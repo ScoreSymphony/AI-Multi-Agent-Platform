@@ -21,6 +21,7 @@ class InMemoryEvaluationRepository:
         self._results: dict[str, list[EvaluationResult]] = {}
         self._aggregates: dict[str, list[AggregatedEvaluationResult]] = {}
         self._comparisons: dict[str, ComparisonReport] = {}
+        self._comparison_lenses: dict[str, tuple[frozenset[str], bool]] = {}
         self._lock = RLock()
 
     def save_run(self, run: EvaluationRun) -> None:
@@ -114,10 +115,24 @@ class InMemoryEvaluationRepository:
         )
         return tuple(sorted(filtered, key=lambda result: result.created_at, reverse=True))[:limit]
 
-    def save_comparison(self, comparison: ComparisonReport) -> None:
+    def save_comparison(
+        self,
+        comparison: ComparisonReport,
+        *,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive: bool = False,
+    ) -> None:
         with self._lock:
             self._comparisons[comparison.current_run_id] = comparison
+            self._comparison_lenses[comparison.current_run_id] = (
+                candidate_reference_kinds,
+                performance_sensitive,
+            )
 
     def get_comparison(self, current_run_id: str) -> ComparisonReport | None:
         with self._lock:
             return self._comparisons.get(current_run_id)
+
+    def get_comparison_lens(self, current_run_id: str) -> tuple[frozenset[str], bool] | None:
+        with self._lock:
+            return self._comparison_lenses.get(current_run_id)

@@ -49,6 +49,7 @@ class DurableRoutingProfileAgentRuntime(AgentRuntime):
         revision: int | None = None,
         team_revision: AgentTeamRevision | None = None,
         task_model_override: RoutingRequirements | None = None,
+        runtime_model_requirements: RoutingRequirements | None = None,
         requested_capability_ids: tuple[str, ...] = (),
         shared_capability_ids: tuple[str, ...] = (),
         available_capability_ids: frozenset[str] = frozenset(),
@@ -67,6 +68,7 @@ class DurableRoutingProfileAgentRuntime(AgentRuntime):
         requirements, profile = self._effective_profile_requirements(
             agent,
             task_model_override,
+            runtime_model_requirements,
         )
         model_id, provider_id = self._resolve_profile_model(agent, requirements, profile)
         capability_ids, capability_versions = self._resolve_capabilities(
@@ -94,6 +96,7 @@ class DurableRoutingProfileAgentRuntime(AgentRuntime):
         self,
         agent: AgentRevision,
         task_override: RoutingRequirements | None,
+        runtime_requirements: RoutingRequirements | None = None,
     ) -> tuple[RoutingRequirements, ModelRoutingProfileRevision | None]:
         requirements = agent.profile.model.requirements
         profile: ModelRoutingProfileRevision | None = None
@@ -112,6 +115,8 @@ class DurableRoutingProfileAgentRuntime(AgentRuntime):
                     "task-level model override is not permitted by this Agent revision",
                 )
             requirements = _merge_requirements(requirements, task_override)
+        if runtime_requirements is not None:
+            requirements = _merge_requirements(requirements, runtime_requirements)
         return requirements, profile
 
     def _resolve_profile_model(

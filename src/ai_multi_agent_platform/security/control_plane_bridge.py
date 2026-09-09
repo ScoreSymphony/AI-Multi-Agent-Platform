@@ -175,6 +175,15 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
     if action.startswith("task-management."):
         return AuthorizationAction.MODIFY, ResourceType.TASK
 
+    if action.startswith("learning."):
+        learning_verb = action.removeprefix("learning.")
+        learning_actions = {
+            "feedback.create": AuthorizationAction.CREATE,
+            "propose": AuthorizationAction.CREATE,
+            "propose-from-feedback": AuthorizationAction.CREATE,
+        }
+        return learning_actions.get(learning_verb, AuthorizationAction.MODIFY), ResourceType.GENERIC
+
     if action.startswith("model-routing-profile."):
         routing_profile_verb = action.removeprefix("model-routing-profile.")
         routing_profile_actions = {

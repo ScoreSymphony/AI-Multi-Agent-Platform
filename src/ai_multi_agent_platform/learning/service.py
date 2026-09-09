@@ -16,6 +16,7 @@ from ai_multi_agent_platform.evaluation import (
     EvaluationRunStatus,
     EvaluationService,
 )
+from ai_multi_agent_platform.evaluation.product import parse_agent_evaluation_target
 from ai_multi_agent_platform.security import (
     ActorIdentity,
     AuthorizationAction,
@@ -50,6 +51,13 @@ _TERMINAL_STATUSES = frozenset(
         LearningCandidateStatus.REJECTED,
         LearningCandidateStatus.SUPERSEDED,
         LearningCandidateStatus.PROMOTED,
+    }
+)
+_IDENTITY_BOUND_TARGET_TYPES = frozenset(
+    {
+        LearningTargetType.AGENT,
+        LearningTargetType.SKILL,
+        LearningTargetType.MODEL_ROUTING_PROFILE,
     }
 )
 
@@ -93,6 +101,8 @@ class LearningQualityGate:
                     "learning candidate Evaluation run is not completed",
                     details={"evaluation_run_id": run_id, "status": run.status.value},
                 )
+            _require_evaluation_manifest(detail, run_id)
+            _require_evaluation_target_binding(candidate, detail, run_id)
             suite_ref = f"{run.suite_id}@{run.suite_version}"
             if allowed_suites and suite_ref not in allowed_suites:
                 raise ContractError(
@@ -120,19 +130,24 @@ class LearningQualityGate:
                         "failing_result_ids": cast(JsonValue, failures),
                     },
                 )
-            if (
-                candidate.gate_plan.require_regression_free
-                and detail.comparison is not None
-                and detail.comparison.regressions
-            ):
-                raise ContractError(
-                    ErrorCode.CONFLICT,
-                    "learning candidate has Evaluation regressions",
-                    details={
-                        "evaluation_run_id": run_id,
-                        "regression_count": len(detail.comparison.regressions),
-                    },
-                )
+            if candidate.gate_plan.require_regression_free:
+                comparison = detail.comparison
+                if comparison is None:
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        "learning candidate requires a persisted Evaluation comparison",
+                        details={"evaluation_run_id": run_id},
+                    )
+                _require_comparison_identity(run, comparison, run_id)
+                if comparison.regressions:
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        "learning candidate has Evaluation regressions",
+                        details={
+                            "evaluation_run_id": run_id,
+                            "regression_count": len(comparison.regressions),
+                        },
+                    )
 
     def _enforce_verification(self, candidate: LearningCandidate) -> None:
         if self.verification is None:
@@ -149,6 +164,16 @@ class LearningQualityGate:
         allowed_policies = set(candidate.gate_plan.verification_policy_refs)
         for verification_id in candidate.verification_ids:
             request = self.verification.get_request(verification_id)
+            if request.project_id != candidate.project_id:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "learning candidate project scope does not match Verification evidence",
+                    details={
+                        "verification_id": verification_id,
+                        "candidate_project_id": candidate.project_id,
+                        "verification_project_id": request.project_id,
+                    },
+                )
             policy_ref = f"{request.policy_id}@{request.policy_version}"
             if allowed_policies and policy_ref not in allowed_policies:
                 raise ContractError(
@@ -166,6 +191,13 @@ class LearningQualityGate:
                     "learning candidate Verification has no completed result",
                     details={"verification_id": verification_id},
                 )
+            _require_verification_target_binding(
+                candidate.target,
+                candidate.proposed_artifact_ref,
+                request,
+                result,
+                verification_id,
+            )
             if result.outcome is not VerificationOutcome.PASS:
                 raise ContractError(
                     ErrorCode.CONFLICT,
@@ -192,6 +224,96 @@ class LearningService:
         self.quality_gate = quality_gate
         self.promotion_registry = promotion_registry
         self.authorization_gate = authorization_gate
+
+    def evaluation_run_project_id(self, evaluation_run_id: str) -> str | None:
+        """Resolve the canonical project scope of one persisted Evaluation run's targets."""
+
+        evaluation = self.quality_gate.evaluation
+        if evaluation is None:
+            raise ContractError(ErrorCode.UNAVAILABLE, "Evaluation service is not configured")
+        detail = evaluation.get_run_detail(evaluation_run_id)
+        suite_ref = f"{detail.run.suite_id}@{detail.run.suite_version}"
+        suite = evaluation.get_suite(suite_ref)
+        snapshot_targets = {
+            (reference.ref_id, reference.version)
+            for reference in detail.run.snapshot.references
+            if reference.kind == "agent"
+        }
+        project_ids: set[str | None] = set()
+        found_target = False
+        for case in suite.cases:
+            try:
+                target = parse_agent_evaluation_target(case)
+            except ValueError as exc:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "Evaluation run suite contains an invalid canonical target",
+                    details={"evaluation_run_id": evaluation_run_id, "suite_ref": suite_ref},
+                ) from exc
+            if target is None:
+                continue
+            found_target = True
+            identity = (target.agent_id, str(target.agent_revision))
+            if identity not in snapshot_targets:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "Evaluation run snapshot does not pin its declared Agent target",
+                    details={
+                        "evaluation_run_id": evaluation_run_id,
+                        "agent_id": target.agent_id,
+                        "agent_revision": target.agent_revision,
+                    },
+                )
+            learning_target = LearningTarget(
+                resource_type=LearningTargetType.AGENT,
+                resource_id=target.agent_id,
+                revision=target.agent_revision,
+            )
+            if not self.promotion_registry.supports(learning_target.resource_type):
+                raise ContractError(
+                    ErrorCode.UNAVAILABLE,
+                    "Learning cannot resolve Evaluation Agent target scope",
+                    details={"evaluation_run_id": evaluation_run_id},
+                )
+            project_ids.add(self.promotion_registry.resolve_project_id(learning_target))
+        if not found_target:
+            return None
+        if len(project_ids) != 1:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "Evaluation evidence spans multiple project scopes",
+                details={"evaluation_run_id": evaluation_run_id},
+            )
+        return next(iter(project_ids))
+
+    def require_evaluation_project_scope(
+        self,
+        candidate: LearningCandidate,
+        evaluation_run_id: str,
+    ) -> None:
+        evaluation_project_id = self.evaluation_run_project_id(evaluation_run_id)
+        if evaluation_project_id is not None:
+            _require_matching_evaluation_project_scope(
+                candidate.project_id,
+                evaluation_project_id,
+                evaluation_run_id,
+            )
+            return
+        if (
+            candidate.target.resource_type in _IDENTITY_BOUND_TARGET_TYPES
+            and self.promotion_registry.supports(candidate.target.resource_type)
+        ):
+            _require_matching_evaluation_project_scope(
+                candidate.project_id,
+                self.promotion_registry.resolve_project_id(candidate.target),
+                evaluation_run_id,
+            )
+            return
+        _require_matching_evaluation_project_scope(
+            candidate.project_id,
+            evaluation_project_id,
+            evaluation_run_id,
+        )
 
     def record_feedback(
         self,
@@ -335,6 +457,13 @@ class LearningService:
                 ErrorCode.INVALID_REQUEST,
                 "passing Verification does not represent a failure learning source",
             )
+        _require_verification_target_binding(
+            target,
+            proposed_artifact_ref,
+            request,
+            result,
+            verification_id,
+        )
         result_ref = LearningReference(
             kind="verification_result",
             resource_id=result.verification_result_id,
@@ -381,10 +510,34 @@ class LearningService:
         if evaluation is None:
             raise ContractError(ErrorCode.UNAVAILABLE, "Evaluation service is not configured")
         detail = evaluation.get_run_detail(evaluation_run_id)
+        if detail.run.status is not EvaluationRunStatus.COMPLETED:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Evaluation regression source is not completed",
+                details={"evaluation_run_id": evaluation_run_id},
+            )
+        _require_evaluation_manifest(detail, evaluation_run_id)
+        _require_evaluation_target_binding_for_target(target, detail, evaluation_run_id)
         if detail.comparison is None or not detail.comparison.regressions:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "Evaluation run does not contain a regression finding",
+            )
+        _require_comparison_identity(detail.run, detail.comparison, evaluation_run_id)
+        project_id = (
+            self.promotion_registry.resolve_project_id(target)
+            if self.promotion_registry.supports(target.resource_type)
+            else None
+        )
+        evaluation_project_id = self.evaluation_run_project_id(evaluation_run_id)
+        if (
+            evaluation_project_id is not None
+            or target.resource_type not in _IDENTITY_BOUND_TARGET_TYPES
+        ):
+            _require_matching_evaluation_project_scope(
+                project_id,
+                evaluation_project_id,
+                evaluation_run_id,
             )
         run_ref = LearningReference(
             kind="evaluation_run",
@@ -412,6 +565,7 @@ class LearningService:
             evidence_refs=(run_ref, *finding_refs, *evidence_refs),
             proposed_change=proposed_change,
             proposed_artifact_ref=proposed_artifact_ref,
+            project_id=project_id,
         )
 
     def record_gate_evidence(
@@ -441,6 +595,8 @@ class LearningService:
                 raise ContractError(ErrorCode.UNAVAILABLE, "Evaluation service is not configured")
             for run_id in evaluation_run_ids:
                 detail = evaluation.get_run_detail(run_id)
+                _require_evaluation_target_binding(current, detail, run_id)
+                self.require_evaluation_project_scope(current, run_id)
                 if run_id not in eval_ids:
                     eval_ids.append(run_id)
                 _append_reference(
@@ -457,6 +613,24 @@ class LearningService:
                 raise ContractError(ErrorCode.UNAVAILABLE, "Verification service is not configured")
             for verification_id in verification_ids:
                 request = verification.get_request(verification_id)
+                if request.project_id != current.project_id:
+                    raise ContractError(
+                        ErrorCode.FORBIDDEN,
+                        "learning candidate project scope does not match Verification evidence",
+                        details={
+                            "verification_id": verification_id,
+                            "candidate_project_id": current.project_id,
+                            "verification_project_id": request.project_id,
+                        },
+                    )
+                result = verification.result_for(verification_id)
+                _require_verification_target_binding(
+                    current.target,
+                    current.proposed_artifact_ref,
+                    request,
+                    result,
+                    verification_id,
+                )
                 if verification_id not in verification_refs:
                     verification_refs.append(verification_id)
                 _append_reference(
@@ -467,7 +641,6 @@ class LearningService:
                         revision=f"{request.policy_id}@{request.policy_version}",
                     ),
                 )
-                result = verification.result_for(verification_id)
                 if result is not None:
                     _append_reference(
                         evidence,
@@ -507,6 +680,8 @@ class LearningService:
                 ErrorCode.CONFLICT,
                 f"cannot accept candidate in {current.status.value} status",
             )
+        for run_id in current.evaluation_run_ids:
+            self.require_evaluation_project_scope(current, run_id)
         self.quality_gate.enforce(current)
         return self._append(current, status=LearningCandidateStatus.ACCEPTED)
 
@@ -586,6 +761,8 @@ class LearningService:
                 ErrorCode.FORBIDDEN,
                 "learning candidate project scope does not match promotion operation",
             )
+        for run_id in current.evaluation_run_ids:
+            self.require_evaluation_project_scope(current, run_id)
         self.quality_gate.enforce(current)
         adapter = self.promotion_registry.resolve(current.target.resource_type)
         action = _promotion_action(current, actor=actor, operation=operation)
@@ -743,6 +920,209 @@ def _feedback_dedupe_key(record: FeedbackRecord) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _require_evaluation_manifest(detail: Any, evaluation_run_id: str) -> None:
+    manifest = getattr(detail, "manifest", None)
+    if manifest is None:
+        raise ContractError(
+            ErrorCode.CONFLICT,
+            "learning Evaluation evidence is missing its persisted EvalManifest",
+            details={"evaluation_run_id": evaluation_run_id},
+        )
+    run = detail.run
+    if (
+        manifest.evaluation_run_id != run.run_id
+        or manifest.suite_id != run.suite_id
+        or str(manifest.suite_version) != str(run.suite_version)
+    ):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "learning Evaluation manifest identity does not match the run",
+            details={"evaluation_run_id": evaluation_run_id},
+        )
+
+
+def _require_evaluation_target_binding(
+    candidate: LearningCandidate,
+    detail: Any,
+    evaluation_run_id: str,
+) -> None:
+    _require_evaluation_target_binding_for_target(candidate.target, detail, evaluation_run_id)
+    if candidate.proposed_artifact_ref is not None:
+        _require_evaluation_manifest(detail, evaluation_run_id)
+        if not _manifest_contains_learning_reference(
+            detail.manifest, candidate.proposed_artifact_ref
+        ):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "Evaluation manifest does not pin the proposed candidate artifact",
+                details={"evaluation_run_id": evaluation_run_id},
+            )
+
+
+def _require_evaluation_target_binding_for_target(
+    target: LearningTarget,
+    detail: Any,
+    evaluation_run_id: str,
+) -> None:
+    if target.resource_type not in _IDENTITY_BOUND_TARGET_TYPES:
+        return
+    _require_evaluation_manifest(detail, evaluation_run_id)
+    expected_ids = {target.resource_id}
+    if target.resource_type is LearningTargetType.MODEL_ROUTING_PROFILE:
+        expected_ids.add(f"{target.resource_id}@r{target.revision}")
+    snapshot_match = _has_exact_target_reference(
+        detail.run.snapshot.references,
+        target,
+        expected_ids,
+    )
+    manifest_match = _has_exact_target_reference(
+        detail.manifest.configuration_references,
+        target,
+        expected_ids,
+    )
+    if not snapshot_match or not manifest_match:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Evaluation evidence does not match the exact learning target identity",
+            details={
+                "evaluation_run_id": evaluation_run_id,
+                "target_type": target.resource_type.value,
+                "target_id": target.resource_id,
+                "target_revision": target.revision,
+            },
+        )
+
+
+def _has_exact_target_reference(
+    references: Any,
+    target: LearningTarget,
+    expected_ids: set[str],
+) -> bool:
+    expected_revision = str(target.revision)
+    for reference in references:
+        if reference.kind != target.resource_type.value or reference.ref_id not in expected_ids:
+            continue
+        if str(getattr(reference, "version", "")) == expected_revision:
+            return True
+    return False
+
+
+def _manifest_contains_learning_reference(manifest: Any, expected: LearningReference) -> bool:
+    groups = (
+        manifest.configuration_references,
+        manifest.skill_bundles,
+        manifest.context_bundles,
+        manifest.research_evidence,
+        manifest.fixture_sources,
+        manifest.verification_policies,
+        manifest.dependencies,
+        manifest.contract_versions,
+        (() if manifest.workspace is None else (manifest.workspace,)),
+    )
+    for group in groups:
+        for reference in group:
+            if reference.kind != expected.kind or reference.ref_id != expected.resource_id:
+                continue
+            if expected.revision is not None and expected.revision not in {
+                getattr(reference, "revision", None),
+                getattr(reference, "version", None),
+            }:
+                continue
+            if (
+                expected.digest is not None
+                and getattr(reference, "digest", None) != expected.digest
+            ):
+                continue
+            return True
+    return False
+
+
+def _require_comparison_identity(run: Any, comparison: Any, evaluation_run_id: str) -> None:
+    baseline_run_id = getattr(run, "baseline_run_id", None)
+    if baseline_run_id is None:
+        raise ContractError(
+            ErrorCode.CONFLICT,
+            "learning regression evidence has no persisted baseline run",
+            details={"evaluation_run_id": evaluation_run_id},
+        )
+    if comparison.current_run_id != run.run_id or comparison.baseline_run_id != baseline_run_id:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Evaluation comparison does not match the current/baseline run references",
+            details={
+                "evaluation_run_id": evaluation_run_id,
+                "baseline_run_id": baseline_run_id,
+            },
+        )
+
+
+def _require_verification_target_binding(
+    target: LearningTarget,
+    proposed_artifact_ref: LearningReference | None,
+    request: Any,
+    result: Any | None,
+    verification_id: str,
+) -> None:
+    if target.resource_type not in _IDENTITY_BOUND_TARGET_TYPES:
+        return
+    subject = request.subject
+    if result is not None and result.subject != subject:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Verification result does not match the exact requested subject",
+            details={"verification_id": verification_id},
+        )
+    if proposed_artifact_ref is not None and _verification_subject_matches_reference(
+        subject, proposed_artifact_ref
+    ):
+        return
+    producer = getattr(request, "producer", None)
+    if (
+        target.resource_type is LearningTargetType.AGENT
+        and producer is not None
+        and getattr(producer, "agent_id", None) == target.resource_id
+        and getattr(producer, "agent_revision", None) == target.revision
+    ):
+        return
+    raise ContractError(
+        ErrorCode.CONTRACT_VIOLATION,
+        "Verification evidence is not bound to the exact learning target or candidate artifact",
+        details={
+            "verification_id": verification_id,
+            "target_type": target.resource_type.value,
+            "target_id": target.resource_id,
+            "target_revision": target.revision,
+        },
+    )
+
+
+def _verification_subject_matches_reference(subject: Any, reference: LearningReference) -> bool:
+    if subject.subject_type != reference.kind or subject.subject_id != reference.resource_id:
+        return False
+    if reference.revision is not None and subject.revision != reference.revision:
+        return False
+    if reference.digest is not None and subject.digest != reference.digest:
+        return False
+    return reference.revision is not None or reference.digest is not None
+
+
+def _require_matching_evaluation_project_scope(
+    candidate_project_id: str | None,
+    evaluation_project_id: str | None,
+    evaluation_run_id: str,
+) -> None:
+    if candidate_project_id != evaluation_project_id:
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "learning candidate project scope does not match Evaluation evidence",
+            details={
+                "evaluation_run_id": evaluation_run_id,
+                "candidate_project_id": candidate_project_id,
+                "evaluation_project_id": evaluation_project_id,
+            },
+        )
 
 
 def _append_reference(values: list[LearningReference], reference: LearningReference) -> None:

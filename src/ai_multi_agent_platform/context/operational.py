@@ -1,0 +1,647 @@
+"""Production-shaped execution helpers for canonical Context Bundles.
+
+This module operationalizes the existing #590 boundary without changing Context Bundle
+ownership. It composes context-derived model routing, egress enforcement, context-aware
+AgentRun binding, and the exact rendered model input used by execution.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from typing import Protocol
+
+from ai_multi_agent_platform.agents import (
+    AgentExecutionSpec,
+    AgentOrchestratorMapper,
+    AgentRunRecord,
+    AgentRuntime,
+    AgentTeamRevision,
+    ModelFallbackPolicy,
+    OrchestratorMapping,
+)
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    EgressRequest,
+    EgressTarget,
+    EgressTargetKind,
+    EgressTargetPosture,
+    ErrorCode,
+    ModelRequest,
+    OperationContext,
+)
+from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.models import (
+    ModelLocation,
+    ModelRegistry,
+    ModelRuntime,
+    RoutingRequirements,
+)
+from ai_multi_agent_platform.security.egress import EgressGate
+
+from .bindings import (
+    ContextAwareOrchestratorAdapter,
+    ContextRunBinding,
+    ContextRunBindingRepository,
+    InMemoryContextRunBindingRepository,
+    ReferenceContextOrchestratorAdapter,
+)
+from .classification import effective_context_bundle_classification
+from .egress import ContextBundleEgressExporter
+from .models import ContextBundle, ContextEntryRole
+from .persistence import InMemoryContextBundleRepository
+from .rendering import (
+    ContextContentProvider,
+    ContextRenderer,
+    ReferenceContextRenderer,
+    RenderedContext,
+    assert_render_preserves_bundle,
+)
+from .resolver import ContextBundleRepository, context_window_requirement
+
+
+@dataclass(frozen=True, slots=True)
+class ContextRoutingPolicy:
+    """Explicit provider-neutral reserve applied before #10 model selection."""
+
+    output_reserve_tokens: int = 0
+
+    def __post_init__(self) -> None:
+        if self.output_reserve_tokens < 0:
+            raise ValueError("context output reserve tokens must be >= 0")
+
+
+_DEFAULT_CONTEXT_ROUTING_POLICY = ContextRoutingPolicy()
+
+
+@dataclass(frozen=True, slots=True)
+class ContextModelInput:
+    """Role-preserving model input derived from one already-rendered Context Bundle."""
+
+    system_instruction: str
+    user_message: str
+
+    def __post_init__(self) -> None:
+        if not self.system_instruction.strip():
+            raise ValueError("operational context requires instruction/security content")
+        if not self.user_message.strip():
+            raise ValueError("operational context requires task/context/evidence content")
+
+
+@dataclass(frozen=True, slots=True)
+class OperationalContextBindingExecution:
+    """Exact rendered Context and binding evidence before optional direct model-input conversion."""
+
+    agent_run: AgentRunRecord
+    binding: ContextRunBinding
+    rendered: RenderedContext
+
+
+@dataclass(frozen=True, slots=True)
+class OperationalContextExecution:
+    """Exact evidence and model input produced for one context-bound AgentRun."""
+
+    agent_run: AgentRunRecord
+    binding: ContextRunBinding
+    rendered: RenderedContext
+    model_input: ContextModelInput
+
+
+class ContextEgressTargetResolver(Protocol):
+    """Resolve the trust boundary for the model selected by canonical #10 routing."""
+
+    def resolve(
+        self,
+        spec: AgentExecutionSpec,
+        bundle: ContextBundle,
+    ) -> EgressTarget | None: ...
+
+
+class ModelRegistryContextEgressTargetResolver:
+    """Resolve canonical model location into a Context egress trust boundary.
+
+    Local models remain in-process. Self-hosted and remote models cross the canonical egress
+    boundary before rendering. Operators may override a provider target with an explicit
+    classification allowlist through ``target_factory`` without leaking provider-native model
+    identifiers into Context Bundle state.
+    """
+
+    def __init__(
+        self,
+        registry: ModelRegistry,
+        *,
+        target_factory: Mapping[str, EgressTarget] | None = None,
+    ) -> None:
+        self.registry = registry
+        self.target_factory = dict(target_factory or {})
+
+    def resolve(
+        self,
+        spec: AgentExecutionSpec,
+        bundle: ContextBundle,
+    ) -> EgressTarget | None:
+        del bundle
+        model_id = spec.selected_model_config_id
+        if model_id is None:
+            return None
+        model = self.registry.get_model(model_id)
+        if model.location is ModelLocation.LOCAL:
+            return None
+        configured = self.target_factory.get(model.provider_id)
+        if configured is not None:
+            if configured.kind is not EgressTargetKind.CONTEXT_EXPORT:
+                raise ValueError("configured model Context egress target must use context_export")
+            return configured
+
+        posture = (
+            EgressTargetPosture.INTERNAL
+            if model.location is ModelLocation.SELF_HOSTED
+            else EgressTargetPosture.EXTERNAL
+        )
+        return EgressTarget(
+            kind=EgressTargetKind.CONTEXT_EXPORT,
+            target_id=model.provider_id,
+            posture=posture,
+        )
+
+
+def merge_context_routing_requirements(
+    base: RoutingRequirements | None,
+    bundle: ContextBundle,
+    *,
+    policy: ContextRoutingPolicy = _DEFAULT_CONTEXT_ROUTING_POLICY,
+) -> RoutingRequirements:
+    """Monotonically add the effective Bundle size to an existing routing requirement set."""
+
+    current = base or RoutingRequirements()
+    required = context_window_requirement(
+        bundle,
+        output_reserve_tokens=policy.output_reserve_tokens,
+    )
+    if required <= 0:
+        return current
+    effective = max(current.min_context_window or 0, required)
+    return replace(current, min_context_window=effective)
+
+
+def rendered_context_model_input(rendered: RenderedContext) -> ContextModelInput:
+    """Preserve #590 role authority while converting provider-neutral parts to model text."""
+
+    instruction_parts: list[str] = []
+    context_parts: list[str] = []
+    for part in rendered.parts:
+        labelled = (
+            f"[context:{part.ordinal}:{part.source_type.value}:{part.source_id}]\n{part.content}"
+        )
+        if part.role in {ContextEntryRole.SECURITY, ContextEntryRole.INSTRUCTION}:
+            instruction_parts.append(labelled)
+        else:
+            context_parts.append(labelled)
+    return ContextModelInput(
+        system_instruction="\n\n".join(instruction_parts),
+        user_message="\n\n".join(context_parts),
+    )
+
+
+def _routing_request_requirements(
+    requirements: RoutingRequirements,
+    bundle: ContextBundle,
+) -> dict[str, JsonValue]:
+    values: dict[str, JsonValue] = {
+        "tool_calling": requirements.tool_calling,
+        "structured_output": requirements.structured_output,
+        "streaming": requirements.streaming,
+        "modalities": list(requirements.modalities),
+        "reasoning": list(requirements.reasoning),
+        "local_only": requirements.local_only,
+        "self_hosted_only": requirements.self_hosted_only,
+        "data_classification": effective_context_bundle_classification(bundle).value,
+        "task_id": bundle.task_id,
+        "run_id": bundle.run_id,
+        "agent_id": bundle.agent_id,
+    }
+    if requirements.explicit_model_id is not None:
+        values["model_config_id"] = requirements.explicit_model_id
+    if requirements.min_context_window is not None:
+        values["min_context_window"] = requirements.min_context_window
+    return values
+
+
+def _context_export_preflight_request(
+    bundle: ContextBundle,
+    *,
+    target: EgressTarget,
+    operation: OperationContext,
+) -> EgressRequest:
+    return EgressRequest(
+        request_id=f"context-route:{bundle.context_bundle_id}:{target.target_id}",
+        target=target,
+        context=operation,
+        classification=effective_context_bundle_classification(bundle),
+        resource_type="context_bundle",
+        payload_digest=bundle.digest,
+        task_id=bundle.task_id,
+        run_id=bundle.run_id,
+        policy_descriptors={
+            "context_bundle_id": bundle.context_bundle_id,
+            "entry_count": len(bundle.entries),
+            "phase": "model_candidate_preflight",
+        },
+    )
+
+
+class _OperationalContextMapper(AgentOrchestratorMapper):
+    def __init__(
+        self,
+        *,
+        bundle: ContextBundle,
+        adapter: ContextAwareOrchestratorAdapter,
+        renderer: ContextRenderer,
+        exporter: ContextBundleEgressExporter,
+        operation: OperationContext,
+        target_resolver: ContextEgressTargetResolver | None,
+        content_provider: ContextContentProvider | None,
+    ) -> None:
+        self.bundle = bundle
+        self.adapter = adapter
+        self.renderer = renderer
+        self.exporter = exporter
+        self.operation = operation
+        self.target_resolver = target_resolver
+        self.content_provider = content_provider
+        self.rendered: RenderedContext | None = None
+
+    @property
+    def adapter_id(self) -> str:
+        return self.adapter.adapter_id
+
+    async def map_agent(self, spec: AgentExecutionSpec) -> OrchestratorMapping:
+        self._validate_spec(spec)
+        target = (
+            None
+            if self.target_resolver is None
+            else self.target_resolver.resolve(spec, self.bundle)
+        )
+        resolved_posture: str | None = None
+        if target is None:
+            rendered = await self.renderer.render(
+                self.bundle,
+                content_provider=self.content_provider,
+            )
+        else:
+            rendered, decision = await self.exporter.export_with_decision(
+                self.bundle,
+                target=target,
+                context=self.operation,
+                content_provider=self.content_provider,
+            )
+            decision_posture = decision.audit_metadata.get("target_posture")
+            resolved_posture = (
+                decision_posture
+                if isinstance(decision_posture, str) and decision_posture.strip()
+                else target.effective_posture.value
+            )
+        assert_render_preserves_bundle(self.bundle, rendered)
+        self.rendered = rendered
+
+        mapping = await self.adapter.map_agent_with_context(spec, self.bundle, rendered)
+        if mapping.adapter_id != self.adapter_id:
+            raise ValueError("context-aware adapter returned a different adapter ID")
+        metadata = dict(mapping.metadata)
+        reserved: dict[str, JsonValue] = {
+            "context_bundle_id": self.bundle.context_bundle_id,
+            "context_bundle_digest": self.bundle.digest,
+            "context_renderer_id": rendered.renderer_id,
+        }
+        if target is not None:
+            reserved["context_egress_target_id"] = target.target_id
+            reserved["context_egress_target_posture"] = resolved_posture
+        for key, value in reserved.items():
+            existing = metadata.get(key)
+            if existing is not None and existing != value:
+                raise ValueError(f"context-aware adapter changed reserved metadata {key!r}")
+            metadata[key] = value
+        return OrchestratorMapping(
+            adapter_id=mapping.adapter_id,
+            runtime_ref=mapping.runtime_ref,
+            metadata=metadata,
+        )
+
+    def _validate_spec(self, spec: AgentExecutionSpec) -> None:
+        if spec.task_id != self.bundle.task_id or spec.run_id != self.bundle.run_id:
+            raise ValueError("Context Bundle Task/Run does not match Agent execution")
+        revision = spec.agent_revision
+        if (
+            revision.agent_id != self.bundle.agent_id
+            or revision.revision != self.bundle.agent_revision
+        ):
+            raise ValueError("Context Bundle Agent revision does not match Agent execution")
+        if spec.task_context or spec.project_context:
+            raise ValueError(
+                "context-bound execution cannot mix canonical Context Bundle "
+                "with legacy adapter-private task/project context"
+            )
+
+
+class OperationalContextBoundAgentRuntime:
+    """Production-shaped composition of #590 context with #33/#10 execution."""
+
+    def __init__(
+        self,
+        runtime: AgentRuntime,
+        *,
+        bundle_repository: ContextBundleRepository | None = None,
+        binding_repository: ContextRunBindingRepository | None = None,
+        renderer: ContextRenderer | None = None,
+        egress_gate: EgressGate | None = None,
+        target_resolver: ContextEgressTargetResolver | None = None,
+        model_runtime: ModelRuntime | None = None,
+        routing_policy: ContextRoutingPolicy = _DEFAULT_CONTEXT_ROUTING_POLICY,
+    ) -> None:
+        self.runtime = runtime
+        self.bundle_repository = bundle_repository or InMemoryContextBundleRepository()
+        self.binding_repository = binding_repository or InMemoryContextRunBindingRepository()
+        self.renderer = renderer or ReferenceContextRenderer()
+        self.exporter = ContextBundleEgressExporter(
+            egress_gate=egress_gate,
+            renderer=self.renderer,
+        )
+        self.target_resolver = target_resolver
+        self.model_runtime = model_runtime
+        self.routing_policy = routing_policy
+
+    async def _context_export_candidate_allowed(
+        self,
+        *,
+        bundle: ContextBundle,
+        operation: OperationContext,
+        agent: object,
+        model_config_id: str,
+        provider_id: str,
+    ) -> tuple[bool, str | None]:
+        target_resolver = self.target_resolver
+        if target_resolver is None:
+            return True, None
+        target = target_resolver.resolve(
+            AgentExecutionSpec(
+                task_id=bundle.task_id,
+                run_id=bundle.run_id,
+                agent_revision=agent,  # type: ignore[arg-type]
+                capability_ids=(),
+                selected_model_config_id=model_config_id,
+                selected_provider_id=provider_id,
+            ),
+            bundle,
+        )
+        if target is None:
+            return True, None
+        decision = await self.exporter.egress_gate.evaluate(
+            _context_export_preflight_request(
+                bundle,
+                target=target,
+                operation=operation,
+            )
+        )
+        return decision.allowed, None if decision.allowed else decision.reason_code.value
+
+    async def _classification_aware_route(
+        self,
+        *,
+        bundle: ContextBundle,
+        operation: OperationContext,
+        task_model_override: RoutingRequirements | None,
+        runtime_requirements: RoutingRequirements,
+    ) -> RoutingRequirements:
+        model_runtime = self.model_runtime
+        if model_runtime is None:
+            return runtime_requirements
+
+        agent = self.runtime.service.get_agent_revision(bundle.agent_id, bundle.agent_revision)
+        effective = self.runtime._effective_model_requirements(  # noqa: SLF001
+            agent,
+            task_model_override,
+            runtime_requirements,
+        )
+
+        def request_for(requirements: RoutingRequirements) -> ModelRequest:
+            return ModelRequest(
+                request_id=f"{bundle.run_id}:context-route",
+                messages=(bundle.digest,),
+                context=operation,
+                requirements=_routing_request_requirements(requirements, bundle),
+            )
+
+        # Focused/local embeddings without a Context target resolver retain the ordinary #591
+        # model-provider candidate policy. Public production composition supplies a resolver and
+        # therefore evaluates the separate Context-export policy before pinning a model.
+        if self.target_resolver is None:
+            try:
+                selection = await model_runtime.select(request_for(effective))
+            except ContractError as exc:
+                if (
+                    exc.code is not ErrorCode.NO_COMPATIBLE_ROUTE
+                    or effective.explicit_model_id is None
+                    or agent.profile.model.fallback is not ModelFallbackPolicy.ROUTE
+                ):
+                    raise
+                selection = await model_runtime.select(
+                    request_for(replace(effective, explicit_model_id=None))
+                )
+            if selection.model_ref is None:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "classification-aware model routing returned no canonical model "
+                    "configuration ID",
+                )
+            return replace(runtime_requirements, explicit_model_id=selection.model_ref)
+
+        fallback_allowed = agent.profile.model.fallback is ModelFallbackPolicy.ROUTE
+        candidate_ids: list[str] = []
+        if effective.explicit_model_id is not None:
+            candidate_ids.append(effective.explicit_model_id)
+            if fallback_allowed:
+                candidates = model_runtime.router._candidate_configs(  # noqa: SLF001
+                    replace(effective, explicit_model_id=None)
+                )
+                candidate_ids.extend(
+                    candidate.config_id
+                    for candidate in candidates
+                    if candidate.config_id != effective.explicit_model_id
+                )
+        else:
+            candidates = model_runtime.router._candidate_configs(effective)  # noqa: SLF001
+            candidate_ids.extend(candidate.config_id for candidate in candidates)
+
+        if not candidate_ids:
+            # Preserve the router's canonical NO_COMPATIBLE_ROUTE diagnostics.
+            await model_runtime.select(request_for(effective))
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "model routing returned without a candidate",
+            )
+
+        context_denied: list[str] = []
+        model_denied: list[str] = []
+        for index, candidate_id in enumerate(candidate_ids):
+            candidate_requirements = replace(effective, explicit_model_id=candidate_id)
+            try:
+                selection = await model_runtime.select(request_for(candidate_requirements))
+            except ContractError as exc:
+                if exc.code is not ErrorCode.NO_COMPATIBLE_ROUTE:
+                    raise
+                if index == 0 and effective.explicit_model_id is not None and not fallback_allowed:
+                    raise
+                model_denied.append(candidate_id)
+                continue
+
+            if selection.model_ref is None:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "classification-aware model routing returned no canonical model "
+                    "configuration ID",
+                )
+            allowed, _reason = await self._context_export_candidate_allowed(
+                bundle=bundle,
+                operation=operation,
+                agent=agent,
+                model_config_id=selection.model_ref,
+                provider_id=selection.provider_id,
+            )
+            if allowed:
+                return replace(runtime_requirements, explicit_model_id=selection.model_ref)
+
+            context_denied.append(selection.model_ref)
+            if index == 0 and effective.explicit_model_id is not None and not fallback_allowed:
+                raise ContractError(
+                    ErrorCode.NO_COMPATIBLE_ROUTE,
+                    "explicit model assignment is prohibited by Context-export policy",
+                    provider_id=selection.provider_id,
+                    details={"explicit_model_id": selection.model_ref},
+                )
+
+        raise ContractError(
+            ErrorCode.NO_COMPATIBLE_ROUTE,
+            "no registered model satisfies both model-provider and Context-export egress policy",
+            details={
+                "candidate_ids": ",".join(candidate_ids),
+                "model_policy_denied": ",".join(model_denied),
+                "context_export_denied": ",".join(context_denied),
+            },
+        )
+
+    async def start_agent_binding(
+        self,
+        *,
+        bundle: ContextBundle,
+        operation: OperationContext,
+        adapter: ContextAwareOrchestratorAdapter | None = None,
+        content_provider: ContextContentProvider | None = None,
+        team_revision: AgentTeamRevision | None = None,
+        task_model_override: RoutingRequirements | None = None,
+        requested_capability_ids: tuple[str, ...] = (),
+        shared_capability_ids: tuple[str, ...] = (),
+        available_capability_ids: frozenset[str] = frozenset(),
+        granted_permissions: frozenset[str] = frozenset(),
+        available_worker_capabilities: frozenset[str] = frozenset(),
+        verification_context: Mapping[str, JsonValue] | None = None,
+    ) -> OperationalContextBindingExecution:
+        stored_bundle = self.bundle_repository.put(bundle)
+        runtime_requirements = merge_context_routing_requirements(
+            None,
+            stored_bundle,
+            policy=self.routing_policy,
+        )
+        runtime_requirements = await self._classification_aware_route(
+            bundle=stored_bundle,
+            operation=operation,
+            task_model_override=task_model_override,
+            runtime_requirements=runtime_requirements,
+        )
+        selected_adapter = adapter or ReferenceContextOrchestratorAdapter()
+        mapper = _OperationalContextMapper(
+            bundle=stored_bundle,
+            adapter=selected_adapter,
+            renderer=self.renderer,
+            exporter=self.exporter,
+            operation=operation,
+            target_resolver=self.target_resolver,
+            content_provider=content_provider,
+        )
+        record = await self.runtime.start_agent(
+            task_id=stored_bundle.task_id,
+            run_id=stored_bundle.run_id,
+            agent_id=stored_bundle.agent_id,
+            revision=stored_bundle.agent_revision,
+            mapper=mapper,
+            team_revision=team_revision,
+            task_model_override=task_model_override,
+            runtime_model_requirements=runtime_requirements,
+            requested_capability_ids=requested_capability_ids,
+            shared_capability_ids=shared_capability_ids,
+            available_capability_ids=available_capability_ids,
+            granted_permissions=granted_permissions,
+            available_worker_capabilities=available_worker_capabilities,
+            task_context=None,
+            project_context=None,
+            verification_context=verification_context,
+        )
+        rendered = mapper.rendered
+        if rendered is None:
+            raise RuntimeError("context-aware Agent mapping did not produce rendered context")
+        binding = ContextRunBinding(
+            agent_run_id=record.agent_run_id,
+            run_id=record.run_id,
+            task_id=record.task_id,
+            agent_id=record.agent.agent_id,
+            agent_revision=record.agent.revision,
+            context_bundle_id=stored_bundle.context_bundle_id,
+            context_bundle_digest=stored_bundle.digest,
+            resolver_version=stored_bundle.resolver_version,
+            policy_version=stored_bundle.policy_version,
+            orchestrator_adapter_id=record.orchestrator_adapter_id or selected_adapter.adapter_id,
+            created_at=datetime.now(UTC),
+        )
+        stored_binding = self.binding_repository.put(binding)
+        return OperationalContextBindingExecution(
+            agent_run=record,
+            binding=stored_binding,
+            rendered=rendered,
+        )
+
+    async def start_agent(
+        self,
+        *,
+        bundle: ContextBundle,
+        operation: OperationContext,
+        adapter: ContextAwareOrchestratorAdapter | None = None,
+        content_provider: ContextContentProvider | None = None,
+        team_revision: AgentTeamRevision | None = None,
+        task_model_override: RoutingRequirements | None = None,
+        requested_capability_ids: tuple[str, ...] = (),
+        shared_capability_ids: tuple[str, ...] = (),
+        available_capability_ids: frozenset[str] = frozenset(),
+        granted_permissions: frozenset[str] = frozenset(),
+        available_worker_capabilities: frozenset[str] = frozenset(),
+        verification_context: Mapping[str, JsonValue] | None = None,
+    ) -> OperationalContextExecution:
+        execution = await self.start_agent_binding(
+            bundle=bundle,
+            operation=operation,
+            adapter=adapter,
+            content_provider=content_provider,
+            team_revision=team_revision,
+            task_model_override=task_model_override,
+            requested_capability_ids=requested_capability_ids,
+            shared_capability_ids=shared_capability_ids,
+            available_capability_ids=available_capability_ids,
+            granted_permissions=granted_permissions,
+            available_worker_capabilities=available_worker_capabilities,
+            verification_context=verification_context,
+        )
+        return OperationalContextExecution(
+            agent_run=execution.agent_run,
+            binding=execution.binding,
+            rendered=execution.rendered,
+            model_input=rendered_context_model_input(execution.rendered),
+        )

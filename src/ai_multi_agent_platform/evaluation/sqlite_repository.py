@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -17,7 +19,13 @@ from .codec import (
     encode_result,
     encode_run,
 )
-from .models import ComparisonReport, EvaluationResult, EvaluationRun
+from .models import (
+    ComparisonReport,
+    EvaluationResult,
+    EvaluationRun,
+    EvaluationRunStatus,
+    utc_now,
+)
 
 _STORAGE_SCHEMA_VERSION = "2"
 _SUPPORTED_STORAGE_SCHEMA_VERSIONS = {"1", _STORAGE_SCHEMA_VERSION}
@@ -122,6 +130,15 @@ class SqliteEvaluationRepository:
                         policy_id TEXT NOT NULL,
                         policy_version TEXT NOT NULL,
                         comparison_json TEXT NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS evaluation_comparison_lenses (
+                        current_run_id TEXT PRIMARY KEY,
+                        candidate_reference_kinds_json TEXT NOT NULL,
+                        performance_sensitive INTEGER NOT NULL
                     )
                     """
                 )
@@ -265,6 +282,51 @@ class SqliteEvaluationRepository:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR, "failed to persist evaluation run"
             ) from exc
+
+    def reconcile_interrupted_runs(self) -> tuple[str, ...]:
+        """Mark persisted RUNNING runs failed after a process restart.
+
+        A RUNNING row is never promoted back to readiness from current runtime configuration.
+        The immutable EvalManifest, if present, remains historical evidence; a missing manifest is
+        likewise not reconstructed. This operation is intentionally explicit so callers invoke it
+        only at a restart boundary, never from a second live repository handle.
+        """
+
+        now = utc_now()
+        reconciled: list[str] = []
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    "SELECT run_json FROM evaluation_runs WHERE status = ? ORDER BY run_id ASC",
+                    (EvaluationRunStatus.RUNNING.value,),
+                ).fetchall()
+                for row in rows:
+                    run = self._decode_run(str(row["run_json"]))
+                    failed = replace(
+                        run,
+                        status=EvaluationRunStatus.FAILED,
+                        completed_at=now,
+                    )
+                    connection.execute(
+                        """
+                        UPDATE evaluation_runs
+                        SET status = ?, completed_at = ?, run_json = ?
+                        WHERE run_id = ?
+                        """,
+                        (
+                            failed.status.value,
+                            now.isoformat(),
+                            self._encode_run(failed),
+                            failed.run_id,
+                        ),
+                    )
+                    reconciled.append(failed.run_id)
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to reconcile interrupted evaluation runs",
+            ) from exc
+        return tuple(reconciled)
 
     def get_run(self, run_id: str) -> EvaluationRun | None:
         try:
@@ -478,10 +540,17 @@ class SqliteEvaluationRepository:
             ) from exc
         return tuple(self._decode_result(str(row["result_json"])) for row in rows)
 
-    def save_comparison(self, comparison: ComparisonReport) -> None:
+    def save_comparison(
+        self,
+        comparison: ComparisonReport,
+        *,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive: bool = False,
+    ) -> None:
         self._require_run(comparison.current_run_id)
         self._require_run(comparison.baseline_run_id)
         raw = self._encode_comparison(comparison)
+        lens_raw = json.dumps(sorted(candidate_reference_kinds), separators=(",", ":"))
         try:
             with self._connect() as connection:
                 connection.execute(
@@ -503,6 +572,17 @@ class SqliteEvaluationRepository:
                         raw,
                     ),
                 )
+                connection.execute(
+                    """
+                    INSERT INTO evaluation_comparison_lenses(
+                        current_run_id, candidate_reference_kinds_json, performance_sensitive
+                    ) VALUES (?, ?, ?)
+                    ON CONFLICT(current_run_id) DO UPDATE SET
+                        candidate_reference_kinds_json = excluded.candidate_reference_kinds_json,
+                        performance_sensitive = excluded.performance_sensitive
+                    """,
+                    (comparison.current_run_id, lens_raw, int(performance_sensitive)),
+                )
         except sqlite3.Error as exc:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
@@ -522,3 +602,34 @@ class SqliteEvaluationRepository:
                 "failed to read evaluation comparison",
             ) from exc
         return None if row is None else self._decode_comparison(str(row["comparison_json"]))
+
+    def get_comparison_lens(self, current_run_id: str) -> tuple[frozenset[str], bool] | None:
+        try:
+            with self._connect() as connection:
+                row = connection.execute(
+                    "SELECT candidate_reference_kinds_json, performance_sensitive "
+                    "FROM evaluation_comparison_lenses WHERE current_run_id = ?",
+                    (current_run_id,),
+                ).fetchone()
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to read evaluation comparison lens",
+            ) from exc
+        if row is None:
+            return None
+        try:
+            raw_kinds = json.loads(str(row["candidate_reference_kinds_json"]))
+        except json.JSONDecodeError as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "stored evaluation comparison lens is invalid",
+            ) from exc
+        if not isinstance(raw_kinds, list) or any(
+            not isinstance(item, str) or not item.strip() for item in raw_kinds
+        ):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "stored evaluation comparison lens is invalid",
+            )
+        return frozenset(raw_kinds), bool(row["performance_sensitive"])

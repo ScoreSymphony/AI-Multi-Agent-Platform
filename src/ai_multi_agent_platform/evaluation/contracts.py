@@ -105,9 +105,17 @@ class EvaluationRepository(Protocol):
         aggregation_policy_version: str | None = None,
     ) -> tuple[AggregatedEvaluationResult, ...]: ...
 
-    def save_comparison(self, comparison: ComparisonReport) -> None: ...
+    def save_comparison(
+        self,
+        comparison: ComparisonReport,
+        *,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive: bool = False,
+    ) -> None: ...
 
     def get_comparison(self, current_run_id: str) -> ComparisonReport | None: ...
+
+    def get_comparison_lens(self, current_run_id: str) -> tuple[frozenset[str], bool] | None: ...
 
 
 class EvaluationHistoryRepository(EvaluationRepository, Protocol):

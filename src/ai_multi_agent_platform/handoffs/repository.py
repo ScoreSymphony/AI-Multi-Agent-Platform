@@ -33,6 +33,8 @@ class HandoffRepository(Protocol):
 
     def get_handoff(self, handoff_id: str, revision: int | None = None) -> AgentHandoff: ...
 
+    def list_handoffs(self) -> tuple[AgentHandoff, ...]: ...
+
     def list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]: ...
 
     def list_handoffs_for_step(self, step_id: str) -> tuple[AgentHandoff, ...]: ...
@@ -44,6 +46,8 @@ class HandoffRepository(Protocol):
     def list_consumptions(
         self, handoff_id: str, revision: int
     ) -> tuple[HandoffConsumption, ...]: ...
+
+    def list_consumptions_for_run(self, run_id: str) -> tuple[HandoffConsumption, ...]: ...
 
 
 class InMemoryHandoffRepository:
@@ -106,6 +110,14 @@ class InMemoryHandoffRepository:
                 f"handoff revision not found: {handoff_id}@{revision}",
             ) from exc
 
+    def list_handoffs(self) -> tuple[AgentHandoff, ...]:
+        return tuple(
+            sorted(
+                self._handoffs.values(),
+                key=lambda item: (item.created_at, item.handoff_id, item.revision),
+            )
+        )
+
     def list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]:
         return tuple(
             sorted(
@@ -152,6 +164,22 @@ class InMemoryHandoffRepository:
                     if current_id == handoff_id and current_revision == revision
                 ),
                 key=lambda item: (item.consumed_at, item.consuming_run_id),
+            )
+        )
+
+    def list_consumptions_for_run(self, run_id: str) -> tuple[HandoffConsumption, ...]:
+        return tuple(
+            sorted(
+                (
+                    item
+                    for (_, _, consuming_run_id), item in self._consumptions.items()
+                    if consuming_run_id == run_id
+                ),
+                key=lambda item: (
+                    item.consumed_at,
+                    item.handoff_id,
+                    item.handoff_revision,
+                ),
             )
         )
 
@@ -210,6 +238,8 @@ class SQLiteHandoffRepository:
                     FOREIGN KEY (handoff_id, revision)
                         REFERENCES agent_handoffs(handoff_id, revision)
                 );
+                CREATE INDEX IF NOT EXISTS idx_agent_handoff_consumptions_run
+                    ON agent_handoff_consumptions(consuming_run_id);
                 """
             )
 
@@ -307,6 +337,12 @@ class SQLiteHandoffRepository:
         payload = cast(Mapping[str, Any], json.loads(str(row["payload_json"])))
         return handoff_from_dict(payload)
 
+    def list_handoffs(self) -> tuple[AgentHandoff, ...]:
+        return self._list_handoffs(
+            "SELECT payload_json FROM agent_handoffs ORDER BY handoff_id, revision",
+            (),
+        )
+
     def list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]:
         return self._list_handoffs(
             "SELECT payload_json FROM agent_handoffs WHERE task_id = ? "
@@ -381,6 +417,18 @@ class SQLiteHandoffRepository:
                 "SELECT payload_json FROM agent_handoff_consumptions "
                 "WHERE handoff_id = ? AND revision = ? ORDER BY consuming_run_id",
                 (handoff_id, revision),
+            ).fetchall()
+        return tuple(
+            consumption_from_dict(cast(Mapping[str, Any], json.loads(str(row["payload_json"]))))
+            for row in rows
+        )
+
+    def list_consumptions_for_run(self, run_id: str) -> tuple[HandoffConsumption, ...]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM agent_handoff_consumptions "
+                "WHERE consuming_run_id = ? ORDER BY handoff_id, revision",
+                (run_id,),
             ).fetchall()
         return tuple(
             consumption_from_dict(cast(Mapping[str, Any], json.loads(str(row["payload_json"]))))

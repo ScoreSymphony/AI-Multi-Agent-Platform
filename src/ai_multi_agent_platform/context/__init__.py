@@ -10,6 +10,7 @@ from .bindings import (
     ReferenceContextOrchestratorAdapter,
     context_binding_from_agent_run_metadata,
 )
+from .classification import effective_context_bundle_classification
 from .control_plane import (
     CONTEXT_BUNDLE_COLLECTION,
     CONTEXT_RUN_BINDING_COLLECTION,
@@ -19,6 +20,11 @@ from .control_plane import (
     register_context_control_plane,
 )
 from .egress import ContextBundleEgressExporter
+from .lifecycle import (
+    CanonicalContextAgentLifecycleBackend,
+    ContextBindingFactory,
+    ContextLifecycleSourceRequest,
+)
 from .models import (
     ContextBudget,
     ContextBudgetUsage,
@@ -38,12 +44,27 @@ from .models import (
     ContextTrust,
     new_context_bundle_id,
 )
+from .operational import (
+    ContextEgressTargetResolver,
+    ContextModelInput,
+    ContextRoutingPolicy,
+    ModelRegistryContextEgressTargetResolver,
+    OperationalContextBoundAgentRuntime,
+    OperationalContextExecution,
+    merge_context_routing_requirements,
+    rendered_context_model_input,
+)
 from .persistence import (
     InMemoryContextBundleRepository,
     JsonContextBundleRepository,
     context_bundle_from_json,
 )
 from .projection import context_bundle_projection, context_run_binding_projection
+from .reconciliation import (
+    ContextBindingReconciler,
+    ContextBindingReconciliationReport,
+    reconcile_context_run_bindings,
+)
 from .rendering import (
     ContextContentProvider,
     ContextRenderer,
@@ -68,14 +89,35 @@ from .resolver import (
     StaticContextSourceAdapter,
     context_window_requirement,
 )
+from .source_adapters import (
+    AgentContextSourceAdapter,
+    ContextSourceAdapterBinding,
+    FileArtifactResultContextSourceAdapter,
+    KnowledgeContextSourceAdapter,
+    MemoryContextSourceAdapter,
+    OperationalContextAssemblyService,
+    OperationalContextSourceRequest,
+    PlanStepContextSourceAdapter,
+    RepositoryContextSourceAdapter,
+    ResearchEvidenceContextSourceAdapter,
+    SkillBundleContextSourceAdapter,
+    TaskContextSourceAdapter,
+)
+from .visibility import AuthorizationContextEntryVisibilityResolver
 
 __all__ = [
     "CONTEXT_BUNDLE_COLLECTION",
     "CONTEXT_RUN_BINDING_COLLECTION",
     "RESOLVER_VERSION",
+    "AgentContextSourceAdapter",
+    "AuthorizationContextEntryVisibilityResolver",
+    "CanonicalContextAgentLifecycleBackend",
     "ContextAssemblyRequest",
     "ContextAssemblyService",
     "ContextAwareOrchestratorAdapter",
+    "ContextBindingFactory",
+    "ContextBindingReconciler",
+    "ContextBindingReconciliationReport",
     "ContextBlockerReason",
     "ContextBoundAgentRuntime",
     "ContextBudget",
@@ -88,10 +130,13 @@ __all__ = [
     "ContextConflictPolicy",
     "ContextContentProvider",
     "ContextDataClassification",
+    "ContextEgressTargetResolver",
     "ContextEntry",
     "ContextEntryRole",
     "ContextEntryVisibilityResolver",
     "ContextFreshness",
+    "ContextLifecycleSourceRequest",
+    "ContextModelInput",
     "ContextOmission",
     "ContextOmissionReason",
     "ContextPolicy",
@@ -100,31 +145,50 @@ __all__ = [
     "ContextResolutionBlocker",
     "ContextResolutionError",
     "ContextResolver",
+    "ContextRoutingPolicy",
     "ContextRunBinding",
     "ContextRunBindingRepository",
     "ContextRunBindingResourceService",
     "ContextSourceAdapter",
+    "ContextSourceAdapterBinding",
     "ContextSourceRef",
     "ContextSourceRequest",
     "ContextSourceType",
     "ContextTransformation",
     "ContextTransformationKind",
     "ContextTrust",
+    "FileArtifactResultContextSourceAdapter",
     "InMemoryContextBundleRepository",
     "InMemoryContextRunBindingRepository",
     "JsonContextBundleRepository",
     "JsonContextRunBindingRepository",
+    "KnowledgeContextSourceAdapter",
+    "MemoryContextSourceAdapter",
+    "ModelRegistryContextEgressTargetResolver",
+    "OperationalContextAssemblyService",
+    "OperationalContextBoundAgentRuntime",
+    "OperationalContextExecution",
+    "OperationalContextSourceRequest",
+    "PlanStepContextSourceAdapter",
     "ReferenceContextOrchestratorAdapter",
     "ReferenceContextRenderer",
     "RenderedContext",
     "RenderedContextPart",
+    "RepositoryContextSourceAdapter",
+    "ResearchEvidenceContextSourceAdapter",
+    "SkillBundleContextSourceAdapter",
     "StaticContextSourceAdapter",
+    "TaskContextSourceAdapter",
     "assert_render_preserves_bundle",
     "context_binding_from_agent_run_metadata",
     "context_bundle_from_json",
     "context_bundle_projection",
     "context_run_binding_projection",
     "context_window_requirement",
+    "effective_context_bundle_classification",
+    "merge_context_routing_requirements",
     "new_context_bundle_id",
+    "reconcile_context_run_bindings",
     "register_context_control_plane",
+    "rendered_context_model_input",
 ]

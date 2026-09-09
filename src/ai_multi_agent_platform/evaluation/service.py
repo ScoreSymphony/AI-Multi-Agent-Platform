@@ -64,6 +64,7 @@ class EvaluationRunDetail:
     comparison: ComparisonReport | None
     aggregates: tuple[AggregatedEvaluationResult, ...] = ()
     manifest: EvalManifest | None = None
+    manifest_comparison: ManifestComparison | None = None
 
 
 class EvaluationService:
@@ -241,12 +242,25 @@ class EvaluationService:
         run = self._repository.get_run(run_id)
         if run is None:
             raise ContractError(ErrorCode.NOT_FOUND, f"evaluation run not found: {run_id}")
+        comparison = self._repository.get_comparison(run_id)
+        manifest_comparison = None
+        if comparison is not None:
+            lens = self._repository.get_comparison_lens(run_id)
+            if lens is not None:
+                candidate_reference_kinds, performance_sensitive = lens
+                manifest_comparison = self.compare_manifests(
+                    current_run_id=run_id,
+                    baseline_run_id=comparison.baseline_run_id,
+                    candidate_reference_kinds=candidate_reference_kinds,
+                    performance_sensitive=performance_sensitive,
+                )
         return EvaluationRunDetail(
             run=run,
             results=self._repository.list_results(run_id),
-            comparison=self._repository.get_comparison(run_id),
+            comparison=comparison,
             aggregates=self._repository.list_aggregates(run_id),
             manifest=self._runner.get_manifest(run_id),
+            manifest_comparison=manifest_comparison,
         )
 
     def compare_manifests(
@@ -386,7 +400,11 @@ class EvaluationService:
             current_results=current_comparable,
             policy=policy,
         )
-        self._repository.save_comparison(comparison)
+        self._repository.save_comparison(
+            comparison,
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive=performance_sensitive,
+        )
         return comparison
 
     def _aggregates_for_run(

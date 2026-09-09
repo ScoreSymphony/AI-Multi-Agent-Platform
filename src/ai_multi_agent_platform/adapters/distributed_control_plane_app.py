@@ -22,12 +22,12 @@ from ai_multi_agent_platform.deployment.advanced_profiles import (
 from ai_multi_agent_platform.deployment.config import SingleNodeConfig
 from ai_multi_agent_platform.deployment.distributed_admin import register_distributed_worker_admin
 from ai_multi_agent_platform.deployment.distributed_control_plane import build_worker_protocol_app
+from ai_multi_agent_platform.deployment.durable_connectors import SingleNodeDeployment
 from ai_multi_agent_platform.deployment.host_pressure import (
     HostPressureDeploymentConfig,
     configure_distributed_host_pressure,
 )
 from ai_multi_agent_platform.deployment.server import main as run_server
-from ai_multi_agent_platform.deployment.single_node import SingleNodeDeployment
 from ai_multi_agent_platform.distributed import (
     DistributedExecutorArtifactProvider,
     register_distributed_control_plane,

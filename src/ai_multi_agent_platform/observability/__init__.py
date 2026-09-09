@@ -1,6 +1,7 @@
 """Platform-owned observability contracts and reference instrumentation."""
 
 from .authorization import ObservedAuthorizationProvider
+from .egress import EgressTelemetryAuditSink
 from .event_provider import ObservabilityEventProvider
 from .exporters import (
     InMemoryExporter,
@@ -60,6 +61,7 @@ __all__ = [
     "CapturePolicy",
     "CompositeInvocationObserver",
     "DependencyHealth",
+    "EgressTelemetryAuditSink",
     "FailureClassification",
     "FailureComponent",
     "InMemoryExporter",

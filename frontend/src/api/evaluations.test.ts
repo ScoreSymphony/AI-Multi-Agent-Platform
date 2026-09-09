@@ -91,13 +91,74 @@ describe("EvaluationClient", () => {
     );
   });
 
-  it("compares runs only through evaluation.compare", async () => {
+  it("forwards explicit repeat, seed and candidate comparison policies", async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        resource_ref: "suite@1",
+        snapshot: {
+          platform_version: "1.0",
+          platform_commit: null,
+          references: [],
+          environment: [],
+        },
+        repetitions: 3,
+        aggregation_policy_ref: "aggregate@1",
+        repeat_policy: {
+          strategy: "paired_ab",
+          repeat_count: 3,
+          min_repeats: 1,
+          stability_window: null,
+          variance_threshold: null,
+          version: "1.0",
+        },
+        seed_policy: {
+          mode: "fixed_seed_supported",
+          ordered_seeds: [11, 17, 23],
+          provider_seed_control: true,
+          limitations: [],
+          version: "1.0",
+        },
+        candidate_reference_kinds: ["model"],
+        performance_sensitive: true,
+      });
+      return jsonResponse({ id: "run", type: "evaluation-run" });
+    });
+    const client = new EvaluationClient({ fetchImpl });
+
+    await client.runSuite("suite@1", {
+      snapshot: { platform_version: "1.0" },
+      repetitions: 3,
+      aggregation_policy_ref: "aggregate@1",
+      repeat_policy: {
+        strategy: "paired_ab",
+        repeat_count: 3,
+        min_repeats: 1,
+        stability_window: null,
+        variance_threshold: null,
+        version: "1.0",
+      },
+      seed_policy: {
+        mode: "fixed_seed_supported",
+        ordered_seeds: [11, 17, 23],
+        provider_seed_control: true,
+        limitations: [],
+        version: "1.0",
+      },
+      candidate_reference_kinds: ["model"],
+      performance_sensitive: true,
+    });
+  });
+
+  it("compares runs only through evaluation.compare and forwards manifest controls", async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("/api/v1/commands/evaluation.compare");
       expect(JSON.parse(String(init?.body))).toEqual({
         resource_ref: "current-run",
         baseline_run_id: "baseline-run",
         regression_policy_ref: "reference.pr@1.0",
+        aggregation_policy_ref: "aggregate@1",
+        candidate_reference_kinds: ["skill_bundle"],
+        performance_sensitive: true,
       });
       return jsonResponse({
         id: "current-run",
@@ -109,15 +170,29 @@ describe("EvaluationClient", () => {
         findings: [],
         regression_count: 0,
         improvement_count: 0,
+        manifest_comparison: {
+          status: "directly_comparable",
+          differences: [],
+        },
       });
     });
     const client = new EvaluationClient({ fetchImpl });
 
-    await client.compareRuns("current-run", "baseline-run", "reference.pr@1.0", "eval-compare-key");
+    await client.compareRuns(
+      "current-run",
+      "baseline-run",
+      "reference.pr@1.0",
+      "eval-compare-key",
+      {
+        aggregation_policy_ref: "aggregate@1",
+        candidate_reference_kinds: ["skill_bundle"],
+        performance_sensitive: true,
+      },
+    );
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
-  it("rejects invalid repetitions before transport", () => {
+  it("rejects invalid repetitions and ambiguous seed inputs before transport", () => {
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse({}));
     const client = new EvaluationClient({ fetchImpl });
 
@@ -127,10 +202,24 @@ describe("EvaluationClient", () => {
         repetitions: 0,
       }),
     ).toThrow("positive integer");
+
+    expect(() =>
+      client.runSuite("reference.lifecycle@1.0", {
+        snapshot: { platform_version: "0.1.0" },
+        seed: 42,
+        seed_policy: {
+          mode: "deterministic_no_randomness",
+          ordered_seeds: [],
+          provider_seed_control: null,
+          limitations: [],
+          version: "1.0",
+        },
+      }),
+    ).toThrow("alternative inputs");
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("rejects incomplete or stochastic baseline comparisons before transport", () => {
+  it("requires an aggregation policy for repeated baseline comparisons", () => {
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse({}));
     const client = new EvaluationClient({ fetchImpl });
 
@@ -148,7 +237,7 @@ describe("EvaluationClient", () => {
         baseline_run_id: "baseline-run",
         regression_policy_ref: "reference.pr@1.0",
       }),
-    ).toThrow("requires repetitions=1");
+    ).toThrow("aggregation policy");
 
     expect(fetchImpl).not.toHaveBeenCalled();
   });

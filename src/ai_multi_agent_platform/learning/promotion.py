@@ -18,11 +18,13 @@ from ai_multi_agent_platform.models import (
 )
 from ai_multi_agent_platform.skills import SkillContent, SkillService
 
-from .models import LearningCandidate, LearningTargetType, PromotionReceipt
+from .models import LearningCandidate, LearningTarget, LearningTargetType, PromotionReceipt
 
 
 class OwnerPromotionAdapter(Protocol):
     target_type: LearningTargetType
+
+    def resolve_project_id(self, target: LearningTarget) -> str | None: ...
 
     async def promote(
         self,
@@ -47,6 +49,9 @@ class PromotionRegistry:
             raise ValueError(f"duplicate learning promotion adapter: {adapter.target_type.value}")
         self._adapters[adapter.target_type] = adapter
 
+    def supports(self, target_type: LearningTargetType) -> bool:
+        return target_type in self._adapters
+
     def resolve(self, target_type: LearningTargetType) -> OwnerPromotionAdapter:
         try:
             return self._adapters[target_type]
@@ -56,6 +61,11 @@ class PromotionRegistry:
                 f"learning promotion target is not supported: {target_type.value}",
             ) from exc
 
+    def resolve_project_id(self, target: LearningTarget) -> str | None:
+        """Resolve the canonical project of one exact, supported target revision."""
+
+        return self.resolve(target.resource_type).resolve_project_id(target)
+
 
 class AgentPromotionAdapter:
     target_type = LearningTargetType.AGENT
@@ -63,6 +73,10 @@ class AgentPromotionAdapter:
 
     def __init__(self, service: AgentService) -> None:
         self.service = service
+
+    def resolve_project_id(self, target: LearningTarget) -> str | None:
+        _require_target_type(target, self.target_type)
+        return self.service.get_agent_revision(target.resource_id, target.revision).project_id
 
     async def promote(
         self,
@@ -72,9 +86,10 @@ class AgentPromotionAdapter:
         context: OperationContext,
         actor_type: str | None = None,
     ) -> PromotionReceipt:
-        del context, actor_type
+        del actor_type
         _require_target(candidate, self.target_type)
         current = self.service.get_agent_revision(candidate.target.resource_id)
+        _require_promotion_scope(candidate, current.project_id, context)
         recovered = _recover_receipt(current.revision, current.provenance, candidate)
         if recovered is not None:
             return recovered
@@ -136,6 +151,10 @@ class SkillPromotionAdapter:
     def __init__(self, service: SkillService) -> None:
         self.service = service
 
+    def resolve_project_id(self, target: LearningTarget) -> str | None:
+        _require_target_type(target, self.target_type)
+        return self.service.get_skill_revision(target.resource_id, target.revision).project_id
+
     async def promote(
         self,
         candidate: LearningCandidate,
@@ -144,9 +163,10 @@ class SkillPromotionAdapter:
         context: OperationContext,
         actor_type: str | None = None,
     ) -> PromotionReceipt:
-        del context, actor_type
+        del actor_type
         _require_target(candidate, self.target_type)
         current = self.service.get_skill_revision(candidate.target.resource_id)
+        _require_promotion_scope(candidate, current.project_id, context)
         recovered = _recover_receipt(current.revision, current.provenance, candidate)
         if recovered is not None:
             return recovered
@@ -208,6 +228,12 @@ class RoutingProfilePromotionAdapter:
     def __init__(self, service: ModelRoutingProfileService) -> None:
         self.service = service
 
+    def resolve_project_id(self, target: LearningTarget) -> str | None:
+        _require_target_type(target, self.target_type)
+        return self.service.repository.get_revision(
+            ModelRoutingProfileRef(target.resource_id, target.revision)
+        ).project_id
+
     async def promote(
         self,
         candidate: LearningCandidate,
@@ -221,6 +247,7 @@ class RoutingProfilePromotionAdapter:
         current = self.service.repository.get_revision(
             ModelRoutingProfileRef(definition.profile_id, definition.current_revision)
         )
+        _require_promotion_scope(candidate, current.project_id, context)
         recovered = _recover_receipt(current.revision, current.provenance, candidate)
         if recovered is not None:
             return recovered
@@ -340,10 +367,31 @@ def _require_fresh(candidate: LearningCandidate, current_revision: int) -> None:
 
 
 def _require_target(candidate: LearningCandidate, target_type: LearningTargetType) -> None:
-    if candidate.target.resource_type is not target_type:
+    _require_target_type(candidate.target, target_type)
+
+
+def _require_target_type(target: LearningTarget, target_type: LearningTargetType) -> None:
+    if target.resource_type is not target_type:
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
             "learning promotion adapter received the wrong target type",
+        )
+
+
+def _require_promotion_scope(
+    candidate: LearningCandidate,
+    target_project_id: str | None,
+    context: OperationContext,
+) -> None:
+    if candidate.project_id != target_project_id:
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "learning candidate project scope does not match the canonical promotion target",
+        )
+    if context.project_id != target_project_id:
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "learning promotion operation does not match the canonical target project scope",
         )
 
 

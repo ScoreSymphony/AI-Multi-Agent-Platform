@@ -19,12 +19,16 @@ from .domain_mapping import (
     validate_tool_invocation_binding,
 )
 from .egress import (
+    EGRESS_PROFILE_SCHEMA_VERSION,
     EgressAuditEvent,
     EgressAuditEventType,
     EgressAuditSink,
+    EgressCostClass,
     EgressDecision,
     EgressOutcome,
     EgressPolicyPort,
+    EgressProfile,
+    EgressProfileTrust,
     EgressReasonCode,
     EgressRequest,
     EgressTarget,
@@ -83,6 +87,7 @@ from .types import (
 
 __all__ = [
     "CONTRACT_VERSION",
+    "EGRESS_PROFILE_SCHEMA_VERSION",
     "AdapterMetadata",
     "AuthorizationDecision",
     "AuthorizationOutcome",
@@ -97,9 +102,12 @@ __all__ = [
     "EgressAuditEvent",
     "EgressAuditEventType",
     "EgressAuditSink",
+    "EgressCostClass",
     "EgressDecision",
     "EgressOutcome",
     "EgressPolicyPort",
+    "EgressProfile",
+    "EgressProfileTrust",
     "EgressReasonCode",
     "EgressRequest",
     "EgressTarget",

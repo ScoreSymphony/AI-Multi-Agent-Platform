@@ -7,6 +7,7 @@ from collections.abc import Callable
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .bindings import ContextRunBinding
+from .classification import effective_context_bundle_classification
 from .models import ContextBundle, ContextEntry
 
 ContextEntryVisibility = Callable[[ContextEntry], bool]
@@ -17,8 +18,15 @@ def context_bundle_projection(
     *,
     can_view_entry: ContextEntryVisibility | None = None,
     include_inline_content: bool = False,
+    include_omission_details: bool = True,
 ) -> dict[str, JsonValue]:
-    """Project auditable context metadata without making references imply read permission."""
+    """Project auditable context metadata without making references imply read permission.
+
+    ``include_inline_content`` is intentionally opt-in and must remain disabled on ordinary
+    Control Plane routes. ``include_omission_details`` exists for trusted internal diagnostics;
+    northbound inspection disables it because provider/source failure text may itself reveal a
+    source identifier the viewer is not authorized to inspect.
+    """
 
     entries: list[JsonValue] = []
     for entry in bundle.entries:
@@ -42,6 +50,7 @@ def context_bundle_projection(
                     "source_revision": entry.source.revision,
                     "source_digest": entry.source.digest,
                     "source_snapshot_id": entry.source.snapshot_id,
+                    "source_locator": entry.source.locator,
                     "content_digest": entry.content_digest,
                     "content_ref": entry.content_ref,
                     "inline_content": entry.inline_content if include_inline_content else None,
@@ -50,12 +59,24 @@ def context_bundle_projection(
                     "relevance": entry.relevance,
                     "project_id": entry.project_id,
                     "workspace_id": entry.workspace_id,
+                    "security_labels": list(entry.security_labels),
                     "transformation": (
                         None if entry.transformation is None else entry.transformation.to_json()
                     ),
                 }
             )
         entries.append(item)
+
+    omissions: list[JsonValue] = []
+    for omitted in bundle.omissions:
+        omission: dict[str, JsonValue] = {
+            "source_type": omitted.source.source_type.value,
+            "reason": omitted.reason.value,
+            "mandatory": omitted.mandatory,
+        }
+        if include_omission_details:
+            omission["detail"] = omitted.detail
+        omissions.append(omission)
 
     return {
         "context_bundle_id": bundle.context_bundle_id,
@@ -68,16 +89,9 @@ def context_bundle_projection(
         "step_id": bundle.step_id,
         "skill_bundle_id": bundle.skill_bundle_id,
         "skill_bundle_digest": bundle.skill_bundle_digest,
+        "effective_data_classification": effective_context_bundle_classification(bundle).value,
         "entries": entries,
-        "omissions": [
-            {
-                "source_type": item.source.source_type.value,
-                "reason": item.reason.value,
-                "mandatory": item.mandatory,
-                "detail": item.detail,
-            }
-            for item in bundle.omissions
-        ],
+        "omissions": omissions,
         "budget": bundle.budget.to_json(),
         "usage": bundle.usage.to_json(),
         "resolver_version": bundle.resolver_version,

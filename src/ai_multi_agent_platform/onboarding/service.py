@@ -10,7 +10,9 @@ from ipaddress import ip_address
 from typing import cast
 from urllib.parse import urlsplit
 
-from ai_multi_agent_platform.agents import STARTER_CATALOG_SOURCE, AgentRuntime, AgentService
+from ai_multi_agent_platform.agents.runtime import AgentRuntime
+from ai_multi_agent_platform.agents.service import AgentService
+from ai_multi_agent_platform.agents.standards import STARTER_CATALOG_SOURCE
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
     ContractError,

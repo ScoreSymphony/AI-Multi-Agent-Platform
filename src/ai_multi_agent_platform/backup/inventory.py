@@ -7,6 +7,10 @@ from typing import Literal
 
 StoreKind = Literal["sqlite", "json"]
 
+# Version 1 is the pre-learning backup contract emitted before #595 added platform-owned
+# learning stores. Version 2 is the current single-node durable-store contract.
+SINGLE_NODE_STORE_CONTRACT_VERSION = 2
+
 
 @dataclass(frozen=True, slots=True)
 class DurableStoreSpec:
@@ -17,6 +21,7 @@ class DurableStoreSpec:
     kind: StoreKind
     required: bool
     owner: str
+    required_since_contract: int = 1
 
 
 SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
@@ -47,8 +52,28 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
         "repositories",
     ),
     DurableStoreSpec("connectors", "db/connectors.sqlite3", "sqlite", True, "connectors"),
+    DurableStoreSpec("memory", "db/memory.sqlite3", "sqlite", True, "context"),
+    DurableStoreSpec("knowledge", "db/knowledge.sqlite3", "sqlite", True, "context"),
+    DurableStoreSpec("research", "db/research.sqlite3", "sqlite", True, "research"),
+    DurableStoreSpec("handoffs", "db/handoffs.sqlite3", "sqlite", True, "handoffs"),
     DurableStoreSpec("verification", "db/verification.sqlite3", "sqlite", True, "verification"),
     DurableStoreSpec("evaluation", "db/evaluation.sqlite3", "sqlite", True, "evaluation"),
+    DurableStoreSpec(
+        "learning",
+        "db/learning.sqlite3",
+        "sqlite",
+        True,
+        "learning",
+        required_since_contract=2,
+    ),
+    DurableStoreSpec(
+        "learning-post-promotion",
+        "db/learning-post-promotion.sqlite3",
+        "sqlite",
+        True,
+        "learning",
+        required_since_contract=2,
+    ),
     DurableStoreSpec("authentication", "db/authentication.sqlite3", "sqlite", True, "security"),
     DurableStoreSpec("authorization", "db/authorization.sqlite3", "sqlite", True, "security"),
     DurableStoreSpec("approvals", "db/approvals.sqlite3", "sqlite", False, "security"),
@@ -90,13 +115,52 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
 )
 
 
-def required_single_node_store_paths() -> tuple[str, ...]:
-    """Return every store that must exist in an initialized single-node data root."""
+def required_single_node_store_paths(
+    *,
+    store_contract_version: int | None = None,
+) -> tuple[str, ...]:
+    """Return stores required by one source/current durable-store contract.
 
-    return tuple(spec.path for spec in SINGLE_NODE_DURABLE_STORES if spec.required)
+    With no explicit version this returns the current deployment requirement. Historical backup
+    verification passes the source backup's contract version instead of applying today's inventory
+    retroactively.
+    """
+
+    version = _require_supported_store_contract_version(store_contract_version)
+    return tuple(
+        spec.path
+        for spec in SINGLE_NODE_DURABLE_STORES
+        if spec.required and spec.required_since_contract <= version
+    )
+
+
+def required_single_node_store_specs_added_after(
+    store_contract_version: int,
+) -> tuple[DurableStoreSpec, ...]:
+    """Return current required stores absent from an older source contract."""
+
+    version = _require_supported_store_contract_version(store_contract_version)
+    return tuple(
+        spec
+        for spec in SINGLE_NODE_DURABLE_STORES
+        if spec.required
+        and version < spec.required_since_contract <= SINGLE_NODE_STORE_CONTRACT_VERSION
+    )
 
 
 def optional_single_node_store_paths() -> tuple[str, ...]:
     """Return lazy stores that are backed up whenever they exist."""
 
     return tuple(spec.path for spec in SINGLE_NODE_DURABLE_STORES if not spec.required)
+
+
+def _require_supported_store_contract_version(value: int | None) -> int:
+    version = SINGLE_NODE_STORE_CONTRACT_VERSION if value is None else value
+    if isinstance(version, bool) or not isinstance(version, int):
+        raise ValueError("single-node store contract version must be an integer")
+    if version < 1 or version > SINGLE_NODE_STORE_CONTRACT_VERSION:
+        raise ValueError(
+            "unsupported single-node store contract version: "
+            f"{version}; supported range is 1..{SINGLE_NODE_STORE_CONTRACT_VERSION}"
+        )
+    return version

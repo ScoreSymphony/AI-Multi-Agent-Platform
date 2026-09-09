@@ -449,10 +449,19 @@ def build_single_node_deployment(
                     {
                         AuthorizationAction.EXECUTE,
                         AuthorizationAction.READ,
+                        AuthorizationAction.VIEW,
                         AuthorizationAction.MODIFY,
                     }
                 ),
-                resource_types=frozenset({ResourceType.RUN}),
+                resource_types=frozenset(
+                    {
+                        ResourceType.RUN,
+                        ResourceType.TASK,
+                        ResourceType.AGENT,
+                        ResourceType.FILE,
+                        ResourceType.MEMORY,
+                    }
+                ),
             )
         )
     if not authorization.has_policy(_PLATFORM_SERVICE_PRINCIPAL):

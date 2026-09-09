@@ -235,6 +235,54 @@ class SQLiteLearningRepository:
                     ON learning_candidate_revisions(updated_at);
                 """
             )
+            connection.execute("BEGIN IMMEDIATE")
+            self._rebuild_candidate_dedupe_keys(connection)
+
+    def _rebuild_candidate_dedupe_keys(self, connection: sqlite3.Connection) -> None:
+        """Migrate persisted key indexes to the current canonical dedupe algorithm."""
+
+        rows = connection.execute(
+            """
+            SELECT revisions.payload_json
+            FROM learning_candidate_revisions AS revisions
+            JOIN (
+                SELECT learning_candidate_id, MAX(revision) AS revision
+                FROM learning_candidate_revisions
+                GROUP BY learning_candidate_id
+            ) AS current
+            ON current.learning_candidate_id = revisions.learning_candidate_id
+            AND current.revision = revisions.revision
+            """
+        ).fetchall()
+        expected: dict[str, str] = {}
+        for row in rows:
+            candidate = candidate_from_dict(_load(str(row["payload_json"])))
+            existing_id = expected.get(candidate.dedupe_key)
+            if existing_id is not None and existing_id != candidate.learning_candidate_id:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "stored learning candidates collide under the canonical dedupe key",
+                    details={
+                        "learning_candidate_id": candidate.learning_candidate_id,
+                        "conflicting_learning_candidate_id": existing_id,
+                    },
+                )
+            expected[candidate.dedupe_key] = candidate.learning_candidate_id
+
+        current_rows = connection.execute(
+            "SELECT dedupe_key, learning_candidate_id FROM learning_candidate_keys"
+        ).fetchall()
+        current = {
+            str(row["dedupe_key"]): str(row["learning_candidate_id"]) for row in current_rows
+        }
+        if current == expected:
+            return
+
+        connection.execute("DELETE FROM learning_candidate_keys")
+        connection.executemany(
+            "INSERT INTO learning_candidate_keys(dedupe_key, learning_candidate_id) VALUES (?, ?)",
+            sorted(expected.items()),
+        )
 
     def create_feedback(
         self,

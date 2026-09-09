@@ -4,7 +4,7 @@ Issue #638 productizes the generic Registry/Marketplace foundation from issue #8
 
 ## Product identity
 
-The technical catalog is primarily for developer and agent infrastructure:
+The default Marketplace experience is for developer and agent infrastructure:
 
 - code intelligence;
 - coding agents;
@@ -19,13 +19,28 @@ The technical catalog is primarily for developer and agent infrastructure:
 - model and dataset tooling;
 - domain-specific technical candidates where useful.
 
-Ordinary SaaS connectors remain valid Registry items, but they are not the product identity or default curation focus of this catalog.
+Ordinary SaaS connectors remain valid canonical Registry items, but they are not the product identity or default home surface of the technical Marketplace.
 
-## Taxonomy
+## Ownership boundary with #81
 
-The Registry item type remains the canonical distribution type from issue #81. Technical categories are a second, product-facing taxonomy and must not replace or redefine those item types.
+Issue #81 continues to own the generic distribution engine:
 
-Initial category vocabulary:
+- `RegistryProvider` and filesystem/offline providers;
+- canonical `RegistryItem` metadata;
+- search/filtering;
+- trust, integrity, compatibility and permission preview;
+- explicit activation/update;
+- durable installation, provenance, pins and history;
+- owner-domain routing;
+- the graphical `/marketplace` route.
+
+Issue #638 does not create a second package manager, installation lifecycle or trust model. It adds a technical taxonomy, curated reference data, discovery-source gates and a product-facing presentation on top of those contracts.
+
+## Technical taxonomy
+
+The Registry item type remains the canonical distribution type. Technical categories are a second product-facing taxonomy and do not replace it.
+
+Canonical technical categories:
 
 ```text
 code-intelligence
@@ -42,19 +57,100 @@ model-and-dataset-tooling
 music-ai
 ```
 
-A component may carry more than one category when that is supported by evidence. Categories should describe capabilities rather than a vendor-specific implementation detail.
+A component may carry multiple categories when evidence supports the overlap.
+
+The Marketplace defaults to technical components only but preserves a deliberate `All Registry assets` path for generic #81 browsing.
+
+## Technical metadata without a second Registry schema
+
+Issue #638 intentionally does not fork `RegistryItem`. Product metadata is derived from canonical categories plus a versioned structured-tag vocabulary.
+
+Supported lifecycle values:
+
+```text
+discovered
+candidate
+pilot
+adopted
+reference
+deferred
+rejected
+deprecated
+unknown
+```
+
+Supported evaluation values:
+
+```text
+required
+pending
+in-progress
+passed
+failed
+not-required
+unknown
+```
+
+Supported cost values:
+
+```text
+compatible
+conditional
+incompatible
+unknown
+```
+
+Supported deployment values:
+
+```text
+local
+self-hosted
+cli
+library
+service
+desktop
+extension
+browser
+hosted
+unknown
+```
+
+Supported network values:
+
+```text
+none
+optional
+required
+unknown
+```
+
+Structured tags use these prefixes:
+
+```text
+lifecycle:<status>
+evaluation:<status>
+deployment:<mode>
+cost:<status>
+network:<status>
+provider:<requirement>
+resource:<class>
+alternative:<registry-item-id>
+architecture-ref:<reference>
+decision-ref:<reference>
+evaluation-ref:<reference>
+```
+
+`distribution.technical_catalog` derives a typed backend projection from those tags and fails closed on conflicting/unsupported structured values. The frontend derives the same product presentation from the canonical Registry resource fields. Missing facts render as `unknown`/`not recorded`; they are not fabricated.
 
 ## Candidate lifecycle
 
 A Marketplace listing is not an adoption decision.
 
-External projects should move through the platform's normal component governance, conceptually:
-
 ```text
 DISCOVERED / CANDIDATE
         |
         v
-source + identity + license verification
+source + identity + license + project-status verification
         |
         v
 security / cost / resource review
@@ -71,17 +167,11 @@ recorded decision
         +--> REJECTED
 ```
 
-Trust state and lifecycle state are different concepts. A technically interesting candidate may remain `untrusted` in Registry metadata until project governance has supplied stronger evidence.
-
-Unknown source, cost, resource, security or compatibility facts must remain unknown. Catalog curation must not invent values merely to make a card appear complete.
+Trust and lifecycle are independent. A candidate may be accurately researched while remaining `untrusted` until normal governance supplies stronger evidence.
 
 ## Discovery-only external components
 
-The generic issue #81 Registry originally inferred the distribution route from the item type. That is correct for canonical portable platform assets, but it is too strong for an external technical candidate.
-
-For example, Graphify is semantically a `tool`, yet a Marketplace listing must not imply that the upstream GitHub repository is already a canonical portable Tool package.
-
-Registry metadata therefore supports the optional field:
+An upstream GitHub repository is not automatically a canonical platform package. External candidate entries therefore use Registry schema v2's one-way manual route override:
 
 ```json
 {
@@ -89,52 +179,139 @@ Registry metadata therefore supports the optional field:
 }
 ```
 
-The override is intentionally one-way and fail-closed:
+The override is fail-closed:
 
-- omitting it preserves all existing issue #81 routing behavior;
+- omitting it preserves #81 routing;
 - only `manual` is accepted as an override;
-- it can reduce an item to reference/manual distribution;
-- it cannot turn another item into a plugin or portable import;
-- manual items remain visible and inspectable but cannot be activated automatically.
+- it can reduce an item to discovery/reference distribution;
+- it cannot turn an item into a plugin or portable import;
+- manual items can be browsed and inspected but cannot be automatically activated.
 
-This keeps the existing owner-domain activation boundaries intact while allowing an accurate catalog of candidates that still need evaluation or a future adapter/package.
+No third-party executable source is bundled by the technical reference catalog. The shared `curated-external-component.md` artifact is ScoreSymphony-authored reference material only.
 
-## Bundled reference catalog
+## Bundled offline catalog
 
-The first reference catalog lives at:
+The versioned catalog is:
 
 ```text
 catalogs/technical-components/catalog.json
 ```
 
-It is consumable by the existing `FilesystemRegistryProvider` and therefore remains compatible with offline/self-hosted deployments.
+It is consumed by the existing `FilesystemRegistryProvider`, so the technical Marketplace remains deterministic and usable without a hosted Registry.
 
-The first slice contains the architecture-derived Code Intelligence candidates:
+The current seed contains the architecture-derived Code Intelligence candidates plus a verified cross-category review set. It includes:
 
-- ProjectAtlas — P1 agent-first repository intelligence candidate;
-- Graphify — graph/architecture specialist candidate;
-- CodeGraph — structural comparison candidate;
-- Understand Anything — semantic/domain/impact specialist candidate.
+### Code intelligence
 
-Each entry is a `tool` categorized as `code-intelligence`, marked as a candidate through tags/reference metadata, uses manual distribution and remains untrusted until later governance says otherwise.
+- ProjectAtlas
+- Graphify
+- CodeGraph
+- Understand Anything
 
-The accompanying files under `catalogs/technical-components/artifacts/` are ScoreSymphony-authored reference cards only. They do not vendor, copy, bundle or execute third-party project source.
+### Coding agents
+
+- OpenHands
+- Aider
+
+### Agent frameworks
+
+- Pydantic AI
+- LangGraph
+- smolagents
+- Google ADK
+
+### Specification and skills
+
+- Spec Kit
+
+### Memory / context / retrieval
+
+- Mem0
+- Graphiti
+- Qdrant
+
+### Evaluation / security
+
+- Promptfoo
+- Lighteval
+
+### Browser and execution
+
+- Browser Use
+- Playwright
+
+### Inference
+
+- llama.cpp
+- Ollama
+- vLLM
+
+### Retrieval / model tooling
+
+- Sentence Transformers
+
+For the externally researched review set above, the official repository identity, license and GitHub non-archived status were verified before promotion on 2026-09-08. Where an upstream release/revision was not explicitly pinned during this review, the source revision remains `null`; the Registry `version` is the version of the curated catalog record, not a fabricated upstream release number.
+
+All external entries remain manual, untrusted candidates and evaluation-required. `cost:compatible` means the reviewed deployment has no mandatory recurring paid service under the project cost policy; `cost:conditional` means optional/provider choices can introduce costs and must be checked during evaluation.
+
+## Curation queue
+
+Unresolved leads live in:
+
+```text
+catalogs/technical-components/CURATION_QUEUE.md
+```
+
+The queue is deliberately not loadable by `FilesystemRegistryProvider`. It includes the remaining architecture-derived names and externally researched leads from #638 whose exact identity/license/status or other required facts have not yet been completed.
+
+This prevents two common catalog failures:
+
+1. silently guessing metadata to make cards look complete;
+2. presenting an unreviewed upstream as if it were a trusted/installable component.
+
+## Discovery-source seam
+
+`distribution.discovery.RegistryDiscoverySource` is an intentionally weak interface: it can return untrusted discovery leads but has no fetch/install/activate authority.
+
+`curate_discovered_candidate(...)` requires an explicit `CuratedCandidateReview` before a discovery lead can become a canonical Registry item. Promotion always produces an `untrusted`, `manual`, `candidate`, `evaluation:required` item and validates source/license identity consistency.
+
+This is the future seam for sources such as the MCP Registry. A discovery source is never an authorization source or an automatically trusted install feed.
+
+## Marketplace UX
+
+The graphical Marketplace now:
+
+- defaults to the technical-component surface;
+- exposes the canonical technical categories as navigation;
+- preserves generic Registry item-type filtering;
+- presents lifecycle and evaluation badges;
+- shows deployment and cost state on cards;
+- shows network/provider/resource/alternative/reference metadata in details;
+- keeps source, license, provenance and review reference visible before actions;
+- renders manual candidates as non-automatically-activatable;
+- allows an explicit switch to all generic Registry assets.
+
+This keeps connectors supported without allowing Gmail/Calendar/Slack-style integrations to dominate the product identity.
 
 ## Curation rules
 
-Before adding or materially updating an external component entry:
+Before adding or materially changing a loaded external component entry:
 
-1. Resolve the exact upstream project identity.
-2. Prefer the official upstream repository or project site as provenance.
-3. Verify the license from the upstream project or package metadata.
-4. Record a concrete release/tag/revision when a stable one is known.
-5. Mark archived, maintenance-only, deprecated or rejected projects accurately.
-6. Do not equate popularity, stars or download count with trust or adoption.
-7. Do not bundle third-party executable artifacts merely to make a Marketplace entry installable.
-8. Use manual/discovery-only distribution until a canonical platform package or explicit adapter integration exists.
-9. Preserve the no-mandatory-paid-service architecture and make cost uncertainty explicit.
-10. Route any real future installation/integration through the platform's existing security, provenance, evaluation and owner-domain lifecycle.
+1. resolve the exact official upstream identity;
+2. verify license from the official upstream source;
+3. verify current project status and record archived/deprecated/maintenance-only state where applicable;
+4. record a concrete revision only when it has actually been reviewed;
+5. assign canonical Registry item type separately from technical category;
+6. keep unknown source/cost/resource/security/compatibility facts explicit;
+7. never use popularity/stars as trust or adoption evidence;
+8. never bundle arbitrary third-party executable artifacts merely to make a listing installable;
+9. use manual distribution until a real platform-owned adapter/package path exists;
+10. record lifecycle/evaluation status separately from Registry trust;
+11. preserve the project's no-mandatory-recurring-paid-service policy;
+12. route any real future installation/integration through existing #81, #15, security, evaluation and owner-domain boundaries.
 
-## Future discovery sources
+## Review and promotion
 
-External registries such as the MCP Registry may later be used as discovery inputs. Imported discovery metadata must remain untrusted until it passes normal curation and promotion gates. An external catalog is not an authorization source and must not become an automatic install feed.
+A candidate can progress to `pilot`, `adopted`, `reference`, `deferred` or `rejected` only through the project's canonical evaluation/decision/governance systems. Catalog metadata should then reference the relevant evaluation or decision evidence rather than inventing an independent Marketplace lifecycle database.
+
+Archived, license-incompatible or unsuitable projects remain useful historical/reference entries only when that status is explicitly represented and there is a concrete reason to keep them discoverable.

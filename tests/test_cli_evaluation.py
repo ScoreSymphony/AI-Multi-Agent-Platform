@@ -95,6 +95,10 @@ class EvaluationCLITransport:
                 "baseline_run_id": "evaluation_run_baseline",
                 "regression_count": 0,
                 "improvement_count": 0,
+                "manifest_comparison": {
+                    "status": "directly_comparable",
+                    "differences": [],
+                },
             }
         else:
             raise AssertionError(f"unexpected request: {method} {parsed.path}")
@@ -217,6 +221,54 @@ def test_eval_run_sends_explicit_snapshot_and_versioned_refs(tmp_path: Path) -> 
     }
 
 
+def test_eval_run_forwards_repeat_seed_and_candidate_policies(tmp_path: Path) -> None:
+    transport = EvaluationCLITransport()
+    config = tmp_path / "cli.json"
+    repeat_policy = {
+        "strategy": "paired_ab",
+        "repeat_count": 3,
+        "min_repeats": 1,
+        "stability_window": None,
+        "variance_threshold": None,
+        "version": "1.0",
+    }
+    seed_policy = {
+        "mode": "fixed_seed_supported",
+        "ordered_seeds": [11, 17, 23],
+        "provider_seed_control": True,
+        "limitations": [],
+        "version": "1.0",
+    }
+
+    code, _, error = _invoke(
+        config,
+        transport,
+        "eval",
+        "run",
+        "suite_test@1",
+        "--snapshot-json",
+        '{"platform_version":"1.0"}',
+        "--repetitions",
+        "3",
+        "--repeat-policy-json",
+        json.dumps(repeat_policy),
+        "--seed-policy-json",
+        json.dumps(seed_policy),
+        "--candidate-reference-kind",
+        "model",
+        "--candidate-reference-kind",
+        "context_bundle",
+        "--performance-sensitive",
+    )
+    assert code == 0 and not error
+    body = transport.calls[-1][4]
+    assert body is not None
+    assert body["repeat_policy"] == repeat_policy
+    assert body["seed_policy"] == seed_policy
+    assert body["candidate_reference_kinds"] == ["model", "context_bundle"]
+    assert body["performance_sensitive"] is True
+
+
 def test_eval_result_show_and_compare_use_durable_run_identity(tmp_path: Path) -> None:
     transport = EvaluationCLITransport()
     config = tmp_path / "cli.json"
@@ -246,11 +298,15 @@ def test_eval_result_show_and_compare_use_durable_run_identity(tmp_path: Path) -
         "policy_ci@3",
         "--aggregation-policy-ref",
         "aggregation_release@2",
+        "--candidate-reference-kind",
+        "skill_bundle",
+        "--performance-sensitive",
         "--idempotency-key",
         "eval-compare-test",
     )
     assert code == 0 and not error
     assert compared["data"]["regression_count"] == 0  # type: ignore[index]
+    assert compared["data"]["manifest_comparison"]["status"] == "directly_comparable"  # type: ignore[index]
     method, path, _, headers, body = transport.calls[-1]
     assert method == "POST"
     assert path == "/api/v1/commands/evaluation.compare"
@@ -260,10 +316,14 @@ def test_eval_result_show_and_compare_use_durable_run_identity(tmp_path: Path) -
         "baseline_run_id": "evaluation_run_baseline",
         "regression_policy_ref": "policy_ci@3",
         "aggregation_policy_ref": "aggregation_release@2",
+        "candidate_reference_kinds": ["skill_bundle"],
+        "performance_sensitive": True,
     }
 
 
-def test_eval_rejects_invalid_snapshot_and_repetitions_before_transport(tmp_path: Path) -> None:
+def test_eval_rejects_invalid_snapshot_repetitions_and_seed_policy_overlap(
+    tmp_path: Path,
+) -> None:
     transport = EvaluationCLITransport()
     config = tmp_path / "cli.json"
 
@@ -295,4 +355,22 @@ def test_eval_rejects_invalid_snapshot_and_repetitions_before_transport(tmp_path
     assert code == 2
     assert not payload
     assert "repetitions must be greater than zero" in error
+    assert transport.calls == []
+
+    code, payload, error = _invoke(
+        config,
+        transport,
+        "eval",
+        "run",
+        "suite_test@1",
+        "--snapshot-json",
+        '{"platform_version":"0.0.1"}',
+        "--seed",
+        "19",
+        "--seed-policy-json",
+        '{"mode":"deterministic_no_randomness"}',
+    )
+    assert code == 2
+    assert not payload
+    assert "alternative inputs" in error
     assert transport.calls == []

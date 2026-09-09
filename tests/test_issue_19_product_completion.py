@@ -250,17 +250,13 @@ def test_agent_model_target_runs_through_product_evaluation_and_server_snapshot(
             owner_type="user",
             owner_id=admin.user_id,
         )
-        workspace = first.scopes.create_workspace(
-            key="issue-19-target-workspace",
-            project_id=project.id,
-        )
         bootstrap_standard_agents(first.agents)
         assistant = first.agents.clone_agent(
             STANDARD_AGENT_IDS["general_assistant"],
             revision=1,
             owner_ref=OwnerRef(type="user", id=admin.user_id),
             project_id=project.id,
-            workspace_id=workspace.id,
+            workspace_id=None,
             name="Evaluation Target Assistant",
         )
         token = first.authentication.create_personal_access_token(

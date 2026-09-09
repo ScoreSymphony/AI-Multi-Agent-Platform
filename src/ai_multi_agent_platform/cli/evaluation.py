@@ -43,28 +43,47 @@ def add_evaluation_parser(
     )
     run.add_argument("--repetitions", type=int, default=1)
     run.add_argument("--seed", type=int)
+    run.add_argument(
+        "--repeat-policy-json",
+        help="explicit RepeatPolicy JSON, including strategy/repeat_count and stability fields",
+    )
+    run.add_argument(
+        "--seed-policy-json",
+        help="explicit SeedPolicy JSON; mutually exclusive with --seed",
+    )
     run.add_argument("--baseline-run-id")
     run.add_argument("--regression-policy-ref")
     run.add_argument(
         "--aggregation-policy-ref",
         help="exact versioned aggregation policy required for repeated baseline comparison",
     )
+    run.add_argument(
+        "--candidate-reference-kind",
+        action="append",
+        default=[],
+        help="reference kind intentionally changed by this candidate; repeatable",
+    )
+    run.add_argument(
+        "--performance-sensitive",
+        action="store_true",
+        help="treat relevant hardware/resource environment drift as comparison-blocking",
+    )
     run.add_argument("--idempotency-key")
 
     result = commands.add_parser(
         "result",
-        help="inspect durable evaluation-run detail and evaluator results",
+        help="inspect durable evaluation-run detail, manifest and evaluator results",
     )
     result_commands = result.add_subparsers(dest="result_command", required=True)
     result_show = result_commands.add_parser(
         "show",
-        help="show one durable evaluation run with raw results, aggregates and comparison",
+        help="show one durable evaluation run with manifest, raw results and comparison",
     )
     result_show.add_argument("run_id")
 
     compare = commands.add_parser(
         "compare",
-        help="persist a regression comparison for a completed current run",
+        help="persist a manifest-gated regression comparison for a completed current run",
     )
     compare.add_argument("current_run_id")
     compare.add_argument("--baseline-run-id", required=True)
@@ -72,6 +91,17 @@ def add_evaluation_parser(
     compare.add_argument(
         "--aggregation-policy-ref",
         help="exact versioned aggregation policy required when either run is repeated",
+    )
+    compare.add_argument(
+        "--candidate-reference-kind",
+        action="append",
+        default=[],
+        help="reference kind intentionally changed by the candidate; repeatable",
+    )
+    compare.add_argument(
+        "--performance-sensitive",
+        action="store_true",
+        help="treat relevant hardware/resource environment drift as comparison-blocking",
     )
     compare.add_argument("--idempotency-key")
 
@@ -92,6 +122,9 @@ def execute_evaluation(
     if args.command == "run":
         if args.repetitions <= 0:
             raise ProfileError("--repetitions must be greater than zero")
+        if args.seed is not None and args.seed_policy_json is not None:
+            raise ProfileError("--seed and --seed-policy-json are alternative inputs")
+        candidate_reference_kinds = _candidate_reference_kinds(args.candidate_reference_kind)
         run_body: dict[str, JsonValue] = {
             "resource_ref": str(args.suite_ref),
             "snapshot": parse_snapshot(args.snapshot_json),
@@ -99,12 +132,26 @@ def execute_evaluation(
         }
         if args.seed is not None:
             run_body["seed"] = args.seed
+        if args.repeat_policy_json is not None:
+            run_body["repeat_policy"] = _parse_json_object(
+                args.repeat_policy_json,
+                "--repeat-policy-json",
+            )
+        if args.seed_policy_json is not None:
+            run_body["seed_policy"] = _parse_json_object(
+                args.seed_policy_json,
+                "--seed-policy-json",
+            )
         if args.baseline_run_id is not None:
             run_body["baseline_run_id"] = str(args.baseline_run_id)
         if args.regression_policy_ref is not None:
             run_body["regression_policy_ref"] = str(args.regression_policy_ref)
         if args.aggregation_policy_ref is not None:
             run_body["aggregation_policy_ref"] = str(args.aggregation_policy_ref)
+        if candidate_reference_kinds:
+            run_body["candidate_reference_kinds"] = list(candidate_reference_kinds)
+        if args.performance_sensitive:
+            run_body["performance_sensitive"] = True
         return client.post(
             "/commands/evaluation.run",
             body=run_body,
@@ -117,6 +164,7 @@ def execute_evaluation(
         raise ProfileError(f"unsupported evaluation result command: {args.result_command}")
 
     if args.command == "compare":
+        candidate_reference_kinds = _candidate_reference_kinds(args.candidate_reference_kind)
         compare_body: dict[str, JsonValue] = {
             "resource_ref": str(args.current_run_id),
             "baseline_run_id": str(args.baseline_run_id),
@@ -124,6 +172,10 @@ def execute_evaluation(
         }
         if args.aggregation_policy_ref is not None:
             compare_body["aggregation_policy_ref"] = str(args.aggregation_policy_ref)
+        if candidate_reference_kinds:
+            compare_body["candidate_reference_kinds"] = list(candidate_reference_kinds)
+        if args.performance_sensitive:
+            compare_body["performance_sensitive"] = True
         return client.post(
             "/commands/evaluation.compare",
             body=compare_body,
@@ -136,16 +188,30 @@ def execute_evaluation(
 def parse_snapshot(raw: str) -> dict[str, JsonValue]:
     """Parse an explicit immutable snapshot without duplicating API domain validation."""
 
-    try:
-        value: JsonValue = json.loads(raw)
-    except (json.JSONDecodeError, TypeError) as exc:
-        raise ProfileError("--snapshot-json must contain valid JSON") from exc
-    if not isinstance(value, dict):
-        raise ProfileError("--snapshot-json must be a JSON object")
+    value = _parse_json_object(raw, "--snapshot-json")
     platform_version = value.get("platform_version")
     if not isinstance(platform_version, str) or not platform_version.strip():
         raise ProfileError("--snapshot-json must contain non-blank platform_version")
     return value
+
+
+def _parse_json_object(raw: str, option: str) -> dict[str, JsonValue]:
+    try:
+        value: JsonValue = json.loads(raw)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ProfileError(f"{option} must contain valid JSON") from exc
+    if not isinstance(value, dict):
+        raise ProfileError(f"{option} must be a JSON object")
+    return value
+
+
+def _candidate_reference_kinds(values: list[str]) -> tuple[str, ...]:
+    normalized = tuple(value.strip() for value in values)
+    if any(not value for value in normalized):
+        raise ProfileError("--candidate-reference-kind must not be blank")
+    if len(normalized) != len(set(normalized)):
+        raise ProfileError("--candidate-reference-kind values must be unique")
+    return normalized
 
 
 def _add_pagination_arguments(parser: argparse.ArgumentParser) -> None:

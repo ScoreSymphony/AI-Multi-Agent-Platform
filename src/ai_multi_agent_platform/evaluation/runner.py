@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, replace
+from statistics import pvariance
 
 from .aggregation import (
     AggregatedEvaluationResult,
@@ -49,6 +50,7 @@ from .reproducibility import (
     ManifestComparison,
     RandomnessMode,
     RepeatPolicy,
+    RepeatStrategy,
     SeedPolicy,
 )
 
@@ -190,6 +192,13 @@ class EvaluationRunner:
         if seed_policy is not None and seed is not None:
             raise ValueError("seed and seed_policy are alternative reproducibility inputs")
 
+        effective_repeat_policy = repeat_policy or RepeatPolicy(
+            RepeatStrategy.SINGLE if repetitions == 1 else RepeatStrategy.FIXED_N,
+            repetitions,
+        )
+        if effective_repeat_policy.repeat_count != repetitions:
+            raise ValueError("repeat_policy.repeat_count must match repetitions")
+
         snapshot = self._complete_snapshot(
             suite=suite,
             snapshot=snapshot,
@@ -201,9 +210,18 @@ class EvaluationRunner:
             suite=suite,
             baseline_run_id=baseline_run_id,
             regression_policy=regression_policy,
-            repetitions=repetitions,
             aggregation_policy=aggregation_policy,
         )
+        if (
+            baseline is not None
+            and aggregation_policy is not None
+            and aggregation_policy.require_equal_sample_count
+            and baseline.repetitions != repetitions
+        ):
+            raise ValueError(
+                "aggregation policy requires baseline and current runs "
+                "to use the same repetition count"
+            )
 
         run = EvaluationRun(
             suite_id=suite.suite_id,
@@ -214,9 +232,6 @@ class EvaluationRunner:
             repetitions=repetitions,
             seed=seed,
         )
-        effective_repeat_policy = repeat_policy or RepeatPolicy.for_run(run)
-        if effective_repeat_policy.repeat_count != repetitions:
-            raise ValueError("repeat_policy.repeat_count must match repetitions")
         effective_seed_policy = seed_policy or SeedPolicy.conservative_for_run(run)
         self._validate_seed_policy(effective_seed_policy, repetitions=repetitions)
         manifest = self._manifest_builder.build(
@@ -236,10 +251,15 @@ class EvaluationRunner:
             )
             self._require_comparable_manifests(manifest_comparison)
 
-        self._repository.save_run(run)
-
+        executed_repetitions = 0
+        run_persisted = False
         try:
+            # The manifest is immutable reproducibility evidence. Persist it before exposing a
+            # RUNNING run so a crash can leave at most an orphan manifest, never a run whose
+            # configuration would need to be reconstructed from a later runtime state.
             self._manifest_repository.save_manifest(manifest)
+            self._repository.save_run(run)
+            run_persisted = True
             for repetition_index in range(repetitions):
                 repetition_seed = self._seed_for_repetition(
                     legacy_seed=seed,
@@ -255,44 +275,82 @@ class EvaluationRunner:
                         seed=repetition_seed,
                     )
                     await self._run_attempt(run, case, attempt)
-        except Exception:
-            failed = replace(run, status=EvaluationRunStatus.FAILED, completed_at=utc_now())
-            self._repository.save_run(failed)
-            raise
+                executed_repetitions = repetition_index + 1
+                if self._stability_reached(
+                    suite=suite,
+                    run_id=run.run_id,
+                    policy=effective_repeat_policy,
+                    completed_repetitions=executed_repetitions,
+                ):
+                    break
 
-        completed = replace(run, status=EvaluationRunStatus.COMPLETED, completed_at=utc_now())
-        self._repository.save_run(completed)
-        results = self._repository.list_results(completed.run_id)
-        aggregates: tuple[AggregatedEvaluationResult, ...] = ()
-        if aggregation_policy is not None:
-            aggregates = self._aggregate_and_persist(
-                run=completed,
-                results=results,
-                policy=aggregation_policy,
+            derived_run = replace(
+                run,
+                repetitions=executed_repetitions or run.repetitions,
             )
-
-        comparison: ComparisonReport | None = None
-        if baseline is not None and regression_policy is not None:
-            baseline_comparable: tuple[ComparableEvaluationResult, ...]
-            current_comparable: tuple[ComparableEvaluationResult, ...]
-            if aggregation_policy is None:
-                baseline_comparable = self._repository.list_results(baseline.run_id)
-                current_comparable = results
-            else:
-                baseline_comparable = self._aggregate_and_persist(
-                    run=baseline,
-                    results=self._repository.list_results(baseline.run_id),
+            results = self._repository.list_results(derived_run.run_id)
+            aggregates: tuple[AggregatedEvaluationResult, ...] = ()
+            if aggregation_policy is not None:
+                aggregates = self._aggregate_and_persist(
+                    run=derived_run,
+                    results=results,
                     policy=aggregation_policy,
                 )
-                current_comparable = aggregates
-            comparison = self._regression_engine.compare(
-                baseline_run_id=baseline.run_id,
-                current_run_id=completed.run_id,
-                baseline_results=baseline_comparable,
-                current_results=current_comparable,
-                policy=regression_policy,
+
+            comparison: ComparisonReport | None = None
+            if baseline is not None and regression_policy is not None:
+                if (
+                    aggregation_policy is not None
+                    and aggregation_policy.require_equal_sample_count
+                    and baseline.repetitions != derived_run.repetitions
+                ):
+                    raise ValueError(
+                        "aggregation policy requires baseline and current runs to use the same "
+                        "repetition count after execution"
+                    )
+                baseline_comparable: tuple[ComparableEvaluationResult, ...]
+                current_comparable: tuple[ComparableEvaluationResult, ...]
+                if aggregation_policy is None:
+                    baseline_comparable = self._repository.list_results(baseline.run_id)
+                    current_comparable = results
+                else:
+                    baseline_comparable = self._aggregate_and_persist(
+                        run=baseline,
+                        results=self._repository.list_results(baseline.run_id),
+                        policy=aggregation_policy,
+                    )
+                    current_comparable = aggregates
+                comparison = self._regression_engine.compare(
+                    baseline_run_id=baseline.run_id,
+                    current_run_id=derived_run.run_id,
+                    baseline_results=baseline_comparable,
+                    current_results=current_comparable,
+                    policy=regression_policy,
+                )
+                self._repository.save_comparison(
+                    comparison,
+                    candidate_reference_kinds=candidate_reference_kinds,
+                    performance_sensitive=performance_sensitive_comparison,
+                )
+
+            # COMPLETED is the durable evidence-readiness boundary: all mandatory derived
+            # artifacts have already been persisted successfully when this state becomes visible.
+            completed = replace(
+                derived_run,
+                status=EvaluationRunStatus.COMPLETED,
+                completed_at=utc_now(),
             )
-            self._repository.save_comparison(comparison)
+            self._repository.save_run(completed)
+        except Exception:
+            if run_persisted:
+                failed = replace(
+                    run,
+                    status=EvaluationRunStatus.FAILED,
+                    repetitions=executed_repetitions or run.repetitions,
+                    completed_at=utc_now(),
+                )
+                self._repository.save_run(failed)
+            raise
 
         return EvaluationRunSummary(
             run=completed,
@@ -341,6 +399,63 @@ class EvaluationRunner:
             )
         changed = ", ".join(item.path for item in comparison.blocking_differences)
         raise ValueError(f"evaluation manifests are incomparable: {changed}")
+
+    def _stability_reached(
+        self,
+        *,
+        suite: EvaluationSuite,
+        run_id: str,
+        policy: RepeatPolicy,
+        completed_repetitions: int,
+    ) -> bool:
+        if policy.strategy is not RepeatStrategy.STABILITY:
+            return False
+        assert policy.stability_window is not None
+        assert policy.variance_threshold is not None
+        required = max(policy.min_repeats, policy.stability_window)
+        if completed_repetitions < required:
+            return False
+
+        results = self._repository.list_results(run_id)
+        grouped: dict[tuple[str, str, str], list[EvaluationResult]] = {}
+        for result in results:
+            identity = (result.case_id, result.case_version, result.evaluator.evaluator_id)
+            grouped.setdefault(identity, []).append(result)
+
+        expected: set[tuple[str, str, str]] = set()
+        for case in suite.cases:
+            for evaluator in self._evaluators:
+                expected.add((case.case_id, case.version, evaluator.descriptor.evaluator_id))
+            if case.resource_limits:
+                expected.add(
+                    (
+                        case.case_id,
+                        case.version,
+                        self._resource_limit_evaluator.descriptor.evaluator_id,
+                    )
+                )
+        if set(grouped) != expected:
+            return False
+
+        window = policy.stability_window
+        for identity in expected:
+            samples = sorted(grouped[identity], key=lambda item: item.repetition_index)
+            if len(samples) != completed_repetitions:
+                return False
+            if tuple(item.repetition_index for item in samples) != tuple(
+                range(completed_repetitions)
+            ):
+                return False
+            recent = samples[-window:]
+            if all(item.score is not None for item in recent):
+                values = tuple(float(item.score) for item in recent if item.score is not None)
+            else:
+                values = tuple(
+                    1.0 if item.outcome is EvaluationOutcome.PASSED else 0.0 for item in recent
+                )
+            if pvariance(values) > policy.variance_threshold:
+                return False
+        return True
 
     def _complete_snapshot(
         self,
@@ -398,7 +513,6 @@ class EvaluationRunner:
         suite: EvaluationSuite,
         baseline_run_id: str | None,
         regression_policy: RegressionPolicy | None,
-        repetitions: int,
         aggregation_policy: AggregationPolicy | None,
     ) -> EvaluationRun | None:
         if baseline_run_id is None or regression_policy is None:
@@ -414,15 +528,6 @@ class EvaluationRunner:
             raise ValueError(
                 "repeated baseline comparison requires aggregation_policy; "
                 "without aggregation the baseline must use repetitions=1"
-            )
-        if (
-            aggregation_policy is not None
-            and aggregation_policy.require_equal_sample_count
-            and baseline.repetitions != repetitions
-        ):
-            raise ValueError(
-                "aggregation policy requires baseline and current runs to use the same "
-                "repetition count"
             )
         return baseline
 

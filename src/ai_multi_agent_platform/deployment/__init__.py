@@ -20,6 +20,11 @@ from .durable_connectors import (
     SingleNodeSmokeResult,
     build_single_node_deployment,
 )
+from .egress_bindings import EgressDeploymentBindings
+from .handoff_composition import (
+    HandoffDeploymentComposition,
+    build_single_node_handoff_composition,
+)
 
 __all__ = [
     "AdvancedDeploymentProfile",
@@ -27,12 +32,15 @@ __all__ = [
     "ControlPlaneBinding",
     "DeploymentNode",
     "DeploymentWorkerProtocolService",
+    "EgressDeploymentBindings",
+    "HandoffDeploymentComposition",
     "OptionalServiceBinding",
     "SingleNodeConfig",
     "SingleNodeDeployment",
     "SingleNodeSmokeResult",
     "WorkerHostBinding",
     "build_single_node_deployment",
+    "build_single_node_handoff_composition",
     "build_worker_protocol_app",
     "load_advanced_deployment_profile",
     "load_single_node_config",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -97,6 +98,7 @@ class WorkspaceEvaluationIsolation:
         owner_ref: OwnerRef,
         actor_ref: str | None = None,
         fixture_resolver: EvaluationFixtureResolver | None = None,
+        project_resolver: Callable[[EvaluationCase], str] | None = None,
     ) -> None:
         if not project_id.strip():
             raise ValueError("evaluation workspace project_id must not be blank")
@@ -105,17 +107,31 @@ class WorkspaceEvaluationIsolation:
         self._owner_ref = owner_ref
         self._actor_ref = actor_ref or f"{owner_ref.type}:{owner_ref.id}"
         self._fixture_resolver = fixture_resolver
+        self._project_resolver = project_resolver
         self._active: dict[str, EvaluationExecutionContext] = {}
         self._lock = asyncio.Lock()
 
-    def _data_context(self, attempt: EvaluationAttempt) -> DataAccessContext:
+    def _project_for(self, case: EvaluationCase) -> str:
+        project_id = (
+            self._project_resolver(case) if self._project_resolver is not None else self._project_id
+        )
+        if not project_id.strip():
+            raise ValueError("evaluation workspace project_id must not be blank")
+        return project_id
+
+    def _data_context(
+        self,
+        attempt: EvaluationAttempt,
+        *,
+        project_id: str,
+    ) -> DataAccessContext:
         return DataAccessContext(
             operation=OperationContext(
                 correlation_id=attempt.attempt_id,
                 causation_id=attempt.evaluation_run_id,
                 owner_type=self._owner_ref.type,
                 owner_id=self._owner_ref.id,
-                project_id=self._project_id,
+                project_id=project_id,
             ),
             actor_ref=self._actor_ref,
         )
@@ -150,10 +166,11 @@ class WorkspaceEvaluationIsolation:
         case: EvaluationCase,
         attempt: EvaluationAttempt,
     ) -> EvaluationExecutionContext:
+        project_id = self._project_for(case)
         fixtures = await self._fixtures(case=case, attempt=attempt)
-        data_context = self._data_context(attempt)
+        data_context = self._data_context(attempt, project_id=project_id)
         workspace = await self._workspace_provider.create_workspace(
-            project_id=self._project_id,
+            project_id=project_id,
             owner_ref=self._owner_ref,
             workspace_type=WorkspaceType.ISOLATED_RUN,
             context=data_context,
@@ -171,7 +188,7 @@ class WorkspaceEvaluationIsolation:
         )
         execution_context = EvaluationExecutionContext(
             attempt_id=attempt.attempt_id,
-            project_id=self._project_id,
+            project_id=project_id,
             owner_type=self._owner_ref.type,
             owner_id=self._owner_ref.id,
             workspace_id=workspace.id,

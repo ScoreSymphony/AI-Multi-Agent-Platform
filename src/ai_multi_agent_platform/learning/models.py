@@ -306,9 +306,10 @@ class LearningCandidate:
 
     @property
     def dedupe_key(self) -> str:
-        """Stable problem/target/proposal identity; source refs are linked separately."""
+        """Stable project/problem/target/proposal identity; source refs link separately."""
         return _digest(
             {
+                "project_id": self.project_id,
                 "source_type": self.source_type.value,
                 "problem": self.problem,
                 "target": target_to_dict(self.target),

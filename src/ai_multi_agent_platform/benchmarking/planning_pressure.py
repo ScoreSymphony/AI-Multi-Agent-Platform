@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 import time
 import tracemalloc
 from dataclasses import asdict, dataclass
@@ -264,6 +265,12 @@ class PlanningPressureBenchmarkHarness:
             count=spec.operation_count,
             prefix="measured",
         )
+        # Normalize WAL state before measuring persistent growth. Task seeding can leave
+        # transient WAL pages that are checkpointed during the measured lifecycle; counting
+        # those pages in the baseline can otherwise report negative "growth" even though the
+        # canonical stores gained records.
+        _checkpoint_sqlite_storage(db_dir / "kernel.sqlite3")
+        _checkpoint_sqlite_storage(db_dir / "coordination.sqlite3")
         storage_before = _directory_size(self._data_dir)
         tracing_was_active = tracemalloc.is_tracing()
         if not tracing_was_active:
@@ -295,6 +302,9 @@ class PlanningPressureBenchmarkHarness:
         traced_current, traced_peak = tracemalloc.get_traced_memory()
         if not tracing_was_active:
             tracemalloc.stop()
+        # Compare like-for-like durable SQLite footprints instead of transient WAL state.
+        _checkpoint_sqlite_storage(db_dir / "kernel.sqlite3")
+        _checkpoint_sqlite_storage(db_dir / "coordination.sqlite3")
         storage_after = _directory_size(self._data_dir)
 
         errors = tuple(error for result in results if (error := result.error) is not None)
@@ -457,6 +467,21 @@ async def _exercise_cycle(
     except Exception as exc:  # benchmark evidence records failure instead of hiding it
         result.error = f"{type(exc).__name__}: {exc}"
     return result
+
+
+def _checkpoint_sqlite_storage(path: Path) -> None:
+    """Normalize SQLite WAL state so byte-growth snapshots are comparable."""
+
+    if not path.exists():
+        return
+    with sqlite3.connect(path) as connection:
+        mode_row = connection.execute("PRAGMA journal_mode").fetchone()
+        mode = str(mode_row[0]).casefold() if mode_row is not None else ""
+        if mode != "wal":
+            return
+        checkpoint = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        if checkpoint is None or int(checkpoint[0]) != 0:
+            raise RuntimeError(f"SQLite WAL checkpoint could not complete for {path}")
 
 
 def _linear_draft(agent_id: str, revision: int, count: int) -> PlanDraft:

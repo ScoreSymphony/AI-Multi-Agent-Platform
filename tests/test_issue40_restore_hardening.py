@@ -337,6 +337,8 @@ def test_server_refuses_then_operator_resolves_orphaned_restored_run(
         run = await kernel.start_task(idempotency_key="active:start", task_id=task.task_id)
         assert run.status.value == "running"
         _materialize_required_stores(source)
+        build_single_node_deployment(SingleNodeConfig(data_dir=source, secure_cookie=False))
+        assert (await kernel.get_run(task.task_id, run.run_id)).status.value == "running"
 
         backup = create_single_node_backup(
             data_dir=source,

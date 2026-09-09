@@ -5,15 +5,16 @@ from __future__ import annotations
 from ai_multi_agent_platform.contracts import (
     ContractError,
     DataClassification,
+    EgressDecision,
     EgressRequest,
     EgressTarget,
     EgressTargetKind,
     ErrorCode,
     OperationContext,
-    strongest_classification,
 )
 from ai_multi_agent_platform.security.egress import EgressGate
 
+from .classification import effective_context_bundle_classification
 from .models import ContextBundle
 from .rendering import (
     ContextContentProvider,
@@ -43,9 +44,27 @@ class ContextBundleEgressExporter:
         context: OperationContext,
         content_provider: ContextContentProvider | None = None,
     ) -> RenderedContext:
+        rendered, _ = await self.export_with_decision(
+            bundle,
+            target=target,
+            context=context,
+            content_provider=content_provider,
+        )
+        return rendered
+
+    async def export_with_decision(
+        self,
+        bundle: ContextBundle,
+        *,
+        target: EgressTarget,
+        context: OperationContext,
+        content_provider: ContextContentProvider | None = None,
+    ) -> tuple[RenderedContext, EgressDecision]:
+        """Export Context and retain the exact policy decision that governed disclosure."""
+
         if target.kind is not EgressTargetKind.CONTEXT_EXPORT:
             raise ValueError("context bundle export requires target kind context_export")
-        classification = _bundle_classification(bundle)
+        classification = effective_context_bundle_classification(bundle)
         decision = await self.egress_gate.enforce(
             EgressRequest(
                 request_id=f"context:{bundle.context_bundle_id}:{target.target_id}",
@@ -68,16 +87,10 @@ class ContextBundleEgressExporter:
                 "context egress downgrade requires creation of an explicit redacted Context Bundle",
                 details={"egress_request_id": decision.request_id},
             )
-        return await self.renderer.render(
+        rendered = await self.renderer.render(
             bundle,
             content_provider=content_provider,
             allow_secret_resolution=classification
             not in {DataClassification.SECRET, DataClassification.SECRET_REFERENCE},
         )
-
-
-def _bundle_classification(bundle: ContextBundle) -> DataClassification:
-    classifications = tuple(
-        DataClassification(entry.data_classification.value) for entry in bundle.entries
-    )
-    return strongest_classification(*classifications) or DataClassification.PUBLIC
+        return rendered, decision
