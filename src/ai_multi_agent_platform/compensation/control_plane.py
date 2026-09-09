@@ -71,8 +71,8 @@ class CompensationControlPlaneProjection:
     def get_group(self, group_id: str) -> CompensationGroupView:
         group = self.repository.get_group(group_id)
         requests_by_action: dict[str, list[CompensationRequest]] = {}
-        for request in self.repository.list_requests(group.group_id):
-            requests_by_action.setdefault(request.action_id, []).append(request)
+        for stored_request in self.repository.list_requests(group.group_id):
+            requests_by_action.setdefault(stored_request.action_id, []).append(stored_request)
 
         views: list[CompensationActionView] = []
         for action in self.repository.list_actions(group.group_id):
