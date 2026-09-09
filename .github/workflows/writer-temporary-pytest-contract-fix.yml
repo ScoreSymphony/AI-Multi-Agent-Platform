@@ -1,6 +1,7 @@
 name: Temporary writer Pytest contract fix
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - fix/594-595-eval-learning-integration
