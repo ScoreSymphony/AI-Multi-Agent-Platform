@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from ai_multi_agent_platform.agents import AgentInstructions, AgentProfile, InstructionSource
+from ai_multi_agent_platform.agents import (
+    AgentInstructions,
+    AgentModelPolicy,
+    AgentProfile,
+    InstructionSource,
+)
 from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     encode_agent_execution_binding,
@@ -54,6 +59,7 @@ def test_single_node_repairs_crash_after_agent_run_before_context_binding(
                         version="issue-650-v1",
                     )
                 ),
+                model=AgentModelPolicy(allow_task_override=True),
             ),
             owner_ref=OwnerRef(type="user", id=admin.user_id),
             project_id=project.id,
