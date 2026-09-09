@@ -14,8 +14,8 @@ from ai_multi_agent_platform.contracts import (
 )
 from ai_multi_agent_platform.contracts.authorization import (
     AuthorizationDecision as CanonicalAuthorizationDecision,
-    AuthorizationOutcome,
 )
+from ai_multi_agent_platform.contracts.authorization import AuthorizationOutcome
 from ai_multi_agent_platform.contracts.interfaces import AuthorizationProvider
 from ai_multi_agent_platform.contracts.types import AuthorizationDecision, AuthorizationRequest
 from ai_multi_agent_platform.control_plane.extensions import CommandHandler, ControlPlane
