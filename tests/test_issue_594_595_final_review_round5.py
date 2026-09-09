@@ -168,7 +168,9 @@ def test_learning_databases_are_required_backup_stores() -> None:
     assert "db/learning-post-promotion.sqlite3" in required
 
 
-def test_restore_validator_reconstructs_learning_and_rejects_orphan_post_promotion(tmp_path) -> None:
+def test_restore_validator_reconstructs_learning_and_rejects_orphan_post_promotion(
+    tmp_path,
+) -> None:
     async def scenario() -> None:
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "learning-restore", secure_cookie=False)
