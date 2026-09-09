@@ -9,9 +9,9 @@ module only after the Agent package is fully initialized.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
-from ai_multi_agent_platform.automation import Automation, TriggerDelivery
+from ai_multi_agent_platform.automation import NO_TASK_REQUIRED, Automation, TriggerDelivery
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.decisions import (
     DecisionRepository,
@@ -117,11 +117,9 @@ class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
                 payload,
                 idempotency_key,
             )
-
-        # #18 already models generated_task_id as optional. Its legacy TaskCreator type still
-        # spells the return value as str, so keep the compatibility cast at this composition seam
-        # rather than fabricating a Task when a Goal review correctly needs no executable work.
-        return cast(str, dispatch.generated_task_id)
+        if dispatch.generated_task_id is None:
+            return NO_TASK_REQUIRED
+        return dispatch.generated_task_id
 
     async def list_extension_resources(
         self,
