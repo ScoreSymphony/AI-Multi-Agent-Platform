@@ -61,9 +61,7 @@ def _configured_free_external_profile() -> EgressProfile:
 def test_durable_runtime_blocks_profileless_external_by_default(tmp_path: Path) -> None:
     runtime = build_durable_egress_runtime(tmp_path / "egress-profiles.json")
 
-    decision = asyncio.run(
-        runtime.gate.evaluate(_request(posture=EgressTargetPosture.EXTERNAL))
-    )
+    decision = asyncio.run(runtime.gate.evaluate(_request(posture=EgressTargetPosture.EXTERNAL)))
 
     assert decision.outcome is EgressOutcome.UNKNOWN_BLOCKED
     assert decision.reason_code is EgressReasonCode.UNVERIFIED_PROFILE
@@ -76,9 +74,7 @@ def test_public_single_node_uses_strict_external_profile_policy(tmp_path: Path) 
     )
 
     decision = asyncio.run(
-        deployment.egress.runtime.gate.evaluate(
-            _request(posture=EgressTargetPosture.EXTERNAL)
-        )
+        deployment.egress.runtime.gate.evaluate(_request(posture=EgressTargetPosture.EXTERNAL))
     )
 
     assert decision.outcome is EgressOutcome.UNKNOWN_BLOCKED
@@ -116,9 +112,7 @@ def test_focused_embedding_can_opt_out_of_strict_external_profiles(tmp_path: Pat
         require_external_profile=False,
     )
 
-    decision = asyncio.run(
-        runtime.gate.evaluate(_request(posture=EgressTargetPosture.EXTERNAL))
-    )
+    decision = asyncio.run(runtime.gate.evaluate(_request(posture=EgressTargetPosture.EXTERNAL)))
 
     assert decision.outcome is EgressOutcome.ALLOW
     assert decision.reason_code is EgressReasonCode.ALLOWED
