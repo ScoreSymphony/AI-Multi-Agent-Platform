@@ -147,9 +147,10 @@ def test_public_context_inspection_reauthorizes_each_source_and_redacts_denied_e
 
         assert viewer_entries["task"]["hidden"] is False
         assert viewer_entries["task"]["source_id"] == task.task_id
+        assert viewer_entries["task"]["inline_content"] is None
         assert viewer_entries["agent"]["hidden"] is True
         for forbidden in ("source_id", "source_revision", "source_digest", "source_locator"):
             assert forbidden not in viewer_entries["agent"]
-        assert all("inline_content" not in entry for entry in viewer_entries.values())
+        assert "inline_content" not in viewer_entries["agent"]
 
     asyncio.run(scenario())
