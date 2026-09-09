@@ -177,14 +177,24 @@ implementation and a dependency-free SQLite implementation for single-node resta
 Source Observations, Evidence and completed Verification bindings are append-only historical
 records. Research Items and Claims use explicit optimistic revisions for their mutable projections.
 
-## Current #589 scope
+## #589 completion state
 
-The current implementation establishes the canonical model, durability, freshness semantics,
-#86 binding, #439 provenance handoff, #502 provenance consumption, explicit Knowledge/Memory
-promotion, the untrusted-execution policy contract, and the canonical Control Plane resources and
-commands.
+The canonical Research Evidence core, Search projection, durable single-node composition, #19
+Research evaluation, #77 Research Team integration, #598 Decision provenance and #79 portable
+Research bundle codec are integrated. ``build_single_node_deployment(...)`` now exposes the same
+durable ``ResearchService`` backed by ``db/research.sqlite3`` and registers the Search-aware
+Research Control Plane surface by default.
 
-Remaining #589 work includes Search registration, research-specific #19 evaluation fixtures,
-portability, downstream Decision/provenance integration where the canonical consumers expose the
-required seams, Research Team integration coverage, and broader end-to-end coverage. Those
-additions must extend the authority boundaries above rather than redefine them.
+The Research quality suite remains **explicit/versioned opt-in** via
+``canonical_research_quality_suite(research_item_id)``. This is intentional: the suite evaluates one
+exact Research Item and therefore should not be installed as a global deployment suite with a
+placeholder identity or duplicated thresholds.
+
+The shared #79 portability composition can export Research bundles with historical-preserve
+semantics. Generic package import deliberately does not receive a no-op Research mutation handler;
+``import_research_bundle(...)`` remains the owner-domain import boundary so exact graph validation
+and destination-local #86 Verification validation stay fail-closed.
+
+``UntrustedResearchExecutionProfile`` remains a policy projection consumed by the existing
+Workspace/Executor/Capability/Authorization/resource boundaries. Research does not introduce a
+second executor, scheduler or sandbox authority.
