@@ -202,6 +202,8 @@ def build_single_node_deployment(
     # Compose governed Learning only after Context created the authoritative Skill and Research
     # services. Reusing those exact owner instances avoids a learning-private shadow Skill store;
     # Agent and routing-profile promotion likewise use the base deployment's canonical services.
+    # #694 additionally passes the canonical Run and Planning readers used to authenticate
+    # system-derived Learning source evidence.
     learning = build_single_node_learning(
         database_dir=config.database_dir,
         agents=base.agents,
@@ -209,6 +211,8 @@ def build_single_node_deployment(
         evaluation=base.evaluation,
         verification=base.verification,
         approval_gate=base.approval_gate,
+        kernel=base.kernel,
+        planning=planning,
         telemetry=base.telemetry,
         skills=context.skills,
         research=context.research,

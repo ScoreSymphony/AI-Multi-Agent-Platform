@@ -1,4 +1,4 @@
-"""Governed feedback, learning-candidate and owner-domain promotion workflow (#595)."""
+"""Governed feedback, learning-candidate and owner-domain promotion workflow (#595/#694)."""
 
 from .control_plane import (
     LEARNING_CANDIDATE_COLLECTION,
@@ -54,6 +54,12 @@ from .runtime_control_plane import (
 )
 from .service import LearningQualityGate, LearningService
 from .single_node import SingleNodeLearningComposition, build_single_node_learning
+from .source_evidence import (
+    KernelRunFailureEvidenceResolver,
+    PlanningFailureSourceRef,
+    PlanningProposalFailureEvidenceResolver,
+    RunFailureSourceRef,
+)
 from .sources import LearningSourceBridge
 
 __all__ = [
@@ -70,6 +76,7 @@ __all__ = [
     "GovernedObservedLearningService",
     "InMemoryLearningRepository",
     "InMemoryPostPromotionEvaluationRecorder",
+    "KernelRunFailureEvidenceResolver",
     "LearningCandidate",
     "LearningCandidateResourceService",
     "LearningCandidateStatus",
@@ -87,6 +94,8 @@ __all__ = [
     "LearningTargetType",
     "ObservedLearningService",
     "OwnerPromotionAdapter",
+    "PlanningFailureSourceRef",
+    "PlanningProposalFailureEvidenceResolver",
     "PostPromotionEvaluationOutcome",
     "PostPromotionEvaluationRecord",
     "PostPromotionEvaluationRecorder",
@@ -94,6 +103,7 @@ __all__ = [
     "PromotionReceipt",
     "PromotionRegistry",
     "RoutingProfilePromotionAdapter",
+    "RunFailureSourceRef",
     "SQLiteLearningRepository",
     "SQLitePostPromotionEvaluationRecorder",
     "SingleNodeLearningComposition",
