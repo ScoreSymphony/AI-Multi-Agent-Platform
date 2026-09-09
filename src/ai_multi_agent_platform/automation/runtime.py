@@ -6,7 +6,7 @@ import asyncio
 import json
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +19,8 @@ from ai_multi_agent_platform.kernel.repository import EventRepository
 from .models import TriggerDelivery, require_aware, utc_now
 from .runtime_service import AutomationService
 from .service import ReferenceScheduler
+
+AutomationEventPreprocessor = Callable[[PlatformEvent], Awaitable[None]]
 
 _RETRYABLE_EVENT_ERROR_CODES = frozenset(
     {
@@ -306,6 +308,7 @@ class AutomationRuntime:
         scheduler: ReferenceScheduler,
         events: EventRepository,
         state: AutomationRuntimeState,
+        event_preprocessors: tuple[AutomationEventPreprocessor, ...] = (),
         poll_interval_seconds: float = 1.0,
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
@@ -315,6 +318,7 @@ class AutomationRuntime:
         self._scheduler = scheduler
         self._events = events
         self._state = state
+        self._event_preprocessors = list(event_preprocessors)
         self._poll_interval_seconds = poll_interval_seconds
         self._clock = clock
         self._stop_event = asyncio.Event()
@@ -329,6 +333,11 @@ class AutomationRuntime:
     def last_error(self) -> Exception | None:
         return self._last_error
 
+    def register_event_preprocessor(self, preprocessor: AutomationEventPreprocessor) -> None:
+        """Run a canonical-event projector before #18 delivery/cursor advancement."""
+        if preprocessor not in self._event_preprocessors:
+            self._event_preprocessors.append(preprocessor)
+
     async def run_once(self, *, now: datetime | None = None) -> AutomationRuntimeTick:
         current = require_aware(now or self._clock(), "now").astimezone(UTC)
         processed_event_ids: list[str] = []
@@ -340,6 +349,15 @@ class AutomationRuntime:
 
         pending_events = await self._pending_events()
         for event in pending_events:
+            try:
+                for preprocessor in self._event_preprocessors:
+                    await preprocessor(event)
+            except Exception as exc:
+                # Canonical projectors fail retryably: do not advance the #18 event cursor.
+                failed_event_ids.append(event.id)
+                if first_error is None:
+                    first_error = exc
+                continue
             try:
                 deliveries = await self._service.deliver_canonical_platform_event(event)
                 event_delivery_ids.extend(delivery.id for delivery in deliveries)

@@ -220,7 +220,7 @@ def goal_command_handlers(service: GoalService) -> dict[str, CommandHandler]:
                 idempotency_key=_idempotency(context),
                 expected_revision=_required_int(payload, "expected_revision"),
                 trigger_ref=_required_string(payload, "trigger_ref"),
-                evidence=tuple(_parse_evidence(item) for item in raw_evidence),
+                evidence=tuple(_parse_evidence(context, item) for item in raw_evidence),
                 next_review_at=(
                     None if raw_next is None else _parse_datetime(raw_next, "next_review_at")
                 ),
@@ -352,17 +352,46 @@ def _parse_autonomy(value: dict[str, JsonValue] | None) -> AutonomyPolicy:
     )
 
 
-def _parse_evidence(raw: JsonValue) -> GoalEvidence:
+def _parse_evidence(context: RequestContext, raw: JsonValue) -> GoalEvidence:
     value = _object(raw, "evidence[]")
     observed = _optional_string(value, "observed_at")
     evidence_id = _optional_string(value, "evidence_id")
+    kind = _required_string(value, "kind")
+    supplied_actor_ref = _optional_string(value, "actor_ref")
+    if supplied_actor_ref is not None and supplied_actor_ref != context.actor.principal_ref:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "Goal evidence actor_ref is server-bound to the authenticated principal",
+        )
+
+    claimed_verified = value.get("verified")
+    if claimed_verified is not None and not isinstance(claimed_verified, bool):
+        raise ContractError(ErrorCode.INVALID_REQUEST, "verified must be a boolean")
+
+    if kind == GoalCriterionKind.HUMAN_ACCEPTANCE.value:
+        if context.actor.owner_type != "user":
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "human Goal acceptance requires an authenticated user actor",
+            )
+        verified = True
+        source_ref = f"human-acceptance:{context.actor.principal_ref}"
+    else:
+        if claimed_verified is True:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "verified Goal evidence must come from a canonical verification/promotion boundary",
+            )
+        verified = False
+        source_ref = _required_string(value, "source_ref")
+
     kwargs: dict[str, Any] = {
         "criterion_id": _required_string(value, "criterion_id"),
-        "kind": _required_string(value, "kind"),
+        "kind": kind,
         "value": value.get("value"),
-        "source_ref": _required_string(value, "source_ref"),
-        "verified": _required_bool(value, "verified"),
-        "actor_ref": _optional_string(value, "actor_ref"),
+        "source_ref": source_ref,
+        "verified": verified,
+        "actor_ref": context.actor.principal_ref,
     }
     if observed is not None:
         kwargs["observed_at"] = _parse_datetime(observed, "observed_at")

@@ -108,7 +108,7 @@ platform extension execute goal.review GOAL_ID \
   }'
 ```
 
-Evidence-backed criteria require canonical evidence marked as verified according to the Goal contract. Free-form Agent self-report does not become Goal truth merely because it is supplied in a review payload.
+Direct CLI/Web review cannot self-promote non-human evidence: a client-supplied `verified=true` claim is rejected and evidence actor identity is bound to the authenticated principal. Authenticated user `human_acceptance` is promoted at the Control Plane boundary; all other verified evidence must arrive through a canonical verification/promotion integration such as #86.
 
 Scheduled/event reviews should normally arrive through the #18 Automation delivery integration rather than from a shell loop. #18 owns delivery timing/deduplication; the Goal subsystem owns the review semantics and durable progress state.
 

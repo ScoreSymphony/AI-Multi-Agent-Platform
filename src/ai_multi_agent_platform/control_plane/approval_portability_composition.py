@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ai_multi_agent_platform.automation import NO_TASK_REQUIRED, Automation, TriggerDelivery
-from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.contracts.types import JsonValue, PlatformEvent
 from ai_multi_agent_platform.decisions import (
     DecisionRepository,
     DecisionService,
@@ -26,6 +26,7 @@ from ai_multi_agent_platform.goals import (
     KernelGoalTaskCreator,
     dispatch_goal_automation_delivery,
 )
+from ai_multi_agent_platform.goals.reconciliation import reconcile_goal_task_terminal_event
 from ai_multi_agent_platform.governance.control_plane import register_governance_control_plane
 from ai_multi_agent_platform.governance.repository import (
     GovernanceRepository,
@@ -66,6 +67,11 @@ class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
             self.register_resource_service(collection, service)
         for command, handler in goal_command_handlers(self.goals).items():
             self.register_command(command, handler)
+
+        async def reconcile_goal_task_event(event: PlatformEvent) -> None:
+            await reconcile_goal_task_terminal_event(self.goals, event)
+
+        self.automation_runtime.register_event_preprocessor(reconcile_goal_task_event)
 
         self.governance: GovernanceService | None = None
         self.decisions: DecisionService | None = None

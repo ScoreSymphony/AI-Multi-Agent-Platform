@@ -554,6 +554,13 @@ class GoalService:
             status = GoalStatus.WAITING
             progress = GoalProgress.PARTIAL
             decision_reason = "criteria remain unmet but automatic Task generation is disabled"
+        elif current.task_generation_policy.proposal_required:
+            status = GoalStatus.PAUSED
+            progress = GoalProgress.BLOCKED
+            decision_reason = (
+                "Goal policy requires Proposal/Specification mediation; "
+                "automatic Proposal generation is not configured"
+            )
         else:
             task_id = deterministic_goal_task_id(goal_id, current.revision, idempotency_key, 0)
             created_task_id = await self._task_creator.create_goal_task(

@@ -174,9 +174,8 @@ export interface GoalEvidenceInput {
   criterion_id: string;
   kind: string;
   value: JsonValue;
-  source_ref: string;
-  verified: boolean;
-  actor_ref?: string;
+  source_ref?: string;
+  verified?: false;
   observed_at?: string;
 }
 
