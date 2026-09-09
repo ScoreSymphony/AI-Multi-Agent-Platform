@@ -240,11 +240,14 @@ class EgressGate:
     ) -> EgressDecision:
         decision = await self.evaluate(request, actor=actor, approval_id=approval_id)
         if not decision.allowed:
+            target_posture = _resolved_target_posture(request, decision)
+            profile_ref = _resolved_profile_ref(request, decision)
+            cost_class = _resolved_cost_class(request, decision)
             details: dict[str, JsonValue] = {
                 "egress_request_id": request.request_id,
                 "target_kind": request.target.kind.value,
                 "target_id": request.target.target_id,
-                "target_posture": request.target.effective_posture.value,
+                "target_posture": target_posture.value,
                 "classification": (
                     None if request.classification is None else request.classification.value
                 ),
@@ -253,9 +256,10 @@ class EgressGate:
                 "payload_digest": request.payload_digest,
                 "policy_version": decision.policy_version,
             }
-            if request.target.profile is not None:
-                details["profile_ref"] = request.target.profile.canonical_ref
-                details["cost_class"] = request.target.profile.cost_class.value
+            if profile_ref is not None:
+                details["profile_ref"] = profile_ref
+            if cost_class is not None:
+                details["cost_class"] = cost_class.value
             if decision.approval_ref is not None:
                 details["approval_ref"] = decision.approval_ref
             raise ContractError(
@@ -317,14 +321,16 @@ class EgressGate:
         event_type: EgressAuditEventType,
     ) -> None:
         # Deliberately only project request identity, classification, digest and safe metadata.
-        profile = request.target.profile
+        target_posture = _resolved_target_posture(request, decision)
+        profile_ref = _resolved_profile_ref(request, decision)
+        cost_class = _resolved_cost_class(request, decision)
         await self.audit_sink.record(
             EgressAuditEvent(
                 event_type=event_type,
                 request_id=request.request_id,
                 target_kind=request.target.kind,
                 target_id=request.target.target_id,
-                target_posture=request.target.effective_posture,
+                target_posture=target_posture,
                 classification=decision.effective_classification,
                 outcome=decision.outcome,
                 reason_code=decision.reason_code,
@@ -335,12 +341,48 @@ class EgressGate:
                 task_id=request.task_id,
                 run_id=request.run_id,
                 capability_id=request.capability_id,
-                profile_ref=None if profile is None else profile.canonical_ref,
-                cost_class=None if profile is None else profile.cost_class,
+                profile_ref=profile_ref,
+                cost_class=cost_class,
                 approval_ref=decision.approval_ref,
                 audit_metadata=decision.audit_metadata,
             )
         )
+
+
+def _decision_metadata_string(decision: EgressDecision, key: str) -> str | None:
+    value = decision.audit_metadata.get(key)
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _resolved_target_posture(
+    request: EgressRequest,
+    decision: EgressDecision,
+) -> EgressTargetPosture:
+    value = _decision_metadata_string(decision, "target_posture")
+    if value is not None:
+        try:
+            return EgressTargetPosture(value)
+        except ValueError:
+            pass
+    return request.target.effective_posture
+
+
+def _resolved_profile_ref(request: EgressRequest, decision: EgressDecision) -> str | None:
+    return _decision_metadata_string(decision, "profile_ref") or request.target.profile_ref
+
+
+def _resolved_cost_class(
+    request: EgressRequest,
+    decision: EgressDecision,
+) -> EgressCostClass | None:
+    value = _decision_metadata_string(decision, "cost_class")
+    if value is not None:
+        try:
+            return EgressCostClass(value)
+        except ValueError:
+            pass
+    profile = request.target.profile
+    return None if profile is None else profile.cost_class
 
 
 def _apply_redactions(payload: JsonValue, paths: tuple[str, ...]) -> JsonValue:

@@ -74,6 +74,8 @@ Identity, authorization, policy evaluation, approval gates, auditability, observ
 
 Sensitive operations must be representable as governed actions that can require explicit human or policy approval.
 
+The production-shaped durable egress boundary fails closed for external destinations whose trust and cost policy is not represented by an explicit `EgressProfile`. Per ADR 0011, a profileless external target is not eligible merely because its provider identity is known; local/internal compatibility paths remain distinct from the normative production baseline.
+
 ## 13. Provenance and licensing are first-class
 
 Any reused or vendored upstream code retains provenance and compatible licensing. Dependencies, external services, protocols and vendored code are treated as distinct integration categories.
@@ -98,6 +100,7 @@ The following invariants are reviewable constraints for implementation work:
 8. Baseline operation must remain possible with local/self-hosted components.
 9. Third-party source reuse must follow the repository's license and provenance policy.
 10. Security, approvals, traceability and recovery are cross-cutting platform requirements.
+11. Production-shaped durable external egress requires explicit policy/trust metadata and fails closed when the external target has no `EgressProfile`.
 
 ## Replaceable architecture boundaries
 
