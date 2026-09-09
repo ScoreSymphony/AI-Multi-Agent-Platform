@@ -12,7 +12,13 @@ from ai_multi_agent_platform.context.resolver import ContextSourceRequest
 from ai_multi_agent_platform.context.verification_source import (
     VerificationContextClassificationResolver,
 )
-from ai_multi_agent_platform.contracts import DataClassification, strongest_classification
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    DataClassification,
+    ErrorCode,
+    OperationContext,
+    strongest_classification,
+)
 from ai_multi_agent_platform.data.contracts import FileProvider
 from ai_multi_agent_platform.data.models import DataAccessContext
 from ai_multi_agent_platform.verification import VerificationRequest, VerificationResult
@@ -57,9 +63,21 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
         request: ContextSourceRequest,
         artifact_id: str,
     ) -> DataClassification:
+        operation = getattr(request, "operation", None)
+        actor_ref = getattr(request, "actor_ref", None)
+        if not isinstance(operation, OperationContext):
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "Verification Context classification requires OperationContext",
+            )
+        if not isinstance(actor_ref, str) or not actor_ref.strip():
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "Verification Context classification requires actor_ref",
+            )
         access = DataAccessContext(
-            operation=request.operation,
-            actor_ref=request.actor_ref,
+            operation=operation,
+            actor_ref=actor_ref,
             task_id=request.task_id,
             run_id=request.run_id,
             agent_id=request.agent_id,
@@ -72,7 +90,17 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
         if len(linked) != 1:
             # Missing or ambiguous owner evidence cannot justify rendering reviewer prose inline.
             return DataClassification.SECRET
-        return DataClassification(linked[0].classification)
+        classification = linked[0].classification
+        if classification is None:
+            return DataClassification.SECRET
+        try:
+            return (
+                classification
+                if isinstance(classification, DataClassification)
+                else DataClassification(classification)
+            )
+        except ValueError:
+            return DataClassification.SECRET
 
 
 def _context_classification(value: DataClassification) -> ContextDataClassification:
