@@ -4,24 +4,28 @@ Issue: #595
 
 The Learning CLI is API-first. It reads and mutates governed Learning state only through the canonical `/api/v1` Control Plane. It never imports Learning repositories or owner-domain storage directly.
 
-## Read-only inspection
+## Public entrypoint
 
-The existing generic extension commands can inspect registered Learning collections:
+The distributed `platform` command registers the first-class governed Learning domain through `src/ai_multi_agent_platform/cli/issue_81.py` and `src/ai_multi_agent_platform/cli/learning.py`.
+
+```bash
+platform learning --help
+platform learning candidate list
+```
+
+The existing generic extension commands remain available for read-only inspection of registered Learning collections:
 
 ```bash
 platform extension list learning-candidates
 platform extension show learning-candidates <learning_candidate_id>
 platform extension list learning-feedback
 platform extension list learning-post-promotion-evaluations
+platform extension commands
 ```
 
-`platform extension commands` can show which canonical extension commands are registered.
-
-The generic extension CLI is deliberately read-only. It does not execute `POST /api/v1/commands/{command}` because a generic mutation layer cannot know a domain's confirmation, Approval and recovery semantics.
+The generic extension CLI is deliberately read-only. It does not execute `POST /api/v1/commands/{command}` because a generic mutation layer cannot know a domain's confirmation, Approval and recovery semantics. Mutations use the explicit `platform learning` adapter instead.
 
 ## First-class Learning commands
-
-`src/ai_multi_agent_platform/cli/learning.py` prepares the explicit `platform learning` domain adapter. The later unified integration branch must register `add_learning_parser(...)` and dispatch `execute_learning(...)` in the final CLI composition.
 
 ### Candidate inspection
 
@@ -80,7 +84,7 @@ high
 critical
 ```
 
-The Candidate `gate_plan` is not the platform authority. The deployment-owned `LearningPlatformPolicy` is enforced separately and can require stricter Evaluation/Verification bindings or Approval. In the prepared default configuration, Evaluation/Verification references must use exact `<id>@<version>` form when their gate is enabled, HIGH/CRITICAL promotions require Approval, global/unscoped promotions require Approval, and automatic promotion is disabled platform-wide.
+The Candidate `gate_plan` is not the platform authority. The deployment-owned `LearningPlatformPolicy` is enforced separately and can require stricter Evaluation/Verification bindings or Approval. In the default production composition, Evaluation/Verification references must use exact `<id>@<version>` form when their gate is enabled, HIGH/CRITICAL promotions require Approval, global/unscoped promotions require Approval, and automatic promotion is disabled platform-wide.
 
 ### Proposal from exact feedback
 
@@ -133,22 +137,24 @@ platform learning supersede learning_candidate_old \
 
 ### Promote
 
+Promotion is a side-effecting operation and therefore uses the global explicit-confirmation flag:
+
 ```bash
-platform learning promote learning_candidate_... \
+platform --yes learning promote learning_candidate_... \
   --expected-revision 4 \
   --idempotency-key learning-promote-1
 ```
 
-When either the Candidate policy or the platform governance floor requires explicit Approval, the first attempt returns the canonical pending Approval reference. With the prepared default platform policy this includes HIGH/CRITICAL candidates and global/unscoped targets. After that exact action has been approved through the normal Approval surface, retry with the bound Approval ID:
+When either the Candidate policy or the platform governance floor requires explicit Approval, the first authorized promotion attempt can return the canonical pending Approval reference. With the default platform policy this includes HIGH/CRITICAL candidates and global/unscoped targets. After that exact action has been approved through the normal Approval surface, retry with the bound Approval ID:
 
 ```bash
-platform learning promote learning_candidate_... \
+platform --yes learning promote learning_candidate_... \
   --expected-revision 4 \
   --approval-id approval_... \
   --idempotency-key learning-promote-approved-1
 ```
 
-The CLI invokes its normal explicit confirmation hook before promotion. The server still owns stale-revision checking, exact-action Approval binding, authorization, quality validation, platform-policy validation and canonical owner revision creation.
+The CLI requires `--yes` before sending promotion to the Control Plane. The server still owns stale-revision checking, exact-action Approval binding, authorization, quality validation, platform-policy validation and canonical owner revision creation.
 
 ### Post-promotion Evaluation
 
@@ -159,15 +165,17 @@ platform learning post-eval list
 platform learning post-eval show learning_post_evaluation_...
 ```
 
-These records are derived Evaluation evidence only. They do not rewrite the promoted resource or historical Learning Candidate revisions. In the prepared Single-Node composition they are persisted in SQLite and the runtime suppresses duplicate evaluation for the same promoted Candidate revision/target revision pair.
+These records are derived Evaluation evidence only. They do not rewrite the promoted resource or historical Learning Candidate revisions. In the Single-Node composition they are persisted in SQLite and the runtime suppresses duplicate evaluation for the same promoted Candidate revision/target revision pair.
 
-## Unified-branch integration
+## Production integration
 
-This issue branch intentionally leaves the top-level CLI dispatcher untouched to reduce conflicts with other active branches. When the active branches are combined, the final CLI composition should:
+The public CLI composition now:
 
-1. import `add_learning_parser` and `execute_learning`;
-2. register `add_learning_parser(areas)` once;
-3. dispatch the `learning` area to `execute_learning(args, client, confirm)` using the existing authenticated Control Plane client and confirmation helper;
-4. retain the generic extension CLI as read-only;
-5. preserve the deployment-owned `LearningPlatformPolicy` floor;
-6. run the unified branch's formatting/type/test/CI pass only after all active branches are reconciled.
+1. imports `add_learning_parser` and `execute_learning`;
+2. registers `platform learning` exactly once alongside the Registry domain;
+3. dispatches it through the same authenticated `ControlPlaneClient` and confirmation helper as other top-level domains;
+4. retains the generic extension CLI as read-only;
+5. preserves the deployment-owned `LearningPlatformPolicy` floor;
+6. delegates every unrelated CLI area unchanged to the existing lower-level composition.
+
+Regression coverage in `tests/test_issue_81_cli_entrypoint.py` proves that candidate inspection reaches `/api/v1/learning-candidates`, promotion requires global `--yes` before transport, and confirmed promotion dispatches the exact candidate revision and optional Approval binding.
