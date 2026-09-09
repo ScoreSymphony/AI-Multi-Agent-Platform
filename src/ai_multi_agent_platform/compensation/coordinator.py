@@ -81,10 +81,40 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
         action = self.repository.get_action(request.action_id)
         current = self.repository.get_result(compensation_id)
 
-        # Terminal results stay immutable, while an ambiguous RUNNING result must go through the
-        # base reconciler because the external compensation may already have happened.
+        # Terminal results stay immutable. Recovery must nevertheless refuse to execute a sibling
+        # request when an upgraded store contains multiple persisted identities for the same
+        # immutable compensation target.
         if current is not None and self._is_terminal(current.status):
             return current
+        identity_conflict = self._request_identity_conflict(action)
+        if identity_conflict is not None:
+            checked_at = utc_now()
+            if current is not None:
+                return self.repository.save_result(
+                    replace(
+                        current,
+                        status=CompensationStatus.RECONCILIATION_REQUIRED,
+                        error_code=identity_conflict.code.value,
+                        error_message=identity_conflict.message,
+                        manual_intervention_required=True,
+                        completed_at=checked_at,
+                    )
+                )
+            return self.repository.save_result(
+                CompensationResult(
+                    compensation_id=request.compensation_id,
+                    status=CompensationStatus.RECONCILIATION_REQUIRED,
+                    execution_task_id=context.task_id,
+                    execution_run_id=context.run_id,
+                    execution_agent_id=context.agent_id,
+                    invocation_id=context.invocation_id,
+                    error_code=identity_conflict.code.value,
+                    error_message=identity_conflict.message,
+                    manual_intervention_required=True,
+                    completed_at=checked_at,
+                )
+            )
+
         if current is not None and current.status is CompensationStatus.RUNNING:
             return await super().execute(compensation_id, context)
 
@@ -121,7 +151,27 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
                 )
             )
 
-        return await super().execute(compensation_id, context)
+        result = await super().execute(compensation_id, context)
+        if (
+            result.status is CompensationStatus.EXPIRED
+            and current is not None
+            and current.status is CompensationStatus.APPROVAL_REQUIRED
+            and current.canonical_tool_invocation_id is not None
+        ):
+            # The base executor creates a fresh RUNNING result for the retry. If asynchronous
+            # governance crosses the deadline, keep the previously governed Approval/ToolInvocation
+            # tuple together instead of pairing the old Approval with the retry invocation.
+            return self.repository.save_result(
+                replace(
+                    current,
+                    status=CompensationStatus.EXPIRED,
+                    error_code=result.error_code,
+                    error_message=result.error_message,
+                    manual_intervention_required=True,
+                    completed_at=result.completed_at,
+                )
+            )
+        return result
 
     def _build_invocation(
         self,
@@ -176,6 +226,34 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
                 )
             )
         return super()._record_invocation_failure(running, error)
+
+    def _request_identity_conflict(
+        self, action: CompletedSideEffect
+    ) -> ContractError | None:
+        """Return a fail-closed conflict when persisted default request identities disagree."""
+
+        canonical_key = self._default_idempotency_key(action)
+        matches: list[CompensationRequest] = []
+        canonical = self.repository.find_request_by_key(canonical_key)
+        if canonical is not None:
+            self._validate_request_target(canonical, action)
+            matches.append(canonical)
+        for legacy_trigger in CompensationTrigger:
+            existing = self.repository.find_request_by_key(
+                f"{canonical_key}:{legacy_trigger.value}"
+            )
+            if existing is not None:
+                self._validate_request_target(existing, action)
+                matches.append(existing)
+
+        unique_ids = {request.compensation_id for request in matches}
+        if len(unique_ids) <= 1:
+            return None
+        return ContractError(
+            ErrorCode.CONFLICT,
+            "canonical and legacy compensation requests coexist for one immutable target; "
+            "manual reconciliation is required",
+        )
 
     def _find_legacy_request(
         self, action: CompletedSideEffect
