@@ -205,9 +205,7 @@ def test_compensation_policy_or_descriptor_can_force_fresh_ordinary_approval(
             provider,
             approval_hook=not_approved,
         )
-        group = coordinator.register_group(
-            _group(require_human_approval=group_requires_approval)
-        )
+        group = coordinator.register_group(_group(require_human_approval=group_requires_approval))
         action = coordinator.record_completed_side_effect(
             _action(group, requires_approval=descriptor_requires_approval)
         )
