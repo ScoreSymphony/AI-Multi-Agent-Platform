@@ -298,6 +298,7 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
                     capability_ids=agent_run.capability_ids,
                     capability_versions=dict(agent_run.capability_versions),
                     context=request.context,
+                    agent_run_id=agent_run.agent_run_id,
                     data_classification=data_classification,
                 )
                 text = turn.text

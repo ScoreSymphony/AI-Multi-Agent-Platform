@@ -83,6 +83,7 @@ class AgentCapabilityTurn:
         capability_ids: tuple[str, ...],
         capability_versions: dict[str, str],
         context: OperationContext,
+        agent_run_id: str | None = None,
         data_classification: DataClassification = DataClassification.INTERNAL,
     ) -> AgentCapabilityTurnResult:
         tools, tool_names = self._tool_definitions(
@@ -139,6 +140,7 @@ class AgentCapabilityTurn:
                         task_id=task_id,
                         run_id=run_id,
                         agent_id=agent_id,
+                        agent_run_id=agent_run_id,
                         project_id=operation.project_id,
                         causation_id=operation.causation_id,
                     ),

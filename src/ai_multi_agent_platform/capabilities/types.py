@@ -268,6 +268,7 @@ class InvocationTrace:
     task_id: str
     run_id: str
     agent_id: str
+    agent_run_id: str | None = None
     project_id: str | None = None
     causation_id: str | None = None
 
@@ -277,6 +278,8 @@ class InvocationTrace:
         validate_id(self.task_id, "task")
         validate_id(self.run_id, "run")
         validate_id(self.agent_id, "agent")
+        if self.agent_run_id is not None:
+            validate_id(self.agent_run_id, "agent_run")
         if self.project_id is not None:
             validate_id(self.project_id, "project")
 

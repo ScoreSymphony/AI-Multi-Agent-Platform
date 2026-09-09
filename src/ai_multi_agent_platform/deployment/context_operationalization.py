@@ -135,31 +135,42 @@ def _bound_capability_classification(
     bundles: ContextBundleRepository,
     run_bindings: ContextRunBindingRepository,
 ) -> DataClassification:
-    active_runs = tuple(
-        record
-        for record in agents.list_agent_runs(request.trace.run_id)
-        if record.task_id == request.trace.task_id
-        and record.agent.agent_id == request.trace.agent_id
-        and record.status is AgentRunStatus.RUNNING
-    )
-    if len(active_runs) != 1:
+    agent_run_id = request.trace.agent_run_id
+    if agent_run_id is None:
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
-            "Context capability egress requires exactly one active canonical AgentRun",
+            "Context capability egress requires the exact invoking AgentRun identity",
             details={
                 "run_id": request.trace.run_id,
                 "agent_id": request.trace.agent_id,
-                "matching_active_agent_runs": len(active_runs),
             },
         )
-    agent_run = active_runs[0]
     try:
-        binding = run_bindings.get(agent_run.agent_run_id)
+        agent_run = agents.get_agent_run(agent_run_id)
     except KeyError as exc:
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
-            "Context capability egress requires the current AgentRun Context binding",
-            details={"agent_run_id": agent_run.agent_run_id},
+            "Context capability egress references a missing invoking AgentRun",
+            details={"agent_run_id": agent_run_id},
+        ) from exc
+    if (
+        agent_run.run_id != request.trace.run_id
+        or agent_run.task_id != request.trace.task_id
+        or agent_run.agent.agent_id != request.trace.agent_id
+        or agent_run.status is not AgentRunStatus.RUNNING
+    ):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress AgentRun does not match the invocation trace",
+            details={"agent_run_id": agent_run_id},
+        )
+    try:
+        binding = run_bindings.get(agent_run_id)
+    except KeyError as exc:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress requires the invoking AgentRun Context binding",
+            details={"agent_run_id": agent_run_id},
         ) from exc
     if (
         binding.run_id != request.trace.run_id
@@ -169,8 +180,8 @@ def _bound_capability_classification(
     ):
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
-            "Context capability egress binding does not match the current AgentRun",
-            details={"agent_run_id": agent_run.agent_run_id},
+            "Context capability egress binding does not match the invoking AgentRun",
+            details={"agent_run_id": agent_run_id},
         )
     try:
         bundle = bundles.get(binding.context_bundle_id)
@@ -190,9 +201,9 @@ def _bound_capability_classification(
     ):
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
-            "Context capability egress bundle does not match the current AgentRun binding",
+            "Context capability egress bundle does not match the invoking AgentRun binding",
             details={
-                "agent_run_id": agent_run.agent_run_id,
+                "agent_run_id": agent_run_id,
                 "context_bundle_id": binding.context_bundle_id,
             },
         )

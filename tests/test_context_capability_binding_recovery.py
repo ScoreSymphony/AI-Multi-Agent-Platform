@@ -72,6 +72,12 @@ class _AgentRuns:
     def __init__(self, records: tuple[SimpleNamespace, ...]) -> None:
         self.records = records
 
+    def get_agent_run(self, agent_run_id: str) -> SimpleNamespace:
+        for record in self.records:
+            if record.agent_run_id == agent_run_id:
+                return record
+        raise KeyError(agent_run_id)
+
     def list_agent_runs(self, run_id: str | None = None) -> tuple[SimpleNamespace, ...]:
         if run_id is None:
             return self.records
@@ -144,7 +150,7 @@ def test_capability_classification_uses_current_agent_run_binding_after_retry() 
                 run_id=run_id,
                 task_id=task_id,
                 agent=agent_ref,
-                status=AgentRunStatus.FAILED,
+                status=AgentRunStatus.RUNNING,
             ),
             SimpleNamespace(
                 agent_run_id=current_agent_run_id,
@@ -166,6 +172,7 @@ def test_capability_classification_uses_current_agent_run_binding_after_retry() 
             task_id=task_id,
             run_id=run_id,
             agent_id=agent_id,
+            agent_run_id=current_agent_run_id,
         ),
     )
 
