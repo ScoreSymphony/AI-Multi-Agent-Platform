@@ -1,0 +1,40 @@
+name: Temporary PR 677 lint normalization
+
+on:
+  push:
+    branches:
+      - fix/591-650-651-context-egress-handoffs
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/591-650-651-context-egress-handoffs
+      - name: Split overlong error literals
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('src/ai_multi_agent_platform/context/operational.py')
+          text = path.read_text()
+          old = '                    "classification-aware model routing returned no canonical model configuration ID",\n'
+          new = (
+              '                    "classification-aware model routing returned no canonical model "\n'
+              '                    "configuration ID",\n'
+          )
+          count = text.count(old)
+          if count != 2:
+              raise SystemExit(f'expected exactly 2 overlong literals, found {count}')
+          path.write_text(text.replace(old, new))
+      - name: Commit normalization
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/ai_multi_agent_platform/context/operational.py
+          git commit -m 'style: satisfy context routing lint'
+          git push origin HEAD:fix/591-650-651-context-egress-handoffs
