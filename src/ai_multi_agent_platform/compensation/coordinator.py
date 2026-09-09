@@ -85,9 +85,7 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
 
         actions: list[CompensationActionProjection] = []
         for action in self.repository.list_actions(group_id):
-            request = self._select_projection_request(
-                requests_by_action.get(action.action_id, [])
-            )
+            request = self._select_projection_request(requests_by_action.get(action.action_id, []))
             result = (
                 None if request is None else self.repository.get_result(request.compensation_id)
             )
