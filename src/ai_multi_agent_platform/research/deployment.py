@@ -1,4 +1,4 @@
-"""Single-node Research composition prepared for aggregate #589 integration."""
+"""Compatibility access to the standard single-node Research composition."""
 
 from __future__ import annotations
 
@@ -27,21 +27,26 @@ def compose_single_node_research(
     *,
     database_path: Path | None = None,
 ) -> SingleNodeResearchComposition:
-    """Attach durable Search-aware Research to an already-built single-node deployment.
+    """Return standard Research or attach an explicitly separate compatibility store.
 
-    This is intentionally an additive composition seam for the active-branch integration window.
-    The later aggregate branch can fold the same three operations directly into
-    ``build_single_node_deployment`` and expose the service on ``SingleNodeDeployment`` once all
-    concurrent central-file changes have been combined.
+    The ordinary ``build_single_node_deployment`` path now owns ``research.sqlite3`` and Search
+    registration. Calling this helper without a custom path is therefore idempotent. A custom path
+    remains available for isolated compatibility/test compositions and is registered separately.
     """
 
-    path = database_path or deployment.config.database_dir / "research.sqlite3"
+    standard_path = deployment.config.database_dir / "research.sqlite3"
+    if database_path is None or database_path == standard_path:
+        return SingleNodeResearchComposition(
+            service=deployment.research,
+            database_path=standard_path,
+        )
+
     research = ResearchService(
-        SqliteResearchRepository(path),
+        SqliteResearchRepository(database_path),
         authorization=deployment.approval_gate,
     )
     register_searchable_research_control_plane(deployment.control_plane, research)
-    return SingleNodeResearchComposition(service=research, database_path=path)
+    return SingleNodeResearchComposition(service=research, database_path=database_path)
 
 
 __all__ = ["SingleNodeResearchComposition", "compose_single_node_research"]

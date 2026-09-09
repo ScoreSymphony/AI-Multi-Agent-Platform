@@ -179,6 +179,14 @@ from .project_codecs import (
 )
 from .project_import import ProjectDependencyAudit, ProjectImportMutationHandler
 from .registry import ImportContext, ResourceCodec, ResourceExport, ResourceSerializerRegistry
+from .research_codecs import (
+    RESEARCH_BUNDLE_PORTABLE_SCHEMA_VERSION,
+    RESEARCH_BUNDLE_RESOURCE_TYPE,
+    PortableResearchBundle,
+    ResearchBundlePortableCodec,
+    portable_research_bundle,
+    register_research_bundle_portability_codec,
+)
 from .schema import PORTABLE_PACKAGE_SCHEMA_V1, validate_package_document
 from .template_codecs import (
     TEMPLATE_PORTABLE_SCHEMA_VERSION,
@@ -370,4 +378,10 @@ __all__ = [
     "validate_portable_payload",
     "verify_package",
     "verify_resource",
+    "RESEARCH_BUNDLE_PORTABLE_SCHEMA_VERSION",
+    "RESEARCH_BUNDLE_RESOURCE_TYPE",
+    "PortableResearchBundle",
+    "ResearchBundlePortableCodec",
+    "portable_research_bundle",
+    "register_research_bundle_portability_codec",
 ]
