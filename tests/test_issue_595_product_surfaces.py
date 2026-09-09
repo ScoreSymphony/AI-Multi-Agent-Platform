@@ -45,5 +45,5 @@ def test_learning_web_surface_handles_collection_pagination_safely() -> None:
     assert "candidates?.next_cursor" in learning_page
     assert '"Load more"' in learning_page
     assert "loadPostPromotionEvaluations" in learning_page
-    assert 'filters: { learning_candidate_id: learningCandidateId }' in learning_page
+    assert "filters: { learning_candidate_id: learningCandidateId }" in learning_page
     assert "page.next_cursor ?? undefined" in learning_page
