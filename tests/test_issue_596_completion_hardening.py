@@ -226,7 +226,7 @@ def test_compensation_policy_or_descriptor_can_force_fresh_ordinary_approval(
     asyncio.run(scenario())
 
 
-def test_compensation_window_is_rechecked_immediately_before_provider_invocation(
+def test_expiry_after_approval_wait_preserves_prior_governed_invocation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def scenario() -> None:
@@ -234,32 +234,122 @@ def test_compensation_window_is_rechecked_immediately_before_provider_invocation
         from ai_multi_agent_platform.compensation import service as service_module
 
         provider = _UndoProvider()
+
+        async def not_approved(request, capability, invocation) -> bool:
+            del request, capability, invocation
+            return False
+
         repository = InMemoryCompensationRepository()
-        coordinator = await _coordinator(repository, provider)
+        coordinator = await _coordinator(
+            repository,
+            provider,
+            approval_hook=not_approved,
+        )
         started = datetime(2026, 9, 9, 12, 0, tzinfo=UTC)
         group = coordinator.register_group(_group())
         action = coordinator.record_completed_side_effect(
-            _action(group, completed_at=started, window_seconds=10.0)
+            _action(
+                group,
+                completed_at=started,
+                requires_approval=True,
+                window_seconds=10.0,
+            )
         )
 
         monkeypatch.setattr(service_module, "utc_now", lambda: started + timedelta(seconds=5))
+        monkeypatch.setattr(
+            coordinator_module,
+            "utc_now",
+            lambda: started + timedelta(seconds=5),
+        )
         request = coordinator.request_compensation(
             action.action_id,
             trigger=CompensationTrigger.MANUAL,
-            reason="created inside compensation window",
+            reason="approval before expiry",
             actor_ref="user:user-1",
-            correlation_id="corr-expiry-request",
+            correlation_id="corr-approval-expiry",
         )
-        assert repository.get_result(request.compensation_id) is None
+        awaiting_approval = await coordinator.execute(
+            request.compensation_id,
+            _context(group),
+        )
+        assert awaiting_approval.status is CompensationStatus.APPROVAL_REQUIRED
+        assert awaiting_approval.canonical_tool_invocation_id is not None
 
         monkeypatch.setattr(
             coordinator_module,
             "utc_now",
             lambda: started + timedelta(seconds=11),
         )
+        expired = await coordinator.execute(request.compensation_id, _context(group, 2))
+
+        assert expired.status is CompensationStatus.EXPIRED
+        assert (
+            expired.canonical_tool_invocation_id
+            == awaiting_approval.canonical_tool_invocation_id
+        )
+        assert expired.provider_id == awaiting_approval.provider_id
+        assert provider.calls == []
+
+    asyncio.run(scenario())
+
+
+def test_compensation_window_is_rechecked_immediately_before_provider_invocation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        from ai_multi_agent_platform.capabilities import invocation as invocation_module
+        from ai_multi_agent_platform.compensation import coordinator as coordinator_module
+        from ai_multi_agent_platform.compensation import service as service_module
+
+        provider = _UndoProvider()
+
+        async def approved(request, capability, invocation) -> bool:
+            del request, capability, invocation
+            return True
+
+        repository = InMemoryCompensationRepository()
+        coordinator = await _coordinator(
+            repository,
+            provider,
+            approval_hook=approved,
+        )
+        started = datetime(2026, 9, 9, 12, 0, tzinfo=UTC)
+        group = coordinator.register_group(_group())
+        action = coordinator.record_completed_side_effect(
+            _action(
+                group,
+                completed_at=started,
+                requires_approval=True,
+                window_seconds=10.0,
+            )
+        )
+
+        monkeypatch.setattr(service_module, "utc_now", lambda: started + timedelta(seconds=5))
+        monkeypatch.setattr(
+            coordinator_module,
+            "utc_now",
+            lambda: started + timedelta(seconds=5),
+        )
+
+        class _AfterDeadline(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                del tz
+                return started + timedelta(seconds=11)
+
+        monkeypatch.setattr(invocation_module, "datetime", _AfterDeadline)
+        request = coordinator.request_compensation(
+            action.action_id,
+            trigger=CompensationTrigger.MANUAL,
+            reason="governance crosses expiry deadline",
+            actor_ref="user:user-1",
+            correlation_id="corr-final-expiry",
+        )
         result = await coordinator.execute(request.compensation_id, _context(group))
 
         assert result.status is CompensationStatus.EXPIRED
+        assert result.canonical_tool_invocation_id is not None
         assert result.manual_intervention_required
         assert provider.calls == []
 
