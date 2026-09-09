@@ -123,7 +123,6 @@ def test_public_context_inspection_reauthorizes_each_source_and_redacts_denied_e
                     {AuthorizationAction.READ, AuthorizationAction.VIEW}
                 ),
                 resource_types=frozenset({ResourceType.GENERIC, ResourceType.TASK}),
-                project_ids=frozenset({project.id}),
             )
         )
 
