@@ -7,8 +7,6 @@ enforcement and invocation-scoped Approval requirements.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from ai_multi_agent_platform.capabilities import CapabilityInvocation
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
@@ -22,13 +20,6 @@ from .models import (
     utc_now,
 )
 from .service import CompensationCoordinator as _BaseCompensationCoordinator
-
-
-@dataclass(frozen=True, slots=True)
-class _ApprovalAwareCapabilityInvocation(CapabilityInvocation):
-    """Ordinary canonical invocation with an invocation-scoped Approval requirement."""
-
-    require_approval: bool = False
 
 
 class CompensationCoordinator(_BaseCompensationCoordinator):
@@ -128,7 +119,7 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
         require_approval = group.policy.require_human_approval or bool(
             descriptor is not None and descriptor.requires_approval
         )
-        return _ApprovalAwareCapabilityInvocation(
+        return CapabilityInvocation(
             invocation_id=invocation.invocation_id,
             capability_id=invocation.capability_id,
             arguments=invocation.arguments,
