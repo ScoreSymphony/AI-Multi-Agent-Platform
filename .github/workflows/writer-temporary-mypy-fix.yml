@@ -1,0 +1,48 @@
+name: Temporary writer Mypy fix
+
+on:
+  push:
+    branches:
+      - fix/594-595-eval-learning-integration
+    paths:
+      - .github/workflows/writer-temporary-mypy-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  mypy-fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/594-595-eval-learning-integration
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Apply narrow typing fix and remove temporary workflow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/ai_multi_agent_platform/evaluation/sqlite_repository.py')
+          text = path.read_text(encoding='utf-8')
+          old = '                            failed.completed_at.isoformat(),\n'
+          new = '                            now.isoformat(),\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one target, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          python -m pip install -e '.[dev]'
+          ruff format --check .
+          ruff check .
+          mypy
+          git rm .github/workflows/writer-temporary-mypy-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: make evaluation restart timestamp type-safe'
+          git push origin HEAD:fix/594-595-eval-learning-integration
