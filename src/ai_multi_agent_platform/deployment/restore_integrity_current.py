@@ -378,7 +378,9 @@ def _validate_templates(deployment: SingleNodeDeployment, index: _CurrentIndex) 
     return checked
 
 
-def _validate_learning(deployment: SingleNodeDeployment, index: _CurrentIndex) -> tuple[int, int, int]:
+def _validate_learning(
+    deployment: SingleNodeDeployment, index: _CurrentIndex
+) -> tuple[int, int, int]:
     try:
         feedback_records = deployment.learning.repository.list_feedback()
         candidates = deployment.learning.repository.list_candidates()
@@ -394,8 +396,10 @@ def _validate_learning(deployment: SingleNodeDeployment, index: _CurrentIndex) -
         _validate_project(candidate.project_id, index, entity)
         if deployment.learning.service.promotion_registry.supports(candidate.target.resource_type):
             try:
-                target_project_id = deployment.learning.service.promotion_registry.resolve_project_id(
-                    candidate.target
+                target_project_id = (
+                    deployment.learning.service.promotion_registry.resolve_project_id(
+                        candidate.target
+                    )
                 )
             except ContractError as exc:
                 raise RestoreValidationError(
@@ -448,7 +452,9 @@ def _validate_learning(deployment: SingleNodeDeployment, index: _CurrentIndex) -
             )
             try:
                 promoted_project_id = (
-                    deployment.learning.service.promotion_registry.resolve_project_id(promoted_target)
+                    deployment.learning.service.promotion_registry.resolve_project_id(
+                        promoted_target
+                    )
                 )
             except ContractError as exc:
                 raise RestoreValidationError(
