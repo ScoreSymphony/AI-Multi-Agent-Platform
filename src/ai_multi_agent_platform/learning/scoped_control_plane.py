@@ -30,6 +30,7 @@ from .control_plane import (
     _feedback_resource,
     register_learning_control_plane,
 )
+from .control_plane import _string_tuple as _parse_string_tuple
 from .control_plane import _target as _parse_target
 from .models import LearningTarget
 from .runtime import ObservedLearningService
@@ -341,6 +342,31 @@ class ScopedLearningCommand:
             resource_ref,
             project_id=candidate.project_id,
         )
+        if self.action == "learning.evidence":
+            verification_ids = _parse_string_tuple(
+                payload.get("verification_ids"),
+                "verification_ids",
+            )
+            if verification_ids:
+                verification = self.learning.quality_gate.verification
+                if verification is None:
+                    raise ContractError(
+                        ErrorCode.UNAVAILABLE,
+                        "Verification service is not configured",
+                    )
+                for verification_id in verification_ids:
+                    request = verification.get_request(verification_id)
+                    _require_matching_evidence_project_scope(
+                        candidate.project_id,
+                        request.project_id,
+                    )
+                    await self.access.authorize(
+                        context,
+                        self.action,
+                        verification_id,
+                        project_id=request.project_id,
+                    )
+            return
         if self.action == "learning.promote":
             target_project_id = self.learning.promotion_registry.resolve_project_id(
                 candidate.target
@@ -455,6 +481,17 @@ def _require_matching_project_scope(
         raise ContractError(
             ErrorCode.FORBIDDEN,
             "learning candidate project scope does not match the canonical target project",
+        )
+
+
+def _require_matching_evidence_project_scope(
+    candidate_project_id: str | None,
+    evidence_project_id: str | None,
+) -> None:
+    if candidate_project_id != evidence_project_id:
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "learning candidate project scope does not match Verification evidence",
         )
 
 
