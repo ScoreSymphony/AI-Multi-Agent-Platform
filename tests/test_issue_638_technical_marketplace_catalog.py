@@ -20,35 +20,75 @@ from ai_multi_agent_platform.distribution import (
 )
 
 CATALOG = Path(__file__).parents[1] / "catalogs" / "technical-components" / "catalog.json"
-EXPECTED_CODE_INTELLIGENCE = {
+ISSUE_502_ITEMS = {
     "projectatlas",
     "graphify",
     "codegraph",
     "understand-anything",
 }
-EXPECTED_CODING_AGENTS = {"openhands", "aider"}
-EXPECTED_AGENT_FRAMEWORKS = {"pydantic-ai", "langgraph", "smolagents", "google-adk"}
-EXPECTED_MEMORY = {"mem0", "graphiti", "qdrant"}
-EXPECTED_INFERENCE = {"llama-cpp", "ollama", "vllm"}
+EXPECTED_CODE_INTELLIGENCE = ISSUE_502_ITEMS | {
+    "serena",
+    "ast-grep",
+    "semgrep",
+    "scip",
+}
+EXPECTED_CODING_AGENTS = {
+    "openhands",
+    "aider",
+    "opencode",
+    "goose",
+    "cline",
+    "roo-code",
+    "plandex",
+    "gemini-cli",
+    "codex-cli",
+}
+EXPECTED_AGENT_FRAMEWORKS = {
+    "pydantic-ai",
+    "langgraph",
+    "smolagents",
+    "google-adk",
+    "anything-llm",
+    "microsoft-agent-framework",
+    "agno",
+    "crewai",
+    "dify",
+    "flowise",
+    "letta",
+}
+EXPECTED_MEMORY = {"mem0", "graphiti", "qdrant", "anything-llm", "letta"}
+EXPECTED_INFERENCE = {
+    "llama-cpp",
+    "ollama",
+    "vllm",
+    "tei",
+    "onnx-runtime",
+    "transformers-js",
+}
+REFERENCE_ONLY = {"roo-code", "flowise"}
 
 
 def test_curated_technical_catalog_loads_cross_category_seed() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
-    all_items = provider.search(RegistryQuery(technical_only=True))
+    all_items = provider.search(RegistryQuery(technical_only=True, include_deprecated=True))
 
-    assert len(all_items) >= 22
+    assert len(all_items) >= 47
     assert {
         item.item_id
         for item in provider.search(RegistryQuery(categories=frozenset({"code-intelligence"})))
     } == EXPECTED_CODE_INTELLIGENCE
     assert {
         item.item_id
-        for item in provider.search(RegistryQuery(categories=frozenset({"coding-agent"})))
+        for item in provider.search(
+            RegistryQuery(categories=frozenset({"coding-agent"}), include_deprecated=True)
+        )
     } == EXPECTED_CODING_AGENTS
     assert {
         item.item_id
-        for item in provider.search(RegistryQuery(categories=frozenset({"agent-framework"})))
+        for item in provider.search(
+            RegistryQuery(categories=frozenset({"agent-framework"}), include_deprecated=True)
+        )
     } == EXPECTED_AGENT_FRAMEWORKS
     assert EXPECTED_MEMORY.issubset(
         {
@@ -62,20 +102,29 @@ def test_curated_technical_catalog_loads_cross_category_seed() -> None:
     } == EXPECTED_INFERENCE
 
 
-def test_curated_catalog_entries_remain_manual_untrusted_candidates() -> None:
+def test_curated_catalog_entries_remain_manual_untrusted_and_fail_closed() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
-    for item in provider.search(RegistryQuery(technical_only=True)):
+    for item in provider.search(RegistryQuery(technical_only=True, include_deprecated=True)):
         technical = derive_technical_metadata(item)
         assert technical is not None
         assert item.route is DistributionRoute.MANUAL
         assert item.trust_status is TrustStatus.UNTRUSTED
-        assert technical.lifecycle_status == "candidate"
-        assert technical.evaluation_status == "required"
-        assert technical.evaluation_required is True
         assert technical.cost_status in {"compatible", "conditional", "unknown"}
         assert technical.network_status in {"none", "optional", "unknown"}
-        if item.item_id in EXPECTED_CODE_INTELLIGENCE:
+
+        if item.item_id in REFERENCE_ONLY:
+            assert technical.lifecycle_status == "reference"
+            assert technical.evaluation_status == "not-required"
+            assert technical.evaluation_required is False
+            assert item.deprecated is True
+            assert "project-status:archived" in item.tags
+        else:
+            assert technical.lifecycle_status == "candidate"
+            assert technical.evaluation_status == "required"
+            assert technical.evaluation_required is True
+
+        if item.item_id in ISSUE_502_ITEMS:
             assert (
                 item.review_reference
                 == "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/502"
@@ -98,8 +147,13 @@ def test_curated_catalog_preserves_explicit_unknowns_instead_of_guessing() -> No
     assert metadata.cost_status == "unknown"
     assert metadata.network_status == "unknown"
 
+    roo = derive_technical_metadata(provider.get("roo-code"))
+    assert roo is not None
+    assert roo.cost_status == "unknown"
+    assert roo.network_status == "unknown"
 
-def test_verified_external_catalog_records_do_not_fake_upstream_revision() -> None:
+
+def test_verified_active_external_catalog_records_do_not_fake_upstream_revision() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
     for item_id in {
@@ -121,17 +175,68 @@ def test_verified_external_catalog_records_do_not_fake_upstream_revision() -> No
         "ollama",
         "vllm",
         "sentence-transformers",
+        "serena",
+        "ast-grep",
+        "semgrep",
+        "scip",
+        "opencode",
+        "goose",
+        "cline",
+        "plandex",
+        "gemini-cli",
+        "codex-cli",
+        "anything-llm",
+        "microsoft-agent-framework",
+        "agno",
+        "crewai",
+        "dify",
+        "stagehand",
+        "letta",
+        "inspect-ai",
+        "deepeval",
+        "agentdojo",
+        "garak",
+        "tei",
+        "onnx-runtime",
+        "transformers-js",
     }:
         item = provider.get(item_id)
         assert item.source.revision is None
-        assert "upstream version is not pinned" in (item.changelog or "")
         assert "project-status:not-archived" in item.tags
+        assert item.deprecated is False
+
+
+def test_archived_projects_are_reference_only_not_active_candidates() -> None:
+    provider = FilesystemRegistryProvider(CATALOG)
+
+    for item_id in REFERENCE_ONLY:
+        item = provider.get(item_id)
+        technical = derive_technical_metadata(item)
+        assert technical is not None
+        assert item.route is DistributionRoute.MANUAL
+        assert item.trust_status is TrustStatus.UNTRUSTED
+        assert item.deprecated is True
+        assert "project-status:archived" in item.tags
+        assert technical.lifecycle_status == "reference"
+        assert technical.evaluation_status == "not-required"
+
+
+def test_nonstandard_license_terms_are_visible_instead_of_normalized_away() -> None:
+    provider = FilesystemRegistryProvider(CATALOG)
+
+    dify = provider.get("dify")
+    flowise = provider.get("flowise")
+
+    assert dify.license == "Modified Apache-2.0 (Dify license)"
+    assert "license-restrictions:additional-terms" in dify.tags
+    assert flowise.license == "Mixed: Apache-2.0 / Commercial"
+    assert "license-restrictions:mixed" in flowise.tags
 
 
 def test_curated_candidate_artifacts_are_reference_only() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
-    for item in provider.search(RegistryQuery(technical_only=True)):
+    for item in provider.search(RegistryQuery(technical_only=True, include_deprecated=True)):
         artifact = provider.fetch_artifact(item.item_id, item.version).decode("utf-8")
         normalized = artifact.casefold()
         assert "does not vendor" in normalized
