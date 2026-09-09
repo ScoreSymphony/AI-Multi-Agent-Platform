@@ -7,15 +7,17 @@ from dataclasses import dataclass
 from typing import Never, Protocol, cast
 
 from ai_multi_agent_platform.contracts import (
-    AuthorizationDecision,
-    AuthorizationOutcome,
     ContractError,
     ErrorCode,
     JsonValue,
     ProviderDescriptor,
 )
+from ai_multi_agent_platform.contracts.authorization import (
+    AuthorizationDecision,
+    AuthorizationOutcome,
+    AuthorizationRequest,
+)
 from ai_multi_agent_platform.contracts.interfaces import AuthorizationProvider
-from ai_multi_agent_platform.contracts.types import AuthorizationRequest
 from ai_multi_agent_platform.control_plane.extensions import CommandHandler, ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
