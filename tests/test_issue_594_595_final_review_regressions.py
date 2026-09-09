@@ -55,6 +55,18 @@ def test_learning_evidence_authorizes_each_evaluation_run_id(tmp_path: Path) -> 
             owner_type="user",
             owner_id="owner-a",
         )
+        scope_agent = deployment.agents.create_agent(
+            AgentProfile(
+                name="Evaluation evidence scope target",
+                role="worker",
+                description="Scope-bearing evaluation target",
+                instructions=AgentInstructions(
+                    role=InstructionSource(content="Provide canonical project scope.")
+                ),
+            ),
+            owner_ref=OwnerRef(type="user", id="owner-a"),
+            project_id=project.id,
+        )
         candidate, _ = deployment.learning.service.create_candidate(
             source_type=LearningSourceType.OPERATOR_PROPOSAL,
             problem="authorize exact Evaluation evidence",
@@ -74,7 +86,11 @@ def test_learning_evidence_authorizes_each_evaluation_run_id(tmp_path: Path) -> 
             project_id=project.id,
         )
         evaluation = _EvaluationLookup()
-        evaluation.add(_EVALUATION_RUN_ID)
+        evaluation.add(
+            _EVALUATION_RUN_ID,
+            agent_id=scope_agent.agent_id,
+            agent_revision=scope_agent.revision,
+        )
         deployment.learning.service.quality_gate.evaluation = cast(EvaluationService, evaluation)
         access = _RecordingLearningAccess()
 
@@ -138,8 +154,17 @@ def test_evaluation_regression_candidate_inherits_target_project_and_promotes(
         project_id=project.id,
     )
     evaluation = _EvaluationLookup()
-    evaluation.add("evaluation-regression-source", regressions=True)
-    evaluation.add("evaluation-regression-gate")
+    evaluation.add(
+        "evaluation-regression-source",
+        regressions=True,
+        agent_id=agent.agent_id,
+        agent_revision=agent.revision,
+    )
+    evaluation.add(
+        "evaluation-regression-gate",
+        agent_id=agent.agent_id,
+        agent_revision=agent.revision,
+    )
     deployment.learning.service.quality_gate.evaluation = cast(EvaluationService, evaluation)
 
     candidate, created = deployment.learning.service.create_from_evaluation_regression(
@@ -240,8 +265,16 @@ def test_sqlite_restart_migrates_legacy_candidate_dedupe_key(tmp_path: Path) -> 
 class _EvaluationLookup:
     def __init__(self) -> None:
         self._details: dict[str, SimpleNamespace] = {}
+        self._suites: dict[str, SimpleNamespace] = {}
 
-    def add(self, run_id: str, *, regressions: bool = False) -> None:
+    def add(
+        self,
+        run_id: str,
+        *,
+        regressions: bool = False,
+        agent_id: str | None = None,
+        agent_revision: int = 1,
+    ) -> None:
         result = SimpleNamespace(
             result_id=f"{run_id}-result",
             outcome=EvaluationOutcome.PASSED,
@@ -256,19 +289,50 @@ class _EvaluationLookup:
             if regressions
             else ()
         )
+        references = (
+            ()
+            if agent_id is None
+            else (
+                SimpleNamespace(
+                    kind="agent",
+                    ref_id=agent_id,
+                    version=str(agent_revision),
+                ),
+            )
+        )
+        cases = (
+            ()
+            if agent_id is None
+            else (
+                SimpleNamespace(
+                    input_template={
+                        "evaluation_target": {
+                            "kind": "agent",
+                            "agent_id": agent_id,
+                            "agent_revision": agent_revision,
+                        }
+                    }
+                ),
+            )
+        )
         self._details[run_id] = SimpleNamespace(
             run=SimpleNamespace(
                 run_id=run_id,
                 suite_id="learning-suite",
                 suite_version="1",
                 status=EvaluationRunStatus.COMPLETED,
+                snapshot=SimpleNamespace(references=references),
             ),
             results=(result,),
             comparison=SimpleNamespace(regressions=findings),
         )
+        self._suites["learning-suite@1"] = SimpleNamespace(cases=cases)
 
     def get_run_detail(self, run_id: str) -> SimpleNamespace:
         return self._details[run_id]
+
+    def get_suite(self, suite_ref: str) -> SimpleNamespace:
+        return self._suites[suite_ref]
 
 
 class _RecordingLearningAccess:
