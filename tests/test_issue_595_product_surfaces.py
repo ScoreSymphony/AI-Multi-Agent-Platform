@@ -6,12 +6,12 @@ from pathlib import Path
 def test_public_shell_mounts_governed_learning_routes() -> None:
     shell = Path("frontend/src/app/Shell.tsx").read_text(encoding="utf-8")
 
-    assert 'new LearningClient({ baseUrl, fetchImpl: session.fetch })' in shell
+    assert "new LearningClient({ baseUrl, fetchImpl: session.fetch })" in shell
     assert 'matchPath("/learning/:learningCandidateId", path)' in shell
     assert 'path === "/learning"' in shell
-    assert '<LearningPage client={learningClient} />' in shell
-    assert 'commands={learningCapabilities.commands}' in shell
-    assert 'postPromotionAvailable={learningCapabilities.postPromotionAvailable}' in shell
+    assert "<LearningPage client={learningClient} />" in shell
+    assert "commands={learningCapabilities.commands}" in shell
+    assert "postPromotionAvailable={learningCapabilities.postPromotionAvailable}" in shell
 
 
 def test_public_navigation_exposes_learning_through_canonical_collection() -> None:
