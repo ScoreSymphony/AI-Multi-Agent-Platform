@@ -79,6 +79,15 @@ class ContextModelInput:
 
 
 @dataclass(frozen=True, slots=True)
+class OperationalContextBindingExecution:
+    """Exact rendered Context and binding evidence before optional direct model-input conversion."""
+
+    agent_run: AgentRunRecord
+    binding: ContextRunBinding
+    rendered: RenderedContext
+
+
+@dataclass(frozen=True, slots=True)
 class OperationalContextExecution:
     """Exact evidence and model input produced for one context-bound AgentRun."""
 
@@ -295,7 +304,7 @@ class OperationalContextBoundAgentRuntime:
         self.target_resolver = target_resolver
         self.routing_policy = routing_policy
 
-    async def start_agent(
+    async def start_agent_binding(
         self,
         *,
         bundle: ContextBundle,
@@ -310,7 +319,7 @@ class OperationalContextBoundAgentRuntime:
         granted_permissions: frozenset[str] = frozenset(),
         available_worker_capabilities: frozenset[str] = frozenset(),
         verification_context: Mapping[str, JsonValue] | None = None,
-    ) -> OperationalContextExecution:
+    ) -> OperationalContextBindingExecution:
         stored_bundle = self.bundle_repository.put(bundle)
         runtime_requirements = merge_context_routing_requirements(
             None,
@@ -362,9 +371,45 @@ class OperationalContextBoundAgentRuntime:
             created_at=datetime.now(UTC),
         )
         stored_binding = self.binding_repository.put(binding)
-        return OperationalContextExecution(
+        return OperationalContextBindingExecution(
             agent_run=record,
             binding=stored_binding,
             rendered=rendered,
-            model_input=rendered_context_model_input(rendered),
+        )
+
+    async def start_agent(
+        self,
+        *,
+        bundle: ContextBundle,
+        operation: OperationContext,
+        adapter: ContextAwareOrchestratorAdapter | None = None,
+        content_provider: ContextContentProvider | None = None,
+        team_revision: AgentTeamRevision | None = None,
+        task_model_override: RoutingRequirements | None = None,
+        requested_capability_ids: tuple[str, ...] = (),
+        shared_capability_ids: tuple[str, ...] = (),
+        available_capability_ids: frozenset[str] = frozenset(),
+        granted_permissions: frozenset[str] = frozenset(),
+        available_worker_capabilities: frozenset[str] = frozenset(),
+        verification_context: Mapping[str, JsonValue] | None = None,
+    ) -> OperationalContextExecution:
+        execution = await self.start_agent_binding(
+            bundle=bundle,
+            operation=operation,
+            adapter=adapter,
+            content_provider=content_provider,
+            team_revision=team_revision,
+            task_model_override=task_model_override,
+            requested_capability_ids=requested_capability_ids,
+            shared_capability_ids=shared_capability_ids,
+            available_capability_ids=available_capability_ids,
+            granted_permissions=granted_permissions,
+            available_worker_capabilities=available_worker_capabilities,
+            verification_context=verification_context,
+        )
+        return OperationalContextExecution(
+            agent_run=execution.agent_run,
+            binding=execution.binding,
+            rendered=execution.rendered,
+            model_input=rendered_context_model_input(execution.rendered),
         )
