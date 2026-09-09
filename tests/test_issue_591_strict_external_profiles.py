@@ -17,6 +17,7 @@ from ai_multi_agent_platform.contracts import (
     OperationContext,
     digest_egress_payload,
 )
+from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.security import build_durable_egress_runtime
 
 
@@ -67,6 +68,23 @@ def test_durable_runtime_blocks_profileless_external_target_by_default(tmp_path:
     assert decision.outcome is EgressOutcome.UNKNOWN_BLOCKED
     assert decision.reason_code is EgressReasonCode.UNVERIFIED_PROFILE
     assert decision.audit_metadata["external_profile_required"] is True
+
+
+def test_public_single_node_composition_inherits_strict_external_profile_policy(
+    tmp_path: Path,
+) -> None:
+    deployment = build_single_node_deployment(
+        SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
+    )
+
+    decision = asyncio.run(
+        deployment.egress.runtime.gate.evaluate(
+            _request(posture=EgressTargetPosture.EXTERNAL)
+        )
+    )
+
+    assert decision.outcome is EgressOutcome.UNKNOWN_BLOCKED
+    assert decision.reason_code is EgressReasonCode.UNVERIFIED_PROFILE
 
 
 def test_durable_runtime_keeps_profileless_local_target_functional(tmp_path: Path) -> None:
