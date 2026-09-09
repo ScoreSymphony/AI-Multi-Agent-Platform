@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from ai_multi_agent_platform.contracts import (
     DataClassification,
@@ -56,7 +57,7 @@ def _configured_free_external_profile() -> EgressProfile:
     )
 
 
-def test_durable_runtime_blocks_profileless_external_target_by_default(tmp_path) -> None:
+def test_durable_runtime_blocks_profileless_external_target_by_default(tmp_path: Path) -> None:
     runtime = build_durable_egress_runtime(tmp_path / "egress-profiles.json")
 
     decision = asyncio.run(
@@ -68,7 +69,7 @@ def test_durable_runtime_blocks_profileless_external_target_by_default(tmp_path)
     assert decision.audit_metadata["external_profile_required"] is True
 
 
-def test_durable_runtime_keeps_profileless_local_target_functional(tmp_path) -> None:
+def test_durable_runtime_keeps_profileless_local_target_functional(tmp_path: Path) -> None:
     runtime = build_durable_egress_runtime(tmp_path / "egress-profiles.json")
 
     decision = asyncio.run(runtime.gate.evaluate(_request(posture=EgressTargetPosture.LOCAL)))
@@ -77,7 +78,7 @@ def test_durable_runtime_keeps_profileless_local_target_functional(tmp_path) -> 
     assert decision.reason_code is EgressReasonCode.ALLOWED
 
 
-def test_inline_external_profile_satisfies_strict_durable_requirement(tmp_path) -> None:
+def test_inline_external_profile_satisfies_strict_durable_requirement(tmp_path: Path) -> None:
     runtime = build_durable_egress_runtime(tmp_path / "egress-profiles.json")
 
     decision = asyncio.run(
@@ -94,7 +95,7 @@ def test_inline_external_profile_satisfies_strict_durable_requirement(tmp_path) 
 
 
 def test_focused_embedding_can_explicitly_keep_legacy_profileless_external_behavior(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     runtime = build_durable_egress_runtime(
         tmp_path / "egress-profiles.json",
