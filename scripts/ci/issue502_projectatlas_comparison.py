@@ -26,6 +26,32 @@ from issue502_projectatlas_pilot import (
 _DETERMINISTIC_GIT_DATE = "2000-01-01T00:00:00Z"
 
 
+def _normalize_pilot_rss_evidence(candidate_report: dict[str, Any]) -> None:
+    """Move cumulative RUSAGE_CHILDREN maxima out of per-command measurements.
+
+    ``ru_maxrss`` is a process-lifetime high-water mark across terminated children, so values
+    observed after individual commands must not be presented as command-specific RSS. The pilot
+    retains only the maximum as a conservative whole-pilot observation.
+    """
+
+    commands = candidate_report.get("commands")
+    if not isinstance(commands, list):
+        raise RuntimeError("candidate report does not contain command measurements")
+    observed: list[int] = []
+    for measurement in commands:
+        if not isinstance(measurement, dict):
+            raise RuntimeError("candidate command measurement has an invalid shape")
+        value = measurement.pop("max_rss_kb", None)
+        if value is not None:
+            observed.append(int(value))
+    candidate_report["pilot_max_child_rss_kb"] = max(observed, default=0)
+    candidate_report["rss_measurement_note"] = (
+        "RUSAGE_CHILDREN ru_maxrss is a process-lifetime child high-water mark. It is retained "
+        "only as a whole-pilot observation and is not attributed to individual commands or "
+        "compared with the Git baseline."
+    )
+
+
 def run_comparison(binary: Path, no_network_wrapper: Path) -> dict[str, Any]:
     """Run candidate evidence and compare it with the same immutable tiny Git fixture."""
 
@@ -35,6 +61,7 @@ def run_comparison(binary: Path, no_network_wrapper: Path) -> dict[str, Any]:
     os.environ["GIT_COMMITTER_DATE"] = _DETERMINISTIC_GIT_DATE
     try:
         candidate_report = run_pilot(binary, no_network_wrapper)
+        _normalize_pilot_rss_evidence(candidate_report)
 
         with tempfile.TemporaryDirectory(prefix="issue502-baseline-") as temporary:
             root = Path(temporary)
@@ -65,7 +92,7 @@ def run_comparison(binary: Path, no_network_wrapper: Path) -> dict[str, Any]:
             candidate_version=PINNED_VERSION,
             fixture_revision=revision,
         )
-        candidate_report["schema_version"] = "3"
+        candidate_report["schema_version"] = "4"
         candidate_report["comparison"] = comparison
         candidate_report["decision"] = {
             "status": "experimental/deferred",
