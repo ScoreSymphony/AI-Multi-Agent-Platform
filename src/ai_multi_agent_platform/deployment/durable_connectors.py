@@ -17,7 +17,7 @@ from ai_multi_agent_platform.connectors import (
 from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import DistributedRuntime
-from ai_multi_agent_platform.kernel import PlatformKernel
+from ai_multi_agent_platform.kernel import EventSourcedTaskRepository, PlatformKernel
 from ai_multi_agent_platform.models import ModelRoutingProfileRef
 from ai_multi_agent_platform.observability import (
     EgressTelemetryAuditSink,
@@ -200,6 +200,7 @@ def build_single_node_deployment(
         agents=base.agents.repository,
         agent_runtime=base.agent_runtime,
         coordinator=base.coordination_repository,
+        tasks=EventSourcedTaskRepository(base.kernel_repository),
         authorization=base.approval_gate.provider,
         verification=base.verification_runtime.evidence,
         telemetry=base.telemetry,

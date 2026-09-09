@@ -23,6 +23,7 @@ from ai_multi_agent_platform.agents import (
 )
 from ai_multi_agent_platform.contracts import (
     ContractError,
+    EgressRequest,
     EgressTarget,
     EgressTargetKind,
     EgressTargetPosture,
@@ -227,6 +228,29 @@ def _routing_request_requirements(
     return values
 
 
+def _context_export_preflight_request(
+    bundle: ContextBundle,
+    *,
+    target: EgressTarget,
+    operation: OperationContext,
+) -> EgressRequest:
+    return EgressRequest(
+        request_id=f"context-route:{bundle.context_bundle_id}:{target.target_id}",
+        target=target,
+        context=operation,
+        classification=effective_context_bundle_classification(bundle),
+        resource_type="context_bundle",
+        payload_digest=bundle.digest,
+        task_id=bundle.task_id,
+        run_id=bundle.run_id,
+        policy_descriptors={
+            "context_bundle_id": bundle.context_bundle_id,
+            "entry_count": len(bundle.entries),
+            "phase": "model_candidate_preflight",
+        },
+    )
+
+
 class _OperationalContextMapper(AgentOrchestratorMapper):
     def __init__(
         self,
@@ -347,6 +371,40 @@ class OperationalContextBoundAgentRuntime:
         self.model_runtime = model_runtime
         self.routing_policy = routing_policy
 
+    async def _context_export_candidate_allowed(
+        self,
+        *,
+        bundle: ContextBundle,
+        operation: OperationContext,
+        agent: object,
+        model_config_id: str,
+        provider_id: str,
+    ) -> tuple[bool, str | None]:
+        target_resolver = self.target_resolver
+        if target_resolver is None:
+            return True, None
+        target = target_resolver.resolve(
+            AgentExecutionSpec(
+                task_id=bundle.task_id,
+                run_id=bundle.run_id,
+                agent_revision=agent,  # type: ignore[arg-type]
+                capability_ids=(),
+                selected_model_config_id=model_config_id,
+                selected_provider_id=provider_id,
+            ),
+            bundle,
+        )
+        if target is None:
+            return True, None
+        decision = await self.exporter.egress_gate.evaluate(
+            _context_export_preflight_request(
+                bundle,
+                target=target,
+                operation=operation,
+            )
+        )
+        return decision.allowed, None if decision.allowed else decision.reason_code.value
+
     async def _classification_aware_route(
         self,
         *,
@@ -374,25 +432,101 @@ class OperationalContextBoundAgentRuntime:
                 requirements=_routing_request_requirements(requirements, bundle),
             )
 
-        try:
-            selection = await model_runtime.select(request_for(effective))
-        except ContractError as exc:
-            if (
-                exc.code is not ErrorCode.NO_COMPATIBLE_ROUTE
-                or effective.explicit_model_id is None
-                or agent.profile.model.fallback is not ModelFallbackPolicy.ROUTE
-            ):
-                raise
-            selection = await model_runtime.select(
-                request_for(replace(effective, explicit_model_id=None))
-            )
+        # Focused/local embeddings without a Context target resolver retain the ordinary #591
+        # model-provider candidate policy. Public production composition supplies a resolver and
+        # therefore evaluates the separate Context-export policy before pinning a model.
+        if self.target_resolver is None:
+            try:
+                selection = await model_runtime.select(request_for(effective))
+            except ContractError as exc:
+                if (
+                    exc.code is not ErrorCode.NO_COMPATIBLE_ROUTE
+                    or effective.explicit_model_id is None
+                    or agent.profile.model.fallback is not ModelFallbackPolicy.ROUTE
+                ):
+                    raise
+                selection = await model_runtime.select(
+                    request_for(replace(effective, explicit_model_id=None))
+                )
+            if selection.model_ref is None:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "classification-aware model routing returned no canonical model configuration ID",
+                )
+            return replace(runtime_requirements, explicit_model_id=selection.model_ref)
 
-        if selection.model_ref is None:
+        fallback_allowed = agent.profile.model.fallback is ModelFallbackPolicy.ROUTE
+        candidate_ids: list[str] = []
+        if effective.explicit_model_id is not None:
+            candidate_ids.append(effective.explicit_model_id)
+            if fallback_allowed:
+                candidates = model_runtime.router._candidate_configs(  # noqa: SLF001
+                    replace(effective, explicit_model_id=None)
+                )
+                candidate_ids.extend(
+                    candidate.config_id
+                    for candidate in candidates
+                    if candidate.config_id != effective.explicit_model_id
+                )
+        else:
+            candidates = model_runtime.router._candidate_configs(effective)  # noqa: SLF001
+            candidate_ids.extend(candidate.config_id for candidate in candidates)
+
+        if not candidate_ids:
+            # Preserve the router's canonical NO_COMPATIBLE_ROUTE diagnostics.
+            await model_runtime.select(request_for(effective))
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
-                "classification-aware model routing returned no canonical model configuration ID",
+                "model routing returned without a candidate",
             )
-        return replace(runtime_requirements, explicit_model_id=selection.model_ref)
+
+        context_denied: list[str] = []
+        model_denied: list[str] = []
+        for index, candidate_id in enumerate(candidate_ids):
+            candidate_requirements = replace(effective, explicit_model_id=candidate_id)
+            try:
+                selection = await model_runtime.select(request_for(candidate_requirements))
+            except ContractError as exc:
+                if exc.code is not ErrorCode.NO_COMPATIBLE_ROUTE:
+                    raise
+                if index == 0 and effective.explicit_model_id is not None and not fallback_allowed:
+                    raise
+                model_denied.append(candidate_id)
+                continue
+
+            if selection.model_ref is None:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "classification-aware model routing returned no canonical model configuration ID",
+                )
+            allowed, _reason = await self._context_export_candidate_allowed(
+                bundle=bundle,
+                operation=operation,
+                agent=agent,
+                model_config_id=selection.model_ref,
+                provider_id=selection.provider_id,
+            )
+            if allowed:
+                return replace(runtime_requirements, explicit_model_id=selection.model_ref)
+
+            context_denied.append(selection.model_ref)
+            if index == 0 and effective.explicit_model_id is not None and not fallback_allowed:
+                raise ContractError(
+                    ErrorCode.NO_COMPATIBLE_ROUTE,
+                    "explicit model assignment is prohibited by Context-export policy",
+                    provider_id=selection.provider_id,
+                    details={"explicit_model_id": selection.model_ref},
+                )
+
+        raise ContractError(
+            ErrorCode.NO_COMPATIBLE_ROUTE,
+            "no registered model satisfies both model-provider and Context-export egress policy",
+            details={
+                "candidate_ids": ",".join(candidate_ids),
+                "model_policy_denied": ",".join(model_denied),
+                "context_export_denied": ",".join(context_denied),
+            },
+        )
 
     async def start_agent_binding(
         self,

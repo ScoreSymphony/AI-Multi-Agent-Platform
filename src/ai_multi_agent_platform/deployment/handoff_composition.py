@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
 
@@ -20,7 +20,12 @@ from ai_multi_agent_platform.context import (
     OperationalContextBoundAgentRuntime,
     register_context_control_plane,
 )
-from ai_multi_agent_platform.contracts import AuthorizationProvider, OperationContext
+from ai_multi_agent_platform.contracts import (
+    AuthorizationProvider,
+    ContractError,
+    ErrorCode,
+    OperationContext,
+)
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
 from ai_multi_agent_platform.handoffs import (
@@ -36,6 +41,7 @@ from ai_multi_agent_platform.handoffs import (
     TelemetryHandoffAuditSink,
     register_handoff_control_plane,
 )
+from ai_multi_agent_platform.kernel import EventSourcedTaskRepository
 from ai_multi_agent_platform.models import ModelRuntime
 from ai_multi_agent_platform.observability import Telemetry
 from ai_multi_agent_platform.research import SqliteResearchRepository
@@ -46,6 +52,31 @@ from ai_multi_agent_platform.verification import VerificationEvidenceResolver
 
 class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):
     """Bridge #651 consumption into the production #650/#591 Context runtime."""
+
+    def __init__(
+        self,
+        *,
+        service: HandoffService,
+        coordinated: CoordinatedHandoffService,
+        repository: SQLiteHandoffRepository,
+        references: CanonicalHandoffReferenceGateway,
+        agents: AgentRepository,
+        context_assembly: ContextAssemblyService,
+        context_runtime: OperationalContextBoundAgentRuntime,
+        audit: TelemetryHandoffAuditSink,
+        tasks: EventSourcedTaskRepository,
+    ) -> None:
+        super().__init__(
+            service=service,
+            coordinated=coordinated,
+            repository=repository,
+            references=references,
+            agents=agents,
+            context_assembly=context_assembly,
+            context_runtime=context_runtime,  # type: ignore[arg-type]
+            audit=audit,
+        )
+        self.tasks = tasks
 
     async def start_consumer(
         self,
@@ -66,6 +97,9 @@ class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):
         granted_permissions: frozenset[str] = frozenset(),
         available_worker_capabilities: frozenset[str] = frozenset(),
     ) -> HandoffConsumerExecution:
+        handoff = self.service.get_handoff(handoff_id, revision)
+        task = await self.tasks.get_task(handoff.task_id)
+        operation = _bind_handoff_task_project_scope(operation, task.task.project_id)
         runtime_context = await self.consume_handoff(
             handoff_id,
             revision,
@@ -124,6 +158,22 @@ class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):
         )
 
 
+def _bind_handoff_task_project_scope(
+    operation: OperationContext,
+    task_project_id: str | None,
+) -> OperationContext:
+    if task_project_id is None:
+        return operation
+    if operation.project_id is not None and operation.project_id != task_project_id:
+        raise ContractError(
+            ErrorCode.NOT_FOUND,
+            "Handoff Project scope conflicts with the canonical Task",
+        )
+    if operation.project_id == task_project_id:
+        return operation
+    return replace(operation, project_id=task_project_id)
+
+
 @dataclass(slots=True)
 class HandoffDeploymentComposition:
     """Long-lived durable resources backing the normal Agent Handoff runtime."""
@@ -151,6 +201,7 @@ def build_single_node_handoff_composition(
     agents: AgentRepository,
     agent_runtime: AgentRuntime,
     coordinator: CoordinatorRepository,
+    tasks: EventSourcedTaskRepository,
     authorization: AuthorizationProvider,
     verification: VerificationEvidenceResolver,
     telemetry: Telemetry,
@@ -224,8 +275,9 @@ def build_single_node_handoff_composition(
         references=references,
         agents=agents,
         context_assembly=context_assembly,
-        context_runtime=context_runtime,  # type: ignore[arg-type]
+        context_runtime=context_runtime,
         audit=audit,
+        tasks=tasks,
     )
 
     # Standalone Handoff composition owns Context registration only when no canonical
