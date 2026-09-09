@@ -11,11 +11,18 @@ from ai_multi_agent_platform.agents import (
 )
 from ai_multi_agent_platform.context import ContextBudget, ContextSourceType
 from ai_multi_agent_platform.contracts import HealthStatus, OperationContext
-from ai_multi_agent_platform.coordination.models import CoordinationPhase, StepCoordinationRecord
+from ai_multi_agent_platform.coordination.models import (
+    CoordinationPhase,
+    StepCoordinationRecord,
+)
 from ai_multi_agent_platform.data import DataAccessContext
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.domain import OwnerRef, Plan, Step, new_id
-from ai_multi_agent_platform.handoffs import HandoffContent, HandoffSourceKind, HandoffSourceRef
+from ai_multi_agent_platform.handoffs import (
+    HandoffContent,
+    HandoffSourceKind,
+    HandoffSourceRef,
+)
 from ai_multi_agent_platform.models import (
     ModelCapabilities,
     ModelConfiguration,
@@ -102,8 +109,14 @@ def test_public_single_node_handoff_survives_restart_and_executes_with_real_arti
             _profile("Issue 651 consumer", "reviewer"),
             owner_ref=owner,
         )
-        producer = AgentRevisionRef(producer_revision.agent_id, producer_revision.revision)
-        consumer = AgentRevisionRef(consumer_revision.agent_id, consumer_revision.revision)
+        producer = AgentRevisionRef(
+            producer_revision.agent_id,
+            producer_revision.revision,
+        )
+        consumer = AgentRevisionRef(
+            consumer_revision.agent_id,
+            consumer_revision.revision,
+        )
         producer_actor = _actor(producer)
         consumer_actor = _actor(consumer)
 
@@ -144,7 +157,11 @@ def test_public_single_node_handoff_survives_restart_and_executes_with_real_arti
             b"canonical issue 651 artifact payload",
             file_context,
         )
-        await deployment.files.link_artifact(file_record.file_id, artifact_id, file_context)
+        await deployment.files.link_artifact(
+            file_record.file_id,
+            artifact_id,
+            file_context,
+        )
         artifact_subject = await deployment.verification_runtime.evidence.resolve_subject(
             task_id=task.task_id,
             subject_type="artifact",
@@ -246,14 +263,16 @@ def test_public_single_node_handoff_survives_restart_and_executes_with_real_arti
             consumer_actor=consumer_actor,
             operation=operation,
         )
-        persisted_before_restart = deployment.handoffs.repository.list_consumptions_for_run(
-            consumer_run_id
+        persisted_before_restart = (
+            deployment.handoffs.repository.list_consumptions_for_run(consumer_run_id)
         )
         assert persisted_before_restart == (consumed_before_restart.consumption,)
 
         restarted = build_single_node_deployment(config)
         _install_local_model(restarted)
-        recovered = restarted.handoffs.repository.list_consumptions_for_run(consumer_run_id)
+        recovered = restarted.handoffs.repository.list_consumptions_for_run(
+            consumer_run_id
+        )
         assert recovered == (consumed_before_restart.consumption,)
         recovered_handoff = restarted.handoffs.repository.get_handoff(
             handoff.handoff_id,
@@ -272,15 +291,33 @@ def test_public_single_node_handoff_survives_restart_and_executes_with_real_arti
             budget=ContextBudget(max_tokens=4096, max_bytes=16_384, max_items=16),
         )
 
-        assert execution.runtime_context.consumption == consumed_before_restart.consumption
+        assert (
+            execution.runtime_context.consumption == consumed_before_restart.consumption
+        )
         assert execution.agent_run.agent == consumer
         assert execution.agent_run.run_id == consumer_run_id
-        assert execution.context_binding.agent_run_id == execution.agent_run.agent_run_id
-        assert execution.context_binding.context_bundle_id == execution.context_bundle.context_bundle_id
-        assert execution.context_binding.context_bundle_digest == execution.context_bundle.digest
-        assert execution.agent_run.verification_context["handoff_id"] == handoff.handoff_id
-        assert execution.agent_run.verification_context["handoff_revision"] == handoff.revision
-        assert execution.agent_run.verification_context["handoff_digest"] == handoff.content_digest
+        assert (
+            execution.context_binding.agent_run_id == execution.agent_run.agent_run_id
+        )
+        assert (
+            execution.context_binding.context_bundle_id
+            == execution.context_bundle.context_bundle_id
+        )
+        assert (
+            execution.context_binding.context_bundle_digest
+            == execution.context_bundle.digest
+        )
+        assert (
+            execution.agent_run.verification_context["handoff_id"] == handoff.handoff_id
+        )
+        assert (
+            execution.agent_run.verification_context["handoff_revision"]
+            == handoff.revision
+        )
+        assert (
+            execution.agent_run.verification_context["handoff_digest"]
+            == handoff.content_digest
+        )
 
         handoff_entries = [
             entry
