@@ -157,18 +157,18 @@ class ModelRegistryContextEgressTargetResolver:
 
         model_profile = _model_egress_profile(model)
         if model_profile is not None:
-            # The Context export crosses the same destination boundary as the selected model.
-            # Project the canonical inline model profile instead of requiring operators to
-            # duplicate trust/cost policy under a second CONTEXT_EXPORT profile.
+            # Context policy has historically been keyed by provider identity. Keep that stable
+            # so durable Project/global CONTEXT_EXPORT profiles remain authoritative, while
+            # projecting the model's inline profile as the strict-runtime fallback.
             context_profile = replace(
                 model_profile,
                 profile_id=f"{model_profile.profile_id}:context-export",
                 target_kind=EgressTargetKind.CONTEXT_EXPORT,
-                target_id=model.config_id,
+                target_id=model.provider_id,
             )
             return EgressTarget(
                 kind=EgressTargetKind.CONTEXT_EXPORT,
-                target_id=model.config_id,
+                target_id=model.provider_id,
                 profile=context_profile,
                 policy_metadata={
                     "model_config_id": model.config_id,
