@@ -273,8 +273,7 @@ class SQLiteLearningRepository:
             "SELECT dedupe_key, learning_candidate_id FROM learning_candidate_keys"
         ).fetchall()
         current = {
-            str(row["dedupe_key"]): str(row["learning_candidate_id"])
-            for row in current_rows
+            str(row["dedupe_key"]): str(row["learning_candidate_id"]) for row in current_rows
         }
         if current == expected:
             return
