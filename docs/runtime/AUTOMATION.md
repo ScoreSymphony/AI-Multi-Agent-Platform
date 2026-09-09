@@ -7,11 +7,12 @@ Issue #18 introduced Automation as a canonical platform domain without creating 
 ```text
 Trigger
   -> Automation evaluation
-  -> canonical Task creation
+  -> canonical TriggerDelivery
+  -> canonical Task creation when executable work is required
   -> normal authorization / planning / routing / execution lifecycle
 ```
 
-Automations never call orchestrators, executors, tools or workers directly.
+Automations never call orchestrators, executors, tools or workers directly. Ordinary Automations are Task-producing. A platform-owned domain dispatcher may explicitly complete a handled delivery without creating a Task only when that domain has determined that no executable work is required. The current canonical example is a Goal observation review. That exception uses the explicit `NO_TASK_REQUIRED` signal; an accidental `None`, blank or non-string `TaskCreator` result is a contract violation rather than successful no-op work.
 
 ## Canonical concepts
 
@@ -48,7 +49,7 @@ The reference recurring scheduler intentionally uses a small interval-based cont
 
 ### TriggerDelivery
 
-Each occurrence is persisted as a canonical `trigger_delivery_*` record containing source, fired/received timestamps, payload, dedupe key, processing status, attempts, generated Task ID and canonical failure details.
+Each occurrence is persisted as a canonical `trigger_delivery_*` record containing source, fired/received timestamps, payload, dedupe key, processing status, attempts, nullable generated Task ID and canonical failure details. A `null` generated Task ID on a successful delivery is valid only for an explicitly handled no-work result such as the Goal observation path described above.
 
 Retry state remains on that same durable delivery through `retryable`, `last_failed_at`, `next_retry_at` and `retry_exhausted_at`. The repository enforces a unique `(automation_id, dedupe_key)` occurrence, so redelivery and automatic retry cannot create a replacement TriggerDelivery accidentally, including after process restart when the SQLite repository is used.
 
@@ -116,16 +117,18 @@ Owner-only behavior remains conservative. An unowned/global event is visible onl
 
 ## Task creation and provenance
 
-The Automation Control Plane adapter renders the configured Task template and calls the existing `ControlPlane.create_task(...)` path using the Automation identity and a deterministic idempotency key.
+The ordinary Automation Control Plane adapter renders the configured Task template and calls the existing `ControlPlane.create_task(...)` path using the Automation identity and a deterministic idempotency key.
 
 The generated Task therefore still passes normal `task:create` authorization and Task-management validation. Automatic retries re-enter this same path and re-check current authorization; retry state is not an authorization cache.
+
+A platform-owned domain dispatcher that has explicitly handled the delivery may return `NO_TASK_REQUIRED` when its domain review determines that executable work is unnecessary. `AutomationService` then persists the delivery as successful with `generated_task_id = null`. This signal is not a replacement for failed Task admission and must not be used to bypass authorization, planning or execution for work that actually exists.
 
 Tasks receive provenance labels:
 
 - `automation:<automation_id>`
 - `delivery:<trigger_delivery_id>`
 
-The TriggerDelivery also stores the generated canonical Task ID, giving bidirectional queryable correlation without a separate Task type.
+When a Task is generated, the TriggerDelivery stores its canonical Task ID, giving bidirectional queryable correlation without a separate Task type.
 
 ## Audit and observability
 
@@ -205,6 +208,6 @@ Automation composes above the current Search-enabled Control Plane layer rather 
 
 `WorkspaceEventScopeResolver` is the provider-neutral workspace visibility seam. The reference implementation resolves canonical #37 workspace relationships without changing Event payload identity.
 
-`TaskCreator` is the admission port. The production Control Plane implementation binds this port to canonical Task creation. Test or alternate embeddings may supply another implementation, but the public composed platform never routes Automation directly to execution providers.
+`TaskCreator` is the admission port and retains the ordinary non-null `Awaitable[str]` contract. The production Control Plane implementation binds this port to canonical Task creation. Platform-owned composed domain dispatchers may return the explicit `NO_TASK_REQUIRED` string-subtype signal only after they have handled a delivery and determined that no executable Task is required. Test or alternate embeddings may supply another implementation, but accidental `None`, blank or non-string results fail closed and the public composed platform never routes Automation directly to execution providers.
 
 No Temporal installation, distributed broker, paid scheduler, frontend or connector framework is required for the reference path.
