@@ -1,7 +1,7 @@
 """Canonical source-evidence resolvers for governed Learning (#694).
 
 Learning may project exact source bindings into a LearningCandidate, but Task/Run and
-Planning remain authoritative for their own records.  These adapters therefore re-read the
+Planning remain authoritative for their own records. These adapters therefore re-read the
 canonical owners and fail closed instead of trusting caller-asserted LearningReference values.
 """
 
@@ -84,7 +84,8 @@ class PlanningEvidenceKernel(Protocol):
 
 
 class PlanningEvidenceService(Protocol):
-    kernel: PlanningEvidenceKernel
+    @property
+    def kernel(self) -> PlanningEvidenceKernel: ...
 
     def history(self, task_id: str) -> tuple[ProposalRecord, ...]: ...
 
@@ -273,6 +274,40 @@ class PlanningProposalFailureEvidenceResolver:
         )
 
 
+_TRUSTED_SYSTEM_SOURCE_KINDS = frozenset(
+    {
+        "user_feedback",
+        "feedback",
+        "verification",
+        "verification_result",
+        "evaluation",
+        "evaluation_run",
+        "evaluation_result",
+        "run",
+        "run_failure",
+        "planning_failure",
+        "plan_proposal",
+        "research_evidence",
+        "research_item",
+        "research_claim",
+        "research_source",
+        "research_source_observation",
+    }
+)
+
+
+def require_operator_source_reference(reference: LearningReference) -> LearningReference:
+    """Reject operator-authored references that impersonate canonical system source authority."""
+
+    if reference.kind in _TRUSTED_SYSTEM_SOURCE_KINDS:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "operator Learning proposal cannot claim a trusted canonical source kind",
+            details={"source_kind": reference.kind},
+        )
+    return reference
+
+
 def _require_owner_project_consistency(task: TaskState, run: RunState) -> None:
     if task.task.project_id != run.run.project_id:
         raise ContractError(
@@ -327,10 +362,13 @@ def _run_projection_digest(run: RunState) -> str:
 
 __all__ = [
     "KernelRunFailureEvidenceResolver",
+    "LearningRunEvidenceKernel",
+    "PlanningEvidenceService",
     "PlanningFailureEvidenceResolver",
     "PlanningFailureSourceRef",
     "PlanningProposalFailureEvidenceResolver",
     "ResolvedLearningSource",
     "RunFailureEvidenceResolver",
     "RunFailureSourceRef",
+    "require_operator_source_reference",
 ]
