@@ -17,6 +17,7 @@ describe("#17 stable navigation baseline", () => {
       "/integrations",
       "/models",
       "/evaluations",
+      "/learning",
       "/marketplace",
       "/compute",
       "/terminal",
@@ -34,6 +35,7 @@ describe("#17 stable navigation baseline", () => {
     const tools = navigation.find((item) => item.path === "/tools");
     const integrations = navigation.find((item) => item.path === "/integrations");
     const evaluations = navigation.find((item) => item.path === "/evaluations");
+    const learning = navigation.find((item) => item.path === "/learning");
     const marketplace = navigation.find((item) => item.path === "/marketplace");
     const compute = navigation.find((item) => item.path === "/compute");
     const plugins = navigation.find((item) => item.path === "/plugins");
@@ -42,6 +44,7 @@ describe("#17 stable navigation baseline", () => {
     expect(tools?.apiResource).toBe("capabilities");
     expect(integrations?.apiResource).toBe("connector-definitions");
     expect(evaluations?.apiResource).toBe("evaluation-suites");
+    expect(learning?.apiResource).toBe("learning-candidates");
     expect(marketplace?.apiResource).toBe("registry-items");
     expect(compute?.apiResource).toBe("nodes");
     expect(plugins?.apiResource).toBe("plugins");
