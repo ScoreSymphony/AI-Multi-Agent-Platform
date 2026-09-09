@@ -320,9 +320,7 @@ def test_learning_supported_target_scope_blocks_cross_project_proposal_and_promo
             LocalPrincipalPolicy(
                 principal_ref=principal,
                 actor_types=frozenset({ActorType.HUMAN}),
-                allowed_actions=frozenset(
-                    {AuthorizationAction.CREATE, AuthorizationAction.MODIFY}
-                ),
+                allowed_actions=frozenset({AuthorizationAction.CREATE, AuthorizationAction.MODIFY}),
                 resource_types=frozenset({ResourceType.GENERIC}),
                 project_ids=frozenset({project_a.id}),
             )
