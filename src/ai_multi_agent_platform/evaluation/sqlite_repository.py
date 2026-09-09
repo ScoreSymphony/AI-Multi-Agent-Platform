@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -18,7 +19,13 @@ from .codec import (
     encode_result,
     encode_run,
 )
-from .models import ComparisonReport, EvaluationResult, EvaluationRun
+from .models import (
+    ComparisonReport,
+    EvaluationResult,
+    EvaluationRun,
+    EvaluationRunStatus,
+    utc_now,
+)
 
 _STORAGE_SCHEMA_VERSION = "2"
 _SUPPORTED_STORAGE_SCHEMA_VERSIONS = {"1", _STORAGE_SCHEMA_VERSION}
@@ -275,6 +282,51 @@ class SqliteEvaluationRepository:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR, "failed to persist evaluation run"
             ) from exc
+
+    def reconcile_interrupted_runs(self) -> tuple[str, ...]:
+        """Mark persisted RUNNING runs failed after a process restart.
+
+        A RUNNING row is never promoted back to readiness from current runtime configuration.
+        The immutable EvalManifest, if present, remains historical evidence; a missing manifest is
+        likewise not reconstructed. This operation is intentionally explicit so callers invoke it
+        only at a restart boundary, never from a second live repository handle.
+        """
+
+        now = utc_now()
+        reconciled: list[str] = []
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    "SELECT run_json FROM evaluation_runs WHERE status = ? ORDER BY run_id ASC",
+                    (EvaluationRunStatus.RUNNING.value,),
+                ).fetchall()
+                for row in rows:
+                    run = self._decode_run(str(row["run_json"]))
+                    failed = replace(
+                        run,
+                        status=EvaluationRunStatus.FAILED,
+                        completed_at=now,
+                    )
+                    connection.execute(
+                        """
+                        UPDATE evaluation_runs
+                        SET status = ?, completed_at = ?, run_json = ?
+                        WHERE run_id = ?
+                        """,
+                        (
+                            failed.status.value,
+                            failed.completed_at.isoformat(),
+                            self._encode_run(failed),
+                            failed.run_id,
+                        ),
+                    )
+                    reconciled.append(failed.run_id)
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to reconcile interrupted evaluation runs",
+            ) from exc
+        return tuple(reconciled)
 
     def get_run(self, run_id: str) -> EvaluationRun | None:
         try:

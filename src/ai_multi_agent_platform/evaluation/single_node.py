@@ -197,6 +197,7 @@ def build_single_node_evaluation(
         return revision.project_id or project_id
 
     repository = SqliteEvaluationRepository(database_path)
+    repository.reconcile_interrupted_runs()
     suite_assets = SqliteEvaluationSuiteAssetRepository(database_path)
     fixture_resolver = DirectoryEvaluationFixtureResolver(
         fixture_root=Path(asset_dir) / "fixtures",
