@@ -28,9 +28,9 @@ from ai_multi_agent_platform.upgrade.versioning import (
 )
 
 from .config import SingleNodeConfig, load_single_node_config
+from .durable_connectors import SingleNodeDeployment, build_single_node_deployment
 from .restore_integrity import single_node_restore_integrity_validators
 from .restore_integrity_current import single_node_current_restore_integrity_validators
-from .single_node import SingleNodeDeployment, build_single_node_deployment
 
 DeploymentBuilder = Callable[[SingleNodeConfig], SingleNodeDeployment]
 
