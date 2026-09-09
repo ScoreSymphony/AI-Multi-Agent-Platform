@@ -355,7 +355,8 @@ class OperationalContextBoundAgentRuntime:
         task_model_override: RoutingRequirements | None,
         runtime_requirements: RoutingRequirements,
     ) -> RoutingRequirements:
-        if self.model_runtime is None:
+        model_runtime = self.model_runtime
+        if model_runtime is None:
             return runtime_requirements
 
         agent = self.runtime.service.get_agent_revision(bundle.agent_id, bundle.agent_revision)
@@ -365,18 +366,16 @@ class OperationalContextBoundAgentRuntime:
             runtime_requirements,
         )
 
-        async def select(requirements: RoutingRequirements):
-            return await self.model_runtime.select(
-                ModelRequest(
-                    request_id=f"{bundle.run_id}:context-route",
-                    messages=(bundle.digest,),
-                    context=operation,
-                    requirements=_routing_request_requirements(requirements, bundle),
-                )
+        def request_for(requirements: RoutingRequirements) -> ModelRequest:
+            return ModelRequest(
+                request_id=f"{bundle.run_id}:context-route",
+                messages=(bundle.digest,),
+                context=operation,
+                requirements=_routing_request_requirements(requirements, bundle),
             )
 
         try:
-            selection = await select(effective)
+            selection = await model_runtime.select(request_for(effective))
         except ContractError as exc:
             if (
                 exc.code is not ErrorCode.NO_COMPATIBLE_ROUTE
@@ -384,7 +383,9 @@ class OperationalContextBoundAgentRuntime:
                 or agent.profile.model.fallback is not ModelFallbackPolicy.ROUTE
             ):
                 raise
-            selection = await select(replace(effective, explicit_model_id=None))
+            selection = await model_runtime.select(
+                request_for(replace(effective, explicit_model_id=None))
+            )
 
         if selection.model_ref is None:
             raise ContractError(
