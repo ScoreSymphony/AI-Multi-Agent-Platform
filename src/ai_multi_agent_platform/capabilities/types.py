@@ -306,6 +306,8 @@ class CapabilityInvocation:
     compatibility: CapabilityCompatibilityRequest | None = None
     granted_permissions: frozenset[str] = frozenset()
     available_worker_capabilities: frozenset[str] = frozenset()
+    require_approval: bool = False
+    expires_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.invocation_id.strip():
@@ -322,7 +324,11 @@ class CapabilityInvocation:
             raise ValueError("trace/context causation_id must match")
         if self.trace.project_id != self.context.project_id:
             raise ValueError("trace/context project_id must match")
+        if self.expires_at is not None and self.expires_at.tzinfo is None:
+            raise ValueError("expires_at must be timezone-aware")
         object.__setattr__(self, "arguments", _freeze_mapping(self.arguments))
+        if self.expires_at is not None:
+            object.__setattr__(self, "expires_at", self.expires_at.astimezone(UTC))
 
 
 @dataclass(frozen=True, slots=True)

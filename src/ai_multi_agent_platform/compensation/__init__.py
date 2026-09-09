@@ -5,6 +5,7 @@ from .control_plane import (
     CompensationControlPlaneProjection,
     CompensationGroupView,
 )
+from .coordinator import CompensationCoordinator
 from .integration import PlanCompensationHooks
 from .models import (
     CompensationActionProjection,
@@ -31,7 +32,6 @@ from .repository import (
 )
 from .service import (
     ApprovalReferenceLookup,
-    CompensationCoordinator,
     CompensationReconciler,
     CompensationVerificationHook,
     ExecutionContextFactory,
