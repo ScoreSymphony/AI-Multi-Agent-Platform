@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   AgentInstructionSource,
   AgentProfile,
@@ -137,11 +137,7 @@ export function AgentConfigurationPage({
     try {
       const agent = await core.getAgent(agentId);
       setLoaded(agent);
-      if (mode === "clone") {
-        setProfile(agent.revision.profile);
-      } else {
-        setProfile(agent.revision.profile);
-      }
+      setProfile(agent.revision.profile);
       setProjectId(agent.project_id);
       setWorkspaceId(agent.workspace_id);
       setBaseline(configurationFingerprint({
@@ -551,16 +547,25 @@ export function AgentTeamConfigurationPage({
   const workspaceOptions = workspaces.filter((workspace) => projectId === null || workspace.project_id === projectId).map((workspace) => ({ value: workspace.id, label: workspace.id }));
   const agentOptions = agents.map((agent) => ({ value: agent.id, label: agent.revision.profile.name, description: `revision ${agent.current_revision} · ${agent.revision.profile.role}` }));
 
+  const removeMember = (agentId: string) => {
+    setProfile((current) => ({
+      ...current,
+      members: current.members
+        .filter((member) => member.agent.agent_id !== agentId)
+        .map((member) => ({
+          ...member,
+          can_delegate_to: member.can_delegate_to.filter((targetId) => targetId !== agentId),
+        })),
+      leader_agent_id: current.leader_agent_id === agentId ? null : current.leader_agent_id,
+    }));
+  };
+
   const toggleMember = (agent: CanonicalAgent, checked: boolean) => {
+    if (!checked) {
+      removeMember(agent.id);
+      return;
+    }
     setProfile((current) => {
-      if (!checked) {
-        const members = current.members.filter((member) => member.agent.agent_id !== agent.id);
-        return {
-          ...current,
-          members,
-          leader_agent_id: current.leader_agent_id === agent.id ? null : current.leader_agent_id,
-        };
-      }
       const member: AgentTeamMember = {
         agent: { agent_id: agent.id, revision: agent.current_revision },
         role: agent.revision.profile.role || "member",
@@ -572,16 +577,9 @@ export function AgentTeamConfigurationPage({
   };
 
   const save = async () => {
-    if (!profile.name.trim()) {
-      setError(new Error("Team name is required."));
-      return;
-    }
-    if (!profile.members.length) {
-      setError(new Error("A Team requires at least one pinned Agent member."));
-      return;
-    }
-    if (profile.leader_agent_id && !profile.members.some((member) => member.agent.agent_id === profile.leader_agent_id)) {
-      setError(new Error("Team leader must be one of the pinned members."));
+    const validation = validateTeam(profile);
+    if (validation) {
+      setError(new Error(validation));
       return;
     }
     setBusy(true);
@@ -638,14 +636,29 @@ export function AgentTeamConfigurationPage({
             </label>
           ))}
         </div>
-        {profile.members.map((member) => (
-          <div className="team-member-editor" key={member.agent.agent_id}>
-            <div><strong>{agents.find((agent) => agent.id === member.agent.agent_id)?.revision.profile.name ?? member.agent.agent_id}</strong><small> pinned revision {member.agent.revision}</small></div>
-            <Field label="Team role"><input value={member.role} onChange={(event) => updateMember(profile, setProfile, member.agent.agent_id, { role: event.currentTarget.value })} /></Field>
-            <CheckboxField label="Required member" checked={member.required} onChange={(required) => updateMember(profile, setProfile, member.agent.agent_id, { required })} />
-            <StringListField label="Can delegate to Agent IDs" values={member.can_delegate_to} onChange={(can_delegate_to) => updateMember(profile, setProfile, member.agent.agent_id, { can_delegate_to })} />
-          </div>
-        ))}
+        {profile.members.map((member) => {
+          const delegationOptions = agentOptions.filter(
+            (option) => selectedIds.has(option.value) && option.value !== member.agent.agent_id,
+          );
+          return (
+            <div className="team-member-editor" key={member.agent.agent_id}>
+              <div>
+                <strong>{agents.find((agent) => agent.id === member.agent.agent_id)?.revision.profile.name ?? member.agent.agent_id}</strong>
+                <small> pinned revision {member.agent.revision}</small>
+                <button type="button" onClick={() => removeMember(member.agent.agent_id)}>Remove member</button>
+              </div>
+              <Field label="Team role"><input value={member.role} onChange={(event) => updateMember(profile, setProfile, member.agent.agent_id, { role: event.currentTarget.value })} /></Field>
+              <CheckboxField label="Required member" checked={member.required} onChange={(required) => updateMember(profile, setProfile, member.agent.agent_id, { required })} />
+              <MultiResourcePicker
+                label="Can delegate to"
+                values={member.can_delegate_to}
+                options={delegationOptions}
+                onChange={(can_delegate_to) => updateMember(profile, setProfile, member.agent.agent_id, { can_delegate_to })}
+                hint="Delegation targets must be other pinned Team members."
+              />
+            </div>
+          );
+        })}
       </Card>
 
       <Card title="Coordination & runtime limits">
@@ -742,12 +755,30 @@ function normalizeInstruction(source: AgentInstructionSource): AgentInstructionS
   return { content: source.content?.trim() || null, ref: null, version: source.version?.trim() || null };
 }
 
-function validateAgent(profile: AgentProfile): string | null {
+export function validateAgent(profile: AgentProfile): string | null {
   if (!profile.name.trim()) return "Agent name is required.";
   if (!profile.role.trim()) return "Agent role is required.";
   if (profile.instructions.role.ref !== null && !profile.instructions.role.ref.trim()) return "Instruction reference cannot be blank.";
   if (profile.instructions.role.ref === null && !profile.instructions.role.content?.trim()) return "Inline instruction content is required.";
   if (profile.data_access.memory_scopes.includes("user") && !profile.data_access.allow_user_memory) return "User memory scope requires Allow user memory.";
+  return null;
+}
+
+export function validateTeam(profile: AgentTeamProfile): string | null {
+  if (!profile.name.trim()) return "Team name is required.";
+  if (!profile.members.length) return "A Team requires at least one pinned Agent member.";
+  const memberIds = new Set(profile.members.map((member) => member.agent.agent_id));
+  if (profile.leader_agent_id && !memberIds.has(profile.leader_agent_id)) {
+    return "Team leader must be one of the pinned members.";
+  }
+  for (const member of profile.members) {
+    if (!member.role.trim()) return "Every Team member requires a non-blank role.";
+    if (member.can_delegate_to.some(
+      (targetId) => targetId === member.agent.agent_id || !memberIds.has(targetId),
+    )) {
+      return "Delegation targets must be other pinned Team members.";
+    }
+  }
   return null;
 }
 
