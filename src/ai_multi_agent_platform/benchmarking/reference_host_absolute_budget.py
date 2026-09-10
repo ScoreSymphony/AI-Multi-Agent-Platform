@@ -282,8 +282,7 @@ def _parse_rule(
             )
     elif not warning < blocking:
         raise ValueError(
-            "lower-is-better absolute budgets require "
-            "warning_boundary < release_blocking_boundary"
+            "lower-is-better absolute budgets require warning_boundary < release_blocking_boundary"
         )
 
     evidence_refs = _require_string_tuple(payload, "evidence_refs")
