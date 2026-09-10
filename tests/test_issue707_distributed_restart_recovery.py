@@ -109,7 +109,9 @@ def _registration() -> RegistrationRequest:
     )
 
 
-def _worker_security(worker_id: str) -> tuple[
+def _worker_security(
+    worker_id: str,
+) -> tuple[
     LocalAuthenticationService,
     LocalAuthorizationProvider,
     str,
