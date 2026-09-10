@@ -45,10 +45,6 @@ _MUTATING_COMMANDS = frozenset(
 )
 
 
-def main() -> int:
-    return run_cli()
-
-
 def run_cli(
     argv: list[str] | None = None,
     *,
