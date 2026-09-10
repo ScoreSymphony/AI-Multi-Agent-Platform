@@ -22,6 +22,9 @@ from ai_multi_agent_platform.context.bindings import (
 )
 from ai_multi_agent_platform.context.classification import effective_context_bundle_classification
 from ai_multi_agent_platform.context.control_plane import register_context_control_plane
+from ai_multi_agent_platform.context.kernel_plan_step import (
+    KernelFallbackPlanStepContextSourceAdapter,
+)
 from ai_multi_agent_platform.context.lifecycle import (
     CanonicalContextAgentLifecycleBackend,
     ContextLifecycleSourceRequest,
@@ -50,7 +53,6 @@ from ai_multi_agent_platform.context.source_adapters import (
     KnowledgeContextSourceAdapter,
     MemoryContextSourceAdapter,
     OperationalContextAssemblyService,
-    PlanStepContextSourceAdapter,
     RepositoryContextSourceAdapter,
     ResearchEvidenceContextSourceAdapter,
     SkillBundleContextSourceAdapter,
@@ -283,7 +285,12 @@ def install_single_node_context(
 
     task_adapter = TaskContextSourceAdapter(tasks)
     agent_adapter = AgentContextSourceAdapter(base.agents)
-    plan_adapter = PlanStepContextSourceAdapter(base.coordination_repository, runs=runs)
+    plan_adapter = KernelFallbackPlanStepContextSourceAdapter(
+        base.coordination_repository,
+        tasks=tasks,
+        events=base.kernel_repository,
+        runs=runs,
+    )
     skill_adapter = SkillBundleContextSourceAdapter(skills_repository)
     research_adapter = ResearchEvidenceContextSourceAdapter(research)
     verification_adapter = VerificationContextSourceAdapter(
