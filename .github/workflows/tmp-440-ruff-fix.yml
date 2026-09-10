@@ -1,4 +1,4 @@
-name: Temporary #440 Ruff diagnostic
+name: Temporary #440 Ruff cleanup
 
 on:
   push:
@@ -9,31 +9,35 @@ permissions:
   contents: write
 
 jobs:
-  diagnose:
+  cleanup:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           ref: perf/440-sqlite-contention
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-      - name: Install Ruff
-        run: python -m pip install "ruff>=0.12,<1"
-      - name: Capture Ruff diagnostics
+      - name: Apply isolated lint fix and remove diagnostics
         run: |
-          mkdir -p .tmp-440
-          ruff check \
-            src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
-            src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py \
-            tests/performance/test_issue_440_persistence_contention.py \
-            > .tmp-440/ruff.txt 2>&1 || true
-      - name: Commit diagnostics
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/ai_multi_agent_platform/benchmarking/persistence_contention.py")
+          text = path.read_text(encoding="utf-8")
+          old = "SQLite internal wait time is observed through end-to-end canonical mutation latency"
+          new = "SQLite wait time is observed through end-to-end canonical mutation latency"
+          if old not in text:
+              raise SystemExit("expected lint target not found")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          rm -rf .tmp-440
+          rm .github/workflows/tmp-440-ruff-fix.yml
+      - name: Commit cleanup
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .tmp-440/ruff.txt
-          git commit -m "chore(#440): capture Ruff diagnostics"
+          git add -A \
+            src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
+            .tmp-440 \
+            .github/workflows/tmp-440-ruff-fix.yml
+          git commit -m "style(#440): fix Ruff line length and remove diagnostics"
           git push origin HEAD:perf/440-sqlite-contention
