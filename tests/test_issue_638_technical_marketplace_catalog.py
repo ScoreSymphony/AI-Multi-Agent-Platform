@@ -42,6 +42,11 @@ EXPECTED_CODING_AGENTS = {
     "plandex",
     "gemini-cli",
     "codex-cli",
+    "jcode",
+    "kimi-code-cli",
+    "mimo-code",
+    "zcode",
+    "mini-swe-agent",
 }
 EXPECTED_AGENT_FRAMEWORKS = {
     "pydantic-ai",
@@ -55,8 +60,15 @@ EXPECTED_AGENT_FRAMEWORKS = {
     "dify",
     "flowise",
     "letta",
+    "paperclip",
+    "agent-zero",
+    "lifeos",
+    "sim-studio",
+    "ruflo",
+    "gas-town",
+    "langflow",
 }
-EXPECTED_MEMORY = {"mem0", "graphiti", "qdrant", "anything-llm", "letta"}
+EXPECTED_MEMORY = {"mem0", "graphiti", "qdrant", "anything-llm", "letta", "openviking"}
 EXPECTED_INFERENCE = {
     "llama-cpp",
     "ollama",
@@ -65,7 +77,37 @@ EXPECTED_INFERENCE = {
     "onnx-runtime",
     "transformers-js",
 }
+EXPECTED_SPECIFICATIONS = {"spec-kit", "superpowers", "ecc", "openspec", "bmad-method"}
+EXPECTED_BROWSER_EXECUTION = {"browser-use", "playwright", "stagehand", "swe-rex"}
+EXPECTED_EVALUATION = {
+    "promptfoo",
+    "lighteval",
+    "inspect-ai",
+    "deepeval",
+    "agentdojo",
+    "garak",
+    "harbor",
+    "openenv",
+}
+EXPECTED_MUSIC_AI = {"bachi", "analysisgnn", "clamp3", "mert", "transformers-js"}
 REFERENCE_ONLY = {"roo-code", "flowise"}
+
+
+def _ids(
+    provider: FilesystemRegistryProvider,
+    category: str,
+    *,
+    include_deprecated: bool = False,
+) -> set[str]:
+    return {
+        item.item_id
+        for item in provider.search(
+            RegistryQuery(
+                categories=frozenset({category}),
+                include_deprecated=include_deprecated,
+            )
+        )
+    }
 
 
 def test_curated_technical_catalog_loads_cross_category_seed() -> None:
@@ -73,33 +115,16 @@ def test_curated_technical_catalog_loads_cross_category_seed() -> None:
 
     all_items = provider.search(RegistryQuery(technical_only=True, include_deprecated=True))
 
-    assert len(all_items) >= 47
-    assert {
-        item.item_id
-        for item in provider.search(RegistryQuery(categories=frozenset({"code-intelligence"})))
-    } == EXPECTED_CODE_INTELLIGENCE
-    assert {
-        item.item_id
-        for item in provider.search(
-            RegistryQuery(categories=frozenset({"coding-agent"}), include_deprecated=True)
-        )
-    } == EXPECTED_CODING_AGENTS
-    assert {
-        item.item_id
-        for item in provider.search(
-            RegistryQuery(categories=frozenset({"agent-framework"}), include_deprecated=True)
-        )
-    } == EXPECTED_AGENT_FRAMEWORKS
-    assert EXPECTED_MEMORY.issubset(
-        {
-            item.item_id
-            for item in provider.search(RegistryQuery(categories=frozenset({"memory-and-context"})))
-        }
-    )
-    assert {
-        item.item_id
-        for item in provider.search(RegistryQuery(categories=frozenset({"inference-runtime"})))
-    } == EXPECTED_INFERENCE
+    assert len(all_items) >= 71
+    assert _ids(provider, "code-intelligence") == EXPECTED_CODE_INTELLIGENCE
+    assert _ids(provider, "coding-agent", include_deprecated=True) == EXPECTED_CODING_AGENTS
+    assert _ids(provider, "agent-framework", include_deprecated=True) == EXPECTED_AGENT_FRAMEWORKS
+    assert EXPECTED_MEMORY.issubset(_ids(provider, "memory-and-context"))
+    assert _ids(provider, "inference-runtime") == EXPECTED_INFERENCE
+    assert _ids(provider, "specification-and-skills") == EXPECTED_SPECIFICATIONS
+    assert _ids(provider, "browser-and-execution") == EXPECTED_BROWSER_EXECUTION
+    assert _ids(provider, "evaluation") == EXPECTED_EVALUATION
+    assert _ids(provider, "music-ai") == EXPECTED_MUSIC_AI
 
 
 def test_curated_catalog_entries_remain_manual_untrusted_and_fail_closed() -> None:
@@ -124,83 +149,41 @@ def test_curated_catalog_entries_remain_manual_untrusted_and_fail_closed() -> No
             assert technical.evaluation_status == "required"
             assert technical.evaluation_required is True
 
-        if item.item_id in ISSUE_502_ITEMS:
-            assert (
-                item.review_reference
-                == "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/502"
-            )
-        else:
-            assert (
-                item.review_reference
-                == "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638"
-            )
+        expected_issue = "502" if item.item_id in ISSUE_502_ITEMS else "638"
+        assert item.review_reference == (
+            "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/" + expected_issue
+        )
 
 
 def test_curated_catalog_preserves_explicit_unknowns_instead_of_guessing() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
-    projectatlas = provider.get("projectatlas")
-    metadata = derive_technical_metadata(projectatlas)
-
-    assert metadata is not None
-    assert metadata.deployment_modes == ("unknown",)
-    assert metadata.cost_status == "unknown"
-    assert metadata.network_status == "unknown"
+    projectatlas = derive_technical_metadata(provider.get("projectatlas"))
+    assert projectatlas is not None
+    assert projectatlas.deployment_modes == ("unknown",)
+    assert projectatlas.cost_status == "unknown"
+    assert projectatlas.network_status == "unknown"
 
     roo = derive_technical_metadata(provider.get("roo-code"))
     assert roo is not None
     assert roo.cost_status == "unknown"
     assert roo.network_status == "unknown"
 
+    for item_id in {"jcode", "paperclip", "openviking", "harbor", "bachi"}:
+        metadata = derive_technical_metadata(provider.get(item_id))
+        assert metadata is not None
+        assert metadata.deployment_modes == ("unknown",)
+        assert metadata.cost_status == "unknown"
+        assert metadata.network_status == "unknown"
+        assert metadata.resource_class == "unknown"
 
-def test_verified_active_external_catalog_records_do_not_fake_upstream_revision() -> None:
+
+def test_active_external_records_do_not_fake_upstream_revision() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
-    for item_id in {
-        "openhands",
-        "aider",
-        "pydantic-ai",
-        "langgraph",
-        "smolagents",
-        "google-adk",
-        "spec-kit",
-        "mem0",
-        "graphiti",
-        "qdrant",
-        "promptfoo",
-        "lighteval",
-        "browser-use",
-        "playwright",
-        "llama-cpp",
-        "ollama",
-        "vllm",
-        "sentence-transformers",
-        "serena",
-        "ast-grep",
-        "semgrep",
-        "scip",
-        "opencode",
-        "goose",
-        "cline",
-        "plandex",
-        "gemini-cli",
-        "codex-cli",
-        "anything-llm",
-        "microsoft-agent-framework",
-        "agno",
-        "crewai",
-        "dify",
-        "stagehand",
-        "letta",
-        "inspect-ai",
-        "deepeval",
-        "agentdojo",
-        "garak",
-        "tei",
-        "onnx-runtime",
-        "transformers-js",
-    }:
-        item = provider.get(item_id)
+    for item in provider.search(RegistryQuery(technical_only=True, include_deprecated=True)):
+        if item.item_id in ISSUE_502_ITEMS | REFERENCE_ONLY:
+            continue
         assert item.source.revision is None
         assert "project-status:not-archived" in item.tags
         assert item.deprecated is False
@@ -226,11 +209,14 @@ def test_nonstandard_license_terms_are_visible_instead_of_normalized_away() -> N
 
     dify = provider.get("dify")
     flowise = provider.get("flowise")
+    openviking = provider.get("openviking")
 
     assert dify.license == "Modified Apache-2.0 (Dify license)"
     assert "license-restrictions:additional-terms" in dify.tags
     assert flowise.license == "Mixed: Apache-2.0 / Commercial"
     assert "license-restrictions:mixed" in flowise.tags
+    assert openviking.license == "AGPL-3.0"
+    assert "license-review:copyleft" in openviking.tags
 
 
 def test_curated_candidate_artifacts_are_reference_only() -> None:
@@ -397,10 +383,7 @@ def test_only_manual_distribution_route_can_override_type_routing() -> None:
 
 
 def test_registry_item_v1_documents_remain_readable() -> None:
-    document = _registry_document(schema_version="1")
-
-    item = registry_item_from_document(document)
-
+    item = registry_item_from_document(_registry_document(schema_version="1"))
     assert item.route is DistributionRoute.PORTABLE_IMPORT
 
 

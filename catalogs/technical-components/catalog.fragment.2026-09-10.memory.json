@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "provider_id": "technical-components-reference",
+  "items": [
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "openviking", "item_type": "tool", "name": "OpenViking",
+        "description": "Agent memory and context infrastructure candidate for persistent context and retrieval architecture comparison.", "version": "1.0.0", "publisher": "Volcengine",
+        "source": {"repository": "https://github.com/volcengine/OpenViking", "package_reference": "github:volcengine/OpenViking", "revision": null}, "license": "AGPL-3.0",
+        "provenance": "Official repository identity, AGPL-3.0 license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown", "license-review:copyleft"],
+        "categories": ["memory-and-context", "retrieval"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted", "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    }
+  ]
+}
