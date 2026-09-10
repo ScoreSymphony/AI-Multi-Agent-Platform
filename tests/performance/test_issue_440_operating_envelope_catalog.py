@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from importlib.resources import files
 from pathlib import Path
 
 import pytest
@@ -89,6 +90,20 @@ def _envelope(
         "budget_status": "not-established",
         "correctness_passed": True,
     }
+
+
+def test_packaged_source_schema_matches_documented_contract() -> None:
+    documented = json.loads(
+        Path("docs/schemas/benchmark-operating-envelope.v1.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    packaged = json.loads(
+        files("ai_multi_agent_platform.benchmarking")
+        .joinpath("schemas/benchmark-operating-envelope.v1.schema.json")
+        .read_text(encoding="utf-8")
+    )
+    assert packaged == documented
 
 
 def test_catalog_preserves_distinct_host_envelopes_without_global_aggregation() -> None:
@@ -188,10 +203,32 @@ def test_catalog_rejects_incomparable_basis_and_tampered_environment() -> None:
         )
 
 
+def test_catalog_rejects_source_schema_violations_before_comparison() -> None:
+    truncated = _envelope()
+    points = truncated["concurrency_envelope"]
+    assert isinstance(points, list)
+    first_point = points[0]
+    assert isinstance(first_point, dict)
+    del first_point["sample_count"]
+    with pytest.raises(ValueError, match="invalid operating-envelope report"):
+        OperatingEnvelopeCatalogBuilder().build(
+            envelopes=(truncated,),
+            labels=("truncated",),
+        )
+
+    negative_endurance = _envelope()
+    negative_endurance["longest_verified_endurance_seconds"] = -1.0
+    with pytest.raises(ValueError, match="invalid operating-envelope report"):
+        OperatingEnvelopeCatalogBuilder().build(
+            envelopes=(negative_endurance,),
+            labels=("negative-endurance",),
+        )
+
+
 def test_catalog_rejects_failed_evidence_and_duplicate_labels() -> None:
     failed = _envelope()
     failed["correctness_passed"] = False
-    with pytest.raises(ValueError, match="correctness"):
+    with pytest.raises(ValueError, match="invalid operating-envelope report"):
         OperatingEnvelopeCatalogBuilder().build(
             envelopes=(failed,),
             labels=("host-a",),
