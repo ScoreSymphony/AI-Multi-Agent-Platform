@@ -58,6 +58,8 @@ class DistributedBuildTargetMatcher:
             node = self.registry.get_node(worker.node_id)
             if node.status is not NodeStatus.ONLINE or node.draining or node.maintenance:
                 continue
+            if node.os_name is None or node.architecture is None:
+                continue
             if _normalize_os(node.os_name) != _normalize_os(target.os_name):
                 continue
             if _normalize_architecture(node.architecture) != _normalize_architecture(
