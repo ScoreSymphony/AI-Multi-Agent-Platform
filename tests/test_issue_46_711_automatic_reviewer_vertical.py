@@ -22,7 +22,6 @@ from ai_multi_agent_platform.contracts import JsonValue
 from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.domain import OwnerRef, RunStatus, TaskStatus
-from ai_multi_agent_platform.models import RoutingRequirements
 from ai_multi_agent_platform.onboarding import FIRST_RUN_RESOURCE_ID
 from ai_multi_agent_platform.verification import (
     CompletionState,
@@ -69,7 +68,7 @@ class _LocalAutomaticReviewTransport:
 
         self.chat_calls += 1
         if self.chat_calls == 1:
-            content = "candidate output produced by the developer agent"
+            content = "candidate output produced by the producer agent"
         else:
             content = json.dumps(
                 {
@@ -201,13 +200,13 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         assert isinstance(workspace_snapshot_id, str)
 
         bootstrap_standard_agents(deployment.agents)
-        developer = deployment.agents.clone_agent(
-            STANDARD_AGENT_IDS["developer"],
+        producer = deployment.agents.clone_agent(
+            STANDARD_AGENT_IDS["general_assistant"],
             revision=1,
             owner_ref=OwnerRef(type="user", id=admin.user_id),
             project_id=project_id,
             workspace_id=workspace_id,
-            name="Automatic Review Developer",
+            name="Automatic Review Producer",
         )
         reviewer = deployment.agents.clone_agent(
             STANDARD_AGENT_IDS["reviewer"],
@@ -240,8 +239,8 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
             task_id=task_id,
             metadata=encode_agent_execution_binding(
                 AgentExecutionBinding(
-                    agent_id=developer.agent_id,
-                    agent_revision=developer.revision,
+                    agent_id=producer.agent_id,
+                    agent_revision=producer.revision,
                     model_config_id="model-local-auto-review",
                     workspace_id=workspace_id,
                 )
@@ -313,7 +312,7 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         assert isinstance(result_id, str)
         assert isinstance(producer_agent_run_id, str)
         assert isinstance(candidate_text, str)
-        assert candidate_text == "candidate output produced by the developer agent"
+        assert candidate_text == "candidate output produced by the producer agent"
 
         await deployment.kernel.attach_result(
             idempotency_key="issue-46-711:result",
@@ -333,7 +332,7 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
             correlation_id=task_id,
         )
         assert verification_request.producer is not None
-        assert verification_request.producer.agent_id == developer.agent_id
+        assert verification_request.producer.agent_id == producer.agent_id
         assert verification_request.run_id == run_id
 
         input_provider = _ExactResultInputProvider(
@@ -374,7 +373,7 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         reviewer_run = review.latest.reviewer_run
         assert reviewer_run.status is AgentRunStatus.SUCCEEDED
         assert reviewer_run.agent.agent_id == reviewer.agent_id
-        assert reviewer_run.agent.agent_id != developer.agent_id
+        assert reviewer_run.agent.agent_id != producer.agent_id
         assert reviewer_run.run_id == run_id
         assert reviewer_run.selected_model_config_id == "model-local-auto-review"
         assert reviewer_run.model_call_refs == (
@@ -411,7 +410,7 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
 
         producer_run = deployment.agents.repository.get_agent_run(producer_agent_run_id)
         assert producer_run.status is AgentRunStatus.SUCCEEDED
-        assert producer_run.agent.agent_id == developer.agent_id
+        assert producer_run.agent.agent_id == producer.agent_id
         assert producer_run.agent_run_id != reviewer_run.agent_run_id
         assert transport.chat_calls == 2
 
