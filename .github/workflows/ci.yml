@@ -35,6 +35,18 @@ jobs:
         run: python scripts/ci/issue19_evaluation_gate.py --platform-commit "$GITHUB_SHA"
       - name: Build package
         run: python -m build
+      - name: Run MCP environment conformance
+        run: |
+          python scripts/ci/issue46_optional_environment_profile.py \
+            mcp \
+            --json-report conformance-mcp.json
+      - name: Upload MCP conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-conformance-mcp
+          path: conformance-mcp.json
+          if-no-files-found: warn
 
   single-node-install-smoke:
     runs-on: ubuntu-latest
@@ -105,8 +117,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[litellm]" pytest
-      - name: Run real pinned LiteLLM adapter integration test
-        run: pytest -q tests/integration/upstreams/test_litellm_pinned.py
+      - name: Run LiteLLM environment conformance
+        run: |
+          python scripts/ci/issue46_optional_environment_profile.py \
+            litellm \
+            --json-report conformance-litellm.json
+      - name: Upload LiteLLM conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-conformance-litellm
+          path: conformance-litellm.json
+          if-no-files-found: warn
 
   hermes-pinned-compat:
     needs: test
