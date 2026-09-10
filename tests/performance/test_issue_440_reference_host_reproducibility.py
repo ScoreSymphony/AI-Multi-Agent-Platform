@@ -23,7 +23,8 @@ REPORT_SCHEMA = REPO_ROOT / "docs/schemas/benchmark-reference-host-reproducibili
 DOC_CAMPAIGN_SCHEMA = REPO_ROOT / "docs/schemas/benchmark-reference-host-campaign.v1.schema.json"
 PACKAGED_CAMPAIGN_SCHEMA = (
     REPO_ROOT
-    / "src/ai_multi_agent_platform/benchmarking/schemas/benchmark-reference-host-campaign.v1.schema.json"
+    / "src/ai_multi_agent_platform/benchmarking/schemas"
+    / "benchmark-reference-host-campaign.v1.schema.json"
 )
 COMMIT = "e" * 40
 
