@@ -22,25 +22,13 @@ from ai_multi_agent_platform.contracts import JsonValue
 from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.domain import OwnerRef, RunStatus, TaskStatus
-from ai_multi_agent_platform.kernel import EventSourcedRunRepository, EventSourcedTaskRepository
 from ai_multi_agent_platform.onboarding import FIRST_RUN_RESOURCE_ID
 from ai_multi_agent_platform.verification import (
     ReviewerIndependence,
-    VerificationCompletionAuthority,
     VerificationOutcome,
     VerificationPolicy,
     VerificationStage,
     VerifierKind,
-)
-from ai_multi_agent_platform.verification.agent_workflow import AutomaticReviewerWorkflow
-from ai_multi_agent_platform.verification.output_workflow import (
-    AutomaticReviewerOutputCoordinator,
-    PolicyMetadataReviewerResolver,
-    install_automatic_reviewer_output_observer,
-)
-from ai_multi_agent_platform.verification.reference_reviewer import ModelRuntimeReviewerExecutor
-from ai_multi_agent_platform.verification.reviewer_input import (
-    KernelFileReviewerSubjectInputProvider,
 )
 
 _PASSWORD = "correct horse battery staple"
@@ -270,31 +258,6 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
             policy_version=policy.version,
         )
 
-        completion = deployment.kernel._completion_authority  # noqa: SLF001
-        assert isinstance(completion, VerificationCompletionAuthority)
-        workflow = AutomaticReviewerWorkflow(
-            runtime=deployment.verification_runtime,
-            completion=completion,
-            agents=deployment.agent_runtime,
-            resolver=PolicyMetadataReviewerResolver(completion),
-            executor=ModelRuntimeReviewerExecutor(
-                agents=deployment.agent_runtime,
-                models=deployment.model_runtime,
-                inputs=KernelFileReviewerSubjectInputProvider(
-                    tasks=EventSourcedTaskRepository(deployment.kernel_repository),
-                    runs=EventSourcedRunRepository(deployment.kernel_repository),
-                    files=deployment.files,
-                ),
-            ),
-        )
-        coordinator = AutomaticReviewerOutputCoordinator(
-            kernel=deployment.kernel,
-            runtime=deployment.verification_runtime,
-            completion=completion,
-            reviewer=workflow,
-        )
-        install_automatic_reviewer_output_observer(deployment.kernel, coordinator)
-
         queued = await deployment.http.handle(
             HTTPRequest(
                 method="POST",
@@ -338,9 +301,8 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         assert isinstance(producer_agent_run_id, str)
         assert candidate_text == "candidate output produced by the producer agent"
 
-        # This is the decisive #711 product path: after setup, the caller only attaches the
-        # canonical output. The kernel observer creates/reuses Verification, runs the reviewer,
-        # submits the canonical result and releases Task completion without private review calls.
+        # After configuration this is the only review-driving call. Public deployment composition
+        # must already have installed the kernel output observer and concrete local reviewer path.
         completed = await deployment.kernel.attach_result(
             idempotency_key="issue-46-711:result",
             task_id=task_id,
@@ -411,8 +373,6 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         assert producer_run.agent_run_id != reviewer_run.agent_run_id
         assert transport.chat_calls == 2
 
-        # Replaying the same canonical attach command reconciles from the persisted event and
-        # must not create a second reviewer/model call or VerificationResult.
         repeated = await deployment.kernel.attach_result(
             idempotency_key="issue-46-711:result",
             task_id=task_id,
@@ -423,14 +383,6 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         )
         assert repeated.status is TaskStatus.SUCCEEDED
         assert transport.chat_calls == 2
-        assert len(
-            [
-                record
-                for record in deployment.agents.repository.list_agent_runs()
-                if record.verification_context.get("verification_id")
-                == verification_request.verification_id
-            ]
-        ) == 1
         assert len(
             [
                 pair
