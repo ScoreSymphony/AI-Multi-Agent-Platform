@@ -352,9 +352,7 @@ async def _run_writer_async(
             try:
                 barrier.wait()
             except BrokenBarrierError:
-                errors.append(
-                    f"writer {writer_index} synchronization barrier broke during {phase}"
-                )
+                errors.append(f"writer {writer_index} synchronization barrier broke during {phase}")
                 unexpected_errors += 1
                 task_succeeded = False
                 break
@@ -389,15 +387,11 @@ async def _run_writer_async(
                     contract_conflicts += 1
                 else:
                     unexpected_errors += 1
-                errors.append(
-                    f"writer {writer_index} {phase}: {exc.code.value}: {exc.message}"
-                )
+                errors.append(f"writer {writer_index} {phase}: {exc.code.value}: {exc.message}")
                 task_succeeded = False
             except Exception as exc:  # pragma: no cover - defensive evidence path
                 unexpected_errors += 1
-                errors.append(
-                    f"writer {writer_index} {phase}: {type(exc).__name__}: {exc}"
-                )
+                errors.append(f"writer {writer_index} {phase}: {type(exc).__name__}: {exc}")
                 task_succeeded = False
             else:
                 successful_operations += 1
