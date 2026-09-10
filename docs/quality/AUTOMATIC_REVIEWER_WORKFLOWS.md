@@ -2,6 +2,8 @@
 
 Issue #711 connects the canonical Verification subsystem from #86 to normal Agent/AgentTeam execution without creating another review lifecycle.
 
+The integration is intentionally imported from `ai_multi_agent_platform.verification.agent_workflow`, not re-exported from `verification.__init__`. The existing reviewer and repair bridges have the same package-boundary rule because they depend on Agent/Kernel runtime code and a top-level re-export can introduce a `verification -> agents/control_plane -> kernel -> verification` import cycle.
+
 ## Canonical path
 
 The productive path is:
@@ -30,9 +32,9 @@ Supported routes are:
 
 - exact standalone Agent ID + revision;
 - exact AgentTeam ID + revision + exact member Agent ID/revision;
-- exact AgentTeam ID + revision + unique role such as `reviewer`.
+- exact AgentTeam ID + revision + unique role.
 
-Team-role resolution must yield exactly one member. Missing or ambiguous configuration fails closed. There is deliberately no hidden fallback to the bundled Reviewer from #77, so cloned/custom Reviewers work identically and removing the bundled definition does not change architecture.
+The bundled Software Development Team from #77 is supported through its actual `reviewer_tester` role, but it is not a hidden default. Team-role resolution must yield exactly one member. Missing or ambiguous configuration fails closed, so cloned/custom Reviewers work identically and removing the bundled definition does not change architecture.
 
 ## Replaceable reviewer execution
 
@@ -50,9 +52,16 @@ Review assignment does not grant write, shell, merge, deploy or administrative a
 
 ## Bounded repair and re-review
 
-If canonical completion assessment returns `repair_required` and a `ReviewerRepairExecutor` is configured, the coordinator invokes it with the exact request, structured VerificationResult/findings and completion decision.
+Automatic repair is available only when both the existing `VerificationRepairRuntime` and a `ReviewerRepairExecutor` are supplied. Partial repair composition is rejected instead of silently bypassing the canonical repair path.
 
-The repair executor is intentionally a boundary rather than a second lifecycle engine. Its implementation must perform repair through the normal canonical Task/Plan/Step/Run mechanisms and return only a reference to the newly produced Result/Artifact.
+When canonical completion assessment returns `repair_required`, the coordinator first calls `VerificationRepairRuntime.start_repair()`. That existing #86 bridge performs the canonical repair transition through ordinary kernel operations:
+
+1. replan the Task through the replaceable orchestrator;
+2. resume the Verification-waiting Task;
+3. create an exact repair Step/Run;
+4. start the Run through the normal lifecycle backend.
+
+Only after that canonical repair Run exists does `ReviewerRepairExecutor.execute_repair()` run or await the producer/Worker work associated with it. The executor receives the immutable source Verification request/result and `VerificationRepairExecution`; it cannot invent a second repair identity. It returns only the newly produced canonical Result/Artifact reference.
 
 The coordinator then calls `CanonicalVerificationRuntime.request_reverification_after_repair()`. That runtime resolves the new subject from canonical evidence, binds a fresh exact revision/digest and increments the #86 repair attempt. The next review therefore cannot reuse an old Verification for modified output.
 
@@ -72,22 +81,27 @@ Before dispatch, the coordinator scans existing canonical AgentRuns for the Veri
 
 This intentionally prioritizes correctness over automatically replaying an external reviewer after an uncertain restart boundary.
 
+Reviewer AgentRuns remain ordinary AgentRuns associated with the canonical Run referenced by the Verification request. Team members already use this same subordinate AgentRun model; the AgentRun identity remains distinct and is included in the normal AgentRun surface.
+
 ## Product/status surface
 
-`ReviewWorkflowResult` exposes the canonical request, bound reviewer AgentRun, VerificationResult and current `CompletionGateDecision`. `status_for()` reads this state without executing or retrying work.
+`ReviewWorkflowResult` exposes the canonical request, bound reviewer AgentRun, VerificationResult, optional canonical `VerificationRepairExecution`, and current `CompletionGateDecision`. `status_for()` reads review state without executing or retrying work.
 
-The existing Verification Control Plane collections continue to expose canonical request/result/completion data. Product clients should use those canonical resources plus normal AgentRun resources rather than calling reviewer-private internals.
+The existing Verification Control Plane collections continue to expose canonical request/result/completion data. Normal AgentRun resources serialize their `verification_context`, including the Verification ID and exact subject binding, so clients can correlate pending/running reviewer AgentRuns without a second review-state API or database.
 
 ## Integration sketch
 
 ```python
+from ai_multi_agent_platform.verification.agent_workflow import AutomaticReviewerWorkflow
+
 workflow = AutomaticReviewerWorkflow(
     runtime=canonical_verification_runtime,
     completion=verification_completion_authority,
     agents=agent_runtime,
     resolver=configured_reviewer_resolver,
     executor=reviewer_execution_adapter,
-    repair_executor=repair_adapter,
+    repair_runtime=verification_repair_runtime,
+    repair_executor=repair_execution_adapter,
 )
 
 result = await workflow.request_and_run(
@@ -111,6 +125,7 @@ The following remain explicitly non-authoritative:
 - orchestrator-native review state;
 - provider session IDs;
 - AgentTeam membership by itself;
+- `ReviewerExecutionDecision`;
 - the workflow coordinator's returned status object.
 
-Only canonical Verification records and the existing completion authority decide whether required review has passed.
+Only canonical Verification records and the existing completion authority decide whether required review has passed. Only the kernel/`VerificationRepairRuntime` owns the repair Plan/Step/Run transition.
