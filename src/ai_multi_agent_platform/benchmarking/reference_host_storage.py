@@ -25,6 +25,7 @@ _MOUNTINFO_ESCAPES = {
 @dataclass(frozen=True, slots=True)
 class _MountIdentity:
     filesystem_type: str
+    device_id: str
     source: str
     root: str
     mount_options: tuple[str, ...]
@@ -34,6 +35,7 @@ class _MountIdentity:
         return _canonical_sha256(
             {
                 "filesystem_type": self.filesystem_type,
+                "device_id": self.device_id,
                 "source": self.source,
                 "root": self.root,
                 "mount_options": list(self.mount_options),
@@ -113,6 +115,7 @@ def _linux_mount_identity(path: Path) -> _MountIdentity | None:
         if path != mount_point and mount_point not in path.parents:
             continue
 
+        device_id = fields[2]
         root = _decode_mountinfo_field(fields[3])
         mount_options = tuple(sorted(filter(None, fields[5].split(","))))
         filesystem_type = fields[separator + 1]
@@ -123,6 +126,7 @@ def _linux_mount_identity(path: Path) -> _MountIdentity | None:
                 len(mount_point.parts),
                 _MountIdentity(
                     filesystem_type=filesystem_type,
+                    device_id=device_id,
                     source=source,
                     root=root,
                     mount_options=mount_options,
