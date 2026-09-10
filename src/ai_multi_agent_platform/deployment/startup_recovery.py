@@ -98,9 +98,7 @@ async def reconcile_single_node_startup(
 def require_blocked_startup_run(data_dir: Path, *, task_id: str, run_id: str) -> None:
     """Require that an exact Run is blocked by the latest startup recovery report."""
 
-    report_path = (
-        data_dir.expanduser().resolve() / STARTUP_RECOVERY_DIR / STARTUP_RECOVERY_REPORT
-    )
+    report_path = data_dir.expanduser().resolve() / STARTUP_RECOVERY_DIR / STARTUP_RECOVERY_REPORT
     payload = _load_report(report_path)
     if payload.get("ready_for_service") is True:
         raise RuntimeError("single-node startup recovery is already ready for service")
@@ -129,9 +127,7 @@ def require_blocked_startup_run(data_dir: Path, *, task_id: str, run_id: str) ->
             ):
                 return
         break
-    raise RuntimeError(
-        f"run {run_id} is not an orphaned startup-recovery Run for task {task_id}"
-    )
+    raise RuntimeError(f"run {run_id} is not an orphaned startup-recovery Run for task {task_id}")
 
 
 def load_startup_recovery_report(data_dir: Path) -> dict[str, Any] | None:
