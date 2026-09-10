@@ -42,6 +42,16 @@ The directory must be fresh/empty and must be disjoint from the evidence output 
 Explicit work data is intentionally left in place after the command exits so a failed or unusual
 run can be inspected; start the next campaign with a new empty work directory.
 
+The campaign also binds the resulting environment fingerprint to the **storage target containing
+that work directory**. On Linux, the retained metadata contains the filesystem type, total
+filesystem capacity and a SHA-256 fingerprint derived from the selected mount's privacy-sensitive
+identity inputs, including its mount source, root, option sets and `major:minor` device identity.
+Those raw identity inputs, including the device identity, mount source/root and work-directory
+path, are not persisted. On platforms without Linux mount metadata, a privacy-safe filesystem-stat
+fallback is fingerprinted instead. This prevents campaigns performed against materially different
+storage mounts from being treated as the same reference environment merely because CPU, RAM, OS
+and Python match.
+
 Example:
 
 ```bash
@@ -81,10 +91,16 @@ A successful campaign writes:
 - the exact campaign/profile version and tested platform commit;
 - a human-readable host label;
 - the complete fixed campaign configuration plus its canonical SHA-256 digest;
-- the environment metadata and environment fingerprint from the derived operating envelope;
+- the environment metadata and environment fingerprint from the derived operating envelope,
+  including the privacy-safe `storage_target` identity of the measured work-directory filesystem;
 - SHA-256 digests for the sweep summary, soak report and operating-envelope report;
 - `claim_semantics = "single-host-tested-evidence-only"`;
 - `budget_status = "not-established"`.
+
+The same storage-aware environment and fingerprint are written into `operating-envelope.json`.
+Later same-host reproducibility and regression analysis therefore rejects a storage-target change
+through the existing environment-fingerprint comparability contract; no separate ad-hoc storage
+comparison path is required.
 
 The host label is descriptive evidence metadata, not a machine identity. Use a stable label that
 does not contain credentials, private addresses or other values that should not appear in retained
@@ -98,7 +114,8 @@ cannot silently mix artifacts from different executions.
 
 Run the same `release` profile for the same exact platform commit independently on each intended
 reference host. Do not edit the generated environment metadata or fingerprints to make hosts look
-comparable.
+comparable. When repeating campaigns on one host, use fresh work directories on the same intended
+storage target if the runs are meant to form one reproducibility series.
 
 After at least two independent host campaigns exist, build the cross-host catalog from their
 operating envelopes:
@@ -112,7 +129,8 @@ platform-operating-envelope-catalog \
 
 The campaign configuration digest identifies the complete host-local workload profile. The
 cross-host catalog still enforces its own operating-envelope comparability basis and deliberately
-does not average heterogeneous absolute host metrics.
+does not average heterogeneous absolute host metrics. Storage-target identity is part of each
+operating envelope's environment evidence and must not be stripped to force comparability.
 
 ## Performance budgets
 
@@ -131,9 +149,9 @@ work remains a separate dedicated-host #440 profile.
 ## CI boundary
 
 Ordinary pull-request CI may run only the tiny `smoke` campaign to prove packaging, orchestration,
-hashing and schema compatibility. The one-hour release soak and release-sized `1/10/50/100`
-sweeps are manual/release-qualification evidence and should run on the actual documented reference
-hosts whose behavior is being claimed.
+hashing, storage-target identity and schema compatibility. The one-hour release soak and
+release-sized `1/10/50/100` sweeps are manual/release-qualification evidence and should run on the
+actual documented reference hosts whose behavior is being claimed.
 
 ## Schema
 
