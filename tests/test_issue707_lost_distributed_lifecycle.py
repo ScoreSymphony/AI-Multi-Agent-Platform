@@ -11,6 +11,7 @@ from ai_multi_agent_platform.contracts import (
     ExecutionHandle,
     ExecutionRequest,
     ExecutionSnapshot,
+    ExecutionStatus,
     OperationContext,
 )
 from ai_multi_agent_platform.distributed import (
@@ -20,7 +21,7 @@ from ai_multi_agent_platform.distributed import (
     DistributedRuntime,
     WorkerJobRequest,
 )
-from ai_multi_agent_platform.domain import RunStatus, new_id
+from ai_multi_agent_platform.domain import new_id
 
 
 class _LostRuntime:
@@ -50,7 +51,7 @@ def test_lost_dispatch_takes_precedence_over_stale_running_snapshot() -> None:
         reservation_id=new_id("reservation"),
         state=DispatchState.LOST,
         handle=ExecutionHandle(run_id=run_id, backend_ref="stale-worker-backend"),
-        snapshot=ExecutionSnapshot(run_id=run_id, status=RunStatus.RUNNING),
+        snapshot=ExecutionSnapshot(run_id=run_id, status=ExecutionStatus.RUNNING),
     )
     runtime = cast(DistributedRuntime, _LostRuntime(record))
     backend = DistributedLifecycleBackend(runtime)
