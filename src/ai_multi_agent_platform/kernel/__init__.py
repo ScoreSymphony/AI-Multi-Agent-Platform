@@ -2,7 +2,6 @@
 
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 
-from .kernel import PlatformKernel as _BasePlatformKernel
 from .models import (
     TERMINAL_RUN_STATUSES,
     RecoveryDisposition,
@@ -27,8 +26,7 @@ from .state import reduce_run, reduce_task
 from .task_mutations import TaskMutationBoundary
 
 # Keep the long-standing public `PlatformKernel` name while adding the provider-neutral
-# post-commit output observer seam. The base implementation remains available only as the
-# implementation detail inherited by OutputObservingPlatformKernel.
+# post-commit output observer seam.
 PlatformKernel = OutputObservingPlatformKernel
 
 __all__ = [
