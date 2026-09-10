@@ -27,6 +27,7 @@ from .models import (
     MemoryEntry,
     MemoryQuery,
     MemoryScope,
+    MemoryType,
 )
 from .registry import DataProviderSet
 
@@ -180,6 +181,7 @@ class MemoryResourceService:
             scope=scope,
             scope_id=scope_id,
             owner_ref=(query.filters or {}).get("owner_ref"),
+            memory_types=_memory_type_filter(query),
             include_expired=_boolean_filter(query, "include_expired"),
             include_superseded=_boolean_filter(query, "include_superseded"),
             limit=10_000,
@@ -537,6 +539,19 @@ def _memory_scope_query(
     return scope, scope_id, project_id
 
 
+def _memory_type_filter(query: PageQuery) -> tuple[MemoryType, ...]:
+    raw = (query.filters or {}).get("memory_type")
+    if raw is None:
+        return ()
+    try:
+        return (MemoryType(raw),)
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"unknown memory type: {raw}",
+        ) from exc
+
+
 def _boolean_filter(query: PageQuery, key: str) -> bool:
     raw = (query.filters or {}).get(key)
     if raw is None:
@@ -604,6 +619,7 @@ def _memory_resource(entry: MemoryEntry) -> dict[str, JsonValue]:
         "created_at": entry.created_at.isoformat(),
         "value": entry.value,
         "origin": entry.origin.value,
+        "memory_type": entry.memory_type.value,
         "retention": entry.retention.value,
         "expires_at": entry.expires_at.isoformat() if entry.expires_at is not None else None,
         "provenance": provenance,
@@ -632,10 +648,16 @@ def _memory_search_resource(entry: MemoryEntry) -> dict[str, JsonValue]:
         "owner_ref": owner_ref,
         "created_at": entry.created_at.isoformat(),
         "origin": entry.origin.value,
+        "memory_type": entry.memory_type.value,
         "retention": entry.retention.value,
         "expires_at": entry.expires_at.isoformat() if entry.expires_at is not None else None,
         "provenance_refs": [source.ref for source in entry.provenance],
-        "aliases": [entry.scope.value, entry.origin.value, entry.retention.value],
+        "aliases": [
+            entry.scope.value,
+            entry.origin.value,
+            entry.memory_type.value,
+            entry.retention.value,
+        ],
     }
     if entry.scope is MemoryScope.ORGANIZATION:
         resource["organization_id"] = entry.scope_id

@@ -37,6 +37,21 @@ class MemoryOrigin(StrEnum):
     IMPORTED = "imported"
 
 
+class MemoryType(StrEnum):
+    """Canonical semantic class of Memory content, independent from its scope.
+
+    ``UNCLASSIFIED`` is reserved for legacy/backward-compatible entries that predate
+    the canonical taxonomy. New callers should choose one of the semantic types.
+    """
+
+    UNCLASSIFIED = "unclassified"
+    EPISODIC = "episodic"
+    SEMANTIC = "semantic"
+    PROCEDURAL = "procedural"
+    PREFERENCE = "preference"
+    REFLECTIVE = "reflective"
+
+
 class RetentionPolicy(StrEnum):
     EPHEMERAL = "ephemeral"
     TASK_LIFETIME = "task_lifetime"
@@ -198,10 +213,12 @@ class MemoryEntry:
     superseded_by_memory_id: str | None = None
     classification: DataClassification | str | None = None
     metadata: dict[str, JsonValue] = field(default_factory=dict)
+    memory_type: MemoryType = MemoryType.UNCLASSIFIED
 
     def __post_init__(self) -> None:
         validate_id(self.memory_id, "memory")
         _validate_memory_scope_id(self.scope, self.scope_id)
+        object.__setattr__(self, "memory_type", _normalize_memory_type(self.memory_type))
         _require_nonblank(self.owner_ref, "owner_ref")
         _require_nonblank(self.created_by, "created_by")
         _require_aware(self.created_at, "created_at")
@@ -257,11 +274,16 @@ class MemoryQuery:
     include_expired: bool = False
     include_superseded: bool = False
     limit: int = 100
+    memory_types: tuple[MemoryType, ...] = ()
 
     def __post_init__(self) -> None:
         _validate_memory_scope_id(self.scope, self.scope_id)
         if self.owner_ref is not None:
             _require_nonblank(self.owner_ref, "owner_ref")
+        normalized_types = tuple(
+            dict.fromkeys(_normalize_memory_type(memory_type) for memory_type in self.memory_types)
+        )
+        object.__setattr__(self, "memory_types", normalized_types)
         if self.limit <= 0:
             raise ValueError("limit must be greater than zero")
 
@@ -472,6 +494,15 @@ def _validate_memory_scope_id(scope: MemoryScope, scope_id: str) -> None:
         validate_id(scope_id, "project")
         return
     _require_nonblank(scope_id, "scope_id")
+
+
+def _normalize_memory_type(value: MemoryType | str) -> MemoryType:
+    if isinstance(value, MemoryType):
+        return value
+    try:
+        return MemoryType(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"unknown memory type {value!r}") from exc
 
 
 def _normalize_classification(
