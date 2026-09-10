@@ -85,9 +85,7 @@ async def test_smoke_campaign_emits_schema_valid_hashed_host_evidence(tmp_path: 
     assert campaign["budget_status"] == "not-established"
     assert envelope["claim_semantics"] == "tested-envelope-only"
     assert envelope["budget_status"] == "not-established"
-    assert campaign["environment_fingerprint_sha256"] == envelope[
-        "environment_fingerprint_sha256"
-    ]
+    assert campaign["environment_fingerprint_sha256"] == envelope["environment_fingerprint_sha256"]
 
     configuration = campaign["configuration"]
     assert isinstance(configuration, dict)
