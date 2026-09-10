@@ -42,8 +42,7 @@ class ApplicationReleaseResourceService:
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
         return tuple(
-            json_object(release)
-            | {"id": release.release_id, "type": "application_release"}
+            json_object(release) | {"id": release.release_id, "type": "application_release"}
             for release in await self.service.repository.list()
         )
 
@@ -114,6 +113,7 @@ class ApplicationReleaseCommandHandlers:
             target_id=_required_string(payload, "target_id"),
             idempotency_key=context.idempotency_key or context.request_id,
             actor_ref=context.actor.principal_ref,
+            approval_id=_optional_string(payload, "approval_id"),
         )
         return _resource(release)
 
@@ -126,7 +126,14 @@ class ApplicationReleaseCommandHandlers:
         preview = await self.service.preview_publication(
             resource_ref,
             publisher_id=_required_string(payload, "publisher_id"),
-            context=_publish_context(context, _optional_string(payload, "approval_id")),
+            context=_publish_context(
+                context,
+                _optional_string(payload, "approval_id"),
+                _json_object(
+                    payload.get("publisher_configuration"),
+                    "publisher_configuration",
+                ),
+            ),
         )
         return {
             "id": resource_ref,
@@ -143,7 +150,14 @@ class ApplicationReleaseCommandHandlers:
         release = await self.service.publish(
             resource_ref,
             publisher_id=_required_string(payload, "publisher_id"),
-            context=_publish_context(context, _optional_string(payload, "approval_id")),
+            context=_publish_context(
+                context,
+                _optional_string(payload, "approval_id"),
+                _json_object(
+                    payload.get("publisher_configuration"),
+                    "publisher_configuration",
+                ),
+            ),
         )
         return _resource(release)
 
@@ -182,17 +196,28 @@ def _resource(release: object) -> dict[str, JsonValue]:
     return resource
 
 
-def _publish_context(context: RequestContext, approval_id: str | None) -> PublishContext:
-    return PublishContext(
-        actor=_actor(context),
-        operation=OperationContext(
-            correlation_id=context.correlation_id,
-            causation_id=context.request_id,
-            owner_type=context.actor.owner_type,
-            owner_id=context.actor.owner_id,
-        ),
-        approval_id=approval_id,
-    )
+def _publish_context(
+    context: RequestContext,
+    approval_id: str | None,
+    configuration: dict[str, JsonValue],
+) -> PublishContext:
+    try:
+        return PublishContext(
+            actor=_actor(context),
+            operation=OperationContext(
+                correlation_id=context.correlation_id,
+                causation_id=context.request_id,
+                owner_type=context.actor.owner_type,
+                owner_id=context.actor.owner_id,
+            ),
+            approval_id=approval_id,
+            configuration=configuration,
+        )
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"invalid publisher configuration: {exc}",
+        ) from exc
 
 
 def _actor(context: RequestContext) -> ActorIdentity:
