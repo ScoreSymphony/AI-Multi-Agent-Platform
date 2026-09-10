@@ -312,11 +312,12 @@ def test_recovery_distinguishes_queued_pre_accept_and_orphaned_running(tmp_path:
     db = tmp_path / "queued.sqlite3"
     first = kernel(queued_lifecycle, SqliteKernelRepository(db))
     task_id = ready(first)
-    asyncio.run(first.create_run(idempotency_key="run", task_id=task_id))
-    queued_report = asyncio.run(
-        kernel(queued_lifecycle, SqliteKernelRepository(db)).recover_task(task_id)
-    )
+    queued_run = asyncio.run(first.create_run(idempotency_key="run", task_id=task_id))
+    restarted = kernel(queued_lifecycle, SqliteKernelRepository(db))
+    queued_report = asyncio.run(restarted.recover_task(task_id))
     assert queued_report.entries[0].disposition is RecoveryDisposition.QUEUED_PENDING
+    assert asyncio.run(restarted.get_run(task_id, queued_run.run_id)).status is RunStatus.QUEUED
+    assert queued_lifecycle.start_calls == []
 
     pre = CrashBeforeAccept()
     pre_kernel = kernel(pre)
