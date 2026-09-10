@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from dataclasses import replace
 from datetime import UTC, datetime
+from math import ceil
 from pathlib import Path, PurePosixPath
 from time import monotonic
 from uuid import NAMESPACE_URL, uuid5
 
+from ai_multi_agent_platform.configuration import SecretAccessContext, SecretProvider
 from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
@@ -33,6 +36,7 @@ from ai_multi_agent_platform.execution import (
     Executor,
     ExecutorDescriptor,
 )
+from ai_multi_agent_platform.security import redact_sensitive, redact_text
 from ai_multi_agent_platform.workspaces import (
     MaterializationOutcome,
     RunWorkspaceBindingRepository,
@@ -58,7 +62,9 @@ _ENV_ALLOWLIST = (
     "USERPROFILE",
     "VIRTUAL_ENV",
 )
+_ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _POLL_SECONDS = 0.05
+_DEFAULT_SECRET_LIFETIME_SECONDS = 300
 
 
 class ApplicationCommandExecutor(Executor):
@@ -92,6 +98,7 @@ class ApplicationCommandExecutor(Executor):
             )
         if request.cancellation is not None and request.cancellation.cancelled:
             return _cancelled(request, started_at, started)
+        sensitive_values = _sensitive_environment_values(request)
         try:
             workspace = self._workspace(request.workspace)
             command = _command(request.arguments.get("command"))
@@ -100,6 +107,7 @@ class ApplicationCommandExecutor(Executor):
                 request.arguments.get("output_path"),
                 "output_path",
             )
+            environment = _execution_environment(request.environment)
             cwd = workspace if source_path is None else _contained(workspace, source_path)
             if not cwd.is_dir():
                 raise ValueError("build source_path does not exist as a directory")
@@ -107,6 +115,7 @@ class ApplicationCommandExecutor(Executor):
             result = await self._run_process(
                 command,
                 cwd=cwd,
+                environment=environment,
                 timeout_seconds=request.timeout_seconds,
                 cancellation=request.cancellation,
             )
@@ -122,15 +131,18 @@ class ApplicationCommandExecutor(Executor):
         except asyncio.CancelledError:
             return _cancelled(request, started_at, started)
         except (OSError, ValueError) as exc:
+            message = redact_text(str(exc), sensitive_values)
             return _failure(
                 request,
                 started_at,
                 started,
                 ExecutionErrorCategory.INVALID_REQUEST,
-                str(exc),
+                message,
             )
 
         stdout, stderr, returncode = result
+        stdout = redact_text(stdout, sensitive_values)
+        stderr = redact_text(stderr, sensitive_values)
         if request.cancellation is not None and request.cancellation.cancelled:
             return _cancelled(request, started_at, started)
         if returncode != 0:
@@ -192,14 +204,18 @@ class ApplicationCommandExecutor(Executor):
         command: tuple[str, ...],
         *,
         cwd: Path,
+        environment: dict[str, str],
         timeout_seconds: float | None,
         cancellation: CancellationToken | None,
     ) -> tuple[str, str, int]:
-        environment = {name: value for name in _ENV_ALLOWLIST if (value := os.environ.get(name))}
+        process_environment = {
+            name: value for name in _ENV_ALLOWLIST if (value := os.environ.get(name))
+        }
+        process_environment.update(environment)
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=cwd,
-            env=environment,
+            env=process_environment,
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -254,12 +270,23 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
         files: FileProvider,
         bindings: RunWorkspaceBindingRepository,
         executor: Executor,
+        *,
+        secret_provider: SecretProvider | None = None,
+        secret_consumer_ref: str = "service:application-build-secrets",
+        secret_purpose: str = "application_build",
     ) -> None:
+        if not secret_consumer_ref.strip():
+            raise ValueError("application build secret consumer must not be blank")
+        if not secret_purpose.strip():
+            raise ValueError("application build secret purpose must not be blank")
         self._releases = releases
         self._workspaces = workspaces
         self._files = files
         self._bindings = bindings
         self._executor = executor
+        self._secret_provider = secret_provider
+        self._secret_consumer_ref = secret_consumer_ref
+        self._secret_purpose = secret_purpose
         self._results: dict[str, ExecutionResult] = {}
         self._cancellations: dict[str, CancellationToken] = {}
         self._finished: dict[str, asyncio.Event] = {}
@@ -296,6 +323,13 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                     ErrorCode.CONTRACT_VIOLATION,
                     "application build Run binding differs from release provenance",
                 )
+            timeout_seconds = _timeout_seconds(release, request.context)
+            environment, secret_environment_keys = await self._build_environment(
+                release,
+                task_id=binding.task_id,
+                run_id=request.run_id,
+                timeout_seconds=timeout_seconds,
+            )
             context = _data_context(request.context, binding.task_id, request.run_id)
             materialization = await self._workspaces.materialize(
                 release.workspace_id,
@@ -322,8 +356,12 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                             "source_path": release.build_specification.source_path,
                             "output_path": target.target.output_path,
                         },
-                        timeout_seconds=_timeout_seconds(release, request.context),
+                        environment=environment,
+                        timeout_seconds=timeout_seconds,
                         cancellation=cancellation,
+                        policy_context={
+                            "sensitive_environment_keys": list(secret_environment_keys),
+                        },
                     )
                 )
                 if result.status is ExecutionStatus.SUCCEEDED:
@@ -406,6 +444,49 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
             ExecutionErrorCategory.INTERNAL,
             "application build process state is unavailable; refusing implicit re-execution",
         )
+
+    async def _build_environment(
+        self,
+        release: ApplicationRelease,
+        *,
+        task_id: str,
+        run_id: str,
+        timeout_seconds: float | None,
+    ) -> tuple[dict[str, str], tuple[str, ...]]:
+        specification = release.build_specification
+        environment = dict(specification.environment)
+        if not specification.secret_environment:
+            return environment, ()
+        if self._secret_provider is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "application build requires a SecretProvider for secret_environment",
+            )
+        secret_keys: list[str] = []
+        lifetime = _secret_lifetime_seconds(timeout_seconds)
+        for name, reference in specification.secret_environment.items():
+            if reference.scope != release.project_id:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "application build secret reference is outside the release project scope",
+                )
+            material = await self._secret_provider.resolve(
+                reference,
+                SecretAccessContext(
+                    consumer_ref=self._secret_consumer_ref,
+                    project_id=release.project_id,
+                    workspace_id=release.workspace_id,
+                    task_id=task_id,
+                    run_id=run_id,
+                    action=APPLICATION_BUILD_ACTION,
+                    capability_ref=APPLICATION_BUILD_ACTION,
+                    purpose=self._secret_purpose,
+                    requested_lifetime_seconds=lifetime,
+                ),
+            )
+            environment[name] = material.reveal()
+            secret_keys.append(name)
+        return environment, tuple(secret_keys)
 
     async def _release_for_run(self, run_id: str) -> ApplicationRelease:
         release = await self._releases.find_run(run_id)
@@ -547,6 +628,12 @@ def _timeout_seconds(release: ApplicationRelease, context: OperationContext) -> 
     return float(configured)
 
 
+def _secret_lifetime_seconds(timeout_seconds: float | None) -> int:
+    if timeout_seconds is None:
+        return _DEFAULT_SECRET_LIFETIME_SECONDS
+    return max(1, ceil(timeout_seconds))
+
+
 def _command(value: object) -> tuple[str, ...]:
     if not isinstance(value, list) or not value or any(not isinstance(item, str) for item in value):
         raise ValueError("application build command must be a non-empty argv array")
@@ -554,6 +641,32 @@ def _command(value: object) -> tuple[str, ...]:
     if any(not item.strip() for item in command):
         raise ValueError("application build command must not contain blank argv items")
     return command
+
+
+def _execution_environment(values: dict[str, str]) -> dict[str, str]:
+    environment: dict[str, str] = {}
+    for name, value in values.items():
+        if _ENVIRONMENT_NAME.fullmatch(name) is None:
+            raise ValueError("application build environment contains an invalid variable name")
+        if not isinstance(value, str):
+            raise ValueError("application build environment values must be strings")
+        environment[name] = value
+    return environment
+
+
+def _sensitive_environment_values(request: ExecutionRequest) -> tuple[str, ...]:
+    raw_keys = request.policy_context.get("sensitive_environment_keys")
+    configured: set[str] = set()
+    if isinstance(raw_keys, list) and all(isinstance(item, str) for item in raw_keys):
+        configured.update(raw_keys)
+    for name, value in request.environment.items():
+        if redact_sensitive({name: value}) != {name: value}:
+            configured.add(name)
+    return tuple(
+        request.environment[name]
+        for name in sorted(configured)
+        if name in request.environment and request.environment[name]
+    )
 
 
 def _optional_relative_path(value: object) -> str | None:
