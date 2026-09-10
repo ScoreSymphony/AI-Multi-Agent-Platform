@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import sys
 import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ai_multi_agent_platform import __version__
-from ai_multi_agent_platform.deployment import SingleNodeConfig
 
-from .endurance import EnduranceBenchmarkSpec, SingleNodeEnduranceHarness
 from .operating_envelope import OperatingEnvelopeAnalyzer
 from .sweep import SingleNodeSweepHarness
 
@@ -228,34 +228,17 @@ class ReferenceHostCampaignRunner:
         if not sweep_execution.summary.correctness_passed:
             raise RuntimeError("reference-host sweep correctness did not pass")
 
-        soak_spec = EnduranceBenchmarkSpec(
-            benchmark_id="single-node.soak.mixed",
-            benchmark_version="1.0",
-            scenario="soak",
-            deployment_profile="single-node-reference",
-            persistence_profile="sqlite-reference",
-            duration_seconds=profile.soak_duration_seconds,
-            sample_interval_seconds=profile.soak_sample_interval_seconds,
-            max_operations=profile.soak_max_operations,
-            concurrency=profile.soak_concurrency,
-            seed_tasks=profile.soak_seed_tasks,
-            warmup_operations=profile.soak_warmup_operations,
-            timeout_seconds=profile.timeout_seconds,
-            read_weight=profile.soak_read_weight,
-            write_weight=profile.soak_write_weight,
-        )
-        soak = await SingleNodeEnduranceHarness(
-            SingleNodeConfig(data_dir=self._work_dir / "soak-data", secure_cookie=False),
-            platform_commit=self._platform_commit,
-        ).run(soak_spec)
         soak_path = self._output_dir / "soak.json"
-        _write_json(soak_path, soak.to_dict())
-        if not soak.correctness.passed:
-            raise RuntimeError("reference-host soak correctness did not pass")
+        soak_report = await _run_isolated_soak(
+            profile=profile,
+            data_dir=self._work_dir / "soak-data",
+            output_path=soak_path,
+            platform_commit=self._platform_commit,
+        )
 
         envelope = OperatingEnvelopeAnalyzer().analyze(
             sweep_reports=(sweep_execution.summary.to_dict(),),
-            endurance_reports=(soak.to_dict(),),
+            endurance_reports=(soak_report,),
             sweep_sources=("sweep/summary.json",),
             endurance_sources=("soak.json",),
         )
@@ -317,6 +300,64 @@ def _normalize_platform_commit(value: str) -> str:
             "platform_commit must be a full 40- or 64-character hexadecimal Git object id"
         )
     return normalized
+
+
+async def _run_isolated_soak(
+    *,
+    profile: ReferenceHostCampaignProfile,
+    data_dir: Path,
+    output_path: Path,
+    platform_commit: str,
+) -> dict[str, Any]:
+    command = (
+        sys.executable,
+        "-m",
+        "ai_multi_agent_platform.benchmarking.cli",
+        "single-node-endurance",
+        "--scenario",
+        "soak",
+        "--data-dir",
+        str(data_dir),
+        "--duration-seconds",
+        str(profile.soak_duration_seconds),
+        "--sample-interval-seconds",
+        str(profile.soak_sample_interval_seconds),
+        "--max-operations",
+        str(profile.soak_max_operations),
+        "--concurrency",
+        str(profile.soak_concurrency),
+        "--seed-tasks",
+        str(profile.soak_seed_tasks),
+        "--warmup-operations",
+        str(profile.soak_warmup_operations),
+        "--timeout-seconds",
+        str(profile.timeout_seconds),
+        "--read-weight",
+        str(profile.soak_read_weight),
+        "--write-weight",
+        str(profile.soak_write_weight),
+        "--output",
+        str(output_path),
+        "--platform-commit",
+        platform_commit,
+    )
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await process.communicate()
+    if process.returncode != 0:
+        detail = stderr.decode("utf-8", errors="replace").strip()
+        suffix = f": {detail}" if detail else ""
+        raise RuntimeError(f"isolated reference-host soak failed with code {process.returncode}{suffix}")
+    try:
+        payload: object = json.loads(output_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("isolated reference-host soak did not produce valid JSON evidence") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("isolated reference-host soak evidence must be a JSON object")
+    return cast(dict[str, Any], payload)
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
