@@ -313,6 +313,7 @@ export function CapabilityAssignmentConfigurationPage({
   const [targetOptions, setTargetOptions] = useState<
     Record<CapabilityAssignmentTargetType, ResourceOption[]>
   >({ agent: [], agent_team: [], project: [] });
+  const [approvalId, setApprovalId] = useState("");
   const [baseline, setBaseline] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -323,6 +324,7 @@ export function CapabilityAssignmentConfigurationPage({
 
   const load = useCallback(async () => {
     setError(null);
+    setApprovalId("");
     const [capabilityResult, agentResult, teamResult, projectResult] = await Promise.allSettled([
       core.listCapabilities({ limit: 100, sort: "id", direction: "asc" }),
       core.listAgents({ limit: 100, sort: "id", direction: "asc" }),
@@ -390,7 +392,9 @@ export function CapabilityAssignmentConfigurationPage({
     setContent((current) => {
       const existingRules = [...current.required, ...current.allowed, ...current.denied];
       const rules = ids.map(
-        (id) => existingRules.find((rule) => rule.capability_id === id) ?? emptyRule(id),
+        (id) =>
+          existingRules.find((rule) => rule.capability_id === id)
+          ?? ruleForCapability(id, capabilities),
       );
       const required = bucket === "required"
         ? rules
@@ -412,14 +416,16 @@ export function CapabilityAssignmentConfigurationPage({
     }
     setBusy(true);
     setError(null);
+    const approval = approvalId.trim() || undefined;
     try {
       const saved = loaded
         ? await configuration.reviseCapabilityAssignment(
             loaded.id,
             loaded.current_revision,
             content,
+            approval,
           )
-        : await configuration.createCapabilityAssignment({ content });
+        : await configuration.createCapabilityAssignment({ content, approval_id: approval });
       window.location.assign(`/capability-assignments/${encodeURIComponent(saved.id)}`);
     } catch (nextError) {
       setError(nextError);
@@ -435,9 +441,24 @@ export function CapabilityAssignmentConfigurationPage({
     return <ErrorState error={error} onRetry={() => void load()} />;
   }
 
-  const securityRelevant = [...content.required, ...content.allowed, ...content.denied].filter(
-    (rule) => rule.privileged || rule.approval_required,
-  );
+  const selectedRules = [...content.required, ...content.allowed, ...content.denied];
+  const securityRelevant = selectedRules
+    .map((rule) => ({
+      rule,
+      capability: capabilities.find((capability) => capability.id === rule.capability_id),
+    }))
+    .filter(({ rule, capability }) =>
+      rule.privileged
+      || rule.approval_required
+      || capability?.versions.some(
+        (version) =>
+          version.safety !== "standard"
+          || version.side_effects !== "none"
+          || version.required_permissions.length > 0
+          || version.required_approvals.length > 0
+          || version.credential_requirement === "required",
+      ),
+    );
 
   return (
     <div className="stack">
@@ -513,21 +534,43 @@ export function CapabilityAssignmentConfigurationPage({
 
       <Card title="Security implications">
         <p>
-          Capability safety, privilege and approval policy remain server-authoritative. Existing
-          privilege/approval flags are preserved when a capability moves between buckets.
+          Capability safety, privilege and approval policy remain server-authoritative. New rules
+          inherit the conservative security metadata required by every matching canonical version;
+          the server validates it again before persistence.
         </p>
         {securityRelevant.length ? (
           <ul className="plain-list">
-            {securityRelevant.map((rule) => (
-              <li key={rule.capability_id}>
-                <code>{rule.capability_id}</code> — {rule.privileged ? "privileged" : "standard"}
-                {rule.approval_required ? "; approval required" : ""}
-              </li>
-            ))}
+            {securityRelevant.map(({ rule, capability }) => {
+              const versions = capability?.versions ?? [];
+              const permissions = [...new Set(versions.flatMap((version) => version.required_permissions))];
+              const approvals = [...new Set(versions.flatMap((version) => version.required_approvals))];
+              const safety = [...new Set(versions.map((version) => version.safety))];
+              const sideEffects = [...new Set(versions.map((version) => version.side_effects))];
+              return (
+                <li key={rule.capability_id}>
+                  <code>{rule.capability_id}</code> — {rule.privileged ? "privileged" : "standard"}
+                  {rule.approval_required ? "; approval metadata required" : ""}
+                  {safety.length ? `; safety: ${safety.join("/")}` : ""}
+                  {sideEffects.length ? `; side effects: ${sideEffects.join("/")}` : ""}
+                  {permissions.length ? `; permissions: ${permissions.join(", ")}` : ""}
+                  {approvals.length ? `; approvals: ${approvals.join(", ")}` : ""}
+                </li>
+              );
+            })}
           </ul>
         ) : (
-          <EmptyState title="No stored privileged/approval flags in this revision" />
+          <EmptyState title="No selected capability declares elevated security implications" />
         )}
+        <Field
+          label="Approval ID"
+          hint="Optional. If the authoritative server returns approval_required, complete the approval flow and retry with its canonical approval ID."
+        >
+          <input
+            value={approvalId}
+            autoComplete="off"
+            onChange={(event) => setApprovalId(event.currentTarget.value)}
+          />
+        </Field>
       </Card>
 
       <ConfigurationBar
@@ -571,12 +614,22 @@ export function emptyAssignmentContent(): CapabilityAssignmentContent {
   };
 }
 
-function emptyRule(capabilityId: string): CapabilityAssignmentRule {
+export function ruleForCapability(
+  capabilityId: string,
+  capabilities: CanonicalCapability[],
+): CapabilityAssignmentRule {
+  const capability = capabilities.find((item) => item.id === capabilityId);
+  const versions = capability?.versions ?? [];
   return {
     capability_id: capabilityId,
     exact_version: null,
     compatibility: null,
-    privileged: false,
-    approval_required: false,
+    privileged: versions.some(
+      (version) =>
+        version.safety !== "standard"
+        || version.side_effects === "destructive"
+        || version.credential_requirement === "required",
+    ),
+    approval_required: versions.some((version) => version.required_approvals.length > 0),
   };
 }
