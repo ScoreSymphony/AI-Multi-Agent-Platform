@@ -5,8 +5,8 @@ from .contracts import (
     ApplicationReleaseRepository,
     BuildTargetMatcher,
     PublicationResult,
-    PublishedArtifact,
     PublishContext,
+    PublishedArtifact,
 )
 from .execution import (
     APPLICATION_BUILD_ACTION,
