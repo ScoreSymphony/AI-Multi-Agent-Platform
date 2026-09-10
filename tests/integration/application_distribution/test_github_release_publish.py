@@ -71,8 +71,7 @@ class _GitHubReleaseFixtureTransport:
                 "name": name,
                 "digest": f"sha256:{digest}",
                 "browser_download_url": (
-                    "https://github.com/ScoreSymphony/example-app/releases/download/"
-                    f"v1.0.0/{name}"
+                    f"https://github.com/ScoreSymphony/example-app/releases/download/v1.0.0/{name}"
                 ),
             }
             self.assets.append(asset)
@@ -205,8 +204,7 @@ def test_github_release_connector_publishes_manifest_checksums_and_canonical_ass
         assert isinstance(attached.output, dict)
         assert attached.output["sha256"] == file_record.sha256
         assert attached.output["download_url"] == (
-            "https://github.com/ScoreSymphony/example-app/releases/download/"
-            "v1.0.0/example-app.bin"
+            "https://github.com/ScoreSymphony/example-app/releases/download/v1.0.0/example-app.bin"
         )
         assert {asset["name"] for asset in transport.assets} == {
             "application-release-manifest.json",
