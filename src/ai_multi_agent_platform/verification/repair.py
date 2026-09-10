@@ -180,6 +180,7 @@ class VerificationRepairRuntime:
                 ErrorCode.CONTRACT_VIOLATION,
                 "repair planning produced no canonical executable step",
             )
+        plan_id = planned.plan_ref
 
         selected_step = step_id
         if selected_step is None:
@@ -257,7 +258,7 @@ class VerificationRepairRuntime:
         return VerificationRepairExecution(
             source_verification_id=verification_id,
             task_id=request.task_id,
-            plan_id=planned.plan_ref,
+            plan_id=plan_id,
             step_id=selected_step,
             run_id=started.run_id,
             repair_attempt=repair_attempt,

@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, cast
 
 from ai_multi_agent_platform.agents import AgentRunRecord, AgentRuntime
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, PlatformEvent
@@ -454,7 +454,7 @@ def _automatic_review_configuration(
         raise ContractError(
             ErrorCode.INVALID_CONFIGURATION,
             "automatic reviewer policy metadata contains unknown fields",
-            details={"fields": sorted(unknown)},
+            details={"fields": cast(JsonValue, sorted(unknown))},
         )
     enabled = raw.get("enabled", True)
     if not isinstance(enabled, bool):
@@ -480,7 +480,7 @@ def _automatic_review_configuration(
             ErrorCode.INVALID_CONFIGURATION,
             "automatic reviewer subject_types must be a non-empty string list",
         )
-    subject_types = frozenset(subject_types_raw)
+    subject_types = frozenset(item for item in subject_types_raw if isinstance(item, str))
     if not subject_types.issubset(_ALLOWED_OUTPUT_TYPES):
         raise ContractError(
             ErrorCode.INVALID_CONFIGURATION,
@@ -516,7 +516,10 @@ def _automatic_review_configuration(
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
                 "automatic reviewer stage contains unknown fields",
-                details={"stage_id": stage_id, "fields": sorted(unknown_stage)},
+                details={
+                    "stage_id": stage_id,
+                    "fields": cast(JsonValue, sorted(unknown_stage)),
+                },
             )
         try:
             assignments[stage_id] = ReviewerAssignment(

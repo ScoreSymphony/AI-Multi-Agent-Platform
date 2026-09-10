@@ -11,6 +11,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from enum import Enum
+from typing import cast
 
 from ai_multi_agent_platform.agents import AgentRunRecord
 from ai_multi_agent_platform.contracts import (
@@ -22,6 +23,7 @@ from ai_multi_agent_platform.contracts import (
 )
 from ai_multi_agent_platform.data.contracts import FileProvider
 from ai_multi_agent_platform.data.models import DataAccessContext, FileState
+from ai_multi_agent_platform.kernel.models import RunState
 from ai_multi_agent_platform.kernel.repository import RunRepository, TaskRepository
 
 from .models import VerificationRequest, VerificationSubject
@@ -208,7 +210,7 @@ class KernelFileReviewerSubjectInputProvider(ReviewerSubjectInputProvider):
         )
 
 
-def _result_snapshot(*, task_id: str, result_id: str, run: object) -> dict[str, JsonValue]:
+def _result_snapshot(*, task_id: str, result_id: str, run: RunState) -> dict[str, JsonValue]:
     """Mirror the canonical #86 Result subject snapshot used by the evidence resolver."""
 
     return {
@@ -218,8 +220,8 @@ def _result_snapshot(*, task_id: str, result_id: str, run: object) -> dict[str, 
         "run_id": run.run_id,
         "run_attempt": run.attempt,
         "run_status": run.status.value,
-        "output": _plain_json(run.output),
-        "artifact_ids": list(run.artifact_ids),
+        "output": cast(JsonValue, _plain_json(run.output)),
+        "artifact_ids": cast(JsonValue, list(run.artifact_ids)),
     }
 
 
