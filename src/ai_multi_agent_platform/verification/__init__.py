@@ -1,5 +1,19 @@
 """Canonical runtime verification, review and completion-policy subsystem."""
 
+from .agent_workflow import (
+    AutomaticReviewerWorkflow,
+    ConfiguredReviewerResolver,
+    RepairOutput,
+    ResolvedReviewerAssignment,
+    ReviewerAgentExecutor,
+    ReviewerAssignment,
+    ReviewerAssignmentResolver,
+    ReviewerExecutionDecision,
+    ReviewerRepairExecutor,
+    ReviewerRuntimeOptions,
+    ReviewWorkflowCycle,
+    ReviewWorkflowResult,
+)
 from .audit import VerificationAuditEvent, VerificationAuditEventType
 from .canonical_access import CanonicalVerificationAccess
 from .deterministic import (
@@ -47,19 +61,31 @@ from .persistence import (
 from .service import VerificationService
 
 __all__ = [
+    "AutomaticReviewerWorkflow",
     "CanonicalVerificationAccess",
+    "CanonicalVerificationRuntime",
     "CompletionAssessment",
     "CompletionAuthority",
     "CompletionGateDecision",
     "CompletionState",
-    "CanonicalVerificationRuntime",
-    "OutputChangeAwareCompletionAuthority",
+    "ConfiguredReviewerResolver",
     "DeterministicCheck",
     "DeterministicVerifier",
     "KernelFileVerificationEvidenceResolver",
+    "OutputChangeAwareCompletionAuthority",
     "ProducerIdentity",
     "ReferenceDeterministicVerifier",
+    "RepairOutput",
+    "ResolvedReviewerAssignment",
+    "ReviewWorkflowCycle",
+    "ReviewWorkflowResult",
+    "ReviewerAgentExecutor",
+    "ReviewerAssignment",
+    "ReviewerAssignmentResolver",
+    "ReviewerExecutionDecision",
     "ReviewerIndependence",
+    "ReviewerRepairExecutor",
+    "ReviewerRuntimeOptions",
     "SqliteVerificationCompletionAuthority",
     "SqliteVerificationService",
     "TaskVerificationRequirement",
