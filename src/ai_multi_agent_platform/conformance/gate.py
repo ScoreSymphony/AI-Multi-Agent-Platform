@@ -19,6 +19,8 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from time import monotonic
 
+from ai_multi_agent_platform.conformance.evidence import parse_runtime_evidence
+
 REPORT_SCHEMA = "ai-multi-agent-platform/platform-conformance/v1"
 _PACKAGE_NAME = "ai-multi-agent-platform"
 
@@ -59,6 +61,7 @@ class ConformanceScenario:
     required: bool = True
     unavailable_status: ConformanceStatus = ConformanceStatus.NOT_IMPLEMENTED
     unavailable_reason: str | None = None
+    requires_runtime_evidence: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,8 +243,24 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ConformanceScenario(
             "U",
             "#86 runtime verification",
-            "required canonical Verification independently gates concrete completion",
-            _pytest("tests/test_issue_86_kernel_gate.py"),
+            (
+                "required Verification gates completion, binds exact revisions, works "
+                "deterministically without an LLM and enforces reviewer independence"
+            ),
+            _pytest(
+                "tests/test_issue_86_kernel_gate.py::"
+                "test_successful_run_cannot_bypass_required_verification",
+                "tests/test_issue_86_kernel_gate.py::"
+                "test_changed_subject_invalidates_old_verification_at_completion_gate",
+                "tests/test_issue_86_kernel_gate.py::"
+                "test_rejected_verification_blocks_completion_without_rewriting_run_outcome",
+                "tests/test_issue_86_verification.py::"
+                "test_changed_result_revision_cannot_reuse_old_verification",
+                "tests/test_issue_86_verification.py::"
+                "test_deterministic_reference_verifier_passes_and_fails_without_llm",
+                "tests/test_issue_86_verification.py::"
+                "test_agent_reviewer_independence_and_read_only_rules_are_enforced",
+            ),
         ),
         ConformanceScenario(
             "ARCH",
@@ -339,9 +358,11 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
                 "canonical API/timeline/observability without shadow lifecycle state"
             ),
             _pytest(
+                "-s",
                 "tests/test_issue_46_worker_artifact_verification_vertical.py::"
-                "test_authenticated_worker_artifact_is_exact_verification_evidence_same_run"
+                "test_authenticated_worker_artifact_is_exact_verification_evidence_same_run",
             ),
+            requires_runtime_evidence=True,
         ),
         ConformanceScenario(
             "G",
@@ -545,7 +566,42 @@ def _run_scenario(scenario: ConformanceScenario, *, root: Path) -> ConformanceSc
             evidence=(),
         )
 
-    passed = process.returncode == 0
+    command_passed = process.returncode == 0
+    runtime_evidence: tuple[tuple[str, ...], tuple[str, ...]] | None = None
+    evidence_failure_category: str | None = None
+    evidence_failure_reason: str | None = None
+    if command_passed:
+        try:
+            runtime_evidence = parse_runtime_evidence(process.stdout)
+        except ValueError as exc:
+            evidence_failure_category = "runtime_evidence_invalid"
+            evidence_failure_reason = str(exc)
+        else:
+            if scenario.requires_runtime_evidence and runtime_evidence is None:
+                evidence_failure_category = "runtime_evidence_missing"
+                evidence_failure_reason = (
+                    "the registered conformance scenario passed but did not emit its required "
+                    "runtime evidence envelope"
+                )
+
+    passed = command_passed and evidence_failure_category is None
+    evidence: tuple[str, ...]
+    if runtime_evidence is None:
+        canonical_resource_ids: tuple[str, ...] = ()
+        evidence = ("registered-command",)
+    else:
+        canonical_resource_ids, runtime_evidence_refs = runtime_evidence
+        evidence = ("registered-command", *runtime_evidence_refs)
+
+    failure_category: str | None
+    reason: str | None
+    if not command_passed:
+        failure_category = "acceptance_failure"
+        reason = f"registered command exited with status {process.returncode}"
+    else:
+        failure_category = evidence_failure_category
+        reason = evidence_failure_reason
+
     return ConformanceScenarioResult(
         scenario_id=scenario.scenario_id,
         owner=scenario.owner,
@@ -559,10 +615,10 @@ def _run_scenario(scenario: ConformanceScenario, *, root: Path) -> ConformanceSc
         command=scenario.command,
         stdout=_tail(process.stdout),
         stderr=_tail(process.stderr),
-        failure_category=None if passed else "acceptance_failure",
-        reason=None if passed else f"registered command exited with status {process.returncode}",
-        canonical_resource_ids=(),
-        evidence=("registered-command",),
+        failure_category=failure_category,
+        reason=reason,
+        canonical_resource_ids=canonical_resource_ids,
+        evidence=evidence,
     )
 
 
