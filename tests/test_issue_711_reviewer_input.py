@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from datetime import UTC, datetime
 
 import pytest
@@ -132,6 +133,27 @@ def _request(
     )
 
 
+def _result_digest(task_id: str, result_id: str, run: RunState) -> str:
+    snapshot = {
+        "type": "result",
+        "id": result_id,
+        "task_id": task_id,
+        "run_id": run.run_id,
+        "run_attempt": run.attempt,
+        "run_status": run.status.value,
+        "output": run.output,
+        "artifact_ids": list(run.artifact_ids),
+    }
+    encoded = json.dumps(
+        snapshot,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
 def test_result_input_uses_exact_bound_run_output_and_conservative_classification() -> None:
     async def scenario() -> None:
         result_id = new_id("result")
@@ -140,7 +162,7 @@ def test_result_input_uses_exact_bound_run_output_and_conservative_classificatio
             subject_type="result",
             subject_id=result_id,
             revision=f"{run.run_id}:attempt:{run.attempt}",
-            digest="sha256:exact-result",
+            digest=_result_digest(task.task_id, result_id, run),
         )
         provider = KernelFileReviewerSubjectInputProvider(
             tasks=_Tasks(task),
@@ -170,7 +192,7 @@ def test_result_input_rejects_stale_run_revision() -> None:
             subject_type="result",
             subject_id=result_id,
             revision="stale-run-attempt",
-            digest="sha256:stale",
+            digest=_result_digest(task.task_id, result_id, run),
         )
         provider = KernelFileReviewerSubjectInputProvider(
             tasks=_Tasks(task),
@@ -184,6 +206,40 @@ def test_result_input_rejects_stale_run_revision() -> None:
                 agent_run=_agent_run(task.task_id, run.run_id),
             )
         assert exc_info.value.code is ErrorCode.CONTRACT_VIOLATION
+
+    asyncio.run(scenario())
+
+
+def test_result_input_rejects_snapshot_changed_after_verification_binding() -> None:
+    async def scenario() -> None:
+        result_id = new_id("result")
+        task, original = _states(output={"answer": 42}, result_ids=(result_id,))
+        subject = VerificationSubject(
+            subject_type="result",
+            subject_id=result_id,
+            revision=f"{original.run_id}:attempt:{original.attempt}",
+            digest=_result_digest(task.task_id, result_id, original),
+        )
+        changed = RunState(
+            run=original.run,
+            revision=original.revision + 1,
+            output=original.output,
+            result_ids=original.result_ids,
+            artifact_ids=(new_id("artifact"),),
+        )
+        provider = KernelFileReviewerSubjectInputProvider(
+            tasks=_Tasks(task),
+            runs=_Runs(changed),
+            files=_Files(),  # type: ignore[arg-type]
+        )
+
+        with pytest.raises(ContractError) as exc_info:
+            await provider.load(
+                request=_request(task.task_id, original.run_id, subject),
+                agent_run=_agent_run(task.task_id, original.run_id),
+            )
+        assert exc_info.value.code is ErrorCode.CONTRACT_VIOLATION
+        assert "digest differs" in str(exc_info.value)
 
     asyncio.run(scenario())
 
