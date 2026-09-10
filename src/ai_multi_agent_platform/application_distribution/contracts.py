@@ -37,6 +37,9 @@ class ApplicationReleaseRepository(Protocol):
         channel: str,
     ) -> ApplicationRelease | None: ...
 
+    @abstractmethod
+    async def find_run(self, run_id: str) -> ApplicationRelease | None: ...
+
 
 class BuildTargetMatcher(Protocol):
     """Provider-neutral check for whether a build target has an eligible execution host."""
