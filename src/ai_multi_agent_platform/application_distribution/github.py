@@ -18,16 +18,8 @@ class GitHubReleasePublisher:
 
     provider_id = "github-releases"
 
-    def __init__(
-        self,
-        connectors: ConnectorService,
-        *,
-        connection_id: str,
-        repository_ref: str,
-    ) -> None:
+    def __init__(self, connectors: ConnectorService) -> None:
         self._connectors = connectors
-        self._connection_id = connection_id
-        self._repository_ref = repository_ref
 
     async def preview(
         self,
@@ -35,11 +27,11 @@ class GitHubReleasePublisher:
         manifest: dict[str, JsonValue],
         context: PublishContext,
     ) -> dict[str, JsonValue]:
-        del context
+        connection_id, repository_ref = _destination(context)
         return {
             "provider": self.provider_id,
-            "connection_id": self._connection_id,
-            "repository_ref": self._repository_ref,
+            "connection_id": connection_id,
+            "repository_ref": repository_ref,
             "tag": f"v{release.version}",
             "visibility": release.visibility.value,
             "artifact_count": len(release.artifacts),
@@ -47,6 +39,8 @@ class GitHubReleasePublisher:
             "side_effects": [
                 "create_or_resolve_tag",
                 "create_release",
+                "attach_manifest",
+                "attach_checksums",
                 "attach_assets",
             ],
         }
@@ -57,11 +51,13 @@ class GitHubReleasePublisher:
         manifest: dict[str, JsonValue],
         context: PublishContext,
     ) -> PublicationResult:
+        connection_id, repository_ref = _destination(context)
         create = await self._connectors.invoke_action(
-            self._connection_id,
+            connection_id,
             _CREATE_RELEASE_ACTION,
             {
-                "repository_ref": self._repository_ref,
+                "repository_ref": repository_ref,
+                "application_id": release.application_id,
                 "tag": f"v{release.version}",
                 "version": release.version,
                 "channel": release.channel.value,
@@ -85,10 +81,10 @@ class GitHubReleasePublisher:
         published_assets: list[PublishedArtifact] = []
         for artifact in release.artifacts:
             attach = await self._connectors.invoke_action(
-                self._connection_id,
+                connection_id,
                 _ATTACH_ASSET_ACTION,
                 {
-                    "repository_ref": self._repository_ref,
+                    "repository_ref": repository_ref,
                     "external_release_id": external_release_id,
                     "artifact_id": artifact.artifact_id,
                     "file_id": artifact.file_id,
@@ -116,15 +112,43 @@ class GitHubReleasePublisher:
                     },
                 )
             )
-        visibility = ReleaseVisibility(_string(create_output, "visibility"))
+        try:
+            visibility = ReleaseVisibility(_string(create_output, "visibility"))
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_PROVIDER_RESPONSE,
+                "GitHub release response returned an unsupported visibility",
+            ) from exc
         return PublicationResult(
             provider_id=self.provider_id,
             release_url=release_url,
             latest_url=latest_url,
             visibility=visibility,
             artifacts=tuple(published_assets),
-            external_metadata={"github": {"release_id": external_release_id}},
+            external_metadata={
+                "github": {
+                    "release_id": external_release_id,
+                    "connection_id": connection_id,
+                    "repository_ref": repository_ref,
+                }
+            },
         )
+
+
+def _destination(context: PublishContext) -> tuple[str, str]:
+    connection_id = context.configuration.get("connection_id")
+    repository_ref = context.configuration.get("repository_ref")
+    if not isinstance(connection_id, str) or not connection_id.strip():
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "GitHub publication requires publisher_configuration.connection_id",
+        )
+    if not isinstance(repository_ref, str) or not repository_ref.strip():
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "GitHub publication requires publisher_configuration.repository_ref",
+        )
+    return connection_id, repository_ref
 
 
 def _object(value: JsonValue, label: str) -> dict[str, JsonValue]:
