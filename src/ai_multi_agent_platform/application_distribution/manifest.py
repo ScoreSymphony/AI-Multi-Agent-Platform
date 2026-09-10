@@ -14,7 +14,10 @@ MANIFEST_SCHEMA_VERSION = 1
 
 def release_manifest(release: ApplicationRelease) -> dict[str, JsonValue]:
     artifacts: list[JsonValue] = []
-    for artifact in sorted(release.artifacts, key=lambda item: (item.target_id, item.filename)):
+    for artifact in sorted(
+        release.artifacts,
+        key=lambda item: (item.target_id, item.filename),
+    ):
         artifacts.append(
             {
                 "artifact_id": artifact.artifact_id,
@@ -48,6 +51,7 @@ def release_manifest(release: ApplicationRelease) -> dict[str, JsonValue]:
             "status": state.status.value,
             "task_id": state.task_id,
             "run_id": state.run_id,
+            "failure_reason": state.failure_reason,
         }
         for state in sorted(release.targets, key=lambda item: item.target.target_id)
     ]
@@ -61,6 +65,8 @@ def release_manifest(release: ApplicationRelease) -> dict[str, JsonValue]:
         "visibility": release.visibility.value,
         "project_id": release.project_id,
         "workspace_id": release.workspace_id,
+        "workspace_snapshot_id": release.workspace_snapshot_id,
+        "workspace_content_checksum": release.workspace_content_checksum,
         "source_revision": release.source_revision,
         "build_specification": {
             "spec_id": release.build_specification.spec_id,
