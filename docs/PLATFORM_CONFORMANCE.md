@@ -63,7 +63,7 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | H — restart/recovery | crash after backend accept -> process reconstruction -> same running canonical Run with no duplicate dispatch, plus queued/pre-accept/orphaned recovery classification | #46 / canonical kernel recovery |
 | J-cli — client consistency | CLI canonical Task route/fixture parity | #17 / #252 |
 | J-web — client consistency | Web canonical Task route/fixture parity | #17 / #395 |
-| U — runtime verification | Verification independently gates completion | #86 |
+| U — runtime verification | Verification gates completion, binds exact revisions, works deterministically without an LLM, enforces reviewer independence and keeps repair loops bounded and auditable | #86 |
 | ARCH — architecture invariants | optional backend isolation + mandatory-dependency guard | #46 |
 
 The fast tier is intentionally local/reference-only and deterministic. It requires no paid AI/API service and no Hermes, Forge, LiteLLM, Registry, remote distributed deployment or HA service. D-vertical does instantiate an in-process local Worker/Node fixture so the canonical Executor/Worker boundary is continuously exercised without claiming the optional distributed deployment profile.

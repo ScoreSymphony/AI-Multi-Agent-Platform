@@ -252,7 +252,8 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             "#86 runtime verification",
             (
                 "required Verification gates completion, binds exact revisions, works "
-                "deterministically without an LLM and enforces reviewer independence"
+                "deterministically without an LLM, enforces reviewer independence and keeps "
+                "repair loops bounded and auditable"
             ),
             _pytest(
                 "tests/test_issue_86_kernel_gate.py::"
@@ -267,6 +268,8 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "test_deterministic_reference_verifier_passes_and_fails_without_llm",
                 "tests/test_issue_86_verification.py::"
                 "test_agent_reviewer_independence_and_read_only_rules_are_enforced",
+                "tests/test_issue_86_verification.py::"
+                "test_bounded_repair_preserves_history_and_stops_at_policy_limit",
             ),
         ),
         ConformanceScenario(
