@@ -252,6 +252,20 @@ def main(
                     file=sys.stderr,
                 )
                 return 3
+
+            # The report an operator inspected may be stale by the time resolution is requested.
+            # Refresh all runtime evidence first and authorize terminalization only from the newly
+            # written report. This avoids marking an execution failed/cancelled after its backend
+            # has become reachable again.
+            startup = asyncio.run(_run_startup_recovery(deployment))
+            _print_startup_recovery(startup)
+            if startup.ready_for_service:
+                print(
+                    "startup run resolution blocked: fresh reconciliation no longer reports "
+                    "unresolved runs",
+                    file=sys.stderr,
+                )
+                return 3
             require_blocked_startup_run(
                 config.data_dir,
                 task_id=task_id,
