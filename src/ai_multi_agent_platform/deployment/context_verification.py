@@ -101,9 +101,11 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
 
         Result does not own a separate persisted classification today. The only safe weaker-than-
         secret classification is therefore the immutable Context Bundle actually bound to the
-        canonical producer AgentRun. Every link in Result -> Verification -> producer AgentRun ->
-        ContextRunBinding -> ContextBundle must agree. Missing or contradictory provenance remains
-        reference-only rather than being inferred from the current repair/reviewer execution.
+        canonical producer AgentRun, and only when no tool or Artifact output introduced an
+        additional classification source. Every link in Result -> Verification -> producer
+        AgentRun -> ContextRunBinding -> ContextBundle must agree. Missing or contradictory
+        provenance remains reference-only rather than being inferred from the current
+        repair/reviewer execution.
         """
 
         if (
@@ -152,6 +154,12 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
             or record.selected_model_config_id != producer.model_config_id
             or record.selected_provider_id != producer.provider_id
         ):
+            return DataClassification.SECRET
+
+        # Capability output may carry data that is more sensitive than the input Context Bundle.
+        # Until the Result owner persists the effective output classification, never infer a weaker
+        # class for a Result that consumed tools or emitted Artifacts.
+        if record.tool_invocation_refs or record.artifact_ids:
             return DataClassification.SECRET
 
         try:

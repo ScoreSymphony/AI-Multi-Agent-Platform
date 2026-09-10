@@ -88,7 +88,12 @@ class _Bundles:
         return self.bundle
 
 
-def _case(*, binding_digest: str = "bundle-digest"):
+def _case(
+    *,
+    binding_digest: str = "bundle-digest",
+    tool_invocation_refs: tuple[str, ...] = (),
+    artifact_ids: tuple[str, ...] = (),
+):
     task_id = new_id("task")
     project_id = new_id("project")
     run_id = new_id("run")
@@ -155,6 +160,8 @@ def _case(*, binding_digest: str = "bundle-digest"):
         selected_model_config_id="model-local",
         selected_provider_id="provider-local",
         result_ids=(result_id,),
+        tool_invocation_refs=tool_invocation_refs,
+        artifact_ids=artifact_ids,
     )
     binding = SimpleNamespace(
         agent_run_id=agent_run_id,
@@ -211,6 +218,22 @@ def test_result_classification_inherits_exact_producer_context_bundle() -> None:
 
 def test_result_classification_fails_closed_on_context_binding_digest_mismatch() -> None:
     resolver, source, request, result = _case(binding_digest="different-bundle-digest")
+
+    classification = asyncio.run(resolver.classify(source, request, result))
+
+    assert classification is ContextDataClassification.SECRET_REFERENCE
+
+
+def test_result_classification_fails_closed_after_capability_output() -> None:
+    resolver, source, request, result = _case(tool_invocation_refs=("tool-invocation-1",))
+
+    classification = asyncio.run(resolver.classify(source, request, result))
+
+    assert classification is ContextDataClassification.SECRET_REFERENCE
+
+
+def test_result_classification_fails_closed_with_agent_artifacts() -> None:
+    resolver, source, request, result = _case(artifact_ids=(new_id("artifact"),))
 
     classification = asyncio.run(resolver.classify(source, request, result))
 
