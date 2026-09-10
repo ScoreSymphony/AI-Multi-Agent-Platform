@@ -24,6 +24,7 @@ from ai_multi_agent_platform.contracts import (
 from ai_multi_agent_platform.contracts import ExecutionRequest as KernelExecutionRequest
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
 from ai_multi_agent_platform.execution import (
+    CancellationToken,
     ExecutionArtifact,
     ExecutionError,
     ExecutionErrorCategory,
@@ -88,6 +89,8 @@ class ApplicationCommandExecutor(Executor):
                 ExecutionErrorCategory.UNSUPPORTED_CAPABILITY,
                 f"unsupported action: {request.action}",
             )
+        if request.cancellation is not None and request.cancellation.cancelled:
+            return _cancelled(request, started_at, started)
         try:
             workspace = self._workspace(request.workspace)
             command = _command(request.arguments.get("command"))
@@ -104,6 +107,7 @@ class ApplicationCommandExecutor(Executor):
                 command,
                 cwd=cwd,
                 timeout_seconds=request.timeout_seconds,
+                cancellation=request.cancellation,
             )
         except TimeoutError:
             return _failure(
@@ -114,6 +118,8 @@ class ApplicationCommandExecutor(Executor):
                 "application build timed out",
                 status=ExecutionStatus.TIMED_OUT,
             )
+        except asyncio.CancelledError:
+            return _cancelled(request, started_at, started)
         except (OSError, ValueError) as exc:
             return _failure(
                 request,
@@ -124,6 +130,8 @@ class ApplicationCommandExecutor(Executor):
             )
 
         stdout, stderr, returncode = result
+        if request.cancellation is not None and request.cancellation.cancelled:
+            return _cancelled(request, started_at, started)
         if returncode != 0:
             return _failure(
                 request,
@@ -184,6 +192,7 @@ class ApplicationCommandExecutor(Executor):
         *,
         cwd: Path,
         timeout_seconds: float | None,
+        cancellation: CancellationToken | None,
     ) -> tuple[str, str, int]:
         environment = {name: value for name in _ENV_ALLOWLIST if (value := os.environ.get(name))}
         process = await asyncio.create_subprocess_exec(
@@ -194,18 +203,45 @@ class ApplicationCommandExecutor(Executor):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        communication = asyncio.create_task(process.communicate())
+        cancellation_wait = (
+            asyncio.create_task(cancellation.wait()) if cancellation is not None else None
+        )
         try:
-            if timeout_seconds is None:
-                stdout_bytes, stderr_bytes = await process.communicate()
-            else:
-                stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=timeout_seconds,
-                )
-        except TimeoutError:
-            process.kill()
-            await process.wait()
+            waiters: set[asyncio.Task[object]] = {communication}  # type: ignore[arg-type]
+            if cancellation_wait is not None:
+                waiters.add(cancellation_wait)
+            done, _ = await asyncio.wait(
+                waiters,
+                timeout=timeout_seconds,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:
+                if process.returncode is None:
+                    process.kill()
+                await process.wait()
+                communication.cancel()
+                raise TimeoutError
+            if cancellation_wait is not None and cancellation_wait in done:
+                if process.returncode is None:
+                    process.kill()
+                await process.wait()
+                communication.cancel()
+                try:
+                    await communication
+                except asyncio.CancelledError:
+                    pass
+                raise asyncio.CancelledError
+            stdout_bytes, stderr_bytes = await communication
+        except asyncio.CancelledError:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+            communication.cancel()
             raise
+        finally:
+            if cancellation_wait is not None:
+                cancellation_wait.cancel()
         return (
             _decode_output(stdout_bytes),
             _decode_output(stderr_bytes),
@@ -230,6 +266,8 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
         self._bindings = bindings
         self._executor = executor
         self._results: dict[str, ExecutionResult] = {}
+        self._cancellations: dict[str, CancellationToken] = {}
+        self._finished: dict[str, asyncio.Event] = {}
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -243,7 +281,7 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
 
     async def start(self, request: KernelExecutionRequest) -> ExecutionHandle:
         existing = self._results.get(request.run_id)
-        if existing is None:
+        if existing is None and request.run_id not in self._cancellations:
             release = await self._release_for_run(request.run_id)
             target = _target_for_run(release, request.run_id)
             self._validate_request(request, release, target)
@@ -271,6 +309,10 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                 task_id=binding.task_id,
                 run_id=request.run_id,
             )
+            cancellation = CancellationToken()
+            finished = asyncio.Event()
+            self._cancellations[request.run_id] = cancellation
+            self._finished[request.run_id] = finished
             outcome = MaterializationOutcome.FAILED
             try:
                 result = await self._executor.execute(
@@ -286,6 +328,7 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                             "output_path": target.target.output_path,
                         },
                         timeout_seconds=_timeout_seconds(release, request.context),
+                        cancellation=cancellation,
                     )
                 )
                 if result.status is ExecutionStatus.SUCCEEDED:
@@ -301,7 +344,10 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                     outcome = MaterializationOutcome.CANCELLED
                 self._results[request.run_id] = result
             finally:
+                self._cancellations.pop(request.run_id, None)
                 await self._workspaces.release_materialization(materialization.id, outcome)
+                finished.set()
+                self._finished.pop(request.run_id, None)
         return ExecutionHandle(
             run_id=request.run_id,
             backend_ref=f"application-build:{request.run_id}",
@@ -310,39 +356,61 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
 
     async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
         result = self._results.get(run_id)
-        if result is None:
-            release = await self._release_for_run(run_id)
-            target = _target_for_run(release, run_id)
-            if target.task_id is None:
-                raise ContractError(
-                    ErrorCode.CONTRACT_VIOLATION,
-                    "application build target has no canonical Task identity",
-                )
-            await self.start(
-                KernelExecutionRequest(
-                    run_id=run_id,
-                    subject_type="task",
-                    subject_id=target.task_id,
-                    context=context,
-                )
+        if result is not None:
+            return _snapshot(result)
+        if run_id in self._cancellations:
+            return ExecutionSnapshot(
+                run_id=run_id,
+                status=ExecutionStatus.RUNNING,
+                output={"state": "active-local-build"},
             )
-            result = self._results.get(run_id)
-        if result is None:
-            raise ContractError(ErrorCode.NOT_FOUND, f"application build not found: {run_id}")
-        return ExecutionSnapshot(
-            run_id=run_id,
-            status=result.status,
-            output={
-                "result_code": result.result_code,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "output": result.output,
-                "artifacts": [artifact.relative_path for artifact in result.artifacts],
-            },
-        )
+        result = await self._lost_process_result(run_id, context)
+        self._results[run_id] = result
+        return _snapshot(result)
 
     async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
-        return await self.get(run_id, context)
+        result = self._results.get(run_id)
+        if result is not None:
+            return _snapshot(result)
+        cancellation = self._cancellations.get(run_id)
+        if cancellation is not None:
+            finished = self._finished.get(run_id)
+            cancellation.cancel()
+            if finished is not None:
+                await finished.wait()
+            result = self._results.get(run_id)
+            if result is not None:
+                return _snapshot(result)
+        result = await self._lost_process_result(run_id, context)
+        self._results[run_id] = result
+        return _snapshot(result)
+
+    async def _lost_process_result(
+        self,
+        run_id: str,
+        context: OperationContext,
+    ) -> ExecutionResult:
+        release = await self._release_for_run(run_id)
+        target = _target_for_run(release, run_id)
+        if target.task_id is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "application build target has no canonical Task identity",
+            )
+        now = monotonic()
+        return _failure(
+            ExecutionRequest(
+                task_id=target.task_id,
+                run_id=run_id,
+                correlation_id=context.correlation_id,
+                action=APPLICATION_BUILD_ACTION,
+                workspace="unavailable",
+            ),
+            datetime.now(UTC).isoformat(),
+            now,
+            ExecutionErrorCategory.INTERNAL,
+            "application build process state is unavailable; refusing implicit re-execution",
+        )
 
     async def _release_for_run(self, run_id: str) -> ApplicationRelease:
         release = await self._releases.find_run(run_id)
@@ -407,6 +475,20 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                 ErrorCode.CONTRACT_VIOLATION,
                 "application build execution context is outside the release project",
             )
+
+
+def _snapshot(result: ExecutionResult) -> ExecutionSnapshot:
+    return ExecutionSnapshot(
+        run_id=result.run_id,
+        status=result.status,
+        output={
+            "result_code": result.result_code,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "output": result.output,
+            "artifacts": [artifact.relative_path for artifact in result.artifacts],
+        },
+    )
 
 
 def result_request(result: ExecutionResult) -> ExecutionRequest:
@@ -498,6 +580,21 @@ def _decode_output(value: bytes) -> str:
     if len(value) > _MAX_CAPTURED_OUTPUT:
         value = value[-_MAX_CAPTURED_OUTPUT:]
     return value.decode("utf-8", errors="replace")
+
+
+def _cancelled(
+    request: ExecutionRequest,
+    started_at: str,
+    started: float,
+) -> ExecutionResult:
+    return _failure(
+        request,
+        started_at,
+        started,
+        ExecutionErrorCategory.CANCELLED,
+        "application build cancelled",
+        status=ExecutionStatus.CANCELLED,
+    )
 
 
 def _failure(
