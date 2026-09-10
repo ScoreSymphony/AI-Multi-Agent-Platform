@@ -19,9 +19,7 @@ from ai_multi_agent_platform.distribution import (
     registry_item_from_document,
 )
 
-CATALOG = (
-    Path(__file__).parents[1] / "catalogs" / "technical-components" / "catalog.json"
-)
+CATALOG = Path(__file__).parents[1] / "catalogs" / "technical-components" / "catalog.json"
 ISSUE_502_ITEMS = {
     "projectatlas",
     "graphify",
@@ -115,20 +113,12 @@ def _ids(
 def test_curated_technical_catalog_loads_cross_category_seed() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
-    all_items = provider.search(
-        RegistryQuery(technical_only=True, include_deprecated=True)
-    )
+    all_items = provider.search(RegistryQuery(technical_only=True, include_deprecated=True))
 
     assert len(all_items) >= 71
     assert _ids(provider, "code-intelligence") == EXPECTED_CODE_INTELLIGENCE
-    assert (
-        _ids(provider, "coding-agent", include_deprecated=True)
-        == EXPECTED_CODING_AGENTS
-    )
-    assert (
-        _ids(provider, "agent-framework", include_deprecated=True)
-        == EXPECTED_AGENT_FRAMEWORKS
-    )
+    assert _ids(provider, "coding-agent", include_deprecated=True) == EXPECTED_CODING_AGENTS
+    assert _ids(provider, "agent-framework", include_deprecated=True) == EXPECTED_AGENT_FRAMEWORKS
     assert EXPECTED_MEMORY.issubset(_ids(provider, "memory-and-context"))
     assert _ids(provider, "inference-runtime") == EXPECTED_INFERENCE
     assert _ids(provider, "specification-and-skills") == EXPECTED_SPECIFICATIONS
@@ -140,9 +130,7 @@ def test_curated_technical_catalog_loads_cross_category_seed() -> None:
 def test_curated_catalog_entries_remain_manual_untrusted_and_fail_closed() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
-    for item in provider.search(
-        RegistryQuery(technical_only=True, include_deprecated=True)
-    ):
+    for item in provider.search(RegistryQuery(technical_only=True, include_deprecated=True)):
         technical = derive_technical_metadata(item)
         assert technical is not None
         assert item.route is DistributionRoute.MANUAL
@@ -163,8 +151,7 @@ def test_curated_catalog_entries_remain_manual_untrusted_and_fail_closed() -> No
 
         expected_issue = "502" if item.item_id in ISSUE_502_ITEMS else "638"
         assert item.review_reference == (
-            "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/"
-            + expected_issue
+            "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/" + expected_issue
         )
 
 
@@ -194,9 +181,7 @@ def test_curated_catalog_preserves_explicit_unknowns_instead_of_guessing() -> No
 def test_active_external_records_do_not_fake_upstream_revision() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
-    for item in provider.search(
-        RegistryQuery(technical_only=True, include_deprecated=True)
-    ):
+    for item in provider.search(RegistryQuery(technical_only=True, include_deprecated=True)):
         if item.item_id in ISSUE_502_ITEMS | REFERENCE_ONLY:
             continue
         assert item.source.revision is None
@@ -237,9 +222,7 @@ def test_nonstandard_license_terms_are_visible_instead_of_normalized_away() -> N
 def test_curated_candidate_artifacts_are_reference_only() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
-    for item in provider.search(
-        RegistryQuery(technical_only=True, include_deprecated=True)
-    ):
+    for item in provider.search(RegistryQuery(technical_only=True, include_deprecated=True)):
         artifact = provider.fetch_artifact(item.item_id, item.version).decode("utf-8")
         normalized = artifact.casefold()
         assert "does not vendor" in normalized
