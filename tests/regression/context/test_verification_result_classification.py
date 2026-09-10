@@ -4,7 +4,10 @@ import asyncio
 from types import SimpleNamespace
 
 from ai_multi_agent_platform.agents import AgentRunStatus
-from ai_multi_agent_platform.context import ContextDataClassification, OperationalContextSourceRequest
+from ai_multi_agent_platform.context import (
+    ContextDataClassification,
+    OperationalContextSourceRequest,
+)
 from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.deployment.context_verification import (
     CanonicalVerificationContextClassificationResolver,
@@ -32,7 +35,9 @@ class _Evidence:
     def __init__(self, context: VerificationEvidenceContext) -> None:
         self.context = context
 
-    async def resolve_subject(self, *, task_id: str, subject_type: str, subject_id: str):
+    async def resolve_subject(
+        self, *, task_id: str, subject_type: str, subject_id: str
+    ):
         assert task_id == self.context.task_id
         assert subject_type == self.context.subject.subject_type
         assert subject_id == self.context.subject.subject_id
@@ -54,31 +59,31 @@ class _Evidence:
 
 
 class _Agents:
-    def __init__(self, record: object) -> None:
+    def __init__(self, record: SimpleNamespace) -> None:
         self.record = record
 
     def list_agent_runs(self, run_id: str | None = None):
-        if run_id is None or run_id == self.record.run_id:  # type: ignore[attr-defined]
+        if run_id is None or run_id == self.record.run_id:
             return (self.record,)
         return ()
 
 
 class _Bindings:
-    def __init__(self, binding: object) -> None:
+    def __init__(self, binding: SimpleNamespace) -> None:
         self.binding = binding
 
     def get(self, agent_run_id: str):
-        if agent_run_id != self.binding.agent_run_id:  # type: ignore[attr-defined]
+        if agent_run_id != self.binding.agent_run_id:
             raise KeyError(agent_run_id)
         return self.binding
 
 
 class _Bundles:
-    def __init__(self, bundle: object) -> None:
+    def __init__(self, bundle: SimpleNamespace) -> None:
         self.bundle = bundle
 
     def get(self, context_bundle_id: str):
-        if context_bundle_id != self.bundle.context_bundle_id:  # type: ignore[attr-defined]
+        if context_bundle_id != self.bundle.context_bundle_id:
             raise KeyError(context_bundle_id)
         return self.bundle
 
@@ -214,7 +219,9 @@ def test_result_classification_fails_closed_on_context_binding_digest_mismatch()
 
 def test_result_classification_without_exact_provenance_is_reference_only() -> None:
     _resolver, source, request, result = _case()
-    resolver = CanonicalVerificationContextClassificationResolver(_NoFiles())  # type: ignore[arg-type]
+    resolver = CanonicalVerificationContextClassificationResolver(  # type: ignore[arg-type]
+        _NoFiles()
+    )
 
     classification = asyncio.run(resolver.classify(source, request, result))
 
