@@ -432,8 +432,8 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "N",
             "#75 Notifications",
             (
-                "Task completion/failure, approval-required and verification-required notifications "
-                "remain recipient-scoped, deduplicated and source-linked"
+                "Task completion/failure, approval-required and verification-required "
+                "notifications remain recipient-scoped, deduplicated and source-linked"
             ),
             "notification integration profile is optional and not enabled",
         ),
@@ -506,8 +506,8 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "W",
             "#88 Task management",
             (
-                "priority/deadline/assignment/dependencies remain metadata over canonical lifecycle; "
-                "authorization and Worker admission remain mandatory"
+                "priority/deadline/assignment/dependencies remain metadata over canonical "
+                "lifecycle; authorization and Worker admission remain mandatory"
             ),
             _pytest(
                 "tests/test_task_management.py::"
