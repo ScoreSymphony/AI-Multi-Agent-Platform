@@ -89,7 +89,7 @@ EXPECTED_EVALUATION = {
     "harbor",
     "openenv",
 }
-EXPECTED_MUSIC_AI = {"bachi", "analysisgnn", "clamp3", "mert"}
+EXPECTED_MUSIC_AI = {"bachi", "analysisgnn", "clamp3", "mert", "transformers-js"}
 REFERENCE_ONLY = {"roo-code", "flowise"}
 
 
