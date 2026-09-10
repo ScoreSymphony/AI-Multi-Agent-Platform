@@ -32,7 +32,7 @@ from ai_multi_agent_platform.application_distribution import (
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext
-from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.domain import RunStatus, new_id
 from ai_multi_agent_platform.security import (
     ActorIdentity,
     ActorType,
@@ -87,8 +87,9 @@ class _Kernel:
         run_id = new_id("run")
         run = SimpleNamespace(
             run_id=run_id,
-            status=SimpleNamespace(value="pending"),
+            status=RunStatus.QUEUED,
             artifact_ids=(),
+            output={},
         )
         self.runs[(task_id, run_id)] = run
         return run
@@ -98,11 +99,15 @@ class _Kernel:
         run_id = str(kwargs["run_id"])
         run = SimpleNamespace(
             run_id=run_id,
-            status=SimpleNamespace(value="running"),
+            status=RunStatus.RUNNING,
             artifact_ids=(),
+            output={},
         )
         self.runs[(task_id, run_id)] = run
         return run
+
+    async def refresh_run(self, **kwargs: object) -> object:
+        return self.runs[(str(kwargs["task_id"]), str(kwargs["run_id"]))]
 
     async def get_run(self, task_id: str, run_id: str) -> object:
         return self.runs[(task_id, run_id)]
@@ -185,10 +190,7 @@ class _Publisher:
             artifacts=tuple(
                 PublishedArtifact(
                     artifact_id=item.artifact_id,
-                    download_url=(
-                        "https://downloads.example/app/v1.2.3/"
-                        f"{item.filename}"
-                    ),
+                    download_url=(f"https://downloads.example/app/v1.2.3/{item.filename}"),
                 )
                 for item in release.artifacts
             ),
@@ -370,8 +372,9 @@ def test_release_build_binds_exact_snapshot_and_publish_is_policy_gated() -> Non
 
         kernel.runs[(task_id, run_id)] = SimpleNamespace(
             run_id=run_id,
-            status=SimpleNamespace(value="succeeded"),
+            status=RunStatus.SUCCEEDED,
             artifact_ids=(artifact_id,),
+            output={},
         )
         context = DataAccessContext(
             operation=OperationContext(
@@ -467,8 +470,9 @@ def test_mismatched_run_workspace_binding_blocks_artifact_admission() -> None:
         assert run_id is not None
         kernel.runs[(task_id, run_id)] = SimpleNamespace(
             run_id=run_id,
-            status=SimpleNamespace(value="succeeded"),
+            status=RunStatus.SUCCEEDED,
             artifact_ids=(artifact_id,),
+            output={},
         )
         binding = await bindings.get(run_id)
         assert binding is not None
