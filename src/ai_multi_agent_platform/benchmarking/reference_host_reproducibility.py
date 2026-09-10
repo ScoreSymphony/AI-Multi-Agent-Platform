@@ -143,9 +143,7 @@ class ReferenceHostReproducibilityReport:
                 "open_file_descriptor_growth": _optional_metric_dict(
                     self.endurance_variability.open_file_descriptor_growth
                 ),
-                "storage_growth_bytes": asdict(
-                    self.endurance_variability.storage_growth_bytes
-                ),
+                "storage_growth_bytes": asdict(self.endurance_variability.storage_growth_bytes),
                 "latency_drift_ratio": _optional_metric_dict(
                     self.endurance_variability.latency_drift_ratio
                 ),
@@ -191,9 +189,7 @@ class ReferenceHostReproducibilityAnalyzer:
             _require_same_basis(reference.basis, item.basis, source=str(item.source_dir))
 
         levels = _concurrency_levels(reference.envelope, source=str(reference.source_dir))
-        concurrency_variability = tuple(
-            _aggregate_concurrency(level, parsed) for level in levels
-        )
+        concurrency_variability = tuple(_aggregate_concurrency(level, parsed) for level in levels)
         endurance_variability = _aggregate_endurance(parsed)
         campaign_count = len(parsed)
         profile = reference.basis.profile
@@ -445,9 +441,7 @@ def _metric(values: Sequence[float]) -> MetricVariability:
     mean = float(statistics.fmean(samples))
     relative_range = None if median == 0 else (maximum - minimum) / abs(median)
     coefficient = (
-        None
-        if len(samples) < 2 or mean == 0
-        else float(statistics.pstdev(samples) / abs(mean))
+        None if len(samples) < 2 or mean == 0 else float(statistics.pstdev(samples) / abs(mean))
     )
     return MetricVariability(
         sample_count=len(samples),
@@ -506,7 +500,9 @@ def _concurrency_point(
 def _single_endurance(envelope: Mapping[str, Any], *, source: str) -> Mapping[str, Any]:
     raw = envelope.get("endurance_evidence")
     if not isinstance(raw, list) or len(raw) != 1:
-        raise ValueError(f"{source}: reference-host campaign must contain exactly one endurance sample")
+        raise ValueError(
+            f"{source}: reference-host campaign must contain exactly one endurance sample"
+        )
     return _require_mapping(raw[0], f"{source}: endurance_evidence[0]")
 
 
