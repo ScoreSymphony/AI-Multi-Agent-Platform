@@ -175,6 +175,7 @@ class ApplicationDistributionService:
         state = self._target(release, target_id)
         if state.task_id is not None:
             return release
+        self._require_mutable(release)
         target = state.target
         if self.target_matcher is not None and not await self.target_matcher.supports(
             release.build_specification,
@@ -225,9 +226,9 @@ class ApplicationDistributionService:
             actor_ref=actor_ref,
             source=_SOURCE,
         )
-        planned = await self.kernel.get_task(task_id)
-        if planned.plan_ref is None:
-            planned = await self.kernel.plan_task(
+        task_state = await self.kernel.get_task(task_id)
+        if task_state.plan_ref is None:
+            await self.kernel.plan_task(
                 idempotency_key=f"application-release:{idempotency_key}:plan-task:{target_id}",
                 task_id=task_id,
                 actor_ref=actor_ref,
@@ -288,6 +289,7 @@ class ApplicationDistributionService:
         evidence_refs: tuple[str, ...] = (),
     ) -> ApplicationRelease:
         release = await self.repository.get(release_id)
+        self._require_mutable(release)
         target_state = self._target(release, target_id)
         if target_state.task_id is None:
             raise ContractError(ErrorCode.CONFLICT, "build target has no canonical Task")
@@ -363,12 +365,11 @@ class ApplicationDistributionService:
             else item
             for item in release.targets
         )
-        status = self._build_status(targets)
         updated = replace(
             release,
             artifacts=artifacts,
             targets=targets,
-            status=status,
+            status=self._build_status(targets),
             revision=release.revision + 1,
         )
         return await self.repository.save(updated, expected_revision=release.revision)
@@ -379,6 +380,7 @@ class ApplicationDistributionService:
         gate: GateEvidence,
     ) -> ApplicationRelease:
         release = await self.repository.get(release_id)
+        self._require_mutable(release)
         gates = tuple(item for item in release.gates if item.name != gate.name) + (gate,)
         updated = replace(release, gates=gates, revision=release.revision + 1)
         return await self.repository.save(updated, expected_revision=release.revision)
@@ -577,6 +579,14 @@ class ApplicationDistributionService:
         if BuildTargetStatus.FAILED in statuses or BuildTargetStatus.UNSUPPORTED in statuses:
             return ReleaseStatus.FAILED
         return ReleaseStatus.BUILDING
+
+    @staticmethod
+    def _require_mutable(release: ApplicationRelease) -> None:
+        if release.status is ReleaseStatus.PUBLISHED:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "published application releases are immutable",
+            )
 
     @staticmethod
     def _require_publishable(release: ApplicationRelease) -> None:
