@@ -134,12 +134,28 @@ class VerificationRepairRuntime:
         if repair_attempt > policy.max_repair_attempts:
             raise ContractError(ErrorCode.CONFLICT, "verification repair limit exhausted")
 
+        key = f"verification-repair:{verification_id}:{repair_attempt}"
         task = await self._kernel.get_task(request.task_id)
         if task.status not in {TaskStatus.WAITING, TaskStatus.RUNNING}:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 f"task cannot start verification repair from {task.status.value}",
             )
+
+        # A VerificationResult can change the authoritative completion decision after the Task
+        # was already projected as ``verification:waiting`` by Run terminalization. Re-enter the
+        # ordinary completion command once so the kernel records the current REPAIR_REQUIRED
+        # decision instead of letting this bridge invent or mutate a private wait state.
+        if task.status is TaskStatus.WAITING and (
+            task.wait_reason != "verification:repair_required" or not task.blocked
+        ):
+            await self._kernel.complete_task(
+                idempotency_key=f"{key}:project-completion",
+                task_id=request.task_id,
+                actor_ref=actor_ref,
+                source=VERIFICATION_REPAIR_SOURCE,
+            )
+            task = await self._kernel.get_task(request.task_id)
         if task.status is TaskStatus.WAITING and (
             task.wait_reason != "verification:repair_required" or not task.blocked
         ):
@@ -148,7 +164,6 @@ class VerificationRepairRuntime:
                 "waiting task is not canonically blocked for verification repair",
             )
 
-        key = f"verification-repair:{verification_id}:{repair_attempt}"
         existing = await self._existing_execution(
             request.task_id, verification_id, repair_attempt, key
         )
