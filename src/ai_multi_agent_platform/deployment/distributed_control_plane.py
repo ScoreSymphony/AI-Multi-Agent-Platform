@@ -169,7 +169,7 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
 
         ``JsonDistributedStateStore`` deliberately restores persisted Node/Worker liveness as
         offline because old heartbeats are not current evidence. During a Control-Plane restart,
-        however, a still-running Worker can prove its process identity over the already-authenticated
+        however, a still-running Worker can prove its process identity over the authenticated
         #35 transport before the HTTP Worker-protocol surface opens. We use only that positive
         presence proof to attach the transport dispatcher needed to inspect existing Worker Jobs.
 
