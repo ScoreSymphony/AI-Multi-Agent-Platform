@@ -23,6 +23,24 @@ from ai_multi_agent_platform.upgrade.versioning import (
 )
 
 
+class _StartupCoordinator:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def reconcile_all(self) -> tuple[object, ...]:
+        self.calls += 1
+        return (object(), object())
+
+
+class _StartupDistributedRuntime:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def reconcile(self) -> tuple[object, ...]:
+        self.calls += 1
+        return (object(),)
+
+
 async def _prepare_orphaned_run(root: Path) -> tuple[str, str]:
     (root / "db").mkdir(parents=True)
     (root / "files").mkdir()
@@ -85,6 +103,35 @@ def test_clean_startup_recovery_is_repeatable_and_ready(tmp_path: Path) -> None:
         assert payload["plans_reconciled"] == 0
         assert payload["distributed_jobs_reconciled"] == 0
         assert payload["unresolved_run_ids"] == []
+
+    asyncio.run(scenario())
+
+
+def test_startup_recovery_composes_existing_runtime_reconcilers(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        root = tmp_path / "composed"
+        deployment = build_single_node_deployment(
+            SingleNodeConfig(data_dir=root, secure_cookie=False)
+        )
+        coordinator = _StartupCoordinator()
+        distributed_runtime = _StartupDistributedRuntime()
+
+        recovery = await reconcile_single_node_startup(
+            data_dir=root,
+            kernel=deployment.kernel,
+            coordinator=coordinator,
+            distributed_runtime=distributed_runtime,
+        )
+
+        assert recovery.ready_for_service is True
+        assert recovery.plans_reconciled == 2
+        assert recovery.distributed_jobs_reconciled == 1
+        assert coordinator.calls == 1
+        assert distributed_runtime.calls == 1
+        report = load_startup_recovery_report(root)
+        assert report is not None
+        assert report["plans_reconciled"] == 2
+        assert report["distributed_jobs_reconciled"] == 1
 
     asyncio.run(scenario())
 
