@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from threading import Lock as ThreadLock
 from typing import Protocol, runtime_checkable
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, WeakValueDictionary
 
 from ai_multi_agent_platform.agents import (
     AgentOrchestratorMapper,
@@ -42,23 +42,36 @@ from .reviewer_agent import ReviewerAgentRuntime
 _REVIEW_CONTEXT_SCHEMA = "verification-reviewer-agent-v1"
 _STAGED_DECISION_KEY = "automatic_reviewer_decision"
 _STAGED_DECISION_SCHEMA = "automatic-reviewer-decision-v1"
-_REVIEW_LOCKS: WeakKeyDictionary[object, dict[str, asyncio.Lock]] = WeakKeyDictionary()
+_STAGED_REPAIR_OUTPUT_KEY = "automatic_reviewer_repair_output"
+_STAGED_REPAIR_OUTPUT_SCHEMA = "automatic-reviewer-repair-output-v1"
+
+
+class _ReviewLockBox:
+    """Weak-referenceable holder for one in-process Verification dispatch lock."""
+
+    def __init__(self) -> None:
+        self.lock = asyncio.Lock()
+
+
+_REVIEW_LOCKS: WeakKeyDictionary[
+    object, WeakValueDictionary[str, _ReviewLockBox]
+] = WeakKeyDictionary()
 _REVIEW_LOCKS_GUARD = ThreadLock()
 
 
-def _review_lock(repository: object, verification_id: str) -> asyncio.Lock:
-    """Share one in-process dispatch lock across workflow instances for a repository."""
+def _review_lock(repository: object, verification_id: str) -> _ReviewLockBox:
+    """Share a lock while callers reference it, then allow automatic eviction."""
 
     with _REVIEW_LOCKS_GUARD:
         locks = _REVIEW_LOCKS.get(repository)
         if locks is None:
-            locks = {}
+            locks = WeakValueDictionary()
             _REVIEW_LOCKS[repository] = locks
-        lock = locks.get(verification_id)
-        if lock is None:
-            lock = asyncio.Lock()
-            locks[verification_id] = lock
-        return lock
+        box = locks.get(verification_id)
+        if box is None:
+            box = _ReviewLockBox()
+            locks[verification_id] = box
+        return box
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,65 +171,71 @@ class ConfiguredReviewerResolver:
                     "stage_id": request.stage_id,
                 },
             ) from exc
+        return _resolve_assignment(assignment, agents)
 
-        if assignment.team_id is None:
-            assert assignment.agent_id is not None
-            assert assignment.agent_revision is not None
-            agents.service.get_agent_revision(
-                assignment.agent_id,
-                assignment.agent_revision,
-            )
-            return ResolvedReviewerAssignment(
-                agent_id=assignment.agent_id,
-                agent_revision=assignment.agent_revision,
-            )
 
-        assert assignment.team_revision is not None
-        team = agents.service.get_team_revision(
-            assignment.team_id,
-            assignment.team_revision,
+def _resolve_assignment(
+    assignment: ReviewerAssignment,
+    agents: AgentRuntime,
+) -> ResolvedReviewerAssignment:
+    if assignment.team_id is None:
+        assert assignment.agent_id is not None
+        assert assignment.agent_revision is not None
+        agents.service.get_agent_revision(
+            assignment.agent_id,
+            assignment.agent_revision,
         )
-        if not team.profile.enabled:
-            raise ContractError(
-                ErrorCode.UNAVAILABLE,
-                f"reviewer Agent Team is disabled: {team.team_id}@{team.revision}",
-            )
-
-        if assignment.agent_id is not None:
-            assert assignment.agent_revision is not None
-            matches = [
-                member
-                for member in team.profile.members
-                if member.agent.agent_id == assignment.agent_id
-                and member.agent.revision == assignment.agent_revision
-            ]
-        else:
-            assert assignment.team_role is not None
-            requested_role = assignment.team_role.strip().casefold()
-            matches = [
-                member
-                for member in team.profile.members
-                if member.role.strip().casefold() == requested_role
-            ]
-
-        if len(matches) != 1:
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                "reviewer Agent Team selection must resolve exactly one member",
-                details={
-                    "team_id": team.team_id,
-                    "team_revision": team.revision,
-                    "match_count": len(matches),
-                },
-            )
-
-        member = matches[0]
         return ResolvedReviewerAssignment(
-            agent_id=member.agent.agent_id,
-            agent_revision=member.agent.revision,
-            team_id=team.team_id,
-            team_revision=team.revision,
+            agent_id=assignment.agent_id,
+            agent_revision=assignment.agent_revision,
         )
+
+    assert assignment.team_revision is not None
+    team = agents.service.get_team_revision(
+        assignment.team_id,
+        assignment.team_revision,
+    )
+    if not team.profile.enabled:
+        raise ContractError(
+            ErrorCode.UNAVAILABLE,
+            f"reviewer Agent Team is disabled: {team.team_id}@{team.revision}",
+        )
+
+    if assignment.agent_id is not None:
+        assert assignment.agent_revision is not None
+        matches = [
+            member
+            for member in team.profile.members
+            if member.agent.agent_id == assignment.agent_id
+            and member.agent.revision == assignment.agent_revision
+        ]
+    else:
+        assert assignment.team_role is not None
+        requested_role = assignment.team_role.strip().casefold()
+        matches = [
+            member
+            for member in team.profile.members
+            if member.role.strip().casefold() == requested_role
+        ]
+
+    if len(matches) != 1:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "reviewer Agent Team selection must resolve exactly one member",
+            details={
+                "team_id": team.team_id,
+                "team_revision": team.revision,
+                "match_count": len(matches),
+            },
+        )
+
+    member = matches[0]
+    return ResolvedReviewerAssignment(
+        agent_id=member.agent.agent_id,
+        agent_revision=member.agent.revision,
+        team_id=team.team_id,
+        team_revision=team.revision,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,13 +412,14 @@ class AutomaticReviewerWorkflow:
         """Drive one Agent-verifier request through review and bounded repair.
 
         Dispatch is serialized per canonical Agent repository + Verification ID across
-        workflow instances in the current Control Plane process. The durable AgentRun
-        binding remains the recovery source of truth after the lock is released/restarted.
+        workflow instances in the current Control Plane process. Lock holders are weakly
+        retained so completed Verification IDs do not accumulate for the process lifetime.
+        Durable AgentRun bindings remain the recovery source of truth after lock eviction.
         """
 
         validate_id(verification_id, "verification")
-        lock = _review_lock(self._agents.service.repository, verification_id)
-        async with lock:
+        box = _review_lock(self._agents.service.repository, verification_id)
+        async with box.lock:
             return await self._run_request_locked(
                 verification_id,
                 options=options or ReviewerRuntimeOptions(),
@@ -421,9 +441,7 @@ class AutomaticReviewerWorkflow:
             latest = None if not runs else runs[-1]
 
             if request.status is VerificationRequestStatus.COMPLETED:
-                result = self._completion.verification.result_for(
-                    request.verification_id
-                )
+                result = self._completion.verification.result_for(request.verification_id)
                 if result is None:
                     raise ContractError(
                         ErrorCode.CONTRACT_VIOLATION,
@@ -457,14 +475,9 @@ class AutomaticReviewerWorkflow:
                         )
                         return ReviewWorkflowResult(
                             cycles=tuple(cycles),
-                            completion=self._completion.assess_task_completion(
-                                request.task_id
-                            ),
+                            completion=self._completion.assess_task_completion(request.task_id),
                         )
-                    result = await self._resume_submission(
-                        reviewer_run,
-                        staged,
-                    )
+                    result = await self._resume_submission(reviewer_run, staged)
                 elif latest is not None and latest.status is AgentRunStatus.SUCCEEDED:
                     staged = self._staged_decision(latest)
                     if staged is None:
@@ -528,6 +541,11 @@ class AutomaticReviewerWorkflow:
                     ErrorCode.CONTRACT_VIOLATION,
                     "repair-required completion lacks a needs_changes verification result",
                 )
+            if current_cycle.reviewer_run is None:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "automatic repair requires the canonical reviewer AgentRun binding",
+                )
 
             repair_execution = await self._repair_runtime.start_repair(
                 current_cycle.request.verification_id,
@@ -540,11 +558,19 @@ class AutomaticReviewerWorkflow:
                 current_cycle,
                 repair_execution=repair_execution,
             )
-            repaired = await self._repair_executor.execute_repair(
-                execution=repair_execution,
-                request=current_cycle.request,
-                review_result=result,
+
+            reviewer_run = self._agents.service.repository.get_agent_run(
+                current_cycle.reviewer_run.agent_run_id
             )
+            repaired = self._staged_repair_output(reviewer_run, repair_execution)
+            if repaired is None:
+                repaired = await self._repair_executor.execute_repair(
+                    execution=repair_execution,
+                    request=current_cycle.request,
+                    review_result=result,
+                )
+                self._stage_repair_output(reviewer_run, repair_execution, repaired)
+
             next_request = await self._runtime.request_reverification_after_repair(
                 current_cycle.request.verification_id,
                 subject_type=repaired.subject_type,
@@ -610,26 +636,18 @@ class AutomaticReviewerWorkflow:
                 agent_run=reviewer_run,
             )
         except asyncio.CancelledError:
-            current = self._agents.service.repository.get_agent_run(
-                reviewer_run.agent_run_id
-            )
-            if current.status is AgentRunStatus.RUNNING:
-                self._agents.finish_agent_run(
-                    current.agent_run_id,
-                    status=AgentRunStatus.CANCELLED,
-                    error="automatic reviewer execution cancelled",
-                )
+            self._cancel_reviewer_run(reviewer_run.agent_run_id)
+            raise
+        except ContractError as exc:
+            if exc.code is ErrorCode.CANCELLED:
+                self._cancel_reviewer_run(reviewer_run.agent_run_id)
+                raise asyncio.CancelledError(
+                    "canonical reviewer model execution was cancelled"
+                ) from exc
+            self._fail_reviewer_run(reviewer_run.agent_run_id, str(exc))
             raise
         except Exception as exc:
-            current = self._agents.service.repository.get_agent_run(
-                reviewer_run.agent_run_id
-            )
-            if current.status is AgentRunStatus.RUNNING:
-                self._agents.finish_agent_run(
-                    current.agent_run_id,
-                    status=AgentRunStatus.FAILED,
-                    error=str(exc),
-                )
+            self._fail_reviewer_run(reviewer_run.agent_run_id, str(exc))
             raise
 
         staged = self._stage_execution_decision(reviewer_run, execution)
@@ -663,6 +681,24 @@ class AutomaticReviewerWorkflow:
                 )
             raise
 
+    def _cancel_reviewer_run(self, agent_run_id: str) -> None:
+        current = self._agents.service.repository.get_agent_run(agent_run_id)
+        if current.status is AgentRunStatus.RUNNING:
+            self._agents.finish_agent_run(
+                current.agent_run_id,
+                status=AgentRunStatus.CANCELLED,
+                error="automatic reviewer execution cancelled",
+            )
+
+    def _fail_reviewer_run(self, agent_run_id: str, error: str) -> None:
+        current = self._agents.service.repository.get_agent_run(agent_run_id)
+        if current.status is AgentRunStatus.RUNNING:
+            self._agents.finish_agent_run(
+                current.agent_run_id,
+                status=AgentRunStatus.FAILED,
+                error=error,
+            )
+
     def _stage_execution_decision(
         self,
         reviewer_run: AgentRunRecord,
@@ -682,6 +718,73 @@ class AutomaticReviewerWorkflow:
         staged = replace(current, telemetry=telemetry)
         self._agents.service.repository.update_agent_run(staged)
         return staged
+
+    def _stage_repair_output(
+        self,
+        reviewer_run: AgentRunRecord,
+        execution: VerificationRepairExecution,
+        output: RepairOutput,
+    ) -> AgentRunRecord:
+        """Durably remember the canonical repair output reference before reverification."""
+
+        current = self._agents.service.repository.get_agent_run(reviewer_run.agent_run_id)
+        telemetry = dict(current.telemetry)
+        telemetry[_STAGED_REPAIR_OUTPUT_KEY] = {
+            "schema": _STAGED_REPAIR_OUTPUT_SCHEMA,
+            "source_verification_id": execution.source_verification_id,
+            "repair_run_id": execution.run_id,
+            "repair_attempt": execution.repair_attempt,
+            "subject_type": output.subject_type,
+            "subject_id": output.subject_id,
+            "correlation_id": output.correlation_id,
+            "causation_id": output.causation_id,
+        }
+        staged = replace(current, telemetry=telemetry)
+        self._agents.service.repository.update_agent_run(staged)
+        return staged
+
+    @staticmethod
+    def _staged_repair_output(
+        reviewer_run: AgentRunRecord,
+        execution: VerificationRepairExecution,
+    ) -> RepairOutput | None:
+        raw = reviewer_run.telemetry.get(_STAGED_REPAIR_OUTPUT_KEY)
+        if raw is None:
+            return None
+        if not isinstance(raw, dict) or raw.get("schema") != _STAGED_REPAIR_OUTPUT_SCHEMA:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "reviewer AgentRun contains malformed staged repair output metadata",
+            )
+        if (
+            raw.get("source_verification_id") != execution.source_verification_id
+            or raw.get("repair_run_id") != execution.run_id
+            or raw.get("repair_attempt") != execution.repair_attempt
+        ):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "staged repair output does not match the current canonical repair execution",
+            )
+        subject_type = raw.get("subject_type")
+        subject_id = raw.get("subject_id")
+        correlation_id = raw.get("correlation_id")
+        causation_id = raw.get("causation_id")
+        if (
+            not isinstance(subject_type, str)
+            or not isinstance(subject_id, str)
+            or not isinstance(correlation_id, str)
+            or (causation_id is not None and not isinstance(causation_id, str))
+        ):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "staged repair output fields are malformed",
+            )
+        return RepairOutput(
+            subject_type=subject_type,
+            subject_id=subject_id,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+        )
 
     async def _resume_submission(
         self,
