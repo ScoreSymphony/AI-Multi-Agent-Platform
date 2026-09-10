@@ -9,6 +9,7 @@ from ai_multi_agent_platform.agents import (
     AgentInstructions,
     AgentProfile,
     AgentRevisionRef,
+    AgentRunStatus,
     AgentRuntime,
     AgentService,
     AgentTeamMember,
@@ -38,6 +39,7 @@ from ai_multi_agent_platform.verification.agent_workflow import (
     RepairOutput,
     ReviewerAssignment,
     ReviewerExecutionDecision,
+    ReviewerRuntimeOptions,
 )
 from ai_multi_agent_platform.verification.repair import VerificationRepairExecution
 from ai_multi_agent_platform.verification.reviewer_agent import ReviewerAgentRuntime
@@ -58,6 +60,7 @@ def _profile(name: str, role: str) -> AgentProfile:
 class MutableEvidence:
     def __init__(self, context: VerificationEvidenceContext) -> None:
         self.context = context
+        self.fail_validation_once = False
 
     async def resolve_subject(
         self,
@@ -92,6 +95,12 @@ class MutableEvidence:
         artifact_ids: tuple[str, ...],
     ) -> tuple[str, ...]:
         assert task_id == self.context.task_id
+        if self.fail_validation_once:
+            self.fail_validation_once = False
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "transient evidence backend failure",
+            )
         return artifact_ids
 
 
@@ -104,6 +113,35 @@ class QueueReviewerExecutor:
         del request, agent_run
         self.calls += 1
         return ReviewerExecutionDecision(outcome=self._outcomes.pop(0))
+
+
+class BlockingReviewerExecutor:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def execute_review(self, *, request, agent_run) -> ReviewerExecutionDecision:
+        del request, agent_run
+        self.calls += 1
+        self.started.set()
+        await self.release.wait()
+        return ReviewerExecutionDecision(outcome=VerificationOutcome.PASS)
+
+
+class CancelThenPassReviewerExecutor:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.started = asyncio.Event()
+        self._never = asyncio.Event()
+
+    async def execute_review(self, *, request, agent_run) -> ReviewerExecutionDecision:
+        del request, agent_run
+        self.calls += 1
+        if self.calls == 1:
+            self.started.set()
+            await self._never.wait()
+        return ReviewerExecutionDecision(outcome=VerificationOutcome.PASS)
 
 
 class FakeRepairRuntime:
@@ -237,6 +275,17 @@ def _setup(*, max_repairs: int = 0, independent: bool = False):
     )
 
 
+def _resolver(policy, reviewer) -> ConfiguredReviewerResolver:
+    return ConfiguredReviewerResolver(
+        {
+            (policy.policy_id, policy.version, "review"): ReviewerAssignment(
+                agent_id=reviewer.agent_id,
+                agent_revision=reviewer.revision,
+            )
+        }
+    )
+
+
 def test_automatic_reviewer_dispatch_records_canonical_result_and_is_idempotent() -> None:
     async def scenario() -> None:
         (
@@ -255,14 +304,7 @@ def test_automatic_reviewer_dispatch_records_canonical_result_and_is_idempotent(
             runtime=runtime,
             completion=completion,
             agents=agents,
-            resolver=ConfiguredReviewerResolver(
-                {
-                    (policy.policy_id, policy.version, "review"): ReviewerAssignment(
-                        agent_id=reviewer.agent_id,
-                        agent_revision=reviewer.revision,
-                    )
-                }
-            ),
+            resolver=_resolver(policy, reviewer),
             executor=executor,
         )
 
@@ -280,6 +322,201 @@ def test_automatic_reviewer_dispatch_records_canonical_result_and_is_idempotent(
         assert repeated.completion.state is CompletionState.ACCEPTED
         assert executor.calls == 1
         assert len(agents.service.repository.list_agent_runs()) == 1
+
+    asyncio.run(scenario())
+
+
+def test_concurrent_dispatch_is_serialized_across_workflow_instances() -> None:
+    async def scenario() -> None:
+        (
+            agents,
+            _producer,
+            reviewer,
+            _verification,
+            policy,
+            _evidence,
+            completion,
+            runtime,
+            request,
+        ) = _setup()
+        executor = BlockingReviewerExecutor()
+        first_workflow = AutomaticReviewerWorkflow(
+            runtime=runtime,
+            completion=completion,
+            agents=agents,
+            resolver=_resolver(policy, reviewer),
+            executor=executor,
+        )
+        second_workflow = AutomaticReviewerWorkflow(
+            runtime=runtime,
+            completion=completion,
+            agents=agents,
+            resolver=_resolver(policy, reviewer),
+            executor=executor,
+        )
+
+        first = asyncio.create_task(first_workflow.run_request(request.verification_id))
+        await executor.started.wait()
+        second = asyncio.create_task(second_workflow.run_request(request.verification_id))
+        await asyncio.sleep(0)
+        assert executor.calls == 1
+
+        executor.release.set()
+        first_result, second_result = await asyncio.gather(first, second)
+
+        assert first_result.completion.state is CompletionState.ACCEPTED
+        assert second_result.completion.state is CompletionState.ACCEPTED
+        assert executor.calls == 1
+        assert len(agents.service.repository.list_agent_runs()) == 1
+
+    asyncio.run(scenario())
+
+
+def test_cancellation_marks_unstaged_run_cancelled_and_retry_can_complete() -> None:
+    async def scenario() -> None:
+        (
+            agents,
+            _producer,
+            reviewer,
+            _verification,
+            policy,
+            _evidence,
+            completion,
+            runtime,
+            request,
+        ) = _setup()
+        executor = CancelThenPassReviewerExecutor()
+        workflow = AutomaticReviewerWorkflow(
+            runtime=runtime,
+            completion=completion,
+            agents=agents,
+            resolver=_resolver(policy, reviewer),
+            executor=executor,
+        )
+
+        first = asyncio.create_task(workflow.run_request(request.verification_id))
+        await executor.started.wait()
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+
+        runs = agents.service.repository.list_agent_runs()
+        assert len(runs) == 1
+        assert runs[0].status is AgentRunStatus.CANCELLED
+
+        recovered = await workflow.run_request(request.verification_id)
+        assert recovered.completion.state is CompletionState.ACCEPTED
+        assert executor.calls == 2
+        runs = agents.service.repository.list_agent_runs()
+        assert len(runs) == 2
+        assert runs[-1].status is AgentRunStatus.SUCCEEDED
+
+    asyncio.run(scenario())
+
+
+def test_staged_decision_reconciles_submission_failure_without_rerunning_reviewer() -> None:
+    async def scenario() -> None:
+        (
+            agents,
+            _producer,
+            reviewer,
+            _verification,
+            policy,
+            evidence,
+            completion,
+            runtime,
+            request,
+        ) = _setup()
+        evidence.fail_validation_once = True
+        evidence_id = new_id("artifact")
+
+        class EvidenceReviewerExecutor:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def execute_review(self, *, request, agent_run):
+                del request, agent_run
+                self.calls += 1
+                return ReviewerExecutionDecision(
+                    outcome=VerificationOutcome.PASS,
+                    evidence_artifact_ids=(evidence_id,),
+                    findings=(),
+                )
+
+        executor = EvidenceReviewerExecutor()
+        workflow = AutomaticReviewerWorkflow(
+            runtime=runtime,
+            completion=completion,
+            agents=agents,
+            resolver=_resolver(policy, reviewer),
+            executor=executor,
+        )
+
+        with pytest.raises(ContractError) as exc_info:
+            await workflow.run_request(request.verification_id)
+        assert exc_info.value.code is ErrorCode.UNAVAILABLE
+        runs = agents.service.repository.list_agent_runs()
+        assert len(runs) == 1
+        assert runs[0].status is AgentRunStatus.SUCCEEDED
+        assert "automatic_reviewer_decision" in runs[0].telemetry
+        assert executor.calls == 1
+
+        recovered = await workflow.run_request(request.verification_id)
+        assert recovered.completion.state is CompletionState.ACCEPTED
+        assert recovered.latest.verification_result is not None
+        assert recovered.latest.verification_result.evidence_artifact_ids == (evidence_id,)
+        assert executor.calls == 1
+        assert len(agents.service.repository.list_agent_runs()) == 1
+
+    asyncio.run(scenario())
+
+
+def test_reviewer_retry_budget_stops_repeated_failed_execution() -> None:
+    async def scenario() -> None:
+        (
+            agents,
+            _producer,
+            reviewer,
+            _verification,
+            policy,
+            _evidence,
+            completion,
+            runtime,
+            request,
+        ) = _setup()
+
+        class FailingExecutor:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def execute_review(self, *, request, agent_run):
+                del request, agent_run
+                self.calls += 1
+                raise RuntimeError("review backend unavailable")
+
+        executor = FailingExecutor()
+        workflow = AutomaticReviewerWorkflow(
+            runtime=runtime,
+            completion=completion,
+            agents=agents,
+            resolver=_resolver(policy, reviewer),
+            executor=executor,
+        )
+        options = ReviewerRuntimeOptions(max_reviewer_attempts=2)
+
+        for _ in range(2):
+            with pytest.raises(RuntimeError, match="backend unavailable"):
+                await workflow.run_request(request.verification_id, options=options)
+
+        with pytest.raises(ContractError) as exc_info:
+            await workflow.run_request(request.verification_id, options=options)
+        assert exc_info.value.code is ErrorCode.UNAVAILABLE
+        assert executor.calls == 2
+        assert len(agents.service.repository.list_agent_runs()) == 2
+        assert all(
+            run.status is AgentRunStatus.FAILED
+            for run in agents.service.repository.list_agent_runs()
+        )
 
     asyncio.run(scenario())
 
@@ -371,14 +608,7 @@ def test_needs_changes_starts_canonical_repair_before_fresh_reverification() -> 
             runtime=runtime,
             completion=completion,
             agents=agents,
-            resolver=ConfiguredReviewerResolver(
-                {
-                    (policy.policy_id, policy.version, "review"): ReviewerAssignment(
-                        agent_id=reviewer.agent_id,
-                        agent_revision=reviewer.revision,
-                    )
-                }
-            ),
+            resolver=_resolver(policy, reviewer),
             executor=executor,
             repair_runtime=repair_runtime,  # type: ignore[arg-type]
             repair_executor=repair_executor,
@@ -465,14 +695,7 @@ def test_existing_running_review_is_reconciled_without_duplicate_dispatch() -> N
             runtime=runtime,
             completion=completion,
             agents=agents,
-            resolver=ConfiguredReviewerResolver(
-                {
-                    (policy.policy_id, policy.version, "review"): ReviewerAssignment(
-                        agent_id=reviewer.agent_id,
-                        agent_revision=reviewer.revision,
-                    )
-                }
-            ),
+            resolver=_resolver(policy, reviewer),
             executor=executor,
         )
 
