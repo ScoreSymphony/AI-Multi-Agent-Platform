@@ -236,11 +236,12 @@ def test_policy_or_license_blocked_projects_are_deferred_not_candidates() -> Non
     copilot_metadata = derive_technical_metadata(copilot)
     assert copilot_metadata is not None
     assert copilot_metadata.lifecycle_status == "deferred"
-    assert copilot_metadata.cost_status == "incompatible"
+    assert copilot_metadata.cost_status == "conditional"
     assert copilot_metadata.network_status == "required"
     assert copilot_metadata.provider_requirements == ("github-copilot",)
     assert "license-restrictions:no-modification" in copilot.tags
-    assert "service-subscription:required" in copilot.tags
+    assert "free-tier:available" in copilot.tags
+    assert "service-entitlement:required" in copilot.tags
 
     claude = provider.get("claude-code")
     claude_metadata = derive_technical_metadata(claude)
