@@ -75,9 +75,14 @@ This profile targets deterministic transient failure/recovery at the canonical p
 interface. It is **not** evidence for operating-system-level SQLite lock saturation, filesystem
 failure, disk-full behavior, real storage latency spikes, or a stronger production database backend.
 
-In particular, SQLite lock/contention and transaction behavior under real concurrent saturation
-remain separate #440 work. Those profiles should exercise the actual reference backend under
-controlled contention rather than pretending a fault decorator is lock-pressure evidence.
+Real competing SQLite writers are covered separately by `platform-persistence-contention`, which
+uses independent canonical kernel/repository instances sharing the same WAL database and reports
+writer latency, throughput, surfaced busy/locked errors, conflicts and post-reopen integrity. Keeping
+that profile separate prevents a fault decorator from being misrepresented as real lock-pressure
+evidence.
+
+Filesystem failures, disk-full behavior and externally induced storage-latency spikes remain outside
+these deterministic reference-backend profiles and require controlled host-level evidence.
 
 The benchmark remains provider-neutral at the platform boundary, requires no paid service and does
 not make SQLite canonical. SQLite is used only as the shipped durable reference implementation for
