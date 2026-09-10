@@ -1,0 +1,54 @@
+{
+  "schema_version": "1",
+  "provider_id": "technical-components-reference",
+  "items": [
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "superpowers", "item_type": "tool", "name": "Superpowers",
+        "description": "Specification and agent-skills workflow candidate for structured development and reusable agent practices.", "version": "1.0.0", "publisher": "obra",
+        "source": {"repository": "https://github.com/obra/superpowers", "package_reference": "github:obra/superpowers", "revision": null}, "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["specification-and-skills"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted", "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "ecc", "item_type": "tool", "name": "ECC",
+        "description": "Agent coding methodology and skills-system candidate for structured software-engineering workflows.", "version": "1.0.0", "publisher": "affaan-m",
+        "source": {"repository": "https://github.com/affaan-m/ECC", "package_reference": "github:affaan-m/ECC", "revision": null}, "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["specification-and-skills"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted", "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "openspec", "item_type": "tool", "name": "OpenSpec",
+        "description": "Open specification-driven development system candidate for structured agent implementation workflows.", "version": "1.0.0", "publisher": "Fission AI",
+        "source": {"repository": "https://github.com/Fission-AI/OpenSpec", "package_reference": "github:Fission-AI/OpenSpec", "revision": null}, "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["specification-and-skills"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted", "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "bmad-method", "item_type": "tool", "name": "BMAD Method",
+        "description": "Structured agent methodology and specification workflow candidate for multi-role development processes.", "version": "1.0.0", "publisher": "BMAD Code",
+        "source": {"repository": "https://github.com/bmad-code-org/BMAD-METHOD", "package_reference": "github:bmad-code-org/BMAD-METHOD", "revision": null}, "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog. The repository root license is MIT with trademark and branding notices even though GitHub's detector reported NOASSERTION during review.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["specification-and-skills"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted", "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    }
+  ]
+}

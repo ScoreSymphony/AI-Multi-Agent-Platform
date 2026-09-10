@@ -10,9 +10,9 @@ from pathlib import Path
 from ai_multi_agent_platform.adapters.hermes import HERMES_PINNED_REVISION
 
 
-def _run_pytest(path: str) -> int:
+def _run_pytest(*nodes: str) -> int:
     return subprocess.run(
-        (sys.executable, "-m", "pytest", "-q", path),
+        (sys.executable, "-m", "pytest", "-q", *nodes),
         check=False,
     ).returncode
 
@@ -34,7 +34,14 @@ def _hermes() -> int:
             file=sys.stderr,
         )
         return 2
-    return _run_pytest("tests/integration/upstreams/test_hermes_pinned.py")
+    return _run_pytest(
+        "tests/test_issue_8_hermes_adapter.py::"
+        "test_hermes_agent_mapper_pins_agent_team_model_and_capability_contracts",
+        "tests/integration/upstreams/test_hermes_pinned.py::"
+        "test_adapter_against_pinned_hermes_runs_api",
+        "tests/integration/upstreams/test_hermes_pinned.py::"
+        "test_kernel_uses_real_pinned_hermes_and_reference_executor",
+    )
 
 
 def _forge() -> int:
@@ -49,7 +56,13 @@ def _forge() -> int:
     if not Path(workspace_root).is_dir():
         print(f"Forge workspace root does not exist: {workspace_root}", file=sys.stderr)
         return 2
-    return _run_pytest("tests/integration/forge/test_sidecar.py")
+    return _run_pytest(
+        "tests/integration/forge/test_sidecar.py::"
+        "test_real_sidecar_health_and_execution_preserve_canonical_identity",
+        "tests/integration/forge/test_sidecar.py::"
+        "test_real_sidecar_executes_through_canonical_kernel_lifecycle",
+        "tests/integration/forge/test_sidecar.py::test_real_sidecar_cancellation_stays_canonical",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

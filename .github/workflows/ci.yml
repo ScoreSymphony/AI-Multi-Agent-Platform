@@ -137,11 +137,25 @@ jobs:
         run: |
           python -m pip install -e ".upstream/hermes"
           python -m pip install "aiohttp==3.14.3"
-      - name: Run real pinned Hermes API compatibility test
+      - name: Run Hermes Scenario B conformance
         env:
           HERMES_UPSTREAM_DIR: ${{ github.workspace }}/.upstream/hermes
           HERMES_UPSTREAM_REVISION: 63279301bcbdc185c1b07b98a9312eb0c862f26d
-        run: pytest -q tests/integration/upstreams/test_hermes_pinned.py
+        run: |
+          platform-conformance \
+            --profile integration \
+            --deployment-profile hermes-pinned \
+            --enable-optional B \
+            --scenario B \
+            --adapter-version "hermes-agent=$HERMES_UPSTREAM_REVISION" \
+            --json-report conformance-hermes.json
+      - name: Upload Hermes conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-conformance-hermes
+          path: conformance-hermes.json
+          if-no-files-found: warn
 
   forge-sidecar-integration:
     needs: test
@@ -199,11 +213,25 @@ jobs:
           else:
               raise SystemExit("Forge executor sidecar did not become healthy")
           PY
-      - name: Run real Forge sidecar integration tests
+      - name: Run Forge Scenario C conformance
         env:
           FORGE_SIDECAR_BASE_URL: http://127.0.0.1:8787
           FORGE_SIDECAR_WORKSPACE_ROOT: ${{ github.workspace }}/.forge-sidecar-workspaces
-        run: pytest -q tests/integration/forge/test_sidecar.py
+        run: |
+          platform-conformance \
+            --profile integration \
+            --deployment-profile forge-sidecar \
+            --enable-optional C \
+            --scenario C \
+            --adapter-version "forge-sidecar=00b821bc94767865457814bf282982ca242a2e10" \
+            --json-report conformance-forge.json
+      - name: Upload Forge conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-conformance-forge
+          path: conformance-forge.json
+          if-no-files-found: warn
       - name: Show Forge sidecar log
         if: always()
         run: cat "$GITHUB_WORKSPACE/.forge-sidecar.log" || true
