@@ -802,10 +802,15 @@ class ApplicationDistributionService:
             if name in gates and gates[name].status is not GateStatus.PASSED
         ]
         if missing or failed:
+            missing_details: list[JsonValue] = [name for name in missing]
+            failed_details: list[JsonValue] = [name for name in failed]
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "mandatory application release gates have not passed",
-                details={"missing_gates": missing, "failed_gates": failed},
+                details={
+                    "missing_gates": missing_details,
+                    "failed_gates": failed_details,
+                },
             )
         if len(release.artifacts) != len(release.targets):
             raise ContractError(
