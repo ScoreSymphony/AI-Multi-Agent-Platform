@@ -6,20 +6,29 @@ This document describes the first reliability slice: **ordinary startup reconcil
 
 ## Startup invariant
 
-Before `platform-server serve` opens the normal HTTP serving path, the deployment now runs the canonical kernel recovery pass across every Task stream:
+Before `platform-server serve` opens the normal HTTP serving path, the deployment reconciles the durable runtime through the existing subsystem owners and then scans every canonical Task stream:
 
 ```text
 persisted single-node data root
         |
-        v
-kernel.recover_all()
+        +-- distributed_runtime.reconcile()   [when enabled]
+        |      - expire stale heartbeats
+        |      - reconcile Worker jobs
+        |      - expire stale reservations
         |
-        +-- queued Run --------------------> remains queued
-        +-- starting Run + backend found --> reconcile snapshot
-        +-- starting Run + backend absent -> canonical redispatch
-        +-- running Run + backend found ---> reconcile snapshot
-        +-- running Run + backend absent --> recovery_required + BLOCK
-        +-- terminal Run ------------------> unchanged
+        +-- coordination.reconcile_all()
+        |      - reconcile active Plan/Step Runs
+        |      - resume due retries/deadline waits
+        |      - advance safe canonical work
+        |
+        `-- kernel.recover_all()
+               |
+               +-- queued Run --------------------> remains queued
+               +-- starting Run + backend found --> reconcile snapshot
+               +-- starting Run + backend absent -> canonical redispatch
+               +-- running Run + backend found ---> reconcile snapshot
+               +-- running Run + backend absent --> recovery_required + BLOCK
+               +-- terminal Run ------------------> unchanged
         |
         v
 recovery/startup-report.json
@@ -27,6 +36,8 @@ recovery/startup-report.json
         +-- ready_for_service=true  -> serving may start
         `-- ready_for_service=false -> serving is refused
 ```
+
+The ordering is deliberate: distributed Worker liveness/reservation truth is refreshed first; the platform-owned Plan/Step coordinator then reconciles its durable coordination state; the final kernel-wide pass covers Tasks and Runs that are not part of an active Plan as well.
 
 The startup gate does not invent a terminal outcome for a Run whose canonical state says `running` but whose execution backend cannot be found. That case is `orphaned_reconciliation_required` and must be resolved explicitly.
 
@@ -44,6 +55,8 @@ A blocked result exits non-zero and records the exact unresolved Run IDs in:
 <data-dir>/recovery/startup-report.json
 ```
 
+The report also records how many active Plans and distributed Worker jobs were inspected by their existing reconciliation owners.
+
 After investigating an orphaned Run, an operator may terminalize only the exact Task/Run pair named by the current blocked report:
 
 ```bash
@@ -60,7 +73,7 @@ The resolution uses `PlatformKernel.record_run_outcome()` with a deterministic i
 
 ## Recovery outcomes
 
-This slice deliberately distinguishes the outcomes already supported by the canonical kernel:
+This slice deliberately distinguishes the outcomes already supported by the canonical runtime owners:
 
 | Runtime evidence | Recovery action | Startup effect |
 | --- | --- | --- |
@@ -69,12 +82,16 @@ This slice deliberately distinguishes the outcomes already supported by the cano
 | Run is starting/running and backend state exists | reconcile canonical state from backend snapshot | non-blocking if recovery succeeds |
 | Run is running and backend state is absent | mark `recovery_required` | **blocking** |
 | Run is terminal | preserve terminal state | non-blocking |
+| active Plan/Step state exists | reconcile through `DurablePlanStepCoordinator` | non-blocking if reconciliation succeeds |
+| distributed Worker state exists | refresh liveness/jobs/reservations through `DistributedRuntime` | non-blocking if reconciliation succeeds |
 
-Broader #707 work will extend this policy to Worker reservations, Plan/Step coordination, sessions/materialization locks, transient persistence failures and uncertain external side effects. Those must remain explicit instead of being collapsed into a generic `retry everything` rule.
+A reconciliation exception itself is fail-closed: `platform-server serve` does not open the HTTP serving path when a required recovery owner cannot complete its pass.
+
+Broader #707 work will extend this policy to additional session/materialization transient state, persistence failures and uncertain external side effects. Those must remain explicit instead of being collapsed into a generic `retry everything` rule.
 
 ## Idempotency and fail-closed behavior
 
-`reconcile_single_node_startup()` is safe to invoke repeatedly. Repeated reconciliation uses the kernel's existing canonical recovery/idempotency semantics and rewrites only the deployment-local diagnostic report.
+`reconcile_single_node_startup()` is safe to invoke repeatedly. Repeated reconciliation delegates authoritative mutations to the existing kernel, coordinator and distributed-runtime idempotency/reconciliation semantics and rewrites only the deployment-local diagnostic report.
 
 The report is written atomically using a temporary file plus replacement. An unreadable or incompatible report is never accepted as authorization for manual Run resolution.
 
@@ -113,7 +130,7 @@ The reliability principle is intentionally stronger than "HA will recover it lat
 This startup slice does **not** close #707. Remaining reliability work includes, among other items:
 
 - graceful drain/shutdown hardening;
-- stale Worker reservation/lease/session/materialization cleanup;
+- stale non-Worker session/materialization cleanup;
 - explicit uncertain-side-effect recovery states;
 - persistence/filesystem fault injection and recovery;
 - provider/dependency failure isolation and bounded retries;
