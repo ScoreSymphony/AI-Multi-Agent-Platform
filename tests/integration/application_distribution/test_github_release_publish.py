@@ -7,12 +7,12 @@ from urllib.parse import parse_qs, urlparse
 
 from ai_multi_agent_platform.configuration import LocalSecretProvider
 from ai_multi_agent_platform.connectors import (
-    Connection,
-    ConnectorActionInvocation,
     GITHUB_RELEASE_ASSET_ATTACH_ACTION,
     GITHUB_RELEASE_CONNECTOR_TYPE,
     GITHUB_RELEASE_CONNECTOR_VERSION,
     GITHUB_RELEASE_CREATE_ACTION,
+    Connection,
+    ConnectorActionInvocation,
     GitHubReleaseConnectorProvider,
     GitHubRestResponse,
 )
