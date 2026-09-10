@@ -502,9 +502,9 @@ class ApplicationDistributionService:
             build_run_id=build_run_id,
             evidence_refs=evidence_refs,
         )
-        artifacts = tuple(
-            item for item in release.artifacts if item.target_id != target_id
-        ) + (artifact,)
+        artifacts = tuple(item for item in release.artifacts if item.target_id != target_id) + (
+            artifact,
+        )
         targets = tuple(
             replace(item, status=BuildTargetStatus.SUCCEEDED, run_id=build_run_id)
             if item.target.target_id == target_id
