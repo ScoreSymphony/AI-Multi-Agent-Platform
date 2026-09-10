@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,16 @@ def _json_object(path: Path) -> dict[str, object]:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _canonical_sha256(payload: dict[str, object]) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def test_release_profile_is_locked_to_documented_campaign_values() -> None:
@@ -77,6 +88,10 @@ async def test_smoke_campaign_emits_schema_valid_hashed_host_evidence(tmp_path: 
         "environment_fingerprint_sha256"
     ]
 
+    configuration = campaign["configuration"]
+    assert isinstance(configuration, dict)
+    assert campaign["configuration_sha256"] == _canonical_sha256(configuration)
+
     sweep_evidence = campaign["sweep_summary"]
     soak_evidence = campaign["soak_report"]
     envelope_evidence = campaign["operating_envelope"]
@@ -125,6 +140,35 @@ def test_campaign_refuses_overlapping_work_and_evidence_directories(tmp_path: Pa
             platform_commit="deadbeef",
             work_dir_mode="explicit",
         )
+
+
+@pytest.mark.asyncio
+async def test_release_runner_requires_explicit_work_directory_mode(tmp_path: Path) -> None:
+    runner = ReferenceHostCampaignRunner(
+        output_dir=tmp_path / "evidence",
+        work_dir=tmp_path / "work",
+        host_label="reference-a",
+        platform_commit="deadbeef",
+        work_dir_mode="temporary",
+    )
+
+    with pytest.raises(ValueError, match="requires an explicit work directory"):
+        await runner.run(reference_host_campaign_profile("release"))
+
+
+@pytest.mark.asyncio
+async def test_release_runner_rejects_mutated_release_profile(tmp_path: Path) -> None:
+    runner = ReferenceHostCampaignRunner(
+        output_dir=tmp_path / "evidence",
+        work_dir=tmp_path / "work",
+        host_label="reference-a",
+        platform_commit="deadbeef",
+        work_dir_mode="explicit",
+    )
+    mutated = replace(reference_host_campaign_profile("release"), operations_per_level=1)
+
+    with pytest.raises(ValueError, match="must match the fixed documented release profile"):
+        await runner.run(mutated)
 
 
 def test_release_cli_requires_explicit_measured_work_directory(tmp_path: Path) -> None:
