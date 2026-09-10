@@ -13,6 +13,12 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from ai_multi_agent_platform.distributed import (
+    DistributedRegistry,
+    DistributedRuntime,
+    JsonDistributedStateStore,
+)
+
 from .dependencies import DependencyInventoryError, discover_single_node_external_dependencies
 from .inventory import (
     SINGLE_NODE_STORE_CONTRACT_VERSION,
@@ -32,6 +38,9 @@ _SQLITE_SIDECARS = ("-wal", "-shm", "-journal")
 _REQUIRED_SINGLE_NODE_COMPONENTS = frozenset(
     {"db", "files", "workspaces", "configuration-metadata"}
 )
+_DISTRIBUTED_RUNTIME_STATE_PATH = "db/distributed-runtime-state.json"
+_DISTRIBUTED_RUNTIME_COMPONENT = "distributed-runtime-state"
+_DISTRIBUTED_RUNTIME_METADATA_KEY = "distributed_runtime_state"
 
 
 class BackupError(RuntimeError):
@@ -72,12 +81,22 @@ def create_single_node_backup(
     if _is_within(target, source):
         raise BackupError("backup destination must not be inside the source data directory")
 
+    distributed_state = source.joinpath(*PurePosixPath(_DISTRIBUTED_RUNTIME_STATE_PATH).parts)
+    if distributed_state.is_symlink():
+        raise BackupError("distributed runtime state must not be a symbolic link")
+    if distributed_state.exists() and not distributed_state.is_file():
+        raise BackupError("distributed runtime state must be a regular file")
+    has_distributed_runtime_state = distributed_state.is_file()
+
     metadata: dict[str, Any] = {"profile": "single-node"}
     if deployment_metadata is not None:
         supplied_profile = deployment_metadata.get("profile")
         if supplied_profile is not None and supplied_profile != "single-node":
             raise BackupError("single-node backup metadata profile must be 'single-node'")
         metadata.update(deployment_metadata)
+    # This marker is derived from the source durable root and therefore cannot be weakened by
+    # caller-provided metadata. Verification binds it to the manifest component and payload file.
+    metadata[_DISTRIBUTED_RUNTIME_METADATA_KEY] = has_distributed_runtime_state
     _assert_non_secret_metadata(metadata)
     try:
         external_dependencies = discover_single_node_external_dependencies(source, metadata)
@@ -93,6 +112,8 @@ def create_single_node_backup(
     entries: list[dict[str, Any]] = []
     sqlite_versions: dict[str, int] = {}
     included_components: set[str] = set()
+    if has_distributed_runtime_state:
+        included_components.add(_DISTRIBUTED_RUNTIME_COMPONENT)
     excluded = [
         {
             "path": "executor/",
@@ -173,7 +194,7 @@ def create_single_node_backup(
 
 
 def verify_backup(backup_dir: Path) -> BackupVerification:
-    """Validate schema, source-contract scope, checksums, and SQLite payload integrity."""
+    """Validate schema, source-contract scope, checksums, and durable payload integrity."""
 
     root = backup_dir.expanduser().resolve()
     manifest_path = root / MANIFEST_NAME
@@ -236,6 +257,8 @@ def verify_backup(backup_dir: Path) -> BackupVerification:
                     f"SQLite schema version mismatch: {path} "
                     f"manifest={declared_version} actual={actual_version}"
                 )
+        elif path == _DISTRIBUTED_RUNTIME_STATE_PATH:
+            _verify_distributed_state_integrity(file_path)
         total += actual_size
 
     declared_sqlite_paths = set(sqlite_versions)
@@ -351,7 +374,7 @@ def verify_restored_single_node_data_root(
     *,
     expected_sqlite_user_versions: Mapping[str, int],
 ) -> tuple[str, ...]:
-    """Verify restored durable layout and SQLite schema/integrity before serving."""
+    """Verify restored durable layout and store integrity before serving."""
 
     root = data_dir.expanduser().resolve()
     _validate_single_node_layout(root, context="restored data root")
@@ -388,6 +411,10 @@ def verify_restored_single_node_data_root(
                 f"restored SQLite schema version mismatch: {path} "
                 f"expected={version} actual={actual}"
             )
+
+    distributed_state = root.joinpath(*PurePosixPath(_DISTRIBUTED_RUNTIME_STATE_PATH).parts)
+    if distributed_state.exists():
+        _verify_distributed_state_integrity(distributed_state)
     return tuple(sorted(actual_versions))
 
 
@@ -446,6 +473,20 @@ def _verify_required_backup_scope(
     if not isinstance(metadata, dict) or metadata.get("profile") != "single-node":
         raise BackupError("backup deployment metadata does not identify the single-node profile")
     _assert_non_secret_metadata(metadata)
+
+    distributed_marker = metadata.get(_DISTRIBUTED_RUNTIME_METADATA_KEY, False)
+    if not isinstance(distributed_marker, bool):
+        raise BackupError("backup distributed runtime state marker must be a boolean")
+    component_declared = _DISTRIBUTED_RUNTIME_COMPONENT in included_set
+    state_present = _DISTRIBUTED_RUNTIME_STATE_PATH in seen
+    if distributed_marker != component_declared:
+        raise BackupError(
+            "backup distributed runtime component does not match deployment metadata marker"
+        )
+    if distributed_marker and not state_present:
+        raise BackupError("backup is missing required distributed runtime state")
+    if state_present and not distributed_marker:
+        raise BackupError("backup contains undeclared distributed runtime state")
 
 
 def _manifest_store_contract_version(manifest: Mapping[str, Any]) -> int:
@@ -537,6 +578,19 @@ def _verify_sqlite_integrity(path: Path) -> None:
         raise BackupError(f"SQLite integrity check failed: {path}")
     if foreign_key_violation is not None:
         raise BackupError(f"SQLite foreign-key check failed: {path}")
+
+
+def _verify_distributed_state_integrity(path: Path) -> None:
+    if path.is_symlink() or not path.is_file():
+        raise BackupError(f"distributed runtime state is not a regular file: {path}")
+    registry = DistributedRegistry()
+    runtime = DistributedRuntime(registry)
+    try:
+        restored = JsonDistributedStateStore(path).restore(registry, runtime)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError, RuntimeError) as exc:
+        raise BackupError(f"distributed runtime state cannot be verified: {path}") from exc
+    if not restored:
+        raise BackupError(f"distributed runtime state is missing: {path}")
 
 
 def _checkpoint_sqlite_wal(connection: sqlite3.Connection, path: Path) -> None:

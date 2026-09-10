@@ -113,8 +113,10 @@ class DistributedLifecycleBackend(LifecycleBackend):
                 unknown_is_not_found=True,
             ) from exc
 
-        if record.snapshot is not None:
-            return _snapshot(record, record.snapshot)
+        # Lost ownership must win over a previously persisted non-terminal snapshot. A snapshot
+        # only describes the last observation; LOST/CANCEL_PENDING describes current reachability.
+        # Returning a stale RUNNING snapshot here would let startup recovery treat an unreachable
+        # execution as reconciled and reopen the Control Plane unsafely.
         if record.state in {DispatchState.LOST, DispatchState.CANCEL_PENDING}:
             raise ContractError(
                 ErrorCode.UNAVAILABLE,
@@ -122,6 +124,8 @@ class DistributedLifecycleBackend(LifecycleBackend):
                 retryable=True,
                 provider_id=self.descriptor.provider_id,
             )
+        if record.snapshot is not None:
+            return _snapshot(record, record.snapshot)
         raise ContractError(
             ErrorCode.INVALID_PROVIDER_RESPONSE,
             f"distributed execution has no observable snapshot: {run_id}",
