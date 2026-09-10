@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ai_multi_agent_platform.conformance import (
     ConformanceProfile,
+    ConformanceScenario,
     activate_optional_scenarios,
     run_conformance,
 )
@@ -38,6 +39,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SCENARIO_ID",
         help=(
             "Explicitly enable an optional scenario for this compatibility claim. "
+            "May be repeated or use comma-separated IDs."
+        ),
+    )
+    parser.add_argument(
+        "--scenario",
+        action="append",
+        default=[],
+        metavar="SCENARIO_ID",
+        help=(
+            "Run only selected scenario IDs after optional activation. "
             "May be repeated or use comma-separated IDs."
         ),
     )
@@ -76,6 +87,36 @@ def _parse_optional(values: list[str]) -> tuple[str, ...]:
     )
 
 
+def _parse_scenarios(values: list[str]) -> tuple[str, ...]:
+    selected: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for item in value.split(","):
+            scenario_id = item.strip().upper()
+            if scenario_id and scenario_id not in seen:
+                selected.append(scenario_id)
+                seen.add(scenario_id)
+    return tuple(selected)
+
+
+def _select_scenarios(
+    scenarios: tuple[ConformanceScenario, ...],
+    selected_ids: tuple[str, ...],
+) -> tuple[ConformanceScenario, ...]:
+    if not selected_ids:
+        return scenarios
+    by_id = {scenario.scenario_id.upper(): scenario for scenario in scenarios}
+    unknown = [scenario_id for scenario_id in selected_ids if scenario_id not in by_id]
+    if unknown:
+        available = ", ".join(scenario.scenario_id for scenario in scenarios)
+        requested = ", ".join(unknown)
+        raise ValueError(
+            f"scenario(s) not present in selected profile: {requested}; "
+            f"available scenario IDs: {available}"
+        )
+    return tuple(by_id[scenario_id] for scenario_id in selected_ids)
+
+
 def _parse_component_versions(values: list[str], option: str) -> dict[str, str]:
     parsed: dict[str, str] = {}
     for value in values:
@@ -97,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         enabled_optional = _parse_optional(args.enable_optional)
         scenarios = activate_optional_scenarios(profile, enabled_optional)
+        scenarios = _select_scenarios(scenarios, _parse_scenarios(args.scenario))
         adapter_versions = _parse_component_versions(args.adapter_version, "--adapter-version")
         provider_versions = _parse_component_versions(args.provider_version, "--provider-version")
         plugin_versions = _parse_component_versions(args.plugin_version, "--plugin-version")

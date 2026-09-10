@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from uuid import uuid4
 
@@ -12,8 +13,14 @@ from ai_multi_agent_platform.adapters.forge_http import (
     ForgeHttpClient,
     ForgeHttpClientConfig,
 )
-from ai_multi_agent_platform.domain import RunStatus
-from ai_multi_agent_platform.execution import CancellationToken, ExecutionRequest
+from ai_multi_agent_platform.domain import RunStatus, TaskStatus, new_id
+from ai_multi_agent_platform.execution import (
+    CancellationToken,
+    ExecutionRequest,
+    ExecutorLifecycleBackend,
+)
+from ai_multi_agent_platform.kernel import PlatformKernel
+from ai_multi_agent_platform.testing import FakeOrchestrator
 
 BASE_URL = os.environ.get("FORGE_SIDECAR_BASE_URL")
 WORKSPACE_ROOT = os.environ.get("FORGE_SIDECAR_WORKSPACE_ROOT")
@@ -87,6 +94,62 @@ def test_real_sidecar_health_and_execution_preserve_canonical_identity() -> None
         execution_id = forge_metadata["execution_id"]
         assert isinstance(execution_id, str)
         assert execution_id.startswith("forge_exec_")
+
+    asyncio.run(scenario())
+
+
+def test_real_sidecar_executes_through_canonical_kernel_lifecycle() -> None:
+    async def scenario() -> None:
+        task_id = new_id("task")
+        workspace = _workspace()
+        lifecycle = ExecutorLifecycleBackend(
+            _executor(),
+            workspace=workspace,
+            action="execute",
+        )
+        kernel = PlatformKernel(
+            orchestrator=FakeOrchestrator(),
+            lifecycle=lifecycle,
+        )
+
+        await kernel.create_task(
+            idempotency_key="issue-46-forge:create",
+            task_id=task_id,
+            title="Real Forge conformance",
+            objective="Execute a canonical Run through the real Forge sidecar",
+            owner_type="user",
+            owner_id="issue-46",
+        )
+        await kernel.ready_task(
+            idempotency_key="issue-46-forge:ready",
+            task_id=task_id,
+        )
+        run = await kernel.start_task(
+            idempotency_key="issue-46-forge:start",
+            task_id=task_id,
+        )
+        run = await kernel.refresh_run(
+            idempotency_key="issue-46-forge:refresh",
+            task_id=task_id,
+            run_id=run.run_id,
+        )
+
+        task = await kernel.get_task(task_id)
+        history = await kernel.history(task_id)
+        running = next(event for event in history if event.event_type == "run.running")
+        succeeded = next(event for event in history if event.event_type == "run.succeeded")
+
+        assert run.status is RunStatus.SUCCEEDED
+        assert task.status is TaskStatus.SUCCEEDED
+        assert running.payload["backend_ref"] == f"forge:{run.run_id}"
+        for event in (running, succeeded):
+            adapter_metadata = event.payload["adapter_metadata"]
+            assert isinstance(adapter_metadata, Mapping)
+            forge_metadata = adapter_metadata["forge"]
+            assert isinstance(forge_metadata, Mapping)
+            execution_id = forge_metadata["execution_id"]
+            assert isinstance(execution_id, str)
+            assert execution_id.startswith("forge_exec_")
 
     asyncio.run(scenario())
 
