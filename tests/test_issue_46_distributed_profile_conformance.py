@@ -19,8 +19,7 @@ def test_distributed_profile_binds_complete_scenario_e_evidence() -> None:
 
     assert "test_two_node_selection_filters_resources_capabilities_and_model" in command
     assert (
-        "test_dispatch_authorization_denial_releases_reservation_before_worker_execution"
-        in command
+        "test_dispatch_authorization_denial_releases_reservation_before_worker_execution" in command
     )
     assert "test_remote_worker_file_becomes_canonical_run_artifact" in command
     assert (
