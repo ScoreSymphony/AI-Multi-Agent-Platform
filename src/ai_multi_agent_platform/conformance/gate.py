@@ -226,17 +226,23 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ),
         ConformanceScenario(
             "J-cli",
-            "#17/#252 CLI client",
-            "CLI reads canonical Task state through the versioned Control Plane resource path",
+            "#17/#46 CLI client",
+            (
+                "CLI reads shared canonical Task/Run/Result state through the versioned "
+                "Control Plane resource paths"
+            ),
             _pytest(
-                "tests/test_issue_252_acceptance_gate.py::"
-                "test_cli_and_web_share_canonical_task_fixture_and_route"
+                "tests/test_issue_46_client_state_parity.py::"
+                "test_cli_reads_shared_canonical_task_run_result_state"
             ),
         ),
         ConformanceScenario(
             "J-web",
             "#17/#395 Web client",
-            "Web reads the same canonical Task fixture through the same versioned API path",
+            (
+                "Web reads the same canonical Task/Run/Result fixtures through the same "
+                "versioned API paths"
+            ),
             (
                 "npm",
                 "--prefix",

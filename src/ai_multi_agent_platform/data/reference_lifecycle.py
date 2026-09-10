@@ -26,13 +26,14 @@ from .models import (
     MemoryOrigin,
     MemoryQuery,
     MemoryScope,
+    MemoryType,
 )
 from .reference import LocalKnowledgeProvider as _BaseLocalKnowledgeProvider
 from .reference import LocalMemoryProvider as _BaseLocalMemoryProvider
 
 
 class LocalMemoryProvider(_BaseLocalMemoryProvider):
-    """#13 local Memory provider with #251 origin persistence and Organization scope."""
+    """Local Memory provider with lifecycle metadata and canonical Memory Types."""
 
     def __init__(self, db_path: str | Path) -> None:
         super().__init__(db_path)
@@ -46,7 +47,14 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
                 features=tuple(
                     feature for feature in capability.features if feature != "six_scopes"
                 )
-                + ("seven_scopes", "memory_origin", "exact_scoped_expiry", "discovery_snapshot"),
+                + (
+                    "seven_scopes",
+                    "memory_origin",
+                    "memory_type_taxonomy",
+                    "memory_type_filtering",
+                    "exact_scoped_expiry",
+                    "discovery_snapshot",
+                ),
             )
             for capability in self._descriptor.capabilities
         )
@@ -71,10 +79,19 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
                         "ALTER TABLE data_memory ADD COLUMN origin TEXT NOT NULL "
                         "DEFAULT 'user-authored'"
                     )
+                if "memory_type" not in columns:
+                    connection.execute(
+                        "ALTER TABLE data_memory ADD COLUMN memory_type TEXT NOT NULL "
+                        "DEFAULT 'unclassified'"
+                    )
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS data_memory_scope_type_idx "
+                    "ON data_memory(scope, scope_id, memory_type)"
+                )
         except sqlite3.Error as exc:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
-                "failed to migrate memory origin metadata",
+                "failed to migrate memory lifecycle metadata",
             ) from exc
 
     @staticmethod
@@ -98,8 +115,9 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
             INSERT INTO data_memory (
                 memory_id, scope, scope_id, owner_ref, created_by, value_json, created_at,
                 retention, expires_at, provenance_json, supersedes_memory_id,
-                superseded_by_memory_id, classification, metadata_json, origin, deleted
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                superseded_by_memory_id, classification, metadata_json, origin,
+                memory_type, deleted
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """,
             (
                 entry.memory_id,
@@ -117,6 +135,7 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
                 entry.classification,
                 dump(entry.metadata),
                 entry.origin.value,
+                entry.memory_type.value,
             ),
         )
 
@@ -133,7 +152,59 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
                 ErrorCode.CONTRACT_VIOLATION,
                 "stored memory origin is invalid",
             ) from exc
-        return replace(entry, origin=origin)
+        try:
+            raw_memory_type = cast(str, row["memory_type"])
+            memory_type = MemoryType(raw_memory_type)
+        except (KeyError, IndexError):
+            memory_type = MemoryType.UNCLASSIFIED
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "stored memory type is invalid",
+            ) from exc
+        return replace(entry, origin=origin, memory_type=memory_type)
+
+    async def query_entries(
+        self,
+        query: MemoryQuery,
+        context: DataAccessContext,
+    ) -> tuple[MemoryEntry, ...]:
+        """Query one canonical scope with optional provider-neutral type filtering."""
+
+        self._check_scope(query.scope, query.scope_id, context)
+        clauses = ["scope = ?", "scope_id = ?", "deleted = 0"]
+        parameters: list[object] = [query.scope.value, query.scope_id]
+        if query.memory_types:
+            placeholders = ",".join("?" for _ in query.memory_types)
+            clauses.append(f"memory_type IN ({placeholders})")
+            parameters.extend(memory_type.value for memory_type in query.memory_types)
+        statement = (
+            "SELECT * FROM data_memory WHERE " + " AND ".join(clauses) + " ORDER BY created_at DESC"
+        )
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(statement, tuple(parameters)).fetchall()
+        except sqlite3.Error as exc:
+            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to query memory entries") from exc
+
+        now = datetime.now(UTC)
+        entries: list[MemoryEntry] = []
+        for row in rows:
+            entry = self._memory_from_row(row)
+            if query.owner_ref is not None and entry.owner_ref != query.owner_ref:
+                continue
+            if (
+                not query.include_expired
+                and entry.expires_at is not None
+                and entry.expires_at <= now
+            ):
+                continue
+            if not query.include_superseded and entry.superseded_by_memory_id is not None:
+                continue
+            entries.append(entry)
+            if len(entries) >= query.limit:
+                break
+        return tuple(entries)
 
     @staticmethod
     def _check_scope(scope: MemoryScope, scope_id: str, context: DataAccessContext) -> None:
@@ -167,6 +238,8 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
                     raise ContractError(ErrorCode.NOT_FOUND, f"memory not found: {memory_id}")
                 entry = self._memory_from_row(row)
                 if entry.scope is not query.scope or entry.scope_id != query.scope_id:
+                    raise ContractError(ErrorCode.NOT_FOUND, f"memory not found: {memory_id}")
+                if query.memory_types and entry.memory_type not in query.memory_types:
                     raise ContractError(ErrorCode.NOT_FOUND, f"memory not found: {memory_id}")
                 self._check_scope(entry.scope, entry.scope_id, context)
                 if entry.expires_at is None:

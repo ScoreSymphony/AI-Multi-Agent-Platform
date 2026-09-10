@@ -61,8 +61,8 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | D-vertical — local model + distributed capability | authenticated AgentRun -> real loopback OpenAI-compatible model tool call -> pinned `tool.echo@1.0` -> canonical CapabilityInvoker/ToolInvocation -> DistributedExecutorEchoProvider -> ReferenceExecutor -> exact Worker/Node while preserving the root Run and Workspace/Snapshot binding | #46 / #10 / #12 / #7 / #14 |
 | F — approval gate | exact-action approval and changed-payload rejection | #15 |
 | H — restart/recovery | crash after backend accept -> process reconstruction -> same running canonical Run with no duplicate dispatch, plus queued/pre-accept/orphaned recovery classification | #46 / canonical kernel recovery |
-| J-cli — client consistency | CLI canonical Task route/fixture parity | #17 / #252 |
-| J-web — client consistency | Web canonical Task route/fixture parity | #17 / #395 |
+| J-cli — client consistency | CLI reads shared canonical Task/Run/Result fixtures through versioned Control Plane routes | #17 / #46 |
+| J-web — client consistency | Web reads the same canonical Task/Run/Result fixtures through the same versioned API routes | #17 / #395 |
 | U — runtime verification | Verification gates completion, binds exact revisions, works deterministically without an LLM, enforces reviewer independence and keeps repair loops bounded and auditable | #86 |
 | ARCH — architecture invariants | optional backend isolation + mandatory-dependency guard | #46 |
 
