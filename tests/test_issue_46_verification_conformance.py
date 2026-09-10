@@ -16,6 +16,7 @@ def test_runtime_verification_scenario_keeps_required_acceptance_evidence_explic
 
     assert "test_successful_run_cannot_bypass_required_verification" in command
     assert "test_changed_subject_invalidates_old_verification_at_completion_gate" in command
+    assert "test_rejected_verification_blocks_completion_without_rewriting_run_outcome" in command
     assert "test_changed_result_revision_cannot_reuse_old_verification" in command
     assert "test_deterministic_reference_verifier_passes_and_fails_without_llm" in command
     assert "test_agent_reviewer_independence_and_read_only_rules_are_enforced" in command
