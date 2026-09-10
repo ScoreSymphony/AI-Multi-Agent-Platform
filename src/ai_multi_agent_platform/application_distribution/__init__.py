@@ -8,6 +8,11 @@ from .contracts import (
     PublishedArtifact,
     PublishContext,
 )
+from .execution import (
+    APPLICATION_BUILD_ACTION,
+    ApplicationBuildLifecycleBackend,
+    ApplicationCommandExecutor,
+)
 from .github import GitHubReleasePublisher
 from .manifest import canonical_manifest_bytes, manifest_sha256, release_manifest
 from .models import (
@@ -25,7 +30,7 @@ from .models import (
     ReleaseStatus,
     ReleaseVisibility,
 )
-from .placement import DistributedBuildTargetMatcher
+from .placement import DistributedBuildTargetMatcher, LocalBuildTargetMatcher
 from .repository import (
     APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION,
     InMemoryApplicationReleaseRepository,
@@ -34,9 +39,12 @@ from .repository import (
 from .service import ApplicationDistributionService
 
 __all__ = [
+    "APPLICATION_BUILD_ACTION",
     "APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION",
     "APPLICATION_RELEASE_SCHEMA_VERSION",
     "ApplicationArtifact",
+    "ApplicationBuildLifecycleBackend",
+    "ApplicationCommandExecutor",
     "ApplicationDistributionService",
     "ApplicationRelease",
     "ApplicationReleasePublisher",
@@ -52,6 +60,7 @@ __all__ = [
     "GitHubReleasePublisher",
     "InMemoryApplicationReleaseRepository",
     "JsonApplicationReleaseRepository",
+    "LocalBuildTargetMatcher",
     "PackageType",
     "PublicationResult",
     "PublishedArtifact",
