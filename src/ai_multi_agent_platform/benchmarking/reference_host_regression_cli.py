@@ -20,6 +20,25 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _require_distinct_output(
+    *,
+    output: Path,
+    baseline: Path,
+    candidate: Path,
+    policy: Path,
+) -> None:
+    output_resolved = output.resolve()
+    for label, evidence_path in (
+        ("baseline", baseline),
+        ("candidate", candidate),
+        ("policy", policy),
+    ):
+        if output_resolved == evidence_path.resolve():
+            raise ValueError(f"output must not alias {label} evidence")
+        if output.exists() and evidence_path.exists() and output.samefile(evidence_path):
+            raise ValueError(f"output must not alias {label} evidence")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     baseline = cast(Path, args.baseline)
@@ -27,6 +46,12 @@ def main(argv: list[str] | None = None) -> int:
     policy = cast(Path, args.policy)
     output = cast(Path, args.output)
     try:
+        _require_distinct_output(
+            output=output,
+            baseline=baseline,
+            candidate=candidate,
+            policy=policy,
+        )
         report = ReferenceHostRegressionComparator().compare(
             baseline_path=baseline,
             candidate_path=candidate,
