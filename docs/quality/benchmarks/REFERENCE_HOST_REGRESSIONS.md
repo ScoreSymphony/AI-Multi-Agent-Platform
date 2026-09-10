@@ -18,7 +18,8 @@ Both reproducibility inputs must have:
 - `profile = release`;
 - at least the campaign count required by the policy;
 - matching host label, configuration digest, environment fingerprint, deployment profile, persistence profile and workload distribution;
-- successful correctness evidence.
+- successful correctness evidence;
+- disjoint `campaign_sha256` sets so baseline and candidate cannot reuse the same campaign evidence.
 
 The platform version and immutable commit may differ because comparing releases or revisions is the purpose of this layer.
 
