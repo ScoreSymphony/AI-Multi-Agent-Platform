@@ -8,6 +8,14 @@ from typing import Any
 
 from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.accounting import AccountingService
+from ai_multi_agent_platform.application_distribution import (
+    ApplicationDistributionService,
+    DistributedBuildTargetMatcher,
+    JsonApplicationReleaseRepository,
+)
+from ai_multi_agent_platform.application_distribution.control_plane import (
+    register_application_distribution_control_plane,
+)
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.connectors import (
     ConnectorRegistry,
@@ -80,13 +88,13 @@ from .single_node import (
 
 @dataclass(slots=True)
 class SingleNodeDeployment(BaseSingleNodeDeployment):
-    """Normal single-node deployment with durable Connector, Planning,
-    canonical Context, Egress, governed Learning and Handoff state.
-    """
+    """Normal single-node deployment with durable public owner-domain state."""
 
     connector_repository: SqliteConnectorRepository
     connector_registry: ConnectorRegistry
     connectors: ConnectorService
+    application_release_repository: JsonApplicationReleaseRepository
+    application_releases: ApplicationDistributionService
     planning_repository: JsonPlanningRepository
     planning_kernel: PlatformKernel
     planning: PlanningService
@@ -111,15 +119,11 @@ def build_single_node_deployment(
 
     The lower-level ``deployment.single_node`` composition remains usable by focused tests and
     explicitly minimal/ephemeral profiles. Public deployment/server composition comes through this
-    wrapper so Connector Definitions, Connections, planning proposals, canonical Context Bundle/
-    Run-binding evidence, one durable #591 egress policy runtime, governed Learning and Agent
-    Handoffs are durable across process restarts. Context execution remains fully local by default
-    and introduces no hosted RAG/model dependency.
+    wrapper so Connector Definitions, Connections, application releases, planning proposals,
+    canonical Context Bundle/Run-binding evidence, one durable egress policy runtime, governed
+    Learning and Agent Handoffs survive process restarts without requiring hosted services.
     """
 
-    # Preserve the base deployment's canonical configuration error boundary before the Connector
-    # repository touches a path under the data root. This keeps invalid persistence roots from
-    # leaking backend-specific OSError subclasses through the public single-node builder.
     config.prepare_directories()
     connector_repository = SqliteConnectorRepository(config.database_dir / "connectors.sqlite3")
     connector_registry = ConnectorRegistry()
@@ -138,10 +142,6 @@ def build_single_node_deployment(
         repository_discovery_resolver=effective_repository_resolver,
     )
 
-    # #591 owns one durable disclosure-policy runtime for the public process. Rebind the already
-    # constructed ModelRuntime rather than replacing it so Conversation/Onboarding/Lifecycle
-    # references retain object identity while both routing preselection and provider invocation see
-    # the shared gate.
     egress_runtime = build_durable_egress_runtime(
         config.database_dir / "egress-profiles.json",
         authorization=base.authorization,
@@ -158,6 +158,28 @@ def build_single_node_deployment(
     )
     register_connector_control_plane(base.control_plane, connectors)
     egress.register_control_plane(base.control_plane)
+
+    application_release_repository = JsonApplicationReleaseRepository(
+        config.database_dir / "application-releases.json"
+    )
+    target_matcher = (
+        DistributedBuildTargetMatcher(base.distributed_runtime.registry)
+        if enable_distributed_execution and base.distributed_runtime is not None
+        else None
+    )
+    application_releases = ApplicationDistributionService(
+        application_release_repository,
+        kernel=base.kernel,
+        files=base.files,
+        workspaces=base.workspaces,
+        run_workspace_bindings=base.run_workspace_bindings,
+        authorization_gate=base.approval_gate,
+        target_matcher=target_matcher,
+    )
+    register_application_distribution_control_plane(
+        base.control_plane,
+        application_releases,
+    )
 
     planning_repository = JsonPlanningRepository(config.database_dir / "planning.json")
     planning_kernel = PlatformKernel(
@@ -192,18 +214,8 @@ def build_single_node_deployment(
     for command, handler in planning_command_handlers(planning).items():
         base.control_plane.register_command(command, handler)
 
-    # Install canonical Context only after the authoritative Task/Run, Coordination, Repository,
-    # Agent and model components are available. The installer replaces the Agent-bound lifecycle
-    # seam on the same kernel object, so existing services use the canonical Context path. Passing
-    # the shared #591 bindings prevents provider-bound rendering/capabilities from creating private
-    # policy gates.
     context = install_single_node_context(base, egress=egress)
 
-    # Compose governed Learning only after Context created the authoritative Skill and Research
-    # services. Reusing those exact owner instances avoids a learning-private shadow Skill store;
-    # Agent and routing-profile promotion likewise use the base deployment's canonical services.
-    # #694 additionally passes the canonical Run and Planning readers used to authenticate
-    # system-derived Learning source evidence.
     learning = build_single_node_learning(
         database_dir=config.database_dir,
         agents=base.agents,
@@ -237,10 +249,6 @@ def build_single_node_deployment(
         model_runtime=base.model_runtime,
     )
 
-    # The public deployment now has an authoritative canonical Connector inventory. Rebind the
-    # Template surface to a resolver that includes exactly those ConnectorDefinition IDs instead
-    # of leaving connector requirements permanently fail-closed. The callback closes over the
-    # live registry so later provider registration/removal is reflected immediately in preview.
     template_environment = PlatformTemplateEnvironmentResolver(
         workspaces=base.workspaces,
         capabilities=lambda: (
@@ -285,6 +293,8 @@ def build_single_node_deployment(
         connector_repository=connector_repository,
         connector_registry=connector_registry,
         connectors=connectors,
+        application_release_repository=application_release_repository,
+        application_releases=application_releases,
         planning_repository=planning_repository,
         planning_kernel=planning_kernel,
         planning=planning,
@@ -298,7 +308,7 @@ def build_single_node_deployment(
 def _planning_event_sink(
     telemetry: Telemetry,
 ) -> Callable[[str, dict[str, JsonValue]], None]:
-    """Project safe #439 transition evidence into the canonical observability timeline."""
+    """Project safe planning transition evidence into the canonical observability timeline."""
 
     def emit(event_type: str, attributes: dict[str, JsonValue]) -> None:
         raw_task_id = attributes.get("task_id")
