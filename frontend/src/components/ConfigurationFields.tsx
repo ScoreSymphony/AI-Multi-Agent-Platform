@@ -61,6 +61,7 @@ export function ResourcePicker({
   allowEmpty = true,
   emptyLabel = "Use default / none",
   hint,
+  disabled = false,
 }: {
   label: string;
   value: string | null;
@@ -69,6 +70,7 @@ export function ResourcePicker({
   allowEmpty?: boolean;
   emptyLabel?: string;
   hint?: string;
+  disabled?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -89,6 +91,7 @@ export function ResourcePicker({
       {options.length > 8 ? (
         <input
           value={query}
+          disabled={disabled}
           onChange={(event) => setQuery(event.currentTarget.value)}
           placeholder={`Filter ${label.toLocaleLowerCase()}…`}
           aria-label={`Filter ${label}`}
@@ -96,6 +99,7 @@ export function ResourcePicker({
       ) : null}
       <select
         value={value ?? ""}
+        disabled={disabled}
         onChange={(event) => onChange(event.currentTarget.value || null)}
       >
         {allowEmpty ? <option value="">{emptyLabel}</option> : null}
@@ -258,6 +262,7 @@ export function useUnsavedChanges(dirty: boolean): void {
     if (!dirty) return undefined;
     const beforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
+      event.returnValue = "";
     };
     const interceptNavigation = (event: MouseEvent) => {
       const target = event.target;
