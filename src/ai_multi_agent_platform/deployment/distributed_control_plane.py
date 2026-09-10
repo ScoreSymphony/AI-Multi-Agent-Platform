@@ -270,6 +270,14 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
             materializer,
             WorkspaceJobMaterializationResolver(self._workspaces),
         )
+        # The durable distributed runtime already owns the canonical request/handle for jobs that
+        # predate this process. Rebuild only wrapper state that is derivable without adapter-private
+        # evidence. Workspace-backed jobs deliberately remain unresolved until their materialization
+        # receipt/result lifecycle is made durable as a separate reliability slice.
+        for record in self.runtime.records():
+            if record.worker_id != worker_id:
+                continue
+            materializing.restore_unmaterialized_job(record.job, handle=record.handle)
         dispatcher: WorkerDispatcher = materializing
         if self._kernel is not None:
             dispatcher = ArtifactPublishingWorkerDispatcher(
