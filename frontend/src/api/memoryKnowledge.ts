@@ -11,6 +11,13 @@ export type MemoryScope =
   | "historical"
   | "organization";
 export type MemoryOrigin = "user-authored" | "agent-derived" | "imported";
+export type MemoryType =
+  | "unclassified"
+  | "episodic"
+  | "semantic"
+  | "procedural"
+  | "preference"
+  | "reflective";
 export type MemoryRetention =
   | "ephemeral"
   | "task_lifetime"
@@ -40,6 +47,7 @@ export interface CanonicalMemoryEntry {
   created_at: string;
   value: JsonValue;
   origin: MemoryOrigin;
+  memory_type: MemoryType;
   retention: MemoryRetention;
   expires_at: string | null;
   provenance: CanonicalSourceRef[];
@@ -82,6 +90,7 @@ export interface MemoryListInput {
   scopeId?: string;
   projectId?: string;
   ownerRef?: string;
+  memoryType?: MemoryType;
   includeExpired?: boolean;
   includeSuperseded?: boolean;
   search?: string;
@@ -93,6 +102,7 @@ export interface CreateMemoryInput {
   scope: MemoryScope;
   scopeId: string;
   origin: MemoryOrigin;
+  memoryType?: MemoryType;
   value: JsonValue;
   retention?: MemoryRetention;
   expiresAt?: string | null;
@@ -187,6 +197,7 @@ export class MemoryKnowledgeClient {
     setOptionalFilter(filters, "scope_id", input.scopeId);
     setOptionalFilter(filters, "project_id", input.projectId);
     setOptionalFilter(filters, "owner_ref", input.ownerRef);
+    setOptionalFilter(filters, "memory_type", input.memoryType);
     if (input.includeExpired) filters.include_expired = "true";
     if (input.includeSuperseded) filters.include_superseded = "true";
     return this.collections.list<CanonicalMemoryEntry>(MEMORY, {
@@ -213,6 +224,7 @@ export class MemoryKnowledgeClient {
         scope: input.scope,
         scope_id: scopeId,
         origin: input.origin,
+        memory_type: input.memoryType,
         value: input.value,
         retention: input.retention,
         expires_at: optionalNonBlank(input.expiresAt) ?? undefined,

@@ -13,7 +13,9 @@ from ai_multi_agent_platform.data.contracts import MemoryProvider
 from ai_multi_agent_platform.data.models import (
     DataAccessContext,
     MemoryEntry,
+    MemoryOrigin,
     MemoryScope,
+    MemoryType,
     RetentionPolicy,
     SourceRef,
 )
@@ -22,8 +24,9 @@ from .dependencies import resource_dependency
 from .models import DependencyRequirement, IdPolicy, PortableResource
 from .registry import ImportContext, ResourceExport, ResourceSerializerRegistry
 
-MEMORY_PORTABLE_SCHEMA_VERSION = "1"
+MEMORY_PORTABLE_SCHEMA_VERSION = "2"
 MEMORY_RESOURCE_TYPE = "memory"
+_SUPPORTED_MEMORY_SCHEMA_VERSIONS = frozenset({"1", MEMORY_PORTABLE_SCHEMA_VERSION})
 
 _PORTABLE_MEMORY_SCOPES = frozenset(
     {
@@ -132,14 +135,23 @@ class MemoryPortableCodec:
                 ErrorCode.INVALID_REQUEST,
                 f"Memory codec cannot deserialize resource type {resource.resource_type!r}",
             )
-        if resource.payload.get("schema_version") != MEMORY_PORTABLE_SCHEMA_VERSION:
+        schema_version = resource.payload.get("schema_version")
+        if (
+            not isinstance(schema_version, str)
+            or schema_version not in _SUPPORTED_MEMORY_SCHEMA_VERSIONS
+        ):
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
                 "unsupported portable Memory schema version",
-                details={"supported_schema_version": MEMORY_PORTABLE_SCHEMA_VERSION},
+                details={
+                    "supported_schema_versions": sorted(_SUPPORTED_MEMORY_SCHEMA_VERSIONS),
+                },
             )
         try:
-            entry = _memory_entry_from_json(resource.payload.get("entry"))
+            entry = _memory_entry_from_json(
+                resource.payload.get("entry"),
+                schema_version=schema_version,
+            )
             source_project_id = _optional_json_string(
                 resource.payload.get("source_project_id"),
                 "source_project_id",
@@ -231,6 +243,8 @@ def _memory_entry_to_json(entry: MemoryEntry) -> dict[str, JsonValue]:
         "value": entry.value,
         "created_at": entry.created_at.isoformat(),
         "retention": entry.retention.value,
+        "origin": entry.origin.value,
+        "memory_type": entry.memory_type.value,
         "expires_at": None if entry.expires_at is None else entry.expires_at.isoformat(),
         "provenance": [_source_ref_to_json(item) for item in entry.provenance],
         "supersedes_memory_id": entry.supersedes_memory_id,
@@ -240,11 +254,20 @@ def _memory_entry_to_json(entry: MemoryEntry) -> dict[str, JsonValue]:
     }
 
 
-def _memory_entry_from_json(value: JsonValue | None) -> MemoryEntry:
+def _memory_entry_from_json(
+    value: JsonValue | None,
+    *,
+    schema_version: str,
+) -> MemoryEntry:
     data = _object(value, "MemoryEntry")
     raw_provenance = data.get("provenance")
     if not isinstance(raw_provenance, list):
         raise ValueError("MemoryEntry.provenance must be an array")
+    origin = MemoryOrigin.USER_AUTHORED
+    memory_type = MemoryType.UNCLASSIFIED
+    if schema_version == MEMORY_PORTABLE_SCHEMA_VERSION:
+        origin = MemoryOrigin(_string(data, "origin"))
+        memory_type = MemoryType(_string(data, "memory_type"))
     return MemoryEntry(
         memory_id=_string(data, "memory_id"),
         scope=MemoryScope(_string(data, "scope")),
@@ -254,6 +277,8 @@ def _memory_entry_from_json(value: JsonValue | None) -> MemoryEntry:
         value=data.get("value"),
         created_at=_timestamp(data.get("created_at"), "created_at"),
         retention=RetentionPolicy(_string(data, "retention")),
+        origin=origin,
+        memory_type=memory_type,
         expires_at=_optional_timestamp(data.get("expires_at"), "expires_at"),
         provenance=tuple(_source_ref_from_json(item) for item in raw_provenance),
         supersedes_memory_id=_optional_json_string(
