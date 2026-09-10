@@ -467,9 +467,7 @@ class CanonicalVerificationRuntime:
         next_attempt = previous.repair_attempt + 1
         candidates = tuple(
             request
-            for request, _result in self._completion.verification.history(
-                task_id=previous.task_id
-            )
+            for request, _result in self._completion.verification.history(task_id=previous.task_id)
             if request.verification_id != previous.verification_id
             and request.policy_id == previous.policy_id
             and request.policy_version == previous.policy_version
@@ -514,9 +512,7 @@ class CanonicalVerificationRuntime:
                 "persisted repair reverification conflicts with current canonical evidence",
                 details={
                     "source_verification_id": previous.verification_id,
-                    "verification_ids": [
-                        request.verification_id for request in lineage_conflicts
-                    ],
+                    "verification_ids": [request.verification_id for request in lineage_conflicts],
                     "repair_attempt": next_attempt,
                     "subject_id": context.subject.subject_id,
                     "run_id": context.run_id,
