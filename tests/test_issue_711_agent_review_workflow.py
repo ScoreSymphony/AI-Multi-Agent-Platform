@@ -19,14 +19,9 @@ from ai_multi_agent_platform.agents import (
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.verification import (
-    AutomaticReviewerWorkflow,
     CanonicalVerificationRuntime,
     CompletionState,
-    ConfiguredReviewerResolver,
     ProducerIdentity,
-    RepairOutput,
-    ReviewerAssignment,
-    ReviewerExecutionDecision,
     ReviewerIndependence,
     VerificationCompletionAuthority,
     VerificationEvidenceContext,
@@ -37,6 +32,14 @@ from ai_multi_agent_platform.verification import (
     VerificationSubject,
     VerifierKind,
 )
+from ai_multi_agent_platform.verification.agent_workflow import (
+    AutomaticReviewerWorkflow,
+    ConfiguredReviewerResolver,
+    RepairOutput,
+    ReviewerAssignment,
+    ReviewerExecutionDecision,
+)
+from ai_multi_agent_platform.verification.repair import VerificationRepairExecution
 from ai_multi_agent_platform.verification.reviewer_agent import ReviewerAgentRuntime
 
 
@@ -45,7 +48,9 @@ def _profile(name: str, role: str) -> AgentProfile:
         name=name,
         role=role,
         instructions=AgentInstructions(
-            role=InstructionSource(content=f"Act as the {role} for the exact assigned work."),
+            role=InstructionSource(
+                content=f"Act as the {role} for the exact assigned work."
+            ),
         ),
     )
 
@@ -101,14 +106,46 @@ class QueueReviewerExecutor:
         return ReviewerExecutionDecision(outcome=self._outcomes.pop(0))
 
 
+class FakeRepairRuntime:
+    def __init__(self, task_id: str) -> None:
+        self._task_id = task_id
+        self.calls = 0
+
+    async def start_repair(
+        self,
+        verification_id: str,
+        *,
+        idempotency_key: str,
+        step_id: str | None = None,
+        actor_ref: str | None = None,
+    ) -> VerificationRepairExecution:
+        del idempotency_key, step_id, actor_ref
+        self.calls += 1
+        return VerificationRepairExecution(
+            source_verification_id=verification_id,
+            task_id=self._task_id,
+            plan_id=new_id("plan"),
+            step_id=new_id("step"),
+            run_id=new_id("run"),
+            repair_attempt=self.calls,
+        )
+
+
 class ReplacingRepairExecutor:
     def __init__(self, evidence: MutableEvidence) -> None:
         self._evidence = evidence
         self.calls = 0
 
-    async def repair(self, *, request, review_result, completion) -> RepairOutput:
-        del review_result, completion
+    async def execute_repair(
+        self,
+        *,
+        execution: VerificationRepairExecution,
+        request,
+        review_result,
+    ) -> RepairOutput:
+        del review_result
         self.calls += 1
+        assert execution.source_verification_id == request.verification_id
         repaired = VerificationSubject(
             subject_type="result",
             subject_id=new_id("result"),
@@ -118,12 +155,13 @@ class ReplacingRepairExecutor:
         self._evidence.context = replace(
             self._evidence.context,
             subject=repaired,
+            run_id=execution.run_id,
         )
         return RepairOutput(
             subject_type="result",
             subject_id=repaired.subject_id,
             correlation_id=f"{request.correlation_id}-repair",
-            causation_id=request.verification_id,
+            causation_id=execution.run_id,
         )
 
 
@@ -186,7 +224,17 @@ def _setup(*, max_repairs: int = 0, independent: bool = False):
         producer=evidence.context.producer,
         correlation_id="issue-711-review",
     )
-    return agents, producer, reviewer, verification, policy, evidence, completion, runtime, request
+    return (
+        agents,
+        producer,
+        reviewer,
+        verification,
+        policy,
+        evidence,
+        completion,
+        runtime,
+        request,
+    )
 
 
 def test_automatic_reviewer_dispatch_records_canonical_result_and_is_idempotent() -> None:
@@ -254,11 +302,17 @@ def test_team_role_resolves_exact_reviewer_member_and_enforces_independence() ->
                 name="Software Development Team",
                 members=(
                     AgentTeamMember(
-                        agent=AgentRevisionRef(producer.agent_id, producer.revision),
+                        agent=AgentRevisionRef(
+                            producer.agent_id,
+                            producer.revision,
+                        ),
                         role="developer",
                     ),
                     AgentTeamMember(
-                        agent=AgentRevisionRef(reviewer.agent_id, reviewer.revision),
+                        agent=AgentRevisionRef(
+                            reviewer.agent_id,
+                            reviewer.revision,
+                        ),
                         role="reviewer",
                     ),
                 ),
@@ -294,7 +348,7 @@ def test_team_role_resolves_exact_reviewer_member_and_enforces_independence() ->
     asyncio.run(scenario())
 
 
-def test_needs_changes_drives_bounded_repair_and_fresh_reverification() -> None:
+def test_needs_changes_starts_canonical_repair_before_fresh_reverification() -> None:
     async def scenario() -> None:
         (
             agents,
@@ -311,7 +365,8 @@ def test_needs_changes_drives_bounded_repair_and_fresh_reverification() -> None:
             VerificationOutcome.NEEDS_CHANGES,
             VerificationOutcome.PASS,
         )
-        repair = ReplacingRepairExecutor(evidence)
+        repair_runtime = FakeRepairRuntime(request.task_id)
+        repair_executor = ReplacingRepairExecutor(evidence)
         workflow = AutomaticReviewerWorkflow(
             runtime=runtime,
             completion=completion,
@@ -325,7 +380,8 @@ def test_needs_changes_drives_bounded_repair_and_fresh_reverification() -> None:
                 }
             ),
             executor=executor,
-            repair_executor=repair,
+            repair_runtime=repair_runtime,  # type: ignore[arg-type]
+            repair_executor=repair_executor,
         )
 
         result = await workflow.run_request(request.verification_id)
@@ -335,11 +391,14 @@ def test_needs_changes_drives_bounded_repair_and_fresh_reverification() -> None:
         first, second = result.cycles
         assert first.verification_result is not None
         assert first.verification_result.outcome is VerificationOutcome.NEEDS_CHANGES
+        assert first.repair_execution is not None
         assert second.verification_result is not None
         assert second.verification_result.outcome is VerificationOutcome.PASS
         assert first.request.subject != second.request.subject
         assert second.request.repair_attempt == 1
-        assert repair.calls == 1
+        assert second.request.run_id == first.repair_execution.run_id
+        assert repair_runtime.calls == 1
+        assert repair_executor.calls == 1
         assert executor.calls == 2
         assert len(agents.service.repository.list_agent_runs()) == 2
         assert verification.result_for(first.request.verification_id) is first.verification_result
@@ -373,7 +432,10 @@ def test_missing_reviewer_configuration_fails_closed_before_agent_run() -> None:
 
         assert exc_info.value.code is ErrorCode.INVALID_CONFIGURATION
         assert agents.service.repository.list_agent_runs() == ()
-        assert completion.assess_task_completion(request.task_id).state is CompletionState.WAITING
+        assert (
+            completion.assess_task_completion(request.task_id).state
+            is CompletionState.WAITING
+        )
 
     asyncio.run(scenario())
 
@@ -423,3 +485,39 @@ def test_existing_running_review_is_reconciled_without_duplicate_dispatch() -> N
         assert len(agents.service.repository.list_agent_runs()) == 1
 
     asyncio.run(scenario())
+
+
+def test_partial_automatic_repair_configuration_is_rejected() -> None:
+    (
+        agents,
+        _producer,
+        _reviewer,
+        _verification,
+        _policy,
+        evidence,
+        completion,
+        runtime,
+        request,
+    ) = _setup(max_repairs=1)
+
+    with pytest.raises(ValueError, match="requires both"):
+        AutomaticReviewerWorkflow(
+            runtime=runtime,
+            completion=completion,
+            agents=agents,
+            resolver=ConfiguredReviewerResolver({}),
+            executor=QueueReviewerExecutor(VerificationOutcome.PASS),
+            repair_runtime=FakeRepairRuntime(request.task_id),  # type: ignore[arg-type]
+            repair_executor=None,
+        )
+
+    with pytest.raises(ValueError, match="requires both"):
+        AutomaticReviewerWorkflow(
+            runtime=runtime,
+            completion=completion,
+            agents=agents,
+            resolver=ConfiguredReviewerResolver({}),
+            executor=QueueReviewerExecutor(VerificationOutcome.PASS),
+            repair_runtime=None,
+            repair_executor=ReplacingRepairExecutor(evidence),
+        )
