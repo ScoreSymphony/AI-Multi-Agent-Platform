@@ -99,6 +99,7 @@ from .single_node import (
 )
 
 _APPLICATION_BUILD_PRINCIPAL = "service:application-distribution"
+_APPLICATION_BUILD_SECRET_PRINCIPAL = "service:application-build-secrets"
 _GITHUB_RELEASE_CONNECTOR_PRINCIPAL = "connector.github-releases"
 
 
@@ -191,6 +192,17 @@ def build_single_node_deployment(
                 resource_types=frozenset({ResourceType.RUN}),
             )
         )
+    if base.secrets is not None and not base.authorization.has_policy(
+        _APPLICATION_BUILD_SECRET_PRINCIPAL
+    ):
+        base.authorization.register(
+            LocalPrincipalPolicy(
+                principal_ref=_APPLICATION_BUILD_SECRET_PRINCIPAL,
+                actor_types=frozenset({ActorType.SERVICE}),
+                allowed_actions=frozenset({AuthorizationAction.INVOKE_SENSITIVE_CAPABILITY}),
+                resource_types=frozenset({ResourceType.SECRET_REFERENCE}),
+            )
+        )
 
     application_release_repository = JsonApplicationReleaseRepository(
         config.database_dir / "application-releases.json"
@@ -202,6 +214,8 @@ def build_single_node_deployment(
             base.files,
             base.run_workspace_bindings,
             ApplicationCommandExecutor(base.workspaces.materialization_root),
+            secret_provider=base.secrets,
+            secret_consumer_ref=_APPLICATION_BUILD_SECRET_PRINCIPAL,
         ),
         base.approval_gate,
         allow_internal_service_reads=True,
@@ -244,7 +258,7 @@ def build_single_node_deployment(
 
     planning_repository = JsonPlanningRepository(config.database_dir / "planning.json")
     planning_kernel = PlatformKernel(
-        orchestrator=PlanningOrchestratorAdapter(planning_repository),
+        orchestrator=PlanningOrchestratorAdapter(application_release_repository),
         lifecycle=PlanningOnlyLifecycleBackend(),
         repository=base.kernel_repository,
     )
@@ -256,7 +270,9 @@ def build_single_node_deployment(
     planning_environment = PolicyAwarePlanningEnvironmentResolver(
         agents=base.agents.repository,
         capabilities=base.capabilities,
-        authorization=base.approval_gate,
+        models=base.models,
+        workspaces=base.workspaces,
+        connectors=connector_registry,
     )
     planning = ReferencePlanningService(
         planner=DeterministicReferencePlanner(),
