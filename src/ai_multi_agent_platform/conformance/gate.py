@@ -253,6 +253,8 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "tests/test_issue_86_kernel_gate.py::"
                 "test_changed_subject_invalidates_old_verification_at_completion_gate",
                 "tests/test_issue_86_verification.py::"
+                "test_changed_result_revision_cannot_reuse_old_verification",
+                "tests/test_issue_86_verification.py::"
                 "test_deterministic_reference_verifier_passes_and_fails_without_llm",
                 "tests/test_issue_86_verification.py::"
                 "test_agent_reviewer_independence_and_read_only_rules_are_enforced",
