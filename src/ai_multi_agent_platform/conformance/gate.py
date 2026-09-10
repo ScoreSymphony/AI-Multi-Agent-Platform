@@ -516,8 +516,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
                 "test_responsibility_reassignment_and_agent_assignment_are_permission_neutral",
                 "tests/test_task_management.py::"
                 "test_dependency_satisfaction_cycle_cross_project_and_blocked_reason",
-                "tests/test_task_management.py::"
-                "test_bulk_update_preflights_per_task_authorization",
+                "tests/test_task_management.py::test_bulk_update_preflights_per_task_authorization",
                 "tests/test_issue_46_task_management_worker_admission.py::"
                 "test_urgent_task_cannot_bypass_distributed_worker_admission",
             ),
