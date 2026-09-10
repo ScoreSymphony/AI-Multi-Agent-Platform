@@ -18,6 +18,7 @@ from ai_multi_agent_platform.benchmarking.reference_host_storage import (
     attach_storage_target,
     storage_target_metadata,
 )
+import ai_multi_agent_platform.benchmarking.reference_host_storage as reference_host_storage
 
 
 def _fingerprint(payload: object) -> str:
@@ -95,6 +96,44 @@ def test_storage_target_metadata_is_stable_and_privacy_safe_on_same_mount(
     assert str(tmp_path) not in serialized
     assert str(first) not in serialized
     assert str(second) not in serialized
+
+
+def test_linux_storage_fingerprint_distinguishes_identical_mounts_by_device_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    mountinfo = tmp_path / "mountinfo"
+    monkeypatch.setattr(reference_host_storage, "_MOUNTINFO_PATH", mountinfo)
+
+    mount_point = str(tmp_path).replace("\\", "\\134").replace(" ", "\\040")
+    mountinfo.write_text(
+        f"42 1 0:101 / {mount_point} rw - tmpfs tmpfs rw\n",
+        encoding="utf-8",
+    )
+    first_metadata = storage_target_metadata(work_dir)
+
+    mountinfo.write_text(
+        f"43 1 0:202 / {mount_point} rw - tmpfs tmpfs rw\n",
+        encoding="utf-8",
+    )
+    second_metadata = storage_target_metadata(work_dir)
+
+    assert first_metadata["identity_source"] == "linux-mountinfo"
+    assert second_metadata["identity_source"] == "linux-mountinfo"
+    assert first_metadata["filesystem_type"] == second_metadata["filesystem_type"] == "tmpfs"
+    assert first_metadata["total_bytes"] == second_metadata["total_bytes"]
+    assert (
+        first_metadata["mount_fingerprint_sha256"]
+        != second_metadata["mount_fingerprint_sha256"]
+    )
+    serialized = json.dumps(
+        [first_metadata, second_metadata],
+        sort_keys=True,
+    )
+    assert "0:101" not in serialized
+    assert "0:202" not in serialized
 
 
 def test_attach_storage_target_recomputes_operating_envelope_fingerprint(
