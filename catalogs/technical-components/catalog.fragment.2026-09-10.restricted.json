@@ -1,0 +1,242 @@
+{
+  "schema_version": "1",
+  "provider_id": "technical-components-reference",
+  "items": [
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "copilot-cli",
+        "item_type": "agent",
+        "name": "GitHub Copilot CLI",
+        "description": "Terminal coding-agent reference that requires an active GitHub Copilot subscription and is governed by GitHub's restricted Copilot CLI license.",
+        "version": "1.0.0",
+        "publisher": "GitHub",
+        "source": {
+          "repository": "https://github.com/github/copilot-cli",
+          "package_reference": "github:github/copilot-cli",
+          "revision": null
+        },
+        "license": "GitHub Copilot CLI License (restricted)",
+        "provenance": "Official repository, current non-archived project status, README prerequisites and LICENSE.md reviewed on 2026-09-10 for #638. The upstream license permits install/run and limited redistribution of unmodified copies but explicitly withholds modification/derivative-work rights. The README requires an active Copilot subscription and authenticated GitHub access. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:deferred",
+          "evaluation:not-required",
+          "deployment:cli",
+          "cost:incompatible",
+          "network:required",
+          "provider:github-copilot",
+          "resource:unknown",
+          "license-restrictions:no-modification",
+          "license-restrictions:limited-redistribution",
+          "service-subscription:required"
+        ],
+        "categories": [
+          "coding-agent"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; active upstream classified deferred because its required Copilot subscription violates the project recurring-cost policy and its custom license is not an open-source modification grant.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "claude-code",
+        "item_type": "agent",
+        "name": "Claude Code",
+        "description": "Terminal coding-agent reference governed by Anthropic commercial terms rather than an open-source software license.",
+        "version": "1.0.0",
+        "publisher": "Anthropic",
+        "source": {
+          "repository": "https://github.com/anthropics/claude-code",
+          "package_reference": "github:anthropics/claude-code",
+          "revision": null
+        },
+        "license": "Proprietary — Anthropic Commercial Terms",
+        "provenance": "Official repository, current non-archived project status and LICENSE.md reviewed on 2026-09-10 for #638. The repository license states all rights reserved and makes use subject to Anthropic's Commercial Terms of Service. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:deferred",
+          "evaluation:not-required",
+          "deployment:cli",
+          "cost:incompatible",
+          "network:required",
+          "provider:anthropic",
+          "resource:unknown",
+          "license-restrictions:all-rights-reserved",
+          "commercial-terms:required"
+        ],
+        "categories": [
+          "coding-agent"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; active upstream classified deferred because Anthropic commercial-service dependency conflicts with the project's no-additional-paid-AI-services policy.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "multica",
+        "item_type": "tool",
+        "name": "Multica",
+        "description": "Self-hostable agent-team platform candidate with a modified Apache-based license containing hosted-service, branding and attribution conditions.",
+        "version": "1.0.0",
+        "publisher": "Multica, Inc.",
+        "source": {
+          "repository": "https://github.com/multica-ai/multica",
+          "package_reference": "github:multica-ai/multica",
+          "revision": null
+        },
+        "license": "Modified Apache-2.0 (Multica License)",
+        "provenance": "Official repository, current non-archived project status and complete Multica LICENSE reviewed on 2026-09-10 for #638. The license incorporates Apache-2.0 but adds restrictions for hosted/embedded third-party services without a commercial license plus branding and attribution conditions. Internal use within one organization is explicitly allowed without a commercial license. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:self-hosted",
+          "cost:conditional",
+          "network:unknown",
+          "resource:unknown",
+          "license-restrictions:additional-terms",
+          "license-restrictions:hosted-service",
+          "license-restrictions:branding-attribution"
+        ],
+        "categories": [
+          "agent-framework"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; retained as an evaluation candidate only with explicit modified-license and conditional-cost metadata rather than normalized to plain Apache-2.0.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "gsd",
+        "item_type": "tool",
+        "name": "GSD",
+        "description": "Archived spec-driven development and context-engineering system retained for technical reference rather than active adoption.",
+        "version": "1.0.0",
+        "publisher": "gsd-build",
+        "source": {
+          "repository": "https://github.com/gsd-build/get-shit-done",
+          "package_reference": "github:gsd-build/get-shit-done",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and GitHub archived status verified on 2026-09-10 for #638. The archived upstream is retained only as historical/reference material; no fork is silently substituted. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "external-component",
+          "project-status:archived",
+          "lifecycle:reference",
+          "evaluation:not-required",
+          "deployment:unknown",
+          "cost:unknown",
+          "network:unknown",
+          "resource:unknown"
+        ],
+        "categories": [
+          "specification-and-skills"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; archived upstream classified as reference-only.",
+        "deprecated": true,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "musvit",
+        "item_type": "tool",
+        "name": "MuSViT",
+        "description": "Sheet-music foundation vision model reference deferred from general platform adoption because its official code is licensed for non-commercial use.",
+        "version": "1.0.0",
+        "publisher": "OMR-PRAIG-UA-ES",
+        "source": {
+          "repository": "https://github.com/OMR-PRAIG-UA-ES/MuSViT",
+          "package_reference": "github:OMR-PRAIG-UA-ES/MuSViT",
+          "revision": null
+        },
+        "license": "CC BY-NC-SA 4.0",
+        "provenance": "Official ECCV 2026 repository, current non-archived status and README license/runtime requirements reviewed on 2026-09-10 for #638. The README states CC BY-NC-SA 4.0 and documents GPU-required experiment paths plus Hugging Face and Weights & Biases authentication. No third-party executable code or model weights are bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:deferred",
+          "evaluation:not-required",
+          "deployment:cli",
+          "cost:conditional",
+          "network:required",
+          "provider:huggingface",
+          "provider:weights-and-biases",
+          "resource:gpu",
+          "license-restrictions:non-commercial",
+          "license-restrictions:share-alike"
+        ],
+        "categories": [
+          "music-ai",
+          "model-and-dataset-tooling"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; classified deferred for general adoption because the official work is CC BY-NC-SA 4.0, while GPU/provider requirements remain visible for reference.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    }
+  ]
+}
