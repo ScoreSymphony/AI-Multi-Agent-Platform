@@ -16,12 +16,10 @@ from ai_multi_agent_platform.benchmarking.reference_host_absolute_budget_cli imp
 
 REPO_ROOT = Path(__file__).parents[2]
 DOC_POLICY_SCHEMA = (
-    REPO_ROOT
-    / "docs/schemas/benchmark-reference-host-absolute-budget-policy.v1.schema.json"
+    REPO_ROOT / "docs/schemas/benchmark-reference-host-absolute-budget-policy.v1.schema.json"
 )
 DOC_REPORT_SCHEMA = (
-    REPO_ROOT
-    / "docs/schemas/benchmark-reference-host-absolute-budget-report.v1.schema.json"
+    REPO_ROOT / "docs/schemas/benchmark-reference-host-absolute-budget-report.v1.schema.json"
 )
 SCHEMA_DIR = REPO_ROOT / "src/ai_multi_agent_platform/benchmarking/schemas"
 PACKAGED_POLICY_SCHEMA = (
@@ -351,9 +349,7 @@ def test_absolute_budget_rejects_invalid_boundary_ordering(
     message: str,
 ) -> None:
     metric = (
-        "throughput_operations_per_second"
-        if direction == "higher-is-better"
-        else "p95_latency_ms"
+        "throughput_operations_per_second" if direction == "higher-is-better" else "p95_latency_ms"
     )
     evidence, policy = _inputs(
         tmp_path,
