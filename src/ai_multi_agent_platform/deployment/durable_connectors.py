@@ -226,9 +226,7 @@ def build_single_node_deployment(
                 LocalPrincipalPolicy(
                     principal_ref=_GITHUB_RELEASE_CONNECTOR_PRINCIPAL,
                     actor_types=frozenset({ActorType.SERVICE}),
-                    allowed_actions=frozenset(
-                        {AuthorizationAction.INVOKE_SENSITIVE_CAPABILITY}
-                    ),
+                    allowed_actions=frozenset({AuthorizationAction.INVOKE_SENSITIVE_CAPABILITY}),
                     resource_types=frozenset({ResourceType.SECRET_REFERENCE}),
                 )
             )
