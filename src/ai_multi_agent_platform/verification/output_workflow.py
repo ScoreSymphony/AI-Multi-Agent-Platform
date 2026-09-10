@@ -1,8 +1,8 @@
 """Productive output-to-review coordination for automatic Agent Verification (#711).
 
 The kernel remains lifecycle authority and canonical Verification remains review authority.
-This explicit integration service composes those existing seams so callers do not need to
-manually create a VerificationRequest and then invoke ReviewerAgentRuntime plumbing.
+This integration composes those existing seams so a configured kernel output attachment can
+drive Agent review without callers manually creating VerificationRequest/runtime plumbing.
 """
 
 from __future__ import annotations
@@ -12,9 +12,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from ai_multi_agent_platform.agents import AgentRunRecord
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, PlatformEvent
 from ai_multi_agent_platform.domain import TaskStatus, validate_id
-from ai_multi_agent_platform.kernel import PlatformKernel
+from ai_multi_agent_platform.kernel import OutputAttachmentObserver, PlatformKernel
 from ai_multi_agent_platform.kernel.models import TaskState
 
 from .agent_workflow import (
@@ -59,10 +59,10 @@ class AutomaticOutputReviewResult:
 class AutomaticReviewerOutputCoordinator:
     """Attach canonical output and drive every configured Agent-verifier stage.
 
-    This is the normal integration seam for execution components that have produced a
-    canonical Result/Artifact. It deliberately does not embed review policy into AgentRuntime
-    or PlatformKernel: the kernel attaches output, Verification resolves the exact subject,
-    and AutomaticReviewerWorkflow dispatches only AGENT stages required by the Task policy.
+    This is the Verification-side integration seam for execution components that have produced a
+    canonical Result/Artifact. It does not embed review policy into AgentRuntime or kernel state:
+    the kernel attaches output, Verification resolves the exact subject, and
+    AutomaticReviewerWorkflow dispatches only AGENT stages required by the Task policy.
     """
 
     def __init__(
@@ -88,6 +88,8 @@ class AutomaticReviewerOutputCoordinator:
         actor_ref: str | None = None,
         options: ReviewerRuntimeOptions | None = None,
     ) -> AutomaticOutputReviewResult:
+        """Legacy explicit composition helper; normal configured flow uses the kernel observer."""
+
         validate_id(result_id, "result")
         await self._kernel.attach_result(
             idempotency_key=idempotency_key,
@@ -117,6 +119,8 @@ class AutomaticReviewerOutputCoordinator:
         actor_ref: str | None = None,
         options: ReviewerRuntimeOptions | None = None,
     ) -> AutomaticOutputReviewResult:
+        """Legacy explicit composition helper; normal configured flow uses the kernel observer."""
+
         validate_id(artifact_id, "artifact")
         await self._kernel.attach_artifact(
             idempotency_key=idempotency_key,
@@ -280,4 +284,65 @@ class AutomaticReviewerOutputCoordinator:
         )
 
 
-__all__ = ["AutomaticOutputReviewResult", "AutomaticReviewerOutputCoordinator"]
+class AutomaticReviewerOutputObserver(OutputAttachmentObserver):
+    """Translate persisted kernel output events into automatic canonical Agent review."""
+
+    def __init__(
+        self,
+        coordinator: AutomaticReviewerOutputCoordinator,
+        *,
+        options: ReviewerRuntimeOptions | None = None,
+    ) -> None:
+        self._coordinator = coordinator
+        self._options = options
+
+    async def output_attached(self, event: PlatformEvent) -> None:
+        if event.event_type == "result.attached":
+            subject_type: _OutputType = "result"
+            payload_key = "result_id"
+        elif event.event_type == "artifact.attached":
+            subject_type = "artifact"
+            payload_key = "artifact_id"
+        else:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "automatic reviewer observer received a non-output attachment event",
+            )
+
+        subject_id = event.payload.get(payload_key)
+        if not isinstance(subject_id, str):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical output attachment event is missing its output ID",
+            )
+        actor_ref = event.payload.get("actor_ref")
+        await self._coordinator.review_attached_subject(
+            task_id=event.correlation_id,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            correlation_id=event.correlation_id,
+            causation_id=event.causation_id,
+            actor_ref=actor_ref if isinstance(actor_ref, str) else None,
+            options=self._options,
+        )
+
+
+def install_automatic_reviewer_output_observer(
+    kernel: PlatformKernel,
+    coordinator: AutomaticReviewerOutputCoordinator,
+    *,
+    options: ReviewerRuntimeOptions | None = None,
+) -> AutomaticReviewerOutputObserver:
+    """Install automatic review on the kernel's provider-neutral post-commit output seam."""
+
+    observer = AutomaticReviewerOutputObserver(coordinator, options=options)
+    kernel.configure_output_attachment_observer(observer)
+    return observer
+
+
+__all__ = [
+    "AutomaticOutputReviewResult",
+    "AutomaticReviewerOutputCoordinator",
+    "AutomaticReviewerOutputObserver",
+    "install_automatic_reviewer_output_observer",
+]
