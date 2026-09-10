@@ -22,10 +22,12 @@ from ai_multi_agent_platform.distributed import (
     DispatchState,
     DistributedRegistry,
     DistributedRuntime,
+    Heartbeat,
     JobRequirements,
     JsonDistributedStateStore,
     LocalWorker,
     NodeRecord,
+    NodeStatus,
     RegistrationRequest,
     ResourceSnapshot,
     WorkerJobRequest,
@@ -34,7 +36,10 @@ from ai_multi_agent_platform.distributed import (
 )
 from ai_multi_agent_platform.distributed.scheduler import NoEligibleWorkerError
 from ai_multi_agent_platform.distributed.transport import WorkerTransportEndpoint
-from ai_multi_agent_platform.distributed.worker_protocol import WorkerRequestCredentials
+from ai_multi_agent_platform.distributed.worker_protocol import (
+    WorkerHeartbeatRequest,
+    WorkerRequestCredentials,
+)
 from ai_multi_agent_platform.domain import RunStatus, new_id
 from ai_multi_agent_platform.messaging import InProcessMessageTransport
 from ai_multi_agent_platform.security import (
@@ -237,7 +242,10 @@ def test_persisted_remote_run_is_reconciled_before_worker_http_reregistration(
             recovery_worker = restarted.registry.get_worker(worker_id)
             assert recovery_worker.status is WorkerStatus.DEGRADED
             assert recovery_worker.draining is True
-            assert restarted.registry.get_node(registration.node.node_id).draining is True
+            assert (
+                restarted.registry.get_node(registration.node.node_id).draining
+                is registration.node.draining
+            )
 
             reconciled = await restarted.reconcile()
             assert len(reconciled) == 1
@@ -259,6 +267,28 @@ def test_persisted_remote_run_is_reconciled_before_worker_http_reregistration(
             )
             with pytest.raises(NoEligibleWorkerError):
                 await restarted.dispatch(new_job)
+
+            # Once the normal authenticated HTTP heartbeat path becomes available, its fresh Worker
+            # report clears the conservative recovery-only state and ordinary scheduling resumes.
+            await restarted_service.heartbeat(
+                WorkerHeartbeatRequest(
+                    heartbeat=Heartbeat(
+                        node_id=registration.node.node_id,
+                        sequence=1,
+                        resources=registration.node.resources,
+                        node_status=NodeStatus.ONLINE,
+                        workers=registration.workers,
+                    ),
+                    service_identity_ref=worker_id,
+                ),
+                _credentials(secret, "issue707-heartbeat-after-restart"),
+            )
+            refreshed_worker = restarted.registry.get_worker(worker_id)
+            assert refreshed_worker.status is WorkerStatus.HEALTHY
+            assert refreshed_worker.draining is False
+            resumed = await restarted.dispatch(new_job)
+            assert resumed.worker_id == worker_id
+            assert resumed.state is DispatchState.DISPATCHED
         finally:
             for task in (transport_task, presence_task):
                 task.cancel()
