@@ -44,12 +44,13 @@ run can be inspected; start the next campaign with a new empty work directory.
 
 The campaign also binds the resulting environment fingerprint to the **storage target containing
 that work directory**. On Linux, the retained metadata contains the filesystem type, total
-filesystem capacity and a SHA-256 fingerprint derived from the selected mount's source, root and
-mount/superblock option set. Raw mount sources, mount roots and work-directory paths are not
-persisted. On platforms without Linux mount metadata, a privacy-safe filesystem-stat fallback is
-fingerprinted instead. This prevents campaigns performed against materially different storage
-mounts from being treated as the same reference environment merely because CPU, RAM, OS and Python
-match.
+filesystem capacity and a SHA-256 fingerprint derived from the selected mount's privacy-sensitive
+identity inputs, including its mount source, root, option sets and `major:minor` device identity.
+Those raw identity inputs, including the device identity, mount source/root and work-directory
+path, are not persisted. On platforms without Linux mount metadata, a privacy-safe filesystem-stat
+fallback is fingerprinted instead. This prevents campaigns performed against materially different
+storage mounts from being treated as the same reference environment merely because CPU, RAM, OS
+and Python match.
 
 Example:
 
