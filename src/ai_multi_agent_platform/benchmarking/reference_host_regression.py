@@ -153,12 +153,21 @@ class ReferenceHostRegressionReport:
             "generated_at": self.generated_at,
             "claim_semantics": self.claim_semantics,
             "platform_budget_status": self.platform_budget_status,
-            "policy": asdict(self.policy),
+            "policy": {
+                **asdict(self.policy),
+                "evidence_refs": list(self.policy.evidence_refs),
+            },
             "baseline": asdict(self.baseline),
             "candidate": asdict(self.candidate),
             "basis": asdict(self.basis),
             "overall_classification": self.overall_classification,
-            "rules": [asdict(rule) for rule in self.rules],
+            "rules": [
+                {
+                    **asdict(rule),
+                    "evidence_refs": list(rule.evidence_refs),
+                }
+                for rule in self.rules
+            ],
             "correctness_passed": self.correctness_passed,
         }
 
