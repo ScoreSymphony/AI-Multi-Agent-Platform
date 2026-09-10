@@ -31,6 +31,11 @@ from .config import SingleNodeConfig, load_single_node_config
 from .durable_connectors import SingleNodeDeployment, build_single_node_deployment
 from .restore_integrity import single_node_restore_integrity_validators
 from .restore_integrity_current import single_node_current_restore_integrity_validators
+from .startup_recovery import (
+    SingleNodeStartupRecoveryResult,
+    reconcile_single_node_startup,
+    require_blocked_startup_run,
+)
 
 DeploymentBuilder = Callable[[SingleNodeConfig], SingleNodeDeployment]
 
@@ -47,6 +52,23 @@ def build_parser() -> argparse.ArgumentParser:
         "smoke",
         help="Run a retry-safe canonical Task/Run through the local reference execution path",
     )
+    subcommands.add_parser(
+        "recover-startup",
+        help="Run ordinary single-node startup reconciliation without serving",
+    )
+    resolve_startup = subcommands.add_parser(
+        "resolve-startup-run",
+        help="Resolve one orphaned Run named by a blocked startup recovery report",
+    )
+    resolve_startup.add_argument("--task-id", required=True)
+    resolve_startup.add_argument("--run-id", required=True)
+    resolve_startup.add_argument("--resolution", required=True, choices=("failed", "cancelled"))
+    resolve_startup.add_argument(
+        "--reason",
+        required=True,
+        help="Operator reason recorded in the canonical terminal Run output",
+    )
+
     subcommands.add_parser(
         "recover-restore",
         help="Run required post-restore recovery and readiness validation without serving",
@@ -211,10 +233,79 @@ def main(
         print(f"restore run resolved: task={task_id} run={run_id} resolution={resolution.value}")
         return 0
 
-    if args.command in {"recover-restore", "serve"}:
+    if args.command == "resolve-startup-run":
+        task_id = str(args.task_id)
+        run_id = str(args.run_id)
+        resolution = RunStatus(str(args.resolution))
+        reason = str(args.reason).strip()
+        if not reason:
+            print("startup run resolution requires a non-blank reason", file=sys.stderr)
+            return 2
+        try:
+            restore_recovery = asyncio.run(_run_restore_recovery(deployment))
+            _print_restore_recovery(restore_recovery)
+            if restore_recovery is not None and not restore_recovery.ready_for_service:
+                print(
+                    "startup run resolution blocked by post-restore recovery: "
+                    f"unresolved_runs={len(restore_recovery.unresolved_run_ids)} "
+                    f"report={restore_recovery.report_path}",
+                    file=sys.stderr,
+                )
+                return 3
+
+            # The report an operator inspected may be stale by the time resolution is requested.
+            # Refresh all runtime evidence first and authorize terminalization only from the newly
+            # written report. This avoids marking an execution failed/cancelled after its backend
+            # has become reachable again.
+            startup = asyncio.run(_run_startup_recovery(deployment))
+            _print_startup_recovery(startup)
+            if startup.ready_for_service:
+                print(
+                    "startup run resolution blocked: fresh reconciliation no longer reports "
+                    "unresolved runs",
+                    file=sys.stderr,
+                )
+                return 3
+            require_blocked_startup_run(
+                config.data_dir,
+                task_id=task_id,
+                run_id=run_id,
+            )
+            asyncio.run(
+                deployment.kernel.record_run_outcome(
+                    idempotency_key=f"startup-resolution:{task_id}:{run_id}:{resolution.value}",
+                    task_id=task_id,
+                    run_id=run_id,
+                    status=resolution,
+                    output={
+                        "reason": reason,
+                        "recovery_resolution": resolution.value,
+                        "recovery_kind": "ordinary_single_node_startup",
+                    },
+                    actor_ref="service:startup-recovery-operator",
+                    source="startup-recovery-operator",
+                )
+            )
+            startup = asyncio.run(_run_startup_recovery(deployment))
+        except (ContractError, RestoreValidationError, RuntimeError) as exc:
+            print(f"startup run resolution blocked: {exc}", file=sys.stderr)
+            return 3
+        _print_startup_recovery(startup)
+        if not startup.ready_for_service:
+            print(
+                "startup recovery remains blocked after run resolution: "
+                f"unresolved_runs={len(startup.unresolved_run_ids)} "
+                f"report={startup.report_path}",
+                file=sys.stderr,
+            )
+            return 3
+        print(f"startup run resolved: task={task_id} run={run_id} resolution={resolution.value}")
+        return 0
+
+    if args.command in {"recover-restore", "recover-startup", "serve"}:
         try:
             recovery = asyncio.run(_run_restore_recovery(deployment))
-        except (RestoreValidationError, RuntimeError) as exc:
+        except (ContractError, RestoreValidationError, RuntimeError) as exc:
             print(f"post-restore recovery blocked: {exc}", file=sys.stderr)
             return 3
         _print_restore_recovery(recovery)
@@ -227,6 +318,23 @@ def main(
             )
             return 3
         if args.command == "recover-restore":
+            return 0
+
+        try:
+            startup = asyncio.run(_run_startup_recovery(deployment))
+        except (ContractError, RuntimeError) as exc:
+            print(f"startup recovery blocked: {exc}", file=sys.stderr)
+            return 3
+        _print_startup_recovery(startup)
+        if not startup.ready_for_service:
+            print(
+                "startup recovery remains blocked: "
+                f"unresolved_runs={len(startup.unresolved_run_ids)} "
+                f"report={startup.report_path}",
+                file=sys.stderr,
+            )
+            return 3
+        if args.command == "recover-startup":
             return 0
 
         try:
@@ -275,6 +383,17 @@ async def _run_restore_recovery(
     )
 
 
+async def _run_startup_recovery(
+    deployment: SingleNodeDeployment,
+) -> SingleNodeStartupRecoveryResult:
+    return await reconcile_single_node_startup(
+        data_dir=deployment.config.data_dir,
+        kernel=deployment.kernel,
+        coordinator=deployment.coordination,
+        distributed_runtime=deployment.distributed_runtime,
+    )
+
+
 def _print_restore_recovery(recovery: PostRestoreRecoveryResult | None) -> None:
     if recovery is None:
         return
@@ -284,6 +403,18 @@ def _print_restore_recovery(recovery: PostRestoreRecoveryResult | None) -> None:
         f"unresolved={len(recovery.unresolved_run_ids)} "
         f"ready={str(recovery.ready_for_service).lower()} "
         f"checks={len(recovery.validation_checks)} report={recovery.report_path}"
+    )
+
+
+def _print_startup_recovery(recovery: SingleNodeStartupRecoveryResult) -> None:
+    print(
+        "startup recovery completed: "
+        f"runs_checked={recovery.runs_checked} "
+        f"plans={recovery.plans_reconciled} "
+        f"distributed_jobs={recovery.distributed_jobs_reconciled} "
+        f"unresolved={len(recovery.unresolved_run_ids)} "
+        f"ready={str(recovery.ready_for_service).lower()} "
+        f"report={recovery.report_path}"
     )
 
 

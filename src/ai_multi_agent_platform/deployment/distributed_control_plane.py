@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 
 from ai_multi_agent_platform.contracts import AuthorizationProvider, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
@@ -125,11 +125,24 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         now: datetime | None = None,
     ) -> WorkerProtocolReceipt:
         presence_workers = await self._presence_workers(request.heartbeat.workers)
+        reachable_worker_ids = {
+            worker.worker_id
+            for worker in presence_workers
+            if worker.status is not WorkerStatus.OFFLINE
+        }
         safe_request = replace(
             request,
             heartbeat=replace(request.heartbeat, workers=presence_workers),
         )
-        return await super().heartbeat(safe_request, credentials, now=now)
+        receipt = await super().heartbeat(safe_request, credentials, now=now)
+        # A persisted Worker can miss the one-shot pre-serve recovery probe and become reachable
+        # only after the HTTP Worker protocol is open. Its authenticated heartbeat is fresh
+        # evidence, so attach a dispatcher for every Worker that also passed the current presence
+        # probe. Offline siblings remain unschedulable and receive no transport attachment here.
+        for worker_id in receipt.worker_ids:
+            if worker_id in reachable_worker_ids:
+                self._attach(worker_id)
+        return receipt
 
     async def deregister_worker(
         self,
@@ -146,6 +159,86 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
             now=now,
         )
         self._attached.discard(worker_id)
+
+    async def restore_reachable_persisted_workers(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[str, ...]:
+        """Recover transport access to persisted Workers before HTTP registration is available.
+
+        ``JsonDistributedStateStore`` deliberately restores persisted Node/Worker liveness as
+        offline because old heartbeats are not current evidence. During a Control-Plane restart,
+        however, a still-running Worker can prove its process identity over the authenticated
+        #35 transport before the HTTP Worker-protocol surface opens. We use only that positive
+        presence proof to attach the transport dispatcher needed to inspect existing Worker Jobs.
+
+        Reachable Workers are temporarily degraded: this permits reconciliation of already-owned
+        work but cannot admit new scheduling. Existing Control-Plane-owned Worker drain state and
+        Node drain/maintenance policy are preserved rather than invented by recovery. Every
+        persisted sibling remains in the internal registration snapshot so recovery never converts
+        temporary absence into an operator-owned drain. The Worker's normal authenticated heartbeat
+        replaces the degraded health state once HTTP serving starts.
+        """
+
+        if self._presence is None:
+            return ()
+        persisted_workers = self.runtime.registry.list_workers()
+        if not persisted_workers:
+            return ()
+
+        reachable = await asyncio.gather(
+            *(self._presence.reachable(worker.worker_id) for worker in persisted_workers)
+        )
+        reachable_ids = {
+            worker.worker_id
+            for worker, is_reachable in zip(persisted_workers, reachable, strict=True)
+            if is_reachable
+        }
+        if not reachable_ids:
+            return ()
+
+        timestamp = now or datetime.now(UTC)
+        persisted_by_node: dict[str, list[WorkerRecord]] = {}
+        for worker in persisted_workers:
+            persisted_by_node.setdefault(worker.node_id, []).append(worker)
+
+        restored_ids: list[str] = []
+        reachable_node_ids = {
+            worker.node_id for worker in persisted_workers if worker.worker_id in reachable_ids
+        }
+        for node_id in sorted(reachable_node_ids):
+            node = self.runtime.registry.get_node(node_id)
+            recovery_workers = tuple(
+                replace(
+                    worker,
+                    status=(
+                        WorkerStatus.DEGRADED
+                        if worker.worker_id in reachable_ids
+                        else WorkerStatus.OFFLINE
+                    ),
+                )
+                for worker in sorted(
+                    persisted_by_node[node_id],
+                    key=lambda candidate: candidate.worker_id,
+                )
+            )
+            # Register the complete persisted Worker snapshot for this Node. Passing only the
+            # reachable subset would make ``DistributedRegistry.register`` treat absent siblings
+            # as intentionally removed and set their Control-Plane-owned drain flag.
+            self.runtime.register(
+                RegistrationRequest(
+                    node=node,
+                    workers=recovery_workers,
+                ),
+                now=timestamp,
+            )
+            for worker in recovery_workers:
+                if worker.worker_id not in reachable_ids:
+                    continue
+                self._attach(worker.worker_id)
+                restored_ids.append(worker.worker_id)
+        return tuple(restored_ids)
 
     async def _presence_workers(
         self,
@@ -177,6 +270,14 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
             materializer,
             WorkspaceJobMaterializationResolver(self._workspaces),
         )
+        # The durable distributed runtime already owns the canonical request/handle for jobs that
+        # predate this process. Rebuild only wrapper state that is derivable without adapter-private
+        # evidence. Workspace-backed jobs deliberately remain unresolved until their materialization
+        # receipt/result lifecycle is made durable as a separate reliability slice.
+        for record in self.runtime.records():
+            if record.worker_id != worker_id:
+                continue
+            materializing.restore_unmaterialized_job(record.job, handle=record.handle)
         dispatcher: WorkerDispatcher = materializing
         if self._kernel is not None:
             dispatcher = ArtifactPublishingWorkerDispatcher(

@@ -30,6 +30,7 @@ from ai_multi_agent_platform.deployment.host_pressure import (
 from ai_multi_agent_platform.deployment.server import main as run_server
 from ai_multi_agent_platform.distributed import (
     DistributedExecutorArtifactProvider,
+    JsonDistributedStateStore,
     register_distributed_control_plane,
 )
 from ai_multi_agent_platform.distributed.pressure_control_plane import (
@@ -40,6 +41,7 @@ from ai_multi_agent_platform.messaging import TcpMessageTransport
 from .single_node_app import build_default_single_node_deployment
 
 _PROFILE_ENV = "PLATFORM_DISTRIBUTED_PROFILE"
+_DISTRIBUTED_STATE_FILE = "distributed-runtime-state.json"
 
 
 def build_distributed_control_plane_deployment(
@@ -81,6 +83,14 @@ def build_distributed_control_plane_deployment(
     if runtime is None:
         raise RuntimeError("distributed deployment was built without a distributed runtime")
 
+    # The advanced process has the durable data root needed to recover #14 ownership. The generic
+    # Stage-1 builder intentionally does not assume distributed persistence, so bind the reference
+    # store here before any runtime registration or dispatch can occur. Restore marks old liveness
+    # offline; fresh presence evidence below is required before an existing Worker can be queried.
+    runtime.configure_state_store(
+        JsonDistributedStateStore(config.database_dir / _DISTRIBUTED_STATE_FILE)
+    )
+
     # The shipped distributed server exposes the already-existing canonical #14 compute resources
     # and admin commands. Runtime inspection/drain/maintenance therefore use the same northbound
     # Control Plane as the rest of the platform rather than a deployment-private shortcut.
@@ -116,7 +126,7 @@ def build_distributed_control_plane_deployment(
         )
     )
 
-    app, _service = build_worker_protocol_app(
+    app, service = build_worker_protocol_app(
         downstream=deployment.app,
         runtime=runtime,
         authentication=deployment.authentication,
@@ -126,6 +136,14 @@ def build_distributed_control_plane_deployment(
         files=deployment.files,
         kernel=deployment.kernel,
     )
+
+    # A restarted Control Plane has not opened its Worker HTTP registration endpoint yet. Query the
+    # already-running Worker presence endpoints over the private message transport first, and only
+    # for positively proven persisted identities attach recovery dispatchers. Those identities stay
+    # draining/degraded until the normal authenticated Worker registration/heartbeat follows, so
+    # recovery can inspect in-flight work without admitting new scheduling from stale metadata.
+    asyncio.run(service.restore_reachable_persisted_workers())
+
     # ``SingleNodeDeployment`` intentionally types its Stage-1 app as ControlPlaneASGI. The
     # advanced adapter wraps that same ASGI app without changing the Stage-1 contract.
     cast(Any, deployment).app = app
