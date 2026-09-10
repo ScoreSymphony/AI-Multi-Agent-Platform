@@ -1,0 +1,401 @@
+name: Temporary PR 714 context repair fix
+
+on:
+  push:
+    branches:
+      - codex/issue-711-auto-reviewer-workflows
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/issue-711-auto-reviewer-workflows
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Apply focused context fallback
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path('src/ai_multi_agent_platform/context/source_adapters.py')
+          text = source.read_text()
+
+          old = 'from ai_multi_agent_platform.kernel.repository import RunRepository, TaskRepository\n'
+          new = ('from ai_multi_agent_platform.kernel.repository import (\n'
+                 '    EventRepository,\n'
+                 '    RunRepository,\n'
+                 '    TaskRepository,\n'
+                 ')\n')
+          assert text.count(old) == 1
+          text = text.replace(old, new)
+
+          old = '''    def __init__(
+              self,
+              coordinator: CoordinatorRepository,
+              *,
+              runs: RunRepository | None = None,
+          ) -> None:
+              self.coordinator = coordinator
+              self.runs = runs
+          '''
+          new = '''    def __init__(
+              self,
+              coordinator: CoordinatorRepository,
+              *,
+              runs: RunRepository | None = None,
+              events: EventRepository | None = None,
+          ) -> None:
+              self.coordinator = coordinator
+              self.runs = runs
+              self.events = events
+          '''
+          assert text.count(old) == 1
+          text = text.replace(old, new)
+
+          old = '''        state = self.coordinator.get_plan(request.plan_id)
+              record = self.coordinator.get_step_record(request.step_id)
+          '''
+          new = '''        try:
+              state = self.coordinator.get_plan(request.plan_id)
+          except ContractError as exc:
+              if exc.code is not ErrorCode.NOT_FOUND or self.events is None:
+                  raise
+              return await self._collect_kernel_plan_step(request)
+              record = self.coordinator.get_step_record(request.step_id)
+          '''
+          assert text.count(old) == 1
+          text = text.replace(old, new)
+
+          marker = '\n\nclass SkillBundleContextSourceAdapter:\n'
+          assert text.count(marker) == 1
+          helper = '''
+
+    async def _collect_kernel_plan_step(
+        self,
+        request: ContextSourceRequest,
+    ) -> tuple[ContextCandidate, ...]:
+        """Project an exact kernel-owned Plan/Step when coordination has no such Plan.
+
+        The Coordinator remains the primary source for coordinated Plans. This fallback is only
+        used for canonical kernel-created Plans that never entered the coordination repository,
+        such as the bounded Verification repair Plan. Any ambiguity or malformed event evidence
+        fails closed instead of inventing coordination state.
+        """
+
+        if self.events is None or request.plan_id is None or request.step_id is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                "canonical kernel Plan/Step evidence is unavailable",
+            )
+        matches = [
+            event
+            for event in await self.events.read_events(request.task_id)
+            if event.event_type == "plan.created"
+            and event.subject_type == "task"
+            and event.subject_id == request.task_id
+            and event.payload.get("plan_ref") == request.plan_id
+        ]
+        if not matches:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                "canonical kernel Plan is not present in the Task event stream",
+            )
+        if len(matches) != 1:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical kernel Plan identity maps to multiple plan.created events",
+            )
+        event = matches[0]
+
+        step_refs_raw: object = event.payload.get("step_refs")
+        if not isinstance(step_refs_raw, list | tuple) or any(
+            not isinstance(item, str) or not item.strip() for item in step_refs_raw
+        ):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical kernel Plan has invalid Step references",
+            )
+        if request.step_id not in step_refs_raw:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                "canonical Step is not in requested kernel Plan",
+            )
+
+        steps_raw: object = event.payload.get("steps")
+        if not isinstance(steps_raw, list | tuple):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical kernel Plan is missing Step payloads",
+            )
+        step_matches = [
+            item
+            for item in steps_raw
+            if isinstance(item, Mapping) and item.get("id") == request.step_id
+        ]
+        if len(step_matches) != 1:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical kernel Step reference does not map to exactly one Step payload",
+            )
+        step_payload = step_matches[0]
+        title = step_payload.get("title")
+        objective = step_payload.get("objective", "")
+        depends_on_raw: object = step_payload.get("depends_on", ())
+        if not isinstance(title, str) or not title.strip():
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical kernel Step has an invalid title",
+            )
+        if not isinstance(objective, str):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical kernel Step has an invalid objective",
+            )
+        if not isinstance(depends_on_raw, list | tuple) or any(
+            not isinstance(item, str) or not item.strip() for item in depends_on_raw
+        ):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical kernel Step has invalid dependencies",
+            )
+        dependencies = [cast(str, item) for item in depends_on_raw]
+        content = _canonical_json(
+            {
+                "plan_id": request.plan_id,
+                "plan_event_id": event.id,
+                "step_id": request.step_id,
+                "step_title": title,
+                "step_objective": objective,
+                "dependencies": dependencies,
+            }
+        )
+        digest = _digest(content)
+        return (
+            ContextCandidate(
+                source=ContextSourceRef(
+                    ContextSourceType.PLAN_STEP,
+                    request.step_id,
+                    revision=f"event:{event.id}",
+                    digest=digest,
+                ),
+                role=ContextEntryRole.CONTEXT,
+                selection_reason="current canonical kernel Plan/Step purpose",
+                inline_content=content,
+                content_digest=digest,
+                trust=ContextTrust.TRUSTED,
+                data_classification=ContextDataClassification.INTERNAL,
+                priority=80,
+                relevance=1.0,
+                project_id=event.project_id,
+                conflict_key=f"step:{request.step_id}",
+            ),
+        )
+          '''
+          text = text.replace(marker, helper + marker)
+          source.write_text(text)
+
+          composition = Path('src/ai_multi_agent_platform/deployment/context_operationalization.py')
+          text = composition.read_text()
+          old = '    plan_adapter = PlanStepContextSourceAdapter(base.coordination_repository, runs=runs)\n'
+          new = '''    plan_adapter = PlanStepContextSourceAdapter(
+              base.coordination_repository,
+              runs=runs,
+              events=base.kernel_repository,
+          )
+          '''
+          assert text.count(old) == 1
+          composition.write_text(text.replace(old, new))
+          PY
+
+          cat > tests/test_issue_711_kernel_plan_step_context.py <<'PY'
+          from __future__ import annotations
+
+          import asyncio
+          import json
+
+          import pytest
+
+          from ai_multi_agent_platform.context import ContextSourceRequest, ContextSourceType
+          from ai_multi_agent_platform.context.source_adapters import PlanStepContextSourceAdapter
+          from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+          from ai_multi_agent_platform.coordination import InMemoryCoordinatorRepository
+          from ai_multi_agent_platform.domain import Event, new_id
+          from ai_multi_agent_platform.kernel import InMemoryKernelRepository
+
+
+          def test_plan_step_context_falls_back_to_exact_kernel_plan_event() -> None:
+              async def scenario() -> None:
+                  task_id = new_id("task")
+                  run_id = new_id("run")
+                  agent_id = new_id("agent")
+                  project_id = new_id("project")
+                  plan_id = new_id("plan")
+                  step_id = new_id("step")
+                  event = Event(
+                      event_type="plan.created",
+                      subject_type="task",
+                      subject_id=task_id,
+                      correlation_id=task_id,
+                      project_id=project_id,
+                      payload={
+                          "plan_ref": plan_id,
+                          "summary": "Repair output",
+                          "step_refs": [step_id],
+                          "steps": [
+                              {
+                                  "id": step_id,
+                                  "proposal_key": "repair",
+                                  "title": "Repair output",
+                                  "objective": "Correct the verified defects",
+                                  "depends_on": [],
+                                  "metadata": {},
+                              }
+                          ],
+                      },
+                  )
+                  events = InMemoryKernelRepository()
+                  await events.commit(
+                      stream_id=task_id,
+                      expected_revision=0,
+                      events=(event,),
+                  )
+                  adapter = PlanStepContextSourceAdapter(
+                      InMemoryCoordinatorRepository(),
+                      events=events,
+                  )
+                  candidates = await adapter.collect(
+                      ContextSourceRequest(
+                          task_id=task_id,
+                          run_id=run_id,
+                          agent_id=agent_id,
+                          agent_revision=1,
+                          project_id=project_id,
+                          workspace_id=None,
+                          plan_id=plan_id,
+                          step_id=step_id,
+                      )
+                  )
+                  assert len(candidates) == 1
+                  candidate = candidates[0]
+                  assert candidate.source.source_type is ContextSourceType.PLAN_STEP
+                  assert candidate.source.source_id == step_id
+                  assert candidate.source.revision == f"event:{event.id}"
+                  assert candidate.project_id == project_id
+                  assert candidate.inline_content is not None
+                  payload = json.loads(candidate.inline_content)
+                  assert payload == {
+                      "dependencies": [],
+                      "plan_event_id": event.id,
+                      "plan_id": plan_id,
+                      "step_id": step_id,
+                      "step_objective": "Correct the verified defects",
+                      "step_title": "Repair output",
+                  }
+
+              asyncio.run(scenario())
+
+
+          def test_kernel_plan_step_fallback_rejects_ambiguous_plan_events() -> None:
+              async def scenario() -> None:
+                  task_id = new_id("task")
+                  plan_id = new_id("plan")
+                  step_id = new_id("step")
+                  project_id = new_id("project")
+                  payload = {
+                      "plan_ref": plan_id,
+                      "step_refs": [step_id],
+                      "steps": [
+                          {
+                              "id": step_id,
+                              "proposal_key": "repair",
+                              "title": "Repair output",
+                              "objective": "Correct defects",
+                              "depends_on": [],
+                              "metadata": {},
+                          }
+                      ],
+                  }
+                  events = InMemoryKernelRepository()
+                  await events.commit(
+                      stream_id=task_id,
+                      expected_revision=0,
+                      events=(
+                          Event(
+                              event_type="plan.created",
+                              subject_type="task",
+                              subject_id=task_id,
+                              correlation_id=task_id,
+                              project_id=project_id,
+                              payload=payload,
+                          ),
+                          Event(
+                              event_type="plan.created",
+                              subject_type="task",
+                              subject_id=task_id,
+                              correlation_id=task_id,
+                              project_id=project_id,
+                              payload=payload,
+                          ),
+                      ),
+                  )
+                  adapter = PlanStepContextSourceAdapter(
+                      InMemoryCoordinatorRepository(),
+                      events=events,
+                  )
+                  with pytest.raises(ContractError) as raised:
+                      await adapter.collect(
+                          ContextSourceRequest(
+                              task_id=task_id,
+                              run_id=new_id("run"),
+                              agent_id=new_id("agent"),
+                              agent_revision=1,
+                              project_id=project_id,
+                              workspace_id=None,
+                              plan_id=plan_id,
+                              step_id=step_id,
+                          )
+                      )
+                  assert raised.value.code is ErrorCode.CONTRACT_VIOLATION
+
+              asyncio.run(scenario())
+          PY
+
+      - name: Install test toolchain
+        run: python -m pip install -e '.[dev]'
+      - name: Format and lint focused changes
+        run: |
+          ruff format \
+            src/ai_multi_agent_platform/context/source_adapters.py \
+            src/ai_multi_agent_platform/deployment/context_operationalization.py \
+            tests/test_issue_711_kernel_plan_step_context.py
+          ruff check \
+            src/ai_multi_agent_platform/context/source_adapters.py \
+            src/ai_multi_agent_platform/deployment/context_operationalization.py \
+            tests/test_issue_711_kernel_plan_step_context.py
+      - name: Typecheck focused production changes
+        run: mypy src/ai_multi_agent_platform/context/source_adapters.py src/ai_multi_agent_platform/deployment/context_operationalization.py
+      - name: Run focused regression and productive repair tests
+        run: |
+          pytest -q \
+            tests/test_issue_711_kernel_plan_step_context.py \
+            tests/integration/verification/test_automatic_reviewer_repair.py
+      - name: Commit verified fix and remove temporary workflow
+        shell: bash
+        run: |
+          git rm .github/workflows/tmp-pr714-context-repair-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/ai_multi_agent_platform/context/source_adapters.py \
+            src/ai_multi_agent_platform/deployment/context_operationalization.py \
+            tests/test_issue_711_kernel_plan_step_context.py
+          git commit -m 'fix: resolve kernel-owned repair steps in canonical context (#711)'
+          git push origin HEAD:codex/issue-711-auto-reviewer-workflows
