@@ -17,7 +17,10 @@ from ai_multi_agent_platform.deployment.startup_recovery import (
 )
 from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
-from ai_multi_agent_platform.upgrade.versioning import JsonVersionStateStore, current_release_versions
+from ai_multi_agent_platform.upgrade.versioning import (
+    JsonVersionStateStore,
+    current_release_versions,
+)
 
 
 async def _prepare_orphaned_run(root: Path) -> tuple[str, str]:
