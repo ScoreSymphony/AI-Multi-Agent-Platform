@@ -24,7 +24,7 @@ from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.connectors import (
     ConnectorRegistry,
     ConnectorService,
-    GitHubReleaseConnectorProvider,
+    DurableGitHubReleaseConnectorProvider,
     SqliteConnectorRepository,
 )
 from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
@@ -220,10 +220,10 @@ def build_single_node_deployment(
         target_matcher=LocalBuildTargetMatcher(),
     )
     if base.secrets is not None:
-        github_releases = GitHubReleaseConnectorProvider(
+        github_releases = DurableGitHubReleaseConnectorProvider(
             base.secrets,
             base.files,
-            connection_repository=connector_repository,
+            connector_repository,
         )
         asyncio.run(connectors.register_provider(github_releases))
         application_releases.register_publisher(GitHubReleasePublisher(connectors))
