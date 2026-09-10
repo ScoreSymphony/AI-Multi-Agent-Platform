@@ -33,7 +33,10 @@
     "profile": {"enum": ["release", "smoke"]},
     "host_label": {"type": "string", "minLength": 1},
     "platform_version": {"type": "string", "minLength": 1},
-    "platform_commit": {"type": "string", "minLength": 1, "not": {"const": "unknown"}},
+    "platform_commit": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+    },
     "started_at": {"type": "string", "format": "date-time"},
     "completed_at": {"type": "string", "format": "date-time"},
     "duration_seconds": {"type": "number", "minimum": 0},
