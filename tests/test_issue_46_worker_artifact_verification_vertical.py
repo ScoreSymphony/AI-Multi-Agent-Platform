@@ -24,6 +24,7 @@ from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     encode_agent_execution_binding,
 )
+from ai_multi_agent_platform.conformance.evidence import emit_runtime_evidence
 from ai_multi_agent_platform.contracts import JsonValue, OperationContext
 from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.data import DataAccessContext
@@ -485,8 +486,9 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
             assert change.kind is WorkspaceChangeKind.CREATED
             assert change.relative_path == _ARTIFACT_PATH
             assert change.file_id is not None
-            validate_id(change.file_id, "file")
-            assert change.file_id != artifact_id
+            file_id = change.file_id
+            validate_id(file_id, "file")
+            assert file_id != artifact_id
 
             file_context = DataAccessContext(
                 operation=OperationContext(
@@ -499,14 +501,11 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
                 task_id=task_id,
                 run_id=run_id,
             )
-            file_record = await deployment.files.get_file(change.file_id, file_context)
+            file_record = await deployment.files.get_file(file_id, file_context)
             assert artifact_id in file_record.artifact_ids
-            assert await deployment.files.verify_checksum(change.file_id, file_context)
+            assert await deployment.files.verify_checksum(file_id, file_context)
             payload = b"".join(
-                [
-                    chunk
-                    async for chunk in deployment.files.stream_file(change.file_id, file_context)
-                ]
+                [chunk async for chunk in deployment.files.stream_file(file_id, file_context)]
             )
             assert payload == _ARTIFACT_CONTENT.encode("utf-8")
 
@@ -659,6 +658,36 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
             assert len(_ArtifactToolCallingModelHandler.chat_payloads) == 1
             assert deployment.observability_exporter.logs
             assert deployment.observability_exporter.metrics
+
+            emit_runtime_evidence(
+                canonical_resource_ids=(
+                    task_id,
+                    run_id,
+                    agent.agent_id,
+                    agent_run_id,
+                    tool_invocation_id,
+                    worker_job_id,
+                    worker_id,
+                    node_id,
+                    workspace_id,
+                    workspace_snapshot_id,
+                    file_id,
+                    artifact_id,
+                    result_id,
+                    verification_request.verification_id,
+                ),
+                evidence=(
+                    f"api:/api/v1/tasks/{task_id}",
+                    f"api:/api/v1/runs/{run_id}",
+                    f"api:/api/v1/results/{result_id}",
+                    f"api:/api/v1/verifications/{verification_request.verification_id}",
+                    f"timeline:/api/v1/tasks/{task_id}/timeline",
+                    f"artifact:{artifact_id}",
+                    f"file:{file_id}",
+                    "observability:logs",
+                    "observability:metrics",
+                ),
+            )
         finally:
             endpoint_task.cancel()
             with suppress(asyncio.CancelledError):
