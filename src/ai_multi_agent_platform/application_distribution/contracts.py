@@ -1,4 +1,4 @@
-"""Replaceable persistence and publication boundaries for application releases."""
+"""Replaceable persistence, placement and publication boundaries for application releases."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Protocol
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
 from ai_multi_agent_platform.security import ActorIdentity
 
-from .models import ApplicationRelease, ReleaseVisibility
+from .models import ApplicationRelease, BuildSpecification, BuildTarget, ReleaseVisibility
 
 
 class ApplicationReleaseRepository(Protocol):
@@ -34,6 +34,17 @@ class ApplicationReleaseRepository(Protocol):
         version: str,
         channel: str,
     ) -> ApplicationRelease | None: ...
+
+
+class BuildTargetMatcher(Protocol):
+    """Provider-neutral check for whether a build target has an eligible execution host."""
+
+    @abstractmethod
+    async def supports(
+        self,
+        specification: BuildSpecification,
+        target: BuildTarget,
+    ) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +72,13 @@ class PublicationResult:
 
 
 class ApplicationReleasePublisher(Protocol):
+    """Replaceable publication boundary.
+
+    Implementations must make retries idempotent for the same canonical release/artifact IDs or
+    fail with an explicit conflict. They must never silently overwrite a different external
+    release or asset.
+    """
+
     @property
     @abstractmethod
     def provider_id(self) -> str: ...
