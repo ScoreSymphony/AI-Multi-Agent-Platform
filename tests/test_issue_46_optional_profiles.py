@@ -7,6 +7,8 @@ import pytest
 from ai_multi_agent_platform.cli.conformance import (
     _parse_component_versions,
     _parse_optional,
+    _parse_scenarios,
+    _select_scenarios,
 )
 from ai_multi_agent_platform.conformance import (
     ConformanceProfile,
@@ -134,6 +136,18 @@ def test_cli_optional_and_component_version_parsing_is_deterministic() -> None:
         _parse_component_versions(["missing-version"], "--adapter-version")
     with pytest.raises(ValueError, match="repeats component"):
         _parse_component_versions(["same=1", "same=2"], "--adapter-version")
+
+
+def test_cli_scenario_selection_is_case_insensitive_deduplicated_and_ordered() -> None:
+    assert _parse_scenarios(["b,c", "B", " d-model "]) == ("B", "C", "D-MODEL")
+    scenarios = activate_optional_scenarios(ConformanceProfile.INTEGRATION, ("B", "C"))
+    selected = _select_scenarios(scenarios, ("C", "B"))
+
+    assert tuple(scenario.scenario_id for scenario in selected) == ("C", "B")
+    assert all(scenario.required for scenario in selected)
+
+    with pytest.raises(ValueError, match="not present"):
+        _select_scenarios(scenarios, ("UNKNOWN",))
 
 
 def test_external_adapter_profiles_fail_closed_without_real_environment(
