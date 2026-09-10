@@ -17,6 +17,7 @@ from ai_multi_agent_platform.benchmarking.reference_host_campaign_cli import mai
 REPO_ROOT = Path(__file__).parents[2]
 CAMPAIGN_SCHEMA = REPO_ROOT / "docs/schemas/benchmark-reference-host-campaign.v1.schema.json"
 ENVELOPE_SCHEMA = REPO_ROOT / "docs/schemas/benchmark-operating-envelope.v1.schema.json"
+COMMIT = "d" * 40
 
 
 def _json_object(path: Path) -> dict[str, object]:
@@ -65,7 +66,7 @@ async def test_smoke_campaign_emits_schema_valid_hashed_host_evidence(tmp_path: 
         output_dir=output_dir,
         work_dir=tmp_path / "work",
         host_label="ci-reference",
-        platform_commit="deadbeef",
+        platform_commit=COMMIT,
         work_dir_mode="explicit",
     )
 
@@ -79,7 +80,7 @@ async def test_smoke_campaign_emits_schema_valid_hashed_host_evidence(tmp_path: 
     assert report.correctness_passed is True
     assert campaign["profile"] == "smoke"
     assert campaign["host_label"] == "ci-reference"
-    assert campaign["platform_commit"] == "deadbeef"
+    assert campaign["platform_commit"] == COMMIT
     assert campaign["claim_semantics"] == "single-host-tested-evidence-only"
     assert campaign["budget_status"] == "not-established"
     assert envelope["claim_semantics"] == "tested-envelope-only"
@@ -121,7 +122,7 @@ async def test_campaign_refuses_nonempty_evidence_directory(tmp_path: Path) -> N
         output_dir=output_dir,
         work_dir=tmp_path / "work",
         host_label="reference-a",
-        platform_commit="deadbeef",
+        platform_commit=COMMIT,
         work_dir_mode="explicit",
     )
 
@@ -137,7 +138,25 @@ def test_campaign_refuses_overlapping_work_and_evidence_directories(tmp_path: Pa
             output_dir=output_dir,
             work_dir=output_dir / "work",
             host_label="reference-a",
-            platform_commit="deadbeef",
+            platform_commit=COMMIT,
+            work_dir_mode="explicit",
+        )
+
+
+@pytest.mark.parametrize(
+    "platform_commit",
+    ("main", "deadbeef", "unknown", "g" * 40),
+)
+def test_campaign_requires_full_immutable_git_object_id(
+    tmp_path: Path,
+    platform_commit: str,
+) -> None:
+    with pytest.raises(ValueError, match="full 40- or 64-character hexadecimal Git object id"):
+        ReferenceHostCampaignRunner(
+            output_dir=tmp_path / "evidence",
+            work_dir=tmp_path / "work",
+            host_label="reference-a",
+            platform_commit=platform_commit,
             work_dir_mode="explicit",
         )
 
@@ -148,7 +167,7 @@ async def test_release_runner_requires_explicit_work_directory_mode(tmp_path: Pa
         output_dir=tmp_path / "evidence",
         work_dir=tmp_path / "work",
         host_label="reference-a",
-        platform_commit="deadbeef",
+        platform_commit=COMMIT,
         work_dir_mode="temporary",
     )
 
@@ -162,7 +181,7 @@ async def test_release_runner_rejects_mutated_release_profile(tmp_path: Path) ->
         output_dir=tmp_path / "evidence",
         work_dir=tmp_path / "work",
         host_label="reference-a",
-        platform_commit="deadbeef",
+        platform_commit=COMMIT,
         work_dir_mode="explicit",
     )
     mutated = replace(reference_host_campaign_profile("release"), operations_per_level=1)
@@ -180,7 +199,7 @@ def test_release_cli_requires_explicit_measured_work_directory(tmp_path: Path) -
                 "--host-label",
                 "reference-a",
                 "--platform-commit",
-                "deadbeef",
+                COMMIT,
                 "--output-dir",
                 str(tmp_path / "evidence"),
             ]
