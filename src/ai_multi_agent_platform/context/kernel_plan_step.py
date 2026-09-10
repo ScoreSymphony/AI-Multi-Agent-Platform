@@ -13,6 +13,7 @@ import json
 from collections.abc import Mapping
 from hashlib import sha256
 
+from ai_multi_agent_platform.agents.execution_profile import decode_agent_step_execution_binding
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
 from ai_multi_agent_platform.kernel.repository import EventRepository, RunRepository, TaskRepository
@@ -76,6 +77,17 @@ class KernelFallbackPlanStepContextSourceAdapter(PlanStepContextSourceAdapter):
                 "requested kernel Plan/Step is not the active canonical Task Plan",
             )
 
+        try:
+            execution_binding = decode_agent_step_execution_binding(
+                task.task.metadata,
+                request.step_id,
+            )
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                f"canonical kernel Step has invalid Agent execution metadata: {exc}",
+            ) from exc
+
         plan_events = tuple(
             event
             for event in await self._events.read_events(request.task_id)
@@ -125,17 +137,23 @@ class KernelFallbackPlanStepContextSourceAdapter(PlanStepContextSourceAdapter):
                 "canonical kernel Step dependencies must be string IDs",
             )
 
-        content = _canonical_json(
-            {
-                "plan_id": request.plan_id,
-                "plan_event_id": plan_event.id,
-                "step_id": request.step_id,
-                "step_title": title,
-                "step_objective": objective,
-                "dependencies": dependencies,
-                "projection": "kernel_event",
-            }
-        )
+        content_payload: dict[str, object] = {
+            "plan_id": request.plan_id,
+            "plan_event_id": plan_event.id,
+            "step_id": request.step_id,
+            "step_title": title,
+            "step_objective": objective,
+            "dependencies": dependencies,
+            "projection": "kernel_event",
+        }
+        if execution_binding is not None and execution_binding.objective is not None:
+            # The immutable plan event remains the source of Plan/Step purpose. A later exact
+            # Step-scoped AgentExecutionBinding may legitimately refine the execution objective
+            # before the Run starts (for example bounded Verification repair context). Surface
+            # that canonical binding as additional Context rather than replacing plan history.
+            content_payload["execution_objective"] = execution_binding.objective
+
+        content = _canonical_json(content_payload)
         digest = _digest(content)
         return (
             ContextCandidate(
