@@ -252,6 +252,8 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "test_successful_run_cannot_bypass_required_verification",
                 "tests/test_issue_86_kernel_gate.py::"
                 "test_changed_subject_invalidates_old_verification_at_completion_gate",
+                "tests/test_issue_86_kernel_gate.py::"
+                "test_rejected_verification_blocks_completion_without_rewriting_run_outcome",
                 "tests/test_issue_86_verification.py::"
                 "test_changed_result_revision_cannot_reuse_old_verification",
                 "tests/test_issue_86_verification.py::"
