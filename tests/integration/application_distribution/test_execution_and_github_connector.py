@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -33,7 +34,11 @@ from ai_multi_agent_platform.connectors import (
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.domain import OwnerRef, RunStatus, new_id
-from ai_multi_agent_platform.execution import ExecutionRequest
+from ai_multi_agent_platform.execution import (
+    CancellationToken,
+    ExecutionErrorCategory,
+    ExecutionRequest,
+)
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.security import SecretReference
@@ -63,6 +68,16 @@ class _RecordingGitHubTransport:
         if method == "GET" and url == "https://api.github.com/user":
             return GitHubRestResponse(status=200, body={"login": "tester", "id": 42})
         raise AssertionError(f"unexpected GitHub request: {method} {url}")
+
+
+class _NoExecute:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def execute(self, request: ExecutionRequest) -> object:
+        del request
+        self.calls += 1
+        raise AssertionError("lost application build must not be re-executed")
 
 
 def test_application_command_executor_runs_explicit_argv_without_shell(tmp_path: Path) -> None:
@@ -98,6 +113,38 @@ def test_application_command_executor_runs_explicit_argv_without_shell(tmp_path:
         assert result.artifacts[0].relative_path == "dist/app.bin"
         assert (workspace / "dist" / "app.bin").read_bytes() == b"package"
         assert executor.descriptor.metadata["shell"] is False
+
+    asyncio.run(scenario())
+
+
+def test_application_command_executor_cancels_running_process(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        workspace_token = "materialized-cancel"
+        workspace = tmp_path / workspace_token
+        workspace.mkdir()
+        cancellation = CancellationToken()
+        executor = ApplicationCommandExecutor(tmp_path)
+        request = ExecutionRequest(
+            task_id=new_id("task"),
+            run_id=new_id("run"),
+            correlation_id="application-build-cancel",
+            action=APPLICATION_BUILD_ACTION,
+            workspace=workspace_token,
+            arguments={
+                "command": [sys.executable, "-c", "import time; time.sleep(30)"],
+                "output_path": "dist/app.bin",
+            },
+            cancellation=cancellation,
+        )
+
+        execution = asyncio.create_task(executor.execute(request))
+        await asyncio.sleep(0.05)
+        cancellation.cancel()
+        result = await asyncio.wait_for(execution, timeout=5)
+
+        assert result.status is RunStatus.CANCELLED
+        assert result.error is not None
+        assert result.error.category is ExecutionErrorCategory.CANCELLED
 
     asyncio.run(scenario())
 
@@ -208,6 +255,102 @@ def test_application_distribution_executes_build_and_admits_canonical_artifact(
         assert record.sha256 == artifact.sha256
         assert artifact.artifact_id in record.artifact_ids
         assert await files.verify_checksum(artifact.file_id, file_context)
+
+    asyncio.run(scenario())
+
+
+def test_lost_build_state_fails_closed_without_reexecution(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        project_id = new_id("project")
+        operation = OperationContext(
+            correlation_id="application-build-recovery",
+            owner_type="user",
+            owner_id="tester",
+            project_id=project_id,
+        )
+        data_context = DataAccessContext(operation=operation, actor_ref="user:tester")
+        files = LocalFileProvider(tmp_path / "files", tmp_path / "files.sqlite3")
+        workspaces = LocalWorkspaceProvider(tmp_path / "workspaces", files)
+        workspace = await workspaces.create_workspace(
+            project_id=project_id,
+            owner_ref=OwnerRef(type="user", id="tester"),
+            workspace_type=WorkspaceType.PERSISTENT_PROJECT,
+            context=data_context,
+        )
+        snapshot = await workspaces.get_snapshot(workspace.base_snapshot_id or "")
+        releases = InMemoryApplicationReleaseRepository()
+        service = ApplicationDistributionService(
+            releases,
+            kernel=object(),  # type: ignore[arg-type]
+            files=files,
+            workspaces=workspaces,
+        )
+        release = await service.create_release(
+            application_id="recovery-app",
+            display_name="Recovery App",
+            version="1.0.0",
+            channel=ReleaseChannel.STABLE,
+            visibility=ReleaseVisibility.PRIVATE,
+            project_id=project_id,
+            workspace_id=workspace.id,
+            workspace_snapshot_id=snapshot.id,
+            source_revision="source-revision-recovery",
+            build_specification=BuildSpecification(
+                command=(sys.executable, "-c", "raise SystemExit(99)"),
+                targets=(
+                    BuildTarget(
+                        target_id="local-test",
+                        os_name="test",
+                        architecture="test",
+                        package_type=PackageType.ARCHIVE,
+                        output_path="dist/app.bin",
+                    ),
+                ),
+            ),
+            creator_ref="user:tester",
+        )
+        task_id = new_id("task")
+        run_id = new_id("run")
+        persisted = replace(
+            release,
+            status=ReleaseStatus.BUILDING,
+            targets=(
+                replace(
+                    release.targets[0],
+                    status=BuildTargetStatus.RUNNING,
+                    task_id=task_id,
+                    run_id=run_id,
+                ),
+            ),
+            revision=release.revision + 1,
+        )
+        await releases.save(persisted, expected_revision=release.revision)
+
+        get_executor = _NoExecute()
+        get_lifecycle = ApplicationBuildLifecycleBackend(
+            releases,
+            workspaces,
+            files,
+            InMemoryRunWorkspaceBindingRepository(),
+            get_executor,  # type: ignore[arg-type]
+        )
+        recovered = await get_lifecycle.get(run_id, operation)
+        assert recovered.status is RunStatus.FAILED
+        assert "refusing implicit re-execution" in str(recovered.output.get("stderr"))
+        assert get_executor.calls == 0
+
+        cancel_executor = _NoExecute()
+        cancel_lifecycle = ApplicationBuildLifecycleBackend(
+            releases,
+            workspaces,
+            files,
+            InMemoryRunWorkspaceBindingRepository(),
+            cancel_executor,  # type: ignore[arg-type]
+        )
+        cancelled = await cancel_lifecycle.cancel(run_id, operation)
+        assert cancelled.status is RunStatus.FAILED
+        assert "refusing implicit re-execution" in str(cancelled.output.get("stderr"))
+        assert cancel_executor.calls == 0
 
     asyncio.run(scenario())
 
