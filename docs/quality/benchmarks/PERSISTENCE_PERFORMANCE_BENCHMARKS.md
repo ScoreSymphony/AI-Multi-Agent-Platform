@@ -57,16 +57,21 @@ The summary records:
 
 ## Interpretation
 
-This sweep closes part of #440's persistence-scalability evidence: growing-state query behavior, database/file growth, and restart/open cost can now be measured as explicit state-size curves rather than isolated anecdotal runs.
+This sweep closes #440's growing-state persistence evidence: query behavior, database/file growth, and restart/open cost can be measured as explicit state-size curves rather than isolated anecdotal runs.
 
-It does **not** yet prove:
+Complementary #440 persistence profiles now cover two different dimensions that this sweep deliberately does not mix into the same result series:
 
-- concurrent persistence lock/contention behavior under deliberately saturated writers;
-- transaction retry semantics under injected persistence failure;
+- `platform-persistence-fault` measures deterministic before-/after-commit transient failure recovery at the canonical `EventRepository` boundary;
+- `platform-persistence-contention` measures synchronized competing writers against the real SQLite reference repository through canonical `PlatformKernel` mutations.
+
+The persistence benchmark family still does **not** establish:
+
 - cleanup/retention effects where no stable supported retention path exists;
-- transient persistence-failure recovery under load.
+- filesystem failure or disk-full behavior;
+- externally induced real storage-latency spikes;
+- behavior of a stronger production database backend that is not part of the shipped reference profile.
 
-Those require a stable provider-/fixture-level failure seam. The benchmark suite must not add a production bypass or couple platform contracts to SQLite merely to manufacture those faults.
+Those are distinct environment/provider concerns. The benchmark suite must not add a production bypass or couple platform contracts to SQLite merely to manufacture them.
 
 ## Suggested evidence tiers
 
