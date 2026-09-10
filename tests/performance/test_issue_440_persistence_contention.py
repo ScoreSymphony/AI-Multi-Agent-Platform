@@ -63,6 +63,17 @@ def test_sqlite_contention_profile_uses_competing_canonical_writers(tmp_path: Pa
     asyncio.run(scenario())
 
 
+def test_sqlite_contention_schema_allows_zero_peak_for_failed_reports() -> None:
+    schema = json.loads(
+        Path("docs/schemas/benchmark-persistence-contention.v1.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    peak_schema = schema["properties"]["contention"]["properties"]["peak_in_flight_operations"]
+
+    assert peak_schema["minimum"] == 0
+
+
 def test_sqlite_contention_spec_rejects_invalid_bounds() -> None:
     with pytest.raises(ValueError, match="writer_count"):
         PersistenceContentionBenchmarkSpec(writer_count=1)
