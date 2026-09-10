@@ -99,7 +99,7 @@ class PersistenceContentionBenchmarkSpec:
             ],
             "scope_limitations": [
                 "this characterizes the stdlib SQLite reference backend, not a canonical database",
-                "SQLite internal wait time is observed through end-to-end canonical mutation latency",
+                "SQLite wait time is observed through end-to-end canonical mutation latency",
                 "the benchmark does not alter SQLite busy timeout, WAL settings or private tables",
                 "PR-scale runs prove harness semantics only and are not operating-envelope claims",
             ],
