@@ -124,10 +124,7 @@ def test_linux_storage_fingerprint_distinguishes_identical_mounts_by_device_id(
     assert second_metadata["identity_source"] == "linux-mountinfo"
     assert first_metadata["filesystem_type"] == second_metadata["filesystem_type"] == "tmpfs"
     assert first_metadata["total_bytes"] == second_metadata["total_bytes"]
-    assert (
-        first_metadata["mount_fingerprint_sha256"]
-        != second_metadata["mount_fingerprint_sha256"]
-    )
+    assert first_metadata["mount_fingerprint_sha256"] != second_metadata["mount_fingerprint_sha256"]
     serialized = json.dumps(
         [first_metadata, second_metadata],
         sort_keys=True,
@@ -166,9 +163,7 @@ async def test_reference_host_campaign_binds_evidence_to_measured_storage_target
     ).run(reference_host_campaign_profile("smoke"))
 
     campaign = json.loads((output_dir / "campaign.json").read_text(encoding="utf-8"))
-    envelope = json.loads(
-        (output_dir / "operating-envelope.json").read_text(encoding="utf-8")
-    )
+    envelope = json.loads((output_dir / "operating-envelope.json").read_text(encoding="utf-8"))
     expected_storage = storage_target_metadata(work_dir)
 
     assert campaign["environment"]["storage_target"] == expected_storage
