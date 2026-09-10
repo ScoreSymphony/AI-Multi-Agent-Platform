@@ -48,6 +48,8 @@ An executor receives the exact `VerificationRequest` and pinned `AgentRunRecord`
 
 Reviewable content is supplied through `ReviewerSubjectInputProvider`. The provider must return a `ReviewerSubjectInput` carrying the exact `VerificationSubject`. The executor compares that subject to the immutable request before invoking the model, so stale or mismatched content fails closed. This boundary lets repository-, file-, result-, or application-specific subject renderers be replaced independently of Verification semantics.
 
+`ai_multi_agent_platform.verification.reviewer_input.KernelFileReviewerSubjectInputProvider` is the concrete canonical reference input provider. For Results it reads the exact producer Run projection pinned on the Verification request and requires the expected `run_id:attempt` revision. For Artifacts it resolves the exact canonical file revision through `FileProvider`, checks Artifact linkage, ready state, SHA-256 and checksum, preserves the file classification, and reads only bounded UTF-8 evidence. The default input limit is 256 KiB. This keeps the reference path local-first while preventing the model from choosing a different or stale subject.
+
 The reviewed content is presented to the model as untrusted data. The platform, not the model, owns the Verification ID, exact subject revision/digest, reviewer identity, Evidence Artifact IDs, and completion state. The model returns only a structured outcome and findings. Malformed/unknown output is rejected rather than guessed.
 
 The reference executor uses the model configuration already pinned on the reviewer `AgentRun`. A local `ModelConfiguration(location=local)` therefore provides a complete automatic-review path without a mandatory paid/external AI service. Other provider/model implementations can replace it without changing the canonical workflow.
@@ -107,11 +109,19 @@ The existing Verification Control Plane collections continue to expose canonical
 ```python
 from ai_multi_agent_platform.verification.agent_workflow import AutomaticReviewerWorkflow
 from ai_multi_agent_platform.verification.reference_reviewer import ModelRuntimeReviewerExecutor
+from ai_multi_agent_platform.verification.reviewer_input import (
+    KernelFileReviewerSubjectInputProvider,
+)
 
+review_inputs = KernelFileReviewerSubjectInputProvider(
+    tasks=task_repository,
+    runs=run_repository,
+    files=file_provider,
+)
 review_executor = ModelRuntimeReviewerExecutor(
     agents=agent_runtime,
     models=model_runtime,
-    inputs=review_subject_input_provider,
+    inputs=review_inputs,
 )
 workflow = AutomaticReviewerWorkflow(
     runtime=canonical_verification_runtime,
