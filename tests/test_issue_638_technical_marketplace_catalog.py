@@ -98,10 +98,12 @@ EXPECTED_MUSIC_AI = {
     "clamp3",
     "mert",
     "musvit",
+    "musicbert",
+    "legato",
     "transformers-js",
 }
 REFERENCE_ONLY = {"roo-code", "flowise", "gsd"}
-DEFERRED_POLICY = {"copilot-cli", "claude-code", "musvit"}
+DEFERRED_POLICY = {"copilot-cli", "claude-code", "musvit", "legato"}
 
 
 def _ids(
@@ -126,7 +128,7 @@ def test_curated_technical_catalog_loads_cross_category_seed() -> None:
 
     all_items = provider.search(RegistryQuery(technical_only=True, include_deprecated=True))
 
-    assert len(all_items) >= 76
+    assert len(all_items) >= 78
     assert _ids(provider, "code-intelligence") == EXPECTED_CODE_INTELLIGENCE
     assert _ids(provider, "coding-agent", include_deprecated=True) == EXPECTED_CODING_AGENTS
     assert _ids(provider, "agent-framework", include_deprecated=True) == EXPECTED_AGENT_FRAMEWORKS
@@ -262,6 +264,18 @@ def test_policy_or_license_blocked_projects_are_deferred_not_candidates() -> Non
     assert musvit_metadata.provider_requirements == ("huggingface", "weights-and-biases")
     assert "license-restrictions:non-commercial" in musvit.tags
 
+    legato = provider.get("legato")
+    legato_metadata = derive_technical_metadata(legato)
+    assert legato_metadata is not None
+    assert legato_metadata.lifecycle_status == "deferred"
+    assert legato_metadata.cost_status == "conditional"
+    assert legato_metadata.network_status == "required"
+    assert legato_metadata.resource_class == "gpu"
+    assert legato_metadata.provider_requirements == ("huggingface", "meta-llama")
+    assert "license-boundary:third-party-model" in legato.tags
+    assert "license-restrictions:eu-multimodal-developer-exclusion" in legato.tags
+    assert "model-access:gated" in legato.tags
+
 
 def test_nonstandard_license_terms_are_visible_instead_of_normalized_away() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
@@ -288,6 +302,40 @@ def test_nonstandard_license_terms_are_visible_instead_of_normalized_away() -> N
     assert "license-restrictions:all-rights-reserved" in claude.tags
     assert musvit.license == "CC BY-NC-SA 4.0"
     assert "license-restrictions:share-alike" in musvit.tags
+
+
+def test_music_model_component_boundaries_are_explicit() -> None:
+    provider = FilesystemRegistryProvider(CATALOG)
+
+    musicbert = provider.get("musicbert")
+    musicbert_metadata = derive_technical_metadata(musicbert)
+    assert musicbert_metadata is not None
+    assert musicbert.source.repository == "https://github.com/microsoft/muzic"
+    assert musicbert.source.package_reference == "github:microsoft/muzic#musicbert"
+    assert musicbert.license == "MIT"
+    assert musicbert_metadata.lifecycle_status == "candidate"
+    assert musicbert_metadata.evaluation_status == "required"
+    assert musicbert_metadata.cost_status == "compatible"
+    assert musicbert_metadata.network_status == "optional"
+    assert musicbert_metadata.resource_class == "gpu"
+    assert "scope:code-subproject" in musicbert.tags
+    assert "asset-boundary:external-checkpoints" in musicbert.tags
+    assert "asset-boundary:external-datasets" in musicbert.tags
+    assert "asset-license:unverified" in musicbert.tags
+
+    legato = provider.get("legato")
+    legato_metadata = derive_technical_metadata(legato)
+    assert legato_metadata is not None
+    assert legato.source.repository == "https://github.com/guang-yng/legato"
+    assert legato.license == "Mixed: MIT / LGPL-3.0; Llama 3.2 Community License dependency"
+    assert legato_metadata.lifecycle_status == "deferred"
+    assert legato_metadata.evaluation_status == "not-required"
+    assert legato_metadata.cost_status == "conditional"
+    assert legato_metadata.network_status == "required"
+    assert legato_metadata.resource_class == "gpu"
+    assert legato_metadata.provider_requirements == ("huggingface", "meta-llama")
+    assert "license-restrictions:mixed" in legato.tags
+    assert "model-license:llama-3.2-community" in legato.tags
 
 
 def test_curated_candidate_artifacts_are_reference_only() -> None:
