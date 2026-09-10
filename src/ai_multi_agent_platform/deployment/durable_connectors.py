@@ -258,7 +258,7 @@ def build_single_node_deployment(
 
     planning_repository = JsonPlanningRepository(config.database_dir / "planning.json")
     planning_kernel = PlatformKernel(
-        orchestrator=PlanningOrchestratorAdapter(application_release_repository),
+        orchestrator=PlanningOrchestratorAdapter(planning_repository),
         lifecycle=PlanningOnlyLifecycleBackend(),
         repository=base.kernel_repository,
     )
@@ -270,9 +270,7 @@ def build_single_node_deployment(
     planning_environment = PolicyAwarePlanningEnvironmentResolver(
         agents=base.agents.repository,
         capabilities=base.capabilities,
-        models=base.models,
-        workspaces=base.workspaces,
-        connectors=connector_registry,
+        authorization=base.approval_gate,
     )
     planning = ReferencePlanningService(
         planner=DeterministicReferencePlanner(),
