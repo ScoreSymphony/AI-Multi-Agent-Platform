@@ -354,7 +354,7 @@ def _string_tuple(value: JsonValue | None, field: str) -> tuple[str, ...]:
             ErrorCode.INVALID_REQUEST,
             f"{field} must be an array of strings",
         )
-    return tuple(value)
+    return tuple(item for item in value if isinstance(item, str))
 
 
 def _positive_int(value: JsonValue, field: str) -> int:
