@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
@@ -52,6 +53,10 @@ class PublishContext:
     actor: ActorIdentity
     operation: OperationContext
     approval_id: str | None = None
+    configuration: dict[str, JsonValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "configuration", MappingProxyType(dict(self.configuration)))
 
 
 @dataclass(frozen=True, slots=True)
