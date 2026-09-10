@@ -93,6 +93,36 @@ class MaterializingWorkerDispatcher:
     def worker_id(self) -> str:
         return self._dispatcher.worker_id
 
+    def restore_unmaterialized_job(
+        self,
+        job: WorkerJobRequest,
+        *,
+        handle: ExecutionHandle | None = None,
+    ) -> bool:
+        """Restore wrapper bookkeeping only when no remote Workspace state existed.
+
+        The distributed runtime durably owns the Worker Job request and execution handle, so a
+        pass-through job can be reconstructed without inventing adapter-private state. A
+        Workspace-backed job additionally needs its original materialization receipt for result
+        collection and cleanup; until that evidence is persisted, recovery must leave such a job
+        unresolved rather than pretending that no materialization occurred.
+        """
+
+        if job.workspace_ref is not None or job.snapshot_ref is not None:
+            return False
+        existing = self._jobs.get(job.worker_job_id)
+        if existing is not None:
+            if existing.request != job:
+                raise RegistryError("duplicate worker_job_id carries a different workspace request")
+            if existing.handle is None and handle is not None:
+                self._jobs[job.worker_job_id] = replace(existing, handle=handle)
+            return True
+        self._jobs[job.worker_job_id] = _WorkspaceDispatchState(
+            request=job,
+            handle=handle,
+        )
+        return True
+
     async def dispatch(self, job: WorkerJobRequest) -> ExecutionHandle:
         existing = self._jobs.get(job.worker_job_id)
         if existing is not None:

@@ -11,8 +11,7 @@ The default Marketplace experience is for developer and agent infrastructure:
 - agent frameworks;
 - specification and skill systems;
 - memory and context systems;
-- evaluation;
-- security;
+- evaluation and security;
 - browser and execution systems;
 - inference runtimes;
 - retrieval infrastructure;
@@ -57,72 +56,21 @@ model-and-dataset-tooling
 music-ai
 ```
 
-A component may carry multiple categories when evidence supports the overlap.
-
-The Marketplace defaults to technical components only but preserves a deliberate `All Registry assets` path for generic #81 browsing.
+A component may carry multiple categories when evidence supports the overlap. The Marketplace defaults to technical components only but preserves an explicit `All Registry assets` path for generic #81 browsing.
 
 ## Technical metadata without a second Registry schema
 
-Issue #638 intentionally does not fork `RegistryItem`. Product metadata is derived from canonical categories plus a versioned structured-tag vocabulary.
+Issue #638 intentionally does not fork `RegistryItem`. Product metadata is derived from canonical categories plus structured tags.
 
-Supported lifecycle values:
+Supported lifecycle values are `discovered`, `candidate`, `pilot`, `adopted`, `reference`, `deferred`, `rejected`, `deprecated` and `unknown`.
 
-```text
-discovered
-candidate
-pilot
-adopted
-reference
-deferred
-rejected
-deprecated
-unknown
-```
+Supported evaluation values are `required`, `pending`, `in-progress`, `passed`, `failed`, `not-required` and `unknown`.
 
-Supported evaluation values:
+Supported cost values are `compatible`, `conditional`, `incompatible` and `unknown`.
 
-```text
-required
-pending
-in-progress
-passed
-failed
-not-required
-unknown
-```
+Supported deployment values are `local`, `self-hosted`, `cli`, `library`, `service`, `desktop`, `extension`, `browser`, `hosted` and `unknown`.
 
-Supported cost values:
-
-```text
-compatible
-conditional
-incompatible
-unknown
-```
-
-Supported deployment values:
-
-```text
-local
-self-hosted
-cli
-library
-service
-desktop
-extension
-browser
-hosted
-unknown
-```
-
-Supported network values:
-
-```text
-none
-optional
-required
-unknown
-```
+Supported network values are `none`, `optional`, `required` and `unknown`.
 
 Structured tags use these prefixes:
 
@@ -140,7 +88,7 @@ decision-ref:<reference>
 evaluation-ref:<reference>
 ```
 
-`distribution.technical_catalog` derives a typed backend projection from those tags and fails closed on conflicting/unsupported structured values. The frontend derives the same product presentation from the canonical Registry resource fields. Missing facts render as `unknown`/`not recorded`; they are not fabricated.
+`distribution.technical_catalog` derives a typed backend projection from those tags and fails closed on conflicting or unsupported structured values. The frontend derives the same product presentation from canonical Registry resource fields. Missing facts render as `unknown` or `not recorded`; they are not fabricated.
 
 ## Candidate lifecycle
 
@@ -191,143 +139,59 @@ No third-party executable source is bundled by the technical reference catalog. 
 
 ## Bundled offline catalog
 
-The versioned catalog is:
+The catalog is stored under:
 
 ```text
-catalogs/technical-components/catalog.json
+catalogs/technical-components/
 ```
 
-It is consumed by the existing `FilesystemRegistryProvider`, so the technical Marketplace remains deterministic and usable without a hosted Registry.
+`catalog.json` is the primary catalog and `catalog.fragment.*.json` files are additive reviewed fragments loaded deterministically in filename order by the existing `FilesystemRegistryProvider`. Provider mismatches, unsupported catalog schema versions and duplicate item/version identities fail closed. Artifact paths remain confined to the catalog root.
 
-As of the 2026-09-09 curation pass, the loaded catalog contains at least 47 reviewed entries across the technical taxonomy.
+As of the 2026-09-10 #638 closeout pass, the loaded technical catalog contains **at least 78 reviewed records** across the canonical technical taxonomy. The exact loaded inventory is defined by `catalog.json` together with all loaded `catalog.fragment.*.json` files. `CURATION_QUEUE.md` records promotion history, review outcomes and unresolved research leads; it is not the authoritative item-by-item inventory.
 
-### Code intelligence
+The reviewed inventory includes the architecture-derived Code Intelligence seed (`ProjectAtlas`, `Graphify`, `CodeGraph`, `Understand Anything`), the wider agent/framework/specification/memory/evaluation/execution/inference/retrieval groups, and the reviewed ScoreSymphony/domain ML candidates. Restricted, archived or policy-incompatible projects are represented as explicit `reference` or `deferred` records rather than silently promoted as active installs.
 
-- ProjectAtlas
-- Graphify
-- CodeGraph
-- Understand Anything
-- Serena
-- ast-grep
-- Semgrep
-- SCIP
+Notable boundary cases recorded during the final curation passes include:
 
-SCIP records the current `scip-code/scip` identity rather than the former redirected Sourcegraph namespace.
+- Roo Code, Flowise and GSD as archived/reference-only entries;
+- Copilot CLI and Claude Code as restricted/deferred service-bound entries;
+- MuSViT as deferred because of its non-commercial/share-alike license boundary;
+- Multica with its modified Apache terms kept explicit;
+- MusicBERT scoped to the `musicbert/` code subproject in `microsoft/muzic`, without extending the repository MIT claim to separately distributed checkpoints or datasets;
+- LEGATO as deferred because the practical model path requires the separately licensed and gated `meta-llama/Llama-3.2-11B-Vision` dependency, which is also exposed through canonical `required_models` metadata.
 
-### Coding agents
+Where an upstream release/revision was not explicitly pinned during review, the source revision remains `null`; Registry `version` is the version of the curated catalog record, not a fabricated upstream release number.
 
-- OpenHands
-- Aider
-- OpenCode
-- Goose
-- Cline
-- Roo Code — archived/reference only
-- Plandex
-- Gemini CLI
-- Codex CLI
+## Curation queue and unresolved leads
 
-OpenCode and Goose record their current post-move repository namespaces. Roo Code is intentionally represented as an archived `reference`, not an active candidate.
-
-### Agent frameworks and platforms
-
-- Pydantic AI
-- LangGraph
-- smolagents
-- Google ADK
-- AnythingLLM
-- Microsoft Agent Framework
-- Agno
-- CrewAI
-- Dify
-- Flowise — archived/reference only
-- Letta
-
-Dify's actual modified Apache-2.0 terms are recorded rather than normalized to plain Apache-2.0. Flowise is explicitly archived and records its mixed Apache/commercial licensing instead of being shown as a recommended install.
-
-### Specification and skills
-
-- Spec Kit
-
-### Memory / context / retrieval
-
-- Mem0
-- Graphiti
-- Qdrant
-- AnythingLLM
-- Letta
-
-### Evaluation / security
-
-- Promptfoo
-- Lighteval
-- Inspect AI
-- DeepEval
-- AgentDojo
-- garak
-- Semgrep
-
-### Browser and execution
-
-- Browser Use
-- Playwright
-- Stagehand
-
-### Inference
-
-- llama.cpp
-- Ollama
-- vLLM
-- Text Embeddings Inference (TEI)
-- ONNX Runtime
-- Transformers.js
-
-### Retrieval / model tooling
-
-- Sentence Transformers
-- TEI
-- ONNX Runtime
-- Transformers.js
-
-### Domain/model tooling
-
-- Transformers.js
-
-For reviewed external entries, official repository identity, license and project status are verified before promotion. Where an upstream release/revision was not explicitly pinned during review, the source revision remains `null`; the Registry `version` is the version of the curated catalog record, not a fabricated upstream release number.
-
-Active external entries remain `manual`, `untrusted`, `candidate` and `evaluation:required`. Archived upstreams can remain discoverable only as explicit `reference` entries and remain manual/non-activatable. `cost:compatible` means the reviewed deployment has no mandatory recurring paid service under the project cost policy; `cost:conditional` means optional/provider choices can introduce costs and must be checked during evaluation.
-
-## Curation queue
-
-Unresolved leads live in:
+Research leads that do not yet have a sufficiently unambiguous current identity, component boundary or licensing/status record remain in:
 
 ```text
 catalogs/technical-components/CURATION_QUEUE.md
 ```
 
-The queue is deliberately not loadable by `FilesystemRegistryProvider`. It contains names whose exact identity, current licensing/status or suitability still needs evidence before promotion or explicit rejection/deferment.
+The queue is deliberately not loadable by `FilesystemRegistryProvider`. It records curation history and unresolved leads while preventing two common catalog failures:
 
-This prevents two common catalog failures:
+1. guessing metadata merely to make cards look complete;
+2. presenting an unreviewed upstream as if it were trusted or installable.
 
-1. silently guessing metadata to make cards look complete;
-2. presenting an unreviewed upstream as if it were a trusted/installable component.
-
-The queue also records completed promotion batches so repository moves, archival status and nonstandard licensing decisions stay reviewable.
+A lead may be resolved by promotion, explicit reference/deferred/rejected classification, or by documenting that no sufficiently unambiguous current upstream identity exists. Names such as Cursor Agent, Kiro, Open Agent, Fable/Fabel, TurboVec, AgentShield, Colibri and the Hugging Face umbrella remain documented research boundaries rather than guessed catalog identities. Their ambiguity is not missing Registry execution code and is not a reason to weaken #638's verification requirements.
 
 ## Discovery-source seam
 
-`distribution.discovery.RegistryDiscoverySource` is an intentionally weak interface: it can return untrusted discovery leads but has no fetch/install/activate authority.
+`distribution.discovery.RegistryDiscoverySource` is intentionally weak: it can return untrusted discovery leads but has no fetch/install/activate authority.
 
-`curate_discovered_candidate(...)` requires an explicit `CuratedCandidateReview` before a discovery lead can become a canonical Registry item. Promotion always produces an `untrusted`, `manual`, `candidate`, `evaluation:required` item and validates source/license identity consistency.
+`curate_discovered_candidate(...)` requires an explicit `CuratedCandidateReview` before a discovery lead can become a canonical Registry item. Promotion produces an `untrusted`, `manual`, `candidate`, `evaluation:required` item and validates source/license identity consistency.
 
-This is the future seam for sources such as the MCP Registry. A discovery source is never an authorization source or an automatically trusted install feed.
+This is the future seam for sources such as MCP Registry. A concrete MCP Registry adapter is optional follow-up work; discovery sources are never authorization sources or automatically trusted install feeds.
 
 ## Marketplace UX
 
-The graphical Marketplace now:
+The graphical Marketplace:
 
 - defaults to the technical-component surface;
-- exposes the canonical technical categories as navigation;
-- preserves generic Registry item-type filtering;
+- exposes all canonical technical categories as navigation;
+- preserves generic Registry item-type/trust/license/publisher/capability/platform filtering;
 - presents lifecycle and evaluation badges;
 - shows deployment and cost state on cards;
 - shows network/provider/resource/alternative/reference metadata in details;
@@ -335,7 +199,7 @@ The graphical Marketplace now:
 - renders manual candidates as non-automatically-activatable;
 - allows an explicit switch to all generic Registry assets.
 
-This keeps connectors supported without allowing Gmail/Calendar/Slack-style integrations to dominate the product identity.
+Browser regression coverage verifies that the real `MarketplacePage` renders lifecycle/evaluation/deployment/cost state from a technical Registry item, defaults its Registry query to `technical_component=true`, and emits the expected category filter when technical category navigation is used.
 
 ## Curation rules
 
@@ -354,10 +218,10 @@ Before adding or materially changing a loaded external component entry:
 11. preserve the project's no-mandatory-recurring-paid-service policy;
 12. route any real future installation/integration through existing #81, #15, security, evaluation and owner-domain boundaries.
 
-Repository redirects/moves must be resolved to the current canonical identity before promotion. Non-standard or mixed licensing must be recorded literally enough that the Marketplace does not imply standard SPDX compatibility. Archived projects must not retain active-candidate semantics merely because they were historically listed in architecture notes.
+Repository redirects or moves must be resolved to the current canonical identity before promotion. Non-standard or mixed licensing must be recorded literally enough that the Marketplace does not imply standard SPDX compatibility. Archived projects must not retain active-candidate semantics merely because they were historically listed in architecture notes.
 
 ## Review and promotion
 
-A candidate can progress to `pilot`, `adopted`, `reference`, `deferred` or `rejected` only through the project's canonical evaluation/decision/governance systems. Catalog metadata should then reference the relevant evaluation or decision evidence rather than inventing an independent Marketplace lifecycle database.
+A candidate can progress to `pilot`, `adopted`, `reference`, `deferred` or `rejected` only through the project's canonical evaluation/decision/governance systems. Catalog metadata should reference the relevant evaluation or decision evidence rather than inventing an independent Marketplace lifecycle database.
 
 Archived, license-incompatible or unsuitable projects remain useful historical/reference entries only when that status is explicitly represented and there is a concrete reason to keep them discoverable.

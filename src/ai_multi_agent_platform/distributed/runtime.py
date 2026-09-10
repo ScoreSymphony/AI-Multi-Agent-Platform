@@ -101,6 +101,29 @@ class DistributedRuntime:
         if self._state_store is not None:
             self._state_store.restore(self.registry, self)
 
+    def configure_state_store(self, state_store: DistributedStateStore) -> bool:
+        """Bind restart persistence before runtime identities or dispatch records exist.
+
+        Advanced deployment composition may not know its durable state path until after the base
+        single-node graph has been constructed. Binding is therefore allowed exactly once while
+        the runtime is still pristine. Existing persisted state is restored immediately and, as
+        with constructor-time restore, liveness remains conservative until fresh evidence arrives.
+        """
+
+        if self._state_store is not None:
+            raise RegistryError("distributed runtime state store is already configured")
+        if (
+            self.registry.list_nodes()
+            or self.registry.list_workers()
+            or self.registry.active_reservations()
+            or self._records
+            or self._dispatchers
+        ):
+            raise RegistryError("distributed state store must be configured before runtime use")
+        restored = state_store.restore(self.registry, self)
+        self._state_store = state_store
+        return restored
+
     def records(self) -> tuple[DispatchRecord, ...]:
         return tuple(self._records[worker_job_id] for worker_job_id in sorted(self._records))
 

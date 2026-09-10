@@ -104,6 +104,13 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
         False,
         "capability-assignments",
     ),
+    DurableStoreSpec(
+        "distributed-runtime-state",
+        "db/distributed-runtime-state.json",
+        "json",
+        False,
+        "distributed-runtime",
+    ),
     # #41 state is lazy on the 0.0.1 transition because existing deployments adopt the baseline
     # explicitly. Once present, these files are canonical recovery evidence and must move with the
     # rest of the durable data root. `upgrade-maintenance.json` is intentionally excluded: backups
