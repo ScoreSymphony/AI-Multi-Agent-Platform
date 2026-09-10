@@ -431,7 +431,7 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
             if change.relative_path == target.target.output_path
             and change.kind in {WorkspaceChangeKind.CREATED, WorkspaceChangeKind.MODIFIED}
         ]
-        if len(matches) != 1 or matches[0].file_id is None or matches[0].sha256 is None:
+        if len(matches) != 1:
             return _failure(
                 result_request(result),
                 result.started_at or datetime.now(UTC).isoformat(),
@@ -440,6 +440,14 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                 "application build output was not captured as one canonical changed File",
             )
         change = matches[0]
+        if change.file_id is None or change.sha256 is None:
+            return _failure(
+                result_request(result),
+                result.started_at or datetime.now(UTC).isoformat(),
+                monotonic(),
+                ExecutionErrorCategory.EXECUTION_FAILED,
+                "application build output was not captured as one canonical changed File",
+            )
         artifact_id = _artifact_id(result.run_id, target.target.target_id, change.sha256)
         await self._files.link_artifact(change.file_id, artifact_id, context)
         output = dict(result.output)
