@@ -58,19 +58,32 @@ def test_clean_startup_recovery_is_repeatable_and_ready(tmp_path: Path) -> None:
             SingleNodeConfig(data_dir=root, secure_cookie=False)
         )
 
-        first = await reconcile_single_node_startup(data_dir=root, kernel=deployment.kernel)
-        second = await reconcile_single_node_startup(data_dir=root, kernel=deployment.kernel)
+        first = await reconcile_single_node_startup(
+            data_dir=root,
+            kernel=deployment.kernel,
+            coordinator=deployment.coordination,
+        )
+        second = await reconcile_single_node_startup(
+            data_dir=root,
+            kernel=deployment.kernel,
+            coordinator=deployment.coordination,
+        )
 
         assert first.ready_for_service is True
         assert first.unresolved_run_ids == ()
+        assert first.plans_reconciled == 0
+        assert first.distributed_jobs_reconciled == 0
         assert second.ready_for_service is True
         assert second.unresolved_run_ids == ()
+        assert second.plans_reconciled == 0
         assert first.report_path == root.resolve() / STARTUP_RECOVERY_DIR / STARTUP_RECOVERY_REPORT
 
         payload = load_startup_recovery_report(root)
         assert payload is not None
         assert payload["recovery_kind"] == "ordinary_single_node_startup"
         assert payload["ready_for_service"] is True
+        assert payload["plans_reconciled"] == 0
+        assert payload["distributed_jobs_reconciled"] == 0
         assert payload["unresolved_run_ids"] == []
 
     asyncio.run(scenario())
@@ -84,7 +97,11 @@ def test_restarted_single_node_blocks_orphaned_running_run(tmp_path: Path) -> No
             SingleNodeConfig(data_dir=root, secure_cookie=False)
         )
 
-        recovery = await reconcile_single_node_startup(data_dir=root, kernel=restarted.kernel)
+        recovery = await reconcile_single_node_startup(
+            data_dir=root,
+            kernel=restarted.kernel,
+            coordinator=restarted.coordination,
+        )
 
         assert recovery.ready_for_service is False
         assert recovery.unresolved_run_ids == (run_id,)
@@ -99,7 +116,11 @@ def test_restarted_single_node_blocks_orphaned_running_run(tmp_path: Path) -> No
         )
 
         # A second pass remains blocked rather than inventing a terminal outcome.
-        repeated = await reconcile_single_node_startup(data_dir=root, kernel=restarted.kernel)
+        repeated = await reconcile_single_node_startup(
+            data_dir=root,
+            kernel=restarted.kernel,
+            coordinator=restarted.coordination,
+        )
         assert repeated.ready_for_service is False
         assert repeated.unresolved_run_ids == (run_id,)
 
@@ -153,7 +174,11 @@ def test_startup_resolution_rejects_unlisted_run(tmp_path: Path) -> None:
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=root, secure_cookie=False)
         )
-        await reconcile_single_node_startup(data_dir=root, kernel=deployment.kernel)
+        await reconcile_single_node_startup(
+            data_dir=root,
+            kernel=deployment.kernel,
+            coordinator=deployment.coordination,
+        )
 
         with pytest.raises(RuntimeError, match="already ready for service"):
             require_blocked_startup_run(
