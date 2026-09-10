@@ -60,7 +60,9 @@ class FilesystemRegistryProvider:
                     raise ValueError("registry catalog item artifact must be a non-blank path")
                 artifact_path = (root / artifact).resolve()
                 if not artifact_path.is_relative_to(root):
-                    raise ValueError("registry artifact path must remain inside the catalog directory")
+                    raise ValueError(
+                        "registry artifact path must remain inside the catalog directory"
+                    )
                 identity = (item.item_id, item.version)
                 if identity in artifacts:
                     raise ValueError("registry catalog contains duplicate item/version identities")
