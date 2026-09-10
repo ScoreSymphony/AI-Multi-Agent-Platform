@@ -350,11 +350,15 @@ async def _run_isolated_soak(
     if process.returncode != 0:
         detail = stderr.decode("utf-8", errors="replace").strip()
         suffix = f": {detail}" if detail else ""
-        raise RuntimeError(f"isolated reference-host soak failed with code {process.returncode}{suffix}")
+        raise RuntimeError(
+            f"isolated reference-host soak failed with code {process.returncode}{suffix}"
+        )
     try:
         payload: object = json.loads(output_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError("isolated reference-host soak did not produce valid JSON evidence") from exc
+        raise RuntimeError(
+            "isolated reference-host soak did not produce valid JSON evidence"
+        ) from exc
     if not isinstance(payload, dict):
         raise RuntimeError("isolated reference-host soak evidence must be a JSON object")
     return cast(dict[str, Any], payload)
