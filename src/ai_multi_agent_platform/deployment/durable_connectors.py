@@ -60,6 +60,10 @@ from ai_multi_agent_platform.templates import (
     PlatformTemplateEnvironmentResolver,
     register_template_control_plane,
 )
+from ai_multi_agent_platform.verification.agent_repair import (
+    KernelAgentRepairExecutor,
+    ProducerAgentRepairBindingProvider,
+)
 from ai_multi_agent_platform.verification.agent_workflow import AutomaticReviewerWorkflow
 from ai_multi_agent_platform.verification.gate import VerificationCompletionAuthority
 from ai_multi_agent_platform.verification.output_workflow import (
@@ -68,6 +72,7 @@ from ai_multi_agent_platform.verification.output_workflow import (
     install_automatic_reviewer_output_observer,
 )
 from ai_multi_agent_platform.verification.reference_reviewer import ModelRuntimeReviewerExecutor
+from ai_multi_agent_platform.verification.repair import VerificationRepairRuntime
 from ai_multi_agent_platform.verification.reviewer_input import (
     KernelFileReviewerSubjectInputProvider,
 )
@@ -156,6 +161,8 @@ def build_single_node_deployment(
     # Compose #711 on the normal durable kernel. The public PlatformKernel is the provider-neutral
     # output-observing variant, so ordinary attach_result/attach_artifact calls remain the only
     # producer API. Automatic review is still opt-in per versioned VerificationPolicy metadata.
+    # When a configured review returns needs_changes, the same composition routes one bounded
+    # canonical repair Step back through the exact producer Agent identity before fresh review.
     completion = base.kernel._completion_authority  # noqa: SLF001
     if not isinstance(completion, VerificationCompletionAuthority):
         raise RuntimeError("normal single-node kernel is missing Verification completion authority")
@@ -163,6 +170,12 @@ def build_single_node_deployment(
         tasks=EventSourcedTaskRepository(base.kernel_repository),
         runs=EventSourcedRunRepository(base.kernel_repository),
         files=base.files,
+    )
+    repair_runtime = VerificationRepairRuntime(
+        base.verification,
+        completion,
+        base.kernel,
+        binding_provider=ProducerAgentRepairBindingProvider(),
     )
     automatic_reviewer = AutomaticReviewerWorkflow(
         runtime=base.verification_runtime,
@@ -174,6 +187,8 @@ def build_single_node_deployment(
             models=base.model_runtime,
             inputs=reviewer_inputs,
         ),
+        repair_runtime=repair_runtime,
+        repair_executor=KernelAgentRepairExecutor(base.kernel),
     )
     automatic_review_output = AutomaticReviewerOutputCoordinator(
         kernel=base.kernel,
