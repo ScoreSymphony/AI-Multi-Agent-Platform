@@ -2,6 +2,17 @@
 
 from .capability_bridge import ConnectorActorResolver, ConnectorCapabilityProvider
 from .egress import EgressConnectorService
+from .github_releases import (
+    GITHUB_API_VERSION,
+    GITHUB_RELEASE_ASSET_ATTACH_ACTION,
+    GITHUB_RELEASE_CONNECTOR_TYPE,
+    GITHUB_RELEASE_CONNECTOR_VERSION,
+    GITHUB_RELEASE_CREATE_ACTION,
+    GitHubReleaseConnectorProvider,
+    GitHubRestResponse,
+    GitHubRestTransport,
+    UrllibGitHubRestTransport,
+)
 from .models import (
     ConflictPolicy,
     Connection,
@@ -52,6 +63,14 @@ __all__ = [
     "EgressConnectorService",
     "ExternalNativeReference",
     "ExternalResourceReference",
+    "GITHUB_API_VERSION",
+    "GITHUB_RELEASE_ASSET_ATTACH_ACTION",
+    "GITHUB_RELEASE_CONNECTOR_TYPE",
+    "GITHUB_RELEASE_CONNECTOR_VERSION",
+    "GITHUB_RELEASE_CREATE_ACTION",
+    "GitHubReleaseConnectorProvider",
+    "GitHubRestResponse",
+    "GitHubRestTransport",
     "InMemoryConnectorRepository",
     "REFERENCE_ACTION",
     "REFERENCE_CONNECTOR_TYPE",
@@ -61,5 +80,6 @@ __all__ = [
     "SyncCheckpoint",
     "SyncMode",
     "SyncStatus",
+    "UrllibGitHubRestTransport",
     "connector_definition_id",
 ]
