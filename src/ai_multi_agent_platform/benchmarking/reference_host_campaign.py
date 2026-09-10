@@ -221,8 +221,8 @@ class ReferenceHostCampaignRunner:
             timeout_seconds=profile.timeout_seconds,
             repetitions=profile.sweep_repetitions,
         )
-        for point, report in sweep_execution.point_reports:
-            _write_json(sweep_output / point.report_file, report.to_dict())
+        for point, point_report in sweep_execution.point_reports:
+            _write_json(sweep_output / point.report_file, point_report.to_dict())
         sweep_summary_path = sweep_output / "summary.json"
         _write_json(sweep_summary_path, sweep_execution.summary.to_dict())
         if not sweep_execution.summary.correctness_passed:
@@ -247,7 +247,7 @@ class ReferenceHostCampaignRunner:
 
         completed_at = datetime.now(UTC).isoformat()
         duration_seconds = round(time.perf_counter() - started, 6)
-        report = ReferenceHostCampaignReport(
+        campaign_report = ReferenceHostCampaignReport(
             schema_version=REFERENCE_HOST_CAMPAIGN_SCHEMA_VERSION,
             campaign_id=_CAMPAIGN_ID,
             campaign_version=_CAMPAIGN_VERSION,
@@ -276,8 +276,8 @@ class ReferenceHostCampaignRunner:
             budget_status=_BUDGET_STATUS,
             correctness_passed=True,
         )
-        _write_json(self._output_dir / "campaign.json", report.to_dict())
-        return report
+        _write_json(self._output_dir / "campaign.json", campaign_report.to_dict())
+        return campaign_report
 
 
 def _require_profile_contract(
