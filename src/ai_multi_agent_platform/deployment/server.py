@@ -375,6 +375,8 @@ async def _run_startup_recovery(
     return await reconcile_single_node_startup(
         data_dir=deployment.config.data_dir,
         kernel=deployment.kernel,
+        coordinator=deployment.coordination,
+        distributed_runtime=deployment.distributed_runtime,
     )
 
 
@@ -394,6 +396,8 @@ def _print_startup_recovery(recovery: SingleNodeStartupRecoveryResult) -> None:
     print(
         "startup recovery completed: "
         f"runs_checked={recovery.runs_checked} "
+        f"plans={recovery.plans_reconciled} "
+        f"distributed_jobs={recovery.distributed_jobs_reconciled} "
         f"unresolved={len(recovery.unresolved_run_ids)} "
         f"ready={str(recovery.ready_for_service).lower()} "
         f"report={recovery.report_path}"
