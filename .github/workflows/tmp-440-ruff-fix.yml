@@ -1,4 +1,4 @@
-name: Temporary #440 Ruff fixer
+name: Temporary #440 Ruff diagnostic
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  fix:
+  diagnose:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -22,26 +22,18 @@ jobs:
           cache: pip
       - name: Install Ruff
         run: python -m pip install "ruff>=0.12,<1"
-      - name: Apply safe Ruff fixes and formatting
+      - name: Capture Ruff diagnostics
         run: |
-          ruff check --fix --exit-zero \
+          mkdir -p .tmp-440
+          ruff check \
             src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
             src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py \
-            tests/performance/test_issue_440_persistence_contention.py
-          ruff format \
-            src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
-            src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py \
-            tests/performance/test_issue_440_persistence_contention.py
-      - name: Commit fixes
+            tests/performance/test_issue_440_persistence_contention.py \
+            > .tmp-440/ruff.txt 2>&1 || true
+      - name: Commit diagnostics
         run: |
-          if git diff --quiet; then
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
-            src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py \
-            tests/performance/test_issue_440_persistence_contention.py
-          git commit -m "style(#440): apply Ruff lint fixes"
+          git add .tmp-440/ruff.txt
+          git commit -m "chore(#440): capture Ruff diagnostics"
           git push origin HEAD:perf/440-sqlite-contention
