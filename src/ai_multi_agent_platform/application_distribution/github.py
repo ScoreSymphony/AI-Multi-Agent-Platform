@@ -6,7 +6,7 @@ from ai_multi_agent_platform.connectors import ConnectorService
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-from .contracts import PublicationResult, PublishedArtifact, PublishContext
+from .contracts import PublicationResult, PublishContext, PublishedArtifact
 from .models import ApplicationRelease, ReleaseVisibility
 
 _CREATE_RELEASE_ACTION = "github.release.create"
