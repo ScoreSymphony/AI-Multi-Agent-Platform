@@ -16,6 +16,7 @@ from typing import Any, cast
 from ai_multi_agent_platform import __version__
 
 from .operating_envelope import OperatingEnvelopeAnalyzer
+from .reference_host_storage import attach_storage_target
 from .sweep import SingleNodeSweepHarness
 
 REFERENCE_HOST_CAMPAIGN_SCHEMA_VERSION = "1.0"
@@ -242,6 +243,7 @@ class ReferenceHostCampaignRunner:
             sweep_sources=("sweep/summary.json",),
             endurance_sources=("soak.json",),
         )
+        envelope = attach_storage_target(envelope, work_dir=self._work_dir)
         envelope_path = self._output_dir / "operating-envelope.json"
         _write_json(envelope_path, envelope.to_dict())
 
