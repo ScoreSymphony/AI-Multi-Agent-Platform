@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from ai_multi_agent_platform.benchmarking import reference_host_storage
 from ai_multi_agent_platform.benchmarking.operating_envelope import (
     OperatingEnvelopeReport,
     SweepConfiguration,
@@ -18,7 +19,6 @@ from ai_multi_agent_platform.benchmarking.reference_host_storage import (
     attach_storage_target,
     storage_target_metadata,
 )
-import ai_multi_agent_platform.benchmarking.reference_host_storage as reference_host_storage
 
 
 def _fingerprint(payload: object) -> str:
