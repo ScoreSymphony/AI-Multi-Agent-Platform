@@ -119,7 +119,8 @@ def data_command_handlers(
         if requested_type is not None and _memory_type(requested_type) is not current.memory_type:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
-                "memory type is preserved during promotion; derive a new memory explicitly to change it",
+                "memory type is preserved during promotion; "
+                "derive a new memory explicitly to change it",
             )
         target_scope = _memory_scope(_required_string(payload, "scope"))
         if target_scope is MemoryScope.SHORT_TERM:
@@ -172,7 +173,8 @@ def data_command_handlers(
         if requested_type is not None and _memory_type(requested_type) is not current.memory_type:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
-                "memory type is immutable during update; derive a new memory explicitly to change it",
+                "memory type is immutable during update; "
+                "derive a new memory explicitly to change it",
             )
         requested_scope = payload.get("scope")
         if requested_scope is not None and requested_scope != current.scope.value:
