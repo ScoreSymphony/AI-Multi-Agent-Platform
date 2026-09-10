@@ -8,7 +8,7 @@
         "item_id": "copilot-cli",
         "item_type": "agent",
         "name": "GitHub Copilot CLI",
-        "description": "Terminal coding-agent reference that requires an active GitHub Copilot subscription and is governed by GitHub's restricted Copilot CLI license.",
+        "description": "Terminal coding-agent reference that requires a GitHub Copilot entitlement and is governed by GitHub's restricted Copilot CLI license.",
         "version": "1.0.0",
         "publisher": "GitHub",
         "source": {
@@ -17,7 +17,7 @@
           "revision": null
         },
         "license": "GitHub Copilot CLI License (restricted)",
-        "provenance": "Official repository, current non-archived project status, README prerequisites and LICENSE.md reviewed on 2026-09-10 for #638. The upstream license permits install/run and limited redistribution of unmodified copies but explicitly withholds modification/derivative-work rights. The README requires an active Copilot subscription and authenticated GitHub access. No third-party executable code is bundled by this catalog.",
+        "provenance": "Official repository, current non-archived project status, README prerequisites, LICENSE.md and current GitHub Copilot plan availability reviewed on 2026-09-10 for #638. The upstream license permits install/run and limited redistribution of unmodified copies but explicitly withholds modification/derivative-work rights. Copilot CLI is available on the limited free Copilot tier as well as paid tiers, so cost is conditional rather than inherently incompatible. Authenticated GitHub/Copilot access remains required. No third-party executable code is bundled by this catalog.",
         "supported_platform": {},
         "dependencies": [],
         "requested_permissions": [],
@@ -28,13 +28,14 @@
           "lifecycle:deferred",
           "evaluation:not-required",
           "deployment:cli",
-          "cost:incompatible",
+          "cost:conditional",
           "network:required",
           "provider:github-copilot",
           "resource:unknown",
           "license-restrictions:no-modification",
           "license-restrictions:limited-redistribution",
-          "service-subscription:required"
+          "service-entitlement:required",
+          "free-tier:available"
         ],
         "categories": [
           "coding-agent"
@@ -44,7 +45,7 @@
         "trust_status": "untrusted",
         "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
         "released_at": null,
-        "changelog": "Catalog record v1; active upstream classified deferred because its required Copilot subscription violates the project recurring-cost policy and its custom license is not an open-source modification grant.",
+        "changelog": "Catalog record v1; active upstream classified deferred for restricted-license/hosted-provider review. A limited free Copilot tier includes CLI access, while expanded usage may require paid capacity.",
         "deprecated": false,
         "yanked": false
       },
@@ -65,7 +66,7 @@
           "revision": null
         },
         "license": "Proprietary — Anthropic Commercial Terms",
-        "provenance": "Official repository, current non-archived project status and LICENSE.md reviewed on 2026-09-10 for #638. The repository license states all rights reserved and makes use subject to Anthropic's Commercial Terms of Service. No third-party executable code is bundled by this catalog.",
+        "provenance": "Official repository, current non-archived project status and LICENSE.md reviewed on 2026-09-10 for #638. The repository license states all rights reserved and makes use subject to Anthropic's Commercial Terms of Service. Current official consumer guidance requires a paid Pro or Max subscription for Claude Code access; API use is separately billed. No third-party executable code is bundled by this catalog.",
         "supported_platform": {},
         "dependencies": [],
         "requested_permissions": [],
@@ -81,7 +82,8 @@
           "provider:anthropic",
           "resource:unknown",
           "license-restrictions:all-rights-reserved",
-          "commercial-terms:required"
+          "commercial-terms:required",
+          "service-subscription:required"
         ],
         "categories": [
           "coding-agent"
@@ -91,7 +93,7 @@
         "trust_status": "untrusted",
         "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
         "released_at": null,
-        "changelog": "Catalog record v1; active upstream classified deferred because Anthropic commercial-service dependency conflicts with the project's no-additional-paid-AI-services policy.",
+        "changelog": "Catalog record v1; active upstream classified deferred because Anthropic paid-service dependency conflicts with the project's no-additional-paid-AI-services policy.",
         "deprecated": false,
         "yanked": false
       },
