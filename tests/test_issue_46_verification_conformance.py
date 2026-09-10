@@ -20,7 +20,9 @@ def test_runtime_verification_scenario_keeps_required_acceptance_evidence_explic
     assert "test_changed_result_revision_cannot_reuse_old_verification" in command
     assert "test_deterministic_reference_verifier_passes_and_fails_without_llm" in command
     assert "test_agent_reviewer_independence_and_read_only_rules_are_enforced" in command
+    assert "test_bounded_repair_preserves_history_and_stops_at_policy_limit" in command
 
     assert "revisions" in scenario.criterion
     assert "without an LLM" in scenario.criterion
     assert "reviewer independence" in scenario.criterion
+    assert "bounded and auditable" in scenario.criterion
