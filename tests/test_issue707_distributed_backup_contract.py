@@ -49,8 +49,7 @@ def test_distributed_runtime_state_round_trips_through_single_node_backup(tmp_pa
     verification = verify_backup(backup)
     assert "distributed-runtime-state" in verification.manifest["included_components"]
     assert any(
-        entry["path"] == _DISTRIBUTED_STATE_PATH
-        for entry in verification.manifest["entries"]
+        entry["path"] == _DISTRIBUTED_STATE_PATH for entry in verification.manifest["entries"]
     )
 
     restored = restore_single_node_backup(
