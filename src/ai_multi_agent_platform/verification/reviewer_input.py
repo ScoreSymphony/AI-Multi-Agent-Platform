@@ -7,6 +7,7 @@ never lets reviewer/model output choose its own evidence.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping
 from enum import Enum
@@ -87,17 +88,24 @@ class KernelFileReviewerSubjectInputProvider(ReviewerSubjectInputProvider):
                 ErrorCode.CONTRACT_VIOLATION,
                 "reviewed Result revision differs from the bound canonical Run attempt",
             )
+
+        snapshot = _result_snapshot(
+            task_id=request.task_id,
+            result_id=request.subject.subject_id,
+            run=run,
+        )
+        if request.subject.digest != _digest(snapshot):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "reviewed Result digest differs from current canonical Run evidence",
+            )
+
+        # Feed the model only fields covered by the canonical Result digest. In particular,
+        # do not include mutable Run fields that are not part of the #86 subject snapshot.
         content = _canonical_json(
             {
                 "subject": _subject_payload(request.subject),
-                "run": {
-                    "run_id": run.run_id,
-                    "attempt": run.attempt,
-                    "status": run.status.value,
-                    "output": _plain_json(run.output),
-                    "result_ids": list(run.result_ids),
-                    "artifact_ids": list(run.artifact_ids),
-                },
+                "result": snapshot,
             }
         )
         _require_bounded(content, self._max_input_bytes, subject_type="Result")
@@ -200,6 +208,21 @@ class KernelFileReviewerSubjectInputProvider(ReviewerSubjectInputProvider):
         )
 
 
+def _result_snapshot(*, task_id: str, result_id: str, run: object) -> dict[str, JsonValue]:
+    """Mirror the canonical #86 Result subject snapshot used by the evidence resolver."""
+
+    return {
+        "type": "result",
+        "id": result_id,
+        "task_id": task_id,
+        "run_id": run.run_id,
+        "run_attempt": run.attempt,
+        "run_status": run.status.value,
+        "output": _plain_json(run.output),
+        "artifact_ids": list(run.artifact_ids),
+    }
+
+
 def _subject_payload(subject: VerificationSubject) -> dict[str, JsonValue]:
     return {
         "type": subject.subject_type,
@@ -241,6 +264,11 @@ def _canonical_json(value: object) -> str:
         ensure_ascii=False,
         allow_nan=False,
     )
+
+
+def _digest(value: object) -> str:
+    encoded = _canonical_json(value).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
 def _plain_json(value: object) -> object:
