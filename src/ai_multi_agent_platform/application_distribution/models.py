@@ -56,6 +56,7 @@ class ReleaseStatus(StrEnum):
 
 class BuildTargetStatus(StrEnum):
     PENDING = "pending"
+    QUEUED = "queued"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
@@ -143,7 +144,11 @@ class BuildSpecification:
                 field_name,
                 _nonblank_tuple(getattr(self, field_name), field_name),
             )
-        object.__setattr__(self, "resource_hints", MappingProxyType(dict(self.resource_hints)))
+        object.__setattr__(
+            self,
+            "resource_hints",
+            MappingProxyType(dict(self.resource_hints)),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,7 +177,11 @@ class GateEvidence:
 
     def __post_init__(self) -> None:
         _nonblank(self.name, "gate name")
-        object.__setattr__(self, "evidence_refs", _nonblank_tuple(self.evidence_refs, "evidence_refs"))
+        object.__setattr__(
+            self,
+            "evidence_refs",
+            _nonblank_tuple(self.evidence_refs, "evidence_refs"),
+        )
         object.__setattr__(self, "details", MappingProxyType(dict(self.details)))
 
 
@@ -200,10 +209,18 @@ class ApplicationArtifact:
         validate_relative_path(self.filename)
         _nonblank(self.media_type, "media_type")
         object.__setattr__(self, "sha256", validate_sha256(self.sha256))
-        object.__setattr__(self, "evidence_refs", _nonblank_tuple(self.evidence_refs, "evidence_refs"))
+        object.__setattr__(
+            self,
+            "evidence_refs",
+            _nonblank_tuple(self.evidence_refs, "evidence_refs"),
+        )
         if self.download_url is not None:
             _nonblank(self.download_url, "download_url")
-        object.__setattr__(self, "external_metadata", MappingProxyType(dict(self.external_metadata)))
+        object.__setattr__(
+            self,
+            "external_metadata",
+            MappingProxyType(dict(self.external_metadata)),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +232,8 @@ class ApplicationRelease:
     visibility: ReleaseVisibility
     project_id: str
     workspace_id: str
+    workspace_snapshot_id: str
+    workspace_content_checksum: str
     source_revision: str
     build_specification: BuildSpecification
     creator_ref: str
@@ -238,6 +257,12 @@ class ApplicationRelease:
         validate_id(self.release_id, "application_release")
         validate_id(self.project_id, "project")
         validate_id(self.workspace_id, "workspace")
+        validate_id(self.workspace_snapshot_id, "workspace_snapshot")
+        object.__setattr__(
+            self,
+            "workspace_content_checksum",
+            validate_sha256(self.workspace_content_checksum),
+        )
         _nonblank(self.application_id, "application_id")
         _nonblank(self.display_name, "display_name")
         _nonblank(self.version, "version")
@@ -265,11 +290,19 @@ class ApplicationRelease:
         if self.schema_version != APPLICATION_RELEASE_SCHEMA_VERSION:
             raise ValueError("unsupported application release schema version")
         target_ids = {state.target.target_id for state in self.targets}
-        if self.targets and target_ids != {target.target_id for target in self.build_specification.targets}:
-            raise ValueError("release target state must cover the build specification targets exactly")
+        if self.targets and target_ids != {
+            target.target_id for target in self.build_specification.targets
+        }:
+            raise ValueError(
+                "release target state must cover the build specification targets exactly"
+            )
         if any(artifact.target_id not in target_ids for artifact in self.artifacts):
             raise ValueError("release artifact references an unknown target")
         gate_names = [gate.name for gate in self.gates]
         if len(gate_names) != len(set(gate_names)):
             raise ValueError("release gates must be unique by name")
-        object.__setattr__(self, "external_metadata", MappingProxyType(dict(self.external_metadata)))
+        object.__setattr__(
+            self,
+            "external_metadata",
+            MappingProxyType(dict(self.external_metadata)),
+        )
