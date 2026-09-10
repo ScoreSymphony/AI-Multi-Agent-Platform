@@ -23,11 +23,11 @@ from ai_multi_agent_platform.application_distribution import (
 )
 from ai_multi_agent_platform.configuration import LocalSecretProvider
 from ai_multi_agent_platform.connectors import (
+    GITHUB_RELEASE_CONNECTOR_TYPE,
+    GITHUB_RELEASE_CONNECTOR_VERSION,
     Connection,
     ConnectorActionInvocation,
     DurableGitHubReleaseConnectorProvider,
-    GITHUB_RELEASE_CONNECTOR_TYPE,
-    GITHUB_RELEASE_CONNECTOR_VERSION,
     GitHubRestResponse,
     InMemoryConnectorRepository,
 )
