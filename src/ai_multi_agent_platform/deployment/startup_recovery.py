@@ -12,13 +12,25 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from ai_multi_agent_platform.kernel import PlatformKernel, RecoveryDisposition, RecoveryReport
 
 STARTUP_RECOVERY_REPORT_VERSION = 1
 STARTUP_RECOVERY_DIR = "recovery"
 STARTUP_RECOVERY_REPORT = "startup-report.json"
+
+
+class StartupCoordinator(Protocol):
+    """Narrow #384 startup seam used by the deployment recovery gate."""
+
+    async def reconcile_all(self) -> tuple[object, ...]: ...
+
+
+class StartupDistributedRuntime(Protocol):
+    """Narrow #14 startup seam used when distributed execution is enabled."""
+
+    async def reconcile(self) -> tuple[object, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +42,8 @@ class SingleNodeStartupRecoveryResult:
     unresolved_run_ids: tuple[str, ...]
     report_path: Path
     ready_for_service: bool
+    plans_reconciled: int = 0
+    distributed_jobs_reconciled: int = 0
 
     @property
     def runs_checked(self) -> int:
@@ -40,18 +54,35 @@ async def reconcile_single_node_startup(
     *,
     data_dir: Path,
     kernel: PlatformKernel,
+    coordinator: StartupCoordinator | None = None,
+    distributed_runtime: StartupDistributedRuntime | None = None,
 ) -> SingleNodeStartupRecoveryResult:
-    """Reconcile canonical Run state before an ordinary single-node serve.
+    """Reconcile durable runtime state before an ordinary single-node serve.
 
-    The pass is safe to repeat because the kernel recovery path owns canonical
-    idempotency/reconciliation. A running Run whose execution backend can no
-    longer be found is never guessed into a terminal state: it remains marked as
-    requiring reconciliation and blocks authoritative serving until an operator
-    resolves the exact Run through the canonical kernel outcome path.
+    Distributed Worker state is reconciled first so liveness/reservation truth is
+    current before Run recovery. The durable Plan/Step coordinator then resumes
+    due waits/retries and reconciles active Step Runs through its canonical path.
+    Finally the kernel scans every Task stream, including Tasks without an active
+    Plan. The complete pass is safe to repeat.
+
+    A running Run whose execution backend can no longer be found is never guessed
+    into a terminal state: it remains marked as requiring reconciliation and
+    blocks authoritative serving until an operator resolves the exact Run through
+    the canonical kernel outcome path.
     """
 
     root = data_dir.expanduser().resolve()
     report_path = root / STARTUP_RECOVERY_DIR / STARTUP_RECOVERY_REPORT
+
+    distributed_jobs_reconciled = 0
+    if distributed_runtime is not None:
+        distributed_records = await distributed_runtime.reconcile()
+        distributed_jobs_reconciled = len(distributed_records)
+
+    plans_reconciled = 0
+    if coordinator is not None:
+        plan_projections = await coordinator.reconcile_all()
+        plans_reconciled = len(plan_projections)
 
     reports = await kernel.recover_all()
     unresolved = tuple(
@@ -67,6 +98,8 @@ async def reconcile_single_node_startup(
         "recovery_kind": "ordinary_single_node_startup",
         "completed_at": datetime.now(UTC).isoformat(),
         "runs_checked": sum(len(report.entries) for report in reports),
+        "plans_reconciled": plans_reconciled,
+        "distributed_jobs_reconciled": distributed_jobs_reconciled,
         "unresolved_run_ids": list(unresolved),
         "ready_for_service": ready_for_service,
         "tasks": [
@@ -92,6 +125,8 @@ async def reconcile_single_node_startup(
         unresolved_run_ids=unresolved,
         report_path=report_path,
         ready_for_service=ready_for_service,
+        plans_reconciled=plans_reconciled,
+        distributed_jobs_reconciled=distributed_jobs_reconciled,
     )
 
 
