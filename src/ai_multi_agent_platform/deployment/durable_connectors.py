@@ -99,6 +99,7 @@ from .single_node import (
 )
 
 _APPLICATION_BUILD_PRINCIPAL = "service:application-distribution"
+_GITHUB_RELEASE_CONNECTOR_PRINCIPAL = "connector.github-releases"
 
 
 @dataclass(slots=True)
@@ -220,6 +221,17 @@ def build_single_node_deployment(
         target_matcher=LocalBuildTargetMatcher(),
     )
     if base.secrets is not None:
+        if not base.authorization.has_policy(_GITHUB_RELEASE_CONNECTOR_PRINCIPAL):
+            base.authorization.register(
+                LocalPrincipalPolicy(
+                    principal_ref=_GITHUB_RELEASE_CONNECTOR_PRINCIPAL,
+                    actor_types=frozenset({ActorType.SERVICE}),
+                    allowed_actions=frozenset(
+                        {AuthorizationAction.INVOKE_SENSITIVE_CAPABILITY}
+                    ),
+                    resource_types=frozenset({ResourceType.SECRET_REFERENCE}),
+                )
+            )
         github_releases = DurableGitHubReleaseConnectorProvider(
             base.secrets,
             base.files,
