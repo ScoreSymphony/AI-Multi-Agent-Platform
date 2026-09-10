@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
 
 from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
@@ -16,15 +15,13 @@ from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.kernel.models import TaskState
 
+from .agent_workflow import RepairOutput
 from .models import VerificationRequest, VerificationResult
 from .repair import (
     VERIFICATION_REPAIR_SOURCE,
     VerificationRepairBindingProvider,
     VerificationRepairExecution,
 )
-
-if TYPE_CHECKING:
-    from .agent_workflow import RepairOutput
 
 _REPAIR_CONTEXT_SCHEMA = "verification-agent-repair-context-v1"
 _MAX_REPAIR_CONTEXT_BYTES = 32 * 1024
@@ -193,9 +190,6 @@ class KernelAgentRepairExecutor:
             actor_ref=_SERVICE_ACTOR,
             source=VERIFICATION_REPAIR_SOURCE,
         )
-
-        # Local import keeps repair.py -> Agent lifecycle and agent_workflow -> repair.py acyclic.
-        from .agent_workflow import RepairOutput
 
         return RepairOutput(
             subject_type="result",
