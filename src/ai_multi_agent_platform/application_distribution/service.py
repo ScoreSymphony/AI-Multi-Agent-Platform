@@ -7,7 +7,7 @@ from dataclasses import replace
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
-from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.domain import RunStatus, new_id
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.security import (
     ActorIdentity,
@@ -17,6 +17,7 @@ from ai_multi_agent_platform.security import (
     ProposedAction,
     ResourceType,
     RiskClassification,
+    infer_actor_identity,
 )
 from ai_multi_agent_platform.workspaces import (
     RunWorkspaceBinding,
@@ -170,12 +171,22 @@ class ApplicationDistributionService:
         target_id: str,
         idempotency_key: str,
         actor_ref: str,
+        approval_id: str | None = None,
     ) -> ApplicationRelease:
         release = await self.repository.get(release_id)
-        state = self._target(release, target_id)
-        if state.task_id is not None:
-            return release
         self._require_mutable(release)
+        state = self._target(release, target_id)
+        if state.status is BuildTargetStatus.SUCCEEDED:
+            return release
+        if state.task_id is not None:
+            return await self._continue_build(
+                release,
+                state,
+                idempotency_key=idempotency_key,
+                actor_ref=actor_ref,
+                approval_id=approval_id,
+            )
+
         target = state.target
         if self.target_matcher is not None and not await self.target_matcher.supports(
             release.build_specification,
@@ -199,6 +210,7 @@ class ApplicationDistributionService:
             )
             return await self.repository.save(updated, expected_revision=release.revision)
 
+        await self._authorize_build(release, state, actor_ref, approval_id)
         bindings = self._require_run_workspace_bindings()
         objective = (
             f"Build application release {release.application_id} {release.version} for "
@@ -207,10 +219,9 @@ class ApplicationDistributionService:
             f"{release.build_specification.revision}; workspace={release.workspace_id}; "
             f"snapshot={release.workspace_snapshot_id}; output={target.output_path}"
         )
-        task_id = new_id("task")
         task = await self.kernel.create_task(
             idempotency_key=f"application-release:{idempotency_key}:create-task:{target_id}",
-            task_id=task_id,
+            task_id=new_id("task"),
             title=f"Build {release.display_name} {release.version} ({target_id})",
             objective=objective,
             owner_type="service",
@@ -219,61 +230,196 @@ class ApplicationDistributionService:
             actor_ref=actor_ref,
             source=_SOURCE,
         )
-        task_id = task.task_id
         await self.kernel.ready_task(
             idempotency_key=f"application-release:{idempotency_key}:ready-task:{target_id}",
-            task_id=task_id,
+            task_id=task.task_id,
             actor_ref=actor_ref,
             source=_SOURCE,
         )
-        task_state = await self.kernel.get_task(task_id)
-        if task_state.plan_ref is None:
-            await self.kernel.plan_task(
-                idempotency_key=f"application-release:{idempotency_key}:plan-task:{target_id}",
-                task_id=task_id,
-                actor_ref=actor_ref,
-                source=_SOURCE,
-            )
         run = await self.kernel.create_run(
             idempotency_key=f"application-release:{idempotency_key}:create-run:{target_id}",
-            task_id=task_id,
+            task_id=task.task_id,
             actor_ref=actor_ref,
             source=_SOURCE,
         )
         await bindings.bind(
             RunWorkspaceBinding(
                 run_id=run.run_id,
-                task_id=task_id,
+                task_id=task.task_id,
                 workspace_id=release.workspace_id,
                 workspace_snapshot_id=release.workspace_snapshot_id,
                 content_checksum=release.workspace_content_checksum,
             )
         )
-        started = await self.kernel.start_run(
-            idempotency_key=f"application-release:{idempotency_key}:start-run:{target_id}",
-            task_id=task_id,
-            run_id=run.run_id,
-            actor_ref=actor_ref,
-            source=_SOURCE,
-        )
-        updated_targets = tuple(
+        queued_targets = tuple(
             replace(
                 item,
-                status=BuildTargetStatus.RUNNING,
-                task_id=task_id,
-                run_id=started.run_id,
+                status=BuildTargetStatus.QUEUED,
+                task_id=task.task_id,
+                run_id=run.run_id,
+                failure_reason=None,
             )
             if item.target.target_id == target_id
             else item
             for item in release.targets
         )
-        updated = replace(
+        queued = replace(
             release,
             status=ReleaseStatus.BUILDING,
-            targets=updated_targets,
+            targets=queued_targets,
             revision=release.revision + 1,
         )
-        return await self.repository.save(updated, expected_revision=release.revision)
+        queued = await self.repository.save(queued, expected_revision=release.revision)
+        return await self._continue_build(
+            queued,
+            self._target(queued, target_id),
+            idempotency_key=idempotency_key,
+            actor_ref=actor_ref,
+            approval_id=approval_id,
+        )
+
+    async def _continue_build(
+        self,
+        release: ApplicationRelease,
+        state: BuildTargetState,
+        *,
+        idempotency_key: str,
+        actor_ref: str,
+        approval_id: str | None,
+    ) -> ApplicationRelease:
+        if state.task_id is None or state.run_id is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "application build target has incomplete canonical Task/Run provenance",
+            )
+        run = await self.kernel.get_run(state.task_id, state.run_id)
+        if run.status is RunStatus.QUEUED:
+            await self._authorize_build(release, state, actor_ref, approval_id)
+            run = await self.kernel.start_run(
+                idempotency_key=(
+                    f"application-release:{idempotency_key}:start-run:{state.target.target_id}"
+                ),
+                task_id=state.task_id,
+                run_id=state.run_id,
+                actor_ref=actor_ref,
+                source=_SOURCE,
+            )
+        if run.status in {RunStatus.STARTING, RunStatus.RUNNING}:
+            run = await self.kernel.refresh_run(
+                idempotency_key=(
+                    f"application-release:{idempotency_key}:refresh-run:{state.target.target_id}"
+                ),
+                task_id=state.task_id,
+                run_id=state.run_id,
+                actor_ref=actor_ref,
+                source=_SOURCE,
+            )
+        if run.status is RunStatus.SUCCEEDED:
+            return await self._admit_execution_output(
+                release,
+                state,
+                run.output,
+                actor_ref=actor_ref,
+                idempotency_key=idempotency_key,
+            )
+        if run.status in {
+            RunStatus.FAILED,
+            RunStatus.CANCELLED,
+            RunStatus.TIMED_OUT,
+        }:
+            reason = _run_failure_reason(run.output, run.status.value)
+            targets = tuple(
+                replace(item, status=BuildTargetStatus.FAILED, failure_reason=reason)
+                if item.target.target_id == state.target.target_id
+                else item
+                for item in release.targets
+            )
+            failed = replace(
+                release,
+                status=self._build_status(targets),
+                targets=targets,
+                revision=release.revision + 1,
+            )
+            return await self.repository.save(failed, expected_revision=release.revision)
+        running_targets = tuple(
+            replace(item, status=BuildTargetStatus.RUNNING)
+            if item.target.target_id == state.target.target_id
+            else item
+            for item in release.targets
+        )
+        if running_targets == release.targets:
+            return release
+        running = replace(
+            release,
+            status=ReleaseStatus.BUILDING,
+            targets=running_targets,
+            revision=release.revision + 1,
+        )
+        return await self.repository.save(running, expected_revision=release.revision)
+
+    async def _admit_execution_output(
+        self,
+        release: ApplicationRelease,
+        state: BuildTargetState,
+        output: dict[str, JsonValue],
+        *,
+        actor_ref: str,
+        idempotency_key: str,
+    ) -> ApplicationRelease:
+        build = _application_build_output(output)
+        if build.get("release_id") != release.release_id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "build execution output references another application release",
+            )
+        if build.get("target_id") != state.target.target_id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "build execution output references another target",
+            )
+        artifact_id = _required_output_string(build, "artifact_id")
+        file_id = _required_output_string(build, "file_id")
+        filename = _required_output_string(build, "filename")
+        media_type = _required_output_string(build, "media_type")
+        sha256 = _required_output_string(build, "sha256")
+        if state.task_id is None or state.run_id is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "successful build target is missing Task/Run provenance",
+            )
+        file_record = await self.files.get_file(
+            file_id,
+            _build_data_context(release, state, actor_ref),
+        )
+        if file_record.sha256 != sha256:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "build execution output digest differs from canonical File",
+            )
+        run = await self.kernel.get_run(state.task_id, state.run_id)
+        if artifact_id not in run.artifact_ids:
+            await self.kernel.attach_artifact(
+                idempotency_key=(
+                    f"application-release:{idempotency_key}:attach-artifact:"
+                    f"{state.target.target_id}"
+                ),
+                task_id=state.task_id,
+                run_id=state.run_id,
+                artifact_id=artifact_id,
+                actor_ref=actor_ref,
+                source=_SOURCE,
+            )
+        return await self.record_build_artifact(
+            release.release_id,
+            target_id=state.target.target_id,
+            artifact_id=artifact_id,
+            file_id=file_id,
+            filename=filename,
+            media_type=media_type,
+            build_run_id=state.run_id,
+            context=_build_data_context(release, state, actor_ref),
+            evidence_refs=("application-build-executor",),
+        )
 
     async def record_build_artifact(
         self,
@@ -299,7 +445,7 @@ class ApplicationDistributionService:
                 "build artifact does not belong to the target's canonical Run",
             )
         run = await self.kernel.get_run(target_state.task_id, build_run_id)
-        if run.status.value != "succeeded":
+        if run.status is not RunStatus.SUCCEEDED:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "build artifact requires a succeeded canonical Run",
@@ -435,6 +581,48 @@ class ApplicationDistributionService:
             )
         return await self._apply_publication(release, result)
 
+    async def _authorize_build(
+        self,
+        release: ApplicationRelease,
+        target: BuildTargetState,
+        actor_ref: str,
+        approval_id: str | None,
+    ) -> None:
+        if self.authorization_gate is None:
+            return
+        actor = infer_actor_identity(actor_ref)
+        operation = operation_context_for_release(
+            release,
+            correlation_id=release.release_id,
+            actor=actor,
+        )
+        action = ProposedAction(
+            AuthorizationContext(
+                actor=actor,
+                action=AuthorizationAction.EXECUTE,
+                resource_type=ResourceType.GENERIC,
+                resource_id=release.release_id,
+                operation=operation,
+                workspace_id=release.workspace_id,
+                capability_ref="application.build.command",
+                side_effect="application_build_execute",
+            ),
+            payload={
+                "target_id": target.target.target_id,
+                "command": list(release.build_specification.command),
+                "source_path": release.build_specification.source_path,
+                "output_path": target.target.output_path,
+                "source_revision": release.source_revision,
+                "workspace_snapshot_id": release.workspace_snapshot_id,
+                "secret_references": list(release.build_specification.secret_references),
+            },
+        )
+        await self.authorization_gate.enforce(
+            action,
+            approval_id=approval_id,
+            risk=RiskClassification.HIGH,
+        )
+
     async def _authorize_publication(
         self,
         release: ApplicationRelease,
@@ -459,6 +647,7 @@ class ApplicationDistributionService:
             ),
             payload={
                 "publisher_id": publisher.provider_id,
+                "publisher_configuration": dict(context.configuration),
                 "application_id": release.application_id,
                 "version": release.version,
                 "channel": release.channel.value,
@@ -497,6 +686,7 @@ class ApplicationDistributionService:
             actor=context.actor,
             operation=operation,
             approval_id=context.approval_id,
+            configuration=context.configuration,
         )
 
     async def _apply_publication(
@@ -636,3 +826,60 @@ def operation_context_for_release(
         owner_id=actor.actor_id,
         project_id=release.project_id,
     )
+
+
+def _build_data_context(
+    release: ApplicationRelease,
+    state: BuildTargetState,
+    actor_ref: str,
+) -> DataAccessContext:
+    if state.task_id is None or state.run_id is None:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "application build target is missing canonical Task/Run provenance",
+        )
+    actor = infer_actor_identity(actor_ref)
+    return DataAccessContext(
+        operation=operation_context_for_release(
+            release,
+            correlation_id=release.release_id,
+            actor=actor,
+        ),
+        actor_ref=actor_ref,
+        task_id=state.task_id,
+        run_id=state.run_id,
+        audit_metadata={"source": _SOURCE},
+    )
+
+
+def _application_build_output(output: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    nested = output.get("output")
+    if not isinstance(nested, dict):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "successful build Run has no executor output object",
+        )
+    build = nested.get("application_build")
+    if not isinstance(build, dict):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "successful build Run has no application build evidence",
+        )
+    return build
+
+
+def _required_output_string(output: dict[str, JsonValue], field: str) -> str:
+    value = output.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            f"application build evidence is missing {field}",
+        )
+    return value
+
+
+def _run_failure_reason(output: dict[str, JsonValue], fallback: str) -> str:
+    stderr = output.get("stderr")
+    if isinstance(stderr, str) and stderr.strip():
+        return stderr[-1000:]
+    return fallback
