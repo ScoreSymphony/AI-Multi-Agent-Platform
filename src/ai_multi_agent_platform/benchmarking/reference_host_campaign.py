@@ -201,6 +201,7 @@ class ReferenceHostCampaignRunner:
         self._work_dir_mode = work_dir_mode
 
     async def run(self, profile: ReferenceHostCampaignProfile) -> ReferenceHostCampaignReport:
+        _require_profile_contract(profile, work_dir_mode=self._work_dir_mode)
         _require_fresh_directory(self._output_dir, label="campaign output directory")
         _require_fresh_directory(self._work_dir, label="campaign work directory")
         self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -295,6 +296,19 @@ class ReferenceHostCampaignRunner:
         )
         _write_json(self._output_dir / "campaign.json", report.to_dict())
         return report
+
+
+def _require_profile_contract(
+    profile: ReferenceHostCampaignProfile,
+    *,
+    work_dir_mode: str,
+) -> None:
+    if profile.name != "release":
+        return
+    if work_dir_mode != "explicit":
+        raise ValueError("release campaign requires an explicit work directory")
+    if profile != reference_host_campaign_profile("release"):
+        raise ValueError("release campaign profile must match the fixed documented release profile")
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
