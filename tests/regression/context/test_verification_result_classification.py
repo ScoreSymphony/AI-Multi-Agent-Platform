@@ -35,9 +35,7 @@ class _Evidence:
     def __init__(self, context: VerificationEvidenceContext) -> None:
         self.context = context
 
-    async def resolve_subject(
-        self, *, task_id: str, subject_type: str, subject_id: str
-    ):
+    async def resolve_subject(self, *, task_id: str, subject_type: str, subject_id: str):
         assert task_id == self.context.task_id
         assert subject_type == self.context.subject.subject_type
         assert subject_id == self.context.subject.subject_id
@@ -179,9 +177,7 @@ def _case(
         task_id=task_id,
         agent_id=producer_agent_id,
         agent_revision=1,
-        entries=(
-            SimpleNamespace(data_classification=ContextDataClassification.INTERNAL),
-        ),
+        entries=(SimpleNamespace(data_classification=ContextDataClassification.INTERNAL),),
     )
     source = OperationalContextSourceRequest(
         task_id=task_id,
