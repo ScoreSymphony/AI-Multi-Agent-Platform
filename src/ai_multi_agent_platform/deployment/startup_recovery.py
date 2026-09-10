@@ -1,6 +1,6 @@
 """Ordinary single-node startup reconciliation for issue #707.
 
-This module is intentionally separate from disaster-restore recovery.  The normal
+This module is intentionally separate from disaster-restore recovery. The normal
 single-Control-Plane profile must reconcile durable canonical Runs after an
 abnormal process exit even when no backup/restore operation occurred.
 """
@@ -44,7 +44,7 @@ async def reconcile_single_node_startup(
     """Reconcile canonical Run state before an ordinary single-node serve.
 
     The pass is safe to repeat because the kernel recovery path owns canonical
-    idempotency/reconciliation.  A running Run whose execution backend can no
+    idempotency/reconciliation. A running Run whose execution backend can no
     longer be found is never guessed into a terminal state: it remains marked as
     requiring reconciliation and blocks authoritative serving until an operator
     resolves the exact Run through the canonical kernel outcome path.
@@ -160,7 +160,17 @@ def _load_report(path: Path) -> dict[str, Any]:
 
 
 def _atomic_json_write(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     partial = path.with_name(f".{path.name}.partial")
-    partial.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(partial, path)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        partial.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(partial, path)
+    except OSError as exc:
+        try:
+            partial.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise RuntimeError(f"cannot persist startup recovery report: {path}") from exc
