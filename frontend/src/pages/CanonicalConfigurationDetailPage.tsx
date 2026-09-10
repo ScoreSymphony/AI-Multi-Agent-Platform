@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { BrowserSessionClient } from "../api/browserSession";
+import { ControlPlaneClient } from "../api/client";
 import { ControlPlaneCollectionClient } from "../api/collections";
+import { ConfigurationClient } from "../api/configuration";
 import { AppLink } from "../app/router";
 import {
   CanonicalId,
@@ -8,6 +11,10 @@ import {
   LoadingState,
   StatusBadge,
 } from "../components/States";
+import {
+  CapabilityAssignmentConfigurationPage,
+  RoutingProfileConfigurationPage,
+} from "./SingleNodeConfigurationPage";
 
 export type CanonicalConfigurationCollection =
   | "workflows"
@@ -17,6 +24,34 @@ export type CanonicalConfigurationCollection =
 type CanonicalConfigurationResource = Record<string, unknown> & { id?: unknown };
 
 export function CanonicalConfigurationDetailPage({
+  client,
+  collection,
+  resourceId,
+}: {
+  client: ControlPlaneCollectionClient;
+  collection: CanonicalConfigurationCollection;
+  resourceId: string;
+}) {
+  const session = useMemo(() => new BrowserSessionClient({ baseUrl: client.baseUrl }), [client.baseUrl]);
+  const core = useMemo(
+    () => new ControlPlaneClient({ baseUrl: client.baseUrl, fetchImpl: session.fetch }),
+    [client.baseUrl, session],
+  );
+  const configuration = useMemo(
+    () => new ConfigurationClient({ baseUrl: client.baseUrl, fetchImpl: session.fetch }),
+    [client.baseUrl, session],
+  );
+
+  if (collection === "model-routing-profiles") {
+    return <RoutingProfileConfigurationPage core={core} configuration={configuration} profileId={resourceId} />;
+  }
+  if (collection === "capability-assignments") {
+    return <CapabilityAssignmentConfigurationPage core={core} configuration={configuration} assignmentId={resourceId} />;
+  }
+  return <ReadOnlyWorkflowPage client={client} collection={collection} resourceId={resourceId} />;
+}
+
+function ReadOnlyWorkflowPage({
   client,
   collection,
   resourceId,
@@ -59,8 +94,8 @@ export function CanonicalConfigurationDetailPage({
 
       <Card title="Canonical Control Plane projection">
         <p>
-          This view is read-only. The owning domain remains authoritative; Templates only keep
-          the canonical resource reference and provenance.
+          Workflow editing is outside #696. The owning Workflow domain remains authoritative;
+          Templates only keep the canonical resource reference and provenance.
         </p>
         <pre>{JSON.stringify(resource, null, 2)}</pre>
       </Card>
