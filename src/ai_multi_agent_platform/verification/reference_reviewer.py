@@ -234,9 +234,7 @@ def _parse_review_response(
     raw: object = structured_output
     if not isinstance(raw, dict):
         text = "\n".join(
-            value
-            for block in content
-            if isinstance((value := getattr(block, "text", None)), str)
+            value for block in content if isinstance((value := getattr(block, "text", None)), str)
         )
         if not text.strip():
             raise ContractError(

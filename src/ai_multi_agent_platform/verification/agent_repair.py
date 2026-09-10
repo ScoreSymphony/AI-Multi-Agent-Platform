@@ -47,11 +47,7 @@ class ProducerAgentRepairBindingProvider(VerificationRepairBindingProvider):
         repair_attempt: int,
     ) -> dict[str, JsonValue]:
         producer = request.producer
-        if (
-            producer is None
-            or producer.agent_id is None
-            or producer.agent_revision is None
-        ):
+        if producer is None or producer.agent_id is None or producer.agent_revision is None:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
                 "automatic Agent repair requires exact canonical producer Agent identity",
@@ -131,10 +127,7 @@ class KernelAgentRepairExecutor:
                 "repair execution is not bound to the supplied canonical Verification",
             )
 
-        key = (
-            f"verification-repair:{execution.source_verification_id}:"
-            f"{execution.repair_attempt}"
-        )
+        key = f"verification-repair:{execution.source_verification_id}:{execution.repair_attempt}"
         run = await self._kernel.get_run(execution.task_id, execution.run_id)
         if run.status is RunStatus.QUEUED:
             run = await self._kernel.start_run(

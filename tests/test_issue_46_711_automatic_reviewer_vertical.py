@@ -127,9 +127,7 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         transport = _LocalAutomaticReviewTransport()
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False),
-            onboarding_model_adapters=(
-                OpenAICompatibleOnboardingAdapter(transport=transport),
-            ),
+            onboarding_model_adapters=(OpenAICompatibleOnboardingAdapter(transport=transport),),
         )
         admin = deployment.bootstrap_admin("admin", _PASSWORD)
         token = deployment.authentication.create_personal_access_token(
@@ -344,9 +342,7 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         assert reviewer_run.agent.agent_id != producer.agent_id
         assert reviewer_run.run_id == run_id
         assert reviewer_run.selected_model_config_id == "model-local-auto-review"
-        assert reviewer_run.model_call_refs == (
-            f"{reviewer_run.agent_run_id}:review-model",
-        )
+        assert reviewer_run.model_call_refs == (f"{reviewer_run.agent_run_id}:review-model",)
 
         verification_view = await deployment.http.handle(
             HTTPRequest(
@@ -383,12 +379,15 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         )
         assert repeated.status is TaskStatus.SUCCEEDED
         assert transport.chat_calls == 2
-        assert len(
-            [
-                pair
-                for pair in deployment.verification.history(task_id=task_id)
-                if pair[0].verification_id == verification_request.verification_id
-            ]
-        ) == 1
+        assert (
+            len(
+                [
+                    pair
+                    for pair in deployment.verification.history(task_id=task_id)
+                    if pair[0].verification_id == verification_request.verification_id
+                ]
+            )
+            == 1
+        )
 
     asyncio.run(scenario())

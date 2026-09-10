@@ -108,13 +108,16 @@ def test_observer_failure_keeps_attachment_durable_and_retry_resumes_observation
         assert artifact_id in recovered.artifact_ids
         assert len(observer.events) == 2
         assert observer.events[0].id == observer.events[1].id == attachment_events[0].id
-        assert len(
-            [
-                event
-                for event in await kernel.history(task_id)
-                if event.event_type == "artifact.attached"
-            ]
-        ) == 1
+        assert (
+            len(
+                [
+                    event
+                    for event in await kernel.history(task_id)
+                    if event.event_type == "artifact.attached"
+                ]
+            )
+            == 1
+        )
 
     asyncio.run(scenario())
 

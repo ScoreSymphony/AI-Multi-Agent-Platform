@@ -234,9 +234,7 @@ def test_local_modelruntime_reviewer_executes_and_records_canonical_result() -> 
 
 def test_local_reviewer_rejects_stale_subject_before_model_invocation() -> None:
     async def scenario() -> None:
-        workflow, provider, agents, inputs, request = _stack(
-            '{"outcome":"pass","findings":[]}'
-        )
+        workflow, provider, agents, inputs, request = _stack('{"outcome":"pass","findings":[]}')
         inputs.review_input = ReviewerSubjectInput(
             subject=VerificationSubject(
                 subject_type="result",
@@ -271,6 +269,8 @@ def test_local_reviewer_malformed_output_fails_closed() -> None:
         runs = agents.service.repository.list_agent_runs()
         assert len(runs) == 1
         assert runs[0].status.value == "failed"
-        assert workflow.status_for(request.verification_id).completion.state is CompletionState.WAITING
+        assert (
+            workflow.status_for(request.verification_id).completion.state is CompletionState.WAITING
+        )
 
     asyncio.run(scenario())

@@ -53,9 +53,9 @@ class _ReviewLockBox:
         self.lock = asyncio.Lock()
 
 
-_REVIEW_LOCKS: WeakKeyDictionary[
-    object, WeakValueDictionary[str, _ReviewLockBox]
-] = WeakKeyDictionary()
+_REVIEW_LOCKS: WeakKeyDictionary[object, WeakValueDictionary[str, _ReviewLockBox]] = (
+    WeakKeyDictionary()
+)
 _REVIEW_LOCKS_GUARD = ThreadLock()
 
 
@@ -87,9 +87,7 @@ class ReviewerAssignment:
     def __post_init__(self) -> None:
         if self.team_id is None:
             if self.agent_id is None or self.agent_revision is None:
-                raise ValueError(
-                    "standalone reviewer assignment requires exact agent revision"
-                )
+                raise ValueError("standalone reviewer assignment requires exact agent revision")
             if self.team_revision is not None or self.team_role is not None:
                 raise ValueError("team reviewer fields require team_id")
         else:
@@ -507,9 +505,7 @@ class AutomaticReviewerWorkflow:
 
                 cycles.append(
                     ReviewWorkflowCycle(
-                        request=self._completion.verification.get_request(
-                            request.verification_id
-                        ),
+                        request=self._completion.verification.get_request(request.verification_id),
                         reviewer_run=self._agents.service.repository.get_agent_run(
                             reviewer_run.agent_run_id
                         ),
@@ -669,9 +665,7 @@ class AutomaticReviewerWorkflow:
             # complete_review may already have terminalized it before canonical submission.
             raise
         except Exception as exc:
-            current = self._agents.service.repository.get_agent_run(
-                reviewer_run.agent_run_id
-            )
+            current = self._agents.service.repository.get_agent_run(reviewer_run.agent_run_id)
             if current.status is AgentRunStatus.RUNNING:
                 self._agents.finish_agent_run(
                     current.agent_run_id,

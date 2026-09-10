@@ -50,9 +50,7 @@ def _profile(name: str, role: str) -> AgentProfile:
         name=name,
         role=role,
         instructions=AgentInstructions(
-            role=InstructionSource(
-                content=f"Act as the {role} for the exact assigned work."
-            ),
+            role=InstructionSource(content=f"Act as the {role} for the exact assigned work."),
         ),
     )
 
@@ -662,10 +660,7 @@ def test_missing_reviewer_configuration_fails_closed_before_agent_run() -> None:
 
         assert exc_info.value.code is ErrorCode.INVALID_CONFIGURATION
         assert agents.service.repository.list_agent_runs() == ()
-        assert (
-            completion.assess_task_completion(request.task_id).state
-            is CompletionState.WAITING
-        )
+        assert completion.assess_task_completion(request.task_id).state is CompletionState.WAITING
 
     asyncio.run(scenario())
 

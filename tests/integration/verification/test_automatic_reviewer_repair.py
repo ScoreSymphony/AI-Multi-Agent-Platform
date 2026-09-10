@@ -154,9 +154,7 @@ def test_public_single_node_runs_bounded_agent_repair_and_fresh_review(tmp_path:
         transport = _RepairTransport()
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False),
-            onboarding_model_adapters=(
-                OpenAICompatibleOnboardingAdapter(transport=transport),
-            ),
+            onboarding_model_adapters=(OpenAICompatibleOnboardingAdapter(transport=transport),),
         )
         admin = deployment.bootstrap_admin("admin", _PASSWORD)
         token = deployment.authentication.create_personal_access_token(
@@ -411,14 +409,17 @@ def test_public_single_node_runs_bounded_agent_repair_and_fresh_review(tmp_path:
         )
         assert repeated.status is TaskStatus.SUCCEEDED
         assert transport.chat_calls == 4
-        assert len(
-            [
-                pair
-                for pair in deployment.verification.history(task_id=task_id)
-                if pair[0].policy_id == policy.policy_id
-                and pair[0].policy_version == policy.version
-                and pair[0].stage_id == "agent-review"
-            ]
-        ) == 2
+        assert (
+            len(
+                [
+                    pair
+                    for pair in deployment.verification.history(task_id=task_id)
+                    if pair[0].policy_id == policy.policy_id
+                    and pair[0].policy_version == policy.version
+                    and pair[0].stage_id == "agent-review"
+                ]
+            )
+            == 2
+        )
 
     asyncio.run(scenario())
