@@ -6,8 +6,6 @@ import tomllib
 from collections.abc import Iterable
 from pathlib import Path
 
-import pytest
-
 from ai_multi_agent_platform.domain import ExternalRef, OwnerRef, Run, Task, new_id, validate_id
 
 _CORE_ROOTS = (
