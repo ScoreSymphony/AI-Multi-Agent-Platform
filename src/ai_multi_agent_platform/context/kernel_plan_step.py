@@ -173,7 +173,7 @@ def _canonical_json(value: object) -> str:
 
 
 def _digest(content: str) -> str:
-    return f"sha256:{sha256(content.encode('utf-8')).hexdigest()}"
+    return sha256(content.encode("utf-8")).hexdigest()
 
 
 __all__ = ["KernelFallbackPlanStepContextSourceAdapter"]
