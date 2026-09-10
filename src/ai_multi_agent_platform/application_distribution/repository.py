@@ -13,6 +13,7 @@ from typing import Any, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.security import SecretReference
 
 from .models import (
     ApplicationArtifact,
@@ -265,6 +266,8 @@ def _build_specification(value: JsonValue | None) -> BuildSpecification:
             data.get("required_capabilities"), "required_capabilities"
         ),
         resource_hints=_json_object(data.get("resource_hints"), "resource_hints"),
+        environment=_optional_string_mapping(data.get("environment"), "environment"),
+        secret_environment=_secret_environment_mapping(data.get("secret_environment")),
         secret_references=_string_tuple(data.get("secret_references"), "secret_references"),
     )
 
@@ -320,6 +323,48 @@ def _gate_evidence(value: JsonValue) -> GateEvidence:
         evidence_refs=_string_tuple(data.get("evidence_refs"), "evidence_refs"),
         details=_json_object(data.get("details"), "details"),
     )
+
+
+def _secret_environment_mapping(
+    value: JsonValue | None,
+) -> dict[str, SecretReference]:
+    if value is None:
+        return {}
+    data = _json_object(value, "secret_environment")
+    return {
+        name: _secret_reference(item, f"secret_environment.{name}")
+        for name, item in data.items()
+    }
+
+
+def _secret_reference(value: JsonValue, field: str) -> SecretReference:
+    data = _json_object(value, field)
+    metadata = _optional_json_object(data.get("metadata"), f"{field}.metadata")
+    return SecretReference(
+        provider=_required_string(data, "provider"),
+        secret_id=_required_string(data, "secret_id"),
+        scope=_required_string(data, "scope"),
+        version=_optional_string(data, "version"),
+        metadata=metadata,
+    )
+
+
+def _optional_string_mapping(value: JsonValue | None, field: str) -> dict[str, str]:
+    if value is None:
+        return {}
+    data = _json_object(value, field)
+    result: dict[str, str] = {}
+    for key, item in data.items():
+        if not isinstance(item, str):
+            raise ValueError(f"{field} values must be strings")
+        result[key] = item
+    return result
+
+
+def _optional_json_object(value: JsonValue | None, label: str) -> dict[str, JsonValue]:
+    if value is None:
+        return {}
+    return _json_object(value, label)
 
 
 def _json_object(value: object, label: str) -> dict[str, JsonValue]:
