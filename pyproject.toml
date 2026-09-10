@@ -43,6 +43,7 @@ platform-persistence-contention = "ai_multi_agent_platform.benchmarking.persiste
 platform-operating-envelope = "ai_multi_agent_platform.benchmarking.operating_envelope_cli:main"
 platform-operating-envelope-catalog = "ai_multi_agent_platform.benchmarking.operating_envelope_catalog_cli:main"
 platform-reference-host-campaign = "ai_multi_agent_platform.benchmarking.reference_host_campaign_cli:main"
+platform-reference-host-reproducibility = "ai_multi_agent_platform.benchmarking.reference_host_reproducibility_cli:main"
 platform-release = "ai_multi_agent_platform.release.cli:main"
 
 [project.optional-dependencies]
