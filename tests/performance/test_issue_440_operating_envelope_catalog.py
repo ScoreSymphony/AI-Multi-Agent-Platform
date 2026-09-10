@@ -94,9 +94,7 @@ def _envelope(
 
 def test_packaged_source_schema_matches_documented_contract() -> None:
     documented = json.loads(
-        Path("docs/schemas/benchmark-operating-envelope.v1.schema.json").read_text(
-            encoding="utf-8"
-        )
+        Path("docs/schemas/benchmark-operating-envelope.v1.schema.json").read_text(encoding="utf-8")
     )
     packaged = json.loads(
         files("ai_multi_agent_platform.benchmarking")
