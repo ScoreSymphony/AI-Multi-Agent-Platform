@@ -47,6 +47,8 @@ EXPECTED_CODING_AGENTS = {
     "mimo-code",
     "zcode",
     "mini-swe-agent",
+    "copilot-cli",
+    "claude-code",
 }
 EXPECTED_AGENT_FRAMEWORKS = {
     "pydantic-ai",
@@ -67,6 +69,7 @@ EXPECTED_AGENT_FRAMEWORKS = {
     "ruflo",
     "gas-town",
     "langflow",
+    "multica",
 }
 EXPECTED_MEMORY = {"mem0", "graphiti", "qdrant", "anything-llm", "letta", "openviking"}
 EXPECTED_INFERENCE = {
@@ -89,8 +92,16 @@ EXPECTED_EVALUATION = {
     "harbor",
     "openenv",
 }
-EXPECTED_MUSIC_AI = {"bachi", "analysisgnn", "clamp3", "mert", "transformers-js"}
-REFERENCE_ONLY = {"roo-code", "flowise"}
+EXPECTED_MUSIC_AI = {
+    "bachi",
+    "analysisgnn",
+    "clamp3",
+    "mert",
+    "musvit",
+    "transformers-js",
+}
+REFERENCE_ONLY = {"roo-code", "flowise", "gsd"}
+DEFERRED_POLICY = {"copilot-cli", "claude-code", "musvit"}
 
 
 def _ids(
@@ -115,13 +126,16 @@ def test_curated_technical_catalog_loads_cross_category_seed() -> None:
 
     all_items = provider.search(RegistryQuery(technical_only=True, include_deprecated=True))
 
-    assert len(all_items) >= 71
+    assert len(all_items) >= 76
     assert _ids(provider, "code-intelligence") == EXPECTED_CODE_INTELLIGENCE
     assert _ids(provider, "coding-agent", include_deprecated=True) == EXPECTED_CODING_AGENTS
     assert _ids(provider, "agent-framework", include_deprecated=True) == EXPECTED_AGENT_FRAMEWORKS
     assert EXPECTED_MEMORY.issubset(_ids(provider, "memory-and-context"))
     assert _ids(provider, "inference-runtime") == EXPECTED_INFERENCE
     assert _ids(provider, "specification-and-skills") == EXPECTED_SPECIFICATIONS
+    assert _ids(provider, "specification-and-skills", include_deprecated=True) == (
+        EXPECTED_SPECIFICATIONS | {"gsd"}
+    )
     assert _ids(provider, "browser-and-execution") == EXPECTED_BROWSER_EXECUTION
     assert _ids(provider, "evaluation") == EXPECTED_EVALUATION
     assert _ids(provider, "music-ai") == EXPECTED_MUSIC_AI
@@ -135,8 +149,13 @@ def test_curated_catalog_entries_remain_manual_untrusted_and_fail_closed() -> No
         assert technical is not None
         assert item.route is DistributionRoute.MANUAL
         assert item.trust_status is TrustStatus.UNTRUSTED
-        assert technical.cost_status in {"compatible", "conditional", "unknown"}
-        assert technical.network_status in {"none", "optional", "unknown"}
+        assert technical.cost_status in {
+            "compatible",
+            "conditional",
+            "incompatible",
+            "unknown",
+        }
+        assert technical.network_status in {"none", "optional", "required", "unknown"}
 
         if item.item_id in REFERENCE_ONLY:
             assert technical.lifecycle_status == "reference"
@@ -144,6 +163,12 @@ def test_curated_catalog_entries_remain_manual_untrusted_and_fail_closed() -> No
             assert technical.evaluation_required is False
             assert item.deprecated is True
             assert "project-status:archived" in item.tags
+        elif item.item_id in DEFERRED_POLICY:
+            assert technical.lifecycle_status == "deferred"
+            assert technical.evaluation_status == "not-required"
+            assert technical.evaluation_required is False
+            assert item.deprecated is False
+            assert "project-status:not-archived" in item.tags
         else:
             assert technical.lifecycle_status == "candidate"
             assert technical.evaluation_status == "required"
@@ -204,12 +229,50 @@ def test_archived_projects_are_reference_only_not_active_candidates() -> None:
         assert technical.evaluation_status == "not-required"
 
 
+def test_policy_or_license_blocked_projects_are_deferred_not_candidates() -> None:
+    provider = FilesystemRegistryProvider(CATALOG)
+
+    copilot = provider.get("copilot-cli")
+    copilot_metadata = derive_technical_metadata(copilot)
+    assert copilot_metadata is not None
+    assert copilot_metadata.lifecycle_status == "deferred"
+    assert copilot_metadata.cost_status == "conditional"
+    assert copilot_metadata.network_status == "required"
+    assert copilot_metadata.provider_requirements == ("github-copilot",)
+    assert "license-restrictions:no-modification" in copilot.tags
+    assert "free-tier:available" in copilot.tags
+    assert "service-entitlement:required" in copilot.tags
+
+    claude = provider.get("claude-code")
+    claude_metadata = derive_technical_metadata(claude)
+    assert claude_metadata is not None
+    assert claude_metadata.lifecycle_status == "deferred"
+    assert claude_metadata.cost_status == "incompatible"
+    assert claude_metadata.provider_requirements == ("anthropic",)
+    assert "license-restrictions:all-rights-reserved" in claude.tags
+    assert "commercial-terms:required" in claude.tags
+
+    musvit = provider.get("musvit")
+    musvit_metadata = derive_technical_metadata(musvit)
+    assert musvit_metadata is not None
+    assert musvit_metadata.lifecycle_status == "deferred"
+    assert musvit_metadata.cost_status == "conditional"
+    assert musvit_metadata.network_status == "required"
+    assert musvit_metadata.resource_class == "gpu"
+    assert musvit_metadata.provider_requirements == ("huggingface", "weights-and-biases")
+    assert "license-restrictions:non-commercial" in musvit.tags
+
+
 def test_nonstandard_license_terms_are_visible_instead_of_normalized_away() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
     dify = provider.get("dify")
     flowise = provider.get("flowise")
     openviking = provider.get("openviking")
+    multica = provider.get("multica")
+    copilot = provider.get("copilot-cli")
+    claude = provider.get("claude-code")
+    musvit = provider.get("musvit")
 
     assert dify.license == "Modified Apache-2.0 (Dify license)"
     assert "license-restrictions:additional-terms" in dify.tags
@@ -217,6 +280,14 @@ def test_nonstandard_license_terms_are_visible_instead_of_normalized_away() -> N
     assert "license-restrictions:mixed" in flowise.tags
     assert openviking.license == "AGPL-3.0"
     assert "license-review:copyleft" in openviking.tags
+    assert multica.license == "Modified Apache-2.0 (Multica License)"
+    assert "license-restrictions:hosted-service" in multica.tags
+    assert copilot.license == "GitHub Copilot CLI License (restricted)"
+    assert "license-restrictions:limited-redistribution" in copilot.tags
+    assert claude.license == "Proprietary — Anthropic Commercial Terms"
+    assert "license-restrictions:all-rights-reserved" in claude.tags
+    assert musvit.license == "CC BY-NC-SA 4.0"
+    assert "license-restrictions:share-alike" in musvit.tags
 
 
 def test_curated_candidate_artifacts_are_reference_only() -> None:
