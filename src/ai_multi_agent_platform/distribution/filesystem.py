@@ -12,46 +12,60 @@ from .provider import RegistryItemNotFoundError
 from .schema import registry_item_from_document
 
 CATALOG_SCHEMA_VERSION = "1"
+CATALOG_FRAGMENT_GLOB = "catalog.fragment.*.json"
 
 
 class FilesystemRegistryProvider:
-    """Read a canonical local catalog plus artifact files without a hosted service."""
+    """Read a canonical local catalog plus deterministic sibling fragments."""
 
     def __init__(self, catalog_path: Path) -> None:
         self._catalog_path = catalog_path.resolve()
-        document = json.loads(self._catalog_path.read_text(encoding="utf-8"))
-        if not isinstance(document, dict):
-            raise ValueError("registry catalog must be a JSON object")
-        if document.get("schema_version") != CATALOG_SCHEMA_VERSION:
-            raise ValueError("unsupported registry catalog schema_version")
-        provider_id = document.get("provider_id", "local")
-        if not isinstance(provider_id, str) or not provider_id.strip():
-            raise ValueError("registry catalog provider_id must be a non-blank string")
-        raw_items = document.get("items")
-        if not isinstance(raw_items, list):
-            raise ValueError("registry catalog must contain an items array")
+        root = self._catalog_path.parent.resolve()
+        catalog_paths = (
+            self._catalog_path,
+            *sorted(
+                (
+                    path.resolve()
+                    for path in root.glob(CATALOG_FRAGMENT_GLOB)
+                    if path.resolve() != self._catalog_path
+                ),
+                key=lambda path: path.name,
+            ),
+        )
+
+        primary = _load_catalog_document(self._catalog_path)
+        provider_id = _provider_id(primary, fallback="local")
 
         items: list[RegistryItem] = []
         artifacts: dict[tuple[str, str], Path] = {}
-        root = self._catalog_path.parent.resolve()
-        for entry in raw_items:
-            if not isinstance(entry, dict):
-                raise ValueError("registry catalog item must be an object")
-            metadata = entry.get("metadata")
-            if not isinstance(metadata, dict):
-                raise ValueError("registry catalog item metadata must be an object")
-            item = registry_item_from_document(_string_keyed(metadata))
-            artifact = entry.get("artifact")
-            if not isinstance(artifact, str) or not artifact.strip():
-                raise ValueError("registry catalog item artifact must be a non-blank path")
-            artifact_path = (root / artifact).resolve()
-            if not artifact_path.is_relative_to(root):
-                raise ValueError("registry artifact path must remain inside the catalog directory")
-            identity = (item.item_id, item.version)
-            if identity in artifacts:
-                raise ValueError("registry catalog contains duplicate item/version identities")
-            items.append(item)
-            artifacts[identity] = artifact_path
+        for path in catalog_paths:
+            document = primary if path == self._catalog_path else _load_catalog_document(path)
+            fragment_provider_id = _provider_id(document, fallback=provider_id)
+            if fragment_provider_id != provider_id:
+                raise ValueError("registry catalog fragment provider_id must match primary catalog")
+
+            raw_items = document.get("items")
+            if not isinstance(raw_items, list):
+                raise ValueError("registry catalog must contain an items array")
+
+            for entry in raw_items:
+                if not isinstance(entry, dict):
+                    raise ValueError("registry catalog item must be an object")
+                metadata = entry.get("metadata")
+                if not isinstance(metadata, dict):
+                    raise ValueError("registry catalog item metadata must be an object")
+                item = registry_item_from_document(_string_keyed(metadata))
+                artifact = entry.get("artifact")
+                if not isinstance(artifact, str) or not artifact.strip():
+                    raise ValueError("registry catalog item artifact must be a non-blank path")
+                artifact_path = (root / artifact).resolve()
+                if not artifact_path.is_relative_to(root):
+                    raise ValueError("registry artifact path must remain inside the catalog directory")
+                identity = (item.item_id, item.version)
+                if identity in artifacts:
+                    raise ValueError("registry catalog contains duplicate item/version identities")
+                items.append(item)
+                artifacts[identity] = artifact_path
 
         self._metadata = LocalRegistryProvider(items, provider_id=provider_id)
         self._artifacts = artifacts
@@ -78,6 +92,22 @@ class FilesystemRegistryProvider:
             raise RegistryItemNotFoundError(
                 f"artifact for registry item {item_id!r} version {version!r} is unavailable"
             ) from exc
+
+
+def _load_catalog_document(path: Path) -> dict[str, object]:
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise ValueError("registry catalog must be a JSON object")
+    if document.get("schema_version") != CATALOG_SCHEMA_VERSION:
+        raise ValueError("unsupported registry catalog schema_version")
+    return _string_keyed(document)
+
+
+def _provider_id(document: dict[str, object], *, fallback: str) -> str:
+    provider_id = document.get("provider_id", fallback)
+    if not isinstance(provider_id, str) or not provider_id.strip():
+        raise ValueError("registry catalog provider_id must be a non-blank string")
+    return provider_id
 
 
 def _string_keyed(value: dict[object, object]) -> dict[str, Any]:
