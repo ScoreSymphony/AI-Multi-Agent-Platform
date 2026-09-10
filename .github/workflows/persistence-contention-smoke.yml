@@ -1,0 +1,76 @@
+name: Persistence contention smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  persistence-contention-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install benchmark environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Validate SQLite contention implementation
+        run: |
+          ruff format --check \
+            src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
+            src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py \
+            tests/performance/test_issue_440_persistence_contention.py
+          ruff check \
+            src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
+            src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py \
+            tests/performance/test_issue_440_persistence_contention.py
+          mypy \
+            src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
+            src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py
+          pytest tests/performance/test_issue_440_persistence_contention.py
+      - name: Run tiny synchronized SQLite writer profile
+        run: |
+          mkdir -p artifacts/benchmarks/pr-persistence-contention
+          platform-persistence-contention \
+            --writers 3 \
+            --tasks-per-writer 2 \
+            --safety-max-writers 3 \
+            --safety-max-tasks-per-writer 2 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-persistence-contention/report.json
+      - name: Validate contention report
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from jsonschema import Draft202012Validator
+
+          schema = json.loads(
+              Path("docs/schemas/benchmark-persistence-contention.v1.schema.json").read_text()
+          )
+          report = json.loads(
+              Path("artifacts/benchmarks/pr-persistence-contention/report.json").read_text()
+          )
+          Draft202012Validator(schema).validate(report)
+          assert report["benchmark"]["benchmark_id"] == "persistence.sqlite.writer-contention"
+          assert report["benchmark"]["writer_count"] == 3
+          assert report["benchmark"]["task_count"] == 6
+          assert report["benchmark"]["logical_operation_count"] == 12
+          assert report["contention"]["writer_instances"] == 3
+          assert report["contention"]["synchronized_rounds"] == 4
+          assert report["operation_latency"]["count"] == 12
+          assert report["correctness"]["passed"] is True
+          assert report["correctness"]["failed_logical_operations"] == 0
+          PY
+      - name: Upload persistence contention evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-persistence-contention-benchmark
+          path: artifacts/benchmarks/pr-persistence-contention
+          if-no-files-found: ignore
