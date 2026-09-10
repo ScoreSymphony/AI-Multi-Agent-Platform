@@ -20,6 +20,7 @@ from .models import (
     MemoryOrigin,
     MemoryQuery,
     MemoryScope,
+    MemoryType,
     RetentionPolicy,
     SourceRef,
     new_knowledge_source_id,
@@ -69,6 +70,7 @@ def data_command_handlers(
                 "memory.create resource_ref must match the target scope_id",
             )
         origin = _memory_origin(_required_string(payload, "origin"))
+        memory_type = _memory_type(payload.get("memory_type"))
         now = datetime.now(UTC)
         retention = _retention(payload, scope)
         expires_at = _expires_at(payload)
@@ -89,6 +91,7 @@ def data_command_handlers(
             classification=_optional_string(payload, "classification"),
             metadata=_object(payload.get("metadata", {}), "metadata"),
             origin=origin,
+            memory_type=memory_type,
         )
         stored = await providers.memory.write_entry(
             entry,
@@ -112,6 +115,13 @@ def data_command_handlers(
                 ErrorCode.INVALID_REQUEST,
                 "memory.promote only accepts a canonical short-term Memory entry",
             )
+        requested_type = payload.get("memory_type")
+        if requested_type is not None and _memory_type(requested_type) is not current.memory_type:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "memory type is preserved during promotion; "
+                "derive a new memory explicitly to change it",
+            )
         target_scope = _memory_scope(_required_string(payload, "scope"))
         if target_scope is MemoryScope.SHORT_TERM:
             raise ContractError(
@@ -134,6 +144,7 @@ def data_command_handlers(
             classification=current.classification,
             metadata=dict(current.metadata),
             origin=current.origin,
+            memory_type=current.memory_type,
         )
         stored = await providers.memory.write_entry(
             promoted,
@@ -157,6 +168,13 @@ def data_command_handlers(
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "memory origin is immutable; create or promote a new entry instead",
+            )
+        requested_type = payload.get("memory_type")
+        if requested_type is not None and _memory_type(requested_type) is not current.memory_type:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "memory type is immutable during update; "
+                "derive a new memory explicitly to change it",
             )
         requested_scope = payload.get("scope")
         if requested_scope is not None and requested_scope != current.scope.value:
@@ -194,6 +212,7 @@ def data_command_handlers(
                 else dict(current.metadata)
             ),
             origin=current.origin,
+            memory_type=current.memory_type,
         )
         stored = await providers.memory.supersede_entry(resource_ref, replacement, access)
         return _memory_resource(stored)
@@ -452,6 +471,17 @@ def _memory_origin(value: str) -> MemoryOrigin:
         raise ContractError(ErrorCode.INVALID_REQUEST, f"unknown memory origin: {value}") from exc
 
 
+def _memory_type(value: JsonValue | None) -> MemoryType:
+    if value is None:
+        return MemoryType.UNCLASSIFIED
+    if not isinstance(value, str):
+        raise ContractError(ErrorCode.INVALID_REQUEST, "memory_type must be a string")
+    try:
+        return MemoryType(value)
+    except ValueError as exc:
+        raise ContractError(ErrorCode.INVALID_REQUEST, f"unknown memory type: {value}") from exc
+
+
 def _retention(payload: dict[str, JsonValue], scope: MemoryScope) -> RetentionPolicy:
     raw = payload.get("retention")
     if raw is None:
@@ -574,6 +604,7 @@ def _memory_resource(entry: MemoryEntry) -> dict[str, JsonValue]:
         "created_at": entry.created_at.isoformat(),
         "value": entry.value,
         "origin": entry.origin.value,
+        "memory_type": entry.memory_type.value,
         "retention": entry.retention.value,
         "expires_at": entry.expires_at.isoformat() if entry.expires_at is not None else None,
         "provenance": [

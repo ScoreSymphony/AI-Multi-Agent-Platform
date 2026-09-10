@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import canonicalResult from "./__fixtures__/canonical-result.json";
+import canonicalRun from "./__fixtures__/canonical-run.json";
 import canonicalTask from "./__fixtures__/canonical-task.json";
 import workflowProgress from "./__fixtures__/workflow-progress.json";
 import { ControlPlaneClient } from "./client";
@@ -23,6 +25,53 @@ describe("canonical CLI/Web resource parity", () => {
     expect(url).toBe(`/api/v1/tasks/${canonicalTask.id}`);
     expect(init.method).toBe("GET");
     expect(init.credentials).toBe("include");
+  });
+
+  it("reads the shared canonical Run snapshot from the same versioned resource route", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(canonicalRun), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    const observed = await client.getRun(canonicalRun.id);
+
+    expect(observed).toEqual(canonicalRun);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/v1/runs/${canonicalRun.id}`);
+    expect(init.method).toBe("GET");
+    expect(init.credentials).toBe("include");
+  });
+
+  it("reads the shared canonical Result snapshot from the same versioned resource route", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(canonicalResult), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    const observed = await client.getReference("results", canonicalResult.id);
+
+    expect(observed).toEqual(canonicalResult);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/v1/results/${canonicalResult.id}`);
+    expect(init.method).toBe("GET");
+    expect(init.credentials).toBe("include");
+  });
+
+  it("keeps the shared Task Run Result snapshot internally coherent", () => {
+    expect(canonicalRun.task_id).toBe(canonicalTask.id);
+    expect(canonicalResult.task_id).toBe(canonicalTask.id);
+    expect(canonicalTask.run_ids).toEqual([canonicalRun.id]);
+    expect(canonicalTask.result_ids).toEqual([canonicalResult.id]);
+    expect(canonicalTask.status).toBe(canonicalRun.status);
+    expect(canonicalTask.correlation_id).toBe(canonicalRun.correlation_id);
   });
 
   it("reads the shared #560 workflow snapshot with explicit wait and retry terminal semantics", async () => {
