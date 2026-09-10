@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ai-multi-agent-platform:schema:application-release-manifest:v1",
+  "title": "Application Release Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "release_id",
+    "application",
+    "display_name",
+    "version",
+    "channel",
+    "visibility",
+    "project_id",
+    "workspace_id",
+    "workspace_snapshot_id",
+    "workspace_content_checksum",
+    "source_revision",
+    "build_specification",
+    "targets",
+    "artifacts",
+    "gates",
+    "release_notes",
+    "release_url",
+    "latest_url"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "release_id": {"type": "string", "pattern": "^application_release_"},
+    "application": {"type": "string", "minLength": 1},
+    "display_name": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "channel": {"enum": ["stable", "beta", "nightly"]},
+    "visibility": {"enum": ["public", "authenticated", "private"]},
+    "project_id": {"type": "string", "pattern": "^project_"},
+    "workspace_id": {"type": "string", "pattern": "^workspace_"},
+    "workspace_snapshot_id": {
+      "type": "string",
+      "pattern": "^workspace_snapshot_"
+    },
+    "workspace_content_checksum": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_revision": {"type": "string", "minLength": 1},
+    "build_specification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spec_id", "revision"],
+      "properties": {
+        "spec_id": {"type": "string", "pattern": "^build_spec_"},
+        "revision": {"type": "integer", "minimum": 1}
+      }
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target",
+          "os",
+          "architecture",
+          "package_type",
+          "status",
+          "task_id",
+          "run_id",
+          "failure_reason"
+        ],
+        "properties": {
+          "target": {"type": "string", "minLength": 1},
+          "os": {"type": "string", "minLength": 1},
+          "architecture": {"type": "string", "minLength": 1},
+          "package_type": {"type": "string", "minLength": 1},
+          "status": {
+            "enum": [
+              "pending",
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "unsupported"
+            ]
+          },
+          "task_id": {"type": ["string", "null"]},
+          "run_id": {"type": ["string", "null"]},
+          "failure_reason": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "artifacts": {"type": "array", "items": {"type": "object"}},
+    "gates": {"type": "array", "items": {"type": "object"}},
+    "release_notes": {"type": ["string", "null"]},
+    "release_url": {"type": ["string", "null"]},
+    "latest_url": {"type": ["string", "null"]}
+  }
+}
