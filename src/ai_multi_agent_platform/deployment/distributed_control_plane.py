@@ -160,9 +160,10 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         #35 transport before the HTTP Worker-protocol surface opens. We use only that positive
         presence proof to attach the transport dispatcher needed to inspect existing Worker Jobs.
 
-        The temporary registry refresh is deliberately draining/degraded: it permits reconciliation
-        of already-owned work but cannot admit new scheduling. The Worker's normal authenticated
-        registration/heartbeat replaces this conservative state once HTTP serving starts.
+        Reachable Workers are temporarily degraded and draining: this permits reconciliation of
+        already-owned work but cannot admit new scheduling. Node drain/maintenance policy is
+        preserved rather than invented by recovery. The Worker's normal authenticated heartbeat
+        replaces the conservative Worker state once HTTP serving starts.
         """
 
         if self._presence is None:
@@ -192,7 +193,7 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
             )
             self.runtime.register(
                 RegistrationRequest(
-                    node=replace(node, draining=True),
+                    node=node,
                     workers=recovery_workers,
                 ),
                 now=timestamp,
