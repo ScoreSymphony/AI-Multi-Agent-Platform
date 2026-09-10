@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/benchmark-reference-host-reproducibility.v1.schema.json",
+  "title": "AI Multi-Agent Platform Reference Host Reproducibility v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "benchmark_id",
+    "benchmark_version",
+    "generated_at",
+    "basis",
+    "campaign_count",
+    "variability_observed",
+    "comparison_status",
+    "claim_semantics",
+    "budget_status",
+    "stability_classification",
+    "campaigns",
+    "concurrency_variability",
+    "endurance_variability",
+    "correctness_passed"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "benchmark_id": {"const": "single-node.reference.host-campaign.reproducibility"},
+    "benchmark_version": {"const": "1.0"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "basis": {
+      "type": "object",
+      "required": [
+        "host_label",
+        "platform_version",
+        "platform_commit",
+        "profile",
+        "configuration_sha256",
+        "environment_fingerprint_sha256",
+        "deployment_profile",
+        "persistence_profile",
+        "workload_distribution"
+      ],
+      "properties": {
+        "host_label": {"type": "string", "minLength": 1},
+        "platform_version": {"type": "string", "minLength": 1},
+        "platform_commit": {"type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"},
+        "profile": {"enum": ["release", "smoke"]},
+        "configuration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "environment_fingerprint_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "deployment_profile": {"type": "string", "minLength": 1},
+        "persistence_profile": {"type": "string", "minLength": 1},
+        "workload_distribution": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "campaign_count": {"type": "integer", "minimum": 1},
+    "variability_observed": {"type": "boolean"},
+    "comparison_status": {
+      "enum": ["smoke-contract-only", "single-release-campaign", "release-variability-observed"]
+    },
+    "claim_semantics": {"const": "same-host-comparable-campaigns-only"},
+    "budget_status": {"const": "not-established"},
+    "stability_classification": {"const": "not-performed"},
+    "campaigns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "source",
+          "campaign_sha256",
+          "operating_envelope_path",
+          "operating_envelope_sha256",
+          "started_at",
+          "completed_at"
+        ],
+        "properties": {
+          "source": {"type": "string", "minLength": 1},
+          "campaign_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "operating_envelope_path": {"type": "string", "minLength": 1},
+          "operating_envelope_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "started_at": {"type": "string", "format": "date-time"},
+          "completed_at": {"type": "string", "format": "date-time"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "concurrency_variability": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "concurrency",
+          "throughput_operations_per_second",
+          "p95_latency_ms",
+          "storage_growth_bytes"
+        ],
+        "properties": {
+          "concurrency": {"type": "integer", "minimum": 1},
+          "throughput_operations_per_second": {"$ref": "#/$defs/metric"},
+          "p95_latency_ms": {"$ref": "#/$defs/metric"},
+          "storage_growth_bytes": {"$ref": "#/$defs/metric"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "endurance_variability": {
+      "type": "object",
+      "required": [
+        "throughput_operations_per_second",
+        "p95_latency_ms",
+        "traced_memory_growth_bytes",
+        "peak_rss_growth_bytes",
+        "open_file_descriptor_growth",
+        "storage_growth_bytes",
+        "latency_drift_ratio"
+      ],
+      "properties": {
+        "throughput_operations_per_second": {"$ref": "#/$defs/metric"},
+        "p95_latency_ms": {"$ref": "#/$defs/metric"},
+        "traced_memory_growth_bytes": {"$ref": "#/$defs/metric"},
+        "peak_rss_growth_bytes": {"$ref": "#/$defs/optionalMetric"},
+        "open_file_descriptor_growth": {"$ref": "#/$defs/optionalMetric"},
+        "storage_growth_bytes": {"$ref": "#/$defs/metric"},
+        "latency_drift_ratio": {"$ref": "#/$defs/optionalMetric"}
+      },
+      "additionalProperties": false
+    },
+    "correctness_passed": {"const": true}
+  },
+  "$defs": {
+    "metric": {
+      "type": "object",
+      "required": [
+        "sample_count",
+        "minimum",
+        "median",
+        "maximum",
+        "relative_range",
+        "coefficient_of_variation"
+      ],
+      "properties": {
+        "sample_count": {"type": "integer", "minimum": 1},
+        "minimum": {"type": "number"},
+        "median": {"type": "number"},
+        "maximum": {"type": "number"},
+        "relative_range": {"type": ["number", "null"], "minimum": 0},
+        "coefficient_of_variation": {"type": ["number", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "optionalMetric": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/metric"}
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"campaign_count": {"const": 1}}, "required": ["campaign_count"]},
+      "then": {"properties": {"variability_observed": {"const": false}}}
+    },
+    {
+      "if": {"properties": {"campaign_count": {"minimum": 2}}, "required": ["campaign_count"]},
+      "then": {"properties": {"variability_observed": {"const": true}}}
+    },
+    {
+      "if": {
+        "properties": {"basis": {"properties": {"profile": {"const": "smoke"}}}},
+        "required": ["basis"]
+      },
+      "then": {"properties": {"comparison_status": {"const": "smoke-contract-only"}}}
+    }
+  ],
+  "additionalProperties": false
+}
