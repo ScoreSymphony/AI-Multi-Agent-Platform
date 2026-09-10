@@ -8,7 +8,12 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode, Operatio
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, json_object
-from ai_multi_agent_platform.security import ActorIdentity, ActorType, infer_actor_identity
+from ai_multi_agent_platform.security import (
+    ActorIdentity,
+    ActorType,
+    SecretReference,
+    infer_actor_identity,
+)
 
 from .contracts import PublishContext
 from .models import (
@@ -312,6 +317,8 @@ def _build_spec(
                 value.get("resource_hints"),
                 "resource_hints",
             ),
+            environment=_string_mapping(value.get("environment"), "environment"),
+            secret_environment=_secret_environment(value.get("secret_environment")),
             secret_references=_string_tuple(
                 value.get("secret_references"),
                 "secret_references",
@@ -322,6 +329,29 @@ def _build_spec(
             ErrorCode.INVALID_REQUEST,
             f"invalid build specification: {exc}",
         ) from exc
+
+
+def _secret_environment(value: JsonValue | None) -> dict[str, SecretReference]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("secret_environment must be an object")
+    return {
+        name: _secret_reference(raw, f"secret_environment.{name}")
+        for name, raw in value.items()
+    }
+
+
+def _secret_reference(value: JsonValue, field: str) -> SecretReference:
+    if not isinstance(value, dict):
+        raise ValueError(f"{field} must be a SecretReference object")
+    return SecretReference(
+        provider=_required_string(value, "provider"),
+        secret_id=_required_string(value, "secret_id"),
+        scope=_required_string(value, "scope"),
+        version=_optional_string(value, "version"),
+        metadata=_json_object(value.get("metadata"), f"{field}.metadata"),
+    )
 
 
 def _required_string(payload: dict[str, JsonValue], field: str) -> str:
@@ -355,6 +385,14 @@ def _string_tuple(value: JsonValue | None, field: str) -> tuple[str, ...]:
             f"{field} must be an array of strings",
         )
     return tuple(item for item in value if isinstance(item, str))
+
+
+def _string_mapping(value: JsonValue | None, field: str) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or any(not isinstance(item, str) for item in value.values()):
+        raise ValueError(f"{field} must be an object with string values")
+    return {key: item for key, item in value.items() if isinstance(item, str)}
 
 
 def _positive_int(value: JsonValue, field: str) -> int:
