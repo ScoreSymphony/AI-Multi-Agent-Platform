@@ -1,6 +1,7 @@
 """Canonical external connector framework."""
 
 from .capability_bridge import ConnectorActorResolver, ConnectorCapabilityProvider
+from .durable_github_releases import DurableGitHubReleaseConnectorProvider
 from .egress import EgressConnectorService
 from .github_releases import (
     GITHUB_API_VERSION,
@@ -60,6 +61,7 @@ __all__ = [
     "ConnectorService",
     "ConnectorSyncRequest",
     "ConnectorSyncResult",
+    "DurableGitHubReleaseConnectorProvider",
     "EgressConnectorService",
     "ExternalNativeReference",
     "ExternalResourceReference",
