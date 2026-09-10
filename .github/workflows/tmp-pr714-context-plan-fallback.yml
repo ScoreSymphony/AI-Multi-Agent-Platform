@@ -1,0 +1,430 @@
+name: Temporary PR 714 kernel Plan context fallback
+
+on:
+  push:
+    branches:
+      - codex/issue-711-auto-reviewer-workflows
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/issue-711-auto-reviewer-workflows
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Apply kernel Plan context fallback
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source_path = Path('src/ai_multi_agent_platform/context/source_adapters.py')
+          text = source_path.read_text()
+          old_import = 'from ai_multi_agent_platform.kernel.repository import RunRepository, TaskRepository\n'
+          new_import = (
+              'from ai_multi_agent_platform.kernel.models import RunState\n'
+              'from ai_multi_agent_platform.kernel.repository import (\n'
+              '    EventRepository,\n'
+              '    RunRepository,\n'
+              '    TaskRepository,\n'
+              ')\n'
+          )
+          if old_import not in text:
+              raise SystemExit('expected kernel repository import not found')
+          text = text.replace(old_import, new_import, 1)
+
+          start = text.index('class PlanStepContextSourceAdapter:\n')
+          end = text.index('\n\nclass SkillBundleContextSourceAdapter:', start)
+          replacement = '''class PlanStepContextSourceAdapter:
+              adapter_id = "platform.plan-step-context/v1"
+
+              def __init__(
+                  self,
+                  coordinator: CoordinatorRepository,
+                  *,
+                  runs: RunRepository | None = None,
+                  events: EventRepository | None = None,
+              ) -> None:
+                  self.coordinator = coordinator
+                  self.runs = runs
+                  self.events = events
+
+              async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
+                  if request.plan_id is None or request.step_id is None:
+                      return ()
+                  try:
+                      state = self.coordinator.get_plan(request.plan_id)
+                  except ContractError as exc:
+                      if exc.code is not ErrorCode.NOT_FOUND or self.events is None:
+                          raise
+                      return await self._collect_kernel_plan_step(request)
+
+                  record = self.coordinator.get_step_record(request.step_id)
+                  step = next((item for item in state.steps if item.id == request.step_id), None)
+                  if step is None:
+                      raise ContractError(ErrorCode.NOT_FOUND, "canonical Step is not in requested Plan")
+                  content = _canonical_json(
+                      {
+                          "plan_id": state.plan.id,
+                          "plan_revision": state.plan.revision,
+                          "plan_store_revision": state.store_revision,
+                          "step_id": step.id,
+                          "step_title": step.title,
+                          "step_status": step.status.value,
+                          "dependencies": list(step.depends_on),
+                          "coordination_revision": record.revision,
+                          "coordination_phase": record.phase.value,
+                      }
+                  )
+                  digest = _digest(content)
+                  candidates: list[ContextCandidate] = [
+                      ContextCandidate(
+                          source=ContextSourceRef(
+                              ContextSourceType.PLAN_STEP,
+                              step.id,
+                              revision=(
+                                  f"plan:{state.plan.revision};store:{state.store_revision};"
+                                  f"step:{record.revision}"
+                              ),
+                              digest=digest,
+                          ),
+                          role=ContextEntryRole.CONTEXT,
+                          selection_reason="current canonical Plan/Step purpose and dependency state",
+                          inline_content=content,
+                          content_digest=digest,
+                          trust=ContextTrust.TRUSTED,
+                          data_classification=ContextDataClassification.INTERNAL,
+                          priority=80,
+                          relevance=1.0,
+                          project_id=step.project_id,
+                          conflict_key=f"step:{step.id}",
+                      )
+                  ]
+                  if self.runs is None:
+                      return tuple(candidates)
+                  for dependency_id in sorted(step.depends_on):
+                      dependency = self.coordinator.get_step_record(dependency_id)
+                      if dependency.latest_run_id is None:
+                          continue
+                      prior = await self.runs.get_run(request.task_id, dependency.latest_run_id)
+                      candidates.append(self._prior_run_candidate(request, dependency_id, prior))
+                  return tuple(candidates)
+
+              async def _collect_kernel_plan_step(
+                  self,
+                  request: ContextSourceRequest,
+              ) -> tuple[ContextCandidate, ...]:
+                  plan_id = request.plan_id
+                  step_id = request.step_id
+                  events = self.events
+                  if plan_id is None or step_id is None or events is None:
+                      return ()
+
+                  history = await events.read_events(request.task_id)
+                  plan_events = tuple(
+                      event
+                      for event in history
+                      if event.event_type == "plan.created" and event.payload.get("plan_ref") == plan_id
+                  )
+                  if not plan_events:
+                      raise ContractError(
+                          ErrorCode.NOT_FOUND,
+                          f"canonical Plan {plan_id} not found in kernel history",
+                      )
+                  if len(plan_events) != 1:
+                      raise ContractError(
+                          ErrorCode.CONTRACT_VIOLATION,
+                          "kernel history contains duplicate canonical plan.created events",
+                          details={"plan_id": plan_id, "count": len(plan_events)},
+                      )
+                  event = plan_events[0]
+                  raw_steps = event.payload.get("steps")
+                  if not isinstance(raw_steps, (list, tuple)):
+                      raise ContractError(
+                          ErrorCode.CONTRACT_VIOLATION,
+                          "canonical plan.created event has no valid Step payloads",
+                          details={"plan_id": plan_id},
+                      )
+                  matches: list[Mapping[str, object]] = []
+                  for raw in raw_steps:
+                      if not isinstance(raw, Mapping):
+                          raise ContractError(
+                              ErrorCode.CONTRACT_VIOLATION,
+                              "canonical plan.created event contains a malformed Step payload",
+                              details={"plan_id": plan_id},
+                          )
+                      if raw.get("id") == step_id:
+                          matches.append(cast(Mapping[str, object], raw))
+                  if not matches:
+                      raise ContractError(
+                          ErrorCode.NOT_FOUND,
+                          "canonical Step is not in requested kernel Plan",
+                          details={"plan_id": plan_id, "step_id": step_id},
+                      )
+                  if len(matches) != 1:
+                      raise ContractError(
+                          ErrorCode.CONTRACT_VIOLATION,
+                          "canonical kernel Plan contains duplicate Step identities",
+                          details={"plan_id": plan_id, "step_id": step_id},
+                      )
+                  raw_step = matches[0]
+                  title = raw_step.get("title")
+                  objective = raw_step.get("objective")
+                  raw_dependencies = raw_step.get("depends_on", ())
+                  if not isinstance(title, str) or not title.strip():
+                      raise ContractError(
+                          ErrorCode.CONTRACT_VIOLATION,
+                          "canonical kernel Step has no valid title",
+                          details={"plan_id": plan_id, "step_id": step_id},
+                      )
+                  if objective is not None and not isinstance(objective, str):
+                      raise ContractError(
+                          ErrorCode.CONTRACT_VIOLATION,
+                          "canonical kernel Step has invalid objective metadata",
+                          details={"plan_id": plan_id, "step_id": step_id},
+                      )
+                  if not isinstance(raw_dependencies, (list, tuple)):
+                      raise ContractError(
+                          ErrorCode.CONTRACT_VIOLATION,
+                          "canonical kernel Step has invalid dependencies",
+                          details={"plan_id": plan_id, "step_id": step_id},
+                      )
+                  dependencies: list[str] = []
+                  for dependency in raw_dependencies:
+                      if not isinstance(dependency, str):
+                          raise ContractError(
+                              ErrorCode.CONTRACT_VIOLATION,
+                              "canonical kernel Step has invalid dependencies",
+                              details={"plan_id": plan_id, "step_id": step_id},
+                          )
+                      dependencies.append(dependency)
+                  dependency_json: list[JsonValue] = list(dependencies)
+                  snapshot: dict[str, JsonValue] = {
+                      "projection": "kernel_plan_event",
+                      "plan_id": plan_id,
+                      "plan_event_id": event.id,
+                      "step_id": step_id,
+                      "step_title": title,
+                      "step_objective": objective,
+                      "dependencies": dependency_json,
+                      "provenance_source": (
+                          None if event.provenance is None else event.provenance.source
+                      ),
+                  }
+                  content = _canonical_json(snapshot)
+                  digest = _digest(content)
+                  candidates: list[ContextCandidate] = [
+                      ContextCandidate(
+                          source=ContextSourceRef(
+                              ContextSourceType.PLAN_STEP,
+                              step_id,
+                              revision=f"event:{event.id}",
+                              digest=digest,
+                          ),
+                          role=ContextEntryRole.CONTEXT,
+                          selection_reason=(
+                              "canonical kernel Plan/Step purpose and dependencies from "
+                              "plan.created history"
+                          ),
+                          inline_content=content,
+                          content_digest=digest,
+                          trust=ContextTrust.TRUSTED,
+                          data_classification=ContextDataClassification.INTERNAL,
+                          priority=80,
+                          relevance=1.0,
+                          project_id=request.project_id,
+                          workspace_id=request.workspace_id,
+                          conflict_key=f"step:{step_id}",
+                          metadata={
+                              "projection": "kernel_plan_event",
+                              "plan_event_id": event.id,
+                          },
+                      )
+                  ]
+                  if self.runs is None:
+                      return tuple(candidates)
+                  for dependency_id in sorted(dependencies):
+                      run_events = tuple(
+                          candidate
+                          for candidate in history
+                          if candidate.event_type == "run.created"
+                          and candidate.payload.get("subject_type") == "step"
+                          and candidate.payload.get("subject_id") == dependency_id
+                      )
+                      if not run_events:
+                          continue
+                      prior = await self.runs.get_run(request.task_id, run_events[-1].subject_id)
+                      candidates.append(self._prior_run_candidate(request, dependency_id, prior))
+                  return tuple(candidates)
+
+              @staticmethod
+              def _prior_run_candidate(
+                  request: ContextSourceRequest,
+                  dependency_id: str,
+                  prior: RunState,
+              ) -> ContextCandidate:
+                  prior_content = _canonical_json(
+                      {
+                          "run_id": prior.run_id,
+                          "step_id": dependency_id,
+                          "status": prior.status.value,
+                          "output": prior.output,
+                          "result_ids": list(prior.result_ids),
+                          "artifact_ids": list(prior.artifact_ids),
+                          "revision": prior.revision,
+                      }
+                  )
+                  prior_digest = _digest(prior_content)
+                  return ContextCandidate(
+                      source=ContextSourceRef(
+                          ContextSourceType.PRIOR_RUN,
+                          prior.run_id,
+                          revision=str(prior.revision),
+                          digest=prior_digest,
+                      ),
+                      role=ContextEntryRole.EVIDENCE,
+                      selection_reason="completed predecessor Run output for current Step",
+                      inline_content=prior_content,
+                      content_digest=prior_digest,
+                      trust=ContextTrust.TRUSTED,
+                      data_classification=ContextDataClassification.INTERNAL,
+                      priority=70,
+                      relevance=0.9,
+                      project_id=request.project_id,
+                  )
+          '''
+          text = text[:start] + replacement + text[end:]
+          source_path.write_text(text)
+
+          deployment_path = Path('src/ai_multi_agent_platform/deployment/context_operationalization.py')
+          deployment = deployment_path.read_text()
+          old = 'plan_adapter = PlanStepContextSourceAdapter(base.coordination_repository, runs=runs)'
+          new = '''plan_adapter = PlanStepContextSourceAdapter(
+              base.coordination_repository,
+              runs=runs,
+              events=base.kernel_repository,
+          )'''
+          if old not in deployment:
+              raise SystemExit('expected PlanStep adapter composition not found')
+          deployment_path.write_text(deployment.replace(old, new, 1))
+          PY
+
+          mkdir -p tests/unit/context
+          cat > tests/unit/context/test_plan_step_kernel_fallback.py <<'PY'
+          import asyncio
+          import json
+
+          from ai_multi_agent_platform.context.source_adapters import (
+              OperationalContextSourceRequest,
+              PlanStepContextSourceAdapter,
+          )
+          from ai_multi_agent_platform.coordination import InMemoryCoordinatorRepository
+          from ai_multi_agent_platform.contracts import OperationContext
+          from ai_multi_agent_platform.domain import Event, new_id
+
+
+          class _KernelEvents:
+              def __init__(self, task_id: str, events: tuple[Event, ...]) -> None:
+                  self.task_id = task_id
+                  self.events = events
+
+              async def read_events(self, stream_id: str) -> tuple[Event, ...]:
+                  assert stream_id == self.task_id
+                  return self.events
+
+
+          def test_plan_step_context_falls_back_to_canonical_kernel_plan_event() -> None:
+              task_id = new_id("task")
+              plan_id = new_id("plan")
+              step_id = new_id("step")
+              event = Event(
+                  event_type="plan.created",
+                  subject_type="task",
+                  subject_id=task_id,
+                  correlation_id=task_id,
+                  payload={
+                      "plan_ref": plan_id,
+                      "step_refs": [step_id],
+                      "steps": [
+                          {
+                              "id": step_id,
+                              "proposal_key": "repair",
+                              "title": "Repair verified output",
+                              "objective": "Correct the verified defects",
+                              "depends_on": [],
+                              "metadata": {},
+                          }
+                      ],
+                  },
+              )
+              adapter = PlanStepContextSourceAdapter(
+                  InMemoryCoordinatorRepository(),
+                  events=_KernelEvents(task_id, (event,)),
+              )
+              request = OperationalContextSourceRequest(
+                  task_id=task_id,
+                  run_id=new_id("run"),
+                  agent_id=new_id("agent"),
+                  agent_revision=1,
+                  project_id=None,
+                  workspace_id=None,
+                  operation=OperationContext(correlation_id=task_id),
+                  actor_ref="service:test",
+                  plan_id=plan_id,
+                  step_id=step_id,
+              )
+
+              candidates = asyncio.run(adapter.collect(request))
+
+              assert len(candidates) == 1
+              candidate = candidates[0]
+              assert candidate.source.source_id == step_id
+              assert candidate.source.revision == f"event:{event.id}"
+              assert candidate.inline_content is not None
+              payload = json.loads(candidate.inline_content)
+              assert payload["projection"] == "kernel_plan_event"
+              assert payload["plan_id"] == plan_id
+              assert payload["step_id"] == step_id
+              assert payload["step_objective"] == "Correct the verified defects"
+          PY
+
+      - name: Install test tools
+        run: python -m pip install -e '.[dev]'
+      - name: Normalize, format and lint focused changes
+        run: |
+          ruff check --fix \
+            src/ai_multi_agent_platform/context/source_adapters.py \
+            src/ai_multi_agent_platform/deployment/context_operationalization.py \
+            tests/unit/context/test_plan_step_kernel_fallback.py
+          ruff format \
+            src/ai_multi_agent_platform/context/source_adapters.py \
+            src/ai_multi_agent_platform/deployment/context_operationalization.py \
+            tests/unit/context/test_plan_step_kernel_fallback.py
+          ruff check \
+            src/ai_multi_agent_platform/context/source_adapters.py \
+            src/ai_multi_agent_platform/deployment/context_operationalization.py \
+            tests/unit/context/test_plan_step_kernel_fallback.py
+      - name: Typecheck
+        run: mypy
+      - name: Run focused regression tests
+        run: |
+          pytest -q tests/unit/context/test_plan_step_kernel_fallback.py
+          pytest -q tests/integration/verification/test_automatic_reviewer_repair.py::test_public_single_node_runs_bounded_agent_repair_and_fresh_review
+      - name: Commit product fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/ai_multi_agent_platform/context/source_adapters.py \
+            src/ai_multi_agent_platform/deployment/context_operationalization.py \
+            tests/unit/context/test_plan_step_kernel_fallback.py
+          git commit -m 'fix(context): resolve kernel-native repair Plan Steps (#711)'
+          git push origin HEAD:codex/issue-711-auto-reviewer-workflows
