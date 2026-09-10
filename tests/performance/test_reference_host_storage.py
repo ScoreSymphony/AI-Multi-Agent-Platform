@@ -4,9 +4,15 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from ai_multi_agent_platform.benchmarking.operating_envelope import (
     OperatingEnvelopeReport,
     SweepConfiguration,
+)
+from ai_multi_agent_platform.benchmarking.reference_host_campaign import (
+    ReferenceHostCampaignRunner,
+    reference_host_campaign_profile,
 )
 from ai_multi_agent_platform.benchmarking.reference_host_storage import (
     attach_storage_target,
@@ -104,3 +110,32 @@ def test_attach_storage_target_recomputes_operating_envelope_fingerprint(
     assert enriched.environment["storage_target"] == storage_target_metadata(work_dir)
     assert enriched.environment_fingerprint_sha256 == _fingerprint(dict(enriched.environment))
     assert enriched.environment_fingerprint_sha256 != original.environment_fingerprint_sha256
+
+
+@pytest.mark.asyncio
+async def test_reference_host_campaign_binds_evidence_to_measured_storage_target(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "output"
+    work_dir = tmp_path / "work"
+    report = await ReferenceHostCampaignRunner(
+        output_dir=output_dir,
+        work_dir=work_dir,
+        host_label="storage-smoke-host",
+        platform_commit="1" * 40,
+        work_dir_mode="explicit",
+    ).run(reference_host_campaign_profile("smoke"))
+
+    campaign = json.loads((output_dir / "campaign.json").read_text(encoding="utf-8"))
+    envelope = json.loads(
+        (output_dir / "operating-envelope.json").read_text(encoding="utf-8")
+    )
+    expected_storage = storage_target_metadata(work_dir)
+
+    assert campaign["environment"]["storage_target"] == expected_storage
+    assert envelope["environment"]["storage_target"] == expected_storage
+    assert campaign["environment"] == envelope["environment"]
+    assert report.environment == envelope["environment"]
+    assert campaign["environment_fingerprint_sha256"] == _fingerprint(campaign["environment"])
+    assert envelope["environment_fingerprint_sha256"] == _fingerprint(envelope["environment"])
+    assert report.environment_fingerprint_sha256 == envelope["environment_fingerprint_sha256"]
