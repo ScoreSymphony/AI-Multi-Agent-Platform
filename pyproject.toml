@@ -41,6 +41,7 @@ platform-host-pressure-observe = "ai_multi_agent_platform.benchmarking.host_pres
 platform-persistence-fault = "ai_multi_agent_platform.benchmarking.persistence_fault_cli:main"
 platform-persistence-contention = "ai_multi_agent_platform.benchmarking.persistence_contention_cli:main"
 platform-operating-envelope = "ai_multi_agent_platform.benchmarking.operating_envelope_cli:main"
+platform-operating-envelope-catalog = "ai_multi_agent_platform.benchmarking.operating_envelope_catalog_cli:main"
 platform-release = "ai_multi_agent_platform.release.cli:main"
 
 [project.optional-dependencies]
@@ -67,6 +68,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "ai_multi_agent_platform.backup" = ["*.json"]
+"ai_multi_agent_platform.benchmarking" = ["schemas/*.json"]
 "ai_multi_agent_platform.release" = ["*.json"]
 
 [tool.pytest.ini_options]

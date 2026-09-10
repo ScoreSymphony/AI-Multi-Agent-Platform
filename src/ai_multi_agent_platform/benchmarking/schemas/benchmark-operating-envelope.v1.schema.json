@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/benchmark-operating-envelope.v1.schema.json",
+  "title": "AI Multi-Agent Platform Operating Envelope Analysis v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "benchmark_id",
+    "benchmark_version",
+    "platform_version",
+    "platform_commit",
+    "generated_at",
+    "deployment_profile",
+    "persistence_profile",
+    "workload_distribution",
+    "environment",
+    "environment_fingerprint_sha256",
+    "sweep_configuration",
+    "sweep_sources",
+    "endurance_sources",
+    "concurrency_envelope",
+    "highest_verified_concurrency",
+    "endurance_evidence",
+    "longest_verified_endurance_seconds",
+    "claim_semantics",
+    "budget_status",
+    "correctness_passed"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "benchmark_id": {"const": "single-node.reference.operating-envelope.analysis"},
+    "benchmark_version": {"const": "1.0"},
+    "platform_version": {"type": "string", "minLength": 1},
+    "platform_commit": {"type": "string", "minLength": 1},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "deployment_profile": {"const": "single-node-reference"},
+    "persistence_profile": {"type": "string", "minLength": 1},
+    "workload_distribution": {"type": "string", "minLength": 1},
+    "environment": {"type": "object"},
+    "environment_fingerprint_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "sweep_configuration": {
+      "type": "object",
+      "required": [
+        "operation_count_per_point",
+        "warmup_operations",
+        "timeout_seconds",
+        "concurrency_levels"
+      ],
+      "properties": {
+        "operation_count_per_point": {"type": "integer", "minimum": 1},
+        "warmup_operations": {"type": "integer", "minimum": 0},
+        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "concurrency_levels": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        }
+      },
+      "additionalProperties": false
+    },
+    "sweep_sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "endurance_sources": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "concurrency_envelope": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "concurrency",
+          "sample_count",
+          "throughput_min_operations_per_second",
+          "throughput_median_operations_per_second",
+          "throughput_max_operations_per_second",
+          "p95_latency_min_ms",
+          "p95_latency_median_ms",
+          "p95_latency_max_ms",
+          "duration_median_seconds",
+          "completed_operations_min",
+          "storage_growth_median_bytes",
+          "correctness_passed"
+        ],
+        "properties": {
+          "concurrency": {"type": "integer", "minimum": 1},
+          "sample_count": {"type": "integer", "minimum": 1},
+          "throughput_min_operations_per_second": {"type": "number", "minimum": 0},
+          "throughput_median_operations_per_second": {"type": "number", "minimum": 0},
+          "throughput_max_operations_per_second": {"type": "number", "minimum": 0},
+          "p95_latency_min_ms": {"type": "number", "minimum": 0},
+          "p95_latency_median_ms": {"type": "number", "minimum": 0},
+          "p95_latency_max_ms": {"type": "number", "minimum": 0},
+          "duration_median_seconds": {"type": "number", "minimum": 0},
+          "completed_operations_min": {"type": "integer", "minimum": 0},
+          "storage_growth_median_bytes": {"type": "number"},
+          "correctness_passed": {"const": true}
+        },
+        "additionalProperties": false
+      }
+    },
+    "highest_verified_concurrency": {"type": "integer", "minimum": 1},
+    "endurance_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source",
+          "duration_seconds",
+          "concurrency",
+          "max_operations",
+          "completed_operations",
+          "throughput_operations_per_second",
+          "p95_latency_ms",
+          "resource_snapshot_count",
+          "traced_memory_growth_bytes",
+          "peak_rss_growth_bytes",
+          "open_file_descriptor_growth",
+          "storage_growth_bytes",
+          "latency_drift_ratio",
+          "stop_reason",
+          "correctness_passed"
+        ],
+        "properties": {
+          "source": {"type": "string", "minLength": 1},
+          "duration_seconds": {"type": "number", "minimum": 0},
+          "concurrency": {"type": "integer", "minimum": 1},
+          "max_operations": {"type": "integer", "minimum": 1},
+          "completed_operations": {"type": "integer", "minimum": 0},
+          "throughput_operations_per_second": {"type": "number", "minimum": 0},
+          "p95_latency_ms": {"type": "number", "minimum": 0},
+          "resource_snapshot_count": {"type": "integer", "minimum": 2},
+          "traced_memory_growth_bytes": {"type": "integer"},
+          "peak_rss_growth_bytes": {"type": ["integer", "null"]},
+          "open_file_descriptor_growth": {"type": ["integer", "null"]},
+          "storage_growth_bytes": {"type": "integer"},
+          "latency_drift_ratio": {"type": ["number", "null"]},
+          "stop_reason": {"type": "string", "minLength": 1},
+          "correctness_passed": {"const": true}
+        },
+        "additionalProperties": false
+      }
+    },
+    "longest_verified_endurance_seconds": {"type": "number", "minimum": 0},
+    "claim_semantics": {"const": "tested-envelope-only"},
+    "budget_status": {"const": "not-established"},
+    "correctness_passed": {"const": true}
+  },
+  "additionalProperties": false
+}
