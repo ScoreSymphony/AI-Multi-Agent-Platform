@@ -157,6 +157,31 @@ def _credentials(secret: str, nonce: str) -> WorkerRequestCredentials:
     )
 
 
+def _heartbeat(registration: RegistrationRequest, worker_id: str) -> WorkerHeartbeatRequest:
+    return WorkerHeartbeatRequest(
+        heartbeat=Heartbeat(
+            node_id=registration.node.node_id,
+            sequence=1,
+            resources=registration.node.resources,
+            node_status=NodeStatus.ONLINE,
+            workers=registration.workers,
+        ),
+        service_identity_ref=worker_id,
+    )
+
+
+def _job(correlation_id: str) -> WorkerJobRequest:
+    return WorkerJobRequest(
+        execution=ExecutionRequest(
+            run_id=new_id("run"),
+            subject_type="task",
+            subject_id=new_id("task"),
+            context=OperationContext(correlation_id=correlation_id),
+        ),
+        requirements=JobRequirements(executor_type="reference"),
+    )
+
+
 def test_persisted_remote_run_is_reconciled_before_worker_http_reregistration(
     tmp_path: Path,
 ) -> None:
@@ -241,7 +266,7 @@ def test_persisted_remote_run_is_reconciled_before_worker_http_reregistration(
             assert restored_ids == (worker_id,)
             recovery_worker = restarted.registry.get_worker(worker_id)
             assert recovery_worker.status is WorkerStatus.DEGRADED
-            assert recovery_worker.draining is True
+            assert recovery_worker.draining is registration.workers[0].draining
             assert (
                 restarted.registry.get_node(registration.node.node_id).draining
                 is registration.node.draining
@@ -254,41 +279,103 @@ def test_persisted_remote_run_is_reconciled_before_worker_http_reregistration(
             assert reconciled[0].snapshot.status is RunStatus.RUNNING
             assert reconciled[0].last_error is None
 
-            # Presence evidence is enough to inspect already-owned work, never enough to admit new
-            # scheduling from stale resource/health metadata before normal Worker registration.
-            new_job = WorkerJobRequest(
-                execution=ExecutionRequest(
-                    run_id=new_id("run"),
-                    subject_type="task",
-                    subject_id=new_id("task"),
-                    context=OperationContext(correlation_id="issue707-no-new-work-during-recovery"),
-                ),
-                requirements=JobRequirements(executor_type="reference"),
-            )
+            # Positive presence evidence is enough to inspect already-owned work. Degraded health
+            # still rejects new scheduling until a normal authenticated Worker heartbeat arrives.
+            new_job = _job("issue707-no-new-work-during-recovery")
             with pytest.raises(NoEligibleWorkerError):
                 await restarted.dispatch(new_job)
 
-            # Once the normal authenticated HTTP heartbeat path becomes available, its fresh Worker
-            # report clears the conservative recovery-only state and ordinary scheduling resumes.
             await restarted_service.heartbeat(
-                WorkerHeartbeatRequest(
-                    heartbeat=Heartbeat(
-                        node_id=registration.node.node_id,
-                        sequence=1,
-                        resources=registration.node.resources,
-                        node_status=NodeStatus.ONLINE,
-                        workers=registration.workers,
-                    ),
-                    service_identity_ref=worker_id,
-                ),
+                _heartbeat(registration, worker_id),
                 _credentials(secret, "issue707-heartbeat-after-restart"),
             )
             refreshed_worker = restarted.registry.get_worker(worker_id)
             assert refreshed_worker.status is WorkerStatus.HEALTHY
-            assert refreshed_worker.draining is False
+            assert refreshed_worker.draining is registration.workers[0].draining
             resumed = await restarted.dispatch(new_job)
             assert resumed.worker_id == worker_id
             assert resumed.state is DispatchState.DISPATCHED
+        finally:
+            for task in (transport_task, presence_task):
+                task.cancel()
+            for task in (transport_task, presence_task):
+                with suppress(asyncio.CancelledError):
+                    await task
+            await transport.close(graceful=False)
+
+    asyncio.run(scenario())
+
+
+def test_late_heartbeat_attaches_worker_that_missed_startup_presence_probe(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        registration = _registration()
+        worker_id = registration.workers[0].worker_id
+        authentication, authorization, secret = _worker_security(worker_id)
+        transport = InProcessMessageTransport(provider_id="issue-707-late-heartbeat")
+        files = LocalFileProvider(tmp_path / "late-objects", tmp_path / "late-files.sqlite3")
+        workspaces = LocalWorkspaceProvider(tmp_path / "late-workspaces", files)
+        state_path = tmp_path / "late-distributed-runtime-state.json"
+
+        # Persist a known Worker, then reconstruct only the Control Plane while no Worker endpoint
+        # is reachable. The one-shot startup presence probe therefore cannot attach a dispatcher.
+        first_runtime = DistributedRuntime(
+            DistributedRegistry(),
+            state_store=JsonDistributedStateStore(state_path),
+        )
+        first_service = DeploymentWorkerProtocolService(
+            first_runtime,
+            authentication=authentication,
+            authorization=authorization,
+            transport=transport,
+            workspaces=workspaces,
+            files=files,
+            context_resolver=lambda _workspace: (_ for _ in ()).throw(
+                AssertionError("workspace context must not be used")
+            ),
+            presence_timeout_seconds=None,
+        )
+        await first_service.register(
+            registration,
+            _credentials(secret, "issue707-register-before-late-worker"),
+        )
+
+        restarted = DistributedRuntime(DistributedRegistry())
+        assert restarted.configure_state_store(JsonDistributedStateStore(state_path)) is True
+        restarted_service = DeploymentWorkerProtocolService(
+            restarted,
+            authentication=authentication,
+            authorization=authorization,
+            transport=transport,
+            workspaces=workspaces,
+            files=files,
+            context_resolver=lambda _workspace: (_ for _ in ()).throw(
+                AssertionError("workspace context must not be used")
+            ),
+            presence_timeout_seconds=0.05,
+        )
+        assert await restarted_service.restore_reachable_persisted_workers() == ()
+        assert restarted.registry.get_worker(worker_id).status is WorkerStatus.OFFLINE
+
+        backend = _RunningBackend()
+        worker = LocalWorker(worker_id, backend)
+        transport_task = asyncio.create_task(WorkerTransportEndpoint(worker, transport).serve())
+        presence_task = asyncio.create_task(WorkerPresenceEndpoint(worker_id, transport).serve())
+        try:
+            # A later authenticated heartbeat is accepted against the restored canonical identity.
+            # Its current positive presence proof must therefore also attach the missing dispatcher.
+            await restarted_service.heartbeat(
+                _heartbeat(registration, worker_id),
+                _credentials(secret, "issue707-late-heartbeat-after-startup-probe"),
+            )
+            refreshed_worker = restarted.registry.get_worker(worker_id)
+            assert refreshed_worker.status is WorkerStatus.HEALTHY
+            assert refreshed_worker.draining is registration.workers[0].draining
+
+            dispatched = await restarted.dispatch(_job("issue707-dispatch-after-late-heartbeat"))
+            assert dispatched.worker_id == worker_id
+            assert dispatched.state is DispatchState.DISPATCHED
         finally:
             for task in (transport_task, presence_task):
                 task.cancel()
