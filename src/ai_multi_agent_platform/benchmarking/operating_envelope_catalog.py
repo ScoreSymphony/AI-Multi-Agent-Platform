@@ -11,7 +11,7 @@ from functools import lru_cache
 from importlib.resources import files
 from typing import Any, cast
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
 OPERATING_ENVELOPE_CATALOG_SCHEMA_VERSION = "1.0"
 _ENVELOPE_SCHEMA_VERSION = "1.0"
