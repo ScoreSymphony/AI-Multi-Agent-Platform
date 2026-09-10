@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.org/schemas/application-release-manifest.schema.json",
+  "title": "Application Release Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "release_id",
+    "application",
+    "display_name",
+    "version",
+    "channel",
+    "visibility",
+    "project_id",
+    "workspace_id",
+    "source_revision",
+    "build_specification",
+    "targets",
+    "artifacts",
+    "gates",
+    "release_notes",
+    "release_url",
+    "latest_url"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "release_id": {"type": "string", "pattern": "^application_release_"},
+    "application": {"type": "string", "minLength": 1},
+    "display_name": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "channel": {"enum": ["stable", "beta", "nightly"]},
+    "visibility": {"enum": ["public", "authenticated", "private"]},
+    "project_id": {"type": "string", "pattern": "^project_"},
+    "workspace_id": {"type": "string", "pattern": "^workspace_"},
+    "source_revision": {"type": "string", "minLength": 1},
+    "build_specification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spec_id", "revision"],
+      "properties": {
+        "spec_id": {"type": "string", "pattern": "^build_spec_"},
+        "revision": {"type": "integer", "minimum": 1}
+      }
+    },
+    "targets": {"type": "array", "items": {"type": "object"}},
+    "artifacts": {"type": "array", "items": {"type": "object"}},
+    "gates": {"type": "array", "items": {"type": "object"}},
+    "release_notes": {"type": ["string", "null"]},
+    "release_url": {"type": ["string", "null"]},
+    "latest_url": {"type": ["string", "null"]}
+  }
+}

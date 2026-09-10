@@ -1,0 +1,82 @@
+"""Replaceable persistence and publication boundaries for application releases."""
+
+from __future__ import annotations
+
+from abc import abstractmethod
+from dataclasses import dataclass, field
+from typing import Protocol
+
+from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
+from ai_multi_agent_platform.security import ActorIdentity
+
+from .models import ApplicationRelease, ReleaseVisibility
+
+
+class ApplicationReleaseRepository(Protocol):
+    @abstractmethod
+    async def get(self, release_id: str) -> ApplicationRelease: ...
+
+    @abstractmethod
+    async def list(self) -> tuple[ApplicationRelease, ...]: ...
+
+    @abstractmethod
+    async def save(
+        self,
+        release: ApplicationRelease,
+        *,
+        expected_revision: int | None,
+    ) -> ApplicationRelease: ...
+
+    @abstractmethod
+    async def find_version(
+        self,
+        application_id: str,
+        version: str,
+        channel: str,
+    ) -> ApplicationRelease | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class PublishContext:
+    actor: ActorIdentity
+    operation: OperationContext
+    approval_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PublishedArtifact:
+    artifact_id: str
+    download_url: str
+    external_metadata: dict[str, JsonValue] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class PublicationResult:
+    provider_id: str
+    release_url: str
+    visibility: ReleaseVisibility
+    artifacts: tuple[PublishedArtifact, ...]
+    latest_url: str | None = None
+    external_metadata: dict[str, JsonValue] = field(default_factory=dict)
+
+
+class ApplicationReleasePublisher(Protocol):
+    @property
+    @abstractmethod
+    def provider_id(self) -> str: ...
+
+    @abstractmethod
+    async def preview(
+        self,
+        release: ApplicationRelease,
+        manifest: dict[str, JsonValue],
+        context: PublishContext,
+    ) -> dict[str, JsonValue]: ...
+
+    @abstractmethod
+    async def publish(
+        self,
+        release: ApplicationRelease,
+        manifest: dict[str, JsonValue],
+        context: PublishContext,
+    ) -> PublicationResult: ...
