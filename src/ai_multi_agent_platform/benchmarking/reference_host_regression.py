@@ -206,6 +206,12 @@ class ReferenceHostRegressionComparator:
             baseline_source=str(baseline_path),
             candidate_source=str(candidate_path),
         )
+        _require_disjoint_campaign_evidence(
+            baseline,
+            candidate,
+            baseline_source=str(baseline_path),
+            candidate_source=str(candidate_path),
+        )
         _require_campaign_count(
             baseline,
             policy=policy,
@@ -387,6 +393,32 @@ def _require_comparable_basis(
         persistence_profile=_require_str(baseline_basis, "persistence_profile"),
         workload_distribution=_require_str(baseline_basis, "workload_distribution"),
     )
+
+
+def _require_disjoint_campaign_evidence(
+    baseline: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    *,
+    baseline_source: str,
+    candidate_source: str,
+) -> None:
+    baseline_hashes = _campaign_hashes(baseline, source=baseline_source)
+    candidate_hashes = _campaign_hashes(candidate, source=candidate_source)
+    overlap = baseline_hashes & candidate_hashes
+    if overlap:
+        hashes = ", ".join(sorted(overlap))
+        raise ValueError(
+            "baseline and candidate reproducibility evidence must use disjoint campaigns; "
+            f"reused campaign_sha256: {hashes}"
+        )
+
+
+def _campaign_hashes(report: Mapping[str, Any], *, source: str) -> frozenset[str]:
+    campaigns = _require_mapping_list(report, "campaigns")
+    hashes = tuple(_require_str(campaign, "campaign_sha256") for campaign in campaigns)
+    if len(hashes) != len(set(hashes)):
+        raise ValueError(f"{source}: campaign_sha256 values must be unique")
+    return frozenset(hashes)
 
 
 def _compare_rule(
