@@ -351,6 +351,15 @@ def _require_campaign_count(
     source: str,
 ) -> None:
     campaign_count = _require_int(report, "campaign_count")
+    campaigns = _require_mapping_list(report, "campaigns")
+    if len(campaigns) != campaign_count:
+        raise ValueError(
+            f"{source}: campaign_count {campaign_count} does not match "
+            f"{len(campaigns)} campaign entries"
+        )
+    campaign_hashes = tuple(_require_str(campaign, "campaign_sha256") for campaign in campaigns)
+    if len(campaign_hashes) != len(set(campaign_hashes)):
+        raise ValueError(f"{source}: campaign_sha256 values must be unique")
     if campaign_count < policy.minimum_campaign_count:
         raise ValueError(
             f"{source}: campaign_count {campaign_count} is below policy minimum "
