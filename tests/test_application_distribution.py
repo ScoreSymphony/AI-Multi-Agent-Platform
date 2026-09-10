@@ -216,6 +216,7 @@ def _spec() -> BuildSpecification:
                 required_capabilities=("os:linux", "arch:x86_64"),
             ),
         ),
+        spec_id="build_spec_00000000-0000-0000-0000-000000000001",
         test_gates=("tests", "package-smoke"),
         required_capabilities=("python",),
         secret_references=("secret_ref_signing_key",),

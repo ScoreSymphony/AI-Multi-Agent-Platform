@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
@@ -857,20 +858,25 @@ def _build_data_context(
     )
 
 
-def _application_build_output(output: dict[str, JsonValue]) -> dict[str, JsonValue]:
+def _application_build_output(output: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
     nested = output.get("output")
-    if not isinstance(nested, dict):
+    if not isinstance(nested, Mapping):
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
             "successful build Run has no executor output object",
         )
     build = nested.get("application_build")
-    if not isinstance(build, dict):
+    if not isinstance(build, Mapping):
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
             "successful build Run has no application build evidence",
         )
-    return build
+    if any(not isinstance(key, str) for key in build):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "application build evidence contains a non-string field name",
+        )
+    return dict(build)
 
 
 def _required_output_string(output: dict[str, JsonValue], field: str) -> str:
