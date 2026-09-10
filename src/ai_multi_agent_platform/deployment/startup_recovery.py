@@ -38,7 +38,7 @@ class StartupCoordinator(Protocol):
 class StartupDistributedRuntime(Protocol):
     """Narrow #14 startup seam used when distributed execution is enabled."""
 
-    async def reconcile(self) -> tuple[DispatchRecord, ...]: ...
+    async def reconcile(self) -> tuple[object, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,16 +151,18 @@ async def reconcile_single_node_startup(
 
 async def _distributed_recovery_blockers(
     kernel: PlatformKernel,
-    records: tuple[DispatchRecord, ...],
+    records: tuple[object, ...],
 ) -> tuple[RecoveryReport, ...]:
     """Return active canonical Runs whose persisted distributed ownership is uncertain."""
 
     grouped: dict[str, list[RecoveryEntry]] = {}
-    for record in records:
-        if record.state not in {DispatchState.LOST, DispatchState.CANCEL_PENDING}:
+    for candidate in records:
+        if not isinstance(candidate, DispatchRecord):
             continue
-        run_id = record.job.execution.run_id
-        task_id = record.job.execution.context.correlation_id
+        if candidate.state not in {DispatchState.LOST, DispatchState.CANCEL_PENDING}:
+            continue
+        run_id = candidate.job.execution.run_id
+        task_id = candidate.job.execution.context.correlation_id
         # The distributed runtime can also own jobs that are not canonical kernel Runs. Only a
         # kernel-style Task correlation is eligible for the ordinary Run recovery gate.
         if not task_id.startswith("task_"):
