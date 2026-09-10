@@ -81,9 +81,7 @@ def _envelope(
         },
         "sweep_sources": ["summary.json"],
         "endurance_sources": ["soak.json"],
-        "concurrency_envelope": [
-            _point(level, offset=throughput_offset) for level in levels
-        ],
+        "concurrency_envelope": [_point(level, offset=throughput_offset) for level in levels],
         "highest_verified_concurrency": max(levels),
         "endurance_evidence": [],
         "longest_verified_endurance_seconds": 3600.0,
