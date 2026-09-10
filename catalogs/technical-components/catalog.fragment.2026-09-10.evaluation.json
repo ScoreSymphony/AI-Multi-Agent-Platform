@@ -1,0 +1,30 @@
+{
+  "schema_version": "1",
+  "provider_id": "technical-components-reference",
+  "items": [
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "harbor", "item_type": "evaluation", "name": "Harbor",
+        "description": "Evaluation framework candidate for reproducible agent and model benchmark workflows.", "version": "1.0.0", "publisher": "Harbor Framework",
+        "source": {"repository": "https://github.com/harbor-framework/harbor", "package_reference": "github:harbor-framework/harbor", "revision": null}, "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["evaluation"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted", "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "openenv", "item_type": "evaluation", "name": "OpenEnv",
+        "description": "Open evaluation-environment candidate for agent and model evaluation workflows.", "version": "1.0.0", "publisher": "Hugging Face",
+        "source": {"repository": "https://github.com/huggingface/OpenEnv", "package_reference": "github:huggingface/OpenEnv", "revision": null}, "license": "BSD-3-Clause",
+        "provenance": "Official repository identity, BSD-3-Clause license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["evaluation"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted", "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    }
+  ]
+}

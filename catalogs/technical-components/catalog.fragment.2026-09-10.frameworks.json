@@ -1,0 +1,109 @@
+{
+  "schema_version": "1",
+  "provider_id": "technical-components-reference",
+  "items": [
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "paperclip",
+        "item_type": "tool",
+        "name": "Paperclip",
+        "description": "Alternative agent-platform candidate for orchestration and agent-system comparison.",
+        "version": "1.0.0",
+        "publisher": "paperclipai",
+        "source": {"repository": "https://github.com/paperclipai/paperclip", "package_reference": "github:paperclipai/paperclip", "revision": null},
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["agent-framework"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "agent-zero", "item_type": "tool", "name": "Agent Zero",
+        "description": "General-purpose agent framework candidate for alternative agent-runtime and orchestration comparison.", "version": "1.0.0", "publisher": "agent0ai",
+        "source": {"repository": "https://github.com/agent0ai/agent-zero", "package_reference": "github:agent0ai/agent-zero", "revision": null},
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog. The repository root license is MIT even though GitHub's detector reported NOASSERTION during review.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["agent-framework"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "lifeos", "item_type": "tool", "name": "PAI / LifeOS",
+        "description": "LifeOS/PAI agent-system candidate retained under its current canonical upstream identity for architecture comparison.", "version": "1.0.0", "publisher": "Daniel Miessler",
+        "source": {"repository": "https://github.com/danielmiessler/LifeOS", "package_reference": "github:danielmiessler/LifeOS", "revision": null},
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["agent-framework"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "sim-studio", "item_type": "tool", "name": "Sim Studio",
+        "description": "Agent workflow and orchestration platform candidate for self-hosted agent-system comparison.", "version": "1.0.0", "publisher": "simstudioai",
+        "source": {"repository": "https://github.com/simstudioai/sim", "package_reference": "github:simstudioai/sim", "revision": null},
+        "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["agent-framework"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "ruflo", "item_type": "tool", "name": "Ruflo",
+        "description": "Multi-agent orchestration candidate representing the current Ruflo upstream formerly referenced as Claude-Flow.", "version": "1.0.0", "publisher": "ruvnet",
+        "source": {"repository": "https://github.com/ruvnet/ruflo", "package_reference": "github:ruvnet/ruflo", "revision": null},
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog. The former Claude-Flow naming is treated as historical naming, not as a separate current component identity.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["agent-framework"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "gas-town", "item_type": "tool", "name": "Gas Town",
+        "description": "Alternative multi-agent development and orchestration candidate for architecture comparison.", "version": "1.0.0", "publisher": "gastownhall",
+        "source": {"repository": "https://github.com/gastownhall/gastown", "package_reference": "github:gastownhall/gastown", "revision": null},
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["agent-framework"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "langflow", "item_type": "tool", "name": "Langflow",
+        "description": "Visual agent and workflow framework candidate for agent-system and orchestration comparison.", "version": "1.0.0", "publisher": "Langflow",
+        "source": {"repository": "https://github.com/langflow-ai/langflow", "package_reference": "github:langflow-ai/langflow", "revision": null},
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["agent-framework"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    }
+  ]
+}
