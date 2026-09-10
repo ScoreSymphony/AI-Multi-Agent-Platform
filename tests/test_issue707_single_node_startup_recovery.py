@@ -140,9 +140,7 @@ def test_operator_can_resolve_only_exact_startup_blocker(tmp_path: Path, monkeyp
     assert report["unresolved_run_ids"] == []
     assert server_main(["recover-startup"]) == 0
 
-    restarted = build_single_node_deployment(
-        SingleNodeConfig(data_dir=root, secure_cookie=False)
-    )
+    restarted = build_single_node_deployment(SingleNodeConfig(data_dir=root, secure_cookie=False))
     recovered = asyncio.run(restarted.kernel.get_run(task_id, run_id))
     assert recovered.status.value == "failed"
     assert recovered.recovery_required is False
