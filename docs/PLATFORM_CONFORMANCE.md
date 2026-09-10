@@ -60,7 +60,7 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | D-capability — capability boundary | capability discovery/invocation contract suite | #12 |
 | D-vertical — local model + distributed capability | authenticated AgentRun -> real loopback OpenAI-compatible model tool call -> pinned `tool.echo@1.0` -> canonical CapabilityInvoker/ToolInvocation -> DistributedExecutorEchoProvider -> ReferenceExecutor -> exact Worker/Node while preserving the root Run and Workspace/Snapshot binding | #46 / #10 / #12 / #7 / #14 |
 | F — approval gate | exact-action approval and changed-payload rejection | #15 |
-| H — restart/persistence | #252 persistence acceptance profile | #39 / #250 / #251 / #86 |
+| H — restart/recovery | crash after backend accept -> process reconstruction -> same running canonical Run with no duplicate dispatch, plus queued/pre-accept/orphaned recovery classification | #46 / canonical kernel recovery |
 | J-cli — client consistency | CLI canonical Task route/fixture parity | #17 / #252 |
 | J-web — client consistency | Web canonical Task route/fixture parity | #17 / #395 |
 | U — runtime verification | Verification independently gates completion | #86 |
@@ -202,7 +202,7 @@ Hermes and Forge retain their real upstream/sidecar setup in adapter-specific in
 
 #252 remains the usable single-node prototype gate and keeps its own focused profile/report schema. #46 builds on that evidence but does not replace or broaden #252 into the operational-v1 matrix.
 
-In particular, the #46 restart scenario calls the existing #252 persistence profile rather than copying its Memory/Verification/first-task reconstruction logic into a second fixture.
+The #46 H scenario now targets unfinished canonical Run recovery directly rather than invoking the broader #252 persistence profile. Memory, Verification and first-task reconstruction remain covered by #252 and their owning subsystem tests, while H specifically proves post-accept process reconstruction on the same Run without duplicate dispatch and deterministic classification of queued, pre-accept and orphaned work.
 
 ## Extension rule
 
