@@ -186,7 +186,9 @@ class JsonApplicationReleaseRepository(InMemoryApplicationReleaseRepository):
             if identity in identities:
                 raise ValueError("duplicate application release version in repository")
             identities.add(identity)
-            release_run_ids = {target.run_id for target in release.targets if target.run_id is not None}
+            release_run_ids = {
+                target.run_id for target in release.targets if target.run_id is not None
+            }
             if run_ids & release_run_ids:
                 raise ValueError("duplicate application build Run across persisted releases")
             run_ids.update(release_run_ids)
