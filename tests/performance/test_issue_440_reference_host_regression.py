@@ -156,6 +156,25 @@ def _inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
     return baseline, candidate, policy
 
 
+def _cli_args(
+    *,
+    baseline: Path,
+    candidate: Path,
+    policy: Path,
+    output: Path,
+) -> list[str]:
+    return [
+        "--baseline",
+        str(baseline),
+        "--candidate",
+        str(candidate),
+        "--policy",
+        str(policy),
+        "--output",
+        str(output),
+    ]
+
+
 def test_reference_host_regression_classifies_relative_change(tmp_path: Path) -> None:
     baseline, candidate, policy = _inputs(tmp_path)
     _write(candidate, _reproducibility(commit="2" * 40, throughput=88.0))
@@ -333,20 +352,89 @@ def test_reference_host_regression_cli_writes_schema_valid_report(tmp_path: Path
 
     assert (
         regression_main(
-            [
-                "--baseline",
-                str(baseline),
-                "--candidate",
-                str(candidate),
-                "--policy",
-                str(policy),
-                "--output",
-                str(output),
-            ]
+            _cli_args(
+                baseline=baseline,
+                candidate=candidate,
+                policy=policy,
+                output=output,
+            )
         )
         == 0
     )
     Draft202012Validator(_read(DOC_REPORT_SCHEMA)).validate(_read(output))
+
+
+@pytest.mark.parametrize("input_name", ["baseline", "candidate", "policy"])
+def test_reference_host_regression_cli_rejects_direct_output_alias(
+    tmp_path: Path,
+    input_name: str,
+) -> None:
+    baseline, candidate, policy = _inputs(tmp_path)
+    evidence = {
+        "baseline": baseline,
+        "candidate": candidate,
+        "policy": policy,
+    }[input_name]
+    original = evidence.read_bytes()
+
+    assert (
+        regression_main(
+            _cli_args(
+                baseline=baseline,
+                candidate=candidate,
+                policy=policy,
+                output=evidence,
+            )
+        )
+        == 2
+    )
+    assert evidence.read_bytes() == original
+
+
+def test_reference_host_regression_cli_rejects_symlink_output_alias(tmp_path: Path) -> None:
+    baseline, candidate, policy = _inputs(tmp_path)
+    output = tmp_path / "regression-alias.json"
+    try:
+        output.symlink_to(baseline)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"symlinks unavailable: {exc}")
+    original = baseline.read_bytes()
+
+    assert (
+        regression_main(
+            _cli_args(
+                baseline=baseline,
+                candidate=candidate,
+                policy=policy,
+                output=output,
+            )
+        )
+        == 2
+    )
+    assert baseline.read_bytes() == original
+
+
+def test_reference_host_regression_cli_rejects_hardlink_output_alias(tmp_path: Path) -> None:
+    baseline, candidate, policy = _inputs(tmp_path)
+    output = tmp_path / "regression-alias.json"
+    try:
+        output.hardlink_to(baseline)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"hard links unavailable: {exc}")
+    original = baseline.read_bytes()
+
+    assert (
+        regression_main(
+            _cli_args(
+                baseline=baseline,
+                candidate=candidate,
+                policy=policy,
+                output=output,
+            )
+        )
+        == 2
+    )
+    assert baseline.read_bytes() == original
 
 
 def test_reference_host_regression_schema_copies_match_documentation() -> None:
