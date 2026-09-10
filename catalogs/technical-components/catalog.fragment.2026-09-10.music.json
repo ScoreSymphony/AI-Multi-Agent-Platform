@@ -1,0 +1,54 @@
+{
+  "schema_version": "1",
+  "provider_id": "technical-components-reference",
+  "items": [
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "bachi", "item_type": "tool", "name": "BACHI",
+        "description": "Music-AI chord-recognition research candidate for ScoreSymphony-domain evaluation and comparison.", "version": "1.0.0", "publisher": "AndyWeasley2004",
+        "source": {"repository": "https://github.com/AndyWeasley2004/BACHI_Chord_Recognition", "package_reference": "github:AndyWeasley2004/BACHI_Chord_Recognition", "revision": null}, "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["music-ai", "model-and-dataset-tooling"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted", "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "analysisgnn", "item_type": "tool", "name": "AnalysisGNN",
+        "description": "Graph-neural-network music-analysis research candidate for ScoreSymphony-domain evaluation.", "version": "1.0.0", "publisher": "manoskary",
+        "source": {"repository": "https://github.com/manoskary/analysisgnn", "package_reference": "github:manoskary/analysisgnn", "revision": null}, "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["music-ai", "model-and-dataset-tooling"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted", "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "clamp3", "item_type": "tool", "name": "CLaMP 3",
+        "description": "Music representation and multimodal music-model candidate for domain retrieval and analysis evaluation.", "version": "1.0.0", "publisher": "sanderwood",
+        "source": {"repository": "https://github.com/sanderwood/clamp3", "package_reference": "github:sanderwood/clamp3", "revision": null}, "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["music-ai", "model-and-dataset-tooling"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted", "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2", "item_id": "mert", "item_type": "tool", "name": "MERT",
+        "description": "Music understanding representation-model candidate for domain embedding and analysis evaluation.", "version": "1.0.0", "publisher": "yizhilll",
+        "source": {"repository": "https://github.com/yizhilll/MERT", "package_reference": "github:yizhilll/MERT", "revision": null}, "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {}, "dependencies": [], "requested_permissions": [], "required_capabilities": [],
+        "tags": ["candidate", "external-component", "project-status:not-archived", "lifecycle:candidate", "evaluation:required", "deployment:unknown", "cost:unknown", "network:unknown", "resource:unknown"],
+        "categories": ["music-ai", "model-and-dataset-tooling"], "distribution_route": "manual", "integrity": {}, "trust_status": "untrusted", "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638", "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.", "deprecated": false, "yanked": false
+      }, "artifact": "artifacts/curated-external-component.md"
+    }
+  ]
+}
