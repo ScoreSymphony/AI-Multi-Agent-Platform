@@ -19,6 +19,7 @@ from .models import (
     WorkspaceStatus,
     WorkspaceType,
     validate_relative_path,
+    validate_sha256,
 )
 from .reference import LocalWorkspaceProvider
 from .remote import (
@@ -86,4 +87,5 @@ __all__ = [
     "WorkspaceStatus",
     "WorkspaceType",
     "validate_relative_path",
+    "validate_sha256",
 ]
