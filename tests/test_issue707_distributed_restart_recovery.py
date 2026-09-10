@@ -103,6 +103,7 @@ def _registration() -> RegistrationRequest:
                 supported_executors=("reference",),
                 supported_runtimes=("python",),
                 capability_refs=("execution:general",),
+                concurrency_limit=2,
             ),
         ),
         service_identity_ref=worker_id,
@@ -283,6 +284,8 @@ def test_persisted_remote_run_is_reconciled_before_worker_http_reregistration(
 
             # Positive presence evidence is enough to inspect already-owned work. Degraded health
             # still rejects new scheduling until a normal authenticated Worker heartbeat arrives.
+            # The fixture has two concurrency slots so the still-running recovered job consumes one
+            # slot without obscuring whether the fresh heartbeat actually restores schedulability.
             new_job = _job("issue707-no-new-work-during-recovery")
             with pytest.raises(NoEligibleWorkerError):
                 await restarted.dispatch(new_job)
