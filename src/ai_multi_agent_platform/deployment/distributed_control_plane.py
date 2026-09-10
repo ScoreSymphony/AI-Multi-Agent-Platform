@@ -175,8 +175,10 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
 
         Reachable Workers are temporarily degraded: this permits reconciliation of already-owned
         work but cannot admit new scheduling. Existing Control-Plane-owned Worker drain state and
-        Node drain/maintenance policy are preserved rather than invented by recovery. The Worker's
-        normal authenticated heartbeat replaces the degraded health state once HTTP serving starts.
+        Node drain/maintenance policy are preserved rather than invented by recovery. Every
+        persisted sibling remains in the internal registration snapshot so recovery never converts
+        temporary absence into an operator-owned drain. The Worker's normal authenticated heartbeat
+        replaces the degraded health state once HTTP serving starts.
         """
 
         if self._presence is None:
@@ -188,22 +190,42 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         reachable = await asyncio.gather(
             *(self._presence.reachable(worker.worker_id) for worker in persisted_workers)
         )
-        reachable_by_node: dict[str, list[WorkerRecord]] = {}
-        for worker, is_reachable in zip(persisted_workers, reachable, strict=True):
-            if is_reachable:
-                reachable_by_node.setdefault(worker.node_id, []).append(worker)
+        reachable_ids = {
+            worker.worker_id
+            for worker, is_reachable in zip(persisted_workers, reachable, strict=True)
+            if is_reachable
+        }
+        if not reachable_ids:
+            return ()
 
         timestamp = now or datetime.now(UTC)
+        persisted_by_node: dict[str, list[WorkerRecord]] = {}
+        for worker in persisted_workers:
+            persisted_by_node.setdefault(worker.node_id, []).append(worker)
+
         restored_ids: list[str] = []
-        for node_id in sorted(reachable_by_node):
+        reachable_node_ids = {
+            worker.node_id for worker in persisted_workers if worker.worker_id in reachable_ids
+        }
+        for node_id in sorted(reachable_node_ids):
             node = self.runtime.registry.get_node(node_id)
             recovery_workers = tuple(
-                replace(worker, status=WorkerStatus.DEGRADED)
+                replace(
+                    worker,
+                    status=(
+                        WorkerStatus.DEGRADED
+                        if worker.worker_id in reachable_ids
+                        else WorkerStatus.OFFLINE
+                    ),
+                )
                 for worker in sorted(
-                    reachable_by_node[node_id],
+                    persisted_by_node[node_id],
                     key=lambda candidate: candidate.worker_id,
                 )
             )
+            # Register the complete persisted Worker snapshot for this Node. Passing only the
+            # reachable subset would make ``DistributedRegistry.register`` treat absent siblings
+            # as intentionally removed and set their Control-Plane-owned drain flag.
             self.runtime.register(
                 RegistrationRequest(
                     node=node,
@@ -212,6 +234,8 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
                 now=timestamp,
             )
             for worker in recovery_workers:
+                if worker.worker_id not in reachable_ids:
+                    continue
                 self._attach(worker.worker_id)
                 restored_ids.append(worker.worker_id)
         return tuple(restored_ids)
