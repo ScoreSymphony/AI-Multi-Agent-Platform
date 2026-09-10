@@ -35,8 +35,12 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
     "B": _external("B"),
     "C": _external("C"),
     "E": _pytest(
+        "tests/test_issue_14_distributed_runtime.py::"
+        "test_two_node_selection_filters_resources_capabilities_and_model",
         "tests/test_issue_14_security_result_recovery.py::"
         "test_dispatch_authorization_denial_releases_reservation_before_worker_execution",
+        "tests/test_issue_46_worker_artifact_integration.py::"
+        "test_remote_worker_file_becomes_canonical_run_artifact",
         "tests/test_issue_14_security_result_recovery.py::"
         "test_terminal_result_is_recovered_after_restart_and_then_survives_without_worker",
         "tests/test_issue_14_distributed_telemetry.py::"
