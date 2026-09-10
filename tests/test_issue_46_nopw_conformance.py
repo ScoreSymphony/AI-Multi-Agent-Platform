@@ -9,8 +9,7 @@ from ai_multi_agent_platform.conformance import (
 
 def _by_id():
     return {
-        scenario.scenario_id: scenario
-        for scenario in profile_scenarios(ConformanceProfile.RELEASE)
+        scenario.scenario_id: scenario for scenario in profile_scenarios(ConformanceProfile.RELEASE)
     }
 
 
