@@ -1,7 +1,7 @@
 """Structured runtime evidence emitted by maintained conformance scenarios.
 
 The conformance runner owns the compatibility report, while canonical subsystem tests
-own the resources they exercise.  This tiny stdout protocol lets a scenario report the
+own the resources they exercise. This tiny stdout protocol lets a scenario report the
 real canonical IDs and retained evidence references it observed without introducing a
 second lifecycle or persistence model.
 """
@@ -35,7 +35,7 @@ def parse_runtime_evidence(stdout: str) -> tuple[tuple[str, ...], tuple[str, ...
     """Parse at most one evidence envelope from captured scenario stdout.
 
     A scenario that does not participate in the runtime evidence protocol returns
-    ``None``.  Once a marker is present it is treated as an explicit compatibility
+    ``None``. Once a marker is present it is treated as an explicit compatibility
     claim and therefore validated fail-closed.
     """
 
@@ -77,7 +77,9 @@ def _normalized_strings(values: Sequence[object], *, field: str) -> list[str]:
     seen: set[str] = set()
     for value in values:
         if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"conformance runtime evidence field {field!r} requires non-empty strings")
+            raise ValueError(
+                f"conformance runtime evidence field {field!r} requires non-empty strings"
+            )
         item = value.strip()
         if item not in seen:
             normalized.append(item)
