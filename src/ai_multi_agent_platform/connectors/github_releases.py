@@ -395,7 +395,11 @@ class GitHubReleaseConnectorProvider(ConnectorProvider):
             token,
         )
         fail_if_tag_differs = arguments.get("fail_if_tag_points_elsewhere", True)
-        if fail_if_tag_differs is not False and tag_commit is not None and tag_commit != canonical_source:
+        if (
+            fail_if_tag_differs is not False
+            and tag_commit is not None
+            and tag_commit != canonical_source
+        ):
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "GitHub release tag already points to a different source revision",
@@ -622,7 +626,9 @@ class GitHubReleaseConnectorProvider(ConnectorProvider):
             headers=self._headers(connection, token),
         )
         items = self._expect_array(response, expected={200}, operation="list release assets")
-        matches = [item for item in items if isinstance(item, dict) and item.get("name") == filename]
+        matches = [
+            item for item in items if isinstance(item, dict) and item.get("name") == filename
+        ]
         if len(matches) > 1:
             raise ContractError(
                 ErrorCode.INVALID_PROVIDER_RESPONSE,
@@ -859,7 +865,13 @@ def _sha256(value: str) -> str:
 
 
 def _asset_name(value: str) -> str:
-    if value in {".", ".."} or "/" in value or "\\" in value or "\n" in value or "\r" in value:
+    if (
+        value in {".", ".."}
+        or "/" in value
+        or "\\" in value
+        or "\n" in value
+        or "\r" in value
+    ):
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             "GitHub release asset filename must be a single safe path segment",
@@ -901,7 +913,10 @@ def _checksum_document(manifest: dict[str, JsonValue], manifest_digest: str) -> 
     lines = [f"{manifest_digest}  {_MANIFEST_ASSET_NAME}"]
     artifacts = manifest.get("artifacts")
     if not isinstance(artifacts, list):
-        raise ContractError(ErrorCode.INVALID_REQUEST, "release manifest artifacts must be an array")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "release manifest artifacts must be an array",
+        )
     entries: list[tuple[str, str]] = []
     for artifact in artifacts:
         data = _json_object(artifact, "release manifest artifact")
