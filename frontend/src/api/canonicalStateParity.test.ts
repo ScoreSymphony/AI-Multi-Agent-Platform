@@ -65,6 +65,15 @@ describe("canonical CLI/Web resource parity", () => {
     expect(init.credentials).toBe("include");
   });
 
+  it("keeps the shared Task Run Result snapshot internally coherent", () => {
+    expect(canonicalRun.task_id).toBe(canonicalTask.id);
+    expect(canonicalResult.task_id).toBe(canonicalTask.id);
+    expect(canonicalTask.run_ids).toEqual([canonicalRun.id]);
+    expect(canonicalTask.result_ids).toEqual([canonicalResult.id]);
+    expect(canonicalTask.status).toBe(canonicalRun.status);
+    expect(canonicalTask.correlation_id).toBe(canonicalRun.correlation_id);
+  });
+
   it("reads the shared #560 workflow snapshot with explicit wait and retry terminal semantics", async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(workflowProgress), {
