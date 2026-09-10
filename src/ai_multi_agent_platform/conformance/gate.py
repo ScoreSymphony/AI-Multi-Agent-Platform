@@ -209,12 +209,19 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ),
         ConformanceScenario(
             "H",
-            "#39/#250/#251/#86 persistence",
-            "canonical Task/Run/Memory/Verification state remains coherent across restart",
-            _python_module(
-                "ai_multi_agent_platform.cli.acceptance",
-                "--profile",
-                "persistence",
+            "#46 canonical kernel/control-plane recovery",
+            (
+                "an unfinished canonical Run survives Control Plane/process reconstruction on the "
+                "same identity without duplicate dispatch while preserving Workspace binding and "
+                "deterministic queued/pre-accept/orphan recovery semantics"
+            ),
+            _pytest(
+                "tests/test_kernel.py::"
+                "test_restart_reconciles_post_accept_crash_without_duplicate_dispatch",
+                "tests/test_kernel.py::"
+                "test_recovery_distinguishes_queued_pre_accept_and_orphaned_running",
+                "tests/test_run_workspace_binding_restart.py::"
+                "test_restart_between_run_creation_and_binding_recovers_same_run",
             ),
         ),
         ConformanceScenario(
