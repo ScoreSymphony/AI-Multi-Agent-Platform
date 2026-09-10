@@ -1,0 +1,12 @@
+E501 Line too long (102 > 100)
+   --> src/ai_multi_agent_platform/benchmarking/persistence_contention.py:102:101
+    |
+100 |             "scope_limitations": [
+101 |                 "this characterizes the stdlib SQLite reference backend, not a canonical database",
+102 |                 "SQLite internal wait time is observed through end-to-end canonical mutation latency",
+    |                                                                                                     ^^
+103 |                 "the benchmark does not alter SQLite busy timeout, WAL settings or private tables",
+104 |                 "PR-scale runs prove harness semantics only and are not operating-envelope claims",
+    |
+
+Found 1 error.
