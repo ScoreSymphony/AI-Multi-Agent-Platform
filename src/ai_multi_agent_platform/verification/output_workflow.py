@@ -7,18 +7,23 @@ drive Agent review without callers manually creating VerificationRequest/runtime
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from ai_multi_agent_platform.agents import AgentRunRecord
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, PlatformEvent
+from ai_multi_agent_platform.agents import AgentRunRecord, AgentRuntime
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, PlatformEvent
 from ai_multi_agent_platform.domain import TaskStatus, validate_id
 from ai_multi_agent_platform.kernel import OutputAttachmentObserver, PlatformKernel
 from ai_multi_agent_platform.kernel.models import TaskState
 
 from .agent_workflow import (
     AutomaticReviewerWorkflow,
+    ConfiguredReviewerResolver,
+    ResolvedReviewerAssignment,
+    ReviewerAssignment,
+    ReviewerAssignmentResolver,
     ReviewerRuntimeOptions,
     ReviewWorkflowResult,
 )
@@ -36,6 +41,14 @@ from .models import (
 
 _OutputType = Literal["result", "artifact"]
 _SOURCE = "automatic-reviewer-output-workflow"
+_AUTOMATIC_REVIEW_METADATA_KEY = "automatic_reviewer"
+_ALLOWED_OUTPUT_TYPES = frozenset({"result", "artifact"})
+
+
+@dataclass(frozen=True, slots=True)
+class _AutomaticReviewConfiguration:
+    subject_types: frozenset[str]
+    assignments: Mapping[str, ReviewerAssignment]
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,13 +69,53 @@ class AutomaticOutputReviewResult:
         )
 
 
-class AutomaticReviewerOutputCoordinator:
-    """Attach canonical output and drive every configured Agent-verifier stage.
+class PolicyMetadataReviewerResolver(ReviewerAssignmentResolver):
+    """Resolve exact reviewer revisions from versioned VerificationPolicy metadata.
 
-    This is the Verification-side integration seam for execution components that have produced a
-    canonical Result/Artifact. It does not embed review policy into AgentRuntime or kernel state:
-    the kernel attaches output, Verification resolves the exact subject, and
-    AutomaticReviewerWorkflow dispatches only AGENT stages required by the Task policy.
+    Automatic review is explicitly opt-in. A policy configures the output types that trigger
+    automatic review plus one exact reviewer assignment per AGENT stage under
+    ``metadata.automatic_reviewer``. The bundled Reviewer is never a hidden fallback.
+    """
+
+    def __init__(self, completion: VerificationCompletionAuthority) -> None:
+        self._completion = completion
+
+    def resolve(
+        self,
+        request: VerificationRequest,
+        agents: AgentRuntime,
+    ) -> ResolvedReviewerAssignment:
+        policy = self._completion.verification.get_policy(
+            request.policy_id,
+            request.policy_version,
+        )
+        configuration = _automatic_review_configuration(policy, required=True)
+        assert configuration is not None
+        try:
+            assignment = configuration.assignments[request.stage_id]
+        except KeyError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "automatic reviewer policy is missing an exact reviewer assignment for stage",
+                details={
+                    "policy_id": policy.policy_id,
+                    "policy_version": policy.version,
+                    "stage_id": request.stage_id,
+                },
+            ) from exc
+        return ConfiguredReviewerResolver(
+            {
+                (request.policy_id, request.policy_version, request.stage_id): assignment,
+            }
+        ).resolve(request, agents)
+
+
+class AutomaticReviewerOutputCoordinator:
+    """Drive configured Agent-verifier stages for canonical attached output.
+
+    A Task without a Verification requirement, or a policy without automatic-review metadata,
+    is a normal no-review case. Once automatic review is enabled for an output type, missing or
+    ambiguous reviewer configuration fails closed and canonical Verification remains authoritative.
     """
 
     def __init__(
@@ -88,7 +141,7 @@ class AutomaticReviewerOutputCoordinator:
         actor_ref: str | None = None,
         options: ReviewerRuntimeOptions | None = None,
     ) -> AutomaticOutputReviewResult:
-        """Legacy explicit composition helper; normal configured flow uses the kernel observer."""
+        """Legacy explicit helper; configured kernels normally invoke the observer automatically."""
 
         validate_id(result_id, "result")
         await self._kernel.attach_result(
@@ -119,7 +172,7 @@ class AutomaticReviewerOutputCoordinator:
         actor_ref: str | None = None,
         options: ReviewerRuntimeOptions | None = None,
     ) -> AutomaticOutputReviewResult:
-        """Legacy explicit composition helper; normal configured flow uses the kernel observer."""
+        """Legacy explicit helper; configured kernels normally invoke the observer automatically."""
 
         validate_id(artifact_id, "artifact")
         await self._kernel.attach_artifact(
@@ -151,12 +204,7 @@ class AutomaticReviewerOutputCoordinator:
         actor_ref: str | None = None,
         options: ReviewerRuntimeOptions | None = None,
     ) -> AutomaticOutputReviewResult:
-        """Drive configured AGENT stages for an already-attached exact subject.
-
-        Missing Task Verification configuration is a normal no-review case. Once a Task
-        requires a policy, however, missing/ambiguous reviewer configuration fails closed
-        through the underlying workflow and the Task remains Verification-blocked.
-        """
+        """Drive configured AGENT stages for an already-attached exact subject."""
 
         validate_id(task_id, "task")
         validate_id(subject_id, subject_type)
@@ -165,24 +213,36 @@ class AutomaticReviewerOutputCoordinator:
 
         requirement = self._completion.requirement_for(task_id)
         if requirement is None:
-            return AutomaticOutputReviewResult(
-                task=await self._kernel.get_task(task_id),
-                subject=None,
-                reviews=(),
-            )
+            return await self._no_review(task_id)
 
         policy = self._completion.verification.get_policy(
             requirement.policy_id,
             requirement.policy_version,
         )
+        configuration = _automatic_review_configuration(policy)
+        if configuration is None or subject_type not in configuration.subject_types:
+            return await self._no_review(task_id)
+
         agent_stages = tuple(
             stage for stage in policy.stages if stage.verifier_kind is VerifierKind.AGENT
         )
         if not agent_stages:
-            return AutomaticOutputReviewResult(
-                task=await self._kernel.get_task(task_id),
-                subject=None,
-                reviews=(),
+            return await self._no_review(task_id)
+
+        missing_assignments = tuple(
+            stage.stage_id
+            for stage in agent_stages
+            if stage.stage_id not in configuration.assignments
+        )
+        if missing_assignments:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "automatic reviewer policy is missing exact reviewer assignments",
+                details={
+                    "policy_id": policy.policy_id,
+                    "policy_version": policy.version,
+                    "stage_ids": list(missing_assignments),
+                },
             )
 
         subject = await self._runtime.evidence.resolve_subject(
@@ -219,7 +279,10 @@ class AutomaticReviewerOutputCoordinator:
 
         decision = self._completion.assess_task_completion(task_id)
         task = await self._kernel.get_task(task_id)
-        if decision.state is CompletionState.ACCEPTED and task.status is not TaskStatus.SUCCEEDED:
+        # Artifact output may be attached while the producer Run is still active. In that case
+        # normal Run terminalization will consult the same canonical completion authority later.
+        # Only an already verification-blocked Task is completed directly by this observer.
+        if decision.state is CompletionState.ACCEPTED and task.status is TaskStatus.WAITING:
             task = await self._kernel.complete_task(
                 idempotency_key=(
                     f"automatic-review-complete:{task_id}:{subject.subject_type}:"
@@ -233,6 +296,13 @@ class AutomaticReviewerOutputCoordinator:
             task=task,
             subject=subject,
             reviews=tuple(reviews),
+        )
+
+    async def _no_review(self, task_id: str) -> AutomaticOutputReviewResult:
+        return AutomaticOutputReviewResult(
+            task=await self._kernel.get_task(task_id),
+            subject=None,
+            reviews=(),
         )
 
     def _existing_current_request(
@@ -340,9 +410,141 @@ def install_automatic_reviewer_output_observer(
     return observer
 
 
+def _automatic_review_configuration(
+    policy: VerificationPolicy,
+    *,
+    required: bool = False,
+) -> _AutomaticReviewConfiguration | None:
+    raw = policy.metadata.get(_AUTOMATIC_REVIEW_METADATA_KEY)
+    if raw is None:
+        if required:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "verification policy has no automatic reviewer configuration",
+                details={"policy_id": policy.policy_id, "policy_version": policy.version},
+            )
+        return None
+    if not isinstance(raw, Mapping):
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "automatic reviewer policy metadata must be an object",
+        )
+    unknown = set(raw) - {"enabled", "subject_types", "stages"}
+    if unknown:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "automatic reviewer policy metadata contains unknown fields",
+            details={"fields": sorted(unknown)},
+        )
+    enabled = raw.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "automatic reviewer enabled flag must be boolean",
+        )
+    if not enabled:
+        if required:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "automatic reviewer policy is disabled",
+            )
+        return None
+
+    subject_types_raw = raw.get("subject_types")
+    if (
+        not isinstance(subject_types_raw, (list, tuple))
+        or not subject_types_raw
+        or any(not isinstance(item, str) for item in subject_types_raw)
+    ):
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "automatic reviewer subject_types must be a non-empty string list",
+        )
+    subject_types = frozenset(subject_types_raw)
+    if not subject_types.issubset(_ALLOWED_OUTPUT_TYPES):
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "automatic reviewer subject_types may contain only result/artifact",
+        )
+
+    stages_raw = raw.get("stages")
+    if not isinstance(stages_raw, Mapping) or not stages_raw:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "automatic reviewer stages must be a non-empty object",
+        )
+    assignments: dict[str, ReviewerAssignment] = {}
+    for stage_id, stage_raw in stages_raw.items():
+        if not isinstance(stage_id, str) or not stage_id.strip():
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "automatic reviewer stage IDs must be non-blank strings",
+            )
+        if not isinstance(stage_raw, Mapping):
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "automatic reviewer stage configuration must be an object",
+            )
+        unknown_stage = set(stage_raw) - {
+            "agent_id",
+            "agent_revision",
+            "team_id",
+            "team_revision",
+            "team_role",
+        }
+        if unknown_stage:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "automatic reviewer stage contains unknown fields",
+                details={"stage_id": stage_id, "fields": sorted(unknown_stage)},
+            )
+        try:
+            assignments[stage_id] = ReviewerAssignment(
+                agent_id=_optional_string(stage_raw, "agent_id"),
+                agent_revision=_optional_positive_int(stage_raw, "agent_revision"),
+                team_id=_optional_string(stage_raw, "team_id"),
+                team_revision=_optional_positive_int(stage_raw, "team_revision"),
+                team_role=_optional_string(stage_raw, "team_role"),
+            )
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                f"invalid automatic reviewer assignment for stage {stage_id}: {exc}",
+            ) from exc
+    return _AutomaticReviewConfiguration(
+        subject_types=subject_types,
+        assignments=assignments,
+    )
+
+
+def _optional_string(value: Mapping[str, JsonValue], key: str) -> str | None:
+    item = value.get(key)
+    if item is None:
+        return None
+    if not isinstance(item, str) or not item.strip():
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            f"automatic reviewer {key} must be a non-blank string",
+        )
+    return item
+
+
+def _optional_positive_int(value: Mapping[str, JsonValue], key: str) -> int | None:
+    item = value.get(key)
+    if item is None:
+        return None
+    if not isinstance(item, int) or isinstance(item, bool) or item < 1:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            f"automatic reviewer {key} must be an integer >= 1",
+        )
+    return item
+
+
 __all__ = [
     "AutomaticOutputReviewResult",
     "AutomaticReviewerOutputCoordinator",
     "AutomaticReviewerOutputObserver",
+    "PolicyMetadataReviewerResolver",
     "install_automatic_reviewer_output_observer",
 ]
