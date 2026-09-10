@@ -302,8 +302,6 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                 self._results[request.run_id] = result
             finally:
                 await self._workspaces.release_materialization(materialization.id, outcome)
-        else:
-            result = existing
         return ExecutionHandle(
             run_id=request.run_id,
             backend_ref=f"application-build:{request.run_id}",
@@ -311,8 +309,24 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
         )
 
     async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
-        del context
         result = self._results.get(run_id)
+        if result is None:
+            release = await self._release_for_run(run_id)
+            target = _target_for_run(release, run_id)
+            if target.task_id is None:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "application build target has no canonical Task identity",
+                )
+            await self.start(
+                KernelExecutionRequest(
+                    run_id=run_id,
+                    subject_type="task",
+                    subject_id=target.task_id,
+                    context=context,
+                )
+            )
+            result = self._results.get(run_id)
         if result is None:
             raise ContractError(ErrorCode.NOT_FOUND, f"application build not found: {run_id}")
         return ExecutionSnapshot(
@@ -418,9 +432,7 @@ def _target_for_run(release: ApplicationRelease, run_id: str) -> BuildTargetStat
 
 
 def _artifact_id(run_id: str, target_id: str, sha256: str) -> str:
-    return f"artifact_{uuid5(NAMESPACE_URL, f'application-build:{run_id}:{target_id}:{sha256}') }".replace(
-        " }", "}"
-    )
+    return f"artifact_{uuid5(NAMESPACE_URL, f'application-build:{run_id}:{target_id}:{sha256}')}"
 
 
 def _data_context(operation: OperationContext, task_id: str, run_id: str) -> DataAccessContext:
