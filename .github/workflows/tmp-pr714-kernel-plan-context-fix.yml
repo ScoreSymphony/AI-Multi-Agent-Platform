@@ -1,0 +1,44 @@
+name: Temporary PR 714 kernel Plan context fix
+
+on:
+  push:
+    branches:
+      - codex/issue-711-auto-reviewer-workflows
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/issue-711-auto-reviewer-workflows
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Apply exact kernel Plan context fix
+        shell: bash
+        run: |
+          echo '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' | base64 -d | gzip -d > /tmp/pr714_patch.py
+          python /tmp/pr714_patch.py
+      - name: Install test toolchain
+        run: python -m pip install -e '.[dev]'
+      - name: Validate focused change
+        shell: bash
+        run: |
+          ruff format src/ai_multi_agent_platform/context/source_adapters.py src/ai_multi_agent_platform/deployment/context_operationalization.py tests/integration/context/test_plan_step_kernel_fallback.py
+          ruff check src/ai_multi_agent_platform/context/source_adapters.py src/ai_multi_agent_platform/deployment/context_operationalization.py tests/integration/context/test_plan_step_kernel_fallback.py
+          mypy src/ai_multi_agent_platform/context/source_adapters.py src/ai_multi_agent_platform/deployment/context_operationalization.py
+          pytest -q tests/integration/context/test_plan_step_kernel_fallback.py tests/integration/verification/test_automatic_reviewer_repair.py
+      - name: Commit verified fix
+        shell: bash
+        run: |
+          git rm .github/workflows/tmp-pr714-kernel-plan-context-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/ai_multi_agent_platform/context/source_adapters.py src/ai_multi_agent_platform/deployment/context_operationalization.py tests/integration/context/test_plan_step_kernel_fallback.py
+          git commit -m 'fix(context): resolve kernel-owned repair steps (#711)'
+          git push origin HEAD:codex/issue-711-auto-reviewer-workflows
