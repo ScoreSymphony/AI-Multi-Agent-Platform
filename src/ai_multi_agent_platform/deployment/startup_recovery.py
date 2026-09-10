@@ -179,7 +179,7 @@ def _load_report(path: Path) -> dict[str, Any]:
         raise RuntimeError("startup recovery report is missing; run recover-startup first")
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise RuntimeError("startup recovery report is unreadable or invalid JSON") from exc
     if (
         not isinstance(payload, dict)
