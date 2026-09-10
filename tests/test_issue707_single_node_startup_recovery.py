@@ -110,6 +110,8 @@ def test_operator_can_resolve_only_exact_startup_blocker(tmp_path: Path, monkeyp
     monkeypatch.setenv("AI_MAP_SECURE_COOKIE", "false")
 
     assert server_main(["recover-startup"]) == 3
+    # The ordinary serve path must stop before uvicorn while canonical recovery is unresolved.
+    assert server_main(["serve"]) == 3
     require_blocked_startup_run(root, task_id=task_id, run_id=run_id)
 
     assert (
