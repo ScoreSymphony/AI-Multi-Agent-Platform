@@ -58,6 +58,7 @@ _ENV_ALLOWLIST = (
     "USERPROFILE",
     "VIRTUAL_ENV",
 )
+_POLL_SECONDS = 0.05
 
 
 class ApplicationCommandExecutor(Executor):
@@ -204,44 +205,38 @@ class ApplicationCommandExecutor(Executor):
             stderr=asyncio.subprocess.PIPE,
         )
         communication = asyncio.create_task(process.communicate())
-        cancellation_wait = (
-            asyncio.create_task(cancellation.wait()) if cancellation is not None else None
-        )
+        deadline = None if timeout_seconds is None else monotonic() + timeout_seconds
         try:
-            waiters: set[asyncio.Task[object]] = {communication}  # type: ignore[arg-type]
-            if cancellation_wait is not None:
-                waiters.add(cancellation_wait)
-            done, _ = await asyncio.wait(
-                waiters,
-                timeout=timeout_seconds,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            if not done:
-                if process.returncode is None:
-                    process.kill()
-                await process.wait()
-                communication.cancel()
-                raise TimeoutError
-            if cancellation_wait is not None and cancellation_wait in done:
-                if process.returncode is None:
-                    process.kill()
-                await process.wait()
-                communication.cancel()
+            while True:
+                if cancellation is not None and cancellation.cancelled:
+                    raise asyncio.CancelledError
+                if communication.done():
+                    stdout_bytes, stderr_bytes = communication.result()
+                    break
+                interval = _POLL_SECONDS
+                if deadline is not None:
+                    remaining = deadline - monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError
+                    interval = min(interval, remaining)
                 try:
-                    await communication
-                except asyncio.CancelledError:
-                    pass
-                raise asyncio.CancelledError
-            stdout_bytes, stderr_bytes = await communication
-        except asyncio.CancelledError:
+                    stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                        asyncio.shield(communication),
+                        timeout=interval,
+                    )
+                    break
+                except TimeoutError:
+                    continue
+        except (TimeoutError, asyncio.CancelledError):
             if process.returncode is None:
                 process.kill()
                 await process.wait()
             communication.cancel()
+            try:
+                await communication
+            except asyncio.CancelledError:
+                pass
             raise
-        finally:
-            if cancellation_wait is not None:
-                cancellation_wait.cancel()
         return (
             _decode_output(stdout_bytes),
             _decode_output(stderr_bytes),
