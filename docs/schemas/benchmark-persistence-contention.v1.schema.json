@@ -82,7 +82,7 @@
       "properties": {
         "writer_instances": {"type": "integer", "minimum": 2},
         "synchronized_rounds": {"type": "integer", "minimum": 2},
-        "peak_in_flight_operations": {"type": "integer", "minimum": 1},
+        "peak_in_flight_operations": {"type": "integer", "minimum": 0},
         "sqlite_busy_errors": {"type": "integer", "minimum": 0},
         "contract_conflicts": {"type": "integer", "minimum": 0},
         "unexpected_errors": {"type": "integer", "minimum": 0},
