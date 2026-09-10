@@ -125,11 +125,24 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         now: datetime | None = None,
     ) -> WorkerProtocolReceipt:
         presence_workers = await self._presence_workers(request.heartbeat.workers)
+        reachable_worker_ids = {
+            worker.worker_id
+            for worker in presence_workers
+            if worker.status is not WorkerStatus.OFFLINE
+        }
         safe_request = replace(
             request,
             heartbeat=replace(request.heartbeat, workers=presence_workers),
         )
-        return await super().heartbeat(safe_request, credentials, now=now)
+        receipt = await super().heartbeat(safe_request, credentials, now=now)
+        # A persisted Worker can miss the one-shot pre-serve recovery probe and become reachable
+        # only after the HTTP Worker protocol is open. Its authenticated heartbeat is fresh
+        # evidence, so attach a dispatcher for every Worker that also passed the current presence
+        # probe. Offline siblings remain unschedulable and receive no transport attachment here.
+        for worker_id in receipt.worker_ids:
+            if worker_id in reachable_worker_ids:
+                self._attach(worker_id)
+        return receipt
 
     async def deregister_worker(
         self,
@@ -160,10 +173,10 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         #35 transport before the HTTP Worker-protocol surface opens. We use only that positive
         presence proof to attach the transport dispatcher needed to inspect existing Worker Jobs.
 
-        Reachable Workers are temporarily degraded and draining: this permits reconciliation of
-        already-owned work but cannot admit new scheduling. Node drain/maintenance policy is
-        preserved rather than invented by recovery. The Worker's normal authenticated heartbeat
-        replaces the conservative Worker state once HTTP serving starts.
+        Reachable Workers are temporarily degraded: this permits reconciliation of already-owned
+        work but cannot admit new scheduling. Existing Control-Plane-owned Worker drain state and
+        Node drain/maintenance policy are preserved rather than invented by recovery. The Worker's
+        normal authenticated heartbeat replaces the degraded health state once HTTP serving starts.
         """
 
         if self._presence is None:
@@ -185,7 +198,7 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         for node_id in sorted(reachable_by_node):
             node = self.runtime.registry.get_node(node_id)
             recovery_workers = tuple(
-                replace(worker, status=WorkerStatus.DEGRADED, draining=True)
+                replace(worker, status=WorkerStatus.DEGRADED)
                 for worker in sorted(
                     reachable_by_node[node_id],
                     key=lambda candidate: candidate.worker_id,
