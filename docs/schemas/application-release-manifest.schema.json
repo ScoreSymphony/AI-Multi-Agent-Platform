@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://scoresymphony.org/schemas/application-release-manifest.schema.json",
+  "$id": "urn:ai-multi-agent-platform:schema:application-release-manifest:v1",
   "title": "Application Release Manifest",
   "type": "object",
   "additionalProperties": false,
