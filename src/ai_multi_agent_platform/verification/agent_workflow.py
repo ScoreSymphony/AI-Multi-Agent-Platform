@@ -7,9 +7,12 @@ always starts through the existing canonical VerificationRepairRuntime.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from threading import Lock as ThreadLock
 from typing import Protocol, runtime_checkable
+from weakref import WeakKeyDictionary
 
 from ai_multi_agent_platform.agents import (
     AgentOrchestratorMapper,
@@ -37,6 +40,25 @@ from .repair import VerificationRepairExecution, VerificationRepairRuntime
 from .reviewer_agent import ReviewerAgentRuntime
 
 _REVIEW_CONTEXT_SCHEMA = "verification-reviewer-agent-v1"
+_STAGED_DECISION_KEY = "automatic_reviewer_decision"
+_STAGED_DECISION_SCHEMA = "automatic-reviewer-decision-v1"
+_REVIEW_LOCKS: WeakKeyDictionary[object, dict[str, asyncio.Lock]] = WeakKeyDictionary()
+_REVIEW_LOCKS_GUARD = ThreadLock()
+
+
+def _review_lock(repository: object, verification_id: str) -> asyncio.Lock:
+    """Share one in-process dispatch lock across workflow instances for a repository."""
+
+    with _REVIEW_LOCKS_GUARD:
+        locks = _REVIEW_LOCKS.get(repository)
+        if locks is None:
+            locks = {}
+            _REVIEW_LOCKS[repository] = locks
+        lock = locks.get(verification_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            locks[verification_id] = lock
+        return lock
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +231,11 @@ class ReviewerRuntimeOptions:
     available_worker_capabilities: frozenset[str] = frozenset()
     task_context: Mapping[str, JsonValue] = field(default_factory=dict)
     project_context: Mapping[str, JsonValue] = field(default_factory=dict)
+    max_reviewer_attempts: int = 2
+
+    def __post_init__(self) -> None:
+        if self.max_reviewer_attempts < 1:
+            raise ValueError("max_reviewer_attempts must be >= 1")
 
 
 @dataclass(frozen=True, slots=True)
@@ -363,16 +390,35 @@ class AutomaticReviewerWorkflow:
         *,
         options: ReviewerRuntimeOptions | None = None,
     ) -> ReviewWorkflowResult:
-        """Drive one Agent-verifier request through review and bounded repair."""
+        """Drive one Agent-verifier request through review and bounded repair.
 
+        Dispatch is serialized per canonical Agent repository + Verification ID across
+        workflow instances in the current Control Plane process. The durable AgentRun
+        binding remains the recovery source of truth after the lock is released/restarted.
+        """
+
+        validate_id(verification_id, "verification")
+        lock = _review_lock(self._agents.service.repository, verification_id)
+        async with lock:
+            return await self._run_request_locked(
+                verification_id,
+                options=options or ReviewerRuntimeOptions(),
+            )
+
+    async def _run_request_locked(
+        self,
+        verification_id: str,
+        *,
+        options: ReviewerRuntimeOptions,
+    ) -> ReviewWorkflowResult:
         cycles: list[ReviewWorkflowCycle] = []
         current_id = verification_id
-        runtime_options = options or ReviewerRuntimeOptions()
 
         while True:
             request = self._completion.verification.get_request(current_id)
             self._require_agent_request(request)
-            existing = self._review_run_for(request.verification_id)
+            runs = self._review_runs_for(request.verification_id)
+            latest = None if not runs else runs[-1]
 
             if request.status is VerificationRequestStatus.COMPLETED:
                 result = self._completion.verification.result_for(
@@ -386,17 +432,26 @@ class AutomaticReviewerWorkflow:
                 cycles.append(
                     ReviewWorkflowCycle(
                         request=request,
-                        reviewer_run=existing,
+                        reviewer_run=latest,
                         verification_result=result,
                     )
                 )
             elif request.status is VerificationRequestStatus.PENDING:
-                if existing is not None:
-                    if existing.status is AgentRunStatus.RUNNING:
+                active = [run for run in runs if run.status is AgentRunStatus.RUNNING]
+                if len(active) > 1:
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        "verification maps to multiple running reviewer AgentRuns",
+                    )
+
+                if active:
+                    reviewer_run = active[0]
+                    staged = self._staged_decision(reviewer_run)
+                    if staged is None:
                         cycles.append(
                             ReviewWorkflowCycle(
                                 request=request,
-                                reviewer_run=existing,
+                                reviewer_run=reviewer_run,
                                 verification_result=None,
                             )
                         )
@@ -406,14 +461,37 @@ class AutomaticReviewerWorkflow:
                                 request.task_id
                             ),
                         )
-                    raise ContractError(
-                        ErrorCode.CONFLICT,
-                        "pending verification already has a terminal reviewer AgentRun "
-                        "and requires reconciliation",
+                    result = await self._resume_submission(
+                        reviewer_run,
+                        staged,
                     )
+                elif latest is not None and latest.status is AgentRunStatus.SUCCEEDED:
+                    staged = self._staged_decision(latest)
+                    if staged is None:
+                        raise ContractError(
+                            ErrorCode.CONFLICT,
+                            "successful reviewer AgentRun has no recoverable staged decision",
+                        )
+                    reviewer_run = latest
+                    result = await self._resume_submission(reviewer_run, staged)
+                else:
+                    failed_attempts = sum(
+                        run.status in {AgentRunStatus.FAILED, AgentRunStatus.CANCELLED}
+                        for run in runs
+                    )
+                    if failed_attempts >= options.max_reviewer_attempts:
+                        raise ContractError(
+                            ErrorCode.UNAVAILABLE,
+                            "automatic reviewer retry budget is exhausted",
+                            details={
+                                "verification_id": request.verification_id,
+                                "attempts": failed_attempts,
+                                "max_reviewer_attempts": options.max_reviewer_attempts,
+                            },
+                        )
+                    reviewer_run = await self._start_reviewer(request, options)
+                    result = await self._execute_reviewer(request, reviewer_run)
 
-                reviewer_run = await self._start_reviewer(request, runtime_options)
-                result = await self._execute_reviewer(request, reviewer_run)
                 cycles.append(
                     ReviewWorkflowCycle(
                         request=self._completion.verification.get_request(
@@ -481,11 +559,12 @@ class AutomaticReviewerWorkflow:
 
         request = self._completion.verification.get_request(verification_id)
         result = self._completion.verification.result_for(verification_id)
+        runs = self._review_runs_for(verification_id)
         return ReviewWorkflowResult(
             cycles=(
                 ReviewWorkflowCycle(
                     request=request,
-                    reviewer_run=self._review_run_for(verification_id),
+                    reviewer_run=None if not runs else runs[-1],
                     verification_result=result,
                 ),
             ),
@@ -530,18 +609,17 @@ class AutomaticReviewerWorkflow:
                 request=request,
                 agent_run=reviewer_run,
             )
-            return await self._reviewer.complete_review(
-                reviewer_run.agent_run_id,
-                outcome=execution.outcome,
-                findings=execution.findings,
-                evidence_artifact_ids=execution.evidence_artifact_ids,
-                checks_executed=execution.checks_executed,
-                output_artifact_ids=execution.output_artifact_ids,
-                output_result_ids=execution.output_result_ids,
-                model_call_refs=execution.model_call_refs,
-                tool_invocation_refs=execution.tool_invocation_refs,
-                telemetry=execution.telemetry,
+        except asyncio.CancelledError:
+            current = self._agents.service.repository.get_agent_run(
+                reviewer_run.agent_run_id
             )
+            if current.status is AgentRunStatus.RUNNING:
+                self._agents.finish_agent_run(
+                    current.agent_run_id,
+                    status=AgentRunStatus.CANCELLED,
+                    error="automatic reviewer execution cancelled",
+                )
+            raise
         except Exception as exc:
             current = self._agents.service.repository.get_agent_run(
                 reviewer_run.agent_run_id
@@ -554,6 +632,90 @@ class AutomaticReviewerWorkflow:
                 )
             raise
 
+        staged = self._stage_execution_decision(reviewer_run, execution)
+        try:
+            return await self._reviewer.complete_review(
+                reviewer_run.agent_run_id,
+                outcome=execution.outcome,
+                findings=execution.findings,
+                evidence_artifact_ids=execution.evidence_artifact_ids,
+                checks_executed=execution.checks_executed,
+                output_artifact_ids=execution.output_artifact_ids,
+                output_result_ids=execution.output_result_ids,
+                model_call_refs=execution.model_call_refs,
+                tool_invocation_refs=execution.tool_invocation_refs,
+                telemetry=staged.telemetry,
+            )
+        except asyncio.CancelledError:
+            # If execution already produced and staged a decision, keep the run recoverable.
+            # complete_review may already have terminalized it before canonical submission.
+            raise
+        except Exception as exc:
+            current = self._agents.service.repository.get_agent_run(
+                reviewer_run.agent_run_id
+            )
+            if current.status is AgentRunStatus.RUNNING:
+                self._agents.finish_agent_run(
+                    current.agent_run_id,
+                    status=AgentRunStatus.FAILED,
+                    error=str(exc),
+                    telemetry=current.telemetry,
+                )
+            raise
+
+    def _stage_execution_decision(
+        self,
+        reviewer_run: AgentRunRecord,
+        decision: ReviewerExecutionDecision,
+    ) -> AgentRunRecord:
+        """Persist reviewer output before the non-atomic AgentRun/result handoff."""
+
+        current = self._agents.service.repository.get_agent_run(reviewer_run.agent_run_id)
+        if current.status is not AgentRunStatus.RUNNING:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "reviewer execution decision can only be staged on a running AgentRun",
+            )
+        telemetry = dict(current.telemetry)
+        telemetry.update(decision.telemetry)
+        telemetry[_STAGED_DECISION_KEY] = self._encode_decision(decision)
+        staged = replace(current, telemetry=telemetry)
+        self._agents.service.repository.update_agent_run(staged)
+        return staged
+
+    async def _resume_submission(
+        self,
+        reviewer_run: AgentRunRecord,
+        decision: ReviewerExecutionDecision,
+    ) -> VerificationResult:
+        """Resubmit a durable staged decision without re-running the reviewer model."""
+
+        if reviewer_run.status is AgentRunStatus.RUNNING:
+            return await self._reviewer.complete_review(
+                reviewer_run.agent_run_id,
+                outcome=decision.outcome,
+                findings=decision.findings,
+                evidence_artifact_ids=decision.evidence_artifact_ids,
+                checks_executed=decision.checks_executed,
+                output_artifact_ids=decision.output_artifact_ids,
+                output_result_ids=decision.output_result_ids,
+                model_call_refs=decision.model_call_refs,
+                tool_invocation_refs=decision.tool_invocation_refs,
+                telemetry=reviewer_run.telemetry,
+            )
+        if reviewer_run.status is AgentRunStatus.SUCCEEDED:
+            return await self._reviewer.complete_review(
+                reviewer_run.agent_run_id,
+                outcome=decision.outcome,
+                findings=decision.findings,
+                evidence_artifact_ids=decision.evidence_artifact_ids,
+                checks_executed=decision.checks_executed,
+            )
+        raise ContractError(
+            ErrorCode.CONFLICT,
+            "only running/succeeded reviewer AgentRuns can reconcile staged decisions",
+        )
+
     @staticmethod
     def _require_agent_request(request: VerificationRequest) -> None:
         if request.requested_verifier_kind is not VerifierKind.AGENT:
@@ -562,19 +724,116 @@ class AutomaticReviewerWorkflow:
                 "automatic reviewer workflow requires an Agent-verifier request",
             )
 
-    def _review_run_for(self, verification_id: str) -> AgentRunRecord | None:
-        matches = [
+    def _review_runs_for(self, verification_id: str) -> tuple[AgentRunRecord, ...]:
+        return tuple(
             record
             for record in self._agents.service.repository.list_agent_runs()
             if record.verification_context.get("schema") == _REVIEW_CONTEXT_SCHEMA
             and record.verification_context.get("verification_id") == verification_id
-        ]
-        if len(matches) > 1:
+        )
+
+    @staticmethod
+    def _encode_decision(decision: ReviewerExecutionDecision) -> dict[str, JsonValue]:
+        return {
+            "schema": _STAGED_DECISION_SCHEMA,
+            "outcome": decision.outcome.value,
+            "findings": [
+                {
+                    "code": finding.code,
+                    "message": finding.message,
+                    "severity": finding.severity,
+                    "location_ref": finding.location_ref,
+                }
+                for finding in decision.findings
+            ],
+            "evidence_artifact_ids": list(decision.evidence_artifact_ids),
+            "checks_executed": list(decision.checks_executed),
+            "output_artifact_ids": list(decision.output_artifact_ids),
+            "output_result_ids": list(decision.output_result_ids),
+            "model_call_refs": list(decision.model_call_refs),
+            "tool_invocation_refs": list(decision.tool_invocation_refs),
+        }
+
+    @staticmethod
+    def _staged_decision(record: AgentRunRecord) -> ReviewerExecutionDecision | None:
+        raw = record.telemetry.get(_STAGED_DECISION_KEY)
+        if raw is None:
+            return None
+        if not isinstance(raw, dict) or raw.get("schema") != _STAGED_DECISION_SCHEMA:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
-                "verification maps to multiple reviewer AgentRuns",
+                "reviewer AgentRun contains malformed staged decision metadata",
             )
-        return None if not matches else matches[0]
+        outcome_raw = raw.get("outcome")
+        if not isinstance(outcome_raw, str):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "staged reviewer outcome is malformed",
+            )
+        try:
+            outcome = VerificationOutcome(outcome_raw)
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "staged reviewer outcome is unknown",
+            ) from exc
+
+        findings_raw = raw.get("findings", [])
+        if not isinstance(findings_raw, list):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "staged reviewer findings are malformed",
+            )
+        findings: list[VerificationFinding] = []
+        for item in findings_raw:
+            if not isinstance(item, dict):
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "staged reviewer finding is malformed",
+                )
+            code = item.get("code")
+            message = item.get("message")
+            severity = item.get("severity", "info")
+            location_ref = item.get("location_ref")
+            if (
+                not isinstance(code, str)
+                or not isinstance(message, str)
+                or not isinstance(severity, str)
+                or (location_ref is not None and not isinstance(location_ref, str))
+            ):
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "staged reviewer finding fields are malformed",
+                )
+            findings.append(
+                VerificationFinding(
+                    code=code,
+                    message=message,
+                    severity=severity,
+                    location_ref=location_ref,
+                )
+            )
+
+        return ReviewerExecutionDecision(
+            outcome=outcome,
+            findings=tuple(findings),
+            evidence_artifact_ids=_staged_string_tuple(raw, "evidence_artifact_ids"),
+            checks_executed=_staged_string_tuple(raw, "checks_executed"),
+            output_artifact_ids=_staged_string_tuple(raw, "output_artifact_ids"),
+            output_result_ids=_staged_string_tuple(raw, "output_result_ids"),
+            model_call_refs=_staged_string_tuple(raw, "model_call_refs"),
+            tool_invocation_refs=_staged_string_tuple(raw, "tool_invocation_refs"),
+        )
+
+
+def _staged_string_tuple(raw: Mapping[str, JsonValue], field: str) -> tuple[str, ...]:
+    value = raw.get(field, [])
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            f"staged reviewer {field} is malformed",
+        )
+    return tuple(item for item in value if isinstance(item, str))
 
 
 __all__ = [
