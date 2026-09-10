@@ -32,9 +32,9 @@ from ai_multi_agent_platform.data.lifecycle_commands import data_command_handler
 
 _SCOPE_IDS = {
     MemoryScope.SHORT_TERM: "session-memory-type",
-    MemoryScope.TASK: "task_memory_type",
-    MemoryScope.AGENT: "agent_memory_type",
-    MemoryScope.WORKSPACE: "project_memory_type",
+    MemoryScope.TASK: "task_00000000-0000-0000-0000-000000000001",
+    MemoryScope.AGENT: "agent_00000000-0000-0000-0000-000000000002",
+    MemoryScope.WORKSPACE: "project_00000000-0000-0000-0000-000000000003",
     MemoryScope.USER: "user-a",
     MemoryScope.HISTORICAL: "history-memory-type",
     MemoryScope.ORGANIZATION: "organization-a",
