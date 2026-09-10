@@ -1,0 +1,36 @@
+name: Reference host regression smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  reference-host-regression-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install benchmark environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Validate regression implementation
+        run: |
+          ruff format --check src/ai_multi_agent_platform/benchmarking/reference_host_regression.py src/ai_multi_agent_platform/benchmarking/reference_host_regression_cli.py tests/performance/test_issue_440_reference_host_regression.py
+          ruff check src/ai_multi_agent_platform/benchmarking/reference_host_regression.py src/ai_multi_agent_platform/benchmarking/reference_host_regression_cli.py tests/performance/test_issue_440_reference_host_regression.py
+          mypy src/ai_multi_agent_platform/benchmarking/reference_host_regression.py src/ai_multi_agent_platform/benchmarking/reference_host_regression_cli.py
+          pytest tests/performance/test_issue_440_reference_host_regression.py
+      - name: Verify no built-in regression policy is shipped
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          candidates = tuple(Path("docs").rglob("*regression-policy*.json"))
+          schema_files = tuple(path for path in candidates if path.name.endswith(".schema.json"))
+          policy_instances = tuple(path for path in candidates if path not in schema_files)
+          assert not policy_instances, policy_instances
+          PY
