@@ -66,6 +66,19 @@ class InMemoryApplicationReleaseRepository:
                 return release
         return None
 
+    async def find_run(self, run_id: str) -> ApplicationRelease | None:
+        matches = [
+            release
+            for release in self._items.values()
+            if any(target.run_id == run_id for target in release.targets)
+        ]
+        if len(matches) > 1:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical build Run belongs to more than one application release",
+            )
+        return matches[0] if matches else None
+
     async def save(
         self,
         release: ApplicationRelease,
@@ -96,6 +109,17 @@ class InMemoryApplicationReleaseRepository:
                     raise ContractError(
                         ErrorCode.CONFLICT,
                         "application release version already exists",
+                    )
+                if any(
+                    target.run_id is not None
+                    and target.run_id == candidate.run_id
+                    and candidate.run_id is not None
+                    for target in other.targets
+                    for candidate in release.targets
+                ):
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        "canonical build Run cannot belong to multiple application releases",
                     )
             self._items[release.release_id] = release
             return release
@@ -153,6 +177,7 @@ class JsonApplicationReleaseRepository(InMemoryApplicationReleaseRepository):
                 f"{version!r}; expected {APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION!r}"
             )
         identities: set[tuple[str, str, ReleaseChannel]] = set()
+        run_ids: set[str] = set()
         for raw_release in _required_array(document, "releases"):
             release = _release(raw_release)
             if release.release_id in self._items:
@@ -161,6 +186,10 @@ class JsonApplicationReleaseRepository(InMemoryApplicationReleaseRepository):
             if identity in identities:
                 raise ValueError("duplicate application release version in repository")
             identities.add(identity)
+            release_run_ids = {target.run_id for target in release.targets if target.run_id is not None}
+            if run_ids & release_run_ids:
+                raise ValueError("duplicate application build Run across persisted releases")
+            run_ids.update(release_run_ids)
             self._items[release.release_id] = release
 
 
@@ -196,10 +225,7 @@ def _release(value: JsonValue) -> ApplicationRelease:
         project_id=_required_string(data, "project_id"),
         workspace_id=_required_string(data, "workspace_id"),
         workspace_snapshot_id=_required_string(data, "workspace_snapshot_id"),
-        workspace_content_checksum=_required_string(
-            data,
-            "workspace_content_checksum",
-        ),
+        workspace_content_checksum=_required_string(data, "workspace_content_checksum"),
         source_revision=_required_string(data, "source_revision"),
         build_specification=_build_specification(data.get("build_specification")),
         creator_ref=_required_string(data, "creator_ref"),
@@ -212,10 +238,7 @@ def _release(value: JsonValue) -> ApplicationRelease:
         publisher_id=_optional_string(data, "publisher_id"),
         release_url=_optional_string(data, "release_url"),
         latest_url=_optional_string(data, "latest_url"),
-        external_metadata=_json_object(
-            data.get("external_metadata"),
-            "external_metadata",
-        ),
+        external_metadata=_json_object(data.get("external_metadata"), "external_metadata"),
         previous_release_id=_optional_string(data, "previous_release_id"),
         created_at=_datetime(data.get("created_at"), "created_at"),
         published_at=_optional_datetime(data.get("published_at"), "published_at"),
@@ -233,24 +256,14 @@ def _build_specification(value: JsonValue | None) -> BuildSpecification:
         revision=_required_int(data, "revision"),
         source_path=_optional_string(data, "source_path"),
         workflow_ref=_optional_string(data, "workflow_ref"),
-        pre_build_checks=_string_tuple(
-            data.get("pre_build_checks"),
-            "pre_build_checks",
-        ),
+        pre_build_checks=_string_tuple(data.get("pre_build_checks"), "pre_build_checks"),
         test_gates=_string_tuple(data.get("test_gates"), "test_gates"),
-        post_build_checks=_string_tuple(
-            data.get("post_build_checks"),
-            "post_build_checks",
-        ),
+        post_build_checks=_string_tuple(data.get("post_build_checks"), "post_build_checks"),
         required_capabilities=_string_tuple(
-            data.get("required_capabilities"),
-            "required_capabilities",
+            data.get("required_capabilities"), "required_capabilities"
         ),
         resource_hints=_json_object(data.get("resource_hints"), "resource_hints"),
-        secret_references=_string_tuple(
-            data.get("secret_references"),
-            "secret_references",
-        ),
+        secret_references=_string_tuple(data.get("secret_references"), "secret_references"),
     )
 
 
@@ -263,8 +276,7 @@ def _build_target(value: JsonValue | None) -> BuildTarget:
         package_type=PackageType(_required_string(data, "package_type")),
         output_path=_required_string(data, "output_path"),
         required_capabilities=_string_tuple(
-            data.get("required_capabilities"),
-            "required_capabilities",
+            data.get("required_capabilities"), "required_capabilities"
         ),
     )
 
@@ -294,10 +306,7 @@ def _application_artifact(value: JsonValue) -> ApplicationArtifact:
         build_run_id=_required_string(data, "build_run_id"),
         evidence_refs=_string_tuple(data.get("evidence_refs"), "evidence_refs"),
         download_url=_optional_string(data, "download_url"),
-        external_metadata=_json_object(
-            data.get("external_metadata"),
-            "external_metadata",
-        ),
+        external_metadata=_json_object(data.get("external_metadata"), "external_metadata"),
     )
 
 
