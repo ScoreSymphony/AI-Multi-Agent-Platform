@@ -1,0 +1,276 @@
+{
+  "schema_version": "1",
+  "provider_id": "technical-components-reference",
+  "items": [
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "jcode",
+        "item_type": "agent",
+        "name": "jcode",
+        "description": "Coding-agent candidate for terminal-oriented delegated repository work and coding workflow comparison.",
+        "version": "1.0.0",
+        "publisher": "cnjack",
+        "source": {
+          "repository": "https://github.com/cnjack/jcode",
+          "package_reference": "github:cnjack/jcode",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:unknown",
+          "cost:unknown",
+          "network:unknown",
+          "resource:unknown"
+        ],
+        "categories": [
+          "coding-agent"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "kimi-code-cli",
+        "item_type": "agent",
+        "name": "Kimi Code CLI",
+        "description": "Terminal coding-agent candidate from Moonshot AI for delegated code, shell and repository workflows.",
+        "version": "1.0.0",
+        "publisher": "Moonshot AI",
+        "source": {
+          "repository": "https://github.com/MoonshotAI/kimi-code",
+          "package_reference": "github:MoonshotAI/kimi-code",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:unknown",
+          "cost:unknown",
+          "network:unknown",
+          "resource:unknown"
+        ],
+        "categories": [
+          "coding-agent"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "mimo-code",
+        "item_type": "agent",
+        "name": "MiMo Code",
+        "description": "Coding-agent candidate for repository-oriented code generation and agent workflow comparison.",
+        "version": "1.0.0",
+        "publisher": "XiaomiMiMo",
+        "source": {
+          "repository": "https://github.com/XiaomiMiMo/MiMo-Code",
+          "package_reference": "github:XiaomiMiMo/MiMo-Code",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:unknown",
+          "cost:unknown",
+          "network:unknown",
+          "resource:unknown"
+        ],
+        "categories": [
+          "coding-agent"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "zcode",
+        "item_type": "agent",
+        "name": "ZCode",
+        "description": "Coding-agent candidate for delegated software-engineering and repository workflow comparison.",
+        "version": "1.0.0",
+        "publisher": "RenovZ",
+        "source": {
+          "repository": "https://github.com/RenovZ/zcode",
+          "package_reference": "github:RenovZ/zcode",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:unknown",
+          "cost:unknown",
+          "network:unknown",
+          "resource:unknown"
+        ],
+        "categories": [
+          "coding-agent"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "mini-swe-agent",
+        "item_type": "agent",
+        "name": "mini-SWE-agent",
+        "description": "Minimal software-engineering agent candidate for lightweight coding-agent baselines and evaluation.",
+        "version": "1.0.0",
+        "publisher": "SWE-agent",
+        "source": {
+          "repository": "https://github.com/SWE-agent/mini-swe-agent",
+          "package_reference": "github:SWE-agent/mini-swe-agent",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:unknown",
+          "cost:unknown",
+          "network:unknown",
+          "resource:unknown"
+        ],
+        "categories": [
+          "coding-agent"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "swe-rex",
+        "item_type": "tool",
+        "name": "SWE-ReX",
+        "description": "Software-engineering execution environment candidate for running and evaluating coding-agent workloads.",
+        "version": "1.0.0",
+        "publisher": "SWE-agent",
+        "source": {
+          "repository": "https://github.com/SWE-agent/SWE-ReX",
+          "package_reference": "github:SWE-agent/SWE-ReX",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub project status verified during the 2026-09-09 #638 curation review; upstream revision remains intentionally unpinned until pilot selection. No third-party executable code is bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:unknown",
+          "cost:unknown",
+          "network:unknown",
+          "resource:unknown"
+        ],
+        "categories": [
+          "browser-and-execution"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; source/license/status reviewed for discovery-only promotion and upstream revision remains unpinned.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    }
+  ]
+}
