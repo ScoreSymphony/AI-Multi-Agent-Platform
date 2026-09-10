@@ -15,7 +15,6 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .models import (
-    APPLICATION_RELEASE_SCHEMA_VERSION,
     ApplicationArtifact,
     ApplicationRelease,
     BuildSpecification,
@@ -86,6 +85,18 @@ class InMemoryApplicationReleaseRepository:
                     ErrorCode.CONFLICT,
                     "application release revision conflict",
                 )
+            for other in self._items.values():
+                if other.release_id == release.release_id:
+                    continue
+                if (
+                    other.application_id == release.application_id
+                    and other.version == release.version
+                    and other.channel is release.channel
+                ):
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        "application release version already exists",
+                    )
             self._items[release.release_id] = release
             return release
 
@@ -107,8 +118,16 @@ class JsonApplicationReleaseRepository(InMemoryApplicationReleaseRepository):
         expected_revision: int | None,
     ) -> ApplicationRelease:
         async with self._persistence_lock:
+            previous = self._items.get(release.release_id)
             saved = await super().save(release, expected_revision=expected_revision)
-            self._write()
+            try:
+                self._write()
+            except Exception:
+                if previous is None:
+                    self._items.pop(release.release_id, None)
+                else:
+                    self._items[release.release_id] = previous
+                raise
             return saved
 
     def _write(self) -> None:
@@ -133,10 +152,15 @@ class JsonApplicationReleaseRepository(InMemoryApplicationReleaseRepository):
                 "unsupported application release repository schema version: "
                 f"{version!r}; expected {APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION!r}"
             )
+        identities: set[tuple[str, str, ReleaseChannel]] = set()
         for raw_release in _required_array(document, "releases"):
             release = _release(raw_release)
             if release.release_id in self._items:
                 raise ValueError("duplicate application release id in repository")
+            identity = (release.application_id, release.version, release.channel)
+            if identity in identities:
+                raise ValueError("duplicate application release version in repository")
+            identities.add(identity)
             self._items[release.release_id] = release
 
 
@@ -153,12 +177,16 @@ def _encode(value: Any) -> JsonValue:
         encoded: dict[str, JsonValue] = {}
         for key, item in value.items():
             if not isinstance(key, str):
-                raise TypeError("application release persistence requires string mapping keys")
+                raise TypeError(
+                    "application release persistence requires string mapping keys"
+                )
             encoded[key] = _encode(item)
         return encoded
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
         return [_encode(item) for item in value]
-    raise TypeError(f"unsupported application release persistence value: {type(value).__name__}")
+    raise TypeError(
+        f"unsupported application release persistence value: {type(value).__name__}"
+    )
 
 
 def _release(value: JsonValue) -> ApplicationRelease:
@@ -172,7 +200,10 @@ def _release(value: JsonValue) -> ApplicationRelease:
         project_id=_required_string(data, "project_id"),
         workspace_id=_required_string(data, "workspace_id"),
         workspace_snapshot_id=_required_string(data, "workspace_snapshot_id"),
-        workspace_content_checksum=_required_string(data, "workspace_content_checksum"),
+        workspace_content_checksum=_required_string(
+            data,
+            "workspace_content_checksum",
+        ),
         source_revision=_required_string(data, "source_revision"),
         build_specification=_build_specification(data.get("build_specification")),
         creator_ref=_required_string(data, "creator_ref"),
@@ -189,7 +220,10 @@ def _release(value: JsonValue) -> ApplicationRelease:
         publisher_id=_optional_string(data, "publisher_id"),
         release_url=_optional_string(data, "release_url"),
         latest_url=_optional_string(data, "latest_url"),
-        external_metadata=_json_object(data.get("external_metadata"), "external_metadata"),
+        external_metadata=_json_object(
+            data.get("external_metadata"),
+            "external_metadata",
+        ),
         previous_release_id=_optional_string(data, "previous_release_id"),
         created_at=_datetime(data.get("created_at"), "created_at"),
         published_at=_optional_datetime(data.get("published_at"), "published_at"),
@@ -207,9 +241,15 @@ def _build_specification(value: JsonValue | None) -> BuildSpecification:
         revision=_required_int(data, "revision"),
         source_path=_optional_string(data, "source_path"),
         workflow_ref=_optional_string(data, "workflow_ref"),
-        pre_build_checks=_string_tuple(data.get("pre_build_checks"), "pre_build_checks"),
+        pre_build_checks=_string_tuple(
+            data.get("pre_build_checks"),
+            "pre_build_checks",
+        ),
         test_gates=_string_tuple(data.get("test_gates"), "test_gates"),
-        post_build_checks=_string_tuple(data.get("post_build_checks"), "post_build_checks"),
+        post_build_checks=_string_tuple(
+            data.get("post_build_checks"),
+            "post_build_checks",
+        ),
         required_capabilities=_string_tuple(
             data.get("required_capabilities"),
             "required_capabilities",
@@ -222,7 +262,7 @@ def _build_specification(value: JsonValue | None) -> BuildSpecification:
     )
 
 
-def _build_target(value: JsonValue) -> BuildTarget:
+def _build_target(value: JsonValue | None) -> BuildTarget:
     data = _json_object(value, "build target")
     return BuildTarget(
         target_id=_required_string(data, "target_id"),
@@ -262,7 +302,10 @@ def _application_artifact(value: JsonValue) -> ApplicationArtifact:
         build_run_id=_required_string(data, "build_run_id"),
         evidence_refs=_string_tuple(data.get("evidence_refs"), "evidence_refs"),
         download_url=_optional_string(data, "download_url"),
-        external_metadata=_json_object(data.get("external_metadata"), "external_metadata"),
+        external_metadata=_json_object(
+            data.get("external_metadata"),
+            "external_metadata",
+        ),
     )
 
 
