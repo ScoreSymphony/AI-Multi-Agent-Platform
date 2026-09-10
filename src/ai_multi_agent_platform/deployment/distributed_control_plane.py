@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 
 from ai_multi_agent_platform.contracts import AuthorizationProvider, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
@@ -146,6 +146,61 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
             now=now,
         )
         self._attached.discard(worker_id)
+
+    async def restore_reachable_persisted_workers(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[str, ...]:
+        """Recover transport access to persisted Workers before HTTP registration is available.
+
+        ``JsonDistributedStateStore`` deliberately restores persisted Node/Worker liveness as
+        offline because old heartbeats are not current evidence. During a Control-Plane restart,
+        however, a still-running Worker can prove its process identity over the already-authenticated
+        #35 transport before the HTTP Worker-protocol surface opens. We use only that positive
+        presence proof to attach the transport dispatcher needed to inspect existing Worker Jobs.
+
+        The temporary registry refresh is deliberately draining/degraded: it permits reconciliation
+        of already-owned work but cannot admit new scheduling. The Worker's normal authenticated
+        registration/heartbeat replaces this conservative state once HTTP serving starts.
+        """
+
+        if self._presence is None:
+            return ()
+        persisted_workers = self.runtime.registry.list_workers()
+        if not persisted_workers:
+            return ()
+
+        reachable = await asyncio.gather(
+            *(self._presence.reachable(worker.worker_id) for worker in persisted_workers)
+        )
+        reachable_by_node: dict[str, list[WorkerRecord]] = {}
+        for worker, is_reachable in zip(persisted_workers, reachable, strict=True):
+            if is_reachable:
+                reachable_by_node.setdefault(worker.node_id, []).append(worker)
+
+        timestamp = now or datetime.now(UTC)
+        restored_ids: list[str] = []
+        for node_id in sorted(reachable_by_node):
+            node = self.runtime.registry.get_node(node_id)
+            recovery_workers = tuple(
+                replace(worker, status=WorkerStatus.DEGRADED, draining=True)
+                for worker in sorted(
+                    reachable_by_node[node_id],
+                    key=lambda candidate: candidate.worker_id,
+                )
+            )
+            self.runtime.register(
+                RegistrationRequest(
+                    node=replace(node, draining=True),
+                    workers=recovery_workers,
+                ),
+                now=timestamp,
+            )
+            for worker in recovery_workers:
+                self._attach(worker.worker_id)
+                restored_ids.append(worker.worker_id)
+        return tuple(restored_ids)
 
     async def _presence_workers(
         self,
