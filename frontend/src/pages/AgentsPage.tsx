@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CanonicalAgent, CanonicalAgentRun, CanonicalAgentTeam } from "../api/agents";
 import { ControlPlaneClient } from "../api/client";
+import { useConfigurationSession } from "../api/configurationSession";
 import type { Page } from "../api/types";
 import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
@@ -13,6 +14,10 @@ import {
   LoadingState,
   StatusBadge,
 } from "../components/States";
+import {
+  AgentConfigurationPage,
+  AgentTeamConfigurationPage,
+} from "./AgentConfigurationPage";
 
 const AGENT_QUERY_KEY = "agents:id:asc";
 const AGENT_RUN_QUERY_KEY = "agent-runs:id:desc";
@@ -23,8 +28,10 @@ export function AgentsPage({ client }: { client: ControlPlaneClient }) {
   const [runs, setRuns] = useState<Page<CanonicalAgentRun> | null>(null);
   const [agentError, setAgentError] = useState<unknown>(null);
   const [runError, setRunError] = useState<unknown>(null);
+  const [creating, setCreating] = useState(false);
   const agentPagination = useCursorPagination(AGENT_QUERY_KEY);
   const runPagination = useCursorPagination(AGENT_RUN_QUERY_KEY);
+  const { configuration, collections } = useConfigurationSession(client);
 
   const loadAgents = useCallback(async () => {
     try {
@@ -66,6 +73,20 @@ export function AgentsPage({ client }: { client: ControlPlaneClient }) {
     void loadRuns();
   }, [loadRuns]);
 
+  if (creating) {
+    return (
+      <div className="stack">
+        <div className="actions"><button type="button" onClick={() => setCreating(false)}>Back to Agents</button></div>
+        <AgentConfigurationPage
+          core={client}
+          configuration={configuration}
+          collections={collections}
+          mode="create"
+        />
+      </div>
+    );
+  }
+
   if (!agents && !runs && !agentError && !runError) return <LoadingState />;
 
   const enabledOnPage = agents?.items.filter((agent) => agent.revision.profile.enabled).length ?? "—";
@@ -73,13 +94,16 @@ export function AgentsPage({ client }: { client: ControlPlaneClient }) {
 
   return (
     <div className="stack">
-      <header className="page-header">
-        <p className="eyebrow">Canonical agents</p>
-        <h1>Agents</h1>
-        <p>
-          Durable Agent definitions and exact runtime revision evidence from the platform-owned
-          Control Plane. Orchestrator-private session identity is never used for navigation.
-        </p>
+      <header className="page-header detail-header">
+        <div>
+          <p className="eyebrow">Canonical agents</p>
+          <h1>Agents</h1>
+          <p>
+            Durable Agent definitions and exact runtime revision evidence from the platform-owned
+            Control Plane. Orchestrator-private session identity is never used for navigation.
+          </p>
+        </div>
+        <button className="primary" type="button" onClick={() => setCreating(true)}>Create Agent</button>
       </header>
 
       <div className="metrics">
@@ -131,6 +155,8 @@ export function AgentDetailPage({
 }) {
   const [agent, setAgent] = useState<CanonicalAgent | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [editorMode, setEditorMode] = useState<"edit" | "clone" | null>(null);
+  const { configuration, collections } = useConfigurationSession(client);
 
   const load = useCallback(async () => {
     try {
@@ -144,6 +170,21 @@ export function AgentDetailPage({
   useEffect(() => {
     void load();
   }, [load]);
+
+  if (editorMode) {
+    return (
+      <div className="stack">
+        <div className="actions"><button type="button" onClick={() => setEditorMode(null)}>Back to Agent</button></div>
+        <AgentConfigurationPage
+          core={client}
+          configuration={configuration}
+          collections={collections}
+          mode={editorMode}
+          agentId={agentId}
+        />
+      </div>
+    );
+  }
 
   if (error && !agent) return <ErrorState error={error} onRetry={() => void load()} />;
   if (!agent) return <LoadingState />;
@@ -170,6 +211,10 @@ export function AgentDetailPage({
         </div>
       </header>
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      <div className="actions">
+        <button className="primary" type="button" onClick={() => setEditorMode("edit")}>Configure Agent</button>
+        <button type="button" onClick={() => setEditorMode("clone")}>Clone Agent</button>
+      </div>
       <div className="grid-two">
         <Card title="Definition">
           <DefinitionList
@@ -237,7 +282,9 @@ export function AgentDetailPage({
 export function AgentTeamsPage({ client }: { client: ControlPlaneClient }) {
   const [teams, setTeams] = useState<Page<CanonicalAgentTeam> | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [creating, setCreating] = useState(false);
   const pagination = useCursorPagination(TEAM_QUERY_KEY);
+  const { configuration } = useConfigurationSession(client);
 
   const load = useCallback(async () => {
     try {
@@ -259,12 +306,24 @@ export function AgentTeamsPage({ client }: { client: ControlPlaneClient }) {
     void load();
   }, [load]);
 
+  if (creating) {
+    return (
+      <div className="stack">
+        <div className="actions"><button type="button" onClick={() => setCreating(false)}>Back to Agent Teams</button></div>
+        <AgentTeamConfigurationPage core={client} configuration={configuration} mode="create" />
+      </div>
+    );
+  }
+
   return (
     <div className="stack">
-      <header className="page-header">
-        <p className="eyebrow">Canonical coordination</p>
-        <h1>Agent Teams</h1>
-        <p>Versioned Team definitions with exact member Agent revisions and delegation policy.</p>
+      <header className="page-header detail-header">
+        <div>
+          <p className="eyebrow">Canonical coordination</p>
+          <h1>Agent Teams</h1>
+          <p>Versioned Team definitions with exact member Agent revisions and delegation policy.</p>
+        </div>
+        <button className="primary" type="button" onClick={() => setCreating(true)}>Create Team</button>
       </header>
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
       {!teams && !error ? <LoadingState /> : null}
@@ -294,6 +353,8 @@ export function AgentTeamDetailPage({
 }) {
   const [team, setTeam] = useState<CanonicalAgentTeam | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [editing, setEditing] = useState(false);
+  const { configuration } = useConfigurationSession(client);
 
   const load = useCallback(async () => {
     try {
@@ -307,6 +368,15 @@ export function AgentTeamDetailPage({
   useEffect(() => {
     void load();
   }, [load]);
+
+  if (editing) {
+    return (
+      <div className="stack">
+        <div className="actions"><button type="button" onClick={() => setEditing(false)}>Back to Team</button></div>
+        <AgentTeamConfigurationPage core={client} configuration={configuration} mode="edit" teamId={teamId} />
+      </div>
+    );
+  }
 
   if (error && !team) return <ErrorState error={error} onRetry={() => void load()} />;
   if (!team) return <LoadingState />;
@@ -326,6 +396,7 @@ export function AgentTeamDetailPage({
         </div>
       </header>
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      <div className="actions"><button className="primary" type="button" onClick={() => setEditing(true)}>Configure Team</button></div>
       <div className="grid-two">
         <Card title="Team policy">
           <DefinitionList

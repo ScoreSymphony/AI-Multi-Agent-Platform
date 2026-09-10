@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ControlPlaneClient } from "../api/client";
+import type { CanonicalModelRoutingProfile } from "../api/configuration";
+import { useConfigurationSession } from "../api/configurationSession";
 import type { CanonicalModel, CanonicalModelProvider, Page } from "../api/types";
 import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
@@ -12,6 +14,7 @@ import {
   LoadingState,
   StatusBadge,
 } from "../components/States";
+import { RoutingProfileConfigurationPage } from "./SingleNodeConfigurationPage";
 
 const MODEL_QUERY_KEY = "models:display_name:asc";
 const PROVIDER_QUERY_KEY = "model-providers:id:asc";
@@ -19,10 +22,14 @@ const PROVIDER_QUERY_KEY = "model-providers:id:asc";
 export function ModelsPage({ client }: { client: ControlPlaneClient }) {
   const [models, setModels] = useState<Page<CanonicalModel> | null>(null);
   const [providers, setProviders] = useState<Page<CanonicalModelProvider> | null>(null);
+  const [routingProfiles, setRoutingProfiles] = useState<CanonicalModelRoutingProfile[] | null>(null);
   const [modelError, setModelError] = useState<unknown>(null);
   const [providerError, setProviderError] = useState<unknown>(null);
+  const [routingError, setRoutingError] = useState<unknown>(null);
+  const [creatingRoutingProfile, setCreatingRoutingProfile] = useState(false);
   const modelPagination = useCursorPagination(MODEL_QUERY_KEY);
   const providerPagination = useCursorPagination(PROVIDER_QUERY_KEY);
+  const { configuration } = useConfigurationSession(client);
 
   const loadModels = useCallback(async () => {
     try {
@@ -56,6 +63,15 @@ export function ModelsPage({ client }: { client: ControlPlaneClient }) {
     }
   }, [client, providerPagination.cursor]);
 
+  const loadRoutingProfiles = useCallback(async () => {
+    try {
+      setRoutingProfiles((await configuration.listRoutingProfiles({ limit: 100 })).items);
+      setRoutingError(null);
+    } catch (nextError) {
+      setRoutingError(nextError);
+    }
+  }, [configuration]);
+
   useEffect(() => {
     void loadModels();
   }, [loadModels]);
@@ -63,6 +79,19 @@ export function ModelsPage({ client }: { client: ControlPlaneClient }) {
   useEffect(() => {
     void loadProviders();
   }, [loadProviders]);
+
+  useEffect(() => {
+    void loadRoutingProfiles();
+  }, [loadRoutingProfiles]);
+
+  if (creatingRoutingProfile) {
+    return (
+      <div className="stack">
+        <div className="actions"><button type="button" onClick={() => setCreatingRoutingProfile(false)}>Back to Models</button></div>
+        <RoutingProfileConfigurationPage core={client} configuration={configuration} />
+      </div>
+    );
+  }
 
   if (!models && !providers && !modelError && !providerError) return <LoadingState />;
 
@@ -74,10 +103,13 @@ export function ModelsPage({ client }: { client: ControlPlaneClient }) {
 
   return (
     <div className="stack">
-      <header className="page-header">
-        <p className="eyebrow">Model Registry</p>
-        <h1>Models & providers</h1>
-        <p>Canonical model configurations and provider instances from the platform-owned Control Plane.</p>
+      <header className="page-header detail-header">
+        <div>
+          <p className="eyebrow">Model Registry</p>
+          <h1>Models & providers</h1>
+          <p>Canonical model configurations, provider instances and reusable routing policy for this platform.</p>
+        </div>
+        <button className="primary" type="button" onClick={() => setCreatingRoutingProfile(true)}>Create routing profile</button>
       </header>
 
       {modelError || providerError ? (
@@ -93,6 +125,28 @@ export function ModelsPage({ client }: { client: ControlPlaneClient }) {
         <Metric label="Providers" value={providers?.total ?? "—"} />
         <Metric label="Healthy on page" value={healthyProvidersOnPage} />
       </div>
+
+      <Card title="Model Routing Profiles">
+        <p>Provider-neutral reusable model selection policies. Editing creates immutable canonical revisions.</p>
+        {routingError ? <ErrorState error={routingError} onRetry={() => void loadRoutingProfiles()} /> : null}
+        {routingProfiles === null && !routingError ? <LoadingState /> : null}
+        {routingProfiles?.length ? (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Profile</th><th>Revision</th><th>Status</th><th>Project</th><th>Fallback</th></tr></thead>
+              <tbody>{routingProfiles.map((profile) => (
+                <tr key={profile.id}>
+                  <td><AppLink href={`/model-routing-profiles/${encodeURIComponent(profile.id)}`}>{profile.revision.name}</AppLink><div><code>{profile.exact_ref}</code></div></td>
+                  <td>{profile.current_revision}</td>
+                  <td><StatusBadge value={profile.enabled ? "enabled" : "disabled"} /></td>
+                  <td>{profile.project_id ?? "—"}</td>
+                  <td>{profile.revision.policy.fallback}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : routingProfiles ? <EmptyState title="No Model Routing Profiles" /> : null}
+      </Card>
 
       <Card title="Canonical models">
         {modelError ? <ErrorState error={modelError} onRetry={() => void loadModels()} /> : null}
