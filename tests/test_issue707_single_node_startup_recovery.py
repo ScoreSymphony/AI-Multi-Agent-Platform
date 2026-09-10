@@ -110,10 +110,7 @@ def test_restarted_single_node_blocks_orphaned_running_run(tmp_path: Path) -> No
         assert report["tasks"][0]["entries"][0]["run_id"] == run_id
         assert report["tasks"][0]["entries"][0]["before"] == "running"
         assert report["tasks"][0]["entries"][0]["after"] == "running"
-        assert (
-            report["tasks"][0]["entries"][0]["disposition"]
-            == "orphaned_reconciliation_required"
-        )
+        assert report["tasks"][0]["entries"][0]["disposition"] == "orphaned_reconciliation_required"
 
         # A second pass remains blocked rather than inventing a terminal outcome.
         repeated = await reconcile_single_node_startup(
