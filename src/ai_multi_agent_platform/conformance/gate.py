@@ -569,6 +569,7 @@ def _run_scenario(scenario: ConformanceScenario, *, root: Path) -> ConformanceSc
                 )
 
     passed = command_passed and evidence_failure_category is None
+    evidence: tuple[str, ...]
     if runtime_evidence is None:
         canonical_resource_ids: tuple[str, ...] = ()
         evidence = ("registered-command",)
@@ -576,6 +577,8 @@ def _run_scenario(scenario: ConformanceScenario, *, root: Path) -> ConformanceSc
         canonical_resource_ids, runtime_evidence_refs = runtime_evidence
         evidence = ("registered-command", *runtime_evidence_refs)
 
+    failure_category: str | None
+    reason: str | None
     if not command_passed:
         failure_category = "acceptance_failure"
         reason = f"registered command exited with status {process.returncode}"
