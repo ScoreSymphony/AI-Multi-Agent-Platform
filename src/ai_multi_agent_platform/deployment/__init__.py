@@ -25,6 +25,12 @@ from .handoff_composition import (
     HandoffDeploymentComposition,
     build_single_node_handoff_composition,
 )
+from .startup_recovery import (
+    SingleNodeStartupRecoveryResult,
+    load_startup_recovery_report,
+    reconcile_single_node_startup,
+    require_blocked_startup_run,
+)
 
 __all__ = [
     "AdvancedDeploymentProfile",
@@ -38,11 +44,15 @@ __all__ = [
     "SingleNodeConfig",
     "SingleNodeDeployment",
     "SingleNodeSmokeResult",
+    "SingleNodeStartupRecoveryResult",
     "WorkerHostBinding",
     "build_single_node_deployment",
     "build_single_node_handoff_composition",
     "build_worker_protocol_app",
     "load_advanced_deployment_profile",
     "load_single_node_config",
+    "load_startup_recovery_report",
     "parse_advanced_deployment_profile",
+    "reconcile_single_node_startup",
+    "require_blocked_startup_run",
 ]
