@@ -23,6 +23,7 @@ _CAMPAIGN_ID = "single-node.reference.host-campaign"
 _CAMPAIGN_VERSION = "1.0"
 _CLAIM_SEMANTICS = "single-host-tested-evidence-only"
 _BUDGET_STATUS = "not-established"
+_HEX_DIGITS = frozenset("0123456789abcdef")
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,11 +187,9 @@ class ReferenceHostCampaignRunner:
         work_dir_mode: str,
     ) -> None:
         normalized_label = host_label.strip()
-        normalized_commit = platform_commit.strip()
         if not normalized_label:
             raise ValueError("host_label must not be empty")
-        if not normalized_commit or normalized_commit == "unknown":
-            raise ValueError("platform_commit must identify the exact tested commit")
+        normalized_commit = _normalize_platform_commit(platform_commit)
         if work_dir_mode not in {"explicit", "temporary"}:
             raise ValueError("work_dir_mode must be explicit or temporary")
         _require_disjoint_paths(output_dir, work_dir)
@@ -309,6 +308,15 @@ def _require_profile_contract(
         raise ValueError("release campaign requires an explicit work directory")
     if profile != reference_host_campaign_profile("release"):
         raise ValueError("release campaign profile must match the fixed documented release profile")
+
+
+def _normalize_platform_commit(value: str) -> str:
+    normalized = value.strip().lower()
+    if len(normalized) not in {40, 64} or any(char not in _HEX_DIGITS for char in normalized):
+        raise ValueError(
+            "platform_commit must be a full 40- or 64-character hexadecimal Git object id"
+        )
+    return normalized
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
