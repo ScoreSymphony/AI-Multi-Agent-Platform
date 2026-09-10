@@ -22,9 +22,9 @@ from ai_multi_agent_platform.contracts import JsonValue
 from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.domain import OwnerRef, RunStatus, TaskStatus
+from ai_multi_agent_platform.kernel import EventSourcedRunRepository, EventSourcedTaskRepository
 from ai_multi_agent_platform.onboarding import FIRST_RUN_RESOURCE_ID
 from ai_multi_agent_platform.verification import (
-    CompletionState,
     ReviewerIndependence,
     VerificationCompletionAuthority,
     VerificationOutcome,
@@ -32,14 +32,15 @@ from ai_multi_agent_platform.verification import (
     VerificationStage,
     VerifierKind,
 )
-from ai_multi_agent_platform.verification.agent_workflow import (
-    AutomaticReviewerWorkflow,
-    ConfiguredReviewerResolver,
-    ReviewerAssignment,
+from ai_multi_agent_platform.verification.agent_workflow import AutomaticReviewerWorkflow
+from ai_multi_agent_platform.verification.output_workflow import (
+    AutomaticReviewerOutputCoordinator,
+    PolicyMetadataReviewerResolver,
+    install_automatic_reviewer_output_observer,
 )
-from ai_multi_agent_platform.verification.reference_reviewer import (
-    ModelRuntimeReviewerExecutor,
-    ReviewerSubjectInput,
+from ai_multi_agent_platform.verification.reference_reviewer import ModelRuntimeReviewerExecutor
+from ai_multi_agent_platform.verification.reviewer_input import (
+    KernelFileReviewerSubjectInputProvider,
 )
 
 _PASSWORD = "correct horse battery staple"
@@ -99,19 +100,6 @@ class _LocalAutomaticReviewTransport:
                 },
             },
         )
-
-
-class _ExactResultInputProvider:
-    def __init__(self, subject, content: str) -> None:
-        self.subject = subject
-        self.content = content
-        self.calls = 0
-
-    async def load(self, *, request, agent_run) -> ReviewerSubjectInput:
-        assert request.subject == self.subject
-        assert agent_run.task_id == request.task_id
-        self.calls += 1
-        return ReviewerSubjectInput(subject=self.subject, content=self.content)
 
 
 def _headers(token: str, *, key: str | None = None) -> dict[str, str]:
@@ -262,6 +250,18 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
                     producer_agent_must_differ=True,
                     agent_reviewer_must_be_read_only=True,
                 ),
+                metadata={
+                    "automatic_reviewer": {
+                        "enabled": True,
+                        "subject_types": ["result"],
+                        "stages": {
+                            "agent-review": {
+                                "agent_id": reviewer.agent_id,
+                                "agent_revision": reviewer.revision,
+                            }
+                        },
+                    }
+                },
             )
         )
         deployment.verification_runtime.require_task(
@@ -269,6 +269,31 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
             policy_id=policy.policy_id,
             policy_version=policy.version,
         )
+
+        completion = deployment.kernel._completion_authority  # noqa: SLF001
+        assert isinstance(completion, VerificationCompletionAuthority)
+        workflow = AutomaticReviewerWorkflow(
+            runtime=deployment.verification_runtime,
+            completion=completion,
+            agents=deployment.agent_runtime,
+            resolver=PolicyMetadataReviewerResolver(completion),
+            executor=ModelRuntimeReviewerExecutor(
+                agents=deployment.agent_runtime,
+                models=deployment.model_runtime,
+                inputs=KernelFileReviewerSubjectInputProvider(
+                    tasks=EventSourcedTaskRepository(deployment.kernel_repository),
+                    runs=EventSourcedRunRepository(deployment.kernel_repository),
+                    files=deployment.files,
+                ),
+            ),
+        )
+        coordinator = AutomaticReviewerOutputCoordinator(
+            kernel=deployment.kernel,
+            runtime=deployment.verification_runtime,
+            completion=completion,
+            reviewer=workflow,
+        )
+        install_automatic_reviewer_output_observer(deployment.kernel, coordinator)
 
         queued = await deployment.http.handle(
             HTTPRequest(
@@ -311,10 +336,12 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         candidate_text = run.output.get("text")
         assert isinstance(result_id, str)
         assert isinstance(producer_agent_run_id, str)
-        assert isinstance(candidate_text, str)
         assert candidate_text == "candidate output produced by the producer agent"
 
-        await deployment.kernel.attach_result(
+        # This is the decisive #711 product path: after setup, the caller only attaches the
+        # canonical output. The kernel observer creates/reuses Verification, runs the reviewer,
+        # submits the canonical result and releases Task completion without private review calls.
+        completed = await deployment.kernel.attach_result(
             idempotency_key="issue-46-711:result",
             task_id=task_id,
             run_id=run_id,
@@ -322,55 +349,34 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
             actor_ref=admin.user_id,
             source="conformance",
         )
-        verification_request = await deployment.verification_runtime.request_verification(
-            task_id=task_id,
-            policy_id=policy.policy_id,
-            policy_version=policy.version,
-            stage_id="agent-review",
-            subject_type="result",
-            subject_id=result_id,
-            correlation_id=task_id,
-        )
+        assert completed.status is TaskStatus.SUCCEEDED
+
+        history = deployment.verification.history(task_id=task_id)
+        matching = [
+            (request, result)
+            for request, result in history
+            if request.policy_id == policy.policy_id
+            and request.policy_version == policy.version
+            and request.stage_id == "agent-review"
+            and request.subject.subject_id == result_id
+        ]
+        assert len(matching) == 1
+        verification_request, verification_result = matching[0]
         assert verification_request.producer is not None
         assert verification_request.producer.agent_id == producer.agent_id
         assert verification_request.run_id == run_id
+        assert verification_result is not None
+        assert verification_result.outcome is VerificationOutcome.PASS
+        assert verification_result.findings[0].code == "candidate_verified"
 
-        input_provider = _ExactResultInputProvider(
-            verification_request.subject,
-            candidate_text,
-        )
-        completion = deployment.kernel._completion_authority  # noqa: SLF001
-        assert isinstance(completion, VerificationCompletionAuthority)
-        workflow = AutomaticReviewerWorkflow(
-            runtime=deployment.verification_runtime,
-            completion=completion,
-            agents=deployment.agent_runtime,
-            resolver=ConfiguredReviewerResolver(
-                {
-                    (
-                        policy.policy_id,
-                        policy.version,
-                        "agent-review",
-                    ): ReviewerAssignment(
-                        agent_id=reviewer.agent_id,
-                        agent_revision=reviewer.revision,
-                    )
-                }
-            ),
-            executor=ModelRuntimeReviewerExecutor(
-                agents=deployment.agent_runtime,
-                models=deployment.model_runtime,
-                inputs=input_provider,
-            ),
-        )
-
-        review = await workflow.run_request(verification_request.verification_id)
-        assert review.completion.state is CompletionState.ACCEPTED
-        assert review.latest.verification_result is not None
-        assert review.latest.verification_result.outcome is VerificationOutcome.PASS
-        assert review.latest.verification_result.findings[0].code == "candidate_verified"
-        assert review.latest.reviewer_run is not None
-        reviewer_run = review.latest.reviewer_run
+        reviewer_runs = [
+            record
+            for record in deployment.agents.repository.list_agent_runs()
+            if record.verification_context.get("verification_id")
+            == verification_request.verification_id
+        ]
+        assert len(reviewer_runs) == 1
+        reviewer_run = reviewer_runs[0]
         assert reviewer_run.status is AgentRunStatus.SUCCEEDED
         assert reviewer_run.agent.agent_id == reviewer.agent_id
         assert reviewer_run.agent.agent_id != producer.agent_id
@@ -379,7 +385,6 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         assert reviewer_run.model_call_refs == (
             f"{reviewer_run.agent_run_id}:review-model",
         )
-        assert input_provider.calls == 1
 
         verification_view = await deployment.http.handle(
             HTTPRequest(
@@ -400,18 +405,38 @@ def test_authenticated_local_agent_result_is_automatically_reviewed_and_complete
         assert verifier_view["agent_id"] == reviewer.agent_id
         assert verifier_view["read_only"] is True
 
-        completed = await deployment.kernel.complete_task(
-            idempotency_key="issue-46-711:complete",
-            task_id=task_id,
-            actor_ref=admin.user_id,
-            source="conformance",
-        )
-        assert completed.status is TaskStatus.SUCCEEDED
-
         producer_run = deployment.agents.repository.get_agent_run(producer_agent_run_id)
         assert producer_run.status is AgentRunStatus.SUCCEEDED
         assert producer_run.agent.agent_id == producer.agent_id
         assert producer_run.agent_run_id != reviewer_run.agent_run_id
         assert transport.chat_calls == 2
+
+        # Replaying the same canonical attach command reconciles from the persisted event and
+        # must not create a second reviewer/model call or VerificationResult.
+        repeated = await deployment.kernel.attach_result(
+            idempotency_key="issue-46-711:result",
+            task_id=task_id,
+            run_id=run_id,
+            result_id=result_id,
+            actor_ref=admin.user_id,
+            source="conformance",
+        )
+        assert repeated.status is TaskStatus.SUCCEEDED
+        assert transport.chat_calls == 2
+        assert len(
+            [
+                record
+                for record in deployment.agents.repository.list_agent_runs()
+                if record.verification_context.get("verification_id")
+                == verification_request.verification_id
+            ]
+        ) == 1
+        assert len(
+            [
+                pair
+                for pair in deployment.verification.history(task_id=task_id)
+                if pair[0].verification_id == verification_request.verification_id
+            ]
+        ) == 1
 
     asyncio.run(scenario())
