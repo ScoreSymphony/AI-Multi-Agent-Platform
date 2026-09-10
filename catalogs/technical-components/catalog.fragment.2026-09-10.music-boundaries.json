@@ -1,0 +1,108 @@
+{
+  "schema_version": "1",
+  "provider_id": "technical-components-reference",
+  "items": [
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "musicbert",
+        "item_type": "tool",
+        "name": "MusicBERT",
+        "description": "Symbolic music-understanding research-code candidate modeled as the MusicBERT subproject inside Microsoft's Muzic repository rather than as the entire Muzic umbrella.",
+        "version": "1.0.0",
+        "publisher": "Microsoft",
+        "source": {
+          "repository": "https://github.com/microsoft/muzic",
+          "package_reference": "github:microsoft/muzic#musicbert",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official microsoft/muzic repository status, root MIT LICENSE and musicbert/README.md reviewed on 2026-09-10 for #638. This catalog card is deliberately scoped to the repository's MusicBERT code subproject. The MusicBERT README links separately hosted pretrained checkpoints and processed datasets; this catalog does not assert that those external model/data assets inherit the repository MIT license and does not bundle them.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:local",
+          "cost:compatible",
+          "network:optional",
+          "resource:gpu",
+          "scope:code-subproject",
+          "asset-boundary:external-checkpoints",
+          "asset-boundary:external-datasets",
+          "asset-license:unverified"
+        ],
+        "categories": [
+          "music-ai",
+          "model-and-dataset-tooling"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; resolves MusicBERT as the Muzic musicbert code subproject while keeping separately distributed checkpoint and dataset licensing outside the MIT code claim.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "legato",
+        "item_type": "tool",
+        "name": "LEGATO",
+        "description": "Typeset optical-music-recognition model reference whose own code/model layer is not sufficient for use without a separately licensed Llama 3.2 Vision encoder.",
+        "version": "1.0.0",
+        "publisher": "Guang Yang et al.",
+        "source": {
+          "repository": "https://github.com/guang-yng/legato",
+          "package_reference": "github:guang-yng/legato",
+          "revision": null
+        },
+        "license": "Mixed: MIT / LGPL-3.0; Llama 3.2 Community License dependency",
+        "provenance": "Official guang-yng/legato repository, README.md, LICENSE.md and model-loading code plus official Hugging Face LEGATO/Llama 3.2 Vision model cards reviewed on 2026-09-10 for #638. Most LEGATO code is MIT; utils/abc2xml.py is LGPL-3.0. LEGATO checkpoints are described as MIT, but the code loads meta-llama/Llama-3.2-11B-Vision as its vision encoder. That upstream model is gated under the separate Llama 3.2 Community License, whose multimodal grant excludes EU-domiciled developers/companies. The documented practical path is CUDA/GPU-backed and the full model card reports roughly 20GB+ full-precision GPU memory. No third-party executable code or model weights are bundled by this catalog.",
+        "supported_platform": {},
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:deferred",
+          "evaluation:not-required",
+          "deployment:local",
+          "cost:conditional",
+          "network:required",
+          "provider:huggingface",
+          "provider:meta-llama",
+          "resource:gpu",
+          "license-restrictions:mixed",
+          "license-boundary:third-party-model",
+          "license-restrictions:eu-multimodal-developer-exclusion",
+          "model-access:gated",
+          "model-license:llama-3.2-community"
+        ],
+        "categories": [
+          "music-ai",
+          "model-and-dataset-tooling"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; resolves the LEGATO code/model identity but classifies it deferred because the practical model path requires a separately licensed gated Llama 3.2 multimodal encoder with an EU developer restriction.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    }
+  ]
+}
