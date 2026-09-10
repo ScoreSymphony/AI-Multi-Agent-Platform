@@ -8,7 +8,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from functools import lru_cache
+from functools import cache
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, cast
@@ -539,7 +539,7 @@ def _source_evidence(path: Path, report: Mapping[str, Any]) -> RegressionSourceE
     )
 
 
-@lru_cache(maxsize=None)
+@cache
 def _validator(schema_name: str) -> Draft202012Validator:
     resource = files("ai_multi_agent_platform.benchmarking").joinpath(f"schemas/{schema_name}")
     payload: object = json.loads(resource.read_text(encoding="utf-8"))
