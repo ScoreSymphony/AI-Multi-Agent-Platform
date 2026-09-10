@@ -144,7 +144,10 @@ class MemoryPortableCodec:
                 ErrorCode.UNSUPPORTED_CAPABILITY,
                 "unsupported portable Memory schema version",
                 details={
-                    "supported_schema_versions": sorted(_SUPPORTED_MEMORY_SCHEMA_VERSIONS),
+                    "supported_schema_versions": cast(
+                        JsonValue,
+                        sorted(_SUPPORTED_MEMORY_SCHEMA_VERSIONS),
+                    ),
                 },
             )
         try:
