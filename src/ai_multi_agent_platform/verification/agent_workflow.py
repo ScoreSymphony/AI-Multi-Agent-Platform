@@ -1,15 +1,14 @@
 """Automatic reviewer-Agent workflow coordination for issue #711.
 
-This module productively wires the canonical Verification authority to the normal
-Agent runtime. It intentionally does not execute models itself: a replaceable
-ReviewerAgentExecutor performs the provider/orchestrator-specific execution and
-returns a structured review decision.
+This module productively wires canonical Verification to the normal Agent runtime.
+Provider/orchestrator-specific reviewer execution remains replaceable, and repair
+always starts through the existing canonical VerificationRepairRuntime.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Protocol, runtime_checkable
 
 from ai_multi_agent_platform.agents import (
@@ -34,12 +33,15 @@ from .models import (
     VerificationResult,
     VerifierKind,
 )
+from .repair import VerificationRepairExecution, VerificationRepairRuntime
 from .reviewer_agent import ReviewerAgentRuntime
+
+_REVIEW_CONTEXT_SCHEMA = "verification-reviewer-agent-v1"
 
 
 @dataclass(frozen=True, slots=True)
 class ReviewerAssignment:
-    """Configured reviewer route pinned either to an Agent or exact Team member."""
+    """Configured reviewer route pinned to an Agent or exact Team member."""
 
     agent_id: str | None = None
     agent_revision: int | None = None
@@ -50,7 +52,9 @@ class ReviewerAssignment:
     def __post_init__(self) -> None:
         if self.team_id is None:
             if self.agent_id is None or self.agent_revision is None:
-                raise ValueError("standalone reviewer assignment requires exact agent revision")
+                raise ValueError(
+                    "standalone reviewer assignment requires exact agent revision"
+                )
             if self.team_revision is not None or self.team_role is not None:
                 raise ValueError("team reviewer fields require team_id")
         else:
@@ -61,12 +65,14 @@ class ReviewerAssignment:
                 raise ValueError("team reviewer assignment requires agent_id or team_role")
             if self.agent_id is not None and self.team_role is not None:
                 raise ValueError("team reviewer assignment must choose agent_id or team_role")
+
         if self.agent_id is not None:
             validate_id(self.agent_id, "agent")
             if self.agent_revision is None or self.agent_revision < 1:
                 raise ValueError("reviewer assignment requires agent_revision >= 1")
         elif self.agent_revision is not None:
             raise ValueError("agent_revision requires agent_id")
+
         if self.team_role is not None and not self.team_role.strip():
             raise ValueError("team reviewer role must not be blank")
 
@@ -94,7 +100,7 @@ class ResolvedReviewerAssignment:
 
 @runtime_checkable
 class ReviewerAssignmentResolver(Protocol):
-    """Resolve one pending Agent-verifier request to an exact reviewer revision."""
+    """Resolve a pending Agent-verifier request to an exact reviewer revision."""
 
     def resolve(
         self,
@@ -134,14 +140,20 @@ class ConfiguredReviewerResolver:
         if assignment.team_id is None:
             assert assignment.agent_id is not None
             assert assignment.agent_revision is not None
-            agents.service.get_agent_revision(assignment.agent_id, assignment.agent_revision)
+            agents.service.get_agent_revision(
+                assignment.agent_id,
+                assignment.agent_revision,
+            )
             return ResolvedReviewerAssignment(
                 agent_id=assignment.agent_id,
                 agent_revision=assignment.agent_revision,
             )
 
         assert assignment.team_revision is not None
-        team = agents.service.get_team_revision(assignment.team_id, assignment.team_revision)
+        team = agents.service.get_team_revision(
+            assignment.team_id,
+            assignment.team_revision,
+        )
         if not team.profile.enabled:
             raise ContractError(
                 ErrorCode.UNAVAILABLE,
@@ -175,6 +187,7 @@ class ConfiguredReviewerResolver:
                     "match_count": len(matches),
                 },
             )
+
         member = matches[0]
         return ResolvedReviewerAssignment(
             agent_id=member.agent.agent_id,
@@ -186,7 +199,7 @@ class ConfiguredReviewerResolver:
 
 @dataclass(frozen=True, slots=True)
 class ReviewerRuntimeOptions:
-    """Environment inputs required to start a reviewer through normal AgentRuntime."""
+    """Trusted runtime inputs required to start a reviewer Agent."""
 
     mapper: AgentOrchestratorMapper | None = None
     task_model_override: RoutingRequirements | None = None
@@ -215,7 +228,7 @@ class ReviewerExecutionDecision:
 
 @runtime_checkable
 class ReviewerAgentExecutor(Protocol):
-    """Provider/orchestrator seam that executes an already pinned reviewer AgentRun."""
+    """Provider/orchestrator seam executing an already pinned reviewer AgentRun."""
 
     async def execute_review(
         self,
@@ -227,7 +240,7 @@ class ReviewerAgentExecutor(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class RepairOutput:
-    """Reference to a newly produced canonical subject after a repair workflow."""
+    """New canonical Result/Artifact produced by an already-started repair Run."""
 
     subject_type: str
     subject_id: str
@@ -246,18 +259,19 @@ class RepairOutput:
 
 @runtime_checkable
 class ReviewerRepairExecutor(Protocol):
-    """Execute repair through normal canonical Task/Plan/Run mechanisms.
+    """Complete a repair Run already created by VerificationRepairRuntime.
 
-    Implementations must produce and attach a new canonical Result/Artifact. The
-    coordinator only resolves and re-verifies that exact subject afterwards.
+    Implementations may coordinate the producer Agent/Team or wait for an external
+    Worker, but they must not create a second repair lifecycle. They return only the
+    newly produced canonical Result/Artifact reference for exact re-verification.
     """
 
-    async def repair(
+    async def execute_repair(
         self,
         *,
+        execution: VerificationRepairExecution,
         request: VerificationRequest,
         review_result: VerificationResult,
-        completion: CompletionGateDecision,
     ) -> RepairOutput: ...
 
 
@@ -266,6 +280,7 @@ class ReviewWorkflowCycle:
     request: VerificationRequest
     reviewer_run: AgentRunRecord | None
     verification_result: VerificationResult | None
+    repair_execution: VerificationRepairExecution | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,13 +308,20 @@ class AutomaticReviewerWorkflow:
         agents: AgentRuntime,
         resolver: ReviewerAssignmentResolver,
         executor: ReviewerAgentExecutor,
+        repair_runtime: VerificationRepairRuntime | None = None,
         repair_executor: ReviewerRepairExecutor | None = None,
     ) -> None:
+        if (repair_runtime is None) != (repair_executor is None):
+            raise ValueError(
+                "automatic repair requires both VerificationRepairRuntime and "
+                "ReviewerRepairExecutor"
+            )
         self._runtime = runtime
         self._completion = completion
         self._agents = agents
         self._resolver = resolver
         self._executor = executor
+        self._repair_runtime = repair_runtime
         self._repair_executor = repair_executor
         self._reviewer = ReviewerAgentRuntime(
             completion.verification,
@@ -321,6 +343,8 @@ class AutomaticReviewerWorkflow:
         causation_id: str | None = None,
         options: ReviewerRuntimeOptions | None = None,
     ) -> ReviewWorkflowResult:
+        """Create exact Verification and immediately drive configured Agent review."""
+
         request = await self._runtime.request_verification(
             task_id=task_id,
             policy_id=policy_id,
@@ -339,21 +363,21 @@ class AutomaticReviewerWorkflow:
         *,
         options: ReviewerRuntimeOptions | None = None,
     ) -> ReviewWorkflowResult:
+        """Drive one Agent-verifier request through review and bounded repair."""
+
         cycles: list[ReviewWorkflowCycle] = []
         current_id = verification_id
         runtime_options = options or ReviewerRuntimeOptions()
 
         while True:
             request = self._completion.verification.get_request(current_id)
-            if request.requested_verifier_kind is not VerifierKind.AGENT:
-                raise ContractError(
-                    ErrorCode.INVALID_REQUEST,
-                    "automatic reviewer workflow requires an Agent-verifier request",
-                )
-
+            self._require_agent_request(request)
             existing = self._review_run_for(request.verification_id)
+
             if request.status is VerificationRequestStatus.COMPLETED:
-                result = self._completion.verification.result_for(request.verification_id)
+                result = self._completion.verification.result_for(
+                    request.verification_id
+                )
                 if result is None:
                     raise ContractError(
                         ErrorCode.CONTRACT_VIOLATION,
@@ -368,9 +392,6 @@ class AutomaticReviewerWorkflow:
                 )
             elif request.status is VerificationRequestStatus.PENDING:
                 if existing is not None:
-                    # Duplicate dispatch/restart must never create a second AgentRun.
-                    # Re-executing an in-flight external reviewer could duplicate side effects,
-                    # so reconciliation remains explicit and fail-closed.
                     if existing.status is AgentRunStatus.RUNNING:
                         cycles.append(
                             ReviewWorkflowCycle(
@@ -381,43 +402,18 @@ class AutomaticReviewerWorkflow:
                         )
                         return ReviewWorkflowResult(
                             cycles=tuple(cycles),
-                            completion=self._completion.assess_task_completion(request.task_id),
+                            completion=self._completion.assess_task_completion(
+                                request.task_id
+                            ),
                         )
                     raise ContractError(
                         ErrorCode.CONFLICT,
-                        "pending verification already has a terminal reviewer AgentRun and "
-                        "requires reconciliation",
+                        "pending verification already has a terminal reviewer AgentRun "
+                        "and requires reconciliation",
                     )
 
                 reviewer_run = await self._start_reviewer(request, runtime_options)
-                try:
-                    execution = await self._executor.execute_review(
-                        request=request,
-                        agent_run=reviewer_run,
-                    )
-                    result = await self._reviewer.complete_review(
-                        reviewer_run.agent_run_id,
-                        outcome=execution.outcome,
-                        findings=execution.findings,
-                        evidence_artifact_ids=execution.evidence_artifact_ids,
-                        checks_executed=execution.checks_executed,
-                        output_artifact_ids=execution.output_artifact_ids,
-                        output_result_ids=execution.output_result_ids,
-                        model_call_refs=execution.model_call_refs,
-                        tool_invocation_refs=execution.tool_invocation_refs,
-                        telemetry=execution.telemetry,
-                    )
-                except Exception as exc:
-                    current = self._agents.service.repository.get_agent_run(
-                        reviewer_run.agent_run_id
-                    )
-                    if current.status is AgentRunStatus.RUNNING:
-                        self._agents.finish_agent_run(
-                            current.agent_run_id,
-                            status=AgentRunStatus.FAILED,
-                            error=str(exc),
-                        )
-                    raise
+                result = await self._execute_reviewer(request, reviewer_run)
                 cycles.append(
                     ReviewWorkflowCycle(
                         request=self._completion.verification.get_request(
@@ -437,9 +433,15 @@ class AutomaticReviewerWorkflow:
 
             completion = self._completion.assess_task_completion(request.task_id)
             if completion.state is not CompletionState.REPAIR_REQUIRED:
-                return ReviewWorkflowResult(cycles=tuple(cycles), completion=completion)
-            if self._repair_executor is None:
-                return ReviewWorkflowResult(cycles=tuple(cycles), completion=completion)
+                return ReviewWorkflowResult(
+                    cycles=tuple(cycles),
+                    completion=completion,
+                )
+            if self._repair_runtime is None or self._repair_executor is None:
+                return ReviewWorkflowResult(
+                    cycles=tuple(cycles),
+                    completion=completion,
+                )
 
             current_cycle = cycles[-1]
             result = current_cycle.verification_result
@@ -448,10 +450,22 @@ class AutomaticReviewerWorkflow:
                     ErrorCode.CONTRACT_VIOLATION,
                     "repair-required completion lacks a needs_changes verification result",
                 )
-            repaired = await self._repair_executor.repair(
+
+            repair_execution = await self._repair_runtime.start_repair(
+                current_cycle.request.verification_id,
+                idempotency_key=(
+                    f"automatic-review:{current_cycle.request.verification_id}:repair"
+                ),
+                actor_ref="service:automatic-reviewer-workflow",
+            )
+            cycles[-1] = replace(
+                current_cycle,
+                repair_execution=repair_execution,
+            )
+            repaired = await self._repair_executor.execute_repair(
+                execution=repair_execution,
                 request=current_cycle.request,
                 review_result=result,
-                completion=completion,
             )
             next_request = await self._runtime.request_reverification_after_repair(
                 current_cycle.request.verification_id,
@@ -463,7 +477,7 @@ class AutomaticReviewerWorkflow:
             current_id = next_request.verification_id
 
     def status_for(self, verification_id: str) -> ReviewWorkflowResult:
-        """Return canonical review state without executing or retrying anything."""
+        """Read canonical review state without executing or retrying work."""
 
         request = self._completion.verification.get_request(verification_id)
         result = self._completion.verification.result_for(verification_id)
@@ -506,11 +520,53 @@ class AutomaticReviewerWorkflow:
             project_context=options.project_context,
         )
 
+    async def _execute_reviewer(
+        self,
+        request: VerificationRequest,
+        reviewer_run: AgentRunRecord,
+    ) -> VerificationResult:
+        try:
+            execution = await self._executor.execute_review(
+                request=request,
+                agent_run=reviewer_run,
+            )
+            return await self._reviewer.complete_review(
+                reviewer_run.agent_run_id,
+                outcome=execution.outcome,
+                findings=execution.findings,
+                evidence_artifact_ids=execution.evidence_artifact_ids,
+                checks_executed=execution.checks_executed,
+                output_artifact_ids=execution.output_artifact_ids,
+                output_result_ids=execution.output_result_ids,
+                model_call_refs=execution.model_call_refs,
+                tool_invocation_refs=execution.tool_invocation_refs,
+                telemetry=execution.telemetry,
+            )
+        except Exception as exc:
+            current = self._agents.service.repository.get_agent_run(
+                reviewer_run.agent_run_id
+            )
+            if current.status is AgentRunStatus.RUNNING:
+                self._agents.finish_agent_run(
+                    current.agent_run_id,
+                    status=AgentRunStatus.FAILED,
+                    error=str(exc),
+                )
+            raise
+
+    @staticmethod
+    def _require_agent_request(request: VerificationRequest) -> None:
+        if request.requested_verifier_kind is not VerifierKind.AGENT:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "automatic reviewer workflow requires an Agent-verifier request",
+            )
+
     def _review_run_for(self, verification_id: str) -> AgentRunRecord | None:
         matches = [
             record
             for record in self._agents.service.repository.list_agent_runs()
-            if record.verification_context.get("schema") == "verification-reviewer-agent-v1"
+            if record.verification_context.get("schema") == _REVIEW_CONTEXT_SCHEMA
             and record.verification_context.get("verification_id") == verification_id
         ]
         if len(matches) > 1:
@@ -519,3 +575,19 @@ class AutomaticReviewerWorkflow:
                 "verification maps to multiple reviewer AgentRuns",
             )
         return None if not matches else matches[0]
+
+
+__all__ = [
+    "AutomaticReviewerWorkflow",
+    "ConfiguredReviewerResolver",
+    "RepairOutput",
+    "ResolvedReviewerAssignment",
+    "ReviewWorkflowCycle",
+    "ReviewWorkflowResult",
+    "ReviewerAgentExecutor",
+    "ReviewerAssignment",
+    "ReviewerAssignmentResolver",
+    "ReviewerExecutionDecision",
+    "ReviewerRepairExecutor",
+    "ReviewerRuntimeOptions",
+]
