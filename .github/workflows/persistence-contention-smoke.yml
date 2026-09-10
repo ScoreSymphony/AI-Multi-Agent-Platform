@@ -18,20 +18,25 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-      - name: Validate SQLite contention implementation
+      - name: Ruff format
         run: |
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
             src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py \
             tests/performance/test_issue_440_persistence_contention.py
+      - name: Ruff lint
+        run: |
           ruff check \
             src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
             src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py \
             tests/performance/test_issue_440_persistence_contention.py
+      - name: Mypy
+        run: |
           mypy \
             src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
             src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py
-          pytest tests/performance/test_issue_440_persistence_contention.py
+      - name: Pytest
+        run: pytest tests/performance/test_issue_440_persistence_contention.py
       - name: Run tiny synchronized SQLite writer profile
         run: |
           mkdir -p artifacts/benchmarks/pr-persistence-contention
