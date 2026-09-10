@@ -92,8 +92,7 @@ async def test_single_campaign_does_not_claim_variability(tmp_path: Path) -> Non
     assert report.comparison_status == "smoke-contract-only"
     assert report.concurrency_variability[0].throughput_operations_per_second.relative_range == 0
     assert (
-        report.concurrency_variability[0]
-        .throughput_operations_per_second.coefficient_of_variation
+        report.concurrency_variability[0].throughput_operations_per_second.coefficient_of_variation
         is None
     )
 
