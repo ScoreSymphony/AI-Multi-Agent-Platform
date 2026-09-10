@@ -95,10 +95,14 @@ The following architecture-derived names are also loaded, but their cards intent
 
 These classifications are reference/discovery metadata only. They do not vendor, install, execute or imply adoption of any third-party component.
 
-## Reviewed identity, but dependency/license model still needs one more pass
+### 2026-09-10 music model boundary classifications
 
-- MusicBERT — the architecture lead resolves to the MusicBERT implementation under Microsoft's broader `microsoft/muzic` project. Before promotion, record whether the catalog card represents the subproject or umbrella repository and verify the applicable subproject/model-data license boundary.
-- LEGATO — code identity resolves to `guang-yng/legato`, but the practical model path also depends on gated Meta Llama 3.2 Vision assets and materially higher GPU resources. The code license alone is insufficient for a truthful cost/provider/license card.
+Two music-model leads also completed the component-boundary pass. Their code, model and dataset license scopes are deliberately kept separate rather than flattened into a single misleading license label:
+
+- MusicBERT — resolved as the `musicbert/` subproject inside the active `microsoft/muzic` repository. The repository code is MIT and the subproject is explicitly documented by Muzic, so the loaded card represents **only that code subproject** and is a `manual` / `untrusted` / `candidate` / `evaluation:required` record. Separately hosted pretrained checkpoints and processed datasets are not bundled and are not asserted to inherit MIT; their asset-license boundary remains explicit on the card. The documented implementation is local/CUDA-oriented and does not require a recurring paid AI service.
+- LEGATO — resolved to the active `guang-yng/legato` repository and its official Hugging Face checkpoints. The codebase is principally MIT, while `utils/abc2xml.py` is LGPL-3.0. The practical model path separately loads `meta-llama/Llama-3.2-11B-Vision`; Hugging Face requires gated acceptance of the Llama 3.2 license, and Meta's Llama 3.2 multimodal license grant excludes EU-domiciled developers/companies. LEGATO is therefore loaded as `deferred` / `evaluation:not-required`, with the mixed code license, third-party model boundary, gated access, provider requirements and GPU resource class visible instead of presenting it as an ordinary MIT candidate.
+
+Neither record vendors model weights, external datasets or third-party executables.
 
 ## Truly unresolved / ambiguous leads
 
