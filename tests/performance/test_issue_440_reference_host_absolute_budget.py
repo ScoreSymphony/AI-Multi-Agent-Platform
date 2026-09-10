@@ -378,6 +378,38 @@ def test_absolute_budget_rejects_insufficient_campaigns(tmp_path: Path) -> None:
         )
 
 
+def test_absolute_budget_rejects_claimed_campaign_count_mismatch(tmp_path: Path) -> None:
+    payload = _evidence()
+    campaigns = payload["campaigns"]
+    assert isinstance(campaigns, list)
+    campaigns.pop()
+    evidence, policy = _inputs(tmp_path, evidence_payload=payload)
+
+    with pytest.raises(ValueError, match="campaign_count 3 does not match 2 campaign entries"):
+        ReferenceHostAbsoluteBudgetEvaluator().evaluate(
+            evidence_path=evidence,
+            policy_path=policy,
+        )
+
+
+def test_absolute_budget_rejects_duplicate_campaign_hashes(tmp_path: Path) -> None:
+    payload = _evidence()
+    campaigns = payload["campaigns"]
+    assert isinstance(campaigns, list)
+    first = campaigns[0]
+    second = campaigns[1]
+    assert isinstance(first, dict)
+    assert isinstance(second, dict)
+    second["campaign_sha256"] = first["campaign_sha256"]
+    evidence, policy = _inputs(tmp_path, evidence_payload=payload)
+
+    with pytest.raises(ValueError, match="campaign_sha256 values must be unique"):
+        ReferenceHostAbsoluteBudgetEvaluator().evaluate(
+            evidence_path=evidence,
+            policy_path=policy,
+        )
+
+
 def test_absolute_budget_rejects_insufficient_metric_samples(tmp_path: Path) -> None:
     payload = _evidence()
     points = payload["concurrency_variability"]
