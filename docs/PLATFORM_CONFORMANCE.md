@@ -169,7 +169,7 @@ Every report records:
 - command output tail and failure category when applicable;
 - canonical resource IDs and evidence references when a scenario exposes them.
 
-The current aggregator leaves canonical resource ID/evidence collections empty for subsystem tests that do not yet export them. They are explicit empty collections rather than fabricated identifiers. As scenarios become richer cross-layer fixtures, #46 should populate those fields with Task/Run/Result/Artifact/Verification IDs and retained trace/log/artifact references.
+Scenarios may emit a structured runtime-evidence envelope after their maintained acceptance path has proven the resources it exercised. The conformance runner promotes those observed canonical IDs and evidence references into the versioned JSON report instead of fabricating them. `REL-VERTICAL` requires this envelope and fails closed if it is missing or malformed; its report therefore retains the concrete Task, Run, Agent, AgentRun, ToolInvocation, WorkerJob, Worker, Node, Workspace, Snapshot, File, Artifact, Result and Verification IDs together with the canonical API/timeline and observability references exercised by the slice. Subsystem tests that do not yet export runtime evidence continue to use explicit empty canonical-ID collections rather than guessed identifiers.
 
 ## Architecture invariants
 
