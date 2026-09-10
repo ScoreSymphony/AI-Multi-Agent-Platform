@@ -3,6 +3,7 @@
 from .contracts import (
     ApplicationReleasePublisher,
     ApplicationReleaseRepository,
+    BuildTargetMatcher,
     PublicationResult,
     PublishedArtifact,
     PublishContext,
@@ -24,10 +25,16 @@ from .models import (
     ReleaseStatus,
     ReleaseVisibility,
 )
-from .repository import InMemoryApplicationReleaseRepository
+from .placement import DistributedBuildTargetMatcher
+from .repository import (
+    APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION,
+    InMemoryApplicationReleaseRepository,
+    JsonApplicationReleaseRepository,
+)
 from .service import ApplicationDistributionService
 
 __all__ = [
+    "APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION",
     "APPLICATION_RELEASE_SCHEMA_VERSION",
     "ApplicationArtifact",
     "ApplicationDistributionService",
@@ -36,12 +43,15 @@ __all__ = [
     "ApplicationReleaseRepository",
     "BuildSpecification",
     "BuildTarget",
+    "BuildTargetMatcher",
     "BuildTargetState",
     "BuildTargetStatus",
+    "DistributedBuildTargetMatcher",
     "GateEvidence",
     "GateStatus",
     "GitHubReleasePublisher",
     "InMemoryApplicationReleaseRepository",
+    "JsonApplicationReleaseRepository",
     "PackageType",
     "PublicationResult",
     "PublishedArtifact",
