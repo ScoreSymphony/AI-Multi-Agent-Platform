@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -40,6 +41,10 @@ def _metric(value: float, *, samples: int = 3) -> dict[str, object]:
     }
 
 
+def _digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def _reproducibility(
     *,
     commit: str,
@@ -50,10 +55,12 @@ def _reproducibility(
 ) -> dict[str, object]:
     campaigns = [
         {
-            "source": f"/evidence/run-{index}/campaign.json",
-            "campaign_sha256": f"{index + 1:064x}",
-            "operating_envelope_path": f"/evidence/run-{index}/operating-envelope.json",
-            "operating_envelope_sha256": f"{index + 11:064x}",
+            "source": f"/evidence/{commit[:8]}/run-{index}/campaign.json",
+            "campaign_sha256": _digest(f"{commit}:campaign:{index}"),
+            "operating_envelope_path": (
+                f"/evidence/{commit[:8]}/run-{index}/operating-envelope.json"
+            ),
+            "operating_envelope_sha256": _digest(f"{commit}:envelope:{index}"),
             "started_at": "2026-09-10T10:00:00+00:00",
             "completed_at": "2026-09-10T11:00:00+00:00",
         }
@@ -223,6 +230,29 @@ def test_reference_host_regression_rejects_environment_drift(tmp_path: Path) -> 
     _write(candidate, candidate_payload)
 
     with pytest.raises(ValueError, match="incomparable host_label"):
+        ReferenceHostRegressionComparator().compare(
+            baseline_path=baseline,
+            candidate_path=candidate,
+            policy_path=policy,
+        )
+
+
+def test_reference_host_regression_rejects_reused_campaign_evidence(tmp_path: Path) -> None:
+    baseline, candidate, policy = _inputs(tmp_path)
+    baseline_payload = _read(baseline)
+    candidate_payload = _read(candidate)
+    baseline_campaigns = baseline_payload["campaigns"]
+    candidate_campaigns = candidate_payload["campaigns"]
+    assert isinstance(baseline_campaigns, list)
+    assert isinstance(candidate_campaigns, list)
+    baseline_first = baseline_campaigns[0]
+    candidate_first = candidate_campaigns[0]
+    assert isinstance(baseline_first, dict)
+    assert isinstance(candidate_first, dict)
+    candidate_first["campaign_sha256"] = baseline_first["campaign_sha256"]
+    _write(candidate, candidate_payload)
+
+    with pytest.raises(ValueError, match="disjoint campaigns"):
         ReferenceHostRegressionComparator().compare(
             baseline_path=baseline,
             candidate_path=candidate,
