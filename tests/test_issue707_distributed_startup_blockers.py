@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from ai_multi_agent_platform.contracts import ErrorCode, ExecutionRequest, OperationContext
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    ExecutionRequest,
+    OperationContext,
+)
 from ai_multi_agent_platform.deployment.startup_recovery import reconcile_single_node_startup
 from ai_multi_agent_platform.distributed import DispatchRecord, DispatchState, WorkerJobRequest
 from ai_multi_agent_platform.domain import RunStatus, new_id
@@ -114,7 +119,7 @@ def test_lost_starting_dispatch_blocks_without_redispatch(tmp_path: Path) -> Non
             repository=InMemoryKernelRepository(),
         )
         task_id = await _ready_task(kernel, "starting-lost")
-        with pytest.raises(Exception, match="acknowledgement is uncertain"):
+        with pytest.raises(ContractError, match="acknowledgement is uncertain"):
             await kernel.start_task(idempotency_key="starting-lost:start", task_id=task_id)
         task = await kernel.get_task(task_id)
         assert len(task.run_ids) == 1
