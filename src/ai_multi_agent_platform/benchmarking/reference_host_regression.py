@@ -177,7 +177,9 @@ class ReferenceHostRegressionComparator:
         candidate_path = candidate_path.resolve()
         policy_path = policy_path.resolve()
         if baseline_path == candidate_path:
-            raise ValueError("baseline and candidate reproducibility evidence must be distinct files")
+            raise ValueError(
+                "baseline and candidate reproducibility evidence must be distinct files"
+            )
 
         baseline = _load_json_object(baseline_path)
         candidate = _load_json_object(candidate_path)
@@ -296,9 +298,7 @@ def _parse_rule(
     unknown_refs = set(evidence_refs) - set(policy_evidence_refs)
     if unknown_refs:
         formatted = ", ".join(sorted(unknown_refs))
-        raise ValueError(
-            f"rule evidence_refs must be declared by the policy; unknown: {formatted}"
-        )
+        raise ValueError(f"rule evidence_refs must be declared by the policy; unknown: {formatted}")
 
     concurrency_value = payload.get("concurrency")
     concurrency = None
@@ -402,13 +402,13 @@ def _compare_rule(
         )
 
     if rule.direction == "higher-is-better":
-        relative_regression = (
-            baseline_metric.median - candidate_metric.median
-        ) / abs(baseline_metric.median)
+        relative_regression = (baseline_metric.median - candidate_metric.median) / abs(
+            baseline_metric.median
+        )
     else:
-        relative_regression = (
-            candidate_metric.median - baseline_metric.median
-        ) / abs(baseline_metric.median)
+        relative_regression = (candidate_metric.median - baseline_metric.median) / abs(
+            baseline_metric.median
+        )
     classification = _classify(relative_regression, rule)
     return RegressionRuleResult(
         rule_id=rule.rule_id,
