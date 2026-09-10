@@ -635,7 +635,7 @@ class GitHubReleaseConnectorProvider(ConnectorProvider):
                 "GitHub release contains duplicate asset names",
                 provider_id=self._provider_id,
             )
-        return cast(dict[str, JsonValue], matches[0]) if matches else None
+        return matches[0] if matches else None
 
     async def _resolve_tag_commit(
         self,
@@ -763,7 +763,7 @@ class GitHubReleaseConnectorProvider(ConnectorProvider):
                 f"GitHub {operation} response is not an object",
                 provider_id=self._provider_id,
             )
-        return cast(dict[str, JsonValue], response.body)
+        return response.body
 
     def _expect_array(
         self,
@@ -779,7 +779,7 @@ class GitHubReleaseConnectorProvider(ConnectorProvider):
                 f"GitHub {operation} response is not an array",
                 provider_id=self._provider_id,
             )
-        return cast(list[JsonValue], response.body)
+        return response.body
 
     def _expect_status(
         self,
@@ -848,7 +848,7 @@ def _required_string(value: dict[str, JsonValue], field: str) -> str:
 def _json_object(value: JsonValue | None, field: str) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
         raise ContractError(ErrorCode.INVALID_REQUEST, f"{field} must be an object")
-    return cast(dict[str, JsonValue], value)
+    return value
 
 
 def _external_id(value: JsonValue | None, label: str) -> str:
@@ -876,7 +876,7 @@ def _asset_name(value: str) -> str:
 def _release_visibility(value: JsonValue | None) -> str:
     if value not in {"public", "authenticated", "private"}:
         raise ContractError(ErrorCode.INVALID_REQUEST, "unsupported release visibility")
-    return cast(str, value)
+    return value
 
 
 def _validate_visibility(*, private: bool, requested: str) -> None:
