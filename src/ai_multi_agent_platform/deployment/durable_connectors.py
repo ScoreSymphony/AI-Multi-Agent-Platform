@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, fields
 from typing import Any
@@ -9,9 +10,12 @@ from typing import Any
 from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.accounting import AccountingService
 from ai_multi_agent_platform.application_distribution import (
+    ApplicationBuildLifecycleBackend,
+    ApplicationCommandExecutor,
     ApplicationDistributionService,
-    DistributedBuildTargetMatcher,
+    GitHubReleasePublisher,
     JsonApplicationReleaseRepository,
+    LocalBuildTargetMatcher,
 )
 from ai_multi_agent_platform.application_distribution.control_plane import (
     register_application_distribution_control_plane,
@@ -20,6 +24,7 @@ from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.connectors import (
     ConnectorRegistry,
     ConnectorService,
+    GitHubReleaseConnectorProvider,
     SqliteConnectorRepository,
 )
 from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
@@ -39,6 +44,7 @@ from ai_multi_agent_platform.observability import (
     TelemetryContext,
 )
 from ai_multi_agent_platform.onboarding import OnboardingModelAdapter
+from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.planning import (
     DeterministicReferencePlanner,
     JsonPlanningRepository,
@@ -57,7 +63,14 @@ from ai_multi_agent_platform.repositories import RepositoryDiscoveryResolver
 from ai_multi_agent_platform.repositories.connector_bootstrap import (
     connector_repository_discovery_resolver,
 )
-from ai_multi_agent_platform.security import build_durable_egress_runtime
+from ai_multi_agent_platform.security import (
+    ActorType,
+    AuthorizationAction,
+    AuthorizedLifecycleBackend,
+    LocalPrincipalPolicy,
+    ResourceType,
+    build_durable_egress_runtime,
+)
 from ai_multi_agent_platform.templates import (
     AgentTemplateExporter,
     AutomationTemplateExporter,
@@ -85,6 +98,8 @@ from .single_node import (
     build_single_node_deployment as _build_base_single_node_deployment,
 )
 
+_APPLICATION_BUILD_PRINCIPAL = "service:application-distribution"
+
 
 @dataclass(slots=True)
 class SingleNodeDeployment(BaseSingleNodeDeployment):
@@ -94,6 +109,7 @@ class SingleNodeDeployment(BaseSingleNodeDeployment):
     connector_registry: ConnectorRegistry
     connectors: ConnectorService
     application_release_repository: JsonApplicationReleaseRepository
+    application_build_kernel: PlatformKernel
     application_releases: ApplicationDistributionService
     planning_repository: JsonPlanningRepository
     planning_kernel: PlatformKernel
@@ -159,23 +175,58 @@ def build_single_node_deployment(
     register_connector_control_plane(base.control_plane, connectors)
     egress.register_control_plane(base.control_plane)
 
+    if not base.authorization.has_policy(_APPLICATION_BUILD_PRINCIPAL):
+        base.authorization.register(
+            LocalPrincipalPolicy(
+                principal_ref=_APPLICATION_BUILD_PRINCIPAL,
+                actor_types=frozenset({ActorType.SERVICE}),
+                allowed_actions=frozenset(
+                    {
+                        AuthorizationAction.EXECUTE,
+                        AuthorizationAction.READ,
+                        AuthorizationAction.MODIFY,
+                    }
+                ),
+                resource_types=frozenset({ResourceType.RUN}),
+            )
+        )
+
     application_release_repository = JsonApplicationReleaseRepository(
         config.database_dir / "application-releases.json"
     )
-    target_matcher = (
-        DistributedBuildTargetMatcher(base.distributed_runtime.registry)
-        if enable_distributed_execution and base.distributed_runtime is not None
-        else None
+    application_build_lifecycle = AuthorizedLifecycleBackend(
+        ApplicationBuildLifecycleBackend(
+            application_release_repository,
+            base.workspaces,
+            base.files,
+            base.run_workspace_bindings,
+            ApplicationCommandExecutor(base.workspaces.materialization_root),
+        ),
+        base.approval_gate,
+        allow_internal_service_reads=True,
+    )
+    application_build_kernel = PlatformKernel(
+        orchestrator=ReferenceOrchestrator(),
+        lifecycle=application_build_lifecycle,
+        repository=base.kernel_repository,
     )
     application_releases = ApplicationDistributionService(
         application_release_repository,
-        kernel=base.kernel,
+        kernel=application_build_kernel,
         files=base.files,
         workspaces=base.workspaces,
         run_workspace_bindings=base.run_workspace_bindings,
         authorization_gate=base.approval_gate,
-        target_matcher=target_matcher,
+        target_matcher=LocalBuildTargetMatcher(),
     )
+    if base.secrets is not None:
+        github_releases = GitHubReleaseConnectorProvider(
+            base.secrets,
+            base.files,
+            connection_repository=connector_repository,
+        )
+        asyncio.run(connectors.register_provider(github_releases))
+        application_releases.register_publisher(GitHubReleasePublisher(connectors))
     register_application_distribution_control_plane(
         base.control_plane,
         application_releases,
@@ -294,6 +345,7 @@ def build_single_node_deployment(
         connector_registry=connector_registry,
         connectors=connectors,
         application_release_repository=application_release_repository,
+        application_build_kernel=application_build_kernel,
         application_releases=application_releases,
         planning_repository=planning_repository,
         planning_kernel=planning_kernel,
