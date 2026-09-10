@@ -11,14 +11,16 @@ from ai_multi_agent_platform.agents import (
 )
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.verification import (
-    ConfiguredReviewerResolver,
-    ReviewerAssignment,
     VerificationOutcome,
     VerificationPolicy,
     VerificationService,
     VerificationStage,
     VerificationSubject,
     VerifierKind,
+)
+from ai_multi_agent_platform.verification.agent_workflow import (
+    ConfiguredReviewerResolver,
+    ReviewerAssignment,
 )
 
 
