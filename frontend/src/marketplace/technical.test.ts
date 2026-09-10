@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RegistryItem } from "../api/registry";
-import { isTechnicalComponent, technicalCategoryLabel, technicalMetadata } from "./technical";
+import { technicalCategoryLabel, technicalMetadata } from "./technical";
 
 function registryItem(overrides: Partial<RegistryItem> = {}): RegistryItem {
   return {
@@ -69,7 +69,6 @@ describe("technical Marketplace metadata", () => {
       ],
     });
 
-    expect(isTechnicalComponent(item)).toBe(true);
     expect(technicalMetadata(item)).toEqual({
       categories: ["code-intelligence"],
       lifecycle: "candidate",
@@ -102,7 +101,6 @@ describe("technical Marketplace metadata", () => {
   it("does not classify ordinary Registry assets as technical components", () => {
     const item = registryItem({ item_type: "connector", categories: ["productivity"] });
 
-    expect(isTechnicalComponent(item)).toBe(false);
     expect(technicalMetadata(item)).toBeNull();
   });
 });

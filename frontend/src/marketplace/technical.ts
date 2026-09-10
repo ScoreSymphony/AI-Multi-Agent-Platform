@@ -15,7 +15,7 @@ export const TECHNICAL_CATEGORIES = [
   ["music-ai", "Music AI"],
 ] as const;
 
-export const TECHNICAL_CATEGORY_IDS = new Set(TECHNICAL_CATEGORIES.map(([id]) => id));
+const TECHNICAL_CATEGORY_IDS = new Set(TECHNICAL_CATEGORIES.map(([id]) => id));
 
 export type TechnicalLifecycle =
   | "discovered"
@@ -41,10 +41,6 @@ export interface TechnicalMarketplaceMetadata {
   architectureReference: string | null;
   decisionReference: string | null;
   evaluationReference: string | null;
-}
-
-export function isTechnicalComponent(item: RegistryItem): boolean {
-  return item.categories.some((category) => TECHNICAL_CATEGORY_IDS.has(category as never));
 }
 
 export function technicalMetadata(item: RegistryItem): TechnicalMarketplaceMetadata | null {
