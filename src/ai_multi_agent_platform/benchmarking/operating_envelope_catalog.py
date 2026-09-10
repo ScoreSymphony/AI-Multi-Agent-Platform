@@ -7,7 +7,11 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from typing import Any
+from functools import lru_cache
+from importlib.resources import files
+from typing import Any, cast
+
+from jsonschema import Draft202012Validator
 
 OPERATING_ENVELOPE_CATALOG_SCHEMA_VERSION = "1.0"
 _ENVELOPE_SCHEMA_VERSION = "1.0"
@@ -187,6 +191,8 @@ class OperatingEnvelopeCatalogBuilder:
 
 
 def _parse_envelope(report: Mapping[str, Any], *, source: str) -> _EnvelopeInput:
+    _validate_source_envelope(report, source=source)
+
     if _require_str(report, "schema_version") != _ENVELOPE_SCHEMA_VERSION:
         raise ValueError(f"{source}: unsupported operating-envelope schema_version")
     if _require_str(report, "benchmark_id") != _ENVELOPE_BENCHMARK_ID:
@@ -254,6 +260,28 @@ def _parse_envelope(report: Mapping[str, Any], *, source: str) -> _EnvelopeInput
         ),
         concurrency_envelope=tuple(points),
     )
+
+
+@lru_cache(maxsize=1)
+def _source_envelope_validator() -> Draft202012Validator:
+    resource = files("ai_multi_agent_platform.benchmarking").joinpath(
+        "schemas/benchmark-operating-envelope.v1.schema.json"
+    )
+    payload: object = json.loads(resource.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError("packaged operating-envelope schema must be a JSON object")
+    schema = cast(dict[str, Any], payload)
+    Draft202012Validator.check_schema(schema)
+    return Draft202012Validator(schema)
+
+
+def _validate_source_envelope(report: Mapping[str, Any], *, source: str) -> None:
+    error = next(_source_envelope_validator().iter_errors(dict(report)), None)
+    if error is None:
+        return
+    path = ".".join(str(part) for part in error.absolute_path)
+    location = f" at {path}" if path else ""
+    raise ValueError(f"{source}: invalid operating-envelope report{location}: {error.message}")
 
 
 def _require_same_basis(
