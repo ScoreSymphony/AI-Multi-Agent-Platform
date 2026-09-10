@@ -295,7 +295,13 @@ def install_single_node_context(
     research_adapter = ResearchEvidenceContextSourceAdapter(research)
     verification_adapter = VerificationContextSourceAdapter(
         base.verification,
-        classification_resolver=CanonicalVerificationContextClassificationResolver(protected_files),
+        classification_resolver=CanonicalVerificationContextClassificationResolver(
+            protected_files,
+            evidence=base.verification_runtime.evidence,
+            agents=base.agents.repository,
+            bundles=bundles,
+            run_bindings=run_bindings,
+        ),
     )
     repository_adapter = RepositoryContextSourceAdapter(
         base.repository_provenance,
