@@ -192,7 +192,7 @@ The repository treats conformance as three different cost/coverage tiers rather 
 
 - `conformance-fast`;
 - `conformance-release` for the reference single-node release claim;
-- `conformance-extended-reference`, which additionally enables E/N/Q/R,S,T,V,X,Y and therefore treats all nine as required.
+- `conformance-extended-reference`, which additionally enables E/N/Q/R/S/T/V/X/Y and therefore treats all nine as required.
 
 Both release-based jobs execute `REL-BACKUP`, `REL-UPGRADE`, `REL-EVAL` and the complete `REL-VERTICAL` automatically because those checks are required members of the release profile rather than separately enabled options.
 
