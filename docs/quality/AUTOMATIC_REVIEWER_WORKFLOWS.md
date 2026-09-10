@@ -38,11 +38,19 @@ The bundled Software Development Team from #77 is supported through its actual `
 
 ## Replaceable reviewer execution
 
-The coordinator starts a reviewer through the existing `ReviewerAgentRuntime`, which in turn uses normal `AgentRuntime` preparation and orchestration mapping. The provider/orchestrator-specific execution is represented by `ReviewerAgentExecutor`.
+The coordinator starts a reviewer through the existing `ReviewerAgentRuntime`, which in turn uses normal `AgentRuntime` preparation and orchestration mapping. Provider/orchestrator-specific execution remains behind `ReviewerAgentExecutor`.
 
 An executor receives the exact `VerificationRequest` and pinned `AgentRunRecord` and returns a structured `ReviewerExecutionDecision`. The coordinator submits that decision through `ReviewerAgentRuntime.complete_review()`. The execution adapter never receives completion authority.
 
-This keeps local/reference, Hermes, alternative orchestrators and different model providers behind the same canonical workflow.
+### Local/reference ModelRuntime executor
+
+`ai_multi_agent_platform.verification.reference_reviewer.ModelRuntimeReviewerExecutor` is the local-first reference implementation. It executes the already-pinned reviewer through the canonical provider-neutral `ModelRuntime`; it does not assume Hermes, Forge, LiteLLM, OpenAI, or any other provider.
+
+Reviewable content is supplied through `ReviewerSubjectInputProvider`. The provider must return a `ReviewerSubjectInput` carrying the exact `VerificationSubject`. The executor compares that subject to the immutable request before invoking the model, so stale or mismatched content fails closed. This boundary lets repository-, file-, result-, or application-specific subject renderers be replaced independently of Verification semantics.
+
+The reviewed content is presented to the model as untrusted data. The platform, not the model, owns the Verification ID, exact subject revision/digest, reviewer identity, Evidence Artifact IDs, and completion state. The model returns only a structured outcome and findings. Malformed/unknown output is rejected rather than guessed.
+
+The reference executor uses the model configuration already pinned on the reviewer `AgentRun`. A local `ModelConfiguration(location=local)` therefore provides a complete automatic-review path without a mandatory paid/external AI service. Other provider/model implementations can replace it without changing the canonical workflow.
 
 ## Independence and privileges
 
@@ -67,39 +75,50 @@ The coordinator then calls `CanonicalVerificationRuntime.request_reverification_
 
 When the #86 repair budget is exhausted, completion becomes rejected/escalated/waiting according to the configured policy and the coordinator does not start another repair cycle.
 
-## Duplicate dispatch and restart behavior
+## Dispatch, cancellation and recovery
 
 Reviewer correlation is derived from the immutable `AgentRunRecord.verification_context` written by `ReviewerAgentRuntime`; no second workflow-state database is introduced.
 
-Before dispatch, the coordinator scans existing canonical AgentRuns for the Verification ID:
+Dispatch for a Verification ID is serialized across `AutomaticReviewerWorkflow` instances sharing the same canonical Agent repository in the current Control Plane process. The durable AgentRun binding remains the recovery source of truth after the process restarts. A second caller therefore observes the already-created reviewer run rather than starting another model execution.
 
-- no existing reviewer run: resolve and start the exact reviewer;
-- one running reviewer run: return the current blocked state without starting or re-executing another reviewer;
-- a terminal reviewer run with a still-pending Verification: fail closed and require reconciliation;
-- more than one bound reviewer run: report a contract violation;
-- completed Verification: reuse the canonical VerificationResult and never execute the reviewer again.
+The execution/result handoff is deliberately recoverable:
 
-This intentionally prioritizes correctness over automatically replaying an external reviewer after an uncertain restart boundary.
+1. the reviewer runs through `ReviewerAgentExecutor`;
+2. its structured `ReviewerExecutionDecision` is persisted in AgentRun telemetry before canonical result submission;
+3. `ReviewerAgentRuntime.complete_review()` terminalizes the AgentRun and submits the canonical VerificationResult;
+4. if canonical submission fails after model execution, a later invocation reuses the staged decision and retries submission without re-running the reviewer model.
 
-Reviewer AgentRuns remain ordinary AgentRuns associated with the canonical Run referenced by the Verification request. Team members already use this same subordinate AgentRun model; the AgentRun identity remains distinct and is included in the normal AgentRun surface.
+Cancellation before a reviewer decision is produced marks that AgentRun `CANCELLED`. A subsequent invocation may create a fresh reviewer attempt. Ordinary reviewer execution failures similarly become `FAILED`. `ReviewerRuntimeOptions.max_reviewer_attempts` bounds repeated failed/cancelled reviewer attempts; the default is two attempts. Exhaustion fails closed with a canonical error while Verification remains unresolved.
+
+If cancellation happens after a decision has already been staged, the decision remains recoverable. Depending on the exact interruption point the AgentRun may still be running or already succeeded; both states can resume canonical submission from the staged decision without another model call.
+
+A pre-existing running reviewer AgentRun without a staged decision is treated as in-flight work and leaves completion blocked instead of being executed a second time. Completed Verification always reuses its immutable canonical VerificationResult.
+
+The process-local serialization matches the current reference AgentRepository concurrency boundary. Deployments with multiple independent Control Plane writers must provide the same uniqueness/claim guarantee at their durable Agent repository boundary before enabling concurrent reviewer dispatch across processes.
 
 ## Product/status surface
 
 `ReviewWorkflowResult` exposes the canonical request, bound reviewer AgentRun, VerificationResult, optional canonical `VerificationRepairExecution`, and current `CompletionGateDecision`. `status_for()` reads review state without executing or retrying work.
 
-The existing Verification Control Plane collections continue to expose canonical request/result/completion data. Normal AgentRun resources serialize their `verification_context`, including the Verification ID and exact subject binding, so clients can correlate pending/running reviewer AgentRuns without a second review-state API or database.
+The existing Verification Control Plane collections continue to expose canonical request/result/completion data. Normal AgentRun resources serialize their `verification_context`, including the Verification ID and exact subject binding, so clients can correlate pending/running reviewer AgentRuns without a second review-state API or database. Reviewer decision staging lives in ordinary AgentRun telemetry and is recovery evidence, not a competing completion authority.
 
 ## Integration sketch
 
 ```python
 from ai_multi_agent_platform.verification.agent_workflow import AutomaticReviewerWorkflow
+from ai_multi_agent_platform.verification.reference_reviewer import ModelRuntimeReviewerExecutor
 
+review_executor = ModelRuntimeReviewerExecutor(
+    agents=agent_runtime,
+    models=model_runtime,
+    inputs=review_subject_input_provider,
+)
 workflow = AutomaticReviewerWorkflow(
     runtime=canonical_verification_runtime,
     completion=verification_completion_authority,
     agents=agent_runtime,
     resolver=configured_reviewer_resolver,
-    executor=reviewer_execution_adapter,
+    executor=review_executor,
     repair_runtime=verification_repair_runtime,
     repair_executor=repair_execution_adapter,
 )
@@ -125,7 +144,7 @@ The following remain explicitly non-authoritative:
 - orchestrator-native review state;
 - provider session IDs;
 - AgentTeam membership by itself;
-- `ReviewerExecutionDecision`;
+- `ReviewerExecutionDecision` and its staged recovery copy;
 - the workflow coordinator's returned status object.
 
 Only canonical Verification records and the existing completion authority decide whether required review has passed. Only the kernel/`VerificationRepairRuntime` owns the repair Plan/Step/Run transition.
