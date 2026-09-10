@@ -70,9 +70,7 @@ def test_recovery_presence_subset_preserves_unreachable_sibling_drain_state(
             presence_timeout_seconds=0.05,
         )
         try:
-            assert await service.restore_reachable_persisted_workers() == (
-                reachable_worker_id,
-            )
+            assert await service.restore_reachable_persisted_workers() == (reachable_worker_id,)
             reachable = restarted.registry.get_worker(reachable_worker_id)
             offline = restarted.registry.get_worker(offline_worker_id)
             assert reachable.status is WorkerStatus.DEGRADED
