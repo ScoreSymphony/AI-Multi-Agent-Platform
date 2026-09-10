@@ -54,6 +54,10 @@ def test_cli_reads_shared_canonical_task_run_result_state(tmp_path: Path) -> Non
     assert isinstance(result_id, str)
     assert run["task_id"] == task_id
     assert result["task_id"] == task_id
+    assert task["run_ids"] == [run_id]
+    assert task["result_ids"] == [result_id]
+    assert task["status"] == run["status"] == "succeeded"
+    assert task["correlation_id"] == run["correlation_id"]
 
     config = tmp_path / "cli.json"
     config.write_text(
