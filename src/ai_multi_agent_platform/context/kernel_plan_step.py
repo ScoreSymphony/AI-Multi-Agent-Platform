@@ -9,9 +9,9 @@ history only when the whole Coordination Plan is absent.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from hashlib import sha256
-import json
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
@@ -22,10 +22,10 @@ from .models import (
     ContextDataClassification,
     ContextEntryRole,
     ContextSourceRef,
-    ContextSourceRequest,
     ContextSourceType,
     ContextTrust,
 )
+from .resolver import ContextSourceRequest
 from .source_adapters import PlanStepContextSourceAdapter
 
 
