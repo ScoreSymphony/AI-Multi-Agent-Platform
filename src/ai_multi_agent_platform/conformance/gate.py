@@ -431,25 +431,48 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         _optional(
             "N",
             "#75 Notifications",
-            "notifications remain scoped, deduplicated and source-linked",
+            (
+                "Task completion/failure, approval-required and verification-required notifications "
+                "remain recipient-scoped, deduplicated and source-linked"
+            ),
             "notification integration profile is optional and not enabled",
         ),
         ConformanceScenario(
             "O",
             "#76 Usage/resources",
-            "usage remains attributable through canonical IDs",
+            (
+                "Task/model/Worker/Node usage remains attributable through canonical IDs without "
+                "fabricating unavailable measurements"
+            ),
             _pytest(
                 "tests/test_issue76_accounting.py::"
-                "test_task_run_executor_accounting_is_idempotent_and_aggregated"
+                "test_task_run_executor_accounting_is_idempotent_and_aggregated",
+                "tests/integration/accounting/test_model_usage_attribution.py::"
+                "test_auto_routed_model_usage_is_attributed_to_selected_canonical_configuration",
+                "tests/integration/accounting/test_accounting_composition.py::"
+                "test_worker_dispatch_usage_is_additive_and_attributed",
+                "tests/integration/accounting/test_accounting_composition.py::"
+                "test_worker_and_node_reported_resources_are_latest_provider_neutral_gauges",
+                "tests/test_issue76_accounting.py::"
+                "test_missing_measurement_is_unavailable_not_zero",
             ),
         ),
         ConformanceScenario(
             "P",
             "#77 Standard Agents/Teams",
-            "bundled Agent/Team definitions remain editable configuration rather than architecture",
+            (
+                "bundled Agent/Team definitions remain discoverable configuration while user "
+                "clones are scoped, customizable and independently removable"
+            ),
             _pytest(
                 "tests/test_issue_77_completion_hardening.py::"
-                "test_standard_catalog_lifecycle_uses_real_control_plane_http_command_path"
+                "test_standard_catalog_is_discoverable_without_installing_definitions",
+                "tests/test_issue_77_completion_hardening.py::"
+                "test_standard_catalog_lifecycle_uses_real_control_plane_http_command_path",
+                "tests/test_issue_77_completion_hardening.py::"
+                "test_control_plane_bootstrap_clone_scope_customize_and_delete_workflow",
+                "tests/test_issue_77_completion_hardening.py::"
+                "test_scoped_software_team_clone_requires_explicit_scope_and_is_deletable",
             ),
         ),
         _optional(
@@ -482,7 +505,10 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ConformanceScenario(
             "W",
             "#88 Task management",
-            "priority/deadline/assignment/dependencies remain metadata over canonical lifecycle",
+            (
+                "priority/deadline/assignment/dependencies remain metadata over canonical lifecycle; "
+                "authorization and Worker admission remain mandatory"
+            ),
             _pytest(
                 "tests/test_task_management.py::"
                 "test_priority_deadline_not_before_and_query_projection",
@@ -490,6 +516,10 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
                 "test_responsibility_reassignment_and_agent_assignment_are_permission_neutral",
                 "tests/test_task_management.py::"
                 "test_dependency_satisfaction_cycle_cross_project_and_blocked_reason",
+                "tests/test_task_management.py::"
+                "test_bulk_update_preflights_per_task_authorization",
+                "tests/test_issue_46_task_management_worker_admission.py::"
+                "test_urgent_task_cannot_bypass_distributed_worker_admission",
             ),
         ),
         _optional(
