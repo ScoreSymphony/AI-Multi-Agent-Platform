@@ -14,7 +14,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from ai_multi_agent_platform.kernel import PlatformKernel, RecoveryDisposition, RecoveryReport
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.distributed import DispatchRecord, DispatchState
+from ai_multi_agent_platform.domain import RunStatus
+from ai_multi_agent_platform.kernel import (
+    PlatformKernel,
+    RecoveryDisposition,
+    RecoveryEntry,
+    RecoveryReport,
+)
 
 STARTUP_RECOVERY_REPORT_VERSION = 1
 STARTUP_RECOVERY_DIR = "recovery"
@@ -30,7 +38,7 @@ class StartupCoordinator(Protocol):
 class StartupDistributedRuntime(Protocol):
     """Narrow #14 startup seam used when distributed execution is enabled."""
 
-    async def reconcile(self) -> tuple[object, ...]: ...
+    async def reconcile(self) -> tuple[DispatchRecord, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,10 +68,13 @@ async def reconcile_single_node_startup(
     """Reconcile durable runtime state before an ordinary single-node serve.
 
     Distributed Worker state is reconciled first so liveness/reservation truth is
-    current before Run recovery. The durable Plan/Step coordinator then resumes
-    due waits/retries and reconciles active Step Runs through its canonical path.
-    Finally the kernel scans every Task stream, including Tasks without an active
-    Plan. The complete pass is safe to repeat.
+    current before Run recovery. If that pass proves that an existing distributed
+    dispatch for an active canonical Run is currently lost or cancellation-pending,
+    startup records an explicit orphaned blocker instead of asking the kernel to
+    redispatch a possibly accepted STARTING execution or aborting before a report can
+    be written. Once those blockers are resolved, the durable Plan/Step coordinator
+    resumes due waits/retries and the kernel scans every Task stream. The complete
+    pass is safe to repeat.
 
     A running Run whose execution backend can no longer be found is never guessed
     into a terminal state: it remains marked as requiring reconciliation and
@@ -75,16 +86,24 @@ async def reconcile_single_node_startup(
     report_path = root / STARTUP_RECOVERY_DIR / STARTUP_RECOVERY_REPORT
 
     distributed_jobs_reconciled = 0
+    distributed_blockers: tuple[RecoveryReport, ...] = ()
     if distributed_runtime is not None:
         distributed_records = await distributed_runtime.reconcile()
         distributed_jobs_reconciled = len(distributed_records)
+        distributed_blockers = await _distributed_recovery_blockers(kernel, distributed_records)
 
     plans_reconciled = 0
-    if coordinator is not None:
-        plan_projections = await coordinator.reconcile_all()
-        plans_reconciled = len(plan_projections)
+    if distributed_blockers:
+        # Do not enter coordinator/kernel recovery while an already-owned distributed execution
+        # is uncertain. In particular, a canonical STARTING Run may have been accepted remotely
+        # before the Control Plane crashed, so treating UNAVAILABLE as NOT_FOUND would duplicate it.
+        reports = distributed_blockers
+    else:
+        if coordinator is not None:
+            plan_projections = await coordinator.reconcile_all()
+            plans_reconciled = len(plan_projections)
+        reports = await kernel.recover_all()
 
-    reports = await kernel.recover_all()
     unresolved = tuple(
         entry.run_id
         for report in reports
@@ -127,6 +146,48 @@ async def reconcile_single_node_startup(
         ready_for_service=ready_for_service,
         plans_reconciled=plans_reconciled,
         distributed_jobs_reconciled=distributed_jobs_reconciled,
+    )
+
+
+async def _distributed_recovery_blockers(
+    kernel: PlatformKernel,
+    records: tuple[DispatchRecord, ...],
+) -> tuple[RecoveryReport, ...]:
+    """Return active canonical Runs whose persisted distributed ownership is uncertain."""
+
+    grouped: dict[str, list[RecoveryEntry]] = {}
+    for record in records:
+        if record.state not in {DispatchState.LOST, DispatchState.CANCEL_PENDING}:
+            continue
+        run_id = record.job.execution.run_id
+        task_id = record.job.execution.context.correlation_id
+        # The distributed runtime can also own jobs that are not canonical kernel Runs. Only a
+        # kernel-style Task correlation is eligible for the ordinary Run recovery gate.
+        if not task_id.startswith("task_"):
+            continue
+        try:
+            run = await kernel.get_run(task_id, run_id)
+        except ContractError as exc:
+            if exc.code is ErrorCode.NOT_FOUND:
+                continue
+            raise
+        if run.status not in {RunStatus.STARTING, RunStatus.RUNNING}:
+            continue
+        grouped.setdefault(task_id, []).append(
+            RecoveryEntry(
+                run_id=run_id,
+                before=run.status,
+                after=run.status,
+                disposition=RecoveryDisposition.ORPHANED_RECONCILIATION_REQUIRED,
+            )
+        )
+
+    return tuple(
+        RecoveryReport(
+            task_id=task_id,
+            entries=tuple(sorted(entries, key=lambda entry: entry.run_id)),
+        )
+        for task_id, entries in sorted(grouped.items())
     )
 
 
