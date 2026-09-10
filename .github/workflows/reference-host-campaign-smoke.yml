@@ -1,0 +1,75 @@
+name: Reference host campaign smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  reference-host-campaign-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install benchmark environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Validate campaign implementation
+        run: |
+          ruff format --check src/ai_multi_agent_platform/benchmarking/reference_host_campaign.py src/ai_multi_agent_platform/benchmarking/reference_host_campaign_cli.py tests/performance/test_issue_440_reference_host_campaign.py
+          ruff check src/ai_multi_agent_platform/benchmarking/reference_host_campaign.py src/ai_multi_agent_platform/benchmarking/reference_host_campaign_cli.py tests/performance/test_issue_440_reference_host_campaign.py
+          mypy src/ai_multi_agent_platform/benchmarking/reference_host_campaign.py src/ai_multi_agent_platform/benchmarking/reference_host_campaign_cli.py
+          pytest tests/performance/test_issue_440_reference_host_campaign.py
+      - name: Generate tiny reference-host campaign
+        run: |
+          platform-reference-host-campaign \
+            --profile smoke \
+            --host-label ci-reference \
+            --platform-commit "$GITHUB_SHA" \
+            --work-dir "$RUNNER_TEMP/reference-host-campaign-work" \
+            --output-dir artifacts/benchmarks/pr-reference-host-campaign
+      - name: Validate machine-readable campaign evidence
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          from jsonschema import Draft202012Validator
+
+          root = Path("artifacts/benchmarks/pr-reference-host-campaign")
+          campaign = json.loads((root / "campaign.json").read_text(encoding="utf-8"))
+          envelope = json.loads((root / "operating-envelope.json").read_text(encoding="utf-8"))
+          campaign_schema = json.loads(
+              Path("docs/schemas/benchmark-reference-host-campaign.v1.schema.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          envelope_schema = json.loads(
+              Path("docs/schemas/benchmark-operating-envelope.v1.schema.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          Draft202012Validator(campaign_schema).validate(campaign)
+          Draft202012Validator(envelope_schema).validate(envelope)
+          assert campaign["profile"] == "smoke"
+          assert campaign["platform_commit"] == "${GITHUB_SHA}" or campaign["platform_commit"]
+          for field in ("sweep_summary", "soak_report", "operating_envelope"):
+              evidence = campaign[field]
+              artifact = root / evidence["path"]
+              assert hashlib.sha256(artifact.read_bytes()).hexdigest() == evidence["sha256"]
+          assert campaign["environment_fingerprint_sha256"] == envelope[
+              "environment_fingerprint_sha256"
+          ]
+          PY
+      - name: Upload reference-host campaign evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-reference-host-campaign
+          path: artifacts/benchmarks/pr-reference-host-campaign
+          if-no-files-found: ignore
