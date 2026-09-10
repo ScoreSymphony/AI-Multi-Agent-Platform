@@ -33,6 +33,12 @@ def _nonblank_tuple(values: tuple[str, ...], field_name: str) -> tuple[str, ...]
     return tuple(values)
 
 
+def _command_tokens(values: tuple[str, ...]) -> tuple[str, ...]:
+    if any(not value.strip() for value in values):
+        raise ValueError("command must not contain blank values")
+    return tuple(values)
+
+
 class ReleaseChannel(StrEnum):
     STABLE = "stable"
     BETA = "beta"
@@ -122,7 +128,7 @@ class BuildSpecification:
             raise ValueError("build specification revision must be at least 1")
         if not self.command and self.workflow_ref is None:
             raise ValueError("build specification requires command or workflow_ref")
-        object.__setattr__(self, "command", _nonblank_tuple(self.command, "command"))
+        object.__setattr__(self, "command", _command_tokens(self.command))
         if not self.targets:
             raise ValueError("build specification requires at least one target")
         target_ids = [target.target_id for target in self.targets]
