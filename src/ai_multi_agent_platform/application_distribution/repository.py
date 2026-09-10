@@ -177,16 +177,12 @@ def _encode(value: Any) -> JsonValue:
         encoded: dict[str, JsonValue] = {}
         for key, item in value.items():
             if not isinstance(key, str):
-                raise TypeError(
-                    "application release persistence requires string mapping keys"
-                )
+                raise TypeError("application release persistence requires string mapping keys")
             encoded[key] = _encode(item)
         return encoded
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
         return [_encode(item) for item in value]
-    raise TypeError(
-        f"unsupported application release persistence value: {type(value).__name__}"
-    )
+    raise TypeError(f"unsupported application release persistence value: {type(value).__name__}")
 
 
 def _release(value: JsonValue) -> ApplicationRelease:
@@ -209,12 +205,8 @@ def _release(value: JsonValue) -> ApplicationRelease:
         creator_ref=_required_string(data, "creator_ref"),
         release_id=_required_string(data, "release_id"),
         status=ReleaseStatus(_required_string(data, "status")),
-        targets=tuple(
-            _build_target_state(item) for item in _required_array(data, "targets")
-        ),
-        artifacts=tuple(
-            _application_artifact(item) for item in _required_array(data, "artifacts")
-        ),
+        targets=tuple(_build_target_state(item) for item in _required_array(data, "targets")),
+        artifacts=tuple(_application_artifact(item) for item in _required_array(data, "artifacts")),
         gates=tuple(_gate_evidence(item) for item in _required_array(data, "gates")),
         release_notes=_optional_string(data, "release_notes"),
         publisher_id=_optional_string(data, "publisher_id"),
