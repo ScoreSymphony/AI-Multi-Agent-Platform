@@ -28,8 +28,7 @@ class DistributedBuildTargetMatcher:
                 continue
             if node.os_name != target.os_name or node.architecture != target.architecture:
                 continue
-            available_capabilities = set(worker.capability_refs) | set(node.capability_refs)
-            if required_capabilities - available_capabilities:
+            if required_capabilities - set(worker.capability_refs):
                 continue
             return True
         return False
