@@ -147,7 +147,7 @@ catalogs/technical-components/
 
 `catalog.json` is the primary catalog and `catalog.fragment.*.json` files are additive reviewed fragments loaded deterministically in filename order by the existing `FilesystemRegistryProvider`. Provider mismatches, unsupported catalog schema versions and duplicate item/version identities fail closed. Artifact paths remain confined to the catalog root.
 
-As of the 2026-09-10 #638 closeout pass, the loaded technical catalog contains **at least 78 reviewed records** across the canonical technical taxonomy. The exact reviewed inventory and promotion history are maintained in `catalogs/technical-components/CURATION_QUEUE.md` rather than duplicated as a second manually synchronized catalog list in this document.
+As of the 2026-09-10 #638 closeout pass, the loaded technical catalog contains **at least 78 reviewed records** across the canonical technical taxonomy. The exact loaded inventory is defined by `catalog.json` together with all loaded `catalog.fragment.*.json` files. `CURATION_QUEUE.md` records promotion history, review outcomes and unresolved research leads; it is not the authoritative item-by-item inventory.
 
 The reviewed inventory includes the architecture-derived Code Intelligence seed (`ProjectAtlas`, `Graphify`, `CodeGraph`, `Understand Anything`), the wider agent/framework/specification/memory/evaluation/execution/inference/retrieval groups, and the reviewed ScoreSymphony/domain ML candidates. Restricted, archived or policy-incompatible projects are represented as explicit `reference` or `deferred` records rather than silently promoted as active installs.
 
@@ -170,7 +170,7 @@ Research leads that do not yet have a sufficiently unambiguous current identity,
 catalogs/technical-components/CURATION_QUEUE.md
 ```
 
-The queue is deliberately not loadable by `FilesystemRegistryProvider`. It prevents two common catalog failures:
+The queue is deliberately not loadable by `FilesystemRegistryProvider`. It records curation history and unresolved leads while preventing two common catalog failures:
 
 1. guessing metadata merely to make cards look complete;
 2. presenting an unreviewed upstream as if it were trusted or installable.
