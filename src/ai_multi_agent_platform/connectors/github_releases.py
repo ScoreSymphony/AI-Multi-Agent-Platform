@@ -865,13 +865,7 @@ def _sha256(value: str) -> str:
 
 
 def _asset_name(value: str) -> str:
-    if (
-        value in {".", ".."}
-        or "/" in value
-        or "\\" in value
-        or "\n" in value
-        or "\r" in value
-    ):
+    if value in {".", ".."} or "/" in value or "\\" in value or "\n" in value or "\r" in value:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             "GitHub release asset filename must be a single safe path segment",
