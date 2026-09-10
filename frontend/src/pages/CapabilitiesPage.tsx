@@ -5,6 +5,8 @@ import type {
   CanonicalCapabilityVersion,
 } from "../api/capabilities";
 import { ControlPlaneClient, prettyJson } from "../api/client";
+import type { CanonicalCapabilityAssignment } from "../api/configuration";
+import { useConfigurationSession } from "../api/configurationSession";
 import type { Page } from "../api/types";
 import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
@@ -16,6 +18,7 @@ import {
   LoadingState,
   StatusBadge,
 } from "../components/States";
+import { CapabilityAssignmentConfigurationPage } from "./SingleNodeConfigurationPage";
 
 const CAPABILITY_QUERY_KEY = "capabilities:id:asc";
 const PROVIDER_QUERY_KEY = "capability-providers:id:asc";
@@ -23,10 +26,14 @@ const PROVIDER_QUERY_KEY = "capability-providers:id:asc";
 export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
   const [capabilities, setCapabilities] = useState<Page<CanonicalCapability> | null>(null);
   const [providers, setProviders] = useState<Page<CanonicalCapabilityProvider> | null>(null);
+  const [assignments, setAssignments] = useState<CanonicalCapabilityAssignment[] | null>(null);
   const [capabilityError, setCapabilityError] = useState<unknown>(null);
   const [providerError, setProviderError] = useState<unknown>(null);
+  const [assignmentError, setAssignmentError] = useState<unknown>(null);
+  const [creatingAssignment, setCreatingAssignment] = useState(false);
   const capabilityPagination = useCursorPagination(CAPABILITY_QUERY_KEY);
   const providerPagination = useCursorPagination(PROVIDER_QUERY_KEY);
+  const { configuration } = useConfigurationSession(client);
 
   const loadCapabilities = useCallback(async () => {
     try {
@@ -60,6 +67,15 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
     }
   }, [client, providerPagination.cursor]);
 
+  const loadAssignments = useCallback(async () => {
+    try {
+      setAssignments((await configuration.listCapabilityAssignments({ limit: 100 })).items);
+      setAssignmentError(null);
+    } catch (error) {
+      setAssignmentError(error);
+    }
+  }, [configuration]);
+
   useEffect(() => {
     void loadCapabilities();
   }, [loadCapabilities]);
@@ -67,6 +83,19 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
   useEffect(() => {
     void loadProviders();
   }, [loadProviders]);
+
+  useEffect(() => {
+    void loadAssignments();
+  }, [loadAssignments]);
+
+  if (creatingAssignment) {
+    return (
+      <div className="stack">
+        <div className="actions"><button type="button" onClick={() => setCreatingAssignment(false)}>Back to Tools</button></div>
+        <CapabilityAssignmentConfigurationPage core={client} configuration={configuration} />
+      </div>
+    );
+  }
 
   if (!capabilities && !providers && !capabilityError && !providerError) return <LoadingState />;
 
@@ -77,13 +106,17 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
 
   return (
     <div className="stack">
-      <header className="page-header">
-        <p className="eyebrow">Capability Registry</p>
-        <h1>Tools & capabilities</h1>
-        <p>
-          Backend-neutral capability definitions and public provider descriptors. Invocation remains
-          governed by the canonical capability/authorization pipeline and is not duplicated here.
-        </p>
+      <header className="page-header detail-header">
+        <div>
+          <p className="eyebrow">Capability Registry</p>
+          <h1>Tools & capabilities</h1>
+          <p>
+            Backend-neutral capability definitions, public provider descriptors and reusable
+            single-node assignment policy. Invocation remains governed by the canonical
+            capability/authorization pipeline.
+          </p>
+        </div>
+        <button className="primary" type="button" onClick={() => setCreatingAssignment(true)}>Create capability assignment</button>
       </header>
 
       <div className="metrics">
@@ -92,6 +125,29 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
         <Metric label="Providers" value={providers?.total ?? "—"} />
         <Metric label="Healthy on page" value={healthyProvidersOnPage} />
       </div>
+
+      <Card title="Capability Assignments">
+        <p>Canonical required/allowed/denied policy targeting an Agent, Agent Team or Project.</p>
+        {assignmentError ? <ErrorState error={assignmentError} onRetry={() => void loadAssignments()} /> : null}
+        {assignments === null && !assignmentError ? <LoadingState /> : null}
+        {assignments?.length ? (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Assignment</th><th>Target</th><th>Revision</th><th>Required</th><th>Allowed</th><th>Denied</th></tr></thead>
+              <tbody>{assignments.map((assignment) => (
+                <tr key={assignment.id}>
+                  <td><AppLink href={`/capability-assignments/${encodeURIComponent(assignment.id)}`}>{assignment.id}</AppLink></td>
+                  <td>{assignment.revision.content.target.subject_type}:{assignment.revision.content.target.subject_id}</td>
+                  <td>{assignment.current_revision}</td>
+                  <td>{assignment.revision.content.required.length}</td>
+                  <td>{assignment.revision.content.allowed.length}</td>
+                  <td>{assignment.revision.content.denied.length}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : assignments ? <EmptyState title="No Capability Assignments" /> : null}
+      </Card>
 
       <Card title="Canonical capabilities">
         {capabilityError ? (
