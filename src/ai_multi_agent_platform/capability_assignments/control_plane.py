@@ -187,7 +187,8 @@ def _owner_ref(value: JsonValue | None, context: RequestContext) -> OwnerRef:
         if context.actor.owner_type is None or context.actor.owner_id is None:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
-                "capability assignment creation requires an authenticated owner context or owner_ref",
+                "capability assignment creation requires an authenticated owner "
+                "context or owner_ref",
             )
         return OwnerRef(type=context.actor.owner_type, id=context.actor.owner_id)
 
