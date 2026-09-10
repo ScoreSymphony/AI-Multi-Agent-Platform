@@ -2,7 +2,7 @@
 
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 
-from .kernel import PlatformKernel
+from .kernel import PlatformKernel as _BasePlatformKernel
 from .models import (
     TERMINAL_RUN_STATUSES,
     RecoveryDisposition,
@@ -11,6 +11,7 @@ from .models import (
     RunState,
     TaskState,
 )
+from .output_observer import OutputAttachmentObserver, OutputObservingPlatformKernel
 from .repository import (
     CommandRecord,
     CommitResult,
@@ -25,6 +26,11 @@ from .sqlite_repository import SqliteKernelRepository
 from .state import reduce_run, reduce_task
 from .task_mutations import TaskMutationBoundary
 
+# Keep the long-standing public `PlatformKernel` name while adding the provider-neutral
+# post-commit output observer seam. The base implementation remains available only as the
+# implementation detail inherited by OutputObservingPlatformKernel.
+PlatformKernel = OutputObservingPlatformKernel
+
 __all__ = [
     "CommandRecord",
     "CommitResult",
@@ -32,6 +38,8 @@ __all__ = [
     "EventSourcedRunRepository",
     "EventSourcedTaskRepository",
     "InMemoryKernelRepository",
+    "OutputAttachmentObserver",
+    "OutputObservingPlatformKernel",
     "PlatformKernel",
     "RecoveryDisposition",
     "RecoveryEntry",
