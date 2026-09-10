@@ -81,17 +81,19 @@ The following names completed source/license/project-status review and are loade
 - CLaMP 3 — `sanderwood/clamp3`, MIT, non-archived.
 - MERT — `yizhilll/MERT`, Apache-2.0, non-archived.
 
-Promotion still means discovery/evaluation only. All active additions remain `manual`, `untrusted`, `candidate`, and `evaluation:required`; no third-party executable code is bundled. Facts not established by review remain explicit `unknown` values.
+Promotion still means discovery/evaluation only. All active additions in this batch remain `manual`, `untrusted`, `candidate`, and `evaluation:required`; no third-party executable code is bundled. Facts not established by review remain explicit `unknown` values.
 
-## Reviewed but requires restricted/reference semantics
+### 2026-09-10 restricted/reference classifications
 
-These entries have enough evidence to classify, but must not be presented as ordinary free/open active candidates:
+The following architecture-derived names are also loaded, but their cards intentionally do **not** present them as ordinary free/open active candidates:
 
-- Copilot CLI — `github/copilot-cli`, non-archived, governed by the custom GitHub Copilot CLI license rather than an open-source license. The license permits install/run and limited unmodified redistribution but does not grant a general modification/derivative-work right. GitHub service access/cost is a separate requirement. Promote only with explicit restricted-license and cost-policy metadata, likely `deferred` or `reference` under the project's cost policy.
-- Claude Code — `anthropics/claude-code`, non-archived, but its repository license states all rights reserved and use is subject to Anthropic commercial terms. It must not be represented as open source or cost-compatible; any listing should be `reference`/`deferred` unless project governance changes.
-- Multica — `multica-ai/multica`, non-archived, but its "Multica License" is Apache-2.0 plus additional hosted-service, branding and attribution restrictions. It must use explicit modified-license metadata rather than plain `Apache-2.0`.
-- GSD — canonical `gsd-build/get-shit-done`, MIT, but GitHub reports the repository archived. Preserve only as an explicit archived `reference` unless governance selects a documented successor rather than silently substituting a fork.
-- MuSViT — `OMR-PRAIG-UA-ES/MuSViT`, non-archived, but the project README licenses the work under CC BY-NC-SA 4.0 and requires GPU-backed experiment paths. It should be `reference`/`deferred` for commercial/general platform adoption unless that non-commercial restriction is acceptable for the intended domain use.
+- Copilot CLI — `github/copilot-cli`, non-archived. The custom GitHub Copilot CLI License permits install/run and limited redistribution of unmodified copies but explicitly withholds modification and derivative-work rights. Copilot CLI is available on GitHub's limited Free tier as well as paid tiers, so the card is `deferred`, `evaluation:not-required`, `cost:conditional`, and `network:required`; authenticated GitHub/Copilot entitlement remains required.
+- Claude Code — `anthropics/claude-code`, non-archived. The repository license states all rights reserved and subjects use to Anthropic's Commercial Terms of Service. Current official consumer guidance requires a paid Pro or Max plan for Claude Code access. The card is `deferred`, `evaluation:not-required`, `cost:incompatible`, and explicitly records the Anthropic provider/commercial-terms dependency rather than presenting Claude Code as an open-source candidate.
+- Multica — `multica-ai/multica`, non-archived. The complete Multica License incorporates Apache-2.0 but adds hosted/embedded-service restrictions, branding conditions and attribution requirements. Internal use within one organization is expressly permitted without a commercial license. Multica therefore remains a `candidate` for self-hosted evaluation, but with `cost:conditional` and explicit modified-license tags rather than plain `Apache-2.0` metadata.
+- GSD — `gsd-build/get-shit-done`, MIT, but GitHub reports the canonical repository archived. It is loaded only as a deprecated `reference` with `evaluation:not-required`; no fork is silently substituted.
+- MuSViT — `OMR-PRAIG-UA-ES/MuSViT`, non-archived. The official ECCV 2026 repository states CC BY-NC-SA 4.0 and documents GPU-backed experiment paths plus Hugging Face and Weights & Biases authentication. The card is `deferred` for general platform adoption, with the non-commercial/share-alike restriction and GPU/provider requirements explicit.
+
+These classifications are reference/discovery metadata only. They do not vendor, install, execute or imply adoption of any third-party component.
 
 ## Reviewed identity, but dependency/license model still needs one more pass
 
