@@ -79,7 +79,15 @@ class FileProvider(CoreFileProvider):
 
 
 class MemoryProvider(CoreMemoryProvider):
-    """Explicitly scoped memory contract; never canonical task/run history."""
+    """Canonical scoped-memory contract; never canonical task/run history.
+
+    Providers and adapters must preserve every canonical ``MemoryEntry`` dimension,
+    including ``memory_type``, independently from scope, origin, retention, provenance,
+    classification, and provider-native taxonomy. ``MemoryQuery.memory_types`` has the
+    same filtering semantics for ordinary query and text search. Backend-native type
+    identifiers, tags, vector collections, or embedding metadata remain private adapter
+    details and must never replace or collapse the canonical Memory Type value.
+    """
 
     @abstractmethod
     async def write_entry(self, entry: MemoryEntry, context: DataAccessContext) -> MemoryEntry: ...
