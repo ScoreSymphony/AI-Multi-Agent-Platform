@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
-from ai_multi_agent_platform.security import ActorIdentity
+from ai_multi_agent_platform.security import ActorIdentity, redact_sensitive
 
 from .models import ApplicationRelease, BuildSpecification, BuildTarget, ReleaseVisibility
 
@@ -53,10 +54,15 @@ class PublishContext:
     actor: ActorIdentity
     operation: OperationContext
     approval_id: str | None = None
-    configuration: dict[str, JsonValue] = field(default_factory=dict)
+    configuration: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "configuration", MappingProxyType(dict(self.configuration)))
+        configuration = dict(self.configuration)
+        if redact_sensitive(configuration) != configuration:
+            raise ValueError(
+                "publisher configuration must contain references only, not embedded credentials"
+            )
+        object.__setattr__(self, "configuration", MappingProxyType(configuration))
 
 
 @dataclass(frozen=True, slots=True)
