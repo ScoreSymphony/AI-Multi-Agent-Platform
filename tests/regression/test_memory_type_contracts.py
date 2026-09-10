@@ -201,9 +201,7 @@ def test_supersession_preserves_source_type_and_uses_replacement_type(tmp_path: 
     assert linked.memory_type is MemoryType.REFLECTIVE
     assert linked.supersedes_memory_id == original.memory_id
     assert linked.provenance == (SourceRef(kind="memory", ref=original.memory_id),)
-    visible = asyncio.run(
-        provider.query_entries(MemoryQuery(MemoryScope.USER, "user-a"), context)
-    )
+    visible = asyncio.run(provider.query_entries(MemoryQuery(MemoryScope.USER, "user-a"), context))
     assert [entry.memory_id for entry in visible] == [linked.memory_id]
     complete = asyncio.run(
         provider.query_entries(
