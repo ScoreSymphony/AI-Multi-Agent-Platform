@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from uuid import NAMESPACE_URL, uuid5
+
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, json_object
-from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.security import ActorIdentity, ActorType, infer_actor_identity
 
 from .contracts import PublishContext
@@ -92,7 +93,10 @@ class ApplicationReleaseCommandHandlers:
             workspace_id=_required_string(payload, "workspace_id"),
             workspace_snapshot_id=_optional_string(payload, "workspace_snapshot_id"),
             source_revision=_required_string(payload, "source_revision"),
-            build_specification=_build_spec(payload.get("build_specification")),
+            build_specification=_build_spec(
+                payload.get("build_specification"),
+                default_spec_id=_default_build_spec_id(context),
+            ),
             creator_ref=context.actor.principal_ref,
             release_notes=_optional_string(payload, "release_notes"),
             previous_release_id=_optional_string(payload, "previous_release_id"),
@@ -206,7 +210,20 @@ def _actor(context: RequestContext) -> ActorIdentity:
         ) from exc
 
 
-def _build_spec(value: JsonValue | None) -> BuildSpecification:
+def _default_build_spec_id(context: RequestContext) -> str:
+    operation_key = context.idempotency_key or context.request_id
+    value = uuid5(
+        NAMESPACE_URL,
+        f"ai-multi-agent-platform:application-release:build-spec:{operation_key}",
+    )
+    return f"build_spec_{value}"
+
+
+def _build_spec(
+    value: JsonValue | None,
+    *,
+    default_spec_id: str,
+) -> BuildSpecification:
     if not isinstance(value, dict):
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
@@ -232,9 +249,7 @@ def _build_spec(value: JsonValue | None) -> BuildSpecification:
                     target_id=_required_string(raw, "target_id"),
                     os_name=_required_string(raw, "os_name"),
                     architecture=_required_string(raw, "architecture"),
-                    package_type=PackageType(
-                        _required_string(raw, "package_type")
-                    ),
+                    package_type=PackageType(_required_string(raw, "package_type")),
                     output_path=_required_string(raw, "output_path"),
                     required_capabilities=_string_tuple(
                         raw.get("required_capabilities"),
@@ -251,7 +266,7 @@ def _build_spec(value: JsonValue | None) -> BuildSpecification:
         return BuildSpecification(
             command=command,
             targets=tuple(targets),
-            spec_id=_optional_string(value, "spec_id") or new_id("build_spec"),
+            spec_id=_optional_string(value, "spec_id") or default_spec_id,
             revision=_positive_int(value.get("revision", 1), "revision"),
             source_path=_optional_string(value, "source_path"),
             workflow_ref=_optional_string(value, "workflow_ref"),
