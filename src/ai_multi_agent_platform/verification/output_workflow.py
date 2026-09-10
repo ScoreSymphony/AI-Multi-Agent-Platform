@@ -14,7 +14,7 @@ from typing import Literal
 
 from ai_multi_agent_platform.agents import AgentRunRecord, AgentRuntime
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, PlatformEvent
-from ai_multi_agent_platform.domain import TaskStatus, validate_id
+from ai_multi_agent_platform.domain import RunStatus, TaskStatus, validate_id
 from ai_multi_agent_platform.kernel import OutputAttachmentObserver, PlatformKernel
 from ai_multi_agent_platform.kernel.models import TaskState
 
@@ -38,11 +38,13 @@ from .models import (
     VerificationSubject,
     VerifierKind,
 )
+from .repair import VERIFICATION_REPAIR_SOURCE
 
 _OutputType = Literal["result", "artifact"]
 _SOURCE = "automatic-reviewer-output-workflow"
 _AUTOMATIC_REVIEW_METADATA_KEY = "automatic_reviewer"
 _ALLOWED_OUTPUT_TYPES = frozenset({"result", "artifact"})
+_ACTIVE_RUN_STATUSES = frozenset({RunStatus.QUEUED, RunStatus.STARTING, RunStatus.RUNNING})
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,10 +281,14 @@ class AutomaticReviewerOutputCoordinator:
 
         decision = self._completion.assess_task_completion(task_id)
         task = await self._kernel.get_task(task_id)
-        # Artifact output may be attached while the producer Run is still active. In that case
-        # normal Run terminalization will consult the same canonical completion authority later.
-        # Only an already verification-blocked Task is completed directly by this observer.
-        if decision.state is CompletionState.ACCEPTED and task.status is TaskStatus.WAITING:
+        # Artifact output may be attached while a producer Run is still active. Likewise, a repair
+        # temporarily resumes a verification-blocked Task to RUNNING before its Step finishes. Only
+        # release accepted completion once every canonical Run is terminal.
+        if (
+            decision.state is CompletionState.ACCEPTED
+            and task.status in {TaskStatus.WAITING, TaskStatus.RUNNING}
+            and not await self._has_active_runs(task)
+        ):
             task = await self._kernel.complete_task(
                 idempotency_key=(
                     f"automatic-review-complete:{task_id}:{subject.subject_type}:"
@@ -297,6 +303,13 @@ class AutomaticReviewerOutputCoordinator:
             subject=subject,
             reviews=tuple(reviews),
         )
+
+    async def _has_active_runs(self, task: TaskState) -> bool:
+        for run_id in task.run_ids:
+            run = await self._kernel.get_run(task.task_id, run_id)
+            if run.status in _ACTIVE_RUN_STATUSES:
+                return True
+        return False
 
     async def _no_review(self, task_id: str) -> AutomaticOutputReviewResult:
         return AutomaticOutputReviewResult(
@@ -367,6 +380,13 @@ class AutomaticReviewerOutputObserver(OutputAttachmentObserver):
         self._options = options
 
     async def output_attached(self, event: PlatformEvent) -> None:
+        # Automatic repair attaches the new canonical Result before the workflow creates its
+        # lineage-preserving reverification request. Re-entering the general observer here would
+        # create a second unrelated Verification with repair_attempt=0 and could release the Task
+        # against the wrong lineage. The repair workflow therefore owns this one internal event.
+        if event.provenance is not None and event.provenance.source == VERIFICATION_REPAIR_SOURCE:
+            return
+
         if event.event_type == "result.attached":
             subject_type: _OutputType = "result"
             payload_key = "result_id"
