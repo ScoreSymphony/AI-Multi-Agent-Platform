@@ -18,7 +18,13 @@ class GitHubReleasePublisher:
 
     provider_id = "github-releases"
 
-    def __init__(self, connectors: ConnectorService, *, connection_id: str, repository_ref: str) -> None:
+    def __init__(
+        self,
+        connectors: ConnectorService,
+        *,
+        connection_id: str,
+        repository_ref: str,
+    ) -> None:
         self._connectors = connectors
         self._connection_id = connection_id
         self._repository_ref = repository_ref
@@ -38,7 +44,11 @@ class GitHubReleasePublisher:
             "visibility": release.visibility.value,
             "artifact_count": len(release.artifacts),
             "manifest": manifest,
-            "side_effects": ["create_or_resolve_tag", "create_release", "attach_assets"],
+            "side_effects": [
+                "create_or_resolve_tag",
+                "create_release",
+                "attach_assets",
+            ],
         }
 
     async def publish(
@@ -57,6 +67,7 @@ class GitHubReleasePublisher:
                 "channel": release.channel.value,
                 "visibility": release.visibility.value,
                 "source_revision": release.source_revision,
+                "workspace_snapshot_id": release.workspace_snapshot_id,
                 "release_notes": release.release_notes,
                 "manifest": manifest,
                 "fail_if_tag_points_elsewhere": True,
@@ -86,7 +97,9 @@ class GitHubReleasePublisher:
                     "media_type": artifact.media_type,
                     "fail_if_asset_differs": True,
                 },
-                invocation_id=f"application-release:{release.release_id}:asset:{artifact.artifact_id}",
+                invocation_id=(
+                    f"application-release:{release.release_id}:asset:{artifact.artifact_id}"
+                ),
                 actor=context.actor,
                 context=context.operation,
                 approval_id=context.approval_id,
@@ -116,7 +129,10 @@ class GitHubReleasePublisher:
 
 def _object(value: JsonValue, label: str) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
-        raise ContractError(ErrorCode.INVALID_PROVIDER_RESPONSE, f"{label} returned no object")
+        raise ContractError(
+            ErrorCode.INVALID_PROVIDER_RESPONSE,
+            f"{label} returned no object",
+        )
     return value
 
 
