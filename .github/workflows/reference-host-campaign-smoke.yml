@@ -37,6 +37,7 @@ jobs:
           python - <<'PY'
           import hashlib
           import json
+          import os
           from pathlib import Path
 
           from jsonschema import Draft202012Validator
@@ -57,7 +58,7 @@ jobs:
           Draft202012Validator(campaign_schema).validate(campaign)
           Draft202012Validator(envelope_schema).validate(envelope)
           assert campaign["profile"] == "smoke"
-          assert campaign["platform_commit"] == "${GITHUB_SHA}" or campaign["platform_commit"]
+          assert campaign["platform_commit"] == os.environ["GITHUB_SHA"]
           for field in ("sweep_summary", "soak_report", "operating_envelope"):
               evidence = campaign[field]
               artifact = root / evidence["path"]
