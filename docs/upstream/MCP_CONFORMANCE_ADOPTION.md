@@ -95,7 +95,7 @@
 
 ### Decision rationale
 
-The suite is authoritative enough to provide the wire-level protocol evidence missing from the platform's existing MCP integration tests, but it must not become runtime authority. Stable production claims use an exact stable suite pin. The `2026-07-28` track is intentionally informational and unclaimed while the platform adapter does not yet prove the stateless protocol semantics required by that revision.
+The suite is authoritative enough to provide the wire-level protocol evidence missing from the platform's existing MCP integration tests, but it must not become runtime authority. Stable production claims use an exact stable suite pin. The `2026-07-28` stateless behavior is implemented through a separate opt-in `MCPClient` adapter and is exercised against the exact prerelease suite, but the profile remains informational/unclaimed until the official conformance line is stable enough to promote deliberately. This keeps implementation readiness separate from a production compatibility claim.
 
 ### Required follow-up before merge
 
