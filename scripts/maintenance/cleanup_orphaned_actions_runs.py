@@ -11,7 +11,6 @@ Examples:
     python scripts/maintenance/cleanup_orphaned_actions_runs.py --execute
     python scripts/maintenance/cleanup_orphaned_actions_runs.py --execute --max-delete 4000
 """
-
 from __future__ import annotations
 
 import argparse
@@ -146,9 +145,7 @@ def active_workflow_paths(repo: str, ref: str) -> set[str]:
     )
     paths = {line.strip() for line in result.stdout.splitlines() if line.strip()}
     if not paths:
-        raise SystemExit(
-            f"No workflow files found under {WORKFLOW_DIR} at {repo}@{ref}"
-        )
+        raise SystemExit(f"No workflow files found under {WORKFLOW_DIR} at {repo}@{ref}")
     return paths
 
 
@@ -162,8 +159,7 @@ def fetch_workflow_runs(repo: str) -> list[WorkflowRun]:
         "--paginate",
         f"/repos/{repo}/actions/runs?per_page=100",
         "--jq",
-        ".workflow_runs[] | [.id, .path, .status, (.conclusion // \"\"), "
-        ".created_at, .name] | @tsv",
+        '.workflow_runs[] | [.id, .path, .status, (.conclusion // ""), .created_at, .name] | @tsv',
     )
     runs: list[WorkflowRun] = []
     for line in result.stdout.splitlines():
@@ -221,16 +217,11 @@ def print_plan(
     print(f"Orphaned workflow paths with completed runs: {len(grouped)}")
     print(f"Completed orphaned runs eligible for deletion: {total}")
     if skipped_non_completed:
-        print(
-            "Orphaned runs skipped because they are not completed: "
-            f"{skipped_non_completed}"
-        )
+        print(f"Orphaned runs skipped because they are not completed: {skipped_non_completed}")
     if max_delete is not None:
         print(f"Deletion budget for this invocation: {max_delete}")
     print()
-    for path, runs in sorted(
-        grouped.items(), key=lambda item: (len(item[1]), item[0])
-    ):
+    for path, runs in sorted(grouped.items(), key=lambda item: (len(item[1]), item[0])):
         newest = max(run.created_at for run in runs)
         oldest = min(run.created_at for run in runs)
         names = sorted({run.name for run in runs})
@@ -268,9 +259,7 @@ def execute_cleanup(
     max_delete: int | None,
 ) -> int:
     deleted = 0
-    for path, runs in sorted(
-        grouped.items(), key=lambda item: (len(item[1]), item[0])
-    ):
+    for path, runs in sorted(grouped.items(), key=lambda item: (len(item[1]), item[0])):
         if max_delete is not None:
             remaining = max_delete - deleted
             if remaining <= 0:
@@ -320,9 +309,7 @@ def main() -> int:
     print()
     print(f"Deleted {deleted} workflow runs.")
     if deleted < sum(len(runs) for runs in grouped.values()):
-        print(
-            "Some orphaned workflow histories remain; run the command again to continue."
-        )
+        print("Some orphaned workflow histories remain; run the command again to continue.")
     return 0
 
 
