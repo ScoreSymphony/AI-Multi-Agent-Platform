@@ -1,6 +1,6 @@
 """Application packaging and provider-neutral release distribution."""
 
-from .build_provenance import ApplicationBuildLifecycleBackend
+from .build_provenance import ApplicationBuildLifecycleBackend, ApplicationCommandExecutor
 from .contracts import (
     ApplicationReleasePublisher,
     ApplicationReleaseRepository,
@@ -9,7 +9,7 @@ from .contracts import (
     PublishContext,
     PublishedArtifact,
 )
-from .execution import APPLICATION_BUILD_ACTION, ApplicationCommandExecutor
+from .execution import APPLICATION_BUILD_ACTION
 from .gate_provenance import ApplicationReleaseGateCoordinator
 from .gates import (
     DeterministicGateCheck,
