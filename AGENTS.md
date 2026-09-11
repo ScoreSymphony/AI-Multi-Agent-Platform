@@ -10,6 +10,7 @@ All contributors and coding agents must treat the following documents as authori
 
 - [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md) — product identity, canonical workflow, deployment/cost goals and replaceable architecture layers.
 - [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md) — non-negotiable architecture principles and explicit invariants.
+- [`docs/PACKAGE_BOUNDARIES.md`](docs/PACKAGE_BOUNDARIES.md) and [`docs/PACKAGE_BOUNDARIES.toml`](docs/PACKAGE_BOUNDARIES.toml) — top-level Python package ownership, migration disposition and the machine-checked root namespace inventory.
 - [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) — dependency-driven execution order, parallel work lanes and convergence gates.
 - [`docs/adr/README.md`](docs/adr/README.md) — process for recording material architecture decisions.
 
@@ -33,6 +34,7 @@ Implementation work must not silently contradict the normative documents. If a m
 14. Preserve both single-agent and multi-agent workloads behind the same canonical task/run model.
 15. Treat single-node operation as a valid production topology and multi-node operation as an extension of the same contracts.
 16. Treat security, approvals, traceability, observability and recovery as cross-cutting platform requirements.
+17. Extend an existing top-level package owner by default. A new package directly below `ai_multi_agent_platform` requires an explicit ownership rationale in `docs/PACKAGE_BOUNDARIES.toml` and must satisfy the criteria in `docs/PACKAGE_BOUNDARIES.md`; issue-, provider- and one-feature-only root packages are not an acceptable default.
 
 ## Issue dependency and execution rules
 
@@ -75,9 +77,22 @@ Implementation status is intentionally not duplicated in this file because it ch
 
 Always re-check the roadmap, the target milestone and the target issue immediately before assigning work. Newly merged changes can move the execution frontier without any change in issue numbering.
 
+## Top-level Python package ownership
+
+`docs/PACKAGE_BOUNDARIES.toml` is the checked inventory for every importable package directly below `src/ai_multi_agent_platform/`. Its `owner`, `kind`, `disposition` and `responsibility` fields must remain aligned with `docs/PACKAGE_BOUNDARIES.md`.
+
+When adding functionality:
+
+- prefer a module or subpackage below the existing canonical owner;
+- do not create a new root package merely because a feature has a separate issue or service class;
+- do not add unrelated behavior to a package marked `migration` or `compatibility`;
+- keep operations, quality and integration packages from becoming accidental canonical state owners;
+- when decomposing oversized modules under #723 or successor work, remain inside the current owner unless an explicit package-boundary decision changes ownership;
+- update the package inventory in the same change when a root package is added, removed or its ownership/disposition changes.
+
 ## Source layout direction
 
-- `src/ai_multi_agent_platform/` — platform-owned runtime, domain, adapter and Worker code
+- `src/ai_multi_agent_platform/` — platform-owned runtime, domain, adapter and Worker code; root package ownership is governed by `docs/PACKAGE_BOUNDARIES.md`
 - `frontend/` — web frontend
 - `docs/` — authoritative architecture/product documentation
 - `tests/` — unit, contract, integration and end-to-end tests
