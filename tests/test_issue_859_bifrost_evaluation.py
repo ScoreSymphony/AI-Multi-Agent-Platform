@@ -147,7 +147,11 @@ def test_gateway_benchmark_records_canonical_error_category_without_secret_messa
 
     assert report.targets["bifrost"].canonical_error_counts == {"unavailable": 2}
     assert report.targets["bifrost"].throughput_operations_per_second == 0.0
+    assert report.targets["bifrost"].latency.count == 0
     assert report.comparison_to_direct["bifrost"].throughput_ratio == 0.0
+    assert report.comparison_to_direct["bifrost"].p50_latency_delta_ms is None
+    assert report.comparison_to_direct["bifrost"].p95_latency_delta_ms is None
+    assert report.comparison_to_direct["bifrost"].p99_latency_delta_ms is None
     assert "synthetic-secret" not in rendered
     assert "must-not-leak" not in rendered
 
