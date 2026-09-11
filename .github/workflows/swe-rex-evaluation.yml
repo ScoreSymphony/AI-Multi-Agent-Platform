@@ -35,9 +35,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install pinned SWE-ReX revision
+      - name: Install platform and pinned SWE-ReX revision
         run: >-
           python -m pip install
+          -e .
           "git+https://github.com/SWE-agent/SWE-ReX.git@5c995c365dfb1fd5bc56fda688be5d8538f9931f"
       - name: Run local runtime evidence
         run: >-
@@ -77,9 +78,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install pinned SWE-ReX revision and remote-runtime dependency
+      - name: Install platform, pinned SWE-ReX revision and remote-runtime dependency
         run: >-
           python -m pip install
+          -e .
           "git+https://github.com/SWE-agent/SWE-ReX.git@5c995c365dfb1fd5bc56fda688be5d8538f9931f"
           "aiohttp>=3.11,<4"
       - name: Build pinned SWE-ReX server image
@@ -90,7 +92,7 @@ jobs:
           ARG SWE_REX_REVISION
           RUN python -m pip install --no-cache-dir \
               "https://github.com/SWE-agent/SWE-ReX/archive/${SWE_REX_REVISION}.zip"
-          RUN swe-rex --version
+          RUN swerex-remote --version
           EOF
           docker build \
             --build-arg SWE_REX_REVISION=5c995c365dfb1fd5bc56fda688be5d8538f9931f \
@@ -130,9 +132,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install pinned SWE-ReX revision and remote-runtime dependency
+      - name: Install platform, pinned SWE-ReX revision and remote-runtime dependency
         run: >-
           python -m pip install
+          -e .
           "git+https://github.com/SWE-agent/SWE-ReX.git@5c995c365dfb1fd5bc56fda688be5d8538f9931f"
           "aiohttp>=3.11,<4"
       - name: Run remote loopback evidence
