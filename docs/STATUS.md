@@ -14,23 +14,23 @@ Repository documentation/operations owns this status document. Update it at mean
 
 ## Current integration status
 
-> Curated integration note: 2026-09-11
+> Curated integration note: 2026-09-11, after merge of [PR #782](https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/pull/782) into `main` at commit `19b5b882478ad3ff3947006ae97c9d6228cc93b0`.
 
 The repository is in active product-integration, acceptance, hardening and operating-envelope work rather than foundational platform construction. Canonical lifecycle/domain ownership, Control Plane APIs, execution/model/tool/provider boundaries, Agents/Agent Teams, authorization/approvals, Workspaces/files/Artifacts, Memory/Knowledge, Search, Automations, distributed Worker execution, durable Plan/Step coordination, Registry/Marketplace support and release/update foundations already exist in the repository.
 
-Current work is deliberately being developed on focused issue branches and then staged through the shared `integration/active-issue-batch` branch before anything reaches `main`. The corresponding integration pull request is [PR #782](https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/pull/782). Its live PR body and checks are the authoritative source for the exact batch composition.
+The 2026-09-11 shared collector cycle on `integration/active-issue-batch` is complete and has reached `main` through PR #782. That accepted combined state contains the #728 structural README/status separation together with the staged batch work from #721, #723, #725, #726, #731, #746, #748, #749 and #750. Inclusion in that merged batch does not replace each issue's own Definition of Done; live GitHub issue state remains authoritative for whether an individual work item is open or closed.
 
-The #728 staging branch is kept synchronized with the active integration branch at meaningful convergence points. This lets README/status cleanup absorb already-staged cross-issue documentation changes while remaining a late final documentation pass rather than a competing integration branch. At this convergence point, the #728 branch is reconstructed directly on integration commit `b09969b8b3bb1b1dd043e532a79e38bd4d0bd0e0`, including the currently staged #750 release-gate hardening. Further integration commits may still arrive before final #728 closure.
+The temporary #728 staging/convergence branch is no longer an authority for current repository status. This document now describes the accepted `main` state at the boundary above instead of a pending collector. Future work may again use focused issue branches and a shared integration branch where cross-issue convergence is useful, but no collector branch should be treated as current merely because its name still exists.
 
 The integration policy is:
 
 1. validate each focused issue branch independently;
-2. stage only dependency-clean, conflict-free work into the shared integration branch;
-3. resolve cross-issue conflicts on that integration branch rather than independently restoring stale file versions;
-4. run the full required repository validation on the combined head;
-5. refresh this status summary from the final combined state before the integration branch is proposed for `main`.
+2. stage dependency-clean, conflict-free work through a shared integration branch when a combined batch is intentionally being assembled;
+3. resolve cross-issue conflicts against the exact current integration/main state rather than restoring stale file versions;
+4. run the full required repository validation on the exact candidate head before accepting it into `main`;
+5. refresh this status summary at meaningful accepted integration, milestone or release boundaries rather than mirroring every intermediate branch transition.
 
-Issue #728 is the documentation/status cleanup that established this separation. Its branch should remain a late integration pass so README/status text can describe the combined repository state instead of racing every parallel implementation branch.
+Issue #728 established the README/status separation and this refresh removes its temporary pre-merge convergence wording now that the combined collector has been accepted into `main`.
 
 For exact current work-item state, use the repository's [open issues](https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues?q=is%3Aissue%20state%3Aopen), [open pull requests](https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/pulls?q=is%3Apr%20is%3Aopen), the relevant milestone/dependency declarations and [published releases](https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/releases).
 
