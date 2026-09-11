@@ -41,7 +41,12 @@ def test_s3_surface_is_minimal_and_does_not_assume_etag_checksum_semantics() -> 
     manifest = _manifest()
     surface = manifest["required_s3_surface"]
 
-    assert set(surface["required"]) == {"PutObject", "GetObject", "HeadObject", "DeleteObject"}
+    assert set(surface["required"]) == {
+        "PutObject",
+        "GetObject",
+        "HeadObject",
+        "DeleteObject",
+    }
     assert "ListObjectsV2" in surface["required_for_repair_and_orphan_detection"]
     assert "ETag as SHA-256" in surface["explicitly_not_assumed"]
 
