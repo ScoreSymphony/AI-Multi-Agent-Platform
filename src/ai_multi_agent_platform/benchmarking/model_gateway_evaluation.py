@@ -8,6 +8,7 @@ neither gateway becomes a canonical model or routing authority.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 from collections import Counter
 from collections.abc import Mapping
@@ -97,13 +98,19 @@ class ModelGatewayBenchmarkReport:
     comparison_to_direct: Mapping[str, ModelGatewayDelta]
 
     def to_dict(self) -> dict[str, Any]:
+        benchmark = asdict(self.benchmark)
+        prompt = benchmark.pop("prompt")
+        if not isinstance(prompt, str):  # pragma: no cover - dataclass invariant.
+            raise TypeError("benchmark prompt must be a string")
+        benchmark["prompt_sha256"] = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        benchmark["prompt_length"] = len(prompt)
         return {
             "schema_version": self.schema_version,
             "platform_version": self.platform_version,
             "platform_commit": self.platform_commit,
             "started_at": self.started_at,
             "duration_seconds": self.duration_seconds,
-            "benchmark": asdict(self.benchmark),
+            "benchmark": benchmark,
             "targets": {name: result.to_dict() for name, result in self.targets.items()},
             "comparison_to_direct": {
                 name: asdict(delta) for name, delta in self.comparison_to_direct.items()
