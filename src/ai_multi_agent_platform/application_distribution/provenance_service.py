@@ -83,6 +83,8 @@ class ApplicationDistributionService(_GateApplicationDistributionService):
             return release
         artifact_id = build.get("artifact_id")
         runtime = build.get("runtime_provenance")
+        if not isinstance(runtime, dict):
+            runtime = nested.get("runtime_provenance")
         if not isinstance(artifact_id, str) or not isinstance(runtime, dict):
             return release
 
