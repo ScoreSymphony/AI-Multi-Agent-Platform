@@ -373,7 +373,10 @@ def test_cancelled_task_cancels_pending_verification_and_stale_reviewer(tmp_path
 
         assert records[0].disposition is ReviewerRecoveryDisposition.CANCELLED_STALE_RUN
         assert verification.get_request(request.verification_id).status.value == "cancelled"
-        assert agents.service.repository.get_agent_run(running.agent_run_id).status is AgentRunStatus.CANCELLED
+        assert (
+            agents.service.repository.get_agent_run(running.agent_run_id).status
+            is AgentRunStatus.CANCELLED
+        )
         assert executor.calls == 0
         with pytest.raises(ContractError) as stale:
             await bridge.complete_review(running.agent_run_id, outcome=VerificationOutcome.PASS)
@@ -414,7 +417,10 @@ def test_abandoned_reviewer_respects_retry_budget_across_restart(tmp_path) -> No
 
         assert records[0].disposition is ReviewerRecoveryDisposition.BLOCKED
         assert records[0].reviewer_agent_run_id == running.agent_run_id
-        assert agents.service.repository.get_agent_run(running.agent_run_id).status is AgentRunStatus.FAILED
+        assert (
+            agents.service.repository.get_agent_run(running.agent_run_id).status
+            is AgentRunStatus.FAILED
+        )
         assert executor.calls == 0
         assert len(agents.service.repository.list_agent_runs()) == 1
         assert completion.assess_task_completion(request.task_id).state is CompletionState.WAITING
