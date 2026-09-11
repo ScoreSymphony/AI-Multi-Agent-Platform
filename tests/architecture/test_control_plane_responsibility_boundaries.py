@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTROL_PLANE_ROOT = ROOT / "src" / "ai_multi_agent_platform" / "control_plane"
 SERVICE = CONTROL_PLANE_ROOT / "service.py"
 SCOPE_STORE = CONTROL_PLANE_ROOT / "scope_store.py"
+HEALTH = CONTROL_PLANE_ROOT / "health.py"
 
 
 def _tree(path: Path) -> ast.Module:
@@ -25,6 +26,39 @@ def _method(class_node: ast.ClassDef, name: str) -> ast.FunctionDef | ast.AsyncF
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == name:
             return node
     raise AssertionError(f"{class_node.name} does not define {name}")
+
+
+def _assert_delegate(
+    method: ast.FunctionDef | ast.AsyncFunctionDef, component: str, call: str
+) -> None:
+    calls = [node for node in ast.walk(method) if isinstance(node, ast.Call)]
+    assert any(
+        isinstance(item.func, ast.Attribute)
+        and item.func.attr == call
+        and isinstance(item.func.value, ast.Attribute)
+        and isinstance(item.func.value.value, ast.Name)
+        and item.func.value.value.id == "self"
+        and item.func.value.attr == component
+        for item in calls
+    ), f"{method.name} must delegate to self.{component}.{call}"
+
+
+def _assert_no_facade_dependency(path: Path) -> None:
+    violations: list[int] = []
+    for node in ast.walk(_tree(path)):
+        if isinstance(node, ast.ImportFrom) and node.module in {
+            "service",
+            "ai_multi_agent_platform.control_plane.service",
+        }:
+            violations.append(node.lineno)
+        elif isinstance(node, ast.Import) and any(
+            alias.name == "ai_multi_agent_platform.control_plane.service" for alias in node.names
+        ):
+            violations.append(node.lineno)
+    assert not violations, (
+        f"{path.relative_to(ROOT)} must not depend back on the ControlPlane façade: "
+        + ", ".join(str(line) for line in violations)
+    )
 
 
 def test_scope_store_implementation_lives_outside_control_plane_facade() -> None:
@@ -55,22 +89,9 @@ def test_control_plane_imports_scope_store_from_focused_module() -> None:
     ), "ControlPlane must retain ScopeStore through the focused scope_store module"
 
 
-def test_scope_store_does_not_depend_back_on_control_plane_facade() -> None:
-    violations: list[int] = []
-    for node in ast.walk(_tree(SCOPE_STORE)):
-        if isinstance(node, ast.ImportFrom) and node.module in {
-            "service",
-            "ai_multi_agent_platform.control_plane.service",
-        }:
-            violations.append(node.lineno)
-        elif isinstance(node, ast.Import) and any(
-            alias.name == "ai_multi_agent_platform.control_plane.service" for alias in node.names
-        ):
-            violations.append(node.lineno)
-    assert not violations, (
-        "scope identity storage must not depend back on the ControlPlane façade: "
-        + ", ".join(str(line) for line in violations)
-    )
+def test_focused_control_plane_components_do_not_depend_back_on_facade() -> None:
+    _assert_no_facade_dependency(SCOPE_STORE)
+    _assert_no_facade_dependency(HEALTH)
 
 
 def test_control_plane_keeps_scope_store_as_injected_stable_boundary() -> None:
@@ -88,3 +109,10 @@ def test_control_plane_keeps_scope_store_as_injected_stable_boundary() -> None:
         for assignment in assignments
     )
     _method(facade, "scopes")
+
+
+def test_health_aggregation_stays_behind_focused_component() -> None:
+    facade = _class(SERVICE, "ControlPlane")
+    _assert_delegate(_method(facade, "health"), "_health", "health")
+    health = _class(HEALTH, "ControlPlaneHealth")
+    _method(health, "health")
