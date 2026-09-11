@@ -19,10 +19,6 @@ The stable responsibilities are:
 - `cli.auth`: authentication, credential/session handling, and Approval decisions.
 - `cli.main`: established core CLI commands that predate the responsibility-specific layers.
 
-Production code and package entrypoints must not add new `issue_<number>` modules or imports. The architecture tests enforce this rule.
+Production code and package entrypoints must not add `issue_<number>` modules or imports. The architecture tests enforce this rule and no issue-numbered production compatibility module is retained.
 
-## Compatibility exception
-
-`cli.issue_214` is a deprecated, non-canonical import shim that re-exports `cli.auth.main` and `cli.auth.run_cli`. It exists only for the previous direct Python import path; no package entrypoint or canonical production module may depend on it.
-
-Removal policy: migrate callers to `ai_multi_agent_platform.cli.auth` now. Remove the shim at the next breaking package release after downstream import migration. No additional issue-numbered compatibility modules may be introduced without a separately documented compatibility contract and an explicit removal policy.
+Historical issue identifiers may remain in regression-test filenames, changelogs, ADRs, or other provenance where they describe history rather than define runtime architecture. New production callers must use the stable responsibility-based modules above.

@@ -42,6 +42,7 @@ from .handoff_composition import (
     HandoffDeploymentComposition,
     build_single_node_handoff_composition,
 )
+from .release_gate_policy import load_application_release_gate_policy
 from .startup_recovery import (
     SingleNodeStartupRecoveryResult,
     load_startup_recovery_report,
@@ -90,6 +91,7 @@ def build_single_node_deployment(
         files=deployment.files,
         verification_access=CanonicalVerificationAccess(deployment.verification),
         evaluations=deployment.evaluation_repository,
+        evaluation_service=deployment.evaluation,
     )
     return deployment
 
@@ -112,6 +114,7 @@ __all__ = [
     "build_single_node_handoff_composition",
     "build_worker_protocol_app",
     "load_advanced_deployment_profile",
+    "load_application_release_gate_policy",
     "load_single_node_config",
     "load_startup_recovery_report",
     "parse_advanced_deployment_profile",

@@ -8,6 +8,7 @@ from .contracts import (
     PublishContext,
     PublishedArtifact,
 )
+from .evaluation_gate_orchestration import ApplicationReleaseGateCoordinator
 from .execution import (
     APPLICATION_BUILD_ACTION,
     ApplicationBuildLifecycleBackend,
@@ -15,7 +16,6 @@ from .execution import (
 )
 from .gated_service import ApplicationDistributionService
 from .gates import (
-    ApplicationReleaseGateCoordinator,
     DeterministicGateCheck,
     ReleaseGateKind,
     ReleaseGatePolicy,
@@ -30,7 +30,14 @@ from .gates import (
     verification_subject,
 )
 from .github import GitHubReleasePublisher
-from .manifest import canonical_manifest_bytes, manifest_sha256, release_manifest
+from .manifest import (
+    APPLICATION_RELEASE_MANIFEST_SCHEMA,
+    MANIFEST_SCHEMA_VERSION,
+    canonical_manifest_bytes,
+    manifest_sha256,
+    manifest_validation_errors,
+    release_manifest,
+)
 from .models import (
     APPLICATION_RELEASE_SCHEMA_VERSION,
     ApplicationArtifact,
@@ -55,8 +62,10 @@ from .repository import (
 
 __all__ = [
     "APPLICATION_BUILD_ACTION",
+    "APPLICATION_RELEASE_MANIFEST_SCHEMA",
     "APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION",
     "APPLICATION_RELEASE_SCHEMA_VERSION",
+    "MANIFEST_SCHEMA_VERSION",
     "ApplicationArtifact",
     "ApplicationBuildLifecycleBackend",
     "ApplicationCommandExecutor",
@@ -94,6 +103,7 @@ __all__ = [
     "canonical_manifest_bytes",
     "gate_is_current",
     "manifest_sha256",
+    "manifest_validation_errors",
     "publication_readiness",
     "release_manifest",
     "release_subject_digest",
