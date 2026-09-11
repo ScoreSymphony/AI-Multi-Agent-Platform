@@ -237,15 +237,9 @@ def _resolve_repair_output(
     candidates: list[str] = []
     if isinstance(artifact_id, str) and artifact_id.strip():
         candidates.append(artifact_id)
-    if isinstance(artifact_refs, Sequence) and not isinstance(
-        artifact_refs, (str, bytes)
-    ):
-        candidates.extend(
-            item for item in artifact_refs if isinstance(item, str) and item.strip()
-        )
-        if any(
-            not isinstance(item, str) or not item.strip() for item in artifact_refs
-        ):
+    if isinstance(artifact_refs, Sequence) and not isinstance(artifact_refs, (str, bytes)):
+        candidates.extend(item for item in artifact_refs if isinstance(item, str) and item.strip())
+        if any(not isinstance(item, str) or not item.strip() for item in artifact_refs):
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "successful Agent repair Run exposed malformed artifact_refs",
