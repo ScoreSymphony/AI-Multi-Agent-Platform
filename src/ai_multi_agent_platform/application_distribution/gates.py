@@ -151,9 +151,12 @@ class ApplicationReleaseGateCoordinator:
         for name in required_gate_names(release):
             requirement = self.policy.requirement(name)
             if requirement is None:
+                # Legacy/manual evidence has no canonical mechanism from which it can be
+                # reconstructed. Preserve it exactly: rebinding it to a changed release here
+                # would turn stale evidence into apparently current evidence.
                 gate = existing.get(name)
                 if gate is not None:
-                    projected.append(bind_gate_to_release(gate, release))
+                    projected.append(gate)
                 continue
             if requirement.kind is ReleaseGateKind.DETERMINISTIC:
                 gate = await self._deterministic(release, requirement)
