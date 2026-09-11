@@ -32,12 +32,15 @@ jobs:
       - name: Generate synthetic runtime credentials
         shell: bash
         run: |
+          set -euo pipefail
           if [ "${{ matrix.backend }}" = "garage" ]; then
             access_key="GK$(openssl rand -hex 16)"
           else
             access_key="I862$(openssl rand -hex 10)"
           fi
           secret_key="$(openssl rand -hex 32)"
+          echo "::add-mask::$access_key"
+          echo "::add-mask::$secret_key"
           echo "AWS_ACCESS_KEY_ID=$access_key" >> "$GITHUB_ENV"
           echo "AWS_SECRET_ACCESS_KEY=$secret_key" >> "$GITHUB_ENV"
 
@@ -76,6 +79,9 @@ jobs:
               rpc_secret="$(openssl rand -hex 32)"
               admin_token="$(openssl rand -hex 32)"
               metrics_token="$(openssl rand -hex 32)"
+              echo "::add-mask::$rpc_secret"
+              echo "::add-mask::$admin_token"
+              echo "::add-mask::$metrics_token"
               cat > "$RUNNER_TEMP/issue862-garage.toml" <<EOF
           metadata_dir = "/var/lib/garage/meta"
           data_dir = "/var/lib/garage/data"
@@ -334,7 +340,7 @@ jobs:
               test -f "$snapshot"
               test -f /meta/db.sqlite
               cp /meta/db.sqlite /meta/db.sqlite.pre-issue862-restore
-              cp "$snapshot" /meta/db.sqlite
+              cat "$snapshot" > /meta/db.sqlite
             '
           docker start "$ISSUE862_CONTAINER"
           for _ in $(seq 1 90); do
