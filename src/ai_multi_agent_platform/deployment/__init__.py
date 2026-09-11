@@ -91,6 +91,7 @@ def build_single_node_deployment(
         files=deployment.files,
         verification_access=CanonicalVerificationAccess(deployment.verification),
         evaluations=deployment.evaluation_repository,
+        evaluation_service=deployment.evaluation,
     )
     return deployment
 
