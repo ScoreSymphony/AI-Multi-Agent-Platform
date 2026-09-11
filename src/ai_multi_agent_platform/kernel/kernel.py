@@ -46,7 +46,6 @@ from .models import (
 )
 from .queries import KernelQueries
 from .recovery import KernelRecovery
-from .run_commands import KernelRunCommands
 from .repository import (
     CommandRecord,
     EventRepository,
@@ -56,6 +55,7 @@ from .repository import (
     RunRepository,
     TaskRepository,
 )
+from .run_commands import KernelRunCommands
 from .task_commands import KernelTaskCommands
 
 OwnerType = Literal["user", "organization", "team", "service"]
