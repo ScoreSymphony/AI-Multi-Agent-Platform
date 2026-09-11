@@ -227,7 +227,7 @@ async def _run_target(
     await asyncio.gather(*(invoke(index) for index in range(spec.operation_count)))
     duration = time.perf_counter() - target_started
     failed = spec.operation_count - successful
-    throughput = spec.operation_count / duration if duration > 0 else 0.0
+    throughput = successful / duration if duration > 0 else 0.0
 
     return ModelGatewayTargetResult(
         target_name=target_name,
