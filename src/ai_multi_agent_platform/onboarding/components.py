@@ -516,11 +516,21 @@ def _atomic_write_json(path: Path, document: dict[str, JsonValue]) -> None:
 
 
 def _reject_secret_material(value: JsonValue | Mapping[str, JsonValue]) -> None:
-    sensitive = {"api_key", "apikey", "authorization", "bearer_token", "password", "secret", "token"}
+    sensitive = {
+        "api_key",
+        "apikey",
+        "authorization",
+        "bearer_token",
+        "password",
+        "secret",
+        "token",
+    }
     if isinstance(value, Mapping):
         for key, item in value.items():
             if key.casefold().replace("-", "_") in sensitive:
-                raise ValueError(f"component discovery metadata must not contain secret field: {key}")
+                raise ValueError(
+                    f"component discovery metadata must not contain secret field: {key}"
+                )
             _reject_secret_material(item)
     elif isinstance(value, list):
         for item in value:
