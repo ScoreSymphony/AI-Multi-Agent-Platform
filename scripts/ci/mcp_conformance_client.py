@@ -15,6 +15,7 @@ from ai_multi_agent_platform.adapters.mcp import MCPServerConfig
 from ai_multi_agent_platform.adapters.mcp_sdk import MCPPythonSDKClient
 
 _CLAIMED_PROTOCOL_REVISION = "2025-11-25"
+_TRACK_PROTOCOL_ENV = "AI_MULTI_AGENT_PLATFORM_MCP_CONFORMANCE_PROTOCOL_REVISION"
 
 
 async def _run(server_url: str, scenario: str, protocol_revision: str) -> None:
@@ -48,6 +49,19 @@ async def _run(server_url: str, scenario: str, protocol_revision: str) -> None:
     raise RuntimeError(f"unsupported MCP conformance client scenario: {scenario}")
 
 
+def _protocol_revision() -> str:
+    expected = os.environ.get(_TRACK_PROTOCOL_ENV, "").strip()
+    upstream = os.environ.get("MCP_CONFORMANCE_PROTOCOL_VERSION", "").strip()
+    if not expected:
+        raise RuntimeError(f"{_TRACK_PROTOCOL_ENV} is missing")
+    if upstream and upstream != expected:
+        raise RuntimeError(
+            "official MCP runner protocol revision does not match pinned track: "
+            f"runner={upstream!r}, track={expected!r}"
+        )
+    return upstream or expected
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if not args:
@@ -56,15 +70,12 @@ def main(argv: list[str] | None = None) -> int:
 
     server_url = args[-1]
     scenario = os.environ.get("MCP_CONFORMANCE_SCENARIO", "").strip()
-    protocol_revision = os.environ.get("MCP_CONFORMANCE_PROTOCOL_VERSION", "").strip()
     if not scenario:
         print("MCP_CONFORMANCE_SCENARIO is missing", file=sys.stderr)
         return 2
-    if not protocol_revision:
-        print("MCP_CONFORMANCE_PROTOCOL_VERSION is missing", file=sys.stderr)
-        return 2
 
     try:
+        protocol_revision = _protocol_revision()
         asyncio.run(_run(server_url, scenario, protocol_revision))
     except Exception as exc:
         print(f"MCP conformance client failed: {exc}", file=sys.stderr)
