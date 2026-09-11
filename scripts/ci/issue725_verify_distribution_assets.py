@@ -122,7 +122,9 @@ def verify_installed_wheel(path: Path, root: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Verify canonical runtime assets inside built distributions and an installed wheel."
+        description=(
+            "Verify canonical runtime assets inside built distributions and an installed wheel."
+        )
     )
     parser.add_argument("dist_dir", nargs="?", type=Path, default=Path("dist"))
     parser.add_argument(
