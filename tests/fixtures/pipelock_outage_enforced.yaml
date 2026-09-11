@@ -1,0 +1,26 @@
+version: 1
+mode: balanced
+enforce: true
+
+fetch_proxy:
+  listen: "127.0.0.1:8888"
+  timeout_seconds: 5
+  monitoring:
+    max_url_length: 4096
+    entropy_threshold: 4.5
+
+dlp:
+  include_defaults: true
+
+request_body_scanning:
+  enabled: true
+  action: block
+
+response_scanning:
+  enabled: true
+  action: block
+  include_defaults: true
+
+# Deterministic loopback target used only by the outage/recovery fixture.
+# Host-level direct-socket containment remains a separate #730 requirement.
+internal: []
