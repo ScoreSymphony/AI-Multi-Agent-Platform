@@ -1,4 +1,9 @@
-"""CLI for reproducible direct-vs-model-gateway benchmark evidence."""
+"""Concrete OpenAI-compatible CLI for reproducible model-gateway benchmark evidence.
+
+The provider-neutral benchmark contracts live in ``ai_multi_agent_platform.benchmarking``.
+This composition entry point intentionally lives in the adapter layer because it wires those
+contracts to the concrete OpenAI-compatible provider implementation.
+"""
 
 from __future__ import annotations
 
@@ -7,18 +12,18 @@ import asyncio
 import json
 from pathlib import Path
 
-from ai_multi_agent_platform.adapters.openai_compatible import (
-    OpenAICompatibleModelProvider,
-    OpenAICompatibleProviderConfig,
-)
-
-from .model_gateway_evaluation import (
+from ai_multi_agent_platform.benchmarking.model_gateway_evaluation import (
     ModelGatewayBenchmarkSpec,
     run_model_gateway_comparison,
 )
-from .model_gateway_evidence import (
+from ai_multi_agent_platform.benchmarking.model_gateway_evidence import (
     ModelGatewayTargetEvidence,
     build_model_gateway_evidence,
+)
+
+from .openai_compatible import (
+    OpenAICompatibleModelProvider,
+    OpenAICompatibleProviderConfig,
 )
 
 
