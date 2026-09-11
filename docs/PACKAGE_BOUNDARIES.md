@@ -98,6 +98,18 @@ A new top-level package is justified only when all of the following are true:
 Provider-specific, issue-numbered and one-feature-only packages should live below the canonical owner
 or under the appropriate adapter/integration boundary.
 
+## Module naming inside an existing owner
+
+Choosing the correct package owner is separate from choosing a discoverable module filename. The
+normative contributor and coding-agent rules for `service.py`, `models.py`, `control_plane.py`,
+responsibility-specific names and compatibility shims are in
+[`PYTHON_MODULE_NAMING.md`](PYTHON_MODULE_NAMING.md).
+
+A responsibility split should therefore stay under the owner defined here while giving substantial
+components semantic filenames when a generic basename would be ambiguous in editor tabs, tracebacks
+or code search. This does not justify creating another top-level package, and semantic naming must not
+be used to disguise a mixed-responsibility monolith.
+
 ## Migration namespace rules
 
 A package marked `migration` is a compatibility or transition boundary, not a place for continued

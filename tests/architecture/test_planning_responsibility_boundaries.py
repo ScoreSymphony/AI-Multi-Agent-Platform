@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PLANNING_ROOT = ROOT / "src" / "ai_multi_agent_platform" / "planning"
-SERVICE = PLANNING_ROOT / "service.py"
+SERVICE = PLANNING_ROOT / "planning_facade.py"
 SUPERSESSION = PLANNING_ROOT / "supersession.py"
 COMPOSITION = PLANNING_ROOT / "composition.py"
 INVENTORY = PLANNING_ROOT / "inventory.py"
@@ -38,8 +38,10 @@ def _assert_no_service_dependency(path: Path) -> None:
     violations: list[str] = []
     for node in ast.walk(_tree(path)):
         if isinstance(node, ast.ImportFrom) and node.module in {
+            "planning_facade",
             "service",
             "supersession",
+            "ai_multi_agent_platform.planning.planning_facade",
             "ai_multi_agent_platform.planning.service",
             "ai_multi_agent_platform.planning.supersession",
         }:
@@ -47,6 +49,7 @@ def _assert_no_service_dependency(path: Path) -> None:
         elif isinstance(node, ast.Import) and any(
             alias.name
             in {
+                "ai_multi_agent_platform.planning.planning_facade",
                 "ai_multi_agent_platform.planning.service",
                 "ai_multi_agent_platform.planning.supersession",
             }
