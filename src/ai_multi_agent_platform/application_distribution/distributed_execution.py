@@ -7,6 +7,7 @@ remain owned by the existing distributed runtime.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import PurePosixPath
@@ -35,7 +36,9 @@ from ai_multi_agent_platform.distributed.runtime import (
     DistributedRuntime,
 )
 from ai_multi_agent_platform.distributed.scheduler import NoEligibleWorkerError
+from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.execution import (
+    CancellationToken,
     ExecutionRequest,
     ExecutionResult,
     Executor,
@@ -102,7 +105,10 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
             # downgrade to plaintext or silently execute without declared secret-backed inputs.
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
-                "remote application build secret_environment requires scoped Worker secret delivery",
+                (
+                    "remote application build secret_environment requires scoped Worker "
+                    "secret delivery"
+                ),
                 provider_id=self.descriptor.provider_id,
             )
 
@@ -122,6 +128,10 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
                 APPLICATION_BUILD_WORKER_INPUT_KEY: _build_worker_payload(release, target),
             },
         )
+        default_idempotency_key = (
+            f"application-build:{release.release_id}:{target.target.target_id}:"
+            f"{request.run_id}"
+        )
         job = WorkerJobRequest(
             worker_job_id=_worker_job_id(request.run_id),
             execution=execution,
@@ -134,10 +144,7 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
             secret_refs=release.build_specification.secret_references,
             actor_ref=_actor_ref(request.context),
             timeout_seconds=timeout_seconds,
-            idempotency_key=(
-                request.context.control.idempotency_key
-                or f"application-build:{release.release_id}:{target.target.target_id}:{request.run_id}"
-            ),
+            idempotency_key=request.context.control.idempotency_key or default_idempotency_key,
         )
         try:
             record = await self.runtime.dispatch(job)
@@ -242,9 +249,13 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
                 unknown_is_not_found=True,
             ) from exc
         if record.state is DispatchState.CANCEL_PENDING or record.snapshot is None:
+            message = (
+                "distributed application build cancellation is pending Worker reconciliation: "
+                f"{run_id}"
+            )
             raise ContractError(
                 ErrorCode.UNAVAILABLE,
-                f"distributed application build cancellation is pending Worker reconciliation: {run_id}",
+                message,
                 retryable=True,
                 provider_id=self.descriptor.provider_id,
             )
@@ -381,6 +392,8 @@ class ApplicationBuildWorkerLifecycleBackend(LifecycleBackend):
         self._fallback = fallback
         self._results: dict[str, ExecutionResult] = {}
         self._fallback_runs: set[str] = set()
+        self._cancellations: dict[str, CancellationToken] = {}
+        self._tasks: dict[str, asyncio.Task[None]] = {}
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -408,8 +421,75 @@ class ApplicationBuildWorkerLifecycleBackend(LifecycleBackend):
             workspace_id=self._workspace_id,
             snapshot_id=self._snapshot_id,
         )
-        result = self._results.get(request.run_id)
+        if request.run_id not in self._results and request.run_id not in self._tasks:
+            cancellation = CancellationToken()
+            self._cancellations[request.run_id] = cancellation
+            task = asyncio.create_task(self._execute_build(request, payload, cancellation))
+            self._tasks[request.run_id] = task
+        return ExecutionHandle(
+            run_id=request.run_id,
+            backend_ref=f"application-build-worker:{request.run_id}",
+        )
+
+    async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
+        if run_id in self._fallback_runs:
+            assert self._fallback is not None
+            return await self._fallback.get(run_id, context)
+        result = self._results.get(run_id)
+        if result is not None:
+            return _execution_result_snapshot(result)
+        task = self._tasks.get(run_id)
+        if task is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"application build Worker execution not found: {run_id}",
+            )
+        if task.done():
+            await task
+            result = self._results.get(run_id)
+            if result is None:
+                raise ContractError(
+                    ErrorCode.INVALID_PROVIDER_RESPONSE,
+                    f"application build Worker produced no result: {run_id}",
+                )
+            return _execution_result_snapshot(result)
+        return ExecutionSnapshot(
+            run_id=run_id,
+            status=RunStatus.RUNNING,
+            output={"state": "active-remote-application-build"},
+        )
+
+    async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
+        if run_id in self._fallback_runs:
+            assert self._fallback is not None
+            return await self._fallback.cancel(run_id, context)
+        result = self._results.get(run_id)
+        if result is not None:
+            return _execution_result_snapshot(result)
+        task = self._tasks.get(run_id)
+        cancellation = self._cancellations.get(run_id)
+        if task is None or cancellation is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"application build Worker execution not found: {run_id}",
+            )
+        await self._executor.cancel(cancellation)
+        await task
+        result = self._results.get(run_id)
         if result is None:
+            raise ContractError(
+                ErrorCode.INVALID_PROVIDER_RESPONSE,
+                f"cancelled application build Worker produced no result: {run_id}",
+            )
+        return _execution_result_snapshot(result)
+
+    async def _execute_build(
+        self,
+        request: KernelExecutionRequest,
+        payload: Mapping[str, object],
+        cancellation: CancellationToken,
+    ) -> None:
+        try:
             command = _string_array(payload, "command")
             source_path = _optional_string_field(payload, "source_path")
             output_path = _required_string_field(payload, "output_path")
@@ -433,40 +513,19 @@ class ApplicationBuildWorkerLifecycleBackend(LifecycleBackend):
                     },
                     environment=environment,
                     timeout_seconds=request.context.control.timeout_seconds,
+                    cancellation=cancellation,
                 )
             )
-            result = replace(
+            self._results[request.run_id] = replace(
                 result,
                 output={
                     **result.output,
                     "application_build_request": _worker_result_identity(payload),
                 },
             )
-            self._results[request.run_id] = result
-        return ExecutionHandle(
-            run_id=request.run_id,
-            backend_ref=f"application-build-worker:{request.run_id}",
-        )
-
-    async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
-        if run_id in self._fallback_runs:
-            assert self._fallback is not None
-            return await self._fallback.get(run_id, context)
-        result = self._results.get(run_id)
-        if result is None:
-            raise ContractError(
-                ErrorCode.NOT_FOUND,
-                f"application build Worker execution not found: {run_id}",
-            )
-        return _execution_result_snapshot(result)
-
-    async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
-        if run_id in self._fallback_runs:
-            assert self._fallback is not None
-            return await self._fallback.cancel(run_id, context)
-        # ApplicationCommandExecutor currently completes inside start(), matching the existing
-        # local application-build lifecycle. A terminal result is therefore idempotently returned.
-        return await self.get(run_id, context)
+        finally:
+            self._cancellations.pop(request.run_id, None)
+            self._tasks.pop(request.run_id, None)
 
 
 def application_build_worker_input(
@@ -617,10 +676,11 @@ def _select_output_file(
         for artifact_id in matching_artifacts:
             candidates.append((artifact_id, record))
     if len(candidates) != 1:
-        raise ContractError(
-            ErrorCode.CONTRACT_VIOLATION,
-            "remote application build output was not returned as one canonical changed File/Artifact",
+        message = (
+            "remote application build output was not returned as one canonical changed "
+            "File/Artifact"
         )
+        raise ContractError(ErrorCode.CONTRACT_VIOLATION, message)
     return candidates[0]
 
 
@@ -714,7 +774,7 @@ def _failed_evidence_snapshot(
     output["stderr"] = message
     return replace(
         snapshot,
-        status=type(snapshot.status).FAILED,
+        status=RunStatus.FAILED,
         output=output,
         adapter_metadata=(
             *snapshot.adapter_metadata,
