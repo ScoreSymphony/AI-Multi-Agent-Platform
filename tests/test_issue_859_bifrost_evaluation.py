@@ -155,7 +155,7 @@ def test_gateway_benchmark_records_canonical_error_category_without_secret_messa
 def test_bifrost_provenance_keeps_gateway_candidate_optional_and_pinned() -> None:
     provenance = Path("upstream/bifrost.yaml").read_text(encoding="utf-8")
 
-    assert 'status: candidate' in provenance
+    assert "status: candidate" in provenance
     assert "transports/v2.1.1" in provenance
     assert "c193745d2a713e9f58f021d43e138df5eb7e038a" in provenance
     assert "Apache-2.0" in provenance
