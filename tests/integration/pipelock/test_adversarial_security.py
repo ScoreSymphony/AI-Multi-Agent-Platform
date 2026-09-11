@@ -15,7 +15,10 @@ from pathlib import Path
 import pytest
 
 PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
-PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_730_CONFIG")
+_RUNNER_TEMP = os.getenv("RUNNER_TEMP")
+PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_730_CONFIG") or (
+    str(Path(_RUNNER_TEMP) / "pipelock-audit.yaml") if _RUNNER_TEMP else None
+)
 FIXTURE_DIR = Path(__file__).parents[2] / "fixtures"
 WEBSOCKET_CONFIG = FIXTURE_DIR / "pipelock_websocket_audit.yaml"
 ADVERSARIAL_SERVER = FIXTURE_DIR / "websocket_adversarial_server.py"
