@@ -22,6 +22,7 @@ from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     encode_agent_execution_binding,
 )
+from ai_multi_agent_platform.capabilities import CapabilityRegistration, NativeEchoProvider
 from ai_multi_agent_platform.contracts import JsonValue
 from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
@@ -39,6 +40,25 @@ _PASSWORD = "correct horse battery staple"
 _MODEL_ID = "model-local-team-review"
 _PROVIDER_ID = "local-team-review-provider"
 _PROVIDER_MODEL = "qwen-team-review"
+
+
+class _DeveloperFileReadProvider(NativeEchoProvider):
+    """Expose only the standard Developer's required local file-read contract."""
+
+    async def capability_registrations(self) -> tuple[CapabilityRegistration, ...]:
+        registrations = await super().capability_registrations()
+        base = registrations[0]
+        return (
+            replace(
+                base,
+                capability=replace(
+                    base.capability,
+                    capability_id="tool.file.read",
+                    name="File Read",
+                    required_approvals=(),
+                ),
+            ),
+        )
 
 
 class _PassTransport:
@@ -184,6 +204,7 @@ async def _exercise_team_review(
     assert isinstance(workspace_id, str)
     assert isinstance(workspace_snapshot_id, str)
 
+    await deployment.capabilities.register_provider(_DeveloperFileReadProvider())
     bootstrap_standard_agents(deployment.agents)
     if use_cloned_team:
         custom_reviewer = deployment.agents.clone_agent(
