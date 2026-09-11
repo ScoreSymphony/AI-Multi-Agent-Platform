@@ -165,7 +165,9 @@ def test_http_protocol_evidence_cannot_be_combined_with_stdio_platform_evidence(
         if profile.identity.transport_profile == "streamable-http"
     )
     stdio_profile = next(
-        profile for profile in compatibility.profiles if profile.identity.transport_profile == "stdio"
+        profile
+        for profile in compatibility.profiles
+        if profile.identity.transport_profile == "stdio"
     )
     assert http_profile.result == "incomplete"
     assert http_profile.platform_evidence_status == "missing"
