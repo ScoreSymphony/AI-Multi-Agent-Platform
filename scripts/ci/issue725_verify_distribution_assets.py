@@ -41,9 +41,7 @@ def default_repository_root() -> Path:
 def single_artifact(dist_dir: Path, pattern: str, label: str) -> Path:
     matches = sorted(dist_dir.glob(pattern))
     if len(matches) != 1:
-        raise RuntimeError(
-            f"expected exactly one {label} in {dist_dir}, found {len(matches)}"
-        )
+        raise RuntimeError(f"expected exactly one {label} in {dist_dir}, found {len(matches)}")
     return matches[0]
 
 
@@ -59,13 +57,9 @@ def verify_wheel(path: Path, root: Path) -> None:
         names = set(archive.namelist())
         for asset in ASSETS:
             if asset.wheel_member not in names:
-                raise RuntimeError(
-                    f"{path.name} is missing runtime asset {asset.wheel_member}"
-                )
+                raise RuntimeError(f"{path.name} is missing runtime asset {asset.wheel_member}")
             if archive.read(asset.wheel_member) != expected_bytes(root, asset):
-                raise RuntimeError(
-                    f"{path.name} contains stale runtime asset {asset.wheel_member}"
-                )
+                raise RuntimeError(f"{path.name} contains stale runtime asset {asset.wheel_member}")
 
 
 def verify_sdist(path: Path, root: Path) -> None:
@@ -88,9 +82,7 @@ def verify_sdist(path: Path, root: Path) -> None:
                     f"unable to read runtime asset {matches[0].name} from {path.name}"
                 )
             if payload.read() != expected_bytes(root, asset):
-                raise RuntimeError(
-                    f"{path.name} contains stale runtime asset {matches[0].name}"
-                )
+                raise RuntimeError(f"{path.name} contains stale runtime asset {matches[0].name}")
 
 
 def venv_python(venv_dir: Path) -> Path:
