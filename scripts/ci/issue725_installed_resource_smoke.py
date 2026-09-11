@@ -15,9 +15,7 @@ def main() -> int:
     backup_resource = files("ai_multi_agent_platform.backup").joinpath(
         "backup-manifest-v1.schema.json"
     )
-    release_resource = files("ai_multi_agent_platform.release").joinpath(
-        "compatibility.json"
-    )
+    release_resource = files("ai_multi_agent_platform.release").joinpath("compatibility.json")
 
     if not backup_resource.is_file():
         raise RuntimeError("installed backup manifest schema resource is missing")
