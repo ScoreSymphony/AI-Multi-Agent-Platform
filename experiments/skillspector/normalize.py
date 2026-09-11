@@ -6,10 +6,10 @@ output into a small, replaceable evidence envelope used by the #800 evaluation.
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
-import json
 from typing import Any, Mapping
 
 
@@ -145,6 +145,7 @@ def normalize_report(
     network_usage: Mapping[str, Any],
     provider_usage: Mapping[str, Any],
     observed_at: str | None = None,
+    raw_report_sha256: str | None = None,
     process_ok: bool = True,
     degraded_reasons: tuple[str, ...] = (),
 ) -> SecurityEvidence:
@@ -154,7 +155,8 @@ def normalize_report(
     be represented as a clean completed result. Provider risk recommendations
     remain metadata and never become platform trust state.
     """
-    raw = json.dumps(report, sort_keys=True, separators=(",", ":")).encode()
+    canonical_raw = json.dumps(report, sort_keys=True, separators=(",", ":")).encode()
+    report_digest = raw_report_sha256 or sha256(canonical_raw).hexdigest()
     reasons = list(degraded_reasons)
     complete = bool(process_ok)
 
@@ -227,5 +229,5 @@ def normalize_report(
         network_usage=dict(network_usage),
         provider_usage=dict(provider_usage),
         provider_metadata=_provider_metadata(report),
-        raw_report_sha256=sha256(raw).hexdigest(),
+        raw_report_sha256=report_digest,
     )
