@@ -11,6 +11,7 @@ INVENTORY = PLANNING_ROOT / "inventory.py"
 VALIDATION = PLANNING_ROOT / "validation.py"
 REPLANNING = PLANNING_ROOT / "replanning.py"
 PROPOSALS = PLANNING_ROOT / "proposals.py"
+HANDOFF = PLANNING_ROOT / "handoff.py"
 
 
 def _tree(path: Path) -> ast.Module:
@@ -56,6 +57,19 @@ def _assert_no_service_dependency(path: Path) -> None:
     )
 
 
+def _assert_delegated_call(
+    service: ast.ClassDef,
+    method_name: str,
+    delegated_call: str,
+) -> None:
+    method = _method(service, method_name)
+    calls = [node for node in ast.walk(method) if isinstance(node, ast.Call)]
+    assert any(
+        isinstance(call.func, ast.Attribute) and call.func.attr == delegated_call
+        for call in calls
+    ), f"PlanningService.{method_name} must delegate to {delegated_call}"
+
+
 def test_public_planning_service_delegates_base_inventory_construction() -> None:
     service = _class(SUPERSESSION, "PlanningService")
     method = _method(service, "_inventory")
@@ -90,12 +104,7 @@ def test_public_planning_service_delegates_replan_support() -> None:
         "_trigger_fingerprint": "trigger_fingerprint",
     }
     for method_name, delegated_call in expected.items():
-        method = _method(service, method_name)
-        calls = [node for node in ast.walk(method) if isinstance(node, ast.Call)]
-        assert any(
-            isinstance(call.func, ast.Attribute) and call.func.attr == delegated_call
-            for call in calls
-        ), f"PlanningService.{method_name} must delegate to focused replanning support"
+        _assert_delegated_call(service, method_name, delegated_call)
 
 
 def test_public_planning_service_delegates_immutable_proposal_construction() -> None:
@@ -109,6 +118,19 @@ def test_public_planning_service_delegates_immutable_proposal_construction() -> 
         and call.func.value.id == "_PROPOSAL_FACTORY"
         for call in calls
     ), "PlanningService._proposal must delegate base proposal construction to PlanningProposalFactory"
+
+
+def test_public_planning_service_delegates_canonical_activation_handoff() -> None:
+    service = _class(SUPERSESSION, "PlanningService")
+    expected = {
+        "_activated_plan_event": "activated_plan_event",
+        "_plan_ref": "plan_ref",
+        "_failed_replan_can_activate": "failed_replan_can_activate",
+        "_ensure_handoff_ready": "ensure_ready",
+        "_handoff_to_coordinator": "handoff",
+    }
+    for method_name, delegated_call in expected.items():
+        _assert_delegated_call(service, method_name, delegated_call)
 
 
 def test_reference_inventory_filtering_remains_layered_on_public_inventory_seam() -> None:
@@ -159,3 +181,16 @@ def test_proposal_factory_owns_immutable_base_proposal_construction() -> None:
     factory = _class(PROPOSALS, "PlanningProposalFactory")
     _method(factory, "build")
     _assert_no_service_dependency(PROPOSALS)
+
+
+def test_handoff_component_owns_canonical_plan_reconstruction_and_registration() -> None:
+    handoff = _class(HANDOFF, "PlanningActivationHandoff")
+    for method_name in (
+        "activated_plan_event",
+        "ensure_ready",
+        "handoff",
+        "plan_ref",
+        "failed_replan_can_activate",
+    ):
+        _method(handoff, method_name)
+    _assert_no_service_dependency(HANDOFF)
