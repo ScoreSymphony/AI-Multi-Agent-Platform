@@ -25,6 +25,7 @@ from ai_multi_agent_platform.observability import (
 )
 
 from .attempt_outcomes import CoordinationAttemptOutcomes
+from .cancellation import CoordinationCancellation
 from .models import (
     ApprovalOutcome,
     CoordinationPhase,
@@ -32,7 +33,6 @@ from .models import (
     PlanCoordinationProjection,
     PredecessorFailurePolicy,
     ReconciliationDisposition,
-    RetryState,
     StepCoordinationProjection,
     StepCoordinationRecord,
     StepRetryPolicy,
@@ -146,6 +146,7 @@ class DurablePlanStepCoordinator:
         self._progression = CoordinationProgression(repository=repository, kernel=kernel)
         self._waits = CoordinationWaits(repository=repository, kernel=kernel)
         self._attempt_outcomes = CoordinationAttemptOutcomes(repository=repository, kernel=kernel)
+        self._cancellation = CoordinationCancellation(repository=repository, kernel=kernel)
 
     async def register_plan(
         self,
@@ -383,73 +384,16 @@ class DurablePlanStepCoordinator:
     ) -> PlanCoordinationProjection:
         """Suppress future wakeups/retries and propagate cancellation to canonical truth."""
 
-        if not idempotency_key.strip():
-            raise ValueError("idempotency_key must not be blank")
         current_time = self._now(now)
-        state = self.repository.get_plan(plan_id)
-        for record in self.repository.list_step_records(plan_id):
-            step = self.repository.get_plan(plan_id).step(record.step_id)
-            if step.status in {StepStatus.SUCCEEDED, StepStatus.SKIPPED, StepStatus.CANCELLED}:
-                continue
-            claim = self._claim(step.id, current_time)
-            if claim is None:
-                continue
-            try:
-                current = self.repository.get_step_record(step.id)
-                current_step = self.repository.get_plan(plan_id).step(step.id)
-                await self._cancel_active_run(current, f"{idempotency_key}:run:{step.id}")
-                if current_step.status in {
-                    StepStatus.PENDING,
-                    StepStatus.READY,
-                    StepStatus.RUNNING,
-                    StepStatus.WAITING,
-                }:
-                    current_step = current_step.transition_to(StepStatus.CANCELLED)
-                retry_state = (
-                    RetryState.CANCELLED
-                    if current.retry_state in {RetryState.SCHEDULED, RetryState.ACTIVE}
-                    else current.retry_state
-                )
-                updated = replace(
-                    current,
-                    phase=CoordinationPhase.TERMINAL,
-                    retry_due_at=None,
-                    retry_state=retry_state,
-                    wait=self._close_wait(
-                        current.wait,
-                        resolution=WaitResolution.CANCELLED,
-                        resolution_key=f"{idempotency_key}:wait:{step.id}",
-                        now=current_time,
-                    ),
-                    reconciliation=ReconciliationDisposition.CANONICAL_TERMINAL,
-                )
-                self.repository.save_step(
-                    step=current_step,
-                    record=updated,
-                    expected_revision=current.revision,
-                    claim=claim,
-                    now=current_time,
-                )
-                self._emit(
-                    "coordination.step.cancelled",
-                    current.task_id,
-                    current.plan_id,
-                    current.step_id,
-                    run_id=current.latest_run_id,
-                    outcome=TelemetryOutcome.CANCELLED,
-                    attributes={"source": "plan_cancellation"},
-                )
-            finally:
-                self.repository.release_claim(claim)
-        task = await self.kernel.get_task(state.plan.task_id)
-        if task.status is not TaskStatus.CANCELLED:
-            await self.kernel.cancel_task(
-                idempotency_key=f"{idempotency_key}:task",
-                task_id=state.plan.task_id,
-                source="platform-coordinator",
-            )
-        self._emit("coordination.plan.cancelled", state.plan.task_id, plan_id, None)
-        return self.projection(plan_id)
+        result_plan_id = await self._cancellation.cancel_plan(
+            plan_id,
+            idempotency_key=idempotency_key,
+            now=current_time,
+            claim=self._claim,
+            close_wait=self._close_wait,
+            emit=self._emit,
+        )
+        return self.projection(result_plan_id)
 
     async def reconcile_plan(
         self,
@@ -627,16 +571,7 @@ class DurablePlanStepCoordinator:
         return self.projection(result.plan_id)
 
     async def _cancel_active_run(self, record: StepCoordinationRecord, key: str) -> None:
-        if record.latest_run_id is None:
-            return
-        run = await self.kernel.get_run(record.task_id, record.latest_run_id)
-        if run.status not in _TERMINAL_RUNS:
-            await self.kernel.cancel_run(
-                idempotency_key=key,
-                task_id=record.task_id,
-                run_id=record.latest_run_id,
-                source="platform-coordinator",
-            )
+        await self._cancellation.cancel_active_run(record, key)
 
     async def _mark_inconsistent(
         self,
