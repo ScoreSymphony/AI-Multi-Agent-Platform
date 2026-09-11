@@ -135,6 +135,8 @@ def test_connector_authorization_remains_mandatory_after_application_publication
         application_policy = FakeAuthorizationProvider(allowed=True)
         service = ApplicationDistributionService(
             releases,
+            kernel=object(),  # type: ignore[arg-type] - publish path does not use execution
+            files=object(),  # type: ignore[arg-type] - publish path uses canonical release artifacts
             authorization_gate=AuthorizationGate(application_policy),
             publishers=(GitHubReleasePublisher(connectors),),
         )
