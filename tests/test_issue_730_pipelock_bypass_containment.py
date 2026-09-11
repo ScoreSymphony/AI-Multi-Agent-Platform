@@ -206,16 +206,14 @@ def test_uncontained_http_client_can_bypass_mediated_private_target_block(tmp_pa
     PIPELOCK_TEST_BIN is None or PIPELOCK_TEST_CONFIG is None,
     reason="requires the pinned Pipelock #730 compatibility runtime and generated audit config",
 )
-def test_wrapped_mcp_stdio_child_can_open_direct_network_socket(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_wrapped_mcp_stdio_child_can_open_direct_network_socket(tmp_path: Path) -> None:
     assert PIPELOCK_TEST_BIN is not None
     assert PIPELOCK_TEST_CONFIG is not None
 
     with _http_target(tmp_path) as (target_port, count_file):
         target = f"http://127.0.0.1:{target_port}/mcp-child"
-        monkeypatch.setenv("PIPELOCK_730_BYPASS_TARGET", target)
+        child_environment = dict(os.environ)
+        child_environment["PIPELOCK_730_BYPASS_TARGET"] = target
 
         async def scenario() -> None:
             config = MCPServerConfig(
@@ -230,6 +228,7 @@ def test_wrapped_mcp_stdio_child_can_open_direct_network_socket(
                     sys.executable,
                     str(MCP_DIRECT_EGRESS),
                 ),
+                environment=child_environment,
                 read_timeout_seconds=15,
                 capability_id_overrides={"direct_fetch": "tool.direct_fetch"},
             )
