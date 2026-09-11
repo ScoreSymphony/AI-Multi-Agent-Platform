@@ -31,7 +31,7 @@ Record before testing:
 - whether all comparison paths use the same downstream model instance;
 - Bifrost routing/fallback/governance configuration relevant to the request path.
 
-The benchmark CLI writes platform/host metadata plus secret-free per-target version/revision/model metadata into the JSON artifact. Endpoint URLs, headers and credentials are deliberately excluded.
+The benchmark CLI writes platform/host metadata plus secret-free per-target version/revision/model metadata into the JSON artifact. Endpoint URLs, headers and credentials are deliberately excluded. The provider-neutral benchmark logic lives under `ai_multi_agent_platform.benchmarking`; the executable OpenAI-compatible composition entry point lives under `ai_multi_agent_platform.adapters` so the core benchmark layer does not import concrete adapters.
 
 ## 2. Establish the direct baseline
 
@@ -95,7 +95,7 @@ Use the same downstream deployment for both paths and record a stable deployment
 Example:
 
 ```bash
-python -m ai_multi_agent_platform.benchmarking.model_gateway_evaluation_cli \
+python -m ai_multi_agent_platform.adapters.model_gateway_evaluation_cli \
   --canonical-model-id model-local-eval \
   --downstream-deployment-label same-vllm-qwen-local-instance \
   --direct-base-url http://127.0.0.1:8000/v1 \
@@ -114,12 +114,14 @@ The Bifrost version/revision defaults in this evaluator are the reviewed `transp
 
 Record at least:
 
-- p50/p95/p99 end-to-end latency;
+- p50/p95/p99 end-to-end latency for successful operations;
 - attempted/successful/failed operations;
-- throughput;
+- successful-operation throughput;
 - canonical error categories;
 - canonical identity preservation;
 - host/runtime metadata and exact component/model metadata emitted by the evidence manifest.
+
+Failed operations are reported separately and are deliberately excluded from successful latency distributions and successful-operation throughput. A failed-only target therefore has no synthetic latency delta.
 
 Do not invent a universal acceptable latency threshold. Interpret overhead in the context of the tested hardware, downstream model and operational benefit.
 
@@ -128,7 +130,7 @@ Do not invent a universal acceptable latency threshold. Interpret overhead in th
 When LiteLLM is available, repeat the exact workload against the same downstream model/runtime:
 
 ```bash
-python -m ai_multi_agent_platform.benchmarking.model_gateway_evaluation_cli \
+python -m ai_multi_agent_platform.adapters.model_gateway_evaluation_cli \
   --canonical-model-id model-local-eval \
   --downstream-deployment-label same-vllm-qwen-local-instance \
   --direct-base-url http://127.0.0.1:8000/v1 \
@@ -157,7 +159,7 @@ Use a unique synthetic marker as the test credential, for example through a dedi
 - Bifrost logs/diagnostics included in the test evidence;
 - exceptions captured by the test harness.
 
-The marker must not appear in the platform benchmark artifact or normal platform diagnostics. Raw exception messages are not part of the benchmark report by design.
+The marker must not appear in the platform benchmark artifact or normal platform diagnostics. Raw prompts, responses and exception messages are not part of the benchmark report by design; the workload prompt is represented only by its SHA-256 fingerprint and length.
 
 ## 8. Upstream unavailable and restart tests
 
@@ -197,11 +199,14 @@ Exercise URL-fetching features that are actually enabled in the Bifrost profile 
 - IPv4-mapped IPv6;
 - 6to4 (`2002::/16`);
 - NAT64 (`64:ff9b::/96`);
+- Teredo (`2001:0000::/32`);
 - public-to-blocked redirects;
 - DNS rebinding/resolution-time address changes;
 - encoded/alternative host representations applicable to the enabled feature.
 
 Passing means the request is rejected before a connection reaches the controlled blocked target and that redirects/re-resolution cannot cross the egress boundary. Record Bifrost version/commit and enabled feature/configuration for every result.
+
+The reviewed core already contains source-level regressions for these address classes and per-dial DNS validation. Those tests are useful evidence about the pinned source, but they do not replace this isolated deployment-level campaign.
 
 ## 10. Routing/fallback policy test
 
