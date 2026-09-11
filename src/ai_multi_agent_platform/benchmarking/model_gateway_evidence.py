@@ -62,7 +62,8 @@ def build_model_gateway_evidence(
             details.append(f"missing targets: {', '.join(missing)}")
         if unknown:
             details.append(f"unknown targets: {', '.join(unknown)}")
-        raise ValueError("target evidence must match benchmark targets (" + "; ".join(details) + ")")
+        detail_text = "; ".join(details)
+        raise ValueError(f"target evidence must match benchmark targets ({detail_text})")
 
     payload = report.to_dict()
     payload["environment"] = _environment_metadata()
