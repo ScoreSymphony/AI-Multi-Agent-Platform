@@ -379,8 +379,8 @@ responsibility = "Canonical Task planning metadata, dependencies, priority and t
 name = "task_reassignment"
 kind = "migration"
 owner = "task_management"
-disposition = "consolidate"
-responsibility = "Task Project reassignment is a task-management subdomain; migrate to task_management.reassignment with compatibility for the old import path."
+disposition = "compatibility"
+responsibility = "Canonical implementation lives at task_management.reassignment; the root package is a bounded compatibility namespace for supported legacy imports."
 
 [[package]]
 name = "templates"
