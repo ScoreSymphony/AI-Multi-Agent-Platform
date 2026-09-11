@@ -175,6 +175,7 @@ def _strict_connect_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     pubkey = tmp_path / "strict-connect.pub"
     env = dict(os.environ)
     env["HOME"] = str(home)
+    candidate_dir = Path(PIPELOCK_TEST_BIN).parent
 
     subprocess.run(
         (
@@ -192,6 +193,7 @@ def _strict_connect_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
         capture_output=True,
         text=True,
         env=env,
+        cwd=candidate_dir,
     )
 
     text = config.read_text(encoding="utf-8")
@@ -229,6 +231,7 @@ def _strict_connect_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
         capture_output=True,
         text=True,
         env=env,
+        cwd=candidate_dir,
     )
     return home, config, recorder, pubkey
 
