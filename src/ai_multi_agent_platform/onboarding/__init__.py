@@ -45,6 +45,7 @@ from .persistence import (
     OnboardingCommandRecord,
 )
 from .providers import OnboardingModelAdapter, OnboardingModelEndpoint
+from .runtime_discovery import SingleNodeComponentDiscoverySource
 from .service import (
     FIRST_RUN_RESOURCE_ID,
     ONBOARDING_COLLECTION,
@@ -96,6 +97,7 @@ __all__ = [
     "SetupMode",
     "SetupProfile",
     "SetupProfileState",
+    "SingleNodeComponentDiscoverySource",
     "recommend_setup_profile",
     "register_onboarding_control_plane",
     "resolve_component_selection",
