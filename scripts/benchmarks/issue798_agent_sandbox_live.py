@@ -43,7 +43,8 @@ class Kubectl:
         result = CommandResult(completed.returncode, completed.stdout, completed.stderr)
         if check and result.returncode != 0:
             raise RuntimeError(
-                f"kubectl command failed ({result.returncode}): {' '.join(args)}\n{result.stderr}"
+                f"kubectl command failed ({result.returncode}): "
+                f"{' '.join(args)}\n{result.stderr}"
             )
         return result
 
@@ -110,20 +111,30 @@ def _evaluate_pod(pod: dict[str, Any]) -> dict[str, Any]:
     container = _first_container(pod)
     pod_security = spec.get("securityContext") or {}
     container_security = container.get("securityContext") or {}
-    seccomp = container_security.get("seccompProfile") or pod_security.get("seccompProfile") or {}
+    seccomp = (
+        container_security.get("seccompProfile")
+        or pod_security.get("seccompProfile")
+        or {}
+    )
     capabilities = container_security.get("capabilities") or {}
     dropped = capabilities.get("drop") or []
     status = _container_status(pod)
 
     return {
-        "automount_service_account_token_disabled": spec.get("automountServiceAccountToken") is False,
+        "automount_service_account_token_disabled": (
+            spec.get("automountServiceAccountToken") is False
+        ),
         "host_network_disabled": spec.get("hostNetwork") is not True,
         "host_pid_disabled": spec.get("hostPID") is not True,
         "host_ipc_disabled": spec.get("hostIPC") is not True,
-        "allow_privilege_escalation_disabled": container_security.get("allowPrivilegeEscalation") is False,
+        "allow_privilege_escalation_disabled": (
+            container_security.get("allowPrivilegeEscalation") is False
+        ),
         "run_as_non_root": container_security.get("runAsNonRoot") is True
         or pod_security.get("runAsNonRoot") is True,
-        "read_only_root_filesystem": container_security.get("readOnlyRootFilesystem") is True,
+        "read_only_root_filesystem": (
+            container_security.get("readOnlyRootFilesystem") is True
+        ),
         "seccomp_profile": seccomp.get("type"),
         "drops_all_capabilities": "ALL" in dropped,
         "runtime_class_name": spec.get("runtimeClassName"),
@@ -149,7 +160,12 @@ def _exec(kubectl: Kubectl, namespace: str, pod: str, shell: str) -> CommandResu
     )
 
 
-def _probe_readable_path(kubectl: Kubectl, namespace: str, pod: str, path: str) -> dict[str, Any]:
+def _probe_readable_path(
+    kubectl: Kubectl,
+    namespace: str,
+    pod: str,
+    path: str,
+) -> dict[str, Any]:
     result = _exec(kubectl, namespace, pod, f"test -r {path!s}")
     return {
         "path": path,
@@ -200,7 +216,11 @@ def _canary_scan(items: dict[str, Any], canary: str | None) -> dict[str, Any]:
     return {"performed": True, "found": bool(matches), "matches": matches}
 
 
-def _rbac_capture(kubectl: Kubectl, namespace: str, service_account: str) -> dict[str, Any]:
+def _rbac_capture(
+    kubectl: Kubectl,
+    namespace: str,
+    service_account: str,
+) -> dict[str, Any]:
     result = kubectl.run(
         "auth",
         "can-i",
@@ -232,31 +252,65 @@ def _cluster_version(kubectl: Kubectl) -> dict[str, Any]:
 def _main() -> int:
     args = _args()
     kubectl = Kubectl(args.kubectl)
-    pod = kubectl.json("-n", args.namespace, "get", "pod", args.sandbox_pod, "-o", "json")
-    replica_sets = kubectl.json("-n", args.namespace, "get", "replicasets", "-o", "json")
+    pod = kubectl.json(
+        "-n",
+        args.namespace,
+        "get",
+        "pod",
+        args.sandbox_pod,
+        "-o",
+        "json",
+    )
+    replica_sets = kubectl.json(
+        "-n",
+        args.namespace,
+        "get",
+        "replicasets",
+        "-o",
+        "json",
+    )
 
     probes: dict[str, Any] = {
         "service_account_token": _probe_readable_path(
-            kubectl, args.namespace, args.sandbox_pod, TOKEN_PATH
+            kubectl,
+            args.namespace,
+            args.sandbox_pod,
+            TOKEN_PATH,
         ),
         "ambient_host_paths": [
             _probe_readable_path(kubectl, args.namespace, args.sandbox_pod, path)
             for path in SOCKET_PATHS
         ],
         "internet": _network_probe(
-            kubectl, args.namespace, args.sandbox_pod, args.internet_host, 443
+            kubectl,
+            args.namespace,
+            args.sandbox_pod,
+            args.internet_host,
+            443,
         ),
         "metadata": _network_probe(
-            kubectl, args.namespace, args.sandbox_pod, args.metadata_ip, 80
+            kubectl,
+            args.namespace,
+            args.sandbox_pod,
+            args.metadata_ip,
+            80,
         ),
     }
     if args.allowed_host:
         probes["allowed_host"] = _network_probe(
-            kubectl, args.namespace, args.sandbox_pod, args.allowed_host, 443
+            kubectl,
+            args.namespace,
+            args.sandbox_pod,
+            args.allowed_host,
+            443,
         )
     if args.peer_pod_ip:
         probes["peer_sandbox"] = _network_probe(
-            kubectl, args.namespace, args.sandbox_pod, args.peer_pod_ip, 80
+            kubectl,
+            args.namespace,
+            args.sandbox_pod,
+            args.peer_pod_ip,
+            80,
         )
 
     report = {
@@ -275,7 +329,9 @@ def _main() -> int:
         },
         "pod_security": _evaluate_pod(pod),
         "controller_rbac": _rbac_capture(
-            kubectl, args.namespace, args.controller_service_account
+            kubectl,
+            args.namespace,
+            args.controller_service_account,
         ),
         "secret_canary": _canary_scan(replica_sets, args.canary),
         "probes": probes,
@@ -295,7 +351,10 @@ def _main() -> int:
         },
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     return 0
 
 
