@@ -10,6 +10,7 @@ on:
       - "scripts/ci/issue46_optional_environment_profile.py"
       - "src/ai_multi_agent_platform/adapters/mcp.py"
       - "src/ai_multi_agent_platform/adapters/mcp_sdk.py"
+      - "src/ai_multi_agent_platform/adapters/mcp_stateless.py"
       - "src/ai_multi_agent_platform/conformance/mcp_protocol.py"
       - "tests/**mcp**"
       - "pyproject.toml"
@@ -23,6 +24,7 @@ on:
       - "scripts/ci/issue46_optional_environment_profile.py"
       - "src/ai_multi_agent_platform/adapters/mcp.py"
       - "src/ai_multi_agent_platform/adapters/mcp_sdk.py"
+      - "src/ai_multi_agent_platform/adapters/mcp_stateless.py"
       - "src/ai_multi_agent_platform/conformance/mcp_protocol.py"
       - "tests/**mcp**"
       - "pyproject.toml"
@@ -70,6 +72,7 @@ jobs:
             --platform-commit "$GITHUB_SHA" \
             --json-report mcp-protocol-2025-11-25.json
       - name: Combine official protocol and platform integration evidence
+        if: always()
         run: |
           python scripts/ci/issue46_optional_environment_profile.py \
             mcp \
@@ -124,7 +127,8 @@ jobs:
             --track prerelease \
             --suite-root .upstream/mcp-conformance \
             --platform-commit "$GITHUB_SHA" \
-            --json-report mcp-protocol-2026-07-28.json
+            --json-report mcp-protocol-2026-07-28.json \
+            --strict
       - name: Upload informational 2026-07-28 evidence
         if: always()
         uses: actions/upload-artifact@v7
