@@ -26,15 +26,13 @@ from ai_multi_agent_platform.domain import validate_id
 
 from .contracts import FileProvider
 from .models import DataAccessContext, FileRecord, FileState, OrphanReport, new_file_id
-from .reference_support import (
-    SqliteReferenceStore as _SqliteMixin,
-    compat_context as _compat_context,
-    forbidden as _forbidden,
-    json_dict as _json_dict,
-    json_dump as _json_dump,
-    not_found as _not_found,
-    parse_time as _parse_time,
-)
+from .reference_support import SqliteReferenceStore as _SqliteMixin
+from .reference_support import compat_context as _compat_context
+from .reference_support import forbidden as _forbidden
+from .reference_support import json_dict as _json_dict
+from .reference_support import json_dump as _json_dump
+from .reference_support import not_found as _not_found
+from .reference_support import parse_time as _parse_time
 
 
 class LocalFileProvider(_SqliteMixin, FileProvider):
