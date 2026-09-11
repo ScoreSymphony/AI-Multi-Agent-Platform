@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from ai_multi_agent_platform.benchmarking.model_gateway_evaluation import (
     ModelGatewayBenchmarkReport,
     ModelGatewayBenchmarkSpec,
@@ -74,7 +76,20 @@ def test_gateway_evidence_requires_metadata_for_every_benchmark_target() -> None
         raise AssertionError("incomplete target evidence must be rejected")
 
 
-def _report() -> ModelGatewayBenchmarkReport:
+def test_gateway_report_fingerprints_prompt_without_serializing_prompt_text() -> None:
+    secret_prompt = "private-evaluation-prompt-must-not-leak"
+    payload = _report(prompt=secret_prompt).to_dict()
+    rendered = json.dumps(payload, sort_keys=True)
+    benchmark = payload["benchmark"]
+
+    assert secret_prompt not in rendered
+    assert isinstance(benchmark, dict)
+    assert "prompt" not in benchmark
+    assert benchmark["prompt_length"] == len(secret_prompt)
+    assert len(benchmark["prompt_sha256"]) == 64
+
+
+def _report(*, prompt: str = "Reply with the single word: ready") -> ModelGatewayBenchmarkReport:
     latency = LatencyDistribution(
         count=1,
         min_ms=1.0,
@@ -119,6 +134,7 @@ def _report() -> ModelGatewayBenchmarkReport:
             operation_count=1,
             concurrency=1,
             warmup_operations=0,
+            prompt=prompt,
         ),
         targets={"direct": direct, "bifrost": bifrost},
         comparison_to_direct={
