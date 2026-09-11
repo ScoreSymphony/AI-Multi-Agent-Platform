@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import os
+import sys
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -27,6 +31,10 @@ from ai_multi_agent_platform.contracts import (
     OperationContext,
     digest_egress_payload,
 )
+
+PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
+PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_730_CONFIG")
+MCP_FIXTURE_SERVER = Path(__file__).parent / "fixtures" / "mcp_stdio_server.py"
 
 
 def _request() -> EgressRequest:
@@ -244,3 +252,69 @@ def test_malformed_receipt_fails_closed_in_evidence_normalization() -> None:
 
     with pytest.raises(PipelockMappingError, match="action_id"):
         normalize_pipelock_receipt(projection, {"verdict": "allow", "transport": "fetch"})
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    PIPELOCK_TEST_BIN is None or PIPELOCK_TEST_CONFIG is None,
+    reason="requires the pinned Pipelock #730 compatibility runtime",
+)
+def test_pipelock_mcp_stdio_wraps_canonical_invocation_path() -> None:
+    from ai_multi_agent_platform.adapters.mcp import MCPServerConfig
+    from ai_multi_agent_platform.adapters.mcp_sdk import build_mcp_provider
+    from ai_multi_agent_platform.capabilities import (
+        CapabilityInvocation,
+        CapabilityInvoker,
+        CapabilityRegistry,
+        InvocationTrace,
+    )
+    from ai_multi_agent_platform.domain import new_id
+
+    assert PIPELOCK_TEST_BIN is not None
+    assert PIPELOCK_TEST_CONFIG is not None
+
+    async def scenario() -> None:
+        project_id = new_id("project")
+        config = MCPServerConfig(
+            server_id="pipelock-stdio",
+            command=(
+                PIPELOCK_TEST_BIN,
+                "mcp",
+                "proxy",
+                "--config",
+                PIPELOCK_TEST_CONFIG,
+                "--",
+                sys.executable,
+                str(MCP_FIXTURE_SERVER),
+            ),
+            read_timeout_seconds=15,
+            capability_id_overrides={"lookup": "tool.lookup"},
+        )
+        registry = CapabilityRegistry()
+        await registry.register_provider(build_mcp_provider(config))
+        invocation = CapabilityInvocation(
+            invocation_id="mcp-pipelock-730",
+            capability_id="tool.lookup",
+            arguments={"query": "pipelock-transport"},
+            context=OperationContext(
+                correlation_id="mcp-pipelock-correlation-730",
+                owner_type="user",
+                owner_id="user-730",
+                project_id=project_id,
+            ),
+            trace=InvocationTrace(
+                correlation_id="mcp-pipelock-correlation-730",
+                task_id=new_id("task"),
+                run_id=new_id("run"),
+                agent_id=new_id("agent"),
+                project_id=project_id,
+            ),
+        )
+
+        result = await CapabilityInvoker(registry).invoke(invocation)
+
+        assert result.capability_id == "tool.lookup"
+        assert result.provider_id == "mcp:pipelock-stdio"
+        assert result.output == {"query": "pipelock-transport", "transport": "stdio"}
+
+    asyncio.run(scenario())
