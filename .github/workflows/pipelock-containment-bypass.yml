@@ -6,7 +6,7 @@ on:
       - ".github/workflows/pipelock-containment-bypass.yml"
       - "tests/test_issue_730_pipelock_containment.py"
       - "tests/fixtures/mcp_stdio_network_probe_server.py"
-      - "scripts/ci/issue502_no_network_exec.py"
+      - "scripts/ci/issue730_inet_socket_deny_exec.py"
       - "docs/upstream/PIPELOCK_CORE_CONTAINMENT_EVIDENCE.md"
   workflow_dispatch:
 
