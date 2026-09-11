@@ -10,7 +10,6 @@ from .control_plane import (
     register_learning_control_plane,
 )
 from .governance import GovernedObservedLearningService, LearningPlatformPolicy
-from .governed_learning_workflow import LearningQualityGate, LearningService
 from .models import (
     LEARNING_SCHEMA_VERSION,
     FeedbackRecord,
@@ -53,6 +52,7 @@ from .runtime_control_plane import (
     LearningPostPromotionResourceService,
     register_learning_runtime_control_plane,
 )
+from .governed_learning_workflow import LearningQualityGate, LearningService
 from .single_node import SingleNodeLearningComposition, build_single_node_learning
 from .source_evidence import (
     KernelRunFailureEvidenceResolver,

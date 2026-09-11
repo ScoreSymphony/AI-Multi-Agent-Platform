@@ -31,7 +31,6 @@ from .models import (
     WaitResolution,
     WaitType,
 )
-from .plan_step_coordinator import CanonicalRunKernel
 from .repair import CoordinatorRepairAction, CoordinatorRepairService
 from .repository import CoordinatorRepository
 from .retirement import (
@@ -40,6 +39,7 @@ from .retirement import (
     PlanRetirement,
     PlanRetirementRepository,
 )
+from .plan_step_coordinator import CanonicalRunKernel
 from .sqlite_repository_v3 import SQLiteCoordinatorRepository
 
 __all__ = [
