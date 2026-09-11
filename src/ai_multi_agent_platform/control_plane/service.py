@@ -12,7 +12,6 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import (
     AuthorizationProvider,
     EventProvider,
-    ModelProvider,
     ProviderContract,
 )
 from ai_multi_agent_platform.contracts.types import (
@@ -24,9 +23,10 @@ from ai_multi_agent_platform.contracts.types import (
 from ai_multi_agent_platform.domain import Project
 from ai_multi_agent_platform.kernel import PlatformKernel, RunState, TaskState
 from ai_multi_agent_platform.kernel.repository import EventRepository
-from ai_multi_agent_platform.models import ModelConfiguration, ModelRegistry
+from ai_multi_agent_platform.models import ModelRegistry
 
 from .health import ControlPlaneHealth
+from .model_registry_service import ControlPlaneModelRegistry
 from .models import (
     ActorContext,
     OwnerType,
@@ -61,7 +61,7 @@ class ControlPlane:
         self._authorization = authorization
         self._live_events = live_events
         self._health = ControlPlaneHealth(health_providers)
-        self._model_registry = model_registry
+        self._models = ControlPlaneModelRegistry(model_registry)
 
     @property
     def scopes(self) -> ScopeStore:
@@ -471,11 +471,7 @@ class ControlPlane:
         query: PageQuery,
     ) -> dict[str, JsonValue]:
         await self._authorize(context, "model-provider:list", "model-providers")
-        resources = [
-            _model_provider_resource(self._require_model_registry(), provider)
-            for provider in self._require_model_registry().list_providers()
-        ]
-        return paginate(resources, query)
+        return paginate(self._models.list_providers(), query)
 
     async def get_model_provider(
         self,
@@ -483,8 +479,7 @@ class ControlPlane:
         provider_id: str,
     ) -> dict[str, JsonValue]:
         await self._authorize(context, "model-provider:read", provider_id)
-        provider = self._require_model_registry().get_provider(provider_id)
-        return _model_provider_resource(self._require_model_registry(), provider)
+        return self._models.get_provider(provider_id)
 
     async def set_model_provider_enabled(
         self,
@@ -496,9 +491,7 @@ class ControlPlane:
         _require_key(context)
         action = "enable" if enabled else "disable"
         await self._authorize(context, f"model-provider:{action}", provider_id)
-        self._require_model_registry().set_provider_enabled(provider_id, enabled)
-        provider = self._require_model_registry().get_provider(provider_id)
-        return _model_provider_resource(self._require_model_registry(), provider)
+        return self._models.set_provider_enabled(provider_id, enabled)
 
     async def refresh_model_provider_health(
         self,
@@ -507,9 +500,7 @@ class ControlPlane:
     ) -> dict[str, JsonValue]:
         _require_key(context)
         await self._authorize(context, "model-provider:refresh-health", provider_id)
-        await self._require_model_registry().refresh_health(provider_id)
-        provider = self._require_model_registry().get_provider(provider_id)
-        return _model_provider_resource(self._require_model_registry(), provider)
+        return await self._models.refresh_provider_health(provider_id)
 
     async def list_models(
         self,
@@ -517,11 +508,7 @@ class ControlPlane:
         query: PageQuery,
     ) -> dict[str, JsonValue]:
         await self._authorize(context, "model:list", "models")
-        resources = [
-            _model_resource(self._require_model_registry(), config)
-            for config in self._require_model_registry().list_models()
-        ]
-        return paginate(resources, query)
+        return paginate(self._models.list_models(), query)
 
     async def get_model(
         self,
@@ -529,8 +516,7 @@ class ControlPlane:
         model_id_or_alias: str,
     ) -> dict[str, JsonValue]:
         await self._authorize(context, "model:read", model_id_or_alias)
-        config = self._require_model_registry().get_model(model_id_or_alias)
-        return _model_resource(self._require_model_registry(), config)
+        return self._models.get_model(model_id_or_alias)
 
     async def set_model_enabled(
         self,
@@ -542,18 +528,7 @@ class ControlPlane:
         _require_key(context)
         action = "enable" if enabled else "disable"
         await self._authorize(context, f"model:{action}", model_id_or_alias)
-        config = self._require_model_registry().set_enabled(model_id_or_alias, enabled)
-        return _model_resource(self._require_model_registry(), config)
-
-    def _require_model_registry(self) -> ModelRegistry:
-        if self._model_registry is None:
-            raise ContractError(
-                ErrorCode.UNAVAILABLE,
-                "canonical model registry is not configured",
-                retryable=True,
-                details={"resource": "models"},
-            )
-        return self._model_registry
+        return self._models.set_model_enabled(model_id_or_alias, enabled)
 
     async def _task_ids(self) -> tuple[str, ...]:
         return tuple(
@@ -856,38 +831,6 @@ def _references_for_task(
         }
         for result_id in task.result_ids
     ]
-
-
-def _model_provider_resource(
-    registry: ModelRegistry,
-    provider: ModelProvider,
-) -> dict[str, JsonValue]:
-    descriptor = provider.descriptor
-    return {
-        "id": descriptor.provider_id,
-        "type": "model-provider",
-        "provider_type": descriptor.provider_type,
-        "contract_version": descriptor.contract_version,
-        "supported_operations": list(descriptor.supported_operations),
-        "capabilities": [json_object(item) for item in descriptor.capabilities],
-        "health": registry.provider_health(descriptor.provider_id).value,
-        "enabled": registry.provider_enabled(descriptor.provider_id),
-        "available": descriptor.available,
-        "limits": dict(descriptor.limits),
-        "resources": dict(descriptor.resources),
-        "adapter_metadata": [json_object(item) for item in descriptor.adapter_metadata],
-    }
-
-
-def _model_resource(
-    registry: ModelRegistry,
-    config: ModelConfiguration,
-) -> dict[str, JsonValue]:
-    resource = json_object(config)
-    resource["id"] = config.config_id
-    resource["type"] = "model"
-    resource["effective_health"] = registry.effective_health(config).value
-    return resource
 
 
 def _event_resource(event: object) -> dict[str, JsonValue]:
