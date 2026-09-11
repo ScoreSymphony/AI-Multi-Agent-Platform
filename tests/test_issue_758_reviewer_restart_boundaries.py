@@ -37,6 +37,7 @@ from ai_multi_agent_platform.verification.agent_workflow import (
 )
 from ai_multi_agent_platform.verification.persistence import SqliteVerificationService
 from ai_multi_agent_platform.verification.repair import VerificationRepairExecution
+from ai_multi_agent_platform.verification.reviewer_agent import ReviewerAgentRuntime
 from ai_multi_agent_platform.verification.reviewer_recovery import (
     AutomaticReviewerStartupReconciler,
     ReviewerRecoveryDisposition,
@@ -382,5 +383,86 @@ def test_staged_repair_output_is_reused_after_restart_before_reverification(tmp_
         assert reviewer_executor.calls == 2
         assert len(set(repair_runtime.idempotency_keys)) == 1
         assert len(agents.service.repository.list_agent_runs()) == 2
+
+    asyncio.run(scenario())
+
+
+def test_duplicate_reviewer_completion_after_restart_is_rejected_without_new_result(tmp_path) -> None:
+    async def scenario() -> None:
+        agents, verification, evidence, completion, runtime, request, resolver = _setup(tmp_path)
+        executor = QueueReviewerExecutor(VerificationOutcome.PASS)
+        workflow = AutomaticReviewerWorkflow(
+            runtime=runtime,
+            completion=completion,
+            agents=agents,
+            resolver=resolver,
+            executor=executor,
+        )
+        completed = await workflow.run_request(request.verification_id)
+        assert completed.completion.state is CompletionState.ACCEPTED
+        original_result = verification.result_for(request.verification_id)
+        assert original_result is not None
+        reviewer_run = agents.service.repository.list_agent_runs()[0]
+
+        recovery = AutomaticReviewerStartupReconciler(
+            workflow=workflow,
+            agents=agents,
+            verification=verification,
+        )
+        recovered = await recovery.reconcile_startup()
+        assert recovered[0].disposition is ReviewerRecoveryDisposition.ALREADY_COMPLETED
+
+        bridge = ReviewerAgentRuntime(
+            verification,
+            agents,
+            evidence=evidence,
+            canonical_runtime=runtime,
+        )
+        with pytest.raises(ContractError) as duplicate:
+            await bridge.complete_review(
+                reviewer_run.agent_run_id,
+                outcome=VerificationOutcome.PASS,
+            )
+        assert duplicate.value.code is ErrorCode.CONFLICT
+        assert verification.result_for(request.verification_id) == original_result
+        assert executor.calls == 1
+        assert len(agents.service.repository.list_agent_runs()) == 1
+
+    asyncio.run(scenario())
+
+
+def test_exhausted_repair_budget_remains_closed_across_restart(tmp_path) -> None:
+    async def scenario() -> None:
+        agents, verification, _evidence, completion, runtime, request, resolver = _setup(
+            tmp_path,
+            max_repairs=0,
+        )
+        executor = QueueReviewerExecutor(VerificationOutcome.NEEDS_CHANGES)
+        workflow = AutomaticReviewerWorkflow(
+            runtime=runtime,
+            completion=completion,
+            agents=agents,
+            resolver=resolver,
+            executor=executor,
+        )
+
+        initial = await workflow.run_request(request.verification_id)
+        assert initial.completion.state is CompletionState.REJECTED
+        assert executor.calls == 1
+
+        recovery = AutomaticReviewerStartupReconciler(
+            workflow=workflow,
+            agents=agents,
+            verification=verification,
+        )
+        first = await recovery.reconcile_startup()
+        second = await recovery.reconcile_startup()
+
+        assert first[0].disposition is ReviewerRecoveryDisposition.ALREADY_COMPLETED
+        assert second[0].disposition is ReviewerRecoveryDisposition.ALREADY_COMPLETED
+        assert completion.assess_task_completion(request.task_id).state is CompletionState.REJECTED
+        assert executor.calls == 1
+        assert len(verification.history(task_id=request.task_id)) == 1
+        assert len(agents.service.repository.list_agent_runs()) == 1
 
     asyncio.run(scenario())
