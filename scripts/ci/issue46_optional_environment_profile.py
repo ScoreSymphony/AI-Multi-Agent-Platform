@@ -155,9 +155,7 @@ def _write_mcp_compatibility(
     if protocol_evidence_path is None:
         compatibility = missing_mcp_protocol_evidence(platform_conformant=report.passed)
     else:
-        protocol = MCPProtocolEvidence.from_json(
-            protocol_evidence_path.read_text(encoding="utf-8")
-        )
+        protocol = MCPProtocolEvidence.from_json(protocol_evidence_path.read_text(encoding="utf-8"))
         compatibility = combine_mcp_compatibility(
             protocol,
             platform_conformant=report.passed,
