@@ -262,9 +262,7 @@ class AutomaticReviewerStartupReconciler:
                 task_id=request.task_id,
                 disposition=ReviewerRecoveryDisposition.BLOCKED,
                 reviewer_agent_run_id=(
-                    abandoned_run_id
-                    or stale_completed_run_id
-                    or _latest_run_id(runs_before)
+                    abandoned_run_id or stale_completed_run_id or _latest_run_id(runs_before)
                 ),
                 reason=f"{type(exc).__name__}: {exc}",
             )
