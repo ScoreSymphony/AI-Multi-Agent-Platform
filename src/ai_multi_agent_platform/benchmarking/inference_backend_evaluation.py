@@ -85,6 +85,9 @@ def assess_inference_backend_evaluation(
     candidate = _require_mapping(campaign.get("candidate"), "candidate")
     candidate_backend = _require_str(candidate, "backend")
     candidate_revision = _require_str(candidate, "release_commit")
+    allowed_backends = _campaign_backend_ids(campaign)
+    if candidate_backend not in allowed_backends:
+        raise ValueError("candidate backend must be declared in comparison_backends")
     pinned_revisions = _pinned_backend_revisions(
         campaign,
         candidate_backend=candidate_backend,
@@ -103,6 +106,8 @@ def assess_inference_backend_evaluation(
                 f"does not match {campaign_id!r}"
             )
         backend = _require_str(report, "backend")
+        if backend not in allowed_backends:
+            raise ValueError(f"report backend {backend!r} is not declared by this campaign")
         backend_revision = _require_str(report, "backend_revision")
         pinned_revision = pinned_revisions.get(backend)
         if pinned_revision is not None and backend_revision != pinned_revision:
@@ -184,6 +189,20 @@ def assess_inference_backend_evaluation(
         comparable_sglang_vllm_pairs=comparable_pairs,
         blockers=tuple(blockers),
     )
+
+
+def _campaign_backend_ids(campaign: Mapping[str, Any]) -> set[str]:
+    entries = _require_sequence(campaign.get("comparison_backends"), "comparison_backends")
+    backends: set[str] = set()
+    for item in entries:
+        entry = _require_mapping(item, "comparison_backends")
+        backend = _require_str(entry, "backend")
+        if backend in backends:
+            raise ValueError(f"duplicate comparison backend {backend!r}")
+        backends.add(backend)
+    if not backends:
+        raise ValueError("comparison_backends must not be empty")
+    return backends
 
 
 def _pinned_backend_revisions(
