@@ -1,8 +1,8 @@
-"""Ordinary single-node startup reconciliation for issue #707.
+"""Ordinary single-node startup reconciliation for issues #707 and #758.
 
 This module is intentionally separate from disaster-restore recovery. The normal
-single-Control-Plane profile must reconcile durable canonical Runs after an
-abnormal process exit even when no backup/restore operation occurred.
+single-Control-Plane profile must reconcile durable canonical Runs and automatic
+reviewer work after an abnormal process exit even when no backup/restore operation occurred.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from ai_multi_agent_platform.kernel import (
     RecoveryEntry,
     RecoveryReport,
 )
+from ai_multi_agent_platform.verification.reviewer_recovery import ReviewerRecoveryRecord
 
 STARTUP_RECOVERY_REPORT_VERSION = 1
 STARTUP_RECOVERY_DIR = "recovery"
@@ -41,6 +42,12 @@ class StartupDistributedRuntime(Protocol):
     async def reconcile(self) -> tuple[object, ...]: ...
 
 
+class StartupReviewerReconciler(Protocol):
+    """Narrow #758 seam for durable automatic-reviewer reconciliation."""
+
+    async def reconcile_startup(self) -> tuple[ReviewerRecoveryRecord, ...]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class SingleNodeStartupRecoveryResult:
     """Outcome of one ordinary single-node startup reconciliation pass."""
@@ -52,6 +59,8 @@ class SingleNodeStartupRecoveryResult:
     ready_for_service: bool
     plans_reconciled: int = 0
     distributed_jobs_reconciled: int = 0
+    reviewer_recoveries: tuple[ReviewerRecoveryRecord, ...] = ()
+    blocked_verification_ids: tuple[str, ...] = ()
 
     @property
     def runs_checked(self) -> int:
@@ -64,6 +73,7 @@ async def reconcile_single_node_startup(
     kernel: PlatformKernel,
     coordinator: StartupCoordinator | None = None,
     distributed_runtime: StartupDistributedRuntime | None = None,
+    reviewer_reconciler: StartupReviewerReconciler | None = None,
 ) -> SingleNodeStartupRecoveryResult:
     """Reconcile durable runtime state before an ordinary single-node serve.
 
@@ -73,13 +83,16 @@ async def reconcile_single_node_startup(
     startup records an explicit orphaned blocker instead of asking the kernel to
     redispatch a possibly accepted STARTING execution or aborting before a report can
     be written. Once those blockers are resolved, the durable Plan/Step coordinator
-    resumes due waits/retries and the kernel scans every Task stream. The complete
-    pass is safe to repeat.
+    resumes due waits/retries and the kernel scans every Task stream. Only after
+    canonical Run ownership is stable may #758 reconcile automatic reviewer AgentRuns.
+    The complete pass is safe to repeat.
 
-    A running Run whose execution backend can no longer be found is never guessed
-    into a terminal state: it remains marked as requiring reconciliation and
-    blocks authoritative serving until an operator resolves the exact Run through
-    the canonical kernel outcome path.
+    A running canonical Run whose execution backend can no longer be found is never
+    guessed into a terminal state: it remains marked as requiring reconciliation and
+    blocks authoritative serving until an operator resolves the exact Run through the
+    canonical kernel outcome path. Automatic reviewer recovery likewise never invents
+    a Verification outcome: it only reuses staged reviewer evidence or drives the
+    existing bounded reviewer workflow after stale process-local ownership is reconciled.
     """
 
     root = data_dir.expanduser().resolve()
@@ -110,7 +123,14 @@ async def reconcile_single_node_startup(
         for entry in report.entries
         if entry.disposition is RecoveryDisposition.ORPHANED_RECONCILIATION_REQUIRED
     )
-    ready_for_service = not unresolved
+
+    reviewer_recoveries: tuple[ReviewerRecoveryRecord, ...] = ()
+    if not unresolved and reviewer_reconciler is not None:
+        reviewer_recoveries = await reviewer_reconciler.reconcile_startup()
+    blocked_verification_ids = tuple(
+        record.verification_id for record in reviewer_recoveries if record.blocked
+    )
+    ready_for_service = not unresolved and not blocked_verification_ids
 
     payload: dict[str, Any] = {
         "report_version": STARTUP_RECOVERY_REPORT_VERSION,
@@ -119,8 +139,21 @@ async def reconcile_single_node_startup(
         "runs_checked": sum(len(report.entries) for report in reports),
         "plans_reconciled": plans_reconciled,
         "distributed_jobs_reconciled": distributed_jobs_reconciled,
+        "reviewer_recoveries_checked": len(reviewer_recoveries),
         "unresolved_run_ids": list(unresolved),
+        "blocked_verification_ids": list(blocked_verification_ids),
         "ready_for_service": ready_for_service,
+        "reviewer_recoveries": [
+            {
+                "verification_id": record.verification_id,
+                "task_id": record.task_id,
+                "disposition": record.disposition.value,
+                "reviewer_agent_run_id": record.reviewer_agent_run_id,
+                "replacement_agent_run_id": record.replacement_agent_run_id,
+                "reason": record.reason,
+            }
+            for record in reviewer_recoveries
+        ],
         "tasks": [
             {
                 "task_id": report.task_id,
@@ -146,6 +179,8 @@ async def reconcile_single_node_startup(
         ready_for_service=ready_for_service,
         plans_reconciled=plans_reconciled,
         distributed_jobs_reconciled=distributed_jobs_reconciled,
+        reviewer_recoveries=reviewer_recoveries,
+        blocked_verification_ids=blocked_verification_ids,
     )
 
 
