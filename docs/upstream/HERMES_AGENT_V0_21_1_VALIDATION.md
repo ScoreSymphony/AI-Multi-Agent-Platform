@@ -27,7 +27,7 @@ The upstream v0.21.1 release notes describe a broad roll-up of changes across th
 
 The candidate commit still carries the upstream MIT license. No Hermes source is copied, vendored or modified by this repository. The platform owns only its adapter code, configuration, tests and provenance metadata.
 
-The governed provenance entry is `upstream/hermes-agent.yaml`. The candidate pin is accepted on `main` only if the pull-request validation gates complete successfully.
+The governed provenance entry is `upstream/hermes-agent.yaml`. The candidate pin is accepted only together with the passing revision-bound evidence recorded below.
 
 ## Programmatic API review
 
@@ -79,20 +79,28 @@ No ADR is required because the architectural boundary from #8 is unchanged.
 
 ## Validation gates
 
-The candidate pull request must pass all of the following before the updated pin is accepted:
+All required candidate gates passed on the tested platform revision `256b5fc4380e81a0d6f7991ee9939fdc2df347a7`.
 
-1. full repository CI, including Ruff, mypy, pytest and build;
-2. #19 deterministic evaluation/regression gate;
-3. `hermes-pinned-compat` against exact commit `2237be355906fbe6065ce1815711eee52b2d646e`;
-4. #46 Scenario B conformance, including the version-specific regression matrix, real upstream lifecycle-surface test, real `/v1/runs` adapter test, exact Agent/Team mapping test and Hermes + reference-executor kernel E2E;
-5. repository pin/provenance/compatibility inventory consistency tests.
+- **CI workflow:** run `34567628563` — success.
+- **Core test job:** success, including Ruff format/lint, mypy, pytest, package build and MCP environment conformance.
+- **#19 deterministic evaluation/regression gate:** success inside the core `test` job.
+- **Hermes pinned compatibility job:** `hermes-pinned-compat` — success against exact Hermes commit `2237be355906fbe6065ce1815711eee52b2d646e`.
+- **#46 Scenario B:** success inside `hermes-pinned-compat`, including version-specific regressions, real upstream lifecycle-surface validation, real `/v1/runs` adapter integration, exact Agent/Team mapping and Hermes + reference-executor kernel E2E.
+- **Hermes conformance artifact:** `platform-conformance-hermes`, artifact id `10186986745`, digest `sha256:aa361f3f92a7dcffea99aece9a95248b485578fd014d14649a89d1e8a76590dd`.
+- **Platform conformance workflow:** run `34567628589` — success.
+- **Security/dependency gates:** CodeQL run `34567628481` and Dependency review run `34567628611` — success.
+- **Repository-wide operational checks:** all pull-request workflow runs associated with tested revision `256b5fc4380e81a0d6f7991ee9939fdc2df347a7` completed successfully, including performance, pressure, contention, fault, failover, reproducibility, regression, scale and prototype-acceptance workflows.
+
+The evidence is revision-bound to the platform head above and the immutable Hermes candidate commit. No required matrix cell is being inferred from installation or process startup alone.
 
 ## Rollback
 
-If any required validation gate exposes a regression, the update is not accepted. The rollback target is the previously accepted commit `63279301bcbdc185c1b07b98a9312eb0c862f26d`; revert the candidate pin in the adapter, provenance, compatibility snapshots, example configuration and CI checkout together.
+The rollback target remains the previously accepted commit `63279301bcbdc185c1b07b98a9312eb0c862f26d`. If a post-merge regression is discovered, revert the Hermes pin in the adapter, provenance, compatibility snapshots, example configuration and CI checkout together. No canonical Task/Run/Agent/Team/Plan/Step schema migration was introduced by this update, so rollback does not require a platform-domain data migration.
 
 ## Decision
 
-**PENDING_CI** on the candidate branch.
+**PASS_UPDATE**
 
-Static API, provenance and architecture review found no blocker that independently requires `DEFER` or `REJECT`. This is deliberately **not yet `PASS_UPDATE`**: #42 adoption policy requires revision-bound automated evidence, and the exact-candidate PR checks have not completed at the point this document is introduced. The document must be updated to one explicit final outcome — `PASS_UPDATE`, `DEFER` or `REJECT` — after those checks complete.
+Hermes Agent v0.21.1 at exact commit `2237be355906fbe6065ce1815711eee52b2d646e` satisfies the existing #8 adapter boundary and the required #42 update process for the claimed compatibility surface. The full repository CI, #19 deterministic evaluation gate, #46 Hermes Scenario B, exact pinned-runtime integration, lifecycle/status/error regressions, provenance consistency and security/dependency checks all passed on platform revision `256b5fc4380e81a0d6f7991ee9939fdc2df347a7`.
+
+The governed Hermes pin may therefore be updated from `63279301bcbdc185c1b07b98a9312eb0c862f26d` to `2237be355906fbe6065ce1815711eee52b2d646e` without changing canonical lifecycle ownership or making Hermes mandatory.
