@@ -103,14 +103,21 @@ async def _run() -> dict[str, Any]:
         await wrong.start()
         try:
             try:
-                await wrong.is_alive()
+                wrong_health = await wrong.is_alive()
             except Exception as exc:
                 evidence["wrong_auth_rejected"] = True
                 evidence["wrong_auth_error_type"] = type(exc).__name__
             else:
-                evidence["wrong_auth_rejected"] = False
+                evidence["wrong_auth_rejected"] = not bool(wrong_health)
+                evidence["wrong_auth_error_type"] = None
         finally:
-            await wrong.stop()
+            try:
+                await wrong.stop()
+            except Exception as exc:
+                evidence["wrong_auth_close_rejected"] = True
+                evidence["wrong_auth_close_error_type"] = type(exc).__name__
+            else:
+                evidence["wrong_auth_close_rejected"] = False
 
         with tempfile.TemporaryDirectory(prefix="issue861-remote-") as temp_dir:
             root = Path(temp_dir).resolve()
