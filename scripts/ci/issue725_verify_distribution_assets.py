@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
 import sys
 import tarfile
+import tempfile
+import venv
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -89,9 +93,46 @@ def verify_sdist(path: Path, root: Path) -> None:
                 )
 
 
+def venv_python(venv_dir: Path) -> Path:
+    if os.name == "nt":
+        return venv_dir / "Scripts" / "python.exe"
+    return venv_dir / "bin" / "python"
+
+
+def verify_installed_wheel(path: Path, root: Path) -> None:
+    smoke_script = root / "scripts/ci/issue725_installed_resource_smoke.py"
+    if not smoke_script.is_file():
+        raise RuntimeError(f"missing installed-resource smoke script: {smoke_script}")
+
+    with tempfile.TemporaryDirectory(prefix="issue725-wheel-smoke-") as temporary:
+        temporary_root = Path(temporary)
+        venv_dir = temporary_root / "venv"
+        venv.EnvBuilder(with_pip=True).create(venv_dir)
+        python = venv_python(venv_dir)
+        subprocess.run(
+            [
+                str(python),
+                "-m",
+                "pip",
+                "--disable-pip-version-check",
+                "install",
+                str(path),
+            ],
+            cwd=temporary_root,
+            check=True,
+        )
+        subprocess.run(
+            [str(python), str(smoke_script)],
+            cwd=temporary_root,
+            check=True,
+        )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Verify canonical runtime assets inside built distributions."
+        description=(
+            "Verify canonical runtime assets inside built distributions and an installed wheel."
+        )
     )
     parser.add_argument("dist_dir", nargs="?", type=Path, default=Path("dist"))
     parser.add_argument(
@@ -112,11 +153,18 @@ def main() -> int:
         sdist = single_artifact(dist_dir, "*.tar.gz", "sdist")
         verify_wheel(wheel, root)
         verify_sdist(sdist, root)
-    except (OSError, RuntimeError, tarfile.TarError, zipfile.BadZipFile) as exc:
+        verify_installed_wheel(wheel, root)
+    except (
+        OSError,
+        RuntimeError,
+        subprocess.CalledProcessError,
+        tarfile.TarError,
+        zipfile.BadZipFile,
+    ) as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
-    print("Built distributions contain canonical runtime assets.")
+    print("Built distributions and installed wheel contain canonical runtime assets.")
     return 0
 
 
