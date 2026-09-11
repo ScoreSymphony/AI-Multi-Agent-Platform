@@ -121,9 +121,10 @@ try {
   const beforeTypeFilter = await page.evaluate(() => window.__memoryTypeCalls.length);
   await queryCard.getByLabel("Memory Type", { exact: true }).selectOption("procedural");
   await page.waitForFunction(
-    (count) => window.__memoryTypeCalls.slice(count).some((call) =>
-      decodeURIComponent(call.url).includes("filter[memory_type]=procedural"),
-    ),
+    (count) =>
+      window.__memoryTypeCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[memory_type]=procedural"),
+      ),
     beforeTypeFilter,
   );
 
@@ -137,7 +138,9 @@ try {
     beforeAllTypes,
   );
   const allTypeCalls = await page.evaluate((count) => window.__memoryTypeCalls.slice(count), beforeAllTypes);
-  const allTypesListCall = allTypeCalls.find((call) => call.method === "GET" && call.url.startsWith("/api/v1/memory?"));
+  const allTypesListCall = [...allTypeCalls].reverse().find(
+    (call) => call.method === "GET" && call.url.startsWith("/api/v1/memory?"),
+  );
   if (!allTypesListCall || decodeURIComponent(allTypesListCall.url).includes("filter[memory_type]")) {
     throw new Error(`All-types Memory query leaked a type filter: ${JSON.stringify(allTypeCalls)}`);
   }
@@ -170,9 +173,10 @@ try {
   await updateCard.getByLabel("Replacement value JSON", { exact: true }).fill('{"workflow":"compile-release-v2"}');
   await updateCard.getByRole("button", { name: "Create superseding Memory", exact: true }).click();
   await page.waitForFunction(
-    (count) => window.__memoryTypeCalls.slice(count).some((call) =>
-      call.method === "POST" && call.url === "/api/v1/commands/memory.update"),
-    ),
+    (count) =>
+      window.__memoryTypeCalls.slice(count).some(
+        (call) => call.method === "POST" && call.url === "/api/v1/commands/memory.update",
+      ),
     beforeUpdate,
   );
   await page.getByRole("status").filter({ hasText: "type procedural" }).waitFor();
@@ -187,9 +191,10 @@ try {
   await promoteCard.getByLabel("Target scope ID", { exact: true }).fill("user-browser");
   await promoteCard.getByRole("button", { name: "Promote Memory", exact: true }).click();
   await page.waitForFunction(
-    (count) => window.__memoryTypeCalls.slice(count).some((call) =>
-      call.method === "POST" && call.url === "/api/v1/commands/memory.promote"),
-    ),
+    (count) =>
+      window.__memoryTypeCalls.slice(count).some(
+        (call) => call.method === "POST" && call.url === "/api/v1/commands/memory.promote",
+      ),
     beforePromote,
   );
   await page.getByRole("status").filter({ hasText: "type procedural" }).waitFor();
