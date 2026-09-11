@@ -295,6 +295,7 @@ def main(
             print(
                 "startup recovery remains blocked after run resolution: "
                 f"unresolved_runs={len(startup.unresolved_run_ids)} "
+                f"blocked_verifications={len(startup.blocked_verification_ids)} "
                 f"report={startup.report_path}",
                 file=sys.stderr,
             )
@@ -330,6 +331,7 @@ def main(
             print(
                 "startup recovery remains blocked: "
                 f"unresolved_runs={len(startup.unresolved_run_ids)} "
+                f"blocked_verifications={len(startup.blocked_verification_ids)} "
                 f"report={startup.report_path}",
                 file=sys.stderr,
             )
@@ -391,6 +393,7 @@ async def _run_startup_recovery(
         kernel=deployment.kernel,
         coordinator=deployment.coordination,
         distributed_runtime=deployment.distributed_runtime,
+        reviewer_reconciler=deployment.reviewer_recovery,
     )
 
 
@@ -412,7 +415,9 @@ def _print_startup_recovery(recovery: SingleNodeStartupRecoveryResult) -> None:
         f"runs_checked={recovery.runs_checked} "
         f"plans={recovery.plans_reconciled} "
         f"distributed_jobs={recovery.distributed_jobs_reconciled} "
+        f"reviewers={len(recovery.reviewer_recoveries)} "
         f"unresolved={len(recovery.unresolved_run_ids)} "
+        f"blocked_verifications={len(recovery.blocked_verification_ids)} "
         f"ready={str(recovery.ready_for_service).lower()} "
         f"report={recovery.report_path}"
     )
