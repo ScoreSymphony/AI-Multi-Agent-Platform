@@ -332,9 +332,7 @@ class KernelLifecycleReconciler:
                 ErrorCode.CONFLICT,
                 f"backend reports running while canonical run is {run.status.value}",
             )
-        specs: list[EventSpec] = [
-            ("run.running", "run", run.run_id, {}, snapshot.adapter_metadata)
-        ]
+        specs: list[EventSpec] = [("run.running", "run", run.run_id, {}, snapshot.adapter_metadata)]
         if task.status is TaskStatus.READY:
             specs.append(("task.running", "task", task.task_id, {"reconciled": True}, ()))
         return tuple(specs)
