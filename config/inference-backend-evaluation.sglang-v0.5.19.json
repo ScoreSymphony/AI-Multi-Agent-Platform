@@ -38,10 +38,11 @@
       "release_commit": "98dff2a81d747d1dba01a47f939f48c3526d4206"
     },
     {
-      "backend": "llama.cpp-or-ollama",
+      "backend": "ollama",
       "role": "local-path-comparator",
       "protocol": "openai-compatible-where-supported",
-      "revision_policy": "record-exact-revision-per-run"
+      "release": "v0.34.0",
+      "release_commit": "d8ab4b4f0ca24b51d3a46b3bf4f462e58ce66b1f"
     }
   ],
   "comparability": {
