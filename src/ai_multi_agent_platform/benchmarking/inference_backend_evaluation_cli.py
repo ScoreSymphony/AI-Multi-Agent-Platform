@@ -55,8 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         campaign = _load_object(campaign_path, label="campaign")
         reports = tuple(
-            _load_object(report_path, label=f"report {report_path}")
-            for report_path in report_paths
+            _load_object(report_path, label=f"report {report_path}") for report_path in report_paths
         )
         readiness = assess_inference_backend_evaluation(
             campaign=campaign,
