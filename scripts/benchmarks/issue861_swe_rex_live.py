@@ -145,6 +145,8 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
 
     backend = "docker-network-none" if network_none else "docker"
     docker_args = ["--network=none"] if network_none else []
+    configured_image = os.environ.get("ISSUE861_SWEREX_IMAGE")
+    docker_image = configured_image or "python:3.11"
     evidence: dict[str, Any] = {
         "backend": backend,
         "swerex_version": swerex.__version__,
@@ -153,10 +155,12 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
         "host_platform": platform.platform(),
         "python": sys.version,
         "docker_args": docker_args,
+        "docker_image": docker_image,
+        "docker_image_explicitly_pinned": configured_image is not None,
     }
     deployment = DockerDeployment(
-        image="python:3.11",
-        pull="missing",
+        image=docker_image,
+        pull="never" if configured_image is not None else "missing",
         docker_args=docker_args,
         remove_container=True,
     )
@@ -167,7 +171,10 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
         with tempfile.TemporaryDirectory(prefix="issue861-docker-") as temp_dir:
             local_workspace = Path(temp_dir).resolve() / "workspace"
             local_workspace.mkdir()
-            (local_workspace / "input.txt").write_text("input-canary", encoding="utf-8")
+            (local_workspace / "input.txt").write_text(
+                "input-canary",
+                encoding="utf-8",
+            )
             remote_workspace = "/tmp/issue861"
             await deployment.runtime.upload(
                 UploadRequest(
@@ -196,7 +203,10 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
                     command=[
                         "python",
                         "-c",
-                        "from pathlib import Path; Path('out.txt').write_text('artifact-canary')",
+                        (
+                            "from pathlib import Path; "
+                            "Path('out.txt').write_text('artifact-canary')"
+                        ),
                     ],
                     cwd=remote_workspace,
                 )
@@ -205,11 +215,16 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
                 ReadFileRequest(path=artifact_path, encoding="utf-8")
             )
             evidence["artifact_round_trip"] = bool(
-                artifact_response.exit_code == 0 and read_back.content == "artifact-canary"
+                artifact_response.exit_code == 0
+                and read_back.content == "artifact-canary"
             )
 
             egress = await deployment.runtime.execute(
-                Command(command=["python", "-c", _egress_payload()], timeout=10, check=False)
+                Command(
+                    command=["python", "-c", _egress_payload()],
+                    timeout=10,
+                    check=False,
+                )
             )
             evidence["egress"] = {
                 "exit_code": egress.exit_code,
@@ -217,7 +232,10 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
                 "stderr": egress.stderr.strip()[:500],
             }
             if network_none:
-                evidence["network_none_blocked_egress"] = egress.exit_code not in (0, None)
+                evidence["network_none_blocked_egress"] = egress.exit_code not in (
+                    0,
+                    None,
+                )
     finally:
         stopped = monotonic()
         await deployment.stop()
@@ -225,6 +243,7 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
 
     evidence["passed_core_semantics"] = bool(
         evidence["swerex_version"] == EXPECTED_VERSION
+        and evidence["docker_image_explicitly_pinned"]
         and evidence["execute"]["exit_code"] == 0
         and evidence["execute"]["stdout_has_marker"]
         and evidence["execute"]["stderr_has_marker"]
@@ -232,7 +251,8 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
     )
     if network_none:
         evidence["passed_core_semantics"] = bool(
-            evidence["passed_core_semantics"] and evidence["network_none_blocked_egress"]
+            evidence["passed_core_semantics"]
+            and evidence["network_none_blocked_egress"]
         )
     return evidence
 
@@ -251,7 +271,9 @@ async def _main() -> int:
         if args.backend == "local":
             evidence = await _run_local()
         else:
-            evidence = await _run_docker(network_none=args.backend == "docker-network-none")
+            evidence = await _run_docker(
+                network_none=args.backend == "docker-network-none"
+            )
     except Exception as exc:
         evidence = {
             "backend": args.backend,
