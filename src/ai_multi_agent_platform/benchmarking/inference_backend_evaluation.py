@@ -96,6 +96,7 @@ def assess_inference_backend_evaluation(
     required_contract_cases = _require_string_set(campaign, "contract_cases")
     required_failure_cases = _require_string_set(campaign, "failure_cases")
     required_placement_cases = _require_string_set(campaign, "placement_cases")
+    required_metrics = _require_string_set(campaign, "required_metrics")
 
     normalized_reports: list[Mapping[str, Any]] = []
     for report in reports:
@@ -157,6 +158,7 @@ def assess_inference_backend_evaluation(
     comparable_pairs = _count_comparable_candidate_vllm_pairs(
         normalized_reports,
         candidate_backend=candidate_backend,
+        required_metrics=required_metrics,
     )
 
     blockers: list[str] = []
@@ -271,6 +273,7 @@ def _count_comparable_candidate_vllm_pairs(
     reports: Sequence[Mapping[str, Any]],
     *,
     candidate_backend: str,
+    required_metrics: set[str],
 ) -> int:
     candidate = [
         report for report in reports if _require_str(report, "backend") == candidate_backend
@@ -280,20 +283,27 @@ def _count_comparable_candidate_vllm_pairs(
         1
         for candidate_report in candidate
         for comparator in vllm
-        if _report_is_decision_eligible(candidate_report)
-        and _report_is_decision_eligible(comparator)
+        if _report_is_decision_eligible(candidate_report, required_metrics=required_metrics)
+        and _report_is_decision_eligible(comparator, required_metrics=required_metrics)
         and _comparison_key(candidate_report) == _comparison_key(comparator)
     )
 
 
-def _report_is_decision_eligible(report: Mapping[str, Any]) -> bool:
+def _report_is_decision_eligible(
+    report: Mapping[str, Any],
+    *,
+    required_metrics: set[str],
+) -> bool:
     if report.get("decision_eligible") is not True:
         return False
     comparability = _require_mapping(report.get("comparability"), "comparability")
     if comparability.get("comparable") is not True:
         return False
     placement = _require_mapping(report.get("placement"), "placement")
-    return placement.get("status") == "pass"
+    if placement.get("status") != "pass":
+        return False
+    metrics = _require_mapping(report.get("metrics"), "metrics")
+    return all(metrics.get(metric) is not None for metric in required_metrics)
 
 
 def _comparison_key(report: Mapping[str, Any]) -> tuple[Any, ...]:
