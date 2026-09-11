@@ -112,7 +112,9 @@ def _diagnostics(stdout: str, stderr: str, *, limit: int = 4000) -> str | None:
 
 
 def _scenario_slug(scenario: str) -> str:
-    return "".join(character if character.isalnum() or character in "-_." else "_" for character in scenario)
+    return "".join(
+        character if character.isalnum() or character in "-_." else "_" for character in scenario
+    )
 
 
 def _result_directories(results_root: Path) -> set[Path]:
