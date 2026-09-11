@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "backend": "garage",
+  "evidence_scope": "github_hosted_runner_single_node",
+  "workflow_run_id": 34654695281,
+  "workflow_head_sha": "f5873624f36542f0cdf464fe6b012aed3a64b7e7",
+  "artifact_id": 10284869246,
+  "artifact_digest": "sha256:e448450133f3cd8fa94121ed2b10154ed9687f148ca494cac0730c910cc92a7e",
+  "runtime": {
+    "image": "dxflrs/garage:v2.3.0",
+    "image_id": "sha256:5eda3acb72a0b6c3432233d19b07dffabd9ee7eb93be90031bae75e4b81e6324",
+    "repo_digest": "dxflrs/garage@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690"
+  },
+  "contract": {
+    "PutObject": "pass",
+    "HeadObject": "pass",
+    "GetObject": "pass",
+    "RangeGetObject": "pass",
+    "ListObjectsV2": "pass",
+    "DeleteObject": "pass",
+    "concurrent_round_trip": "pass",
+    "concurrency": 8,
+    "primary_bytes": 1048576,
+    "primary_sha256": "db91a6c490671995f6c25914125ca0b3ba0e08dc893de7739dbf1c625917fb52",
+    "etag_observed": "\"f60a2fa6d67599049966d33be32d2f44\"",
+    "etag_used_as_canonical_checksum": false
+  },
+  "restart": {
+    "status": "pass",
+    "bytes": 1048576,
+    "sha256_before": "e520d57071576ddcf7ee5f038f977c12ef50e575c3cfef21d815e425cfcaf8cb",
+    "sha256_after": "e520d57071576ddcf7ee5f038f977c12ef50e575c3cfef21d815e425cfcaf8cb"
+  },
+  "runner_resource_observation": {
+    "classification": "diagnostic_only_not_vps_evidence",
+    "cpu_percent_snapshot": "0.01%",
+    "memory_usage_snapshot": "5.93MiB",
+    "memory_percent_of_runner_snapshot": "0.04%",
+    "pids_snapshot": 17
+  },
+  "credentials_emitted": false,
+  "remaining_gates": [
+    "canonical FileProvider conformance on live backend",
+    "backup and verified restore",
+    "upgrade and rollback/downgrade statement",
+    "TLS/auth deployment evidence",
+    "multi-node partial-failure evidence",
+    "target VPS resource measurements",
+    "AGPL deployment-boundary review",
+    "setup-wizard reconciliation with issue 799"
+  ]
+}
