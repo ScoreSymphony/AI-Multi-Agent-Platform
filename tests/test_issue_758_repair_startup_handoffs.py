@@ -137,9 +137,7 @@ async def _needs_changes_stack(tmp_path):
     )
     agents = AgentRuntime(service)
 
-    verification = SqliteVerificationService(
-        tmp_path / "verification-repair-startup.sqlite3"
-    )
+    verification = SqliteVerificationService(tmp_path / "verification-repair-startup.sqlite3")
     completion = VerificationCompletionAuthority(verification)
     policy = verification.register_policy(
         VerificationPolicy(
@@ -297,10 +295,7 @@ def test_restart_after_needs_changes_before_repair_run_creates_one_lineage(
         assert len(repair_runs) == 1
         assert len(verification.history(task_id=request.task_id)) == 2
         assert len(agents.service.repository.list_agent_runs()) == 2
-        assert (
-            completion.assess_task_completion(request.task_id).state
-            is CompletionState.ACCEPTED
-        )
+        assert completion.assess_task_completion(request.task_id).state is CompletionState.ACCEPTED
 
         repaired_result_id = repair_executor.result_id
         assert repaired_result_id is not None
@@ -387,15 +382,15 @@ def test_restart_after_fresh_reverification_before_dispatch_creates_one_reviewer
         assert len(verification.history(task_id=request.task_id)) == 2
         reviewer_runs = agents.service.repository.list_agent_runs()
         assert len(reviewer_runs) == 2
-        assert sum(
-            run.verification_context.get("verification_id") == descendant.verification_id
-            for run in reviewer_runs
-        ) == 1
+        assert (
+            sum(
+                run.verification_context.get("verification_id") == descendant.verification_id
+                for run in reviewer_runs
+            )
+            == 1
+        )
         assert all(record.blocked is False for record in repeated)
         assert len(agents.service.repository.list_agent_runs()) == 2
-        assert (
-            completion.assess_task_completion(request.task_id).state
-            is CompletionState.ACCEPTED
-        )
+        assert completion.assess_task_completion(request.task_id).state is CompletionState.ACCEPTED
 
     asyncio.run(scenario())
