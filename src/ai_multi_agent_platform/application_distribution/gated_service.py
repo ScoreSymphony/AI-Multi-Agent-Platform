@@ -124,10 +124,11 @@ class ApplicationDistributionService(_BaseApplicationDistributionService):
             if name not in gates or not gate_is_current(gates[name], release)
         ]
         if stale:
+            stale_details: dict[str, JsonValue] = {"stale_gates": [*stale]}
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "mandatory application release gate evidence is stale for the current subject",
-                details={"stale_gates": stale},
+                details=stale_details,
             )
         nonpassing = [
             name
@@ -135,10 +136,11 @@ class ApplicationDistributionService(_BaseApplicationDistributionService):
             if gates[name].status is not GateStatus.PASSED
         ]
         if nonpassing:
+            blocking_details: dict[str, JsonValue] = {"blocking_gates": [*nonpassing]}
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "mandatory application release gates are not conclusively passing",
-                details={"blocking_gates": nonpassing},
+                details=blocking_details,
             )
 
     @staticmethod
