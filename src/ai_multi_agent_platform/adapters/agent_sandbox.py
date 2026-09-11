@@ -195,7 +195,8 @@ class AgentSandboxExecutor(Executor):
                 healthy=False,
                 metadata={
                     **self.descriptor.metadata,
-                    "health_error": str(exc),
+                    "health_error": "provider health check failed",
+                    "health_exception_type": type(exc).__name__,
                 },
             )
         capabilities = health.capabilities or self._capabilities
@@ -277,13 +278,13 @@ class AgentSandboxExecutor(Executor):
         except asyncio.CancelledError:
             await self._cancel_backend(backend_request.request_ref)
             return self._cancelled(request, started_at, started)
-        except Exception as exc:
+        except Exception:
             return self._failure(
                 request,
                 started_at,
                 started,
                 ExecutionErrorCategory.INTERNAL,
-                str(exc),
+                "Agent-Sandbox provider execution failed",
                 retryable=True,
             )
 
