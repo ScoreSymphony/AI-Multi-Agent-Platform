@@ -59,7 +59,9 @@ class _ProducerOnlyTransport:
 
         self.chat_calls += 1
         if self.chat_calls != 1:
-            raise AssertionError("ambiguous reviewer routing must fail before reviewer model execution")
+            raise AssertionError(
+                "ambiguous reviewer routing must fail before reviewer model execution"
+            )
         return HttpJsonResponse(
             200,
             {
@@ -328,15 +330,18 @@ def test_productive_ambiguous_reviewer_routing_fails_closed_with_canonical_reaso
         assert repeated.value.code is ErrorCode.INVALID_CONFIGURATION
         assert repeated.value.details["match_count"] == 2
         assert transport.chat_calls == 1
-        assert len(
-            [
-                pair
-                for pair in deployment.verification.history(task_id=task_id)
-                if pair[0].policy_id == policy.policy_id
-                and pair[0].policy_version == policy.version
-                and pair[0].stage_id == "agent-review"
-                and pair[0].subject.subject_id == result_id
-            ]
-        ) == 1
+        assert (
+            len(
+                [
+                    pair
+                    for pair in deployment.verification.history(task_id=task_id)
+                    if pair[0].policy_id == policy.policy_id
+                    and pair[0].policy_version == policy.version
+                    and pair[0].stage_id == "agent-review"
+                    and pair[0].subject.subject_id == result_id
+                ]
+            )
+            == 1
+        )
 
     asyncio.run(scenario())
