@@ -12,7 +12,6 @@ import asyncio
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from http import HTTPStatus
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -168,7 +167,7 @@ class MCPStatelessHTTPClient(MCPClient):
                 "version": self._client_version,
             },
         }
-        body = {
+        body: dict[str, JsonValue] = {
             "jsonrpc": "2.0",
             "id": request_id,
             "method": method,
@@ -191,7 +190,7 @@ class MCPStatelessHTTPClient(MCPClient):
         )
         timeout = self._config.read_timeout_seconds or 10.0
         try:
-            with urlopen(request, timeout=timeout) as raw:  # noqa: S310 - configured MCP endpoint
+            with urlopen(request, timeout=timeout) as raw:
                 return _decode_response(raw.status, raw.read())
         except HTTPError as exc:
             return _decode_response(exc.code, exc.read())
