@@ -127,11 +127,7 @@ _ERROR_MAP: dict[str, ExecutionErrorCategory] = {
 
 
 def _safe_provider_metadata(metadata: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    return {
-        key: value
-        for key, value in metadata.items()
-        if key in _SAFE_PROVIDER_METADATA_KEYS
-    }
+    return {key: value for key, value in metadata.items() if key in _SAFE_PROVIDER_METADATA_KEYS}
 
 
 class SwerexExecutor(Executor):
@@ -381,11 +377,7 @@ class SwerexExecutor(Executor):
         error: ExecutionError | None = None
         if status is not ExecutionStatus.SUCCEEDED:
             category = self._error_category(backend)
-            message = (
-                backend.error_message
-                or backend.stderr
-                or f"SWE-ReX execution {backend.status}"
-            )
+            message = backend.error_message or backend.stderr or f"SWE-ReX execution {backend.status}"
             details: dict[str, JsonValue] = {}
             if backend.error_code is not None:
                 details["swe_rex_error_code"] = backend.error_code
