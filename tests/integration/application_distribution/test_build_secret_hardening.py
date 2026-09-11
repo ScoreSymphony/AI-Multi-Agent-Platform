@@ -257,9 +257,7 @@ def test_secret_resolution_denials_become_terminal_canonical_build_failures(
         assert target.run_id is not None
         run = await kernel.get_run(target.task_id, target.run_id)
         assert run.status is RunStatus.FAILED
-        assert run.output["output"] == {
-            "contract_error": {"code": code.value, "retryable": False}
-        }
+        assert run.output["output"] == {"contract_error": {"code": code.value, "retryable": False}}
         serialized = repr(run.output)
         assert reference.secret_id not in serialized
         assert "PRIVATE_INDEX_TOKEN" not in serialized
@@ -279,7 +277,9 @@ def test_cross_project_secret_becomes_terminal_canonical_build_failure(tmp_path:
             project_id=project_id,
         )
         data_context = DataAccessContext(operation=operation, actor_ref="user:tester")
-        files = LocalFileProvider(tmp_path / "cross" / "files", tmp_path / "cross" / "files.sqlite3")
+        files = LocalFileProvider(
+            tmp_path / "cross" / "files", tmp_path / "cross" / "files.sqlite3"
+        )
         workspaces = LocalWorkspaceProvider(tmp_path / "cross" / "workspaces", files)
         workspace = await workspaces.create_workspace(
             project_id=project_id,
