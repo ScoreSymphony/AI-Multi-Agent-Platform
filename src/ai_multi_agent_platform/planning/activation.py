@@ -27,12 +27,7 @@ from ai_multi_agent_platform.security import (
 )
 
 from .handoff import ActivatedPlanCoordinator, PlanningActivationHandoff, PlanningEmitter
-from .models import (
-    PlanProposal,
-    PriorPlanSnapshot,
-    ProposalRecord,
-    ProposalStatus,
-)
+from .models import PriorPlanSnapshot, ProposalRecord, ProposalStatus
 from .repository import PlanningRepository, advance_record
 
 
