@@ -8,12 +8,6 @@ from pathlib import Path
 import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
-from ai_multi_agent_platform.contracts.types import (
-    HealthStatus,
-    JsonValue,
-    ProviderDescriptor,
-    StoredObject,
-)
 from ai_multi_agent_platform.data import (
     DataAccessContext,
     DataProviderSet,
@@ -23,8 +17,6 @@ from ai_multi_agent_platform.data import (
     LocalKnowledgeProvider,
     LocalMemoryProvider,
     MemoryEntry,
-    MemoryProvider,
-    MemoryQuery,
     MemoryScope,
     RetentionPolicy,
     SourceRef,
@@ -33,6 +25,7 @@ from ai_multi_agent_platform.data import (
     new_memory_id,
 )
 from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.testing import FakeScopedMemoryProvider
 
 
 def _operation(project_id: str | None = None, owner_id: str = "user-a") -> OperationContext:
@@ -146,80 +139,8 @@ def test_memory_access_semantics_are_explicit_for_all_six_scopes() -> None:
     assert entries[4].access_policy.cross_project_access == "explicit_policy_only"
 
 
-class InMemoryReplacementMemoryProvider(MemoryProvider):
-    """Second backend used to prove the canonical contract is replaceable."""
-
-    def __init__(self) -> None:
-        self.entries: dict[str, MemoryEntry] = {}
-        self._descriptor = ProviderDescriptor(
-            provider_id="in-memory-contract-test",
-            provider_type="memory",
-            supported_operations=("write", "get"),
-            capabilities=(),
-            health=HealthStatus.HEALTHY,
-        )
-
-    @property
-    def descriptor(self) -> ProviderDescriptor:
-        return self._descriptor
-
-    async def put(
-        self,
-        namespace: str,
-        key: str,
-        value: JsonValue,
-        context: OperationContext,
-        *,
-        metadata: dict[str, JsonValue] | None = None,
-    ) -> StoredObject:
-        raise NotImplementedError
-
-    async def get(self, namespace: str, key: str, context: OperationContext) -> JsonValue:
-        raise NotImplementedError
-
-    async def write_entry(self, entry: MemoryEntry, context: DataAccessContext) -> MemoryEntry:
-        self.entries[entry.memory_id] = entry
-        return entry
-
-    async def get_entry(self, memory_id: str, context: DataAccessContext) -> MemoryEntry:
-        try:
-            return self.entries[memory_id]
-        except KeyError as exc:
-            raise ContractError(ErrorCode.NOT_FOUND, f"memory not found: {memory_id}") from exc
-
-    async def query_entries(
-        self,
-        query: MemoryQuery,
-        context: DataAccessContext,
-    ) -> tuple[MemoryEntry, ...]:
-        return tuple(
-            entry
-            for entry in self.entries.values()
-            if entry.scope is query.scope and entry.scope_id == query.scope_id
-        )[: query.limit]
-
-    async def search_entries(
-        self,
-        query: MemoryQuery,
-        text: str,
-        context: DataAccessContext,
-    ) -> tuple[MemoryEntry, ...]:
-        return await self.query_entries(query, context)
-
-    async def supersede_entry(
-        self,
-        memory_id: str,
-        replacement: MemoryEntry,
-        context: DataAccessContext,
-    ) -> MemoryEntry:
-        self.entries[replacement.memory_id] = replacement
-        return replacement
-
-    async def delete_entry(self, memory_id: str, context: DataAccessContext) -> None:
-        self.entries.pop(memory_id, None)
-
-    async def expire_entries(self, context: DataAccessContext) -> tuple[str, ...]:
-        return ()
+class InMemoryReplacementMemoryProvider(FakeScopedMemoryProvider):
+    """Compatibility alias for the reusable refined replacement backend."""
 
 
 def test_backend_replacement_preserves_canonical_memory_identity(tmp_path: Path) -> None:
