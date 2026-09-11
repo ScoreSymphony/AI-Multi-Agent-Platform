@@ -212,6 +212,14 @@ def test_readiness_rejects_ollama_revision_that_does_not_match_campaign() -> Non
         )
 
 
+def test_readiness_rejects_backend_not_declared_by_campaign() -> None:
+    with pytest.raises(ValueError, match="is not declared by this campaign"):
+        assess_inference_backend_evaluation(
+            campaign=CAMPAIGN,
+            reports=[_report("sglang"), _report("vllm"), _report("llama.cpp")],
+        )
+
+
 def test_readiness_rejects_superficially_comparable_pair_with_different_workload() -> None:
     sglang = _report("sglang")
     vllm = _report("vllm")
