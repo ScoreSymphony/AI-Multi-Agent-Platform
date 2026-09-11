@@ -1,9 +1,8 @@
 """Canonical release-gate projection for application distribution.
 
-This module deliberately coordinates existing Verification (#86) and Evaluation (#19)
-authorities instead of creating a second verification/evaluation lifecycle.  The
-application-distribution domain owns only the named release requirement, its projection,
-and the final publication decision.
+This module coordinates existing Verification (#86) and Evaluation (#19) authorities
+instead of creating a second verification/evaluation lifecycle. Application distribution
+owns only the named release requirement, its projection, and the publication decision.
 """
 
 from __future__ import annotations
@@ -15,13 +14,10 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Protocol
 
-from ai_multi_agent_platform.contracts import OperationContext
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
-from ai_multi_agent_platform.evaluation import (
-    EvaluationOutcome,
-    EvaluationRunStatus,
-)
+from ai_multi_agent_platform.evaluation import EvaluationOutcome, EvaluationRunStatus
 from ai_multi_agent_platform.evaluation.contracts import EvaluationHistoryRepository
 from ai_multi_agent_platform.security import infer_actor_identity
 from ai_multi_agent_platform.verification import (
@@ -32,8 +28,23 @@ from ai_multi_agent_platform.verification import (
     VerificationSubject,
 )
 
-from .manifest import manifest_sha256
 from .models import ApplicationArtifact, ApplicationRelease, GateEvidence, GateStatus
+
+_RUNTIME_METADATA_KEYS = frozenset(
+    {
+        "worker_id",
+        "node_id",
+        "executor_id",
+        "executor_version",
+        "runtime_id",
+        "runtime_version",
+        "os",
+        "architecture",
+        "tool_versions",
+        "build_provider_version",
+        "environment_fingerprint",
+    }
+)
 
 
 class ReleaseGateKind(StrEnum):
@@ -70,9 +81,11 @@ class ReleaseGateRequirement:
         if self.kind is ReleaseGateKind.DETERMINISTIC:
             if self.deterministic_check is None:
                 raise ValueError("deterministic release gates require deterministic_check")
-            if self.deterministic_check is not DeterministicGateCheck.MANIFEST_CHECKSUM:
-                if self.target_id is None:
-                    raise ValueError("artifact/file deterministic gates require target_id")
+            if (
+                self.deterministic_check is not DeterministicGateCheck.MANIFEST_CHECKSUM
+                and self.target_id is None
+            ):
+                raise ValueError("artifact/file deterministic gates require target_id")
         elif self.kind is ReleaseGateKind.VERIFICATION:
             if self.target_id is None:
                 raise ValueError("verification release gates require target_id")
@@ -157,19 +170,15 @@ class ApplicationReleaseGateCoordinator:
     ) -> GateEvidence:
         check = requirement.deterministic_check
         if check is DeterministicGateCheck.MANIFEST_CHECKSUM:
-            try:
-                digest = manifest_sha256(release)
-            except Exception as exc:  # fail closed on malformed/incomplete release state
-                return _gate(
-                    requirement,
-                    GateStatus.FAILED,
-                    blocking_reason=f"manifest checksum generation failed: {type(exc).__name__}",
-                )
+            # The published manifest contains gate evidence itself. Hashing the full manifest
+            # into one of its own gates would be self-referential, so this deterministic gate
+            # binds the gate-independent release subject that the manifest represents.
+            digest = release_subject_digest(release)
             return _gate(
                 requirement,
                 GateStatus.PASSED,
-                evidence_refs=(f"manifest-sha256:{digest}",),
-                details={"manifest_sha256": digest},
+                evidence_refs=(f"release-subject-sha256:{digest}",),
+                details={"manifest_subject_sha256": digest},
             )
 
         artifact = _artifact_for_target(release, requirement.target_id)
@@ -230,7 +239,9 @@ class ApplicationReleaseGateCoordinator:
         if verification_id is not None:
             try:
                 request = self.verification.get_request(verification_id)
-            except Exception:
+            except ContractError as exc:
+                if exc.code is not ErrorCode.NOT_FOUND:
+                    raise
                 request = None
             if request is None or request.subject != subject:
                 verification_id = None
@@ -309,7 +320,9 @@ class ApplicationReleaseGateCoordinator:
             requirement,
             status,
             evidence_refs=(verification_id, result.verification_result_id),
-            blocking_reason=None if status is GateStatus.PASSED else f"verification {result.outcome.value}",
+            blocking_reason=(
+                None if status is GateStatus.PASSED else f"verification {result.outcome.value}"
+            ),
             details=_artifact_details(artifact)
             | {
                 "verification_id": verification_id,
@@ -420,9 +433,7 @@ class ApplicationReleaseGateCoordinator:
                 "evaluation_suite_id": run.suite_id,
                 "evaluation_suite_version": run.suite_version,
                 "evaluation_subject_revision": revision,
-                "checked_at": (
-                    None if run.completed_at is None else run.completed_at.isoformat()
-                ),
+                "checked_at": None if run.completed_at is None else run.completed_at.isoformat(),
             },
         )
 
@@ -440,6 +451,8 @@ def required_gate_names(release: ApplicationRelease) -> tuple[str, ...]:
 
 
 def release_subject_digest(release: ApplicationRelease) -> str:
+    """Fingerprint only release inputs that can invalidate release-quality evidence."""
+
     payload = {
         "release_id": release.release_id,
         "source_revision": release.source_revision,
@@ -550,7 +563,7 @@ def _artifact_for_target(
 
 
 def _artifact_details(artifact: ApplicationArtifact) -> dict[str, JsonValue]:
-    return {
+    details: dict[str, JsonValue] = {
         "target_id": artifact.target_id,
         "artifact_id": artifact.artifact_id,
         "file_id": artifact.file_id,
@@ -558,6 +571,14 @@ def _artifact_details(artifact: ApplicationArtifact) -> dict[str, JsonValue]:
         "build_task_id": artifact.build_task_id,
         "build_run_id": artifact.build_run_id,
     }
+    runtime = {
+        key: value
+        for key, value in artifact.external_metadata.items()
+        if key in _RUNTIME_METADATA_KEYS
+    }
+    if runtime:
+        details["runtime_provenance"] = runtime
+    return details
 
 
 def _gate(
