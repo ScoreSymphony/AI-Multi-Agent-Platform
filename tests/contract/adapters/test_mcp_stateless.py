@@ -52,6 +52,24 @@ def _unsupported(*supported: str) -> _WireResponse:
     )
 
 
+def _malformed_unsupported() -> _WireResponse:
+    return _WireResponse(
+        status=400,
+        payload={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "error": {
+                "code": -32022,
+                "message": "Unsupported protocol version",
+                "data": {
+                    "supported": MCP_STATELESS_PROTOCOL_REVISION,
+                    "requested": MCP_STATELESS_PROTOCOL_REVISION,
+                },
+            },
+        },
+    )
+
+
 @pytest.mark.asyncio
 async def test_stateless_client_populates_required_metadata_on_every_request() -> None:
     client = _ScriptedStatelessClient([_result({"tools": []})])
@@ -86,8 +104,11 @@ async def test_stateless_client_retries_supported_version_rejection_once() -> No
 
 
 @pytest.mark.asyncio
-async def test_stateless_client_rejects_no_common_protocol_revision() -> None:
-    client = _ScriptedStatelessClient([_unsupported("2025-11-25")])
+@pytest.mark.parametrize("supported_revision", ("2025-11-25", "2027-01-01"))
+async def test_stateless_client_rejects_no_common_protocol_revision(
+    supported_revision: str,
+) -> None:
+    client = _ScriptedStatelessClient([_unsupported(supported_revision)])
 
     with pytest.raises(ContractError) as exc_info:
         await client.list_tools()
@@ -95,7 +116,22 @@ async def test_stateless_client_rejects_no_common_protocol_revision() -> None:
     assert exc_info.value.code is ErrorCode.CONTRACT_VIOLATION
     assert exc_info.value.details == {
         "requested_protocol_revision": MCP_STATELESS_PROTOCOL_REVISION,
-        "supported_protocol_revisions": ["2025-11-25"],
+        "supported_protocol_revisions": [supported_revision],
+    }
+    assert len(client.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_stateless_client_rejects_malformed_supported_version_declaration() -> None:
+    client = _ScriptedStatelessClient([_malformed_unsupported()])
+
+    with pytest.raises(ContractError) as exc_info:
+        await client.list_tools()
+
+    assert exc_info.value.code is ErrorCode.CONTRACT_VIOLATION
+    assert exc_info.value.details == {
+        "requested_protocol_revision": MCP_STATELESS_PROTOCOL_REVISION,
+        "supported_protocol_revisions": [],
     }
     assert len(client.requests) == 1
 
@@ -161,5 +197,6 @@ def test_stateless_client_rejects_stdio_and_other_protocol_revisions() -> None:
         MCPStatelessHTTPClient(stdio)
 
     endpoint = MCPServerConfig(server_id="http", endpoint="http://localhost.invalid/mcp")
-    with pytest.raises(ValueError, match="supports only protocol revision"):
-        MCPStatelessHTTPClient(endpoint, protocol_revision="2025-11-25")
+    for protocol_revision in ("2025-11-25", "2027-01-01"):
+        with pytest.raises(ValueError, match="supports only protocol revision"):
+            MCPStatelessHTTPClient(endpoint, protocol_revision=protocol_revision)
