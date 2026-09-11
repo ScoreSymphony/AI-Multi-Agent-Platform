@@ -113,17 +113,22 @@ work into a v1 blocker.
 
 ## Final validation gate
 
-The closing PR for #502 must satisfy all normal protected-branch requirements on its exact head and
-must also pass `.github/workflows/repository-intelligence-projectatlas-pilot.yml`, which emits the
-machine-readable contained-pilot plus baseline-comparison artifact.
+Historical note: the dedicated `repository-intelligence-projectatlas-pilot.yml` workflow was the
+closing validation gate for #502. After #502 was completed and ProjectAtlas remained
+experimental/deferred, that dedicated active CI workflow was retired during workflow consolidation;
+the scripts, documentation and recorded evaluation evidence remain as provenance.
 
-Do not close #502 merely because GitHub reports the PR mergeable. Before merge/closure, confirm:
+The closing PR for #502 was required to satisfy all normal protected-branch requirements on its
+exact head and also pass the ProjectAtlas comparison workflow, which emitted the machine-readable
+contained-pilot plus baseline-comparison artifact.
 
-1. branch is not behind current `main`;
-2. no merge conflicts exist;
-3. all required protected-branch checks are successful;
-4. the ProjectAtlas comparison workflow is successful on the exact head;
-5. no unresolved P1/P2 review blocker remains.
+The closing check required confirmation that:
 
-Once those conditions hold, #502 is complete at its clarified v1 boundary. Further third-party
+1. the branch was not behind current `main`;
+2. no merge conflicts existed;
+3. all required protected-branch checks were successful;
+4. the ProjectAtlas comparison workflow was successful on the exact head;
+5. no unresolved P1/P2 review blocker remained.
+
+Once those conditions held, #502 was complete at its clarified v1 boundary. Further third-party
 provider adoption belongs in follow-up work rather than keeping the core issue open indefinitely.
