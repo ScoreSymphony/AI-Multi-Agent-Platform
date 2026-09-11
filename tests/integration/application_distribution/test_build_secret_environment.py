@@ -22,8 +22,8 @@ from ai_multi_agent_platform.application_distribution import (
     ReleaseChannel,
     ReleaseStatus,
     ReleaseVisibility,
+    control_plane,
 )
-from ai_multi_agent_platform.application_distribution.control_plane import _build_spec
 from ai_multi_agent_platform.configuration import (
     LocalSecretProvider,
     SecretAccessContext,
@@ -111,7 +111,7 @@ def test_build_specification_separates_safe_and_secret_environment() -> None:
 
 def test_control_plane_build_spec_accepts_references_not_secret_values() -> None:
     project_id = new_id("project")
-    specification = _build_spec(
+    specification = control_plane._build_spec(  # noqa: SLF001 - exact parser boundary regression
         {
             "command": ["tool", "build"],
             "targets": [
@@ -141,7 +141,7 @@ def test_control_plane_build_spec_accepts_references_not_secret_values() -> None
     assert reference.scope == project_id
 
     with pytest.raises((ContractError, ValueError)):
-        _build_spec(
+        control_plane._build_spec(  # noqa: SLF001 - exact parser boundary regression
             {
                 "command": ["tool", "build"],
                 "targets": [
