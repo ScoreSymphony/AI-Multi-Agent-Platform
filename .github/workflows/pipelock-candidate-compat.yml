@@ -122,8 +122,63 @@ jobs:
           test "$success" -eq 1
           test -s "$RUNNER_TEMP/pipelock-fetch-output.txt"
 
-          find "$RUNNER_TEMP/pipelock-home" -type f -name '*.jsonl' -print \
-            > "$RUNNER_TEMP/pipelock-evidence-files.txt" || true
+      - name: Verify signed allow receipt on controlled audit pilot
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/pipelock-audit.yaml" "$RUNNER_TEMP/pipelock-receipts.yaml"
+          grep -q '^[[:space:]]*require_receipts:[[:space:]]*false$' \
+            "$RUNNER_TEMP/pipelock-receipts.yaml"
+          sed -i \
+            's/^[[:space:]]*require_receipts:[[:space:]]*false$/  require_receipts: true/' \
+            "$RUNNER_TEMP/pipelock-receipts.yaml"
+          grep -q '^[[:space:]]*require_receipts:[[:space:]]*true$' \
+            "$RUNNER_TEMP/pipelock-receipts.yaml"
+
+          HOME="$RUNNER_TEMP/pipelock-home" ./pipelock signing pubkey \
+            --config "$RUNNER_TEMP/pipelock-receipts.yaml" \
+            --out "$RUNNER_TEMP/pipelock-signing.pub"
+          test -s "$RUNNER_TEMP/pipelock-signing.pub"
+
+          HOME="$RUNNER_TEMP/pipelock-home" ./pipelock run \
+            --config "$RUNNER_TEMP/pipelock-receipts.yaml" \
+            > "$RUNNER_TEMP/pipelock-receipts.log" 2>&1 &
+          pipelock_pid=$!
+          trap 'kill "$pipelock_pid" 2>/dev/null || true' EXIT
+
+          success=0
+          for _ in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 20 \
+              --dump-header "$RUNNER_TEMP/pipelock-receipt-headers.txt" \
+              --get --data-urlencode 'url=https://example.com/' \
+              --output "$RUNNER_TEMP/pipelock-receipt-fetch-output.txt" \
+              http://127.0.0.1:8888/fetch; then
+              success=1
+              break
+            fi
+            sleep 1
+          done
+          test "$success" -eq 1
+          grep -i '^X-Pipelock-Receipt:' "$RUNNER_TEMP/pipelock-receipt-headers.txt" \
+            | sed 's/\r$//' \
+            > "$RUNNER_TEMP/pipelock-receipt-action-id.txt"
+
+          kill "$pipelock_pid" 2>/dev/null || true
+          wait "$pipelock_pid" 2>/dev/null || true
+          trap - EXIT
+
+          find "$RUNNER_TEMP" -type f -name '*.jsonl' -print \
+            > "$RUNNER_TEMP/pipelock-evidence-files.txt"
+          test -s "$RUNNER_TEMP/pipelock-evidence-files.txt"
+          receipt_file="$(head -n 1 "$RUNNER_TEMP/pipelock-evidence-files.txt")"
+          receipt_dir="$(dirname "$receipt_file")"
+          sha256sum "$receipt_file" > "$RUNNER_TEMP/pipelock-receipt-sha256.txt"
+
+          ./pipelock verify-receipt \
+            --chain "$receipt_dir" \
+            --key "$RUNNER_TEMP/pipelock-signing.pub" \
+            | tee "$RUNNER_TEMP/pipelock-receipt-verification.txt"
 
       - name: Upload non-secret candidate evidence
         if: always()
@@ -135,5 +190,10 @@ jobs:
             ${{ runner.temp }}/pipelock-candidate-sha256.txt
             ${{ runner.temp }}/pipelock-fetch-latency-seconds.txt
             ${{ runner.temp }}/pipelock-evidence-files.txt
+            ${{ runner.temp }}/pipelock-receipt-action-id.txt
+            ${{ runner.temp }}/pipelock-receipt-sha256.txt
+            ${{ runner.temp }}/pipelock-receipt-verification.txt
+            ${{ runner.temp }}/pipelock-signing.pub
             ${{ runner.temp }}/pipelock-audit.log
+            ${{ runner.temp }}/pipelock-receipts.log
           if-no-files-found: error
