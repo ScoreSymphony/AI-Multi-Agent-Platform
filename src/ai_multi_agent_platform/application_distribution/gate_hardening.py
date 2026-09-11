@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.verification import VerificationOutcome
 
@@ -10,7 +12,11 @@ from .gates import (
 )
 from .gates import (
     DeterministicGateCheck,
+    ReleaseGateKind,
     ReleaseGateRequirement,
+    bind_gate_to_release,
+    release_subject_digest,
+    required_gate_names,
     verification_subject,
 )
 from .manifest import MANIFEST_SCHEMA_VERSION, manifest_sha256, manifest_validation_errors
@@ -40,6 +46,64 @@ class ApplicationReleaseGateCoordinator(_BaseApplicationReleaseGateCoordinator):
     improves projection/reconciliation and deterministic manifest evidence; it does not introduce
     another verification, evaluation, or execution state machine.
     """
+
+    async def reconcile(self, release: ApplicationRelease) -> tuple[GateEvidence, ...]:
+        """Project non-manifest gates before hashing the canonical release manifest.
+
+        Manifest checksum evidence must include the current projections of every other release
+        gate. Deferring manifest checksum gates until those projections are known keeps the first
+        reconciliation identical to retries/restarts instead of hashing a partially projected
+        release on the first pass and a fully projected release on the second.
+        """
+
+        required_names = required_gate_names(release)
+        manifest_names = tuple(
+            name
+            for name in required_names
+            if (requirement := self.policy.requirement(name)) is not None
+            and requirement.kind is ReleaseGateKind.DETERMINISTIC
+            and requirement.deterministic_check is DeterministicGateCheck.MANIFEST_CHECKSUM
+        )
+        if not manifest_names:
+            return await super().reconcile(release)
+
+        existing = {gate.name: gate for gate in release.gates}
+        projected: dict[str, GateEvidence] = {}
+
+        for name in required_names:
+            if name in manifest_names:
+                continue
+            requirement = self.policy.requirement(name)
+            if requirement is None:
+                gate = existing.get(name)
+                if gate is not None:
+                    projected[name] = gate
+                continue
+            if requirement.kind is ReleaseGateKind.DETERMINISTIC:
+                gate = await self._deterministic(release, requirement)
+            elif requirement.kind is ReleaseGateKind.VERIFICATION:
+                gate = self._verification(release, requirement, existing.get(name))
+            else:
+                gate = self._evaluation(release, requirement)
+            projected[name] = bind_gate_to_release(gate, release)
+
+        required = set(required_names)
+        passthrough = tuple(gate for gate in release.gates if gate.name not in required)
+        manifest_basis = replace(
+            release,
+            gates=tuple(projected[name] for name in required_names if name in projected)
+            + passthrough,
+        )
+
+        for name in manifest_names:
+            requirement = self.policy.requirement(name)
+            assert requirement is not None
+            gate = await self._deterministic(manifest_basis, requirement)
+            projected[name] = bind_gate_to_release(gate, release)
+
+        ordered = [projected[name] for name in required_names if name in projected]
+        ordered.extend(passthrough)
+        return tuple(ordered)
 
     async def _deterministic(
         self,
@@ -76,6 +140,7 @@ class ApplicationReleaseGateCoordinator(_BaseApplicationReleaseGateCoordinator):
                 "gate_kind": requirement.kind.value,
                 "source_classification": requirement.kind.value,
                 "manifest_sha256": digest,
+                "manifest_subject_sha256": release_subject_digest(release),
                 "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
                 "checksum_scope": "canonical-manifest-excluding-self-gate",
             },
