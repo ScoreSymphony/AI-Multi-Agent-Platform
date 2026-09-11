@@ -9,6 +9,11 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import CommandHandler, ResourceService
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
+from .component_setup import (
+    ONBOARDING_SAVE_COMPONENT_PROFILE_COMMAND,
+    ONBOARDING_SELECT_COMPONENT_PROFILE_COMMAND,
+    OnboardingComponentSetupService,
+)
 from .first_task import ONBOARDING_RUN_FIRST_TASK_COMMAND, FirstRunTaskService
 from .service import (
     FIRST_RUN_RESOURCE_ID,
@@ -27,8 +32,14 @@ class OnboardingControlPlane(Protocol):
 class OnboardingResourceService:
     """Expose one user-specific, non-mutating first-run status resource."""
 
-    def __init__(self, onboarding: OnboardingService) -> None:
+    def __init__(
+        self,
+        onboarding: OnboardingService,
+        *,
+        component_setup: OnboardingComponentSetupService | None = None,
+    ) -> None:
         self.onboarding = onboarding
+        self.component_setup = component_setup
 
     async def list_resources(
         self,
@@ -36,7 +47,7 @@ class OnboardingResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
-        return (self.onboarding.status(context),)
+        return (self._status(context),)
 
     async def get_resource(
         self,
@@ -48,7 +59,13 @@ class OnboardingResourceService:
                 ErrorCode.NOT_FOUND,
                 f"onboarding resource not found: {resource_id}",
             )
-        return self.onboarding.status(context)
+        return self._status(context)
+
+    def _status(self, context: RequestContext) -> dict[str, JsonValue]:
+        status = dict(self.onboarding.status(context))
+        if self.component_setup is not None:
+            status["component_setup"] = self.component_setup.status()
+        return status
 
 
 def register_onboarding_control_plane(
@@ -56,16 +73,18 @@ def register_onboarding_control_plane(
     onboarding: OnboardingService,
     *,
     first_task: FirstRunTaskService | None = None,
+    component_setup: OnboardingComponentSetupService | None = None,
 ) -> None:
-    """Register only orchestration surfaces owned by issue #250.
+    """Register orchestration surfaces while canonical owner domains remain authoritative.
 
-    Project/Workspace, standard-Agent and Task/Run lifecycle operations remain on
-    their existing canonical APIs and are merely referenced by onboarding status.
+    Project/Workspace, standard-Agent, model-provider, Executor and Task/Run lifecycle operations
+    remain on their existing canonical APIs. Component setup only projects discovery/compatibility
+    and persists reversible provider-neutral defaults.
     """
 
     control_plane.register_resource_service(
         ONBOARDING_COLLECTION,
-        OnboardingResourceService(onboarding),
+        OnboardingResourceService(onboarding, component_setup=component_setup),
     )
     control_plane.register_command(
         ONBOARDING_CONFIGURE_MODEL_COMMAND,
@@ -75,4 +94,13 @@ def register_onboarding_control_plane(
         control_plane.register_command(
             ONBOARDING_RUN_FIRST_TASK_COMMAND,
             first_task.run_first_task,
+        )
+    if component_setup is not None:
+        control_plane.register_command(
+            ONBOARDING_SAVE_COMPONENT_PROFILE_COMMAND,
+            component_setup.save_profile,
+        )
+        control_plane.register_command(
+            ONBOARDING_SELECT_COMPONENT_PROFILE_COMMAND,
+            component_setup.select_profile,
         )
