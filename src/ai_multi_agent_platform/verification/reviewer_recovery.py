@@ -137,6 +137,9 @@ class AutomaticReviewerStartupReconciler:
         options: ReviewerRuntimeOptions,
     ) -> ReviewerRecoveryRecord:
         runs_before = self._review_runs_for(request.verification_id)
+        all_before_ids = {
+            run.agent_run_id for run in self._all_review_runs_for_task(request.task_id)
+        }
         running = tuple(run for run in runs_before if run.status is AgentRunStatus.RUNNING)
 
         task_cancelled = await self._task_cancelled(request)
@@ -248,7 +251,6 @@ class AutomaticReviewerStartupReconciler:
             )
             abandoned_run_id = abandoned.agent_run_id
 
-        before_ids = {run.agent_run_id for run in runs_before}
         try:
             result = await self._workflow.run_request(
                 request.verification_id,
@@ -270,10 +272,11 @@ class AutomaticReviewerStartupReconciler:
         runs_after = self._review_runs_for(request.verification_id)
         all_runs_after = self._all_review_runs_for_task(request.task_id)
         replacement = next(
-            (run.agent_run_id for run in all_runs_after if run.agent_run_id not in before_ids),
+            (run.agent_run_id for run in all_runs_after if run.agent_run_id not in all_before_ids),
             None,
         )
         latest = result.latest.reviewer_run
+        resumed_descendant = result.latest.request.verification_id != request.verification_id
 
         if abandoned_run_id is not None:
             disposition = ReviewerRecoveryDisposition.ABANDONED_RETRIED
@@ -281,7 +284,7 @@ class AutomaticReviewerStartupReconciler:
             disposition = ReviewerRecoveryDisposition.STAGED_DECISION_REUSED
         elif not runs_before and runs_after:
             disposition = ReviewerRecoveryDisposition.DISPATCHED
-        elif completed_before and replacement is None:
+        elif completed_before and replacement is None and not resumed_descendant:
             disposition = ReviewerRecoveryDisposition.ALREADY_COMPLETED
         else:
             disposition = ReviewerRecoveryDisposition.RECONCILED
