@@ -46,7 +46,9 @@ def _assert_no_facade_dependency(path: Path) -> None:
     )
 
 
-def _assert_delegate(method: ast.AsyncFunctionDef | ast.FunctionDef, component: str, call: str) -> None:
+def _assert_delegate(
+    method: ast.AsyncFunctionDef | ast.FunctionDef, component: str, call: str
+) -> None:
     calls = [node for node in ast.walk(method) if isinstance(node, ast.Call)]
     assert any(
         isinstance(item.func, ast.Attribute)
