@@ -65,7 +65,7 @@ class _Handler(BaseHTTPRequestHandler):
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {
                     "error": {
-                        "message": "issue-859 synthetic upstream unavailable",
+                        "message": "synthetic-secret=must-not-leak",
                         "type": "server_error",
                     }
                 },
