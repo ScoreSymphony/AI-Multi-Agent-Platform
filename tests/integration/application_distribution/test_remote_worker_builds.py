@@ -242,9 +242,12 @@ def test_application_build_dispatches_to_canonical_remote_worker_and_returns_art
             assert canonical.metadata["relative_path"] == "dist/app.bin"
             assert artifact.artifact_id in canonical.artifact_ids
             assert await files.verify_checksum(canonical.file_id, file_context)
-            assert b"".join(
-                [chunk async for chunk in files.stream_file(canonical.file_id, file_context)]
-            ) == b"remote-package"
+            assert (
+                b"".join(
+                    [chunk async for chunk in files.stream_file(canonical.file_id, file_context)]
+                )
+                == b"remote-package"
+            )
 
             repeated = await service.request_build(
                 release.release_id,
