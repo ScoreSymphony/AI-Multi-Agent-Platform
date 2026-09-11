@@ -26,17 +26,22 @@
     {
       "backend": "sglang",
       "role": "candidate",
-      "protocol": "openai-compatible"
+      "protocol": "openai-compatible",
+      "release": "v0.5.19",
+      "release_commit": "0bcd822377da7b5718e674eaf9c870d349424dd1"
     },
     {
       "backend": "vllm",
       "role": "gpu-serving-comparator",
-      "protocol": "openai-compatible"
+      "protocol": "openai-compatible",
+      "release": "v0.29.0",
+      "release_commit": "98dff2a81d747d1dba01a47f939f48c3526d4206"
     },
     {
       "backend": "llama.cpp-or-ollama",
       "role": "local-path-comparator",
-      "protocol": "openai-compatible-where-supported"
+      "protocol": "openai-compatible-where-supported",
+      "revision_policy": "record-exact-revision-per-run"
     }
   ],
   "comparability": {
