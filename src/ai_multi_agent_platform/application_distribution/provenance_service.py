@@ -5,8 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
+from .contracts import PublicationResult
 from .gated_service import ApplicationDistributionService as _GateApplicationDistributionService
 from .models import ApplicationRelease, BuildTargetState, BuildTargetStatus
 from .provenance import sanitize_runtime_provenance
@@ -50,6 +52,31 @@ class ApplicationDistributionService(_GateApplicationDistributionService):
             idempotency_key=idempotency_key,
         )
         return await self._persist_runtime_provenance(admitted, output)
+
+    async def _apply_publication(
+        self,
+        release: ApplicationRelease,
+        result: PublicationResult,
+    ) -> ApplicationRelease:
+        """Keep canonical build provenance while adding namespaced publisher metadata."""
+
+        canonical_metadata = {
+            artifact.artifact_id: artifact.external_metadata for artifact in release.artifacts
+        }
+        merged_result = replace(
+            result,
+            artifacts=tuple(
+                replace(
+                    published,
+                    external_metadata=_merge_external_metadata(
+                        canonical_metadata.get(published.artifact_id, {}),
+                        published.external_metadata,
+                    ),
+                )
+                for published in result.artifacts
+            ),
+        )
+        return await super()._apply_publication(release, merged_result)
 
     async def _reconcile_build_runtime_provenance(
         self,
@@ -114,3 +141,19 @@ class ApplicationDistributionService(_GateApplicationDistributionService):
             revision=release.revision + 1,
         )
         return await self.repository.save(updated, expected_revision=release.revision)
+
+
+def _merge_external_metadata(
+    canonical: Mapping[str, JsonValue],
+    published: Mapping[str, JsonValue],
+) -> dict[str, JsonValue]:
+    merged = dict(canonical)
+    for key, value in published.items():
+        if key in merged and merged[key] != value:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "publisher external metadata conflicts with canonical build provenance",
+                details={"metadata_key": key},
+            )
+        merged[key] = value
+    return merged
