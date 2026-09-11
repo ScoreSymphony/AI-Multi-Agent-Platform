@@ -339,9 +339,9 @@ async def _exercise_team_review(
     assert len(reviewer_runs) == 1
     reviewer_run = reviewer_runs[0]
     assert reviewer_run.status is AgentRunStatus.SUCCEEDED
-    assert reviewer_run.team_revision is not None
-    assert reviewer_run.team_revision.team_id == team_id
-    assert reviewer_run.team_revision.revision == team_revision
+    assert reviewer_run.team is not None
+    assert reviewer_run.team.team_id == team_id
+    assert reviewer_run.team.revision == team_revision
     assert reviewer_run.verification_context.get("subject") == {
         "type": "result",
         "id": result_id,
