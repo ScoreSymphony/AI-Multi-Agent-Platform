@@ -90,6 +90,47 @@ The current harness records:
 
 The harness output is **raw evidence**, not an automatic adoption decision.
 
+## Machine-readable evidence gate
+
+The repository also provides:
+
+```text
+scripts/benchmarks/issue798_agent_sandbox_evidence_gate.py
+scripts/benchmarks/issue798_agent_sandbox_campaign.example.json
+```
+
+Copy the example campaign manifest to the retained evidence directory and change a scenario from
+`not_run` only after its live fixture has actually been executed. `pass`, `fail` and `unsupported`
+are terminal evaluation states and require at least one evidence reference; a missing scenario is
+normalized back to `not_run`.
+
+After the raw capture and lifecycle campaign, run:
+
+```bash
+python scripts/benchmarks/issue798_agent_sandbox_evidence_gate.py \
+  --evidence artifacts/issue798-agent-sandbox-live.json \
+  --campaign artifacts/issue798-agent-sandbox-campaign.json \
+  --output artifacts/issue798-agent-sandbox-gate.json
+```
+
+The gate verifies the pinned provider identity, derives protected-profile hard gates from the raw
+Pod/network/credential/authorization evidence, and checks that every required lifecycle, isolation,
+browser, snapshot and representative-VPS scenario has a terminal result.
+
+Its fields have deliberately narrow meanings:
+
+- `protected_profile_gate=pass` means only that all machine-checkable hard gates captured by the
+  current raw harness passed;
+- `decision_ready=true` means the required campaign has enough evidence to choose one of
+  `adopt`, `optional_provider_only` or `reject/defer`; failures may still be present;
+- `adoption_eligible_from_this_gate=true` is stricter and requires no hard-gate failures, failed
+  scenarios, unsupported required scenarios or missing evidence;
+- none of those fields performs the final architecture/security recommendation for #798.
+
+This separation is intentional: a complete campaign that exposes a vulnerability must become
+**decision-ready for rejection**, not be mislabeled as incomplete, while missing live work must
+never look like successful validation.
+
 ## Protected-profile expectations
 
 For a profile that claims high isolation, the following are expected before it can be marked
@@ -139,6 +180,11 @@ The following still require additional provider/API lifecycle fixtures around th
 16. idle CPU/RAM/disk measurement;
 17. concurrent sandbox density on the representative VPS class;
 18. malicious/untrusted repository execution fixture.
+
+The campaign manifest additionally retains an explicit `multi_sandbox_concurrency_cleanup`
+scenario because the issue acceptance criteria require concurrent-sandbox failure cleanup rather
+than only density measurement. The provider-create step is evidenced as part of the benign
+round-trip/lifecycle evidence set rather than treated as proof of isolation on its own.
 
 These cases must use the same pinned upstream revision and record any platform-owned hardened
 blueprint/profile revision used for the run.
