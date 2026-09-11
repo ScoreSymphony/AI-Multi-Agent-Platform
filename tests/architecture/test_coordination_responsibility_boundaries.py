@@ -11,6 +11,7 @@ PROGRESSION = COORDINATION_ROOT / "progression.py"
 WAITS = COORDINATION_ROOT / "waits.py"
 ATTEMPT_OUTCOMES = COORDINATION_ROOT / "attempt_outcomes.py"
 CANCELLATION = COORDINATION_ROOT / "cancellation.py"
+AGGREGATION = COORDINATION_ROOT / "aggregation.py"
 
 
 def _tree(path: Path) -> ast.Module:
@@ -129,6 +130,15 @@ def test_cancellation_entrypoints_stay_behind_focused_component() -> None:
     )
 
 
+def test_aggregation_stays_behind_focused_component() -> None:
+    coordinator = _class(SERVICE, "DurablePlanStepCoordinator")
+    _assert_delegate(
+        _method(coordinator, "_aggregate_task"),
+        "_aggregation",
+        "aggregate_task",
+    )
+
+
 def test_wait_entrypoints_stay_behind_focused_component() -> None:
     coordinator = _class(SERVICE, "DurablePlanStepCoordinator")
     _assert_delegate(_method(coordinator, "wait_step"), "_waits", "wait_step")
@@ -167,6 +177,7 @@ def test_focused_coordination_components_do_not_depend_back_on_facade() -> None:
     _assert_no_facade_dependency(WAITS)
     _assert_no_facade_dependency(ATTEMPT_OUTCOMES)
     _assert_no_facade_dependency(CANCELLATION)
+    _assert_no_facade_dependency(AGGREGATION)
 
 
 def test_registration_component_owns_graph_validation() -> None:
@@ -192,6 +203,11 @@ def test_cancellation_component_owns_plan_and_active_run_cancellation() -> None:
     cancellation = _class(CANCELLATION, "CoordinationCancellation")
     _method(cancellation, "cancel_plan")
     _method(cancellation, "cancel_active_run")
+
+
+def test_aggregation_component_owns_terminal_task_reduction() -> None:
+    aggregation = _class(AGGREGATION, "CoordinationAggregation")
+    _method(aggregation, "aggregate_task")
 
 
 def test_wait_component_owns_wait_validation_and_resolution() -> None:
