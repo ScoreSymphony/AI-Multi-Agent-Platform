@@ -1,8 +1,8 @@
 # SkillSpector evaluation (#800)
 
-This directory is an **evaluation harness**, not a production integration. It evaluates
-NVIDIA SkillSpector as an optional producer of pre-install security evidence for the
-canonical Skill trust lifecycle from #588.
+This directory contains the completed evaluation harness for NVIDIA SkillSpector as an **optional
+pre-install security-evidence provider** for the canonical #588 Skill trust lifecycle. It is not a
+production integration and does not grant the scanner trust authority.
 
 ## Pinned upstream
 
@@ -10,87 +10,99 @@ canonical Skill trust lifecycle from #588.
 - Version: `v2.11.2`
 - Commit: `69dcdfb74487d361ba4c811d088cfdea2ff3a9dc`
 - License: Apache-2.0
+- Approved evaluation mode: `static_no_llm_network_none`
 
-The pinned upstream CLI supports static scans with `--no-llm` and JSON output. `--no-llm`
-does **not** by itself mean offline: the pinned supply-chain SC4 path can query OSV.dev and
-fall back when unavailable. The canonical #800 baseline therefore combines `--no-llm` with
-container `--network=none` and records the mode as `static_no_llm_network_none`.
+`--no-llm` alone is not equivalent to offline operation: the pinned supply-chain analyzer can query
+OSV.dev. The approved baseline therefore also enforces container `--network=none`.
 
-LLM analysis is a separate mode because it changes data-egress, reproducibility, cost and
-policy properties. `source_audit.md` records the pinned provider/network behavior and the
-integration boundary.
+## Final #800 decision
 
-The pinned JSON contract exposes `issues`, `risk_assessment`, `execution_successful` and
-`analysis_completeness`. A CLI exit code of `1` can represent a policy-relevant risk score,
-not a scanner crash. The harness therefore treats a parsed, complete report with
-`execution_successful: true` as usable evidence for exit `0` or `1`. Exit `2`, malformed
-output, missing required report structure or incomplete analysis is never normalized into a
-clean result.
+**Recommendation: `optional_evidence_provider` for the static, network-isolated CLI/container path
+only.**
+
+The final `generated-corpus-v3` benchmark executed 15 fixtures three times each (**45 scans**).
+Every scan produced runnable evidence and every fixture's semantic finding signature was stable
+across repeats. The scanner demonstrated useful incremental coverage for prompt injection,
+obfuscation, dangerous code, exfiltration, MCP poisoning/least privilege and supply-chain signals.
+
+It is intentionally **not** recommended as canonical trust authority. The corpus also demonstrated:
+- a benign negation false positive around credential-access wording;
+- a complete static miss of the memory-poisoning fixture;
+- incomplete file-read→network flow correlation;
+- no dedicated persistence finding for the autostart fixture;
+- overlapping/duplicate findings in several pattern families;
+- partial/degraded supply-chain evidence when OSV is unreachable by policy.
+
+See `benchmark.md` for the executed result table and exact artifact identity.
 
 ## Safety boundary
 
-`runner.py` rejects candidate symlinks, stages a copy of a candidate into a temporary
-directory and prefers Docker or Podman with networking disabled, a read-only root
-filesystem, dropped capabilities, `no-new-privileges`, resource limits, a bounded temporary
-filesystem and a read-only candidate mount. It refuses host execution by default.
-`--allow-local-process` exists only for explicit diagnostic use and must not be treated as a
-security boundary.
+`runner.py`:
+- rejects candidate symlinks;
+- stages a local candidate copy;
+- uses Docker/Podman by default;
+- disables networking;
+- mounts the candidate read-only;
+- uses a read-only container root;
+- drops Linux capabilities;
+- sets `no-new-privileges`;
+- bounds PIDs, memory, CPU and temporary storage;
+- forwards only a small environment allowlist;
+- refuses host-process execution unless explicitly requested for diagnostics.
 
-The harness passes only a small environment allowlist to the scanner. It does not forward
-common platform/API credential variables. Input fixtures are non-destructive and contain no
-live credentials.
+The scanner output directory is a private temporary leaf made writable for the
+capability-dropped container. Candidate code is inspected, never executed.
 
-The adapter contract deliberately supplies a **local staged snapshot**, not a Git URL or
-arbitrary web URL. Canonical platform intake owns fetching/source/version/provenance; the
-scanner only inspects that snapshot.
+## Evidence boundary
 
-The harness does **not** make trust decisions. A SkillSpector score, severity or
-recommendation remains provider-native metadata. `normalize.py` maps a report to advisory
-evidence only. Scanner failure, malformed output or an incomplete scan becomes degraded
-evidence, never a clean pass.
+`normalize.py` maps SkillSpector JSON into advisory `SecurityEvidence` carrying:
+- candidate/revision/digest;
+- scanner version/revision and scan mode;
+- policy/config version and timestamp;
+- provider occurrence IDs plus stable rule IDs;
+- severity/confidence/path/line evidence;
+- provider-native risk metadata;
+- suppression data;
+- completeness/degradation state;
+- network/provider usage;
+- raw-report digest.
 
-## Deterministic corpus
+It exposes no canonical trust, Approval, installation, enablement or activation mutation.
 
-`fixtures.py` creates benign controls plus synthetic prompt-injection, hidden/parameter
-injection, memory-poisoning, exfiltration, dangerous-code, MCP tool-poisoning, supply-chain,
-obfuscation, mixed-content and resource-abuse fixtures. Dangerous examples are inert static
-analysis inputs and contain no live credentials.
+A scanner-native `SAFE`, score, severity or suppression therefore cannot bypass #588/#15/#43
+source/license/capability/Approval/pilot/evaluation gates.
 
-Example corpus generation:
+## Executed benchmark
 
-```bash
-python -c "from pathlib import Path; from experiments.skillspector.fixtures import write_fixture_corpus; write_fixture_corpus(Path('/tmp/skillspector-eval'))"
-```
+`.github/workflows/skillspector-evaluation.yml` checks out the exact upstream revision, verifies its
+license, builds the evaluation image, runs the harness regression suite and scans each fixture three
+times. The final v3 evidence is workflow run `34657274640`, artifact id `10286034099`, digest
+`sha256:5c3f7f39154d23a4a77151652e1eabf7ace68056b976f912877f2ebab3bdd760`.
 
-Example scan, once the pinned evaluation image exists:
+`run_benchmark.py` records normalized evidence, raw report digests, semantic stability and wall-clock
+latency. `benchmark.md` contains the reviewed classification and final recommendation.
 
-```bash
-python experiments/skillspector/runner.py /tmp/skillspector-eval/benign
-```
+## LLM-assisted mode
 
-The default command expects a locally built image named `skillspector-eval:2.11.2`; the
-image must itself be built from the pinned upstream revision. The harness does not pull
-images automatically because an evaluation of network behavior must not silently add a
-network fetch.
+LLM-assisted scanning is a **separate, deferred mode**. Pinned upstream can place Skill-derived
+content in provider prompts. #800 therefore did not send evaluation Skills to an external LLM
+without explicit content-egress authorization.
 
-## Executed benchmark path
+No claim is made that LLM-assisted mode is production-ready. A future evaluation must use an
+explicitly approved local/covered or otherwise authorized endpoint and record provider, egress,
+latency, reproducibility and incremental detection value. It must never become mandatory for the
+baseline.
 
-`.github/workflows/skillspector-evaluation.yml` checks out the exact upstream commit, verifies
-the pin/license, builds the evaluation image, runs the harness regression tests and executes
-each deterministic fixture three times under the network-disabled baseline. Raw reports and
-machine-readable summaries are retained as a workflow artifact.
+## Production follow-up constraints
 
-`run_benchmark.py` records individual results, normalized evidence, report/finding stability
-and wall-clock latency. `benchmark.md` is updated only from reviewed execution evidence; it
-must not infer detection performance from source inspection.
+Any implementation following #800 must:
+- remain optional and replaceable;
+- preserve the isolated CLI/container boundary;
+- pin source plus immutable built/dependency identity;
+- default to `static_no_llm_network_none`;
+- preserve fail-closed incomplete/degraded semantics;
+- retain exact evidence provenance;
+- keep canonical source acquisition, policy, Approval, trust and activation platform-owned;
+- add no mandatory hosted service or recurring paid API.
 
-## Remaining adoption gates
-
-Before production adoption, review at minimum false positives, known false negatives,
-repeated-run stability, latency/resource behavior, dependency-vulnerability degradation,
-malformed/resource-abuse handling, LLM-mode data egress and the exact raw report schema.
-External LLM execution must not be performed merely to complete this evaluation unless the
-provider/endpoint and Skill-content egress have first been explicitly authorized.
-
-Any production adapter must remain replaceable and platform policy must remain authoritative
-for trust, Approval, installation and activation.
+`comparison.md` and `source_audit.md` record the architectural and data-egress rationale.

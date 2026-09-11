@@ -1,81 +1,77 @@
 # SkillSpector versus the canonical platform baseline (#800)
 
-This comparison separates **platform authority/policy controls** from **content-security detection**.
-SkillSpector can only add evidence in the latter category; it must not replace the former.
+This comparison separates **platform authority/policy controls** from **content-security
+detection**. The executed `generated-corpus-v3` benchmark supports SkillSpector only as an optional
+evidence producer; it does not replace canonical platform controls.
 
 ## Existing platform baseline
 
-The canonical Skill model from #588 already provides controls that a scanner cannot replace:
-
-- stable `SkillDefinition` identity plus immutable `SkillRevision` history;
-- exact source/revision/license/checksum/signature metadata for external Skills;
+The canonical Skill model from #588 already owns:
+- stable `SkillDefinition` identity and immutable `SkillRevision` history;
+- exact source/revision/license/checksum/signature metadata;
 - server-resolved Capability requirements and compatibility checks;
-- fail-closed resolution when a Skill is untrusted, disabled, incompatible, out of scope or requires
-  unavailable capabilities/model properties;
-- immutable `SkillBundle` hashes and historical trust evidence;
-- an explicit third-party lifecycle from discovery through source verification, security review,
-  isolated pilot/evaluation and adoption;
-- external Skills enter disabled and cannot enable themselves;
-- adoption requires a passed platform evaluation;
-- portable imports do not silently transfer runtime trust between deployments;
-- baseline operation does not require a hosted Skill service or paid AI/API dependency.
+- fail-closed resolution for untrusted/disabled/incompatible/out-of-scope Skills;
+- immutable bundle/trust evidence;
+- source verification, security review, isolated pilot/evaluation and adoption lifecycle;
+- disabled-by-default external Skills;
+- platform-owned Approval/authorization and activation;
+- portable provenance without silently transferring runtime trust.
 
-The platform security model additionally treats external/model/tool content as untrusted input,
-keeps authorization and Approval platform-owned, records security-relevant decisions, and excludes
-plaintext secrets from persistent audit/telemetry.
+SkillSpector's incremental niche is **content-security evidence before install**.
 
-Repository search did not identify an existing dedicated Skill-content scanner that independently
-covers prompt injection, code/data-flow analysis, MCP metadata poisoning and dependency/CVE signals.
-That is the incremental niche #800 is evaluating.
+## Executed comparison
 
-## Capability comparison
-
-| Area | Platform/manual baseline | SkillSpector v2.11.2 candidate | Architectural conclusion |
+| Area | Platform/manual baseline | SkillSpector v2.11.2 evidence | Conclusion |
 |---|---|---|---|
-| Source/revision/license identity | Canonical and immutable in #588 | Scanner accepts input but is not canonical source authority | Platform remains authoritative |
-| Trust state / adoption | Canonical lifecycle and evaluation gates | Produces scores/recommendations only | Never map scanner result directly to trust |
-| Authorization / Approval | Canonical #15 boundary | Not authoritative | Platform-only decision |
-| Capability least privilege | Server-resolved capabilities cannot be widened by a Skill | Can flag advertised MCP/permission patterns | Scanner evidence may supplement, not replace enforcement |
-| Prompt injection | General untrusted-input policy/manual review; no dedicated Skill scanner located | Advertised static patterns plus optional semantic analysis | Potential incremental detection value; benchmark required |
-| Hidden/encoded injection | No dedicated Skill-content detector located | TP/static pattern families advertise hidden/encoded detection | Benchmark required; known FNs must be explicit |
-| Data exfiltration | Network/secret/capability policy and runtime boundaries | Static pattern + Python taint/data-flow checks | Complementary: detection before install, enforcement remains platform-owned |
-| Dangerous code | Runtime/tool/capability policy; manual review | Python AST/static dangerous-code rules | Potentially useful pre-install evidence |
-| MCP tool poisoning | MCP/tool trust remains a platform boundary | TP1-TP3 static; TP4 LLM-assisted at pinned revision | Useful specialty area if fixture results confirm coverage |
-| Description/behavior mismatch | Manual/policy review | TP4 requires LLM-assisted mode | Not available in canonical offline static baseline |
-| Supply-chain/CVE | Canonical source/provenance; dependency policy elsewhere | SC4 OSV.dev lookup with static fallback | Useful evidence, but no-LLM alone is not offline |
-| Typosquatting | No Skill-specific detector located | Static package-name checks | Potential incremental value |
-| False-positive control | Human review/evaluation | Baselines/suppression supported | Suppression remains provider evidence, not platform approval |
-| Structured machine output | Platform resources/evidence are structured | JSON/Markdown/SARIF-style outputs | JSON fits a replaceable adapter |
-| Offline/local operation | Required baseline property | Possible only when network is separately blocked; OSV otherwise may be contacted | Canonical mode must record `network_none` explicitly |
-| External LLM data egress | Policy/Approval-controlled | Multiple hosted/local-compatible provider paths | LLM mode remains optional and separately authorized |
-| Historical explainability | Immutable revisions/bundles/trust evidence | Upstream scoring/rules may change | Retain exact scanner revision, config, raw-report digest and mode |
-| Failure semantics | Platform expected to fail closed | Scanner can crash/timeout/degrade | Adapter must turn failures into incomplete evidence, never clean pass |
-| Runtime dependency coupling | Platform Python environment should remain stable | Broad Alpha-stage dependency graph | Prefer isolated CLI/container, not in-process import |
-| Replaceability | Canonical Skill identity is provider-neutral | Scanner-specific rules/IDs | Keep provider IDs namespaced and adapter removable |
-| MCP integration mode | MCP is an additional trust/tool surface | Upstream may expose MCP | No reason to use MCP for this pre-install scan path |
-| Recurring paid dependency | Not acceptable for baseline operation | Static mode needs no paid LLM; semantic mode can use several providers/local-compatible endpoints | No new paid API may become mandatory |
+| Source/revision/license identity | Canonical #588 ownership | Scanner consumes a staged candidate; it is not source authority | Platform remains authoritative |
+| Trust/adoption | Canonical lifecycle/evaluation | Emits scores/recommendations only | Never map directly to trust |
+| Authorization/Approval | Canonical #15 boundary | Not authoritative | Platform-only decision |
+| Capability least privilege | Server-side capability enforcement | `LP3` identified an undeclared tool scope in the legitimate-network control | Useful advisory evidence, not enforcement |
+| Explicit prompt injection | General untrusted-input/manual review | `P1`/`YR4` detected 3/3 | Incremental value demonstrated |
+| Hidden injection | No dedicated Skill-content scanner located | Hidden-comment fixture detected 3/3 with `TP1/P1/P2/YR4` | Incremental value demonstrated |
+| Encoded/obfuscated injection | No dedicated Skill-content scanner located | Base64 fixture detected 3/3 | Incremental value demonstrated |
+| Persistent memory poisoning | Platform policy/runtime memory boundary | Static fixture missed 3/3 | Known static false negative |
+| Data exfiltration | Network/secret/capability enforcement | Env→network, credential/config access and callback detected; file→network flow not fully linked as `TT4` | Complementary, incomplete static evidence |
+| Dangerous code | Runtime/tool/capability policy | eval/subprocess/os.system/sudo/destructive filesystem detected | Strong pre-install evidence |
+| Persistence | Runtime/host policy | autostart write not separately detected | Known gap |
+| MCP tool poisoning | MCP/tool trust boundary | TP1-TP3/homoglyph/parameter injection detected | Strong specialty evidence |
+| Description/behavior mismatch | Manual/policy review | TP4 requires LLM-assisted mode | Not available in approved static baseline |
+| Supply-chain/CVE | Canonical provenance/dependency policy | Typosquat detected; OSV network-off fallback becomes partial/degraded | Useful but network enrichment is separate mode |
+| Benign shell/doc controls | Manual review | Both clean | Low noise for these controls |
+| Benign negation | Manual semantics | `Do not ... access credentials` falsely triggers `PE3` | Concrete FP; human/platform review required |
+| Benign network control | Capability/policy review | `LP3` because tool scope is undeclared; no exfiltration finding | Policy signal, not network-use FP |
+| Large/repetitive input | Resource policy | Completes in ~14.95 s; `P9` repetition heuristic | Bounded but heuristic noise exists |
+| Finding stability | Canonical evidence history | 15/15 fixture semantic signatures stable across 3 runs | Good reproducibility in static mode |
+| Structured output | Platform-owned resource models | JSON output normalized into advisory `SecurityEvidence` | Good adapter fit |
+| Offline/local operation | Baseline requirement | Achieved only with explicit `--network=none`; `--no-llm` alone can contact OSV | Record scan mode exactly |
+| External LLM egress | Approval/policy-controlled | Upstream can send Skill-derived content through configured provider | Not approved as baseline |
+| Runtime dependency coupling | Platform Python env should remain stable | Alpha package with broad/ranged dependency graph | Prefer pinned isolated container |
+| Replaceability | Canonical identity provider-neutral | Provider rule/occurrence IDs remain namespaced | Keep adapter removable |
+| MCP integration mode | MCP adds service/tool trust surface | No benefit over CLI for this path | Do not use MCP here |
+| Recurring paid dependency | Not acceptable for baseline | Static network-none mode needs none | Meets project cost constraint |
 
-## What SkillSpector must prove to add value
+## Integration placement
 
-A clean architectural fit alone is insufficient. The executed corpus must demonstrate all of the
-following before the candidate should move beyond `reject/defer` for production integration:
-
-1. useful detection across at least prompt injection, exfiltration, dangerous code, MCP poisoning and
-   supply-chain fixtures;
-2. acceptable noise on benign Skills, including legitimate shell/code-documentation controls;
-3. reproducible findings across repeated scans;
-4. explicit false negatives rather than a misleading aggregate accuracy percentage;
-5. bounded behavior on large/malformed inputs;
-6. stable machine-readable reports and fail-closed handling of partial/error states;
-7. useful incremental evidence beyond controls the platform already enforces canonically;
-8. no mandatory external LLM/API or uncontrolled data-egress path.
-
-## Preferred integration if the benchmark passes
-
-The narrowest justified production shape is:
+Preferred production seam:
 
 `canonical external-Skill intake -> immutable staged snapshot -> isolated SkillSpector CLI/container -> namespaced SecurityEvidence -> platform trust review`
 
-The scanner should receive neither authority to fetch arbitrary sources on behalf of the platform nor
-an ability to mutate Skill state. The platform should own source acquisition/provenance, policy,
-Approval, capability enforcement, adoption and activation. SkillSpector should remain replaceable.
+The scanner must not:
+- fetch arbitrary Git/URL inputs on behalf of canonical intake;
+- receive broad platform credentials;
+- mutate Skill state;
+- convert `SAFE`, risk score, severity or suppression into Approval;
+- make external LLM use mandatory.
+
+## Decision
+
+The benchmark moves the candidate from provisional `reject/defer` to
+**`optional_evidence_provider` for the static network-isolated mode only**.
+
+`adopt` is intentionally not selected because the executed corpus contains a real false positive,
+known false negatives/gaps and overlapping findings. The platform should use the scanner as one
+evidence source alongside canonical provenance, capability policy, human review and other future
+security evidence.
+
+LLM-assisted scanning remains a separate, deferred mode until a provider/endpoint and content-egress
+policy are explicitly authorized and independently evaluated.
