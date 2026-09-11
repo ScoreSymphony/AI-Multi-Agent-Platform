@@ -252,7 +252,11 @@ def _string_tuple_hint(hints: Mapping[str, JsonValue], key: str) -> tuple[str, .
         not isinstance(item, str) or not item.strip() for item in value
     ):
         raise ValueError(f"build resource_hints.{key} must be an array of non-blank strings")
-    return tuple(dict.fromkeys(value))
+    unique: dict[str, None] = {}
+    for item in value:
+        if isinstance(item, str):
+            unique.setdefault(item, None)
+    return tuple(unique)
 
 
 def _hint_value(
