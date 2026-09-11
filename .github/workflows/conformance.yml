@@ -1,0 +1,284 @@
+name: Platform conformance and acceptance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - ".github/workflows/conformance.yml"
+      - "conformance/mcp/**"
+      - "scripts/ci/mcp_conformance_client.py"
+      - "scripts/ci/mcp_protocol_conformance.py"
+      - "scripts/ci/issue46_optional_environment_profile.py"
+      - "src/ai_multi_agent_platform/adapters/mcp.py"
+      - "src/ai_multi_agent_platform/adapters/mcp_sdk.py"
+      - "src/ai_multi_agent_platform/adapters/mcp_stateless.py"
+      - "src/ai_multi_agent_platform/conformance/mcp_protocol.py"
+      - "tests/**mcp**"
+      - "pyproject.toml"
+      - "src/ai_multi_agent_platform/application_distribution/**"
+      - "src/ai_multi_agent_platform/distributed/**"
+      - "src/ai_multi_agent_platform/workspaces/**"
+      - "tests/integration/application_distribution/**"
+      - "tests/test_issue749_*.py"
+      - "scripts/ci/issue749_remote_application_build_acceptance.py"
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    name: platform-conformance
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.2"
+      - name: Pin supported npm
+        run: npm install --global npm@11.6.0
+      - name: Install conformance environment
+        run: python -m pip install -e '.[dev]'
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install --no-audit --no-fund
+      - name: Run fast conformance profile
+        run: >-
+          platform-conformance
+          --profile fast
+          --deployment-profile reference-single-node
+          --json-report conformance-fast.json
+      - name: Run release conformance profile
+        if: always()
+        run: >-
+          platform-conformance
+          --profile release
+          --deployment-profile reference-single-node-release
+          --json-report conformance-release.json
+      - name: Run extended reference compatibility claims
+        if: always()
+        run: >-
+          platform-conformance
+          --profile release
+          --deployment-profile reference-single-node-extended
+          --enable-optional E,N,Q,R,S,T,V,X,Y
+          --json-report conformance-extended-reference.json
+      - name: Upload fast conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-conformance-fast
+          path: conformance-fast.json
+          if-no-files-found: warn
+      - name: Upload release conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-conformance-release
+          path: conformance-release.json
+          if-no-files-found: warn
+      - name: Upload extended reference evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-conformance-extended-reference
+          path: conformance-extended-reference.json
+          if-no-files-found: warn
+
+  stable-2025-11-25:
+    name: mcp-protocol-2025-11-25
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.2"
+      - name: Pin supported npm
+        run: npm install --global npm@11.6.0
+      - name: Install platform MCP test environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Checkout pinned official MCP conformance suite
+        uses: actions/checkout@v7
+        with:
+          repository: modelcontextprotocol/conformance
+          ref: 21a9a2febd7100d7c17ac1021ee7f2ed9f66a1e0
+          path: .upstream/mcp-conformance
+          persist-credentials: false
+      - name: Build pinned official MCP conformance suite
+        working-directory: .upstream/mcp-conformance
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Run official MCP 2025-11-25 client conformance
+        run: |
+          python scripts/ci/mcp_protocol_conformance.py \
+            --track stable \
+            --suite-root .upstream/mcp-conformance \
+            --platform-commit "$GITHUB_SHA" \
+            --json-report mcp-protocol-2025-11-25.json
+      - name: Combine official protocol and platform integration evidence
+        if: always()
+        run: |
+          python scripts/ci/issue46_optional_environment_profile.py \
+            mcp \
+            --protocol-evidence mcp-protocol-2025-11-25.json \
+            --json-report conformance-mcp-platform.json \
+            --compatibility-report mcp-compatibility-2025-11-25.json
+      - name: Upload MCP compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcp-conformance-2025-11-25
+          path: |
+            mcp-protocol-2025-11-25.json
+            mcp-protocol-2025-11-25-artifacts/
+            conformance-mcp-platform.json
+            mcp-compatibility-2025-11-25.json
+          if-no-files-found: warn
+
+  prerelease-2026-07-28:
+    name: mcp-protocol-2026-07-28-informational
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.2"
+      - name: Pin supported npm
+        run: npm install --global npm@11.6.0
+      - name: Install platform MCP test environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Checkout exact prerelease MCP conformance revision
+        uses: actions/checkout@v7
+        with:
+          repository: modelcontextprotocol/conformance
+          ref: a983ba93c91e0bb31d0b6849eeb52f0ad1083107
+          path: .upstream/mcp-conformance
+          persist-credentials: false
+      - name: Build exact prerelease MCP conformance suite
+        working-directory: .upstream/mcp-conformance
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Probe unclaimed MCP 2026-07-28 stateless profile
+        run: |
+          python scripts/ci/mcp_protocol_conformance.py \
+            --track prerelease \
+            --suite-root .upstream/mcp-conformance \
+            --platform-commit "$GITHUB_SHA" \
+            --json-report mcp-protocol-2026-07-28.json \
+            --strict
+      - name: Upload informational 2026-07-28 evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcp-conformance-2026-07-28-informational
+          path: |
+            mcp-protocol-2026-07-28.json
+            mcp-protocol-2026-07-28-artifacts/
+          if-no-files-found: warn
+
+  acceptance:
+    name: prototype-acceptance
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.2"
+      - name: Pin supported npm
+        run: npm install --global npm@11.6.0
+      - name: Install platform acceptance environment
+        run: python -m pip install -e '.[dev]'
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install --no-audit --no-fund
+      - name: Run all acceptance profiles
+        shell: bash
+        run: |
+          status=0
+          for profile in reference local-ai degraded persistence; do
+            if ! platform-acceptance \
+              --profile "$profile" \
+              --json-report "acceptance-${profile}.json"; then
+              status=1
+            fi
+          done
+          exit "$status"
+      - name: Upload reference acceptance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: prototype-acceptance-reference
+          path: acceptance-reference.json
+          if-no-files-found: warn
+      - name: Upload local AI acceptance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: prototype-acceptance-local-ai
+          path: acceptance-local-ai.json
+          if-no-files-found: warn
+      - name: Upload degraded acceptance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: prototype-acceptance-degraded
+          path: acceptance-degraded.json
+          if-no-files-found: warn
+      - name: Upload persistence acceptance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: prototype-acceptance-persistence
+          path: acceptance-persistence.json
+          if-no-files-found: warn
+
+  issue749-acceptance:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install platform test environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Run complete remote application build acceptance matrix
+        run: python scripts/ci/issue749_remote_application_build_acceptance.py
