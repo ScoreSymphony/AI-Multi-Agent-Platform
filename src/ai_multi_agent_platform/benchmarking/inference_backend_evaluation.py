@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 from importlib.resources import files
 from typing import Any, cast
@@ -162,9 +163,9 @@ def _latest_case_statuses(
     reports: Sequence[Mapping[str, Any]],
     field: str,
 ) -> dict[str, str]:
-    latest: dict[str, tuple[str, str]] = {}
+    latest: dict[str, tuple[datetime, str]] = {}
     for report in reports:
-        completed_at = _require_str(report, "completed_at")
+        completed_at = _completed_at(report)
         results = _require_sequence(report.get(field), field)
         for item in results:
             result = _require_mapping(item, field)
@@ -177,9 +178,9 @@ def _latest_case_statuses(
 
 
 def _latest_placement_statuses(reports: Sequence[Mapping[str, Any]]) -> dict[str, str]:
-    latest: dict[str, tuple[str, str]] = {}
+    latest: dict[str, tuple[datetime, str]] = {}
     for report in reports:
-        completed_at = _require_str(report, "completed_at")
+        completed_at = _completed_at(report)
         placement = _require_mapping(report.get("placement"), "placement")
         case_id = _require_str(placement, "case_id")
         status = _require_str(placement, "status")
@@ -187,6 +188,14 @@ def _latest_placement_statuses(reports: Sequence[Mapping[str, Any]]) -> dict[str
         if previous is None or completed_at >= previous[0]:
             latest[case_id] = (completed_at, status)
     return {case_id: value[1] for case_id, value in latest.items()}
+
+
+def _completed_at(report: Mapping[str, Any]) -> datetime:
+    value = _require_str(report, "completed_at")
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"completed_at is not a valid ISO-8601 timestamp: {value!r}") from exc
 
 
 def _count_comparable_sglang_vllm_pairs(reports: Sequence[Mapping[str, Any]]) -> int:
@@ -223,9 +232,16 @@ def _comparison_key(report: Mapping[str, Any]) -> tuple[Any, ...]:
         model["model_revision"],
         model["quantization_or_dtype"],
         worker_ids,
+        environment["os_kernel"],
+        environment["accelerator_runtime"],
+        environment["driver_version"],
         environment["gpu_model"],
         environment["gpu_count"],
         environment["gpu_vram_bytes"],
+        environment["cpu_model"],
+        environment["host_ram_bytes"],
+        environment["network_topology"],
+        environment["cache_state"],
         workload["scenario_id"],
         workload["request_count"],
         workload["warmup_policy"],
