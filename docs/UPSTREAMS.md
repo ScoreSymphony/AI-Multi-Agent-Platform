@@ -110,13 +110,13 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 ### NousResearch Hermes Agent
 
 - **Purpose:** optional production-oriented orchestration/planning runtime behind the platform-owned `Orchestrator` and `AgentOrchestratorMapper` boundaries.
-- **Status:** integrated through #8.
+- **Status:** integrated through #8; v0.21.1 compatibility revalidated through #733.
 - **Integration category/categories:** optional external service; orchestrator adapter integration.
 - **Canonical upstream repository:** `https://github.com/NousResearch/hermes-agent`.
-- **Pinned version/tag/commit or deployed revision:** `63279301bcbdc185c1b07b98a9312eb0c862f26d`.
+- **Pinned version/tag/commit or deployed revision:** Hermes Agent v0.21.1 / tag `v2026.9.7` / `2237be355906fbe6065ce1815711eee52b2d646e`.
 - **Verified license:** MIT.
-- **License verification date:** 2026-09-03.
-- **Last review date:** 2026-09-03.
+- **License verification date:** 2026-09-11.
+- **Last review date:** 2026-09-11.
 - **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.hermes.HermesOrchestrator` implements the canonical `Orchestrator`; `HermesAgentMapper` implements the platform-owned Agent/Team mapping seam. The baseline transport is the separately deployed Hermes API server `/v1/runs` surface.
 - **Local source path:** `src/ai_multi_agent_platform/adapters/hermes.py` contains platform-owned adapter code only; no Hermes source is vendored.
 - **Source origin/path:** no upstream source is copied. Compatibility is pinned to the documented API-server run/status/stop/health surface at the revision above.
@@ -130,7 +130,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Exit/replacement strategy:** remove the Hermes adapter/configuration and external service, then select another canonical `Orchestrator`/Agent mapper. No canonical Task/Run/Agent/Team/Plan/Event migration is required.
 - **ADR:** none required while Hermes remains a subordinate optional adapter; any proposal to move canonical lifecycle/domain/approval ownership into Hermes requires explicit architecture review.
 - **Provenance:** `upstream/hermes-agent.yaml`.
-- **Adoption/mapping review:** `docs/upstream/HERMES_AGENT_ADOPTION.md` and `docs/HERMES_ADAPTER.md`.
+- **Adoption/mapping review:** `docs/upstream/HERMES_AGENT_ADOPTION.md`, `docs/upstream/HERMES_AGENT_V0_21_1_VALIDATION.md` and `docs/integrations/HERMES_ADAPTER.md`.
 
 ### ScoreSymphony AI-Agent-VPS Forge subsystem
 

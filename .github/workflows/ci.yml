@@ -152,7 +152,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: NousResearch/hermes-agent
-          ref: 63279301bcbdc185c1b07b98a9312eb0c862f26d
+          ref: 2237be355906fbe6065ce1815711eee52b2d646e
           path: .upstream/hermes
           persist-credentials: false
       - name: Install pinned Hermes runtime dependencies
@@ -162,7 +162,7 @@ jobs:
       - name: Run Hermes Scenario B conformance
         env:
           HERMES_UPSTREAM_DIR: ${{ github.workspace }}/.upstream/hermes
-          HERMES_UPSTREAM_REVISION: 63279301bcbdc185c1b07b98a9312eb0c862f26d
+          HERMES_UPSTREAM_REVISION: 2237be355906fbe6065ce1815711eee52b2d646e
         run: |
           platform-conformance \
             --profile integration \

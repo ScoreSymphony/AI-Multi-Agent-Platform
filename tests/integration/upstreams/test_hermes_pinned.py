@@ -62,6 +62,33 @@ def _mock_agent() -> MagicMock:
     return mock_agent
 
 
+def test_pinned_hermes_declares_required_run_lifecycle_surface() -> None:
+    upstream = _pinned_upstream()
+    sys.path.insert(0, str(upstream))
+
+    from gateway.config import PlatformConfig
+    from gateway.platforms.api_server import APIServerAdapter
+    from gateway.platforms.api_server_run_idempotency import TERMINAL_STATUSES
+
+    upstream_adapter = APIServerAdapter(
+        PlatformConfig(
+            enabled=True,
+            extra={"host": "127.0.0.1", "port": 0},
+        )
+    )
+    routes = {(method, path) for method, path, _handler in upstream_adapter._http_route_table()}
+
+    assert {
+        ("POST", "/v1/runs"),
+        ("GET", "/v1/runs/{run_id}"),
+        ("GET", "/v1/runs/{run_id}/events"),
+        ("POST", "/v1/runs/{run_id}/approval"),
+        ("POST", "/v1/runs/{run_id}/steer"),
+        ("POST", "/v1/runs/{run_id}/stop"),
+    }.issubset(routes)
+    assert set(TERMINAL_STATUSES) == {"completed", "failed", "cancelled", "interrupted"}
+
+
 def test_adapter_against_pinned_hermes_runs_api() -> None:
     upstream = _pinned_upstream()
     sys.path.insert(0, str(upstream))
