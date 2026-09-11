@@ -1,7 +1,7 @@
 """Canonical API-first command-line client."""
 
+from .app import main, run_cli
 from .client import APIClientError, ClientResponse, ControlPlaneClient, TransportError
-from .issue_214 import main, run_cli
 from .profiles import CLIProfile, ProfileStore
 
 __all__ = [

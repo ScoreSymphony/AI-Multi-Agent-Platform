@@ -46,6 +46,20 @@ python -m build
 
 These checks are intended to stay aligned with `.github/workflows/ci.yml`.
 
+## Frontend feature modules
+
+Frontend page code should be organized by product responsibility rather than allowed to grow into cross-domain page monoliths.
+
+- Keep a route-level page orchestrator under `frontend/src/pages/<feature>/` when a feature needs multiple components, forms, state helpers, or data-loading concerns.
+- Keep feature-local presentation components, forms, state reducers, query helpers, and formatting next to that feature. Do not promote them into global `components/` merely to shorten one page file.
+- Share code across feature directories only when the responsibility is genuinely shared. Prefer a narrowly named shared module over catch-all `utils.ts`, `helpers.ts`, or `components.tsx` files.
+- Keep app-shell responsibilities under `frontend/src/app/shell/`: client/session bootstrap, manifest availability, route composition, and shell layout/navigation are separate concerns.
+- Preserve stable public import paths with a small compatibility re-export while a feature is being decomposed when other active branches or tests depend on that path.
+- Frontend-local state may own view and interaction state only. Canonical lifecycle state, authorization state, Tasks, Runs, approvals, provider health, Memory, Knowledge, and other Control Plane resources remain server-owned and must not be duplicated as shadow domain state.
+- Preserve route behavior, keyboard/accessibility semantics, responsive structure, loading/error handling, and live-update behavior when moving code between modules.
+
+When adding a new feature, prefer explicit responsibility names such as `ConversationThread.tsx`, `KnowledgeSearchPanel.tsx`, `state.ts`, or `query.ts` over generic buckets. A compatibility export file should contain exports only and should not become a second implementation location.
+
 ## Architecture changes
 
 Changes to canonical domain entities, lifecycle semantics, public contracts, adapter boundaries, persistence ownership, security boundaries or distributed-node behavior must be documented in the pull request. Significant changes should add or update an architecture decision record before implementation is treated as stable.

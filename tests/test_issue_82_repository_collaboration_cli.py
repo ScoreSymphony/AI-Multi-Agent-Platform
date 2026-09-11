@@ -8,8 +8,8 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from ai_multi_agent_platform.cli.client import RawResponse
-from ai_multi_agent_platform.cli.issue_82 import run_cli
 from ai_multi_agent_platform.cli.profiles import CLIProfile, ProfileStore
+from ai_multi_agent_platform.cli.repositories import run_cli
 
 
 class _RecordingTransport:
