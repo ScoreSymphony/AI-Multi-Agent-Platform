@@ -9,6 +9,7 @@ SUPERSESSION = PLANNING_ROOT / "supersession.py"
 COMPOSITION = PLANNING_ROOT / "composition.py"
 INVENTORY = PLANNING_ROOT / "inventory.py"
 VALIDATION = PLANNING_ROOT / "validation.py"
+REPLANNING = PLANNING_ROOT / "replanning.py"
 
 
 def _tree(path: Path) -> ast.Module:
@@ -80,6 +81,22 @@ def test_public_planning_service_delegates_proposal_validation() -> None:
     ), "PlanningService.validate must delegate to PlanningProposalValidator"
 
 
+def test_public_planning_service_delegates_replan_support() -> None:
+    service = _class(SUPERSESSION, "PlanningService")
+    expected = {
+        "_prior_plan": "prior_plan",
+        "_enforce_replan_budget": "enforce_budget",
+        "_trigger_fingerprint": "trigger_fingerprint",
+    }
+    for method_name, delegated_call in expected.items():
+        method = _method(service, method_name)
+        calls = [node for node in ast.walk(method) if isinstance(node, ast.Call)]
+        assert any(
+            isinstance(call.func, ast.Attribute) and call.func.attr == delegated_call
+            for call in calls
+        ), f"PlanningService.{method_name} must delegate to focused replanning support"
+
+
 def test_reference_inventory_filtering_remains_layered_on_public_inventory_seam() -> None:
     service = _class(COMPOSITION, "ReferencePlanningService")
     method = _method(service, "_inventory")
@@ -114,3 +131,11 @@ def test_validator_component_owns_deterministic_proposal_checks() -> None:
     ):
         _method(validator, method_name)
     _assert_no_service_dependency(VALIDATION)
+
+
+def test_replan_component_owns_prior_plan_trigger_and_budget_policy() -> None:
+    support = _class(REPLANNING, "PlanningReplanSupport")
+    _method(support, "prior_plan")
+    _method(support, "enforce_budget")
+    _method(support, "trigger_fingerprint")
+    _assert_no_service_dependency(REPLANNING)
