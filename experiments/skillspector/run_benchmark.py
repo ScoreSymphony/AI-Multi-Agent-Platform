@@ -7,18 +7,28 @@ result into platform trust, approval, installation or activation state.
 from __future__ import annotations
 
 import argparse
+import json
+import tempfile
 from collections import Counter
 from hashlib import sha256
-import json
 from pathlib import Path
 from statistics import mean, median
-import tempfile
 from time import perf_counter
 from typing import Any, Mapping
 
 from experiments.skillspector.fixtures import write_fixture_corpus
 from experiments.skillspector.normalize import normalize_report
-from experiments.skillspector.runner import DEFAULT_IMAGE, PINNED_REVISION, PINNED_VERSION, evaluate
+from experiments.skillspector.runner import (
+    DEFAULT_IMAGE,
+    PINNED_REVISION,
+    PINNED_VERSION,
+    evaluate,
+)
+
+POLICY_CONFIG_VERSION = "skillspector-eval-policy-v1"
+CANDIDATE_REVISION = "generated-corpus-v1"
+NETWORK_USAGE = {"network_allowed": False, "services": []}
+PROVIDER_USAGE = {"llm_assisted": False, "provider": None}
 
 
 def _finding_signature(evidence: Mapping[str, Any]) -> str:
@@ -30,6 +40,7 @@ def _finding_signature(evidence: Mapping[str, Any]) -> str:
 def _run_once(
     fixture: Path,
     *,
+    fixture_name: str,
     image: str,
     timeout_seconds: int,
 ) -> dict[str, Any]:
@@ -46,12 +57,19 @@ def _run_once(
         report = result.get("report")
         normalized: dict[str, Any] | None = None
         if isinstance(report, Mapping):
+            raw_digest = result.get("raw_report_sha256")
             evidence = normalize_report(
                 report,
                 provider_version=PINNED_VERSION,
                 provider_revision=PINNED_REVISION,
                 mode="static_no_llm_network_none",
+                policy_config_version=POLICY_CONFIG_VERSION,
+                candidate_id=f"issue-800/{fixture_name}",
+                candidate_revision=CANDIDATE_REVISION,
                 candidate_digest=str(result["candidate_digest"]),
+                network_usage=NETWORK_USAGE,
+                provider_usage=PROVIDER_USAGE,
+                raw_report_sha256=str(raw_digest) if raw_digest is not None else None,
                 process_ok=result.get("process_ok") is True,
             )
             normalized = evidence.to_dict()
@@ -66,6 +84,9 @@ def _run_once(
                 "stdout": result.get("stdout"),
             },
             "report": report,
+            "raw_report_text": result.get("raw_report_text"),
+            "raw_report_sha256": result.get("raw_report_sha256"),
+            "raw_report_size_bytes": result.get("raw_report_size_bytes"),
             "normalized_evidence": normalized,
             "finding_signature": _finding_signature(normalized) if normalized else None,
         }
@@ -75,6 +96,9 @@ def _run_once(
             "exception": f"{type(exc).__name__}: {exc}",
             "process": None,
             "report": None,
+            "raw_report_text": None,
+            "raw_report_sha256": None,
+            "raw_report_size_bytes": None,
             "normalized_evidence": None,
             "finding_signature": None,
         }
@@ -110,6 +134,18 @@ def _summarize(name: str, runs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _write_raw_report(output_dir: Path, fixture_name: str, repeat: int, result: dict[str, Any]) -> None:
+    raw_report_text = result.pop("raw_report_text", None)
+    if not isinstance(raw_report_text, str):
+        result["raw_report_artifact"] = None
+        return
+    raw_dir = output_dir / "raw-reports"
+    raw_dir.mkdir(exist_ok=True)
+    target = raw_dir / f"{fixture_name.replace('/', '__')}--run-{repeat}.json"
+    target.write_bytes(raw_report_text.encode("utf-8"))
+    result["raw_report_artifact"] = target.relative_to(output_dir).as_posix()
+
+
 def run_benchmark(
     *,
     output_dir: Path,
@@ -118,8 +154,8 @@ def run_benchmark(
     timeout_seconds: int,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    raw_dir = output_dir / "runs"
-    raw_dir.mkdir(exist_ok=True)
+    runs_dir = output_dir / "runs"
+    runs_dir.mkdir(exist_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="skillspector-corpus-") as temporary:
         corpus = Path(temporary)
@@ -131,9 +167,15 @@ def run_benchmark(
             name = fixture.relative_to(corpus).as_posix()
             runs: list[dict[str, Any]] = []
             for repeat in range(1, repeats + 1):
-                result = _run_once(fixture, image=image, timeout_seconds=timeout_seconds)
+                result = _run_once(
+                    fixture,
+                    fixture_name=name,
+                    image=image,
+                    timeout_seconds=timeout_seconds,
+                )
+                _write_raw_report(output_dir, name, repeat, result)
                 runs.append(result)
-                target = raw_dir / f"{name.replace('/', '__')}--run-{repeat}.json"
+                target = runs_dir / f"{name.replace('/', '__')}--run-{repeat}.json"
                 target.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
             all_runs[name] = runs
 
@@ -146,6 +188,10 @@ def run_benchmark(
             "image": image,
         },
         "mode": "static_no_llm_network_none",
+        "policy_config_version": POLICY_CONFIG_VERSION,
+        "candidate_revision": CANDIDATE_REVISION,
+        "network_usage": NETWORK_USAGE,
+        "provider_usage": PROVIDER_USAGE,
         "repeats": repeats,
         "fixtures": {name: _summarize(name, runs) for name, runs in all_runs.items()},
     }
