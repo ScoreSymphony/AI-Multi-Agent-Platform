@@ -24,7 +24,7 @@ def test_storage_evidence_preserves_platform_authority() -> None:
     assert invariants["object_store_is_mandatory"] is False
 
 
-def test_storage_evidence_records_exact_reviewed_revisions() -> None:
+def test_storage_evidence_records_exact_reviewed_and_runtime_revisions() -> None:
     manifest = _manifest()
     backends = manifest["backends"]
 
@@ -32,9 +32,16 @@ def test_storage_evidence_records_exact_reviewed_revisions() -> None:
     for backend in backends.values():
         assert backend["reviewed_ref"]
         assert len(backend["reviewed_commit"]) == 40
+        assert backend["runtime_ref"]
+        assert len(backend["runtime_commit"]) == 40
+        assert ":" in backend["runtime_image"]
         assert backend["license"]
         assert backend["source_url"].startswith("https://")
         assert backend["proposed_classification"] in ALLOWED_CLASSIFICATIONS
+
+    assert backends["rustfs"]["reviewed_commit"] == backends["rustfs"]["runtime_commit"]
+    assert backends["garage"]["reviewed_commit"] == backends["garage"]["runtime_commit"]
+    assert backends["seaweedfs"]["reviewed_commit"] == backends["seaweedfs"]["runtime_commit"]
 
 
 def test_s3_surface_is_minimal_and_does_not_assume_etag_checksum_semantics() -> None:
