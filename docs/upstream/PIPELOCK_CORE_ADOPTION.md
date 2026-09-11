@@ -1,17 +1,38 @@
 # Pipelock Core adoption checklist
 
-This is the repository adoption-checklist record for issue #730. The current decision is **Candidate**,
-not Approved or Integrated.
+This is the repository decision-readiness record for issue #730. Pipelock remains an evaluated
+**Candidate**, not an adopted canonical dependency. The platform's #15 authorization and #591 egress
+policy remain authoritative; Pipelock is evaluated only as an optional downstream technical
+mediation/evidence layer.
 
 ## Candidate identity
 
 - **Project name:** Pipelock Core
 - **Canonical upstream repository:** `https://github.com/luckyPipewrench/pipelock`
-- **Candidate version/tag/commit:** `f7d1816f1a5ad63d501b0c48f36066f836f59022`
-- **Integration category/categories:** external self-hosted service; adapter integration
-- **Proposed platform boundary/adapter:** post-#15/#591 technical mediation and evidence
+- **Reviewed revision:** `f7d1816f1a5ad63d501b0c48f36066f836f59022`
+- **Evaluated build:** tag-free source build through `make build`
+- **Integration category:** optional external self-hosted enforcement/evidence adapter
 - **Reviewer:** ScoreSymphony platform evaluation / issue #730
 - **Review date:** 2026-09-11
+
+## Current decision state
+
+Final #730 outcome is **not yet recorded**. Exactly one of these must be selected after the remaining
+hard evidence gate is resolved:
+
+- `adopt`
+- `optional_provider`
+- `reference_only`
+- `reject`
+
+Current evidence points away from treating Pipelock as a complete or mandatory network-security
+boundary: mediated traffic gains inspection and signed evidence, but Pipelock proxying alone is
+bypassable by a child-owned direct network socket and independent OS/container/network containment is
+required. Cross-request secret fragments also remain a demonstrated correlation limitation.
+
+The remaining hard decision blocker is the representative ordinary-VPS/single-node measurement. The
+retained GitHub-hosted benchmark is useful reference evidence but is explicitly not substituted for
+that VPS evidence.
 
 ## Required evaluation
 
@@ -27,165 +48,212 @@ not Approved or Integrated.
 - [x] The canonical platform MCP stdio fixture is live-validated through `pipelock mcp proxy -- ...`.
 - [x] Canonical platform MCP Streamable HTTP and MCP WebSocket fixtures are live-validated through
   Pipelock remote-upstream wrapping.
-- [ ] Generic `/ws`, redirects/private targets, bypass, failure and performance behavior are measured.
+- [x] Generic `/ws` round trip is live-validated.
+- [x] Redirect-to-private, RFC1918, localhost, link-local/metadata and IPv6 loopback boundary cases are
+  exercised by reproducible tests.
+- [x] Deterministic hostname resolution-change / DNS-rebinding behavior is exercised. The retained
+  outcome uses the previously validated IP rather than following a later private remap.
+- [x] Multi-request exfiltration is exercised. Two individually harmless secret fragments can reach a
+  controlled upstream and be recombined there; this is retained as a known cross-request correlation
+  limitation rather than hidden as a passing security claim.
 
 ### Architecture fit
 
-- [x] Integration can remain behind platform-owned contracts.
-- [x] Canonical Task/Run/Agent and policy identities remain platform-owned.
-- [x] Pipelock receipt/session/config state is explicitly non-canonical evidence/adapter state.
-- [x] Optional external-runtime adapter is less coupled than vendoring/forking/selective source porting.
+- [x] Integration remains behind platform-owned contracts.
+- [x] #15 remains canonical authorization/approval authority.
+- [x] #591 remains canonical data-classification/egress-policy authority.
+- [x] Canonical Task/Run/Agent/correlation and policy identities remain platform-owned.
+- [x] Pipelock receipt/session/config/rule state remains non-canonical adapter evidence.
+- [x] Pipelock can be removed/disabled without canonical data migration.
+- [x] Pipelock is not required for local/reference operation.
 
-### Replaceability and exit
+### Canonical policy mapping
 
-- [x] Removal path is explicit: disable/remove adapter/runtime without canonical data migration.
-- [x] No canonical lifecycle or policy state needs migration.
-- [x] Upstream-specific values remain adapter evidence.
-- [ ] Live rollback/degradation behavior is exercised under an enforced profile.
-- [x] Baselines include platform-only #591 hooks and a minimal/reference mediation comparison where
-  available.
+- [x] Canonical `ALLOW` is the only decision projected into the Pipelock mediation path.
+- [x] `DENY`, `REQUIRE_APPROVAL`, `LOCAL_ONLY` and unknown/blocked states are stopped by platform
+  policy before Pipelock can weaken them.
+- [x] `ALLOW` does not bypass permissions denied by #15.
+- [x] #591 policy revision/digest and canonical correlation identity remain platform-owned evidence.
+- [x] Pipelock-native identifiers remain adapter metadata rather than canonical policy identifiers.
 
 ### License and provenance
 
-- [x] Canonical upstream location is verified.
-- [x] Exact reviewed commit is recorded.
+- [x] Canonical upstream location and exact reviewed commit are recorded.
 - [x] Root Core license boundary is Apache-2.0 at the reviewed commit.
 - [x] `enterprise/LICENSE` is Elastic License 2.0 at the reviewed commit.
 - [x] Enterprise source/build-tag boundary is recorded.
 - [x] Upstream `Makefile` `build` is tag-free at the reviewed revision.
 - [x] The repository Dockerfile builds `pipelock` with `-tags enterprise`.
-- [x] `.goreleaser.yaml` builds the normal `pipelock` release binary with the `enterprise` tag, so
-  release archives/images are not accepted as Core-only artifacts for this evaluation baseline.
-- [x] No upstream source is copied or modified by this candidate adapter.
-- [ ] Byte-for-byte reproducible Core binary builds are demonstrated. Recorded runs at the same source
-  pin/toolchain currently have different binary SHA-256 values, so only run-specific fingerprints are
-  claimed.
+- [x] `.goreleaser.yaml` builds the normal release binary with the `enterprise` tag, so official
+  release archives/images are not treated as Core-only artifacts for this evaluation baseline.
+- [x] The evaluated baseline builds the exact pinned source through the tag-free Core path.
+- [x] No upstream source is copied into the platform.
+- [ ] Byte-for-byte reproducible Core builds are not demonstrated. Run-specific binary fingerprints
+  have differed at the same source pin/toolchain, so only run-specific hashes are claimed.
 
-### Project health and maintenance
+### Replaceability and failure semantics
 
-- [x] The exact reviewed main commit is recorded as the evaluation pin rather than relying on an
-  unpinned branch.
-- [ ] Release/update cadence is quantified before approval.
-- [ ] Bus-factor/abandonment risk is assessed before approval.
-- [x] Security/advisory handling is reviewed before approval. The reviewed upstream security policy
-  provides a private GitHub-advisory reporting path, supported-version guidance and severity-targeted
-  acknowledgement/patch-or-mitigation windows.
+- [x] Removal path is explicit: disable/remove the adapter/runtime without canonical data migration.
+- [x] No canonical lifecycle or policy state needs migration.
+- [x] Audit-only operation may degrade without redefining canonical policy.
+- [x] Enforced mediation is exercised under process outage and does not silently forward through the
+  dead mediator.
+- [x] Recovery restores mediation without duplicating canonical policy state.
+- [x] Platform local/reference CI remains green without Pipelock as a runtime dependency.
 
-### Security implications
+### Security and adversarial corpus
 
-- [x] Proxy/MCP trust boundary and external-process nature are documented.
-- [x] Pipelock cannot grant permissions denied by canonical policy mapping.
-- [x] Receipt trust requires external cryptographic verification rather than self-assertion.
-- [x] Live proxy writer chains are verified with out-of-band pinned Ed25519 public keys.
-- [x] Raw receipt targets/patterns are excluded from the initial platform evidence normalizer.
-- [x] Direct-network bypass is treated as an explicit unsupported condition until complete mediation is
-  proven.
-- [x] The live verifier's `Containment: UNKNOWN` / `L-CONTAINMENT-UNPROVEN` result is retained rather
-  than promoted into a non-bypass claim.
-- [ ] CONNECT strict-receipt coverage is proven. The live best-effort CONNECT probe succeeded as a
-  transport but logged `chain sealed: transcript root already emitted` while emitting its allow
-  receipt; this requires a dedicated reproduction.
-- [ ] Adversarial corpus and outage/bypass tests have been executed against the pinned binary.
+- [x] Tool-description poisoning is exercised.
+- [x] Descriptor/tool-definition drift is exercised.
+- [x] MCP response/instruction injection is exercised.
+- [x] Plaintext synthetic-secret DLP is exercised.
+- [x] Encoding/base64 variants are exercised.
+- [x] WebSocket DLP/injection cases are exercised.
+- [x] Multi-stage/cross-request exfiltration is exercised and retains the observed correlation
+  limitation.
+- [x] SSRF/private/localhost/link-local/metadata targets are exercised.
+- [x] DNS resolution-change/rebinding behavior is exercised.
+- [x] Redirect-to-private-target behavior is exercised.
+- [x] IPv6 loopback-equivalent blocking is exercised.
 
-### Resource footprint
+### Bypass and containment
 
-- [ ] Added HTTP request latency is measured against a same-run direct baseline. Current hosted-runner
-  fetch/forward/CONNECT samples are smoke timings only.
-- [ ] MCP call latency overhead is measured against a direct baseline. Current remote-fixture testcase
-  durations include process/fixture startup.
-- [ ] Generic WebSocket overhead is measured.
-- [ ] CPU/RAM/startup/log/disk overhead is measured on the target single-node/VPS profile.
-- [ ] False-positive/false-negative behavior is measured against the maintained corpus.
+- [x] MCP stdio child-owned direct-network bypass is tested beneath `pipelock mcp proxy`.
+- [x] The uncontained child can reach the controlled direct target, proving Pipelock mediation alone is
+  **not** a complete egress security boundary.
+- [x] A narrow Linux x86-64 evaluation seccomp profile preserves MCP stdio/asyncio while denying fresh
+  `AF_INET`/`AF_INET6` sockets with `EPERM` for raw TCP, HTTP-shaped, MCP-HTTP-shaped and
+  WebSocket-upgrade-shaped child traffic.
+- [x] The tested protected MCP-stdio profile therefore requires a separate deployment-owned containment
+  layer; Pipelock itself is not credited with providing that containment.
+- [ ] No deployment-wide containment claim is made for every browser, Connector, Hermes/tool, inherited
+  descriptor or future adapter path. Those profiles must have their own OS/container/network boundary
+  before being labelled protected against direct-network bypass.
 
-### Deployment complexity
+See `PIPELOCK_CORE_CONTAINMENT_EVIDENCE.md` for the exact evaluated boundary.
 
-- [x] Baseline deployment remains optional/self-hosted.
-- [x] No recurring paid service is required for the tag-free Core source-build candidate.
-- [x] Candidate binds behind existing canonical policy instead of imposing a new platform registry or
-  lifecycle service.
-- [ ] Enforced deployment topology and OS/container network-containment requirements are proven in a
-  live pilot.
+### Evidence / receipts
 
-### Dependency footprint
+- [x] Pipelock receipts remain external evidence rather than canonical lifecycle/policy truth.
+- [x] Canonical correlation/policy identity is retained by the platform evidence layer.
+- [x] Protected/raw target material is excluded from the initial normalized platform evidence where it
+  is not required.
+- [x] Live receipt chains are verified with out-of-band pinned Ed25519 public keys.
+- [x] Strict normal-lifecycle CONNECT receipt behavior is reproduced with `require_receipts: true` and a
+  fresh writer.
+- [x] The isolated strict CONNECT chain verifies successfully: 5 receipts, final sequence 4, no
+  sealed-chain error.
+- [x] The earlier `chain sealed: transcript root already emitted` observation is classified as an
+  evaluation-harness teardown race when the recorder was stopped before tunnel close.
+- [ ] Strict CONNECT evidence does not claim every abnormal-shutdown lifecycle is receipt complete.
 
-- [x] No Python runtime dependency is introduced by the initial projection/evidence adapter.
-- [x] Pipelock remains a separately built optional runtime.
-- [x] Enterprise-tagged code is excluded from the intended source-built Core evaluation baseline.
-- [x] The WebSocket transport fixture uses a pinned test-only `websockets==15.0.1`; this is not added to
-  the platform runtime baseline.
-- [ ] Material transitive/runtime dependency footprint of the pinned Core binary is recorded from the
-  actual build artifact.
+See `PIPELOCK_CORE_CONNECT_RECEIPT_EVIDENCE.md` for retained run/artifact fingerprints.
 
-### API and contract stability
+### Performance and operability
 
-- [x] Platform consumes its own `EgressDecision` mapping rather than exposing Pipelock types as
-  canonical contracts.
-- [x] Adapter contract tests cover mapping and evidence normalization.
-- [x] Unknown/unmapped canonical policy state is designed to fail closed.
-- [x] Live upstream CLI/config/receipt compatibility tests are automated against the exact pinned
-  revision in `Pipelock candidate compatibility`.
-- [x] The live MCP stdio check invokes the existing canonical platform fixture rather than only an
-  upstream toy process.
-- [x] MCP Streamable HTTP and MCP WebSocket transport probes retain the platform's canonical
-  `CapabilityRegistry` / `CapabilityInvoker` path.
+The reproducible benchmark is retained in `scripts/benchmarks/issue730_pipelock_benchmark.py` and its
+measurement contract in `PIPELOCK_CORE_PERFORMANCE_EVIDENCE.md`.
 
-### Simpler internal alternative
+- [x] Direct-versus-mediated HTTP latency is measured on a same-run hosted reference.
+- [x] Direct-versus-mediated generic WebSocket round-trip latency is measured.
+- [x] Direct-versus-mediated MCP stdio call-total is measured. This includes process startup/protocol
+  handshake per call and is not presented as a persistent-session microbenchmark.
+- [x] Pipelock cold-start time is measured.
+- [x] CPU and RSS are measured for the exercised hosted reference workload.
+- [x] HOME/stdout log/disk growth is measured for the exercised hosted reference workload.
+- [x] Maintained live HTTP DLP/encoding subset plus benign controls records `2 TP / 4 TN / 0 FP / 0 FN`.
+- [x] Hosted reference evidence is explicitly labelled non-VPS evidence.
+- [ ] Representative ordinary-VPS/single-node measurements using the same retained harness are still
+  pending and must not be replaced by GitHub-hosted runner numbers.
 
-- [x] Platform-native #591 application-layer enforcement remains the zero-Pipelock baseline.
-- [x] Evaluation explicitly compares Pipelock against a minimal/reference mediation path rather than
-  assuming an upstream is required.
-- [ ] Measured evidence demonstrates whether Pipelock adds enough enforcement/evidence value to
-  justify operational complexity.
+Retained GitHub-hosted reference observations:
 
-## Decision
+| Measurement | Direct mean | Mediated mean | Delta | Relative overhead |
+| --- | ---: | ---: | ---: | ---: |
+| HTTP request | 18.311 ms | 19.486 ms | +1.176 ms | +6.42% |
+| WebSocket round trip | 1.447 ms | 3.898 ms | +2.451 ms | +169.44% |
+| MCP stdio call-total | 958.191 ms | 1112.430 ms | +154.239 ms | +16.10% |
 
-- [ ] **Reject**
-- [ ] **Reference only**
-- [x] **Candidate**
-- [ ] **Approved**
+Additional hosted reference observations: Pipelock `run` startup `101.872 ms`; CPU time `0.11 s` for
+that workload; RSS `67,743,744` bytes at start and `68,575,232` bytes peak/end; HOME/stdout workload
+growth `25,844` bytes. These are retained single-run reference values, not universal performance
+claims.
 
-### Decision rationale
+### Comparison baseline
 
-The source/provenance review plus the current live pilots are sufficient to continue the proof of
-concept without changing canonical architecture or introducing a paid baseline dependency. The live
-candidate now proves the exact tag-free build path, audit-only HTTP fetch and forward transport,
-HTTPS CONNECT connectivity without TLS interception, canonical MCP stdio/Streamable-HTTP/WebSocket
-wrapper compatibility and pinned-key proxy receipt chains.
+- [x] Platform-native #591 application-layer decision hooks remain the zero-Pipelock baseline.
+- [x] Direct transport baselines are measured alongside mediated paths.
+- [x] The evaluation records what Pipelock adds: mediated inspection, network/MCP blocking surfaces,
+  flight-recorder/receipt evidence and additional SSRF/DLP checks.
+- [x] The evaluation also records what Pipelock does not add by itself: complete process/network
+  containment, cross-request secret correlation and canonical authorization/egress policy.
 
-That is still not sufficient for approval. The successful receipt verifier reports containment as
-unknown and explicitly does not prove non-bypass. The CONNECT transport probe additionally exposed a
-best-effort receipt-emission error, so successful tunnel transport must not be conflated with validated
-CONNECT receipt completeness. Complete network mediation, generic `/ws`, enforced-profile
-outage/recovery behavior, the adversarial corpus and representative resource/performance costs remain
-unmeasured.
+### Project health / dependency follow-up
 
-The artifact boundary is material. At the pinned revision, both the repository Dockerfile and the
-GoReleaser definition for the normal `pipelock` binary enable Enterprise build tags. Official release
-archives/images therefore cannot be treated as Apache-Core-only artifacts for this baseline merely
-because paid features may be inactive. The #730 Core pilot deliberately builds the pinned source via
-the tag-free `make build` path instead.
+- [x] The exact reviewed upstream commit is pinned instead of relying on a moving branch.
+- [x] Security/advisory handling has been reviewed; the upstream security policy exposes private GitHub
+  advisory reporting and supported-version/severity guidance.
+- [ ] Release/update cadence is not yet quantified in this decision record.
+- [ ] Bus-factor/abandonment risk is not yet quantified in this decision record.
+- [x] Actual Core build metadata is retained in compatibility/performance artifacts.
 
-The recorded tag-free binary SHA-256 has also differed between runs at the same pin/toolchain. This is
-not currently treated as a functional failure, but byte-for-byte build reproducibility has not been
-established and must not be implied by the run fingerprints.
+These maintenance-risk items should influence lifecycle management if the final result is
+`optional_provider` or `adopt`; they do not change the already-demonstrated security boundaries.
 
-### Required follow-up before approval/integration
+## Decision evidence summary
 
-- [x] Execute the audit-only pilot using the exact pinned source revision.
-- [x] Record binary/config/signing-key fingerprints and live signed receipt evidence.
-- [x] Exercise a canonical MCP stdio path through the pinned wrapper.
-- [x] Execute HTTP forward/CONNECT connectivity and canonical MCP Streamable HTTP/WebSocket transport
-  probes.
-- [ ] Reproduce and resolve/classify the CONNECT best-effort receipt-emission anomaly; prove strict
-  CONNECT receipt behavior if receipt completeness is required by the profile.
-- [ ] Execute generic `/ws`, redirect/private-target and SSRF/DNS/IPv6 transport/security matrices.
-- [ ] Execute the adversarial injection/DLP/encoding corpus.
-- [ ] Prove or explicitly reject protected-profile direct-network bypass resistance.
-- [ ] Exercise fail-open/fail-closed/audit-degradation behavior with live process outages/recovery.
-- [ ] Measure latency/CPU/RAM/startup/log growth and false-positive/false-negative behavior on the
-  target single-node/VPS profile.
-- [ ] Choose the final #730 outcome: `adopt`, `optional_provider`, `reference_only` or `reject`.
-- [ ] Update `docs/UPSTREAMS.md` only if Pipelock is promoted to approved/integrated status.
-- [x] Add candidate provenance metadata (`upstream/pipelock-core.yaml`).
-- [x] Add platform-owned mapping/evidence contract tests.
-- [x] Add a pinned source-build compatibility workflow for the Core/audit baseline.
+### Demonstrated strengths
+
+- optional/self-hosted tag-free Core evaluation requires no recurring paid Pipelock service;
+- useful HTTP/WebSocket/MCP mediation and DLP/SSRF inspection on traffic that actually traverses the
+  mediator;
+- reproducible compatibility/security workflows against an exact pin;
+- signed receipt/flight-recorder evidence can be independently verified;
+- canonical #15/#591 policy authority can remain outside Pipelock;
+- removal/absence does not require canonical data migration or break the platform reference baseline.
+
+### Demonstrated limitations
+
+- Pipelock proxying alone is bypassable by direct child-owned sockets;
+- a separate OS/container/network containment layer is required for any protected-profile claim;
+- multi-request secret fragments can evade per-request correlation and be reconstructed upstream;
+- the evaluated official Docker/release build paths are not accepted as the Apache-Core-only baseline
+  because they enable Enterprise build tags; the platform evaluation must keep using the reviewed
+  tag-free source-build boundary;
+- byte-for-byte reproducible builds are not established;
+- GitHub-hosted performance evidence is not representative ordinary-VPS evidence;
+- broad deployment-wide containment across every future network-capable path is not proven by the
+  narrow MCP-stdio seccomp pilot.
+
+## Acceptance readiness
+
+- [x] Exact Core revision and effective license/build boundary verified.
+- [x] Evaluation began with audit-only pilots.
+- [x] #15 and #591 remain canonical authorities.
+- [x] HTTP, WebSocket, MCP stdio and MCP HTTP/WebSocket paths evaluated.
+- [x] Tool poisoning, response injection, descriptor drift, DLP/encoding, SSRF, DNS/private/metadata and
+  IPv6 cases have reproducible tests.
+- [x] Multi-stage exfiltration across multiple requests is tested and its limitation retained.
+- [x] Direct-network bypass resistance is tested for the exercised protected MCP-stdio profile; other
+  profiles are not claimed protected without their own containment boundary.
+- [x] Outage/fail-closed/recovery behavior is exercised for the enforced mediation pilot.
+- [x] Receipts/Flight Recorder are assessed and remain non-canonical evidence.
+- [x] Hosted-reference latency, CPU, RAM, log/disk and maintained-subset FP/FN behavior are measured.
+- [x] Platform local/reference operation remains green without Pipelock as a mandatory runtime.
+- [ ] Representative ordinary-VPS/single-node evidence is retained.
+- [ ] Exactly one final #730 recommendation is recorded and backed by the completed evidence set.
+
+## Required follow-up before final #730 outcome
+
+1. Run the existing benchmark harness on the representative ordinary Linux x86-64 VPS/single-node
+   profile and retain JSON plus exact binary/config hashes and environment metadata.
+2. Compare the VPS result with the retained hosted reference without treating either as a universal
+   threshold.
+3. Choose exactly one final result: `adopt`, `optional_provider`, `reference_only` or `reject`.
+4. Update this decision record and `upstream/pipelock-core.yaml` lifecycle status consistently.
+5. Update `docs/UPSTREAMS.md` only if the chosen lifecycle status requires catalog promotion.
+6. Run the complete final combined #804 CI on the resulting integration head before any merge to
+   `main`.
+
+Until those steps are complete, the safe repository status remains **Candidate / final decision
+pending**, with `optional_provider` a plausible direction but not yet the recorded #730 outcome.

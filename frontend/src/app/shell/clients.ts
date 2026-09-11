@@ -1,0 +1,73 @@
+import { useMemo } from "react";
+import { ApprovalClient } from "../../api/approvals";
+import { AutomationClient } from "../../api/automations";
+import { BrowserSessionClient } from "../../api/browserSession";
+import { ControlPlaneClient } from "../../api/client";
+import { ControlPlaneCollectionClient } from "../../api/collections";
+import { ConversationClient } from "../../api/conversations";
+import { ComputeClient } from "../../api/compute";
+import { EvaluationClient } from "../../api/evaluations";
+import { GoalClient } from "../../api/goals";
+import { GovernanceClient } from "../../api/governance";
+import { IntegrationsClient } from "../../api/integrations";
+import { LearningClient } from "../../api/learning";
+import { MemoryKnowledgeClient } from "../../api/memoryKnowledge";
+import { NotificationClient } from "../../api/notifications";
+import { OnboardingClient } from "../../api/onboarding";
+import { OrganizationClient } from "../../api/organizations";
+import { PluginsClient } from "../../api/plugins";
+import { RegistryClient } from "../../api/registry";
+import { RepositoryCollectionClient } from "../../api/repositories";
+import { TemplateClient } from "../../api/templates";
+import { VerificationClient } from "../../api/verification";
+
+export function useShellClients(baseUrl: string) {
+  const session = useMemo(() => new BrowserSessionClient({ baseUrl }), [baseUrl]);
+  const fetchImpl = session.fetch;
+  const client = useMemo(() => new ControlPlaneClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const onboardingClient = useMemo(() => new OnboardingClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const collections = useMemo(() => new ControlPlaneCollectionClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const approvalClient = useMemo(() => new ApprovalClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const repositoryClient = useMemo(() => new RepositoryCollectionClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const conversationClient = useMemo(() => new ConversationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const automationClient = useMemo(() => new AutomationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const goalClient = useMemo(() => new GoalClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const computeClient = useMemo(() => new ComputeClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const evaluationClient = useMemo(() => new EvaluationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const governanceClient = useMemo(() => new GovernanceClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const integrationsClient = useMemo(() => new IntegrationsClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const learningClient = useMemo(() => new LearningClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const memoryKnowledgeClient = useMemo(() => new MemoryKnowledgeClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const notificationClient = useMemo(() => new NotificationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const organizationClient = useMemo(() => new OrganizationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const pluginsClient = useMemo(() => new PluginsClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const registryClient = useMemo(() => new RegistryClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const templateClient = useMemo(() => new TemplateClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const verificationClient = useMemo(() => new VerificationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+
+  return {
+    session,
+    client,
+    onboardingClient,
+    collections,
+    approvalClient,
+    repositoryClient,
+    conversationClient,
+    automationClient,
+    goalClient,
+    computeClient,
+    evaluationClient,
+    governanceClient,
+    integrationsClient,
+    learningClient,
+    memoryKnowledgeClient,
+    notificationClient,
+    organizationClient,
+    pluginsClient,
+    registryClient,
+    templateClient,
+    verificationClient,
+  };
+}
+
+export type ShellClients = ReturnType<typeof useShellClients>;
