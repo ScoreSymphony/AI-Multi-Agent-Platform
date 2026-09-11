@@ -83,9 +83,29 @@ def test_kernel_task_commands_stay_behind_focused_task_command_component() -> No
         )
 
 
+def test_kernel_run_commands_stay_behind_focused_run_command_component() -> None:
+    facade = _class(KERNEL_FACADE, "PlatformKernel")
+    for method_name in (
+        "create_run",
+        "retry_task",
+        "start_run",
+        "start_task",
+        "refresh_run",
+        "record_run_outcome",
+        "cancel_run",
+        "attach_artifact",
+        "attach_result",
+    ):
+        method = _method(facade, method_name)
+        assert _delegated_attribute(method) == "_run_commands", (
+            f"PlatformKernel.{method_name} reabsorbed Run command mechanics; keep canonical Run "
+            "mutations behind KernelRunCommands or deliberately update the #723 responsibility map"
+        )
+
+
 def test_extracted_kernel_components_do_not_depend_on_concrete_facade() -> None:
     violations: list[str] = []
-    for filename in ("queries.py", "recovery.py", "task_commands.py"):
+    for filename in ("queries.py", "recovery.py", "task_commands.py", "run_commands.py"):
         path = KERNEL_ROOT / filename
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):

@@ -16,7 +16,7 @@ Status: implementation guide for issue #723. This document records responsibilit
 
 | Hotspot | Responsibilities currently combined | Target internal boundaries | Stable façade / ownership to preserve | Primary regression focus | Status in #723 |
 | --- | --- | --- | --- | --- | --- |
-| `kernel/kernel.py` | Task commands; Run commands; Task/Run/Event reads; active-run selection; lifecycle dispatch/reconciliation; recovery; event/command commit mechanics; completion integration | query/read service; recovery coordinator; Task command service; Run command service; lifecycle reconciler; canonical event/command commit support | public `PlatformKernel`; kernel remains canonical Task/Run/Event lifecycle authority; `OutputObservingPlatformKernel` remains compatible | lifecycle transitions, idempotency, event history, cancellation races, recovery/restart, completion verification | **in progress**: queries, recovery and Task commands extracted behind the façade |
+| `kernel/kernel.py` | Task commands; Run commands; Task/Run/Event reads; active-run selection; lifecycle dispatch/reconciliation; recovery; event/command commit mechanics; completion integration | query/read service; recovery coordinator; Task command service; Run command service; lifecycle reconciler; canonical event/command commit support | public `PlatformKernel`; kernel remains canonical Task/Run/Event lifecycle authority; `OutputObservingPlatformKernel` remains compatible | lifecycle transitions, idempotency, event history, cancellation races, recovery/restart, completion verification | **in progress**: queries, recovery, Task commands and Run commands extracted behind the façade |
 | `distributed/workspace_transport.py` | Worker-local materialization state; chunk staging/commit; result collection; path/symlink safety; control-side transport client; worker-side transport endpoint; workspace-bound worker routing; wire codecs/checksums | materialization store; control-side remote materializer; worker endpoint; workspace-bound dispatcher; workspace wire codec | `RemoteWorkspaceMaterializer` contract; canonical Workspace/Snapshot/File identity remains control-plane owned; worker paths remain local deployment detail | interrupted transfers, duplicate chunks, checksum failure, cache replay, result collection, cleanup, read-only enforcement, request/reply correlation | audited; split pending |
 | `coordination/service.py` | Plan registration/graph validation; dependency barriers; Run-attempt creation/dispatch; Run outcome observation; retry scheduling; durable waits and resolution; cancellation; restart reconciliation; task aggregation; claims; telemetry | graph/registration validator; progression engine; attempt/retry coordinator; wait coordinator; recovery/reconciliation coordinator; task aggregation; telemetry adapter | `DurablePlanStepCoordinator` façade; kernel owns canonical Run/Task truth; repository owns durable coordination projection | contention/claim races, duplicate observations, retry due-times, waits, cancellation, restart/reconcile, predecessor failure, aggregate completion | audited; split pending |
 | `data/reference.py` | SQLite helpers plus three independent reference providers: File, Memory, Knowledge; each includes schema initialization, persistence mapping, scope checks and provider compatibility methods | shared SQLite connection/serialization primitives only where semantically shared; `LocalFileProvider`; `LocalMemoryProvider`; `LocalKnowledgeProvider` in dedicated modules | `FileProvider`, `MemoryProvider`, `KnowledgeProvider` contracts and current public exports | persistence restart, scope isolation, tombstones/orphans, memory expiry/supersession, knowledge revisions/index status/search | **implemented**: provider implementations split; `data.reference` retained as compatibility façade |
@@ -62,13 +62,25 @@ The third implementation cohort moves canonical Task mutation mechanics out of t
 
 Architecture tests require every extracted Task mutation to remain delegated and prevent the focused component from depending back on `PlatformKernel`.
 
+## Cohort 4 — Kernel Run command extraction
+
+The fourth implementation cohort moves canonical Run command orchestration and output attachment commands out of the public kernel façade:
+
+- `kernel/run_commands.py` owns Run creation/retry/start/refresh/outcome/cancel plus Task convenience start and artifact/result attachment commands.
+- `PlatformKernel` retains the existing public method names and signatures and delegates them to `KernelRunCommands`.
+- The focused component uses the existing query, lifecycle-reconciliation and commit capabilities through a narrow internal host protocol; it does not own a second repository or lifecycle truth.
+- Task cancellation continues to call the public canonical Run cancellation path, which now delegates into the same focused Run command component.
+- Lifecycle dispatch, snapshot reconciliation, terminal transition construction and commit/idempotency primitives remain separate follow-up boundaries rather than being duplicated into the command component.
+
+Architecture tests require the extracted Run/output methods to stay delegated and prevent `run_commands.py` from depending on the concrete `PlatformKernel` façade.
+
 ## Planned implementation cohorts
 
 ### Kernel
 
 1. **Read/recovery** — query mechanics and restart recovery. *(implemented)*
 2. **Task commands** — create/update/ready/wait/resume/complete/fail/cancel behind an internal command component. *(implemented)*
-3. **Run commands** — create/retry/start/refresh/outcome/cancel and output attachment orchestration.
+3. **Run commands** — create/retry/start/refresh/outcome/cancel and output attachment orchestration. *(implemented)*
 4. **Lifecycle reconciliation** — backend dispatch, snapshot reconciliation and cancellation completion.
 5. **Commit support** — command/idempotency/event construction and mirroring, kept internal to the kernel package.
 
