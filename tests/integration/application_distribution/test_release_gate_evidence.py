@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.application_distribution import (
     ApplicationArtifact,
     ApplicationDistributionService,
@@ -241,7 +242,7 @@ def test_evaluation_gate_accepts_only_exact_subject_and_detects_conflicting_evid
             version=artifact.sha256,
             revision=artifact_subject_revision(release, artifact),
         )
-        snapshot = ConfigurationSnapshot(platform_version="test", references=(reference,))
+        snapshot = ConfigurationSnapshot(platform_version=__version__, references=(reference,))
         completed_at = datetime.now(UTC)
         passed_run = EvaluationRun(
             suite_id="release-suite",
