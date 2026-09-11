@@ -259,10 +259,7 @@ def test_uncontained_websocket_client_can_bypass_mediated_private_target_block(
 
     async def proxied_round_trip(proxy_port: int, target_port: int) -> bool:
         target = f"ws://127.0.0.1:{target_port}/echo"
-        proxy_url = (
-            f"ws://127.0.0.1:{proxy_port}/ws?"
-            + urllib.parse.urlencode({"url": target})
-        )
+        proxy_url = f"ws://127.0.0.1:{proxy_port}/ws?" + urllib.parse.urlencode({"url": target})
         try:
             async with websockets.connect(
                 proxy_url,
