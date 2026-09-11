@@ -10,17 +10,22 @@ import asyncio
 from dataclasses import replace
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.kernel.models import TaskState
 from ai_multi_agent_platform.security import ActorIdentity
 
+from .inventory import PlanningInventoryBuilder
 from .models import (
     PlannerOutput,
+    PlanningInventory,
     PlanningRequest,
     PlanProposal,
     ProposalRecord,
     ProposalStatus,
+    ProposalValidation,
 )
 from .repository import advance_record
 from .service import PlanningService as BasePlanningService
+from .validation import PlanningProposalValidator
 
 _SUPERSEDABLE_STATUSES = frozenset(
     {
@@ -29,10 +34,11 @@ _SUPERSEDABLE_STATUSES = frozenset(
         ProposalStatus.ACTIVATING,
     }
 )
+_PROPOSAL_VALIDATOR = PlanningProposalValidator()
 
 
 class PlanningService(BasePlanningService):
-    """Planning service with deterministic same-Task activation and proposal lineage.
+    """Planning service with focused inventory/validation and deterministic supersession.
 
     Canonical Task/Plan mutation remains owned by the base planning/kernel path. The additional
     per-Task lock closes the in-process check/use race between competing proposal activations.
@@ -41,9 +47,23 @@ class PlanningService(BasePlanningService):
 
     Replacement proposals also point to the durable proposal that activated their base Plan. This
     keeps proposal lineage explicit without mutating prior immutable proposal content.
+
+    Inventory construction and deterministic proposal validation are delegated to focused internal
+    components. ``_inventory`` remains a compatibility seam because ``ReferencePlanningService``
+    intentionally layers trusted environment filtering on top of the canonical base inventory.
     """
 
     _activation_locks: dict[str, asyncio.Lock]
+
+    def _inventory(self, task: TaskState, workspace_id: str | None) -> PlanningInventory:
+        return PlanningInventoryBuilder(
+            agents=self.agents,
+            capabilities=self.capabilities,
+            models=self.models,
+        ).build(task, workspace_id)
+
+    def validate(self, proposal: PlanProposal, request: PlanningRequest) -> ProposalValidation:
+        return _PROPOSAL_VALIDATOR.validate(proposal, request)
 
     def _activation_lock(self, task_id: str) -> asyncio.Lock:
         locks = getattr(self, "_activation_locks", None)
