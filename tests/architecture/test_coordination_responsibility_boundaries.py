@@ -12,6 +12,7 @@ WAITS = COORDINATION_ROOT / "waits.py"
 ATTEMPT_OUTCOMES = COORDINATION_ROOT / "attempt_outcomes.py"
 CANCELLATION = COORDINATION_ROOT / "cancellation.py"
 AGGREGATION = COORDINATION_ROOT / "aggregation.py"
+RECONCILIATION = COORDINATION_ROOT / "reconciliation.py"
 
 
 def _tree(path: Path) -> ast.Module:
@@ -139,6 +140,25 @@ def test_aggregation_stays_behind_focused_component() -> None:
     )
 
 
+def test_reconciliation_entrypoints_stay_behind_focused_component() -> None:
+    coordinator = _class(SERVICE, "DurablePlanStepCoordinator")
+    _assert_delegate(
+        _method(coordinator, "reconcile_plan"),
+        "_reconciliation",
+        "reconcile_plan",
+    )
+    _assert_delegate(
+        _method(coordinator, "_mark_inconsistent"),
+        "_reconciliation",
+        "mark_inconsistent",
+    )
+    _assert_static_delegate(
+        _method(coordinator, "_start_key"),
+        "CoordinationReconciliation",
+        "start_key",
+    )
+
+
 def test_wait_entrypoints_stay_behind_focused_component() -> None:
     coordinator = _class(SERVICE, "DurablePlanStepCoordinator")
     _assert_delegate(_method(coordinator, "wait_step"), "_waits", "wait_step")
@@ -178,6 +198,7 @@ def test_focused_coordination_components_do_not_depend_back_on_facade() -> None:
     _assert_no_facade_dependency(ATTEMPT_OUTCOMES)
     _assert_no_facade_dependency(CANCELLATION)
     _assert_no_facade_dependency(AGGREGATION)
+    _assert_no_facade_dependency(RECONCILIATION)
 
 
 def test_registration_component_owns_graph_validation() -> None:
@@ -208,6 +229,13 @@ def test_cancellation_component_owns_plan_and_active_run_cancellation() -> None:
 def test_aggregation_component_owns_terminal_task_reduction() -> None:
     aggregation = _class(AGGREGATION, "CoordinationAggregation")
     _method(aggregation, "aggregate_task")
+
+
+def test_reconciliation_component_owns_restart_and_run_reconciliation() -> None:
+    reconciliation = _class(RECONCILIATION, "CoordinationReconciliation")
+    _method(reconciliation, "reconcile_plan")
+    _method(reconciliation, "mark_inconsistent")
+    _method(reconciliation, "start_key")
 
 
 def test_wait_component_owns_wait_validation_and_resolution() -> None:
