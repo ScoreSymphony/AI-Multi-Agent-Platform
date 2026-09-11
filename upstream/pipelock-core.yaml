@@ -1,0 +1,43 @@
+name: "Pipelock Core"
+purpose: "Optional technical MCP/network-egress mediation and enforcement evidence for canonical platform policy decisions."
+status: candidate
+integration_categories:
+  - "external self-hosted service"
+  - "adapter integration"
+canonical_upstream: "https://github.com/luckyPipewrench/pipelock"
+pinned_revision: "f7d1816f1a5ad63d501b0c48f36066f836f59022"
+verified_license: "Apache-2.0 for the reviewed Core/tag-free source path; enterprise-tagged source is Elastic License 2.0 and excluded from the Core evaluation baseline."
+license_verification_date: "2026-09-11"
+last_review_date: "2026-09-11"
+platform_adapter_or_boundary: "Optional projection after canonical #15 authorization and #591 EgressDecision; Pipelock remains enforcement/evidence only."
+local_source_path: "src/ai_multi_agent_platform/adapters/pipelock.py"
+source_origin_path: "No Pipelock source is copied; runtime evaluation uses an external source build pinned to the reviewed revision."
+modified_locally: false
+modification_summary: "Platform-owned projection/evidence adapter only; no upstream source modifications."
+required_notices:
+  - "Retain upstream Apache-2.0 notices for any future redistributed Core source or artifact as applicable."
+  - "Do not redistribute Enterprise-tagged source/artifacts under the Apache-2.0 assumption; enterprise/LICENSE is Elastic License 2.0."
+compatibility_constraints:
+  - "Canonical #15 authorization and #591 egress policy remain authoritative."
+  - "Use the tag-free Core source build for the no-paid evaluation baseline."
+  - "The reviewed upstream Dockerfile builds with '-tags enterprise' and is not treated as a Core-only artifact."
+  - "The reviewed .goreleaser.yaml also builds the normal pipelock release binary with the enterprise tag; official release archives/images are therefore not accepted as Core-only artifacts for this baseline."
+  - "Receipt policy_hash is Pipelock configuration evidence, not the canonical #591 policy revision."
+security_constraints:
+  - "Canonical non-ALLOW outcomes must be blocked before the adapter is consulted."
+  - "Enforced profiles must fail closed when Pipelock is unavailable."
+  - "Complete network mediation must be proven per execution profile; proxy use alone is not sufficient evidence against direct-socket bypass."
+  - "MCP stdio child-process direct egress is unsupported for protected profiles until OS/container network containment is verified."
+  - "Raw receipt targets/patterns must not be persisted by default platform evidence normalization."
+deployment_constraints:
+  - "Pipelock remains optional and baseline/local platform operation must not depend on it."
+  - "Audit-only evaluation begins before any production blocking recommendation."
+  - "Source-built Core is required for the evaluation baseline because both the repository Dockerfile and GoReleaser pipelock release build enable Enterprise tags at the reviewed revision."
+resource_constraints:
+  - "Latency, CPU, RAM, startup and log/disk overhead remain to be measured by the live #730 pilot."
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Pin every evaluated revision; re-check root and enterprise license boundaries, Dockerfile/GoReleaser/build tags, receipt/transport behavior, then rerun mapping, security, bypass, failure and performance evidence before promotion."
+exit_replacement_strategy: "Disable/remove the optional adapter and external runtime. Canonical authorization, egress policy, Task/Run lifecycle and provider identities require no migration because Pipelock owns none of them."
+adr: ""
+notes: "Candidate only. Final #730 decision must be adopt, optional_provider, reference_only or reject after measured live evidence. Evaluation details: docs/upstream/PIPELOCK_CORE_EVALUATION.md"
