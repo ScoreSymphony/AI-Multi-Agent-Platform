@@ -13,6 +13,22 @@ from .execution import (
     ApplicationBuildLifecycleBackend,
     ApplicationCommandExecutor,
 )
+from .gated_service import ApplicationDistributionService
+from .gates import (
+    ApplicationReleaseGateCoordinator,
+    DeterministicGateCheck,
+    ReleaseGateKind,
+    ReleaseGatePolicy,
+    ReleaseGateRequirement,
+    StaticReleaseGatePolicy,
+    artifact_subject_revision,
+    bind_gate_to_release,
+    gate_is_current,
+    publication_readiness,
+    release_subject_digest,
+    required_gate_names,
+    verification_subject,
+)
 from .github import GitHubReleasePublisher
 from .manifest import canonical_manifest_bytes, manifest_sha256, release_manifest
 from .models import (
@@ -36,7 +52,6 @@ from .repository import (
     InMemoryApplicationReleaseRepository,
     JsonApplicationReleaseRepository,
 )
-from .service import ApplicationDistributionService
 
 __all__ = [
     "APPLICATION_BUILD_ACTION",
@@ -47,6 +62,7 @@ __all__ = [
     "ApplicationCommandExecutor",
     "ApplicationDistributionService",
     "ApplicationRelease",
+    "ApplicationReleaseGateCoordinator",
     "ApplicationReleasePublisher",
     "ApplicationReleaseRepository",
     "BuildSpecification",
@@ -54,6 +70,7 @@ __all__ = [
     "BuildTargetMatcher",
     "BuildTargetState",
     "BuildTargetStatus",
+    "DeterministicGateCheck",
     "DistributedBuildTargetMatcher",
     "GateEvidence",
     "GateStatus",
@@ -66,9 +83,20 @@ __all__ = [
     "PublishedArtifact",
     "PublishContext",
     "ReleaseChannel",
+    "ReleaseGateKind",
+    "ReleaseGatePolicy",
+    "ReleaseGateRequirement",
     "ReleaseStatus",
     "ReleaseVisibility",
+    "StaticReleaseGatePolicy",
+    "artifact_subject_revision",
+    "bind_gate_to_release",
     "canonical_manifest_bytes",
+    "gate_is_current",
     "manifest_sha256",
+    "publication_readiness",
     "release_manifest",
+    "release_subject_digest",
+    "required_gate_names",
+    "verification_subject",
 ]
