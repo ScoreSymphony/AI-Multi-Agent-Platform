@@ -1,0 +1,131 @@
+name: Pipelock performance and operability
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/pipelock-performance-operability.yml"
+      - "scripts/ci/issue730_pipelock_benchmark.py"
+      - "tests/fixtures/pipelock_websocket_audit.yaml"
+      - "tests/fixtures/websocket_echo_server.py"
+      - "tests/fixtures/mcp_streamable_http_server.py"
+      - "docs/upstream/PIPELOCK_CORE_PERFORMANCE_EVIDENCE.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-core-performance-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out platform
+        uses: actions/checkout@v7
+
+      - name: Check out exact Pipelock Core candidate
+        uses: actions/checkout@v7
+        with:
+          repository: luckyPipewrench/pipelock
+          ref: f7d1816f1a5ad63d501b0c48f36066f836f59022
+          path: .candidate/pipelock
+          persist-credentials: false
+
+      - name: Set up Go from pinned upstream module
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .candidate/pipelock/go.mod
+          cache-dependency-path: .candidate/pipelock/go.sum
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install benchmark environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Validate benchmark harness
+        run: |
+          ruff format --check scripts/ci/issue730_pipelock_benchmark.py
+          ruff check scripts/ci/issue730_pipelock_benchmark.py
+
+      - name: Build tag-free Core candidate
+        working-directory: .candidate/pipelock
+        run: make build
+
+      - name: Reject Enterprise-tagged candidate binary
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          go version -m ./pipelock | tee "$RUNNER_TEMP/pipelock-performance-buildinfo.txt"
+          if grep -Eq 'tags=.*enterprise' "$RUNNER_TEMP/pipelock-performance-buildinfo.txt"; then
+            echo "candidate binary contains Enterprise build tag" >&2
+            exit 1
+          fi
+
+      - name: Generate audit-only MCP evaluation configuration
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pipelock-home"
+          HOME="$RUNNER_TEMP/pipelock-home" ./pipelock init \
+            --scan-home "$RUNNER_TEMP/pipelock-home" \
+            --output "$RUNNER_TEMP/pipelock-audit.yaml" \
+            --preset audit \
+            --skip-canary
+          grep -Eq '^mode:[[:space:]]*audit$' "$RUNNER_TEMP/pipelock-audit.yaml"
+          sha256sum ./pipelock "$RUNNER_TEMP/pipelock-audit.yaml" \
+            > "$RUNNER_TEMP/pipelock-performance-sha256.txt"
+
+      - name: Measure HTTP, WebSocket, MCP and process overhead
+        env:
+          PIPELOCK_BENCHMARK_OUT: ${{ runner.temp }}/pipelock-performance.json
+        run: |
+          python scripts/ci/issue730_pipelock_benchmark.py \
+            --pipelock-bin .candidate/pipelock/pipelock \
+            --mcp-config "$RUNNER_TEMP/pipelock-audit.yaml" \
+            --iterations 8 \
+            --warmup 2 \
+            --output "$PIPELOCK_BENCHMARK_OUT"
+
+      - name: Validate measured evidence
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ["RUNNER_TEMP"], "pipelock-performance.json").read_text())
+          assert report["schema_version"] == 1
+          assert report["issue"] == 730
+          assert report["environment"]["github_actions"] is True
+          assert report["correctness"]["clean_http_allowed"] is True
+          assert report["correctness"]["clean_websocket_allowed"] is True
+          assert report["correctness"]["clean_mcp_allowed"] is True
+          assert report["correctness"]["false_positive_clean_cases"] == 0
+          for transport in ("http", "websocket", "mcp_streamable_http"):
+              assert report[transport]["direct"]["count"] == 8
+              assert report[transport]["mediated"]["count"] == 8
+              assert report[transport]["direct"]["median_ms"] >= 0
+              assert report[transport]["mediated"]["median_ms"] >= 0
+          assert report["resources"]["startup_ms"] >= 0
+          assert report["resources"]["log_bytes"] >= 0
+          assert report["resources"]["home_bytes"] >= 0
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pipelock-performance-operability-evidence
+          path: |
+            ${{ runner.temp }}/pipelock-performance.json
+            ${{ runner.temp }}/pipelock-performance-buildinfo.txt
+            ${{ runner.temp }}/pipelock-performance-sha256.txt
+          if-no-files-found: error
