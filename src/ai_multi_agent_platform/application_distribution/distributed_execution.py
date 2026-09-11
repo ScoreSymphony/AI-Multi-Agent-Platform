@@ -128,9 +128,13 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
                 APPLICATION_BUILD_WORKER_INPUT_KEY: _build_worker_payload(release, target),
             },
         )
-        default_idempotency_key = (
-            f"application-build:{release.release_id}:{target.target.target_id}:"
-            f"{request.run_id}"
+        default_idempotency_key = ":".join(
+            (
+                "application-build",
+                release.release_id,
+                target.target.target_id,
+                request.run_id,
+            )
         )
         job = WorkerJobRequest(
             worker_job_id=_worker_job_id(request.run_id),
@@ -437,6 +441,7 @@ class ApplicationBuildWorkerLifecycleBackend(LifecycleBackend):
             return await self._fallback.get(run_id, context)
         result = self._results.get(run_id)
         if result is not None:
+            self._forget_run(run_id)
             return _execution_result_snapshot(result)
         task = self._tasks.get(run_id)
         if task is None:
@@ -452,6 +457,7 @@ class ApplicationBuildWorkerLifecycleBackend(LifecycleBackend):
                     ErrorCode.INVALID_PROVIDER_RESPONSE,
                     f"application build Worker produced no result: {run_id}",
                 )
+            self._forget_run(run_id)
             return _execution_result_snapshot(result)
         return ExecutionSnapshot(
             run_id=run_id,
@@ -465,10 +471,15 @@ class ApplicationBuildWorkerLifecycleBackend(LifecycleBackend):
             return await self._fallback.cancel(run_id, context)
         result = self._results.get(run_id)
         if result is not None:
+            self._forget_run(run_id)
             return _execution_result_snapshot(result)
         task = self._tasks.get(run_id)
         cancellation = self._cancellations.get(run_id)
         if task is None or cancellation is None:
+            result = self._results.get(run_id)
+            if result is not None:
+                self._forget_run(run_id)
+                return _execution_result_snapshot(result)
             raise ContractError(
                 ErrorCode.NOT_FOUND,
                 f"application build Worker execution not found: {run_id}",
@@ -481,6 +492,7 @@ class ApplicationBuildWorkerLifecycleBackend(LifecycleBackend):
                 ErrorCode.INVALID_PROVIDER_RESPONSE,
                 f"cancelled application build Worker produced no result: {run_id}",
             )
+        self._forget_run(run_id)
         return _execution_result_snapshot(result)
 
     async def _execute_build(
@@ -489,43 +501,43 @@ class ApplicationBuildWorkerLifecycleBackend(LifecycleBackend):
         payload: Mapping[str, object],
         cancellation: CancellationToken,
     ) -> None:
-        try:
-            command = _string_array(payload, "command")
-            source_path = _optional_string_field(payload, "source_path")
-            output_path = _required_string_field(payload, "output_path")
-            environment = _string_mapping(payload, "environment")
-            result = await self._executor.execute(
-                ExecutionRequest(
-                    task_id=(
-                        request.subject_id
-                        if request.subject_type == "task"
-                        else request.context.correlation_id
-                    ),
-                    run_id=request.run_id,
-                    step_id=request.subject_id if request.subject_type == "step" else None,
-                    correlation_id=request.context.correlation_id,
-                    action=APPLICATION_BUILD_ACTION,
-                    workspace=self._workspace,
-                    arguments={
-                        "command": command,
-                        "source_path": source_path,
-                        "output_path": output_path,
-                    },
-                    environment=environment,
-                    timeout_seconds=request.context.control.timeout_seconds,
-                    cancellation=cancellation,
-                )
-            )
-            self._results[request.run_id] = replace(
-                result,
-                output={
-                    **result.output,
-                    "application_build_request": _worker_result_identity(payload),
+        command = _string_array(payload, "command")
+        source_path = _optional_string_field(payload, "source_path")
+        output_path = _required_string_field(payload, "output_path")
+        environment = _string_mapping(payload, "environment")
+        result = await self._executor.execute(
+            ExecutionRequest(
+                task_id=(
+                    request.subject_id
+                    if request.subject_type == "task"
+                    else request.context.correlation_id
+                ),
+                run_id=request.run_id,
+                step_id=request.subject_id if request.subject_type == "step" else None,
+                correlation_id=request.context.correlation_id,
+                action=APPLICATION_BUILD_ACTION,
+                workspace=self._workspace,
+                arguments={
+                    "command": command,
+                    "source_path": source_path,
+                    "output_path": output_path,
                 },
+                environment=environment,
+                timeout_seconds=request.context.control.timeout_seconds,
+                cancellation=cancellation,
             )
-        finally:
-            self._cancellations.pop(request.run_id, None)
-            self._tasks.pop(request.run_id, None)
+        )
+        self._results[request.run_id] = replace(
+            result,
+            output={
+                **result.output,
+                "application_build_request": _worker_result_identity(payload),
+            },
+        )
+
+    def _forget_run(self, run_id: str) -> None:
+        self._tasks.pop(run_id, None)
+        self._cancellations.pop(run_id, None)
 
 
 def application_build_worker_input(
