@@ -4,7 +4,11 @@ from pathlib import Path
 
 from experiments.skillspector.fixtures import FIXTURES, write_fixture_corpus
 from experiments.skillspector.normalize import normalize_report
-from experiments.skillspector.runner import container_command, sanitized_environment
+from experiments.skillspector.runner import (
+    container_command,
+    sanitized_environment,
+    scan_result_is_usable,
+)
 
 
 VERSION = "2.11.2"
@@ -89,6 +93,23 @@ def test_provider_issues_are_normalized_without_becoming_trust_state() -> None:
     assert not hasattr(evidence, "approved")
 
 
+def test_zero_start_line_is_preserved() -> None:
+    evidence = _normalize(
+        _complete_report(
+            issues=[
+                {
+                    "id": "P0",
+                    "severity": "LOW",
+                    "message": "Synthetic line-zero finding",
+                    "location": {"file": "SKILL.md", "start_line": 0},
+                }
+            ]
+        )
+    )
+
+    assert evidence.findings[0].line == 0
+
+
 def test_provider_execution_failure_can_never_normalize_to_clean() -> None:
     evidence = _normalize(_complete_report(execution_successful=False))
 
@@ -123,6 +144,16 @@ def test_partial_provider_report_can_never_normalize_to_clean() -> None:
     assert "provider_analysis_status=partial" in evidence.degraded_reasons
 
 
+def test_missing_required_provider_structure_can_never_normalize_to_clean() -> None:
+    evidence = _normalize({})
+
+    assert evidence.status == "degraded"
+    assert evidence.complete is False
+    assert "provider_execution_status_missing" in evidence.degraded_reasons
+    assert "provider_analysis_completeness_missing" in evidence.degraded_reasons
+    assert "provider_findings_missing" in evidence.degraded_reasons
+
+
 def test_high_risk_recommendation_remains_metadata_not_failure() -> None:
     evidence = _normalize(
         _complete_report(
@@ -137,6 +168,16 @@ def test_high_risk_recommendation_remains_metadata_not_failure() -> None:
     assert evidence.complete is True
     assert evidence.status == "clean"
     assert evidence.provider_metadata["risk_assessment"]["recommendation"] == "DO_NOT_INSTALL"
+
+
+def test_exit_code_one_with_successful_report_is_usable_evidence() -> None:
+    assert scan_result_is_usable(1, _complete_report()) is True
+
+
+def test_failed_or_unstructured_scan_result_is_not_usable_evidence() -> None:
+    assert scan_result_is_usable(2, _complete_report(execution_successful=False)) is False
+    assert scan_result_is_usable(0, {}) is False
+    assert scan_result_is_usable(0, "not-json") is False
 
 
 def test_container_command_enforces_baseline_isolation(tmp_path: Path) -> None:
