@@ -16,6 +16,7 @@ from typing import Any, Mapping
 @dataclass(frozen=True)
 class NormalizedFinding:
     provider_id: str | None
+    rule_id: str | None
     category: str | None
     severity: str | None
     confidence: float | None
@@ -73,11 +74,12 @@ def _normalize_finding(value: Any) -> NormalizedFinding:
     except (TypeError, ValueError):
         normalized_line = None
     return NormalizedFinding(
-        provider_id=_first(item, "finding_id", "id", "rule_id"),
+        provider_id=_first(item, "finding_id", "provider_finding_id"),
+        rule_id=_first(item, "id", "rule_id"),
         category=_first(item, "category", "type", "kind"),
         severity=str(severity).lower() if severity is not None else None,
         confidence=normalized_confidence,
-        summary=_first(item, "title", "summary", "message", "description"),
+        summary=_first(item, "title", "summary", "message", "description", "finding", "explanation"),
         path=_first(location, "file", "path") or _first(item, "file", "path"),
         line=normalized_line,
     )
