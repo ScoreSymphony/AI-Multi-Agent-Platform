@@ -7,12 +7,9 @@ Canonical ownership moved to :mod:`ai_multi_agent_platform.task_management.reass
 from ai_multi_agent_platform.task_management.reassignment import (
     DefaultTaskProjectCompatibilityPolicy,
     PreparedTaskProjectMove,
-    ProjectResolver,
-    TaskIdProvider,
     TaskProjectCompatibilityPolicy,
     TaskProjectMoveRequest,
     TaskProjectReassignmentService,
-    WorkspaceProjectResolver,
 )
 
 __all__ = [
