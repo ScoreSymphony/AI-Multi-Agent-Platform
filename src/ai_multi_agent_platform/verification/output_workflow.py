@@ -1,4 +1,4 @@
-"""Productive output-to-review coordination for automatic Agent Verification (#711).
+"""Productive output-to-review coordination for automatic Agent Verification (#711, #759).
 
 The kernel remains lifecycle authority and canonical Verification remains review authority.
 This integration composes those existing seams so a configured kernel output attachment can
@@ -39,18 +39,31 @@ from .models import (
     VerifierKind,
 )
 from .repair import VERIFICATION_REPAIR_SOURCE
+from .reviewer_routing import CapabilityRoleReviewerResolver, ReviewerDiscoverySelector
 
 _OutputType = Literal["result", "artifact"]
+_ReviewerRoute = ReviewerAssignment | ReviewerDiscoverySelector
 _SOURCE = "automatic-reviewer-output-workflow"
 _AUTOMATIC_REVIEW_METADATA_KEY = "automatic_reviewer"
 _ALLOWED_OUTPUT_TYPES = frozenset({"result", "artifact"})
 _ACTIVE_RUN_STATUSES = frozenset({RunStatus.QUEUED, RunStatus.STARTING, RunStatus.RUNNING})
+_EXPLICIT_ROUTE_FIELDS = frozenset(
+    {"agent_id", "agent_revision", "team_id", "team_revision", "team_role"}
+)
+_DISCOVERY_ROUTE_FIELDS = frozenset(
+    {
+        "candidate_agent_ids",
+        "candidate_team_ids",
+        "reviewer_role",
+        "required_capability_ids",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
 class _AutomaticReviewConfiguration:
     subject_types: frozenset[str]
-    assignments: Mapping[str, ReviewerAssignment]
+    routes: Mapping[str, _ReviewerRoute]
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,11 +85,12 @@ class AutomaticOutputReviewResult:
 
 
 class PolicyMetadataReviewerResolver(ReviewerAssignmentResolver):
-    """Resolve exact reviewer revisions from versioned VerificationPolicy metadata.
+    """Resolve an exact reviewer revision from versioned VerificationPolicy metadata.
 
-    Automatic review is explicitly opt-in. A policy configures the output types that trigger
-    automatic review plus one exact reviewer assignment per AGENT stage under
-    ``metadata.automatic_reviewer``. The bundled Reviewer is never a hidden fallback.
+    Automatic review is explicitly opt-in. A policy stage may either pin one exact Agent/Team
+    assignment or request bounded role/capability discovery inside an explicit canonical candidate
+    scope. Discovery never scans arbitrary global Agents, and the bundled Reviewer is never a
+    hidden fallback.
     """
 
     def __init__(self, completion: VerificationCompletionAuthority) -> None:
@@ -94,22 +108,22 @@ class PolicyMetadataReviewerResolver(ReviewerAssignmentResolver):
         configuration = _automatic_review_configuration(policy, required=True)
         assert configuration is not None
         try:
-            assignment = configuration.assignments[request.stage_id]
+            route = configuration.routes[request.stage_id]
         except KeyError as exc:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                "automatic reviewer policy is missing an exact reviewer assignment for stage",
+                "automatic reviewer policy is missing a reviewer route for stage",
                 details={
                     "policy_id": policy.policy_id,
                     "policy_version": policy.version,
                     "stage_id": request.stage_id,
                 },
             ) from exc
-        return ConfiguredReviewerResolver(
-            {
-                (request.policy_id, request.policy_version, request.stage_id): assignment,
-            }
-        ).resolve(request, agents)
+
+        key = (request.policy_id, request.policy_version, request.stage_id)
+        if isinstance(route, ReviewerDiscoverySelector):
+            return CapabilityRoleReviewerResolver({key: route}).resolve(request, agents)
+        return ConfiguredReviewerResolver({key: route}).resolve(request, agents)
 
 
 class AutomaticReviewerOutputCoordinator:
@@ -231,19 +245,19 @@ class AutomaticReviewerOutputCoordinator:
         if not agent_stages:
             return await self._no_review(task_id)
 
-        missing_assignments = tuple(
+        missing_routes = tuple(
             stage.stage_id
             for stage in agent_stages
-            if stage.stage_id not in configuration.assignments
+            if stage.stage_id not in configuration.routes
         )
-        if missing_assignments:
+        if missing_routes:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                "automatic reviewer policy is missing exact reviewer assignments",
+                "automatic reviewer policy is missing reviewer routes",
                 details={
                     "policy_id": policy.policy_id,
                     "policy_version": policy.version,
-                    "stage_ids": list(missing_assignments),
+                    "stage_ids": list(missing_routes),
                 },
             )
 
@@ -380,7 +394,7 @@ class AutomaticReviewerOutputObserver(OutputAttachmentObserver):
         self._options = options
 
     async def output_attached(self, event: PlatformEvent) -> None:
-        # Automatic repair attaches the new canonical Result before the workflow creates its
+        # Automatic repair attaches the new canonical output before the workflow creates its
         # lineage-preserving reverification request. Re-entering the general observer here would
         # create a second unrelated Verification with repair_attempt=0 and could release the Task
         # against the wrong lineage. The repair workflow therefore owns this one internal event.
@@ -493,7 +507,8 @@ def _automatic_review_configuration(
             ErrorCode.INVALID_CONFIGURATION,
             "automatic reviewer stages must be a non-empty object",
         )
-    assignments: dict[str, ReviewerAssignment] = {}
+    routes: dict[str, _ReviewerRoute] = {}
+    allowed_stage_fields = _EXPLICIT_ROUTE_FIELDS | _DISCOVERY_ROUTE_FIELDS
     for stage_id, stage_raw in stages_raw.items():
         if not isinstance(stage_id, str) or not stage_id.strip():
             raise ContractError(
@@ -505,13 +520,7 @@ def _automatic_review_configuration(
                 ErrorCode.INVALID_CONFIGURATION,
                 "automatic reviewer stage configuration must be an object",
             )
-        unknown_stage = set(stage_raw) - {
-            "agent_id",
-            "agent_revision",
-            "team_id",
-            "team_revision",
-            "team_role",
-        }
+        unknown_stage = set(stage_raw) - allowed_stage_fields
         if unknown_stage:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
@@ -521,22 +530,52 @@ def _automatic_review_configuration(
                     "fields": cast(JsonValue, sorted(unknown_stage)),
                 },
             )
-        try:
-            assignments[stage_id] = ReviewerAssignment(
-                agent_id=_optional_string(stage_raw, "agent_id"),
-                agent_revision=_optional_positive_int(stage_raw, "agent_revision"),
-                team_id=_optional_string(stage_raw, "team_id"),
-                team_revision=_optional_positive_int(stage_raw, "team_revision"),
-                team_role=_optional_string(stage_raw, "team_role"),
+
+        has_explicit = bool(set(stage_raw).intersection(_EXPLICIT_ROUTE_FIELDS))
+        has_discovery = bool(set(stage_raw).intersection(_DISCOVERY_ROUTE_FIELDS))
+        if has_explicit and has_discovery:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "automatic reviewer stage cannot mix exact assignment and discovery fields",
+                details={"stage_id": stage_id},
             )
+        if not has_explicit and not has_discovery:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "automatic reviewer stage must configure an exact assignment or scoped discovery",
+                details={"stage_id": stage_id},
+            )
+
+        try:
+            if has_discovery:
+                routes[stage_id] = ReviewerDiscoverySelector(
+                    candidate_agent_ids=_optional_string_tuple(
+                        stage_raw, "candidate_agent_ids"
+                    ),
+                    candidate_team_ids=_optional_string_tuple(
+                        stage_raw, "candidate_team_ids"
+                    ),
+                    reviewer_role=_optional_string(stage_raw, "reviewer_role"),
+                    required_capability_ids=_optional_string_tuple(
+                        stage_raw, "required_capability_ids"
+                    ),
+                )
+            else:
+                routes[stage_id] = ReviewerAssignment(
+                    agent_id=_optional_string(stage_raw, "agent_id"),
+                    agent_revision=_optional_positive_int(stage_raw, "agent_revision"),
+                    team_id=_optional_string(stage_raw, "team_id"),
+                    team_revision=_optional_positive_int(stage_raw, "team_revision"),
+                    team_role=_optional_string(stage_raw, "team_role"),
+                )
         except ValueError as exc:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                f"invalid automatic reviewer assignment for stage {stage_id}: {exc}",
+                f"invalid automatic reviewer route for stage {stage_id}: {exc}",
             ) from exc
     return _AutomaticReviewConfiguration(
         subject_types=subject_types,
-        assignments=assignments,
+        routes=routes,
     )
 
 
@@ -550,6 +589,20 @@ def _optional_string(value: Mapping[str, JsonValue], key: str) -> str | None:
             f"automatic reviewer {key} must be a non-blank string",
         )
     return item
+
+
+def _optional_string_tuple(value: Mapping[str, JsonValue], key: str) -> tuple[str, ...]:
+    item = value.get(key)
+    if item is None:
+        return ()
+    if not isinstance(item, (list, tuple)) or any(
+        not isinstance(entry, str) or not entry.strip() for entry in item
+    ):
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            f"automatic reviewer {key} must be a string list",
+        )
+    return tuple(entry for entry in item if isinstance(entry, str))
 
 
 def _optional_positive_int(value: Mapping[str, JsonValue], key: str) -> int | None:
