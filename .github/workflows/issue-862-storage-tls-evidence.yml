@@ -1,0 +1,278 @@
+name: Issue 862 storage TLS evidence
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/issue-862-storage-tls-evidence.yml"
+      - "tests/evidence/issue_862/s3_auth_probe.py"
+      - "tests/evidence/issue_862/s3_contract_probe.py"
+      - "docs/research/issue-862-object-storage-evaluation.md"
+
+jobs:
+  tls-s3-subset:
+    if: github.head_ref == 'issue-862-rustfs-garage-storage-evaluation'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [rustfs, garage, seaweedfs]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Generate synthetic credentials and test CA
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.backend }}" = "garage" ]; then
+            access_key="GK$(openssl rand -hex 16)"
+          else
+            access_key="I862$(openssl rand -hex 10 | tr '[:lower:]' '[:upper:]')"
+          fi
+          secret_key="$(openssl rand -hex 32)"
+          echo "::add-mask::$access_key"
+          echo "::add-mask::$secret_key"
+          echo "AWS_ACCESS_KEY_ID=$access_key" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=$secret_key" >> "$GITHUB_ENV"
+
+          mkdir -p "$RUNNER_TEMP/issue862-tls" evidence
+          openssl req \
+            -x509 \
+            -newkey rsa:2048 \
+            -sha256 \
+            -nodes \
+            -days 1 \
+            -subj '/CN=localhost' \
+            -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+            -keyout "$RUNNER_TEMP/issue862-tls/key.pem" \
+            -out "$RUNNER_TEMP/issue862-tls/cert.pem"
+          openssl x509 \
+            -in "$RUNNER_TEMP/issue862-tls/cert.pem" \
+            -noout -subject -issuer -dates -fingerprint -sha256 \
+            > "evidence/${{ matrix.backend }}-tls-certificate.txt"
+          echo "SSL_CERT_FILE=$RUNNER_TEMP/issue862-tls/cert.pem" >> "$GITHUB_ENV"
+
+      - name: Start pinned TLS backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.backend }}" in
+            rustfs)
+              image="rustfs/rustfs:1.0.0-rc.6"
+              container="issue862-tls-rustfs"
+              endpoint="https://127.0.0.1:9443"
+              bucket="issue-862-tls"
+              region="us-east-1"
+              cp "$RUNNER_TEMP/issue862-tls/cert.pem" "$RUNNER_TEMP/issue862-tls/rustfs_cert.pem"
+              cp "$RUNNER_TEMP/issue862-tls/key.pem" "$RUNNER_TEMP/issue862-tls/rustfs_key.pem"
+              chmod 644 "$RUNNER_TEMP/issue862-tls/rustfs_cert.pem"
+              chmod 600 "$RUNNER_TEMP/issue862-tls/rustfs_key.pem"
+              docker volume create issue862-tls-rustfs-data >/dev/null
+              docker run -d \
+                --name "$container" \
+                -p 9443:9000 \
+                -e RUSTFS_VOLUMES=/data \
+                -e RUSTFS_ADDRESS=0.0.0.0:9000 \
+                -e RUSTFS_CONSOLE_ENABLE=false \
+                -e RUSTFS_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+                -e RUSTFS_SECRET_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -e RUSTFS_TLS_PATH=/opt/tls \
+                -v issue862-tls-rustfs-data:/data \
+                -v "$RUNNER_TEMP/issue862-tls:/opt/tls:ro" \
+                "$image"
+              ;;
+            garage)
+              image="dxflrs/garage:v2.3.0"
+              container="issue862-tls-garage"
+              endpoint="https://127.0.0.1:9443"
+              bucket="issue-862-tls"
+              region="garage"
+              rpc_secret="$(openssl rand -hex 32)"
+              admin_token="$(openssl rand -hex 32)"
+              metrics_token="$(openssl rand -hex 32)"
+              echo "::add-mask::$rpc_secret"
+              echo "::add-mask::$admin_token"
+              echo "::add-mask::$metrics_token"
+              docker network create issue862-tls-garage-net >/dev/null
+              cat > "$RUNNER_TEMP/issue862-tls/garage.toml" <<EOF
+          metadata_dir = "/var/lib/garage/meta"
+          data_dir = "/var/lib/garage/data"
+          db_engine = "sqlite"
+          replication_factor = 1
+          rpc_bind_addr = "[::]:3901"
+          rpc_public_addr = "issue862-tls-garage:3901"
+          rpc_secret = "$rpc_secret"
+
+          [s3_api]
+          s3_region = "garage"
+          api_bind_addr = "[::]:3900"
+          root_domain = ".s3.garage.localhost"
+
+          [admin]
+          api_bind_addr = "[::]:3903"
+          admin_token = "$admin_token"
+          metrics_token = "$metrics_token"
+          EOF
+              docker run -d \
+                --name "$container" \
+                --network issue862-tls-garage-net \
+                -v "$RUNNER_TEMP/issue862-tls/garage.toml:/etc/garage.toml:ro" \
+                -v issue862-tls-garage-meta:/var/lib/garage/meta \
+                -v issue862-tls-garage-data:/var/lib/garage/data \
+                -e GARAGE_DEFAULT_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+                -e GARAGE_DEFAULT_SECRET_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -e GARAGE_DEFAULT_BUCKET="$bucket" \
+                "$image" /garage server --single-node --default-bucket
+
+              cat > "$RUNNER_TEMP/issue862-tls/nginx.conf" <<'EOF'
+          events {}
+          http {
+            server {
+              listen 443 ssl;
+              server_name localhost;
+              ssl_certificate /etc/nginx/tls/cert.pem;
+              ssl_certificate_key /etc/nginx/tls/key.pem;
+              location / {
+                proxy_pass http://issue862-tls-garage:3900;
+                proxy_set_header Host $http_host;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_max_temp_file_size 0;
+                proxy_request_buffering off;
+              }
+            }
+          }
+          EOF
+              docker run -d \
+                --name issue862-tls-garage-proxy \
+                --network issue862-tls-garage-net \
+                -p 9443:443 \
+                -v "$RUNNER_TEMP/issue862-tls/nginx.conf:/etc/nginx/nginx.conf:ro" \
+                -v "$RUNNER_TEMP/issue862-tls:/etc/nginx/tls:ro" \
+                nginx:1.28.0-alpine
+              ;;
+            seaweedfs)
+              image="chrislusf/seaweedfs:4.46"
+              container="issue862-tls-seaweedfs"
+              endpoint="https://127.0.0.1:9443"
+              bucket="issue-862-tls"
+              region="us-east-1"
+              docker volume create issue862-tls-seaweedfs-data >/dev/null
+              docker run -d \
+                --name "$container" \
+                -p 9443:8334 \
+                -v issue862-tls-seaweedfs-data:/data \
+                -v "$RUNNER_TEMP/issue862-tls:/tls:ro" \
+                -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+                -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -e S3_BUCKET="$bucket" \
+                "$image" \
+                mini \
+                -dir=/data \
+                -master.telemetry=false \
+                -s3.port.https=8334 \
+                -s3.cert.file=/tls/cert.pem \
+                -s3.key.file=/tls/key.pem
+              ;;
+          esac
+
+          echo "ISSUE862_TLS_IMAGE=$image" >> "$GITHUB_ENV"
+          echo "ISSUE862_TLS_CONTAINER=$container" >> "$GITHUB_ENV"
+          echo "ISSUE862_TLS_ENDPOINT=$endpoint" >> "$GITHUB_ENV"
+          echo "ISSUE862_TLS_BUCKET=$bucket" >> "$GITHUB_ENV"
+          echo "ISSUE862_TLS_REGION=$region" >> "$GITHUB_ENV"
+
+      - name: Wait for verified HTTPS endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 120); do
+            http_code="$(curl \
+              --cacert "$SSL_CERT_FILE" \
+              --silent \
+              --show-error \
+              --output /dev/null \
+              --write-out '%{http_code}' \
+              "$ISSUE862_TLS_ENDPOINT/" || true)"
+            if [[ "$http_code" =~ ^[234][0-9][0-9]$ ]]; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$ISSUE862_TLS_CONTAINER" || true
+          if [ "${{ matrix.backend }}" = "garage" ]; then
+            docker logs issue862-tls-garage-proxy || true
+          fi
+          exit 1
+
+      - name: Record pinned image identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "backend=${{ matrix.backend }}"
+            echo "image=$ISSUE862_TLS_IMAGE"
+            echo "image_id=$(docker image inspect "$ISSUE862_TLS_IMAGE" --format '{{.Id}}')"
+            echo "repo_digests=$(docker image inspect "$ISSUE862_TLS_IMAGE" --format '{{json .RepoDigests}}')"
+            if [ "${{ matrix.backend }}" = "garage" ]; then
+              echo "tls_proxy_image=nginx:1.28.0-alpine"
+              echo "tls_proxy_image_id=$(docker image inspect nginx:1.28.0-alpine --format '{{.Id}}')"
+              echo "tls_proxy_repo_digests=$(docker image inspect nginx:1.28.0-alpine --format '{{json .RepoDigests}}')"
+            fi
+          } > "evidence/${{ matrix.backend }}-tls-image.txt"
+
+      - name: Run S3 subset over certificate-verified HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          create_bucket=()
+          if [ "${{ matrix.backend }}" = "rustfs" ]; then
+            create_bucket=(--create-bucket)
+          fi
+          python tests/evidence/issue_862/s3_contract_probe.py \
+            --backend "${{ matrix.backend }}" \
+            --endpoint "$ISSUE862_TLS_ENDPOINT" \
+            --bucket "$ISSUE862_TLS_BUCKET" \
+            --region "$ISSUE862_TLS_REGION" \
+            --run-id "tls-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            "${create_bucket[@]}" \
+            > "evidence/${{ matrix.backend }}-tls-contract.json"
+
+      - name: Verify authentication rejection over HTTPS
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_auth_probe.py \
+            --backend "${{ matrix.backend }}" \
+            --endpoint "$ISSUE862_TLS_ENDPOINT" \
+            --bucket "$ISSUE862_TLS_BUCKET" \
+            --region "$ISSUE862_TLS_REGION" \
+            --run-id "tls-auth-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > "evidence/${{ matrix.backend }}-tls-auth.json"
+
+      - name: Upload TLS evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-862-${{ matrix.backend }}-tls-evidence
+          path: evidence/${{ matrix.backend }}-tls-*
+          if-no-files-found: warn
+
+      - name: Show logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          docker logs "$ISSUE862_TLS_CONTAINER" || true
+          if [ "${{ matrix.backend }}" = "garage" ]; then
+            docker logs issue862-tls-garage-proxy || true
+          fi
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f "$ISSUE862_TLS_CONTAINER" 2>/dev/null || true
+          docker rm -f issue862-tls-garage-proxy 2>/dev/null || true
+          docker network rm issue862-tls-garage-net 2>/dev/null || true
