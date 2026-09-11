@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from dataclasses import asdict
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -138,7 +137,7 @@ def run_benchmark(
                 target.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
             all_runs[name] = runs
 
-    summary = {
+    summary: dict[str, Any] = {
         "schema_version": 1,
         "upstream": {
             "project": "NVIDIA/SkillSpector",
