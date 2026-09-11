@@ -13,6 +13,7 @@ import asyncio
 import json
 import os
 import platform
+import subprocess
 import sys
 import tempfile
 import traceback
@@ -34,6 +35,10 @@ def _command_payload() -> str:
     )
 
 
+def _environment_probe_payload() -> str:
+    return "import os; print(os.environ.get('ISSUE861_SECRET', 'missing'))"
+
+
 def _timeout_payload() -> str:
     return "import time; time.sleep(2); print('unexpected-timeout-completion')"
 
@@ -51,9 +56,13 @@ def _timeout_child_payload() -> str:
 
 def _egress_payload() -> str:
     return (
-        "import urllib.request; "
-        "r=urllib.request.urlopen('http://example.com', timeout=5); "
-        "print(r.status)"
+        "import urllib.error\n"
+        "import urllib.request\n"
+        "try:\n"
+        "    response = urllib.request.urlopen('http://example.com', timeout=5)\n"
+        "    print(response.status)\n"
+        "except urllib.error.HTTPError as exc:\n"
+        "    print(exc.code)\n"
     )
 
 
@@ -96,6 +105,17 @@ async def _run_local() -> dict[str, Any]:
                 "stderr_has_marker": "stderr-ok" in response.stderr,
                 "synthetic_env_visible": SYNTHETIC_SECRET in response.stdout,
             }
+
+            followup = await deployment.runtime.execute(
+                Command(
+                    command=[sys.executable, "-c", _environment_probe_payload()],
+                    cwd=str(workspace),
+                    check=False,
+                )
+            )
+            evidence["synthetic_env_persisted_after_command"] = (
+                SYNTHETIC_SECRET in followup.stdout
+            )
 
             provider_file = workspace / "provider.txt"
             await deployment.runtime.write_file(
@@ -212,6 +232,44 @@ async def _run_docker(*, backend: str) -> dict[str, Any]:
     await deployment.start()
     evidence["startup_seconds"] = monotonic() - started
     try:
+        container_name = deployment.container_name
+        if container_name is not None:
+            port_probe = subprocess.run(
+                ["docker", "port", container_name, "8000/tcp"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            evidence["published_port_bindings"] = [
+                line
+                for line in port_probe.stdout.splitlines()
+                if line.strip()
+            ]
+            image_probe = subprocess.run(
+                ["docker", "image", "inspect", docker_image, "--format", "{{.Size}}"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if image_probe.returncode == 0 and image_probe.stdout.strip().isdigit():
+                evidence["docker_image_size_bytes"] = int(image_probe.stdout.strip())
+            stats_probe = subprocess.run(
+                [
+                    "docker",
+                    "stats",
+                    "--no-stream",
+                    "--format",
+                    "{{.MemUsage}}|{{.CPUPerc}}",
+                    container_name,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if stats_probe.returncode == 0:
+                evidence["container_resource_sample"] = stats_probe.stdout.strip()
+
         with tempfile.TemporaryDirectory(prefix="issue861-docker-") as temp_dir:
             local_workspace = Path(temp_dir).resolve() / "workspace"
             local_workspace.mkdir()
@@ -241,6 +299,17 @@ async def _run_docker(*, backend: str) -> dict[str, Any]:
                 "synthetic_env_visible": SYNTHETIC_SECRET in response.stdout,
             }
 
+            followup = await deployment.runtime.execute(
+                Command(
+                    command=["python", "-c", _environment_probe_payload()],
+                    cwd=remote_workspace,
+                    check=False,
+                )
+            )
+            evidence["synthetic_env_persisted_after_command"] = (
+                SYNTHETIC_SECRET in followup.stdout
+            )
+
             artifact_path = f"{remote_workspace}/out.txt"
             artifact_response = await deployment.runtime.execute(
                 Command(
@@ -257,6 +326,18 @@ async def _run_docker(*, backend: str) -> dict[str, Any]:
             )
             evidence["artifact_round_trip"] = bool(
                 artifact_response.exit_code == 0 and read_back.content == "artifact-canary"
+            )
+
+            try:
+                outside_read = await deployment.runtime.read_file(
+                    ReadFileRequest(path="/etc/hostname", encoding="utf-8")
+                )
+            except Exception:
+                outside_provider_workspace_read = False
+            else:
+                outside_provider_workspace_read = bool(outside_read.content)
+            evidence["outside_provider_workspace_read_succeeded"] = (
+                outside_provider_workspace_read
             )
 
             child_marker = f"{remote_workspace}/child-after-timeout.txt"
@@ -290,7 +371,9 @@ async def _run_docker(*, backend: str) -> dict[str, Any]:
                 child_survived = False
             else:
                 child_survived = child_read.content == "survived"
-            evidence["timeout_child_cleanup"]["child_survived_parent_timeout"] = child_survived
+            evidence["timeout_child_cleanup"]["child_survived_parent_timeout"] = (
+                child_survived
+            )
 
             egress = await deployment.runtime.execute(
                 Command(
