@@ -165,7 +165,9 @@ def _artifact_for_target(
 ) -> ApplicationArtifact | None:
     if target_id is None:
         return None
-    return next((artifact for artifact in release.artifacts if artifact.target_id == target_id), None)
+    return next(
+        (artifact for artifact in release.artifacts if artifact.target_id == target_id), None
+    )
 
 
 def _detail_string(gate: GateEvidence | None, name: str) -> str | None:
