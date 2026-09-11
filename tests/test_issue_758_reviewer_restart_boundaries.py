@@ -321,7 +321,7 @@ def test_staged_decision_for_changed_subject_blocks_without_second_model_call(tm
 
         assert first[0].disposition is ReviewerRecoveryDisposition.BLOCKED
         assert second[0].disposition is ReviewerRecoveryDisposition.BLOCKED
-        assert "CONTRACT_VIOLATION" in (first[0].reason or "")
+        assert "subject differs from current canonical evidence" in (first[0].reason or "")
         assert executor.calls == 1
         assert len(agents.service.repository.list_agent_runs()) == 1
         assert completion.assess_task_completion(request.task_id).state is CompletionState.WAITING
