@@ -1,0 +1,40 @@
+version: 1
+mode: audit
+
+fetch_proxy:
+  listen: "127.0.0.1:8888"
+  timeout_seconds: 10
+  monitoring:
+    max_url_length: 4096
+    entropy_threshold: 4.5
+
+websocket_proxy:
+  enabled: true
+  max_message_bytes: 1048576
+  max_concurrent_connections: 8
+  scan_text_frames: true
+  allow_binary_frames: false
+  strip_compression: true
+  max_connection_seconds: 30
+  idle_timeout_seconds: 10
+  origin_policy: rewrite
+
+dlp:
+  include_defaults: true
+
+request_body_scanning:
+  enabled: true
+  action: block
+
+response_scanning:
+  enabled: true
+  action: block
+  include_defaults: true
+
+ssrf:
+  ip_allowlist:
+    - "192.0.2.123/32"
+
+internal:
+  - "127.0.0.0/8"
+  - "::1/128"
