@@ -19,7 +19,7 @@ Status: implementation guide for issue #723. This document records responsibilit
 | `kernel/kernel.py` | Task commands; Run commands; Task/Run/Event reads; active-run selection; lifecycle dispatch/reconciliation; recovery; event/command commit mechanics; completion integration | query/read service; recovery coordinator; Task command service; Run command service; lifecycle reconciler; canonical event/command commit support | public `PlatformKernel`; kernel remains canonical Task/Run/Event lifecycle authority; `OutputObservingPlatformKernel` remains compatible | lifecycle transitions, idempotency, event history, cancellation races, recovery/restart, completion verification | **in progress**: queries and recovery extracted behind the façade |
 | `distributed/workspace_transport.py` | Worker-local materialization state; chunk staging/commit; result collection; path/symlink safety; control-side transport client; worker-side transport endpoint; workspace-bound worker routing; wire codecs/checksums | materialization store; control-side remote materializer; worker endpoint; workspace-bound dispatcher; workspace wire codec | `RemoteWorkspaceMaterializer` contract; canonical Workspace/Snapshot/File identity remains control-plane owned; worker paths remain local deployment detail | interrupted transfers, duplicate chunks, checksum failure, cache replay, result collection, cleanup, read-only enforcement, request/reply correlation | audited; split pending |
 | `coordination/service.py` | Plan registration/graph validation; dependency barriers; Run-attempt creation/dispatch; Run outcome observation; retry scheduling; durable waits and resolution; cancellation; restart reconciliation; task aggregation; claims; telemetry | graph/registration validator; progression engine; attempt/retry coordinator; wait coordinator; recovery/reconciliation coordinator; task aggregation; telemetry adapter | `DurablePlanStepCoordinator` façade; kernel owns canonical Run/Task truth; repository owns durable coordination projection | contention/claim races, duplicate observations, retry due-times, waits, cancellation, restart/reconcile, predecessor failure, aggregate completion | audited; split pending |
-| `data/reference.py` | SQLite helpers plus three independent reference providers: File, Memory, Knowledge; each includes schema initialization, persistence mapping, scope checks and provider compatibility methods | shared SQLite connection/serialization primitives only where semantically shared; `LocalFileProvider`; `LocalMemoryProvider`; `LocalKnowledgeProvider` in dedicated modules | `FileProvider`, `MemoryProvider`, `KnowledgeProvider` contracts and current public exports | persistence restart, scope isolation, tombstones/orphans, memory expiry/supersession, knowledge revisions/index status/search | audited; split pending |
+| `data/reference.py` | SQLite helpers plus three independent reference providers: File, Memory, Knowledge; each includes schema initialization, persistence mapping, scope checks and provider compatibility methods | shared SQLite connection/serialization primitives only where semantically shared; `LocalFileProvider`; `LocalMemoryProvider`; `LocalKnowledgeProvider` in dedicated modules | `FileProvider`, `MemoryProvider`, `KnowledgeProvider` contracts and current public exports | persistence restart, scope isolation, tombstones/orphans, memory expiry/supersession, knowledge revisions/index status/search | **implemented**: provider implementations split; `data.reference` retained as compatibility façade |
 | `planning/service.py` | trigger/idempotency handling; prior-plan reconstruction; inventory construction; planner invocation; proposal construction; structural/capability/model validation; authorization/approval; activation; canonical event provenance lookup; coordinator handoff; bounded replanning; telemetry | proposal service façade; inventory builder; proposal validator; activation/authorization service; canonical plan handoff/reconstruction; prior-plan/replan policy support | `PlanningService`; planning never executes Steps or creates Runs; coordinator receives canonical Plan/Step graph only | deterministic validation, stale proposal rejection, approval binding, bounded replanning, restart activation recovery, exact coordinator handoff | audited; split pending |
 | `security/authentication.py` | auth domain records/enums; password hashing; in-memory identity/session/credential store; brute-force limiter; replay protection; local user/password flows; browser sessions/CSRF; bearer credentials; worker authentication; external identity mapping; audit/safe serializers; token codecs | auth models/contracts; password hashing; store; rate limiting/replay protection; session service; credential service; external identity service; façade orchestration; safe serialization/token codec | `LocalAuthenticationService` and authentication result contracts; authorization remains separate; all failures remain fail-closed and secrets remain non-retrievable/redacted | invalid/disabled/locked accounts, password timing path, session expiry/revocation/CSRF, credential expiry/revocation, worker replay, external identity mapping, secret redaction | audited; split pending |
 | `control_plane/service.py` | Project/Workspace identity storage; health aggregation; project/workspace API operations; Task/Run API operations; reference projections; timeline/subscription; model/provider API operations; authorization construction/checks; northbound serialization | scope store; health service; project/workspace resource service; Task/Run service; reference/timeline service; model registry service; shared authorization boundary; resource serializers | `ControlPlane` northbound façade and existing API contracts; kernel/domain/provider ownership unchanged | API contract snapshots, idempotency keys, authorization allow/deny/list filtering, event cursors, provider health, model enable/disable | audited; split pending |
@@ -37,11 +37,23 @@ The first implementation cohort moves implementation responsibility without chan
 
 This cohort deliberately does **not** expose repository or private command primitives outside the kernel package.
 
+## Cohort 2 — Data reference provider decomposition
+
+The second implementation cohort removes the independent File, Memory and Knowledge implementations from the former `data/reference.py` implementation monolith without changing provider contracts or supported imports:
+
+- `data/reference_file.py` owns `LocalFileProvider`, filesystem persistence, file metadata, checksums, tombstones, artifact links and orphan detection.
+- `data/reference_memory.py` owns the base `LocalMemoryProvider`, scoped-memory persistence, expiry, supersession and compatibility methods.
+- `data/reference_knowledge.py` owns the base `LocalKnowledgeProvider`, source/document/index persistence and deterministic keyword retrieval.
+- `data/reference_support.py` contains only genuinely shared SQLite connection, JSON/time serialization and access-context/error primitives.
+- `data/reference.py` remains a behavior-free compatibility façade re-exporting the three base providers, so existing imports and `reference_lifecycle.py` compatibility remain intact.
+
+Architecture tests require the compatibility façade to remain implementation-free and focused provider modules not to depend back on it. Persistence schemas, provider IDs, canonical identifiers and lifecycle-wrapper inheritance remain unchanged.
+
 ## Planned implementation cohorts
 
 ### Kernel
 
-1. **Read/recovery** — query mechanics and restart recovery. *(in progress)*
+1. **Read/recovery** — query mechanics and restart recovery. *(implemented)*
 2. **Task commands** — create/update/ready/wait/resume/complete/fail/cancel behind an internal command component.
 3. **Run commands** — create/retry/start/refresh/outcome/cancel and output attachment orchestration.
 4. **Lifecycle reconciliation** — backend dispatch, snapshot reconciliation and cancellation completion.
@@ -71,13 +83,7 @@ Claims and expected-revision writes remain repository-governed throughout the sp
 
 ### Data reference implementations
 
-This hotspot is primarily a packaging/cohesion problem rather than one giant service object. The three provider implementations already have distinct contract ownership:
-
-- local file storage,
-- scoped memory,
-- local knowledge/index/search.
-
-Move each provider to its own focused module, preserving public imports through `data/__init__.py` (or an equivalent stable façade). Shared SQLite/JSON helpers should be limited to persistence primitives that are genuinely common to all three providers.
+This cohort is implemented. The three provider implementations now live in focused modules and preserve `data.reference` as the compatibility façade. Shared support is intentionally limited to SQLite connection, serialization, access-context and common provider error primitives; provider-specific schema, scope and lifecycle rules stay with their canonical provider implementation.
 
 ### Planning
 
