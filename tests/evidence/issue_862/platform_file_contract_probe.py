@@ -8,6 +8,8 @@ import asyncio
 import json
 import os
 
+from s3_contract_probe import S3ProbeError, SigV4S3Client
+
 from ai_multi_agent_platform.contracts import (
     FileProvider,
     HealthStatus,
@@ -17,7 +19,6 @@ from ai_multi_agent_platform.contracts import (
     StoredObject,
 )
 from ai_multi_agent_platform.testing import assert_file_provider_contract
-from s3_contract_probe import S3ProbeError, SigV4S3Client
 
 
 class S3EvidenceFileProvider(FileProvider):
