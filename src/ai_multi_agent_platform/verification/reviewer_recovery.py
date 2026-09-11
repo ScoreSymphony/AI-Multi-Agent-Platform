@@ -7,6 +7,7 @@ process has disappeared; it does not infer review outcomes from AgentRun state.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -16,10 +17,22 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import TaskStatus
 
 from .agent_workflow import AutomaticReviewerWorkflow, ReviewerRuntimeOptions
-from .models import VerificationRequest, VerificationRequestStatus, VerifierKind
+from .models import VerificationPolicy, VerificationRequest, VerificationRequestStatus, VerifierKind
 from .service import VerificationService
 
 _REVIEW_CONTEXT_SCHEMA = "verification-reviewer-agent-v1"
+_REVIEWER_SELECTION_SCHEMA = "reviewer-selection-v1"
+_EXACT_SELECTION_FIELDS = frozenset(
+    {"agent_id", "agent_revision", "team_id", "team_revision", "team_role"}
+)
+_DISCOVERY_SELECTION_FIELDS = frozenset(
+    {
+        "candidate_agent_ids",
+        "candidate_team_ids",
+        "reviewer_role",
+        "required_capability_ids",
+    }
+)
 _STAGED_DECISION_KEY = "automatic_reviewer_decision"
 _RECOVERY_TELEMETRY_KEY = "automatic_reviewer_recovery"
 _RECOVERY_TELEMETRY_SCHEMA = "automatic-reviewer-recovery-v1"
@@ -380,6 +393,7 @@ class AutomaticReviewerStartupReconciler:
     ) -> tuple[AgentRunRecord, str] | None:
         """Reject AgentRuns that claim this Verification without its exact durable binding."""
 
+        policy = self._verification.get_policy(request.policy_id, request.policy_version)
         for record in self._agents.service.repository.list_agent_runs():
             context = record.verification_context
             if context.get("verification_id") != request.verification_id:
@@ -418,6 +432,13 @@ class AutomaticReviewerStartupReconciler:
                 "capability_ids": list(record.capability_ids),
                 "capability_versions": dict(record.capability_versions),
             }
+            reviewer_selection = _reviewer_selection_context(
+                policy,
+                request.stage_id,
+                record=record,
+            )
+            if reviewer_selection is not None:
+                expected["reviewer_selection"] = reviewer_selection
             if record.task_id != request.task_id or dict(context) != expected:
                 return (
                     record,
@@ -440,6 +461,84 @@ class AutomaticReviewerStartupReconciler:
             if record.task_id == task_id
             and record.verification_context.get("schema") == _REVIEW_CONTEXT_SCHEMA
         )
+
+
+def _reviewer_selection_context(
+    policy: VerificationPolicy,
+    stage_id: str,
+    *,
+    record: AgentRunRecord,
+) -> dict[str, object] | None:
+    """Rebuild #759 reviewer-selection provenance for exact restart binding checks.
+
+    Recovery must validate the complete immutable reviewer binding rather than ignoring
+    selection provenance added by productive reviewer routing. The projection mirrors the
+    canonical reviewer-Agent context so exact/scoped routing survives restart without making
+    AgentRun state authoritative for Verification outcomes.
+    """
+
+    automatic = policy.metadata.get("automatic_reviewer")
+    if not isinstance(automatic, Mapping):
+        return None
+    stages = automatic.get("stages")
+    if not isinstance(stages, Mapping):
+        return None
+    route = stages.get(stage_id)
+    if not isinstance(route, Mapping):
+        return None
+
+    route_fields = set(route)
+    has_exact = bool(route_fields.intersection(_EXACT_SELECTION_FIELDS))
+    has_discovery = bool(route_fields.intersection(_DISCOVERY_SELECTION_FIELDS))
+    if has_exact == has_discovery:
+        return None
+
+    provenance: dict[str, object] = {
+        "schema": _REVIEWER_SELECTION_SCHEMA,
+        "mode": "scoped_discovery" if has_discovery else "exact_assignment",
+        "selected_agent_id": record.agent.agent_id,
+        "selected_agent_revision": record.agent.revision,
+        "selected_team_id": None if record.team is None else record.team.team_id,
+        "selected_team_revision": None if record.team is None else record.team.revision,
+    }
+    if has_discovery:
+        provenance["candidate_agent_ids"] = _selection_string_list(route.get("candidate_agent_ids"))
+        provenance["candidate_team_ids"] = _selection_string_list(route.get("candidate_team_ids"))
+        provenance["reviewer_role"] = _selection_optional_string(route.get("reviewer_role"))
+        provenance["required_capability_ids"] = _selection_string_list(
+            route.get("required_capability_ids")
+        )
+    else:
+        provenance["configured_agent_id"] = _selection_optional_string(route.get("agent_id"))
+        provenance["configured_agent_revision"] = _selection_optional_positive_int(
+            route.get("agent_revision")
+        )
+        provenance["configured_team_id"] = _selection_optional_string(route.get("team_id"))
+        provenance["configured_team_revision"] = _selection_optional_positive_int(
+            route.get("team_revision")
+        )
+        provenance["configured_team_role"] = _selection_optional_string(route.get("team_role"))
+    return provenance
+
+
+def _selection_string_list(value: object) -> list[object]:
+    result: list[object] = []
+    if not isinstance(value, (list, tuple)):
+        return result
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            result.append(item)
+    return result
+
+
+def _selection_optional_string(value: object) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _selection_optional_positive_int(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
+        return value
+    return None
 
 
 def _has_staged_decision(run: AgentRunRecord) -> bool:
