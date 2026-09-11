@@ -1,0 +1,27 @@
+name: Issue 751 formatter diff
+
+on:
+  push:
+    branches:
+      - test/751-application-distribution-conformance
+
+permissions:
+  contents: read
+
+jobs:
+  formatter-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install formatter
+        run: python -m pip install "ruff>=0.12,<1"
+      - name: Capture Ruff formatter diff
+        run: ruff format --diff . > ruff-format.diff || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue751-ruff-format-diff
+          path: ruff-format.diff
+          if-no-files-found: error
