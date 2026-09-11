@@ -64,7 +64,7 @@ class ExecutionRequest:
     workspace: str
     step_id: str | None = None
     arguments: dict[str, JsonValue] = field(default_factory=dict)
-    environment: dict[str, str] = field(default_factory=dict)
+    environment: dict[str, str] = field(default_factory=dict, repr=False)
     timeout_seconds: float | None = None
     cancellation: CancellationToken | None = None
     policy_context: dict[str, JsonValue] = field(default_factory=dict)
