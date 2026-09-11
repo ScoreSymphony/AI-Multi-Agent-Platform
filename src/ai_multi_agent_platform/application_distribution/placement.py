@@ -7,13 +7,15 @@ import shutil
 from collections.abc import Mapping
 from typing import Literal
 
+from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import (
+    DeterministicScheduler,
     DistributedRegistry,
     JobRequirements,
-    NodeStatus,
-    WorkerStatus,
+    WorkerJobRequest,
 )
+from ai_multi_agent_platform.domain import new_id
 
 from .execution import APPLICATION_BUILD_ACTION
 from .models import BuildSpecification, BuildTarget
@@ -49,37 +51,37 @@ class LocalBuildTargetMatcher:
 
 
 class DistributedBuildTargetMatcher:
-    """Match OS/architecture/toolchain requirements to healthy canonical Workers."""
+    """Use the canonical #14 scheduler for pre-dispatch target admission.
 
-    def __init__(self, registry: DistributedRegistry) -> None:
+    This matcher is intentionally not a scheduler. It asks the same scheduler that owns remote
+    placement whether at least one Worker currently satisfies the translated target requirements;
+    it never reserves a Worker and the later canonical dispatch remains authoritative.
+    """
+
+    def __init__(
+        self,
+        registry: DistributedRegistry,
+        *,
+        scheduler: DeterministicScheduler | None = None,
+    ) -> None:
         self.registry = registry
+        self.scheduler = scheduler or DeterministicScheduler(registry)
 
     async def supports(
         self,
         specification: BuildSpecification,
         target: BuildTarget,
     ) -> bool:
-        required_capabilities = set(specification.required_capabilities)
-        required_capabilities.update(target.required_capabilities)
-        required_capabilities.add(APPLICATION_BUILD_ACTION)
-        for worker in self.registry.list_workers():
-            if worker.status is not WorkerStatus.HEALTHY or worker.draining:
-                continue
-            node = self.registry.get_node(worker.node_id)
-            if node.status is not NodeStatus.ONLINE or node.draining or node.maintenance:
-                continue
-            if node.os_name is None or node.architecture is None:
-                continue
-            if _normalize_os(node.os_name) != _normalize_os(target.os_name):
-                continue
-            if _normalize_architecture(node.architecture) != _normalize_architecture(
-                target.architecture
-            ):
-                continue
-            if required_capabilities - set(worker.capability_refs):
-                continue
-            return True
-        return False
+        admission = WorkerJobRequest(
+            execution=ExecutionRequest(
+                run_id=new_id("run"),
+                subject_type="task",
+                subject_id=new_id("task"),
+                context=OperationContext(correlation_id="application-build-target-admission"),
+            ),
+            requirements=job_requirements_for_target(specification, target),
+        )
+        return self.scheduler.evaluate(admission).selected_worker_id is not None
 
 
 def job_requirements_for_target(
