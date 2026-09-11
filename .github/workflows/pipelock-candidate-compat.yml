@@ -34,6 +34,17 @@ jobs:
           go-version-file: .candidate/pipelock/go.mod
           cache-dependency-path: .candidate/pipelock/go.sum
 
+      - name: Set up Python for platform transport fixture
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install platform integration test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
       - name: Verify reviewed license and build boundaries
         shell: bash
         run: |
@@ -94,6 +105,15 @@ jobs:
           grep -Eq '^[[:space:]]+redact:[[:space:]]*true$' "$RUNNER_TEMP/pipelock-audit.yaml"
           sha256sum ./pipelock "$RUNNER_TEMP/pipelock-audit.yaml" \
             > "$RUNNER_TEMP/pipelock-candidate-sha256.txt"
+
+      - name: Exercise platform MCP stdio through pinned Pipelock
+        env:
+          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-audit.yaml
+        run: |
+          pytest -q tests/test_issue_730_pipelock_evaluation.py \
+            -k pipelock_mcp_stdio_wraps_canonical_invocation_path \
+            --junitxml="$RUNNER_TEMP/pipelock-mcp-stdio-junit.xml"
 
       - name: Exercise audit-only HTTP fetch path
         working-directory: .candidate/pipelock
@@ -200,6 +220,7 @@ jobs:
           path: |
             ${{ runner.temp }}/pipelock-buildinfo.txt
             ${{ runner.temp }}/pipelock-candidate-sha256.txt
+            ${{ runner.temp }}/pipelock-mcp-stdio-junit.xml
             ${{ runner.temp }}/pipelock-fetch-latency-seconds.txt
             ${{ runner.temp }}/pipelock-evidence-files.txt
             ${{ runner.temp }}/pipelock-receipt-action-id.txt
