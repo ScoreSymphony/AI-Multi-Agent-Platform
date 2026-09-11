@@ -60,14 +60,17 @@ A decision-eligible SGLang-vLLM pair must use the same:
 - canonical model target and immutable model revision;
 - dtype/quantization;
 - Worker set;
+- OS/kernel, accelerator runtime and driver;
 - GPU model/count/VRAM profile;
+- CPU/host-RAM profile and network topology;
+- cache state;
 - scenario/request corpus;
 - request count and warmup policy;
 - input/output-length policy;
 - request rate;
 - concurrency.
 
-If any of these differ, set `comparability.comparable` to `false` and explain the difference in `comparability.reasons`. Do not normalize non-equivalent runs into a headline performance claim.
+If any of these differ, set `comparability.comparable` to `false` and explain the difference in `comparability.reasons`. Do not normalize non-equivalent runs into a headline performance claim. The platform-side readiness gate independently rechecks these dimensions rather than trusting the flag alone.
 
 ## Worker-side execution sequence
 
@@ -116,13 +119,32 @@ Unavailable hardware is `not_measured`, not `pass`.
 
 ## Decision-readiness gate
 
-`ai_multi_agent_platform.benchmarking.inference_backend_evaluation` validates measured reports and computes decision readiness.
+`ai_multi_agent_platform.benchmarking.inference_backend_evaluation` validates measured reports and computes decision readiness. The installed CLI entry point is `platform-inference-backend-evaluation`.
+
+Example after measured reports have been collected:
+
+```bash
+platform-inference-backend-evaluation \
+  --campaign config/inference-backend-evaluation.sglang-v0.5.19.json \
+  --report evidence/sglang-single-gpu.json \
+  --report evidence/vllm-single-gpu.json \
+  --output evidence/issue-860-readiness.json \
+  --require-ready
+```
+
+Exit codes are:
+
+- `0`: reports validate; with `--require-ready`, the decision gate is ready;
+- `2`: malformed campaign/report input or schema/IO validation failure;
+- `3`: reports validate, but `--require-ready` found insufficient decision evidence.
 
 The gate requires:
 
 - all mandatory SGLang contract cases to have a latest passing result;
 - all mandatory SGLang failure/recovery cases to have a latest passing result;
 - at least one decision-eligible SGLang-vLLM performance pair whose comparison dimensions actually match.
+
+Latest-result selection uses absolute ISO-8601 timestamps rather than string ordering, so evidence from Workers with different timezone offsets is ordered correctly.
 
 Placement coverage is reported separately so missing hardware remains visible rather than being silently converted into success.
 
