@@ -220,6 +220,7 @@ def build_single_node_deployment(
         workflow=automatic_reviewer,
         agents=base.agent_runtime,
         verification=base.verification,
+        tasks=base.kernel,
     )
     automatic_review_output = AutomaticReviewerOutputCoordinator(
         kernel=base.kernel,
