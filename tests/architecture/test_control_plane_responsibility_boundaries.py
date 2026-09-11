@@ -7,6 +7,11 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTROL_PLANE_ROOT = ROOT / "src" / "ai_multi_agent_platform" / "control_plane"
 SERVICE = CONTROL_PLANE_ROOT / "service.py"
 SCOPE_STORE = CONTROL_PLANE_ROOT / "scope_store.py"
+SCOPE_SERVICE = CONTROL_PLANE_ROOT / "scope_service.py"
+TASK_RUN_SERVICE = CONTROL_PLANE_ROOT / "task_run_service.py"
+REFERENCE_EVENT_SERVICE = CONTROL_PLANE_ROOT / "reference_event_service.py"
+RESOURCES = CONTROL_PLANE_ROOT / "resources.py"
+REQUEST_VALIDATION = CONTROL_PLANE_ROOT / "request_validation.py"
 HEALTH = CONTROL_PLANE_ROOT / "health.py"
 MODEL_REGISTRY = CONTROL_PLANE_ROOT / "model_registry_service.py"
 AUTHORIZATION = CONTROL_PLANE_ROOT / "authorization_service.py"
@@ -89,10 +94,18 @@ def test_control_plane_imports_scope_store_from_focused_module() -> None:
 
 
 def test_focused_control_plane_components_do_not_depend_back_on_facade() -> None:
-    _assert_no_facade_dependency(SCOPE_STORE)
-    _assert_no_facade_dependency(HEALTH)
-    _assert_no_facade_dependency(MODEL_REGISTRY)
-    _assert_no_facade_dependency(AUTHORIZATION)
+    for path in (
+        SCOPE_STORE,
+        SCOPE_SERVICE,
+        TASK_RUN_SERVICE,
+        REFERENCE_EVENT_SERVICE,
+        RESOURCES,
+        REQUEST_VALIDATION,
+        HEALTH,
+        MODEL_REGISTRY,
+        AUTHORIZATION,
+    ):
+        _assert_no_facade_dependency(path)
 
 
 def test_control_plane_keeps_scope_store_as_injected_stable_boundary() -> None:
@@ -110,6 +123,83 @@ def test_control_plane_keeps_scope_store_as_injected_stable_boundary() -> None:
         for assignment in assignments
     )
     _method(facade, "scopes")
+
+
+def test_scope_entrypoints_stay_behind_focused_component() -> None:
+    facade = _class(SERVICE, "ControlPlane")
+    for method_name in (
+        "create_project",
+        "list_projects",
+        "get_project",
+        "create_workspace",
+        "list_workspaces",
+        "get_workspace",
+    ):
+        _assert_delegate(_method(facade, method_name), "_scope_resources", method_name)
+
+    component = _class(SCOPE_SERVICE, "ControlPlaneScopeService")
+    for method_name in (
+        "create_project",
+        "list_projects",
+        "get_project",
+        "create_workspace",
+        "list_workspaces",
+        "get_workspace",
+    ):
+        _method(component, method_name)
+
+
+def test_task_run_entrypoints_stay_behind_focused_component() -> None:
+    facade = _class(SERVICE, "ControlPlane")
+    for method_name in (
+        "create_task",
+        "list_tasks",
+        "get_task",
+        "queue_task",
+        "start_task",
+        "cancel_task",
+        "retry_task",
+        "list_runs",
+        "get_run",
+        "cancel_run",
+    ):
+        _assert_delegate(_method(facade, method_name), "_task_runs", method_name)
+
+    component = _class(TASK_RUN_SERVICE, "ControlPlaneTaskRunService")
+    for method_name in (
+        "create_task",
+        "list_tasks",
+        "get_task",
+        "queue_task",
+        "start_task",
+        "cancel_task",
+        "retry_task",
+        "list_runs",
+        "get_run",
+        "cancel_run",
+        "task_ids",
+    ):
+        _method(component, method_name)
+
+
+def test_reference_event_entrypoints_stay_behind_focused_component() -> None:
+    facade = _class(SERVICE, "ControlPlane")
+    for method_name in (
+        "list_references",
+        "get_reference",
+        "timeline",
+        "subscribe_task_events",
+    ):
+        _assert_delegate(_method(facade, method_name), "_reference_events", method_name)
+
+    component = _class(REFERENCE_EVENT_SERVICE, "ControlPlaneReferenceEventService")
+    for method_name in (
+        "list_references",
+        "get_reference",
+        "timeline",
+        "subscribe_task_events",
+    ):
+        _method(component, method_name)
 
 
 def test_health_aggregation_stays_behind_focused_component() -> None:
