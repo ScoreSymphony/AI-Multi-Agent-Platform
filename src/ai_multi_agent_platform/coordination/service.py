@@ -8,14 +8,7 @@ from typing import Literal, Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.domain import (
-    OwnerRef,
-    Plan,
-    RunStatus,
-    Step,
-    StepStatus,
-    TaskStatus,
-)
+from ai_multi_agent_platform.domain import OwnerRef, Plan, RunStatus, Step
 from ai_multi_agent_platform.kernel.models import RecoveryReport, RunState, TaskState
 from ai_multi_agent_platform.observability import (
     FailureComponent,
@@ -24,6 +17,7 @@ from ai_multi_agent_platform.observability import (
     TelemetryOutcome,
 )
 
+from .aggregation import CoordinationAggregation
 from .attempt_outcomes import CoordinationAttemptOutcomes
 from .cancellation import CoordinationCancellation
 from .models import (
@@ -113,9 +107,6 @@ class CanonicalRunKernel(Protocol):
     async def recover_task(self, task_id: str) -> RecoveryReport: ...
 
 
-_TERMINAL_STEPS = frozenset(
-    {StepStatus.SUCCEEDED, StepStatus.FAILED, StepStatus.SKIPPED, StepStatus.CANCELLED}
-)
 _TERMINAL_RUNS = frozenset(
     {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED, RunStatus.TIMED_OUT}
 )
@@ -147,6 +138,7 @@ class DurablePlanStepCoordinator:
         self._waits = CoordinationWaits(repository=repository, kernel=kernel)
         self._attempt_outcomes = CoordinationAttemptOutcomes(repository=repository, kernel=kernel)
         self._cancellation = CoordinationCancellation(repository=repository, kernel=kernel)
+        self._aggregation = CoordinationAggregation(repository=repository, kernel=kernel)
 
     async def register_plan(
         self,
@@ -612,47 +604,7 @@ class DurablePlanStepCoordinator:
             self.repository.release_claim(claim)
 
     async def _aggregate_task(self, plan_id: str) -> None:
-        state = self.repository.get_plan(plan_id)
-        records = self.repository.list_step_records(plan_id)
-        if len(records) != len(state.steps) or any(
-            record.phase is not CoordinationPhase.TERMINAL for record in records
-        ):
-            return
-        if not state.steps or any(step.status not in _TERMINAL_STEPS for step in state.steps):
-            return
-        task = await self.kernel.get_task(state.plan.task_id)
-        if task.plan_ref != plan_id:
-            return
-        if task.status in {TaskStatus.SUCCEEDED, TaskStatus.CANCELLED}:
-            return
-        if any(step.status is StepStatus.FAILED for step in state.steps):
-            if task.status in {TaskStatus.RUNNING, TaskStatus.WAITING}:
-                await self.kernel.fail_task(
-                    idempotency_key=f"coord:{plan_id}:aggregate:failed",
-                    task_id=state.plan.task_id,
-                    reason="canonical Plan contains a failed Step",
-                    source="platform-coordinator",
-                )
-            return
-        if any(step.status is StepStatus.CANCELLED for step in state.steps):
-            if task.status in {
-                TaskStatus.DRAFT,
-                TaskStatus.READY,
-                TaskStatus.RUNNING,
-                TaskStatus.WAITING,
-            }:
-                await self.kernel.cancel_task(
-                    idempotency_key=f"coord:{plan_id}:aggregate:cancelled",
-                    task_id=state.plan.task_id,
-                    source="platform-coordinator",
-                )
-            return
-        if task.status is TaskStatus.RUNNING:
-            await self.kernel.complete_task(
-                idempotency_key=f"coord:{plan_id}:aggregate:succeeded",
-                task_id=state.plan.task_id,
-                source="platform-coordinator",
-            )
+        await self._aggregation.aggregate_task(plan_id)
 
     def _claim(self, step_id: str, now: datetime) -> CoordinatorClaim | None:
         claim = self.repository.acquire_claim(
