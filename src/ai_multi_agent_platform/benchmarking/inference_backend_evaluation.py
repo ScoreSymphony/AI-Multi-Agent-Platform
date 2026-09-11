@@ -82,6 +82,9 @@ def assess_inference_backend_evaluation(
     """Assess whether live evidence is sufficient to make the #860 policy decision."""
 
     campaign_id = _require_str(campaign, "campaign_id")
+    candidate = _require_mapping(campaign.get("candidate"), "candidate")
+    candidate_backend = _require_str(candidate, "backend")
+    candidate_revision = _require_str(candidate, "release_commit")
     required_contract_cases = _require_string_set(campaign, "contract_cases")
     required_failure_cases = _require_string_set(campaign, "failure_cases")
     required_placement_cases = _require_string_set(campaign, "placement_cases")
@@ -94,14 +97,24 @@ def assess_inference_backend_evaluation(
                 f"report campaign_id {_require_str(report, 'campaign_id')!r} "
                 f"does not match {campaign_id!r}"
             )
+        if (
+            _require_str(report, "backend") == candidate_backend
+            and _require_str(report, "backend_revision") != candidate_revision
+        ):
+            raise ValueError(
+                f"candidate report backend_revision {_require_str(report, 'backend_revision')!r} "
+                f"does not match pinned revision {candidate_revision!r}"
+            )
         normalized_reports.append(report)
 
-    sglang_reports = tuple(
-        report for report in normalized_reports if _require_str(report, "backend") == "sglang"
+    candidate_reports = tuple(
+        report
+        for report in normalized_reports
+        if _require_str(report, "backend") == candidate_backend
     )
-    latest_contract = _latest_case_statuses(sglang_reports, "contract_results")
-    latest_failure = _latest_case_statuses(sglang_reports, "failure_results")
-    latest_placement = _latest_placement_statuses(sglang_reports)
+    latest_contract = _latest_case_statuses(candidate_reports, "contract_results")
+    latest_failure = _latest_case_statuses(candidate_reports, "failure_results")
+    latest_placement = _latest_placement_statuses(candidate_reports)
 
     missing_contract = tuple(
         sorted(
@@ -131,21 +144,26 @@ def assess_inference_backend_evaluation(
         )
     )
 
-    comparable_pairs = _count_comparable_sglang_vllm_pairs(normalized_reports)
+    comparable_pairs = _count_comparable_candidate_vllm_pairs(
+        normalized_reports,
+        candidate_backend=candidate_backend,
+    )
 
     blockers: list[str] = []
-    if not sglang_reports:
-        blockers.append("no measured SGLang report")
+    if not candidate_reports:
+        blockers.append(f"no measured {candidate_backend} report")
     if missing_contract:
-        blockers.append("mandatory SGLang contract cases are missing")
+        blockers.append(f"mandatory {candidate_backend} contract cases are missing")
     if failed_contract:
-        blockers.append("mandatory SGLang contract cases are failing")
+        blockers.append(f"mandatory {candidate_backend} contract cases are failing")
     if missing_failure:
-        blockers.append("mandatory SGLang failure/recovery cases are missing")
+        blockers.append(f"mandatory {candidate_backend} failure/recovery cases are missing")
     if failed_failure:
-        blockers.append("mandatory SGLang failure/recovery cases are failing")
+        blockers.append(f"mandatory {candidate_backend} failure/recovery cases are failing")
     if comparable_pairs == 0:
-        blockers.append("no comparable decision-eligible SGLang-vLLM performance pair")
+        blockers.append(
+            f"no comparable decision-eligible {candidate_backend}-vLLM performance pair"
+        )
 
     return InferenceBackendEvaluationReadiness(
         ready_for_decision=not blockers,
@@ -202,16 +220,22 @@ def _completed_at(report: Mapping[str, Any]) -> datetime:
         raise ValueError(f"completed_at is not a valid ISO-8601 timestamp: {value!r}") from exc
 
 
-def _count_comparable_sglang_vllm_pairs(reports: Sequence[Mapping[str, Any]]) -> int:
-    sglang = [report for report in reports if _require_str(report, "backend") == "sglang"]
+def _count_comparable_candidate_vllm_pairs(
+    reports: Sequence[Mapping[str, Any]],
+    *,
+    candidate_backend: str,
+) -> int:
+    candidate = [
+        report for report in reports if _require_str(report, "backend") == candidate_backend
+    ]
     vllm = [report for report in reports if _require_str(report, "backend") == "vllm"]
     return sum(
         1
-        for candidate in sglang
+        for candidate_report in candidate
         for comparator in vllm
-        if _report_is_decision_eligible(candidate)
+        if _report_is_decision_eligible(candidate_report)
         and _report_is_decision_eligible(comparator)
-        and _comparison_key(candidate) == _comparison_key(comparator)
+        and _comparison_key(candidate_report) == _comparison_key(comparator)
     )
 
 
