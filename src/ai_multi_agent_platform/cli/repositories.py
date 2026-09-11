@@ -1,8 +1,8 @@
-"""Issue #82 CLI composition for provider-neutral repository operations.
+"""Provider-neutral repository command-line composition.
 
 Repository commands remain API-first: the CLI only calls the canonical Control Plane
 resource and command surfaces registered by ``repositories.control_plane``. Existing
-CLI areas are delegated unchanged to the authenticated issue #214 composition.
+CLI areas delegate unchanged to the authenticated CLI composition.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from urllib.parse import quote
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
+from .auth import run_cli as authenticated_run_cli
 from .client import (
     APIClientError,
     ClientOptions,
@@ -27,7 +28,6 @@ from .client import (
     UrllibTransport,
 )
 from .credentials import AuthenticatedTransport, CredentialStore
-from .issue_214 import run_cli as issue_214_run_cli
 from .profiles import CLIProfile, ProfileError, ProfileStore, default_config_path
 from .render import Renderer
 
@@ -55,7 +55,7 @@ def run_cli(
 ) -> int:
     arguments = list(argv) if argv is not None else sys.argv[1:]
     if _requested_area(arguments) != "repository":
-        return issue_214_run_cli(
+        return authenticated_run_cli(
             arguments,
             transport=transport,
             stdout=stdout,

@@ -24,7 +24,7 @@ def test_public_navigation_exposes_learning_through_canonical_collection() -> No
 
 
 def test_public_cli_registers_and_dispatches_learning_domain() -> None:
-    cli = Path("src/ai_multi_agent_platform/cli/issue_81.py").read_text(encoding="utf-8")
+    cli = Path("src/ai_multi_agent_platform/cli/app.py").read_text(encoding="utf-8")
 
     assert "from .learning import add_learning_parser, execute_learning" in cli
     assert 'requested_area not in {"registry", "learning"}' in cli

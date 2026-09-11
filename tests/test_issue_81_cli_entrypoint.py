@@ -8,8 +8,8 @@ from urllib.parse import urlsplit
 
 import pytest
 
+from ai_multi_agent_platform.cli.app import run_cli
 from ai_multi_agent_platform.cli.client import RawResponse
-from ai_multi_agent_platform.cli.issue_81 import run_cli
 from ai_multi_agent_platform.cli.profiles import CLIProfile, ProfileStore
 
 
@@ -239,7 +239,7 @@ def test_generic_extension_execute_cannot_bypass_learning_domain_safeguards(
     assert "first-class `platform learning` domain" in stderr.getvalue()
 
 
-def test_non_owned_area_delegates_to_issue_82(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_non_owned_area_delegates_to_repositories(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[list[str]] = []
 
     def delegated(
@@ -249,7 +249,7 @@ def test_non_owned_area_delegates_to_issue_82(monkeypatch: pytest.MonkeyPatch) -
         captured.append(arguments)
         return 17
 
-    monkeypatch.setattr("ai_multi_agent_platform.cli.issue_81.issue_82_run_cli", delegated)
+    monkeypatch.setattr("ai_multi_agent_platform.cli.app.repository_run_cli", delegated)
 
     code = run_cli(["repository", "list"])
 
@@ -269,7 +269,7 @@ def test_non_learning_extension_execution_still_delegates(
         captured.append(arguments)
         return 19
 
-    monkeypatch.setattr("ai_multi_agent_platform.cli.issue_81.issue_82_run_cli", delegated)
+    monkeypatch.setattr("ai_multi_agent_platform.cli.app.repository_run_cli", delegated)
     arguments = [
         "extension",
         "execute",
@@ -287,6 +287,6 @@ def test_non_learning_extension_execution_still_delegates(
     assert captured == [arguments]
 
 
-def test_distribution_script_points_at_issue_81_composition() -> None:
+def test_distribution_script_points_at_stable_composition() -> None:
     pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
-    assert 'platform = "ai_multi_agent_platform.cli.issue_81:main"' in pyproject
+    assert 'platform = "ai_multi_agent_platform.cli.app:main"' in pyproject

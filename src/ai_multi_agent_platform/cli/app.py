@@ -1,8 +1,8 @@
-"""Issue #81 CLI composition for top-level optional platform domains.
+"""Canonical top-level command-line composition.
 
 Registry and governed Learning commands are API-first and use only the canonical
 Control Plane surfaces registered by the deployment. Every other area delegates
-unchanged to the current issue #82 CLI composition.
+to the stable repository/authenticated CLI composition.
 """
 
 from __future__ import annotations
@@ -21,11 +21,11 @@ from .client import (
     UrllibTransport,
 )
 from .credentials import AuthenticatedTransport, CredentialStore
-from .issue_82 import run_cli as issue_82_run_cli
 from .learning import add_learning_parser, execute_learning
 from .profiles import CLIProfile, ProfileError, ProfileStore, default_config_path
 from .registry import add_registry_parser, execute_registry
 from .render import Renderer
+from .repositories import run_cli as repository_run_cli
 
 
 def main() -> int:
@@ -58,7 +58,7 @@ def run_cli(
         )
         return 2
     if requested_area not in {"registry", "learning"}:
-        return issue_82_run_cli(
+        return repository_run_cli(
             arguments,
             transport=transport,
             stdout=stdout,
