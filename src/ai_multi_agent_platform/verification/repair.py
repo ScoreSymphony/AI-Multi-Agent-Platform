@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import TaskStatus, validate_id
 from ai_multi_agent_platform.kernel import PlatformKernel
+from ai_multi_agent_platform.kernel.models import TaskState
 
 from .gate import VerificationCompletionAuthority
-from .models import CompletionState, VerificationOutcome
+from .models import (
+    CompletionState,
+    VerificationOutcome,
+    VerificationRequest,
+    VerificationResult,
+)
 from .service import VerificationService
 
-_REPAIR_SOURCE = "verification-repair"
+VERIFICATION_REPAIR_SOURCE = "verification-repair"
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,12 +44,38 @@ class VerificationRepairExecution:
             raise ValueError("repair_attempt must be >= 1")
 
 
+@runtime_checkable
+class VerificationRepairBindingProvider(Protocol):
+    """Produce canonical Task metadata required before a repair Step Run starts.
+
+    The provider receives only the immutable Verification request/result plus the already
+    planned canonical Step identity. It may derive an execution binding, but it cannot start
+    work, mutate Verification state or grant authority. ``VerificationRepairRuntime`` persists
+    the returned metadata before the repair Run is created/dispatched.
+    """
+
+    def metadata_for_repair(
+        self,
+        *,
+        request: VerificationRequest,
+        review_result: VerificationResult,
+        task: TaskState,
+        step_id: str,
+        repair_attempt: int,
+    ) -> dict[str, JsonValue]: ...
+
+
 class VerificationRepairRuntime:
     """Translate ``needs_changes`` into ordinary canonical Plan/Step/Run execution.
 
     Verification remains the authority for repair budget and exact-subject acceptance.
     The kernel remains the authority for Task/Run lifecycle. This bridge only coordinates
     those two existing authorities; it owns no private task status or execution history.
+
+    A replaceable ``binding_provider`` may persist exact execution metadata for the newly
+    planned repair Step. Binding happens after canonical Step IDs exist but before the Task is
+    resumed and before the repair Run is created, so reviewer findings can inform repair work
+    without racing the execution lifecycle.
     """
 
     def __init__(
@@ -49,10 +83,13 @@ class VerificationRepairRuntime:
         verification: VerificationService,
         completion: VerificationCompletionAuthority,
         kernel: PlatformKernel,
+        *,
+        binding_provider: VerificationRepairBindingProvider | None = None,
     ) -> None:
         self._verification = verification
         self._completion = completion
         self._kernel = kernel
+        self._binding_provider = binding_provider
 
     async def start_repair(
         self,
@@ -97,12 +134,28 @@ class VerificationRepairRuntime:
         if repair_attempt > policy.max_repair_attempts:
             raise ContractError(ErrorCode.CONFLICT, "verification repair limit exhausted")
 
+        key = f"verification-repair:{verification_id}:{repair_attempt}"
         task = await self._kernel.get_task(request.task_id)
         if task.status not in {TaskStatus.WAITING, TaskStatus.RUNNING}:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 f"task cannot start verification repair from {task.status.value}",
             )
+
+        # A VerificationResult can change the authoritative completion decision after the Task
+        # was already projected as ``verification:waiting`` by Run terminalization. Re-enter the
+        # ordinary completion command once so the kernel records the current REPAIR_REQUIRED
+        # decision instead of letting this bridge invent or mutate a private wait state.
+        if task.status is TaskStatus.WAITING and (
+            task.wait_reason != "verification:repair_required" or not task.blocked
+        ):
+            await self._kernel.complete_task(
+                idempotency_key=f"{key}:project-completion",
+                task_id=request.task_id,
+                actor_ref=actor_ref,
+                source=VERIFICATION_REPAIR_SOURCE,
+            )
+            task = await self._kernel.get_task(request.task_id)
         if task.status is TaskStatus.WAITING and (
             task.wait_reason != "verification:repair_required" or not task.blocked
         ):
@@ -111,7 +164,6 @@ class VerificationRepairRuntime:
                 "waiting task is not canonically blocked for verification repair",
             )
 
-        key = f"verification-repair:{verification_id}:{repair_attempt}"
         existing = await self._existing_execution(
             request.task_id, verification_id, repair_attempt, key
         )
@@ -121,13 +173,14 @@ class VerificationRepairRuntime:
             idempotency_key=f"{key}:plan",
             task_id=request.task_id,
             actor_ref=actor_ref,
-            source=_REPAIR_SOURCE,
+            source=VERIFICATION_REPAIR_SOURCE,
         )
         if planned.plan_ref is None or not planned.step_ids:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "repair planning produced no canonical executable step",
             )
+        plan_id = planned.plan_ref
 
         selected_step = step_id
         if selected_step is None:
@@ -144,12 +197,34 @@ class VerificationRepairRuntime:
                 "selected repair step does not belong to the current canonical repair plan",
             )
 
+        if self._binding_provider is not None:
+            binding_metadata = self._binding_provider.metadata_for_repair(
+                request=request,
+                review_result=result,
+                task=planned,
+                step_id=selected_step,
+                repair_attempt=repair_attempt,
+            )
+            if not binding_metadata:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "verification repair binding provider returned no execution metadata",
+                )
+            await self._kernel.update_task(
+                idempotency_key=f"{key}:bind-step",
+                task_id=request.task_id,
+                metadata=binding_metadata,
+                actor_ref=actor_ref,
+                source=VERIFICATION_REPAIR_SOURCE,
+            )
+            planned = await self._kernel.get_task(request.task_id)
+
         if planned.status is TaskStatus.WAITING:
             active_task = await self._kernel.resume_task(
                 idempotency_key=f"{key}:resume",
                 task_id=request.task_id,
                 actor_ref=actor_ref,
-                source=_REPAIR_SOURCE,
+                source=VERIFICATION_REPAIR_SOURCE,
             )
         elif planned.status is TaskStatus.RUNNING:
             active_task = planned
@@ -170,20 +245,20 @@ class VerificationRepairRuntime:
             subject_type="step",
             subject_id=selected_step,
             actor_ref=actor_ref,
-            source=_REPAIR_SOURCE,
+            source=VERIFICATION_REPAIR_SOURCE,
         )
         started = await self._kernel.start_run(
             idempotency_key=f"{key}:start-run",
             task_id=request.task_id,
             run_id=run.run_id,
             actor_ref=actor_ref,
-            source=_REPAIR_SOURCE,
+            source=VERIFICATION_REPAIR_SOURCE,
         )
 
         return VerificationRepairExecution(
             source_verification_id=verification_id,
             task_id=request.task_id,
-            plan_id=planned.plan_ref,
+            plan_id=plan_id,
             step_id=selected_step,
             run_id=started.run_id,
             repair_attempt=repair_attempt,
@@ -201,7 +276,7 @@ class VerificationRepairRuntime:
             for event in await self._kernel.history(task_id)
             if event.event_type == "run.created"
             and event.provenance is not None
-            and event.provenance.source == _REPAIR_SOURCE
+            and event.provenance.source == VERIFICATION_REPAIR_SOURCE
             and event.causation_id == f"{key}:create-run"
         ]
         if len(matches) > 1:
