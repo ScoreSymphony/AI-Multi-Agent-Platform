@@ -21,6 +21,7 @@ from ai_multi_agent_platform.evaluation import (
     EvaluationService,
     VersionReference,
 )
+from ai_multi_agent_platform.evaluation.canonical_access import CanonicalEvaluationAccess
 from ai_multi_agent_platform.evaluation.contracts import EvaluationHistoryRepository
 from ai_multi_agent_platform.verification import CanonicalVerificationAccess, VerificationService
 
@@ -43,10 +44,10 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
     """Drive and project only exact-configuration #19 Evaluation evidence.
 
     The coordinator deliberately does not own Evaluation lifecycle state. It asks the canonical
-    EvaluationService to execute an exact suite version, and projection reads only canonical
-    persisted run/result evidence whose semantic ConfigurationSnapshot exactly matches the current
-    release subject. Snapshot IDs are excluded because they identify a run snapshot instance rather
-    than its configuration content.
+    EvaluationService to complete the exact ConfigurationSnapshot and execute an exact suite
+    version. Projection then reads only canonical persisted run/result evidence whose semantic
+    snapshot matches the current release configuration. Snapshot IDs are excluded because they
+    identify snapshot instances rather than configuration content.
     """
 
     def __init__(
@@ -67,6 +68,9 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
             evaluations=evaluations,
         )
         self.evaluation_service = evaluation_service
+        self.evaluation_access = (
+            None if evaluation_service is None else CanonicalEvaluationAccess(evaluation_service)
+        )
         self._evaluation_drive_lock = asyncio.Lock()
 
     async def reconcile(self, release: ApplicationRelease) -> tuple[GateEvidence, ...]:
@@ -93,6 +97,7 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
         requirement: ReleaseGateRequirement,
     ) -> None:
         assert self.evaluation_service is not None
+        assert self.evaluation_access is not None
         assert self.evaluations is not None
 
         artifact = _artifact_for_target(release, requirement.target_id)
@@ -100,14 +105,23 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
         suite_version = requirement.evaluation_suite_version
         if artifact is None or suite_id is None or suite_version is None:
             return
-        if _exact_evaluation_runs(self.evaluations, release, requirement, artifact):
+
+        suite_ref = f"{suite_id}@{suite_version}"
+        input_snapshot = _evaluation_snapshot(release, artifact)
+        try:
+            expected_snapshot = self.evaluation_access.complete_snapshot(
+                suite_ref=suite_ref,
+                snapshot=input_snapshot,
+            )
+        except Exception:
+            return
+        if _exact_evaluation_runs(self.evaluations, requirement, expected_snapshot):
             return
 
-        snapshot = _evaluation_snapshot(release, artifact)
         try:
             await self.evaluation_service.run_suite(
-                suite_ref=f"{suite_id}@{suite_version}",
-                snapshot=snapshot,
+                suite_ref=suite_ref,
+                snapshot=input_snapshot,
             )
         except Exception:
             # EvaluationRunner durably marks a started run FAILED before re-raising. Errors that
@@ -137,9 +151,33 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
             )
 
         revision = artifact_subject_revision(release, artifact)
-        expected_snapshot = _evaluation_snapshot(release, artifact)
+        input_snapshot = _evaluation_snapshot(release, artifact)
+        expected_snapshot = input_snapshot
+        if self.evaluation_access is not None:
+            suite_id = requirement.evaluation_suite_id
+            suite_version = requirement.evaluation_suite_version
+            if suite_id is None or suite_version is None:
+                return _gate(
+                    requirement,
+                    GateStatus.INCONCLUSIVE,
+                    blocking_reason="evaluation release gate configuration is incomplete",
+                    details=_artifact_details(artifact),
+                )
+            try:
+                expected_snapshot = self.evaluation_access.complete_snapshot(
+                    suite_ref=f"{suite_id}@{suite_version}",
+                    snapshot=input_snapshot,
+                )
+            except Exception:
+                return _gate(
+                    requirement,
+                    GateStatus.INCONCLUSIVE,
+                    blocking_reason="canonical Evaluation configuration is unavailable",
+                    details=_artifact_details(artifact),
+                )
+
         expected_fingerprint = evaluation_snapshot_fingerprint(expected_snapshot)
-        matches = list(_exact_evaluation_runs(self.evaluations, release, requirement, artifact))
+        matches = list(_exact_evaluation_runs(self.evaluations, requirement, expected_snapshot))
         if not matches:
             return _gate(
                 requirement,
@@ -272,11 +310,10 @@ def _evaluation_snapshot(
 
 def _exact_evaluation_runs(
     evaluations: EvaluationHistoryRepository,
-    release: ApplicationRelease,
     requirement: ReleaseGateRequirement,
-    artifact: ApplicationArtifact,
+    expected_snapshot: ConfigurationSnapshot,
 ) -> tuple[EvaluationRun, ...]:
-    expected_fingerprint = evaluation_snapshot_fingerprint(_evaluation_snapshot(release, artifact))
+    expected_fingerprint = evaluation_snapshot_fingerprint(expected_snapshot)
     return tuple(
         run
         for run in evaluations.list_runs(
