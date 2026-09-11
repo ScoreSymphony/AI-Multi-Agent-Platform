@@ -1,0 +1,432 @@
+version = 1
+source_root = "src/ai_multi_agent_platform"
+
+# Every importable package directly below source_root must appear exactly once here.
+# Adding a root package therefore requires an explicit ownership and rationale change.
+
+[[package]]
+name = "acceptance"
+kind = "quality"
+owner = "repository"
+disposition = "keep"
+responsibility = "End-to-end acceptance harnesses and operator-facing acceptance checks; not canonical runtime ownership."
+
+[[package]]
+name = "accounting"
+kind = "domain"
+owner = "accounting"
+disposition = "keep"
+responsibility = "Canonical usage, cost and accounting records and services."
+
+[[package]]
+name = "adapters"
+kind = "integration"
+owner = "repository"
+disposition = "keep"
+responsibility = "Replaceable integration adapters and executable composition adapters; never canonical domain ownership."
+
+[[package]]
+name = "agents"
+kind = "domain"
+owner = "agents"
+disposition = "keep"
+responsibility = "Canonical Agent and AgentTeam definitions, lifecycle-adjacent services and agent-facing policy."
+
+[[package]]
+name = "application_distribution"
+kind = "domain"
+owner = "application_distribution"
+disposition = "keep"
+responsibility = "Application build/distribution state and release-gate integration, distinct from the component registry."
+
+[[package]]
+name = "automation"
+kind = "domain"
+owner = "automation"
+disposition = "keep"
+responsibility = "Canonical triggers, schedules and automation execution semantics."
+
+[[package]]
+name = "backup"
+kind = "operations"
+owner = "repository"
+disposition = "keep"
+responsibility = "Backup/restore operator workflows and formats; consumes canonical state rather than owning domain semantics."
+
+[[package]]
+name = "benchmarking"
+kind = "quality"
+owner = "repository"
+disposition = "keep"
+responsibility = "Performance, scale, pressure and fault benchmark tooling."
+
+[[package]]
+name = "browser"
+kind = "domain"
+owner = "browser"
+disposition = "keep"
+responsibility = "Browser capability contracts and platform-owned browser execution semantics."
+
+[[package]]
+name = "capabilities"
+kind = "domain"
+owner = "capabilities"
+disposition = "keep"
+responsibility = "Canonical capability declaration, discovery and selection semantics."
+
+[[package]]
+name = "capability_assignments"
+kind = "migration"
+owner = "capabilities"
+disposition = "consolidate"
+responsibility = "Capability-to-resource assignment is a capabilities subdomain; migrate under capabilities without breaking supported imports."
+
+[[package]]
+name = "cli"
+kind = "surface"
+owner = "control_plane"
+disposition = "keep"
+responsibility = "Command-line client surface over canonical platform APIs and operator entrypoints."
+
+[[package]]
+name = "compensation"
+kind = "domain"
+owner = "compensation"
+disposition = "keep"
+responsibility = "Canonical compensation/rollback semantics for multi-step work."
+
+[[package]]
+name = "configuration"
+kind = "operations"
+owner = "repository"
+disposition = "keep"
+responsibility = "Platform configuration loading/validation and safe operator configuration boundaries."
+
+[[package]]
+name = "conformance"
+kind = "quality"
+owner = "repository"
+disposition = "keep"
+responsibility = "Reusable contract/conformance verification suites and conformance reporting."
+
+[[package]]
+name = "connectors"
+kind = "integration"
+owner = "repository"
+disposition = "keep"
+responsibility = "External-service connector implementations behind platform-owned connector contracts."
+
+[[package]]
+name = "context"
+kind = "domain"
+owner = "context"
+disposition = "keep"
+responsibility = "Canonical execution/context assembly, policy and context resource semantics."
+
+[[package]]
+name = "contracts"
+kind = "domain"
+owner = "contracts"
+disposition = "keep"
+responsibility = "Foundational platform-owned public contracts and shared error/protocol types."
+
+[[package]]
+name = "control_plane"
+kind = "domain"
+owner = "control_plane"
+disposition = "keep"
+responsibility = "Canonical API/control-plane resource, command and query boundary."
+
+[[package]]
+name = "conversations"
+kind = "domain"
+owner = "conversations"
+disposition = "keep"
+responsibility = "Canonical conversation/session resources when conversational interaction is used."
+
+[[package]]
+name = "coordination"
+kind = "domain"
+owner = "coordination"
+disposition = "keep"
+responsibility = "Canonical multi-agent/work coordination, contention and reconciliation semantics."
+
+[[package]]
+name = "data"
+kind = "domain"
+owner = "data"
+disposition = "keep"
+responsibility = "Canonical file, memory, knowledge and data-provider contracts/reference implementations."
+
+[[package]]
+name = "decisions"
+kind = "domain"
+owner = "decisions"
+disposition = "keep"
+responsibility = "Canonical decision records and decision workflow semantics."
+
+[[package]]
+name = "deployment"
+kind = "operations"
+owner = "repository"
+disposition = "keep"
+responsibility = "Self-hosted deployment profiles, process entrypoints and composition wiring; must not own Node/Worker/Scheduler semantics."
+
+[[package]]
+name = "distributed"
+kind = "domain"
+owner = "distributed"
+disposition = "keep"
+responsibility = "Canonical distributed Node, Worker, WorkerJob, scheduling, transport and distributed-runtime semantics."
+
+[[package]]
+name = "distribution"
+kind = "domain"
+owner = "distribution"
+disposition = "keep"
+responsibility = "Component registry/catalog discovery, validation, installation and distribution; unrelated to distributed compute."
+
+[[package]]
+name = "domain"
+kind = "domain"
+owner = "domain"
+disposition = "keep"
+responsibility = "Foundational canonical domain entities and value objects shared across bounded domains."
+
+[[package]]
+name = "evaluation"
+kind = "domain"
+owner = "evaluation"
+disposition = "keep"
+responsibility = "Canonical evaluation definitions, evidence and evaluation execution semantics."
+
+[[package]]
+name = "execution"
+kind = "domain"
+owner = "execution"
+disposition = "keep"
+responsibility = "Canonical execution-provider and executor boundaries independent of concrete runtimes."
+
+[[package]]
+name = "goals"
+kind = "domain"
+owner = "goals"
+disposition = "keep"
+responsibility = "Canonical Goal resources and goal-to-work semantics."
+
+[[package]]
+name = "governance"
+kind = "domain"
+owner = "governance"
+disposition = "keep"
+responsibility = "Runtime governance, policy/governance resources and governed-action semantics."
+
+[[package]]
+name = "handoffs"
+kind = "domain"
+owner = "handoffs"
+disposition = "keep"
+responsibility = "Canonical work/agent handoff contracts and coordination semantics."
+
+[[package]]
+name = "high_availability"
+kind = "migration"
+owner = "distributed"
+disposition = "consolidate"
+responsibility = "Control Plane HA, leadership, fencing and failover are a distributed-runtime subdomain; migrate toward distributed.high_availability with bounded compatibility."
+
+[[package]]
+name = "kernel"
+kind = "domain"
+owner = "kernel"
+disposition = "keep"
+responsibility = "Canonical Task/Run lifecycle kernel and mutation/query façade."
+
+[[package]]
+name = "learning"
+kind = "domain"
+owner = "learning"
+disposition = "keep"
+responsibility = "Canonical learning/improvement records and learning-loop semantics."
+
+[[package]]
+name = "messaging"
+kind = "domain"
+owner = "messaging"
+disposition = "keep"
+responsibility = "Canonical event/message transport abstractions and messaging semantics."
+
+[[package]]
+name = "models"
+kind = "domain"
+owner = "models"
+disposition = "keep"
+responsibility = "Canonical model-provider, model routing and model-assignment semantics."
+
+[[package]]
+name = "notifications"
+kind = "domain"
+owner = "notifications"
+disposition = "keep"
+responsibility = "Canonical user/operator notification resources and delivery policy semantics."
+
+[[package]]
+name = "observability"
+kind = "domain"
+owner = "observability"
+disposition = "keep"
+responsibility = "Canonical telemetry, tracing, health and observability contracts."
+
+[[package]]
+name = "onboarding"
+kind = "domain"
+owner = "onboarding"
+disposition = "keep"
+responsibility = "Canonical onboarding/readiness workflow semantics."
+
+[[package]]
+name = "orchestration"
+kind = "domain"
+owner = "orchestration"
+disposition = "keep"
+responsibility = "Canonical orchestration interfaces and orchestration-facing platform semantics."
+
+[[package]]
+name = "organizations"
+kind = "domain"
+owner = "organizations"
+disposition = "keep"
+responsibility = "Canonical organization, team, membership, ownership and sharing semantics."
+
+[[package]]
+name = "planning"
+kind = "domain"
+owner = "planning"
+disposition = "keep"
+responsibility = "Canonical plans, plan revisions, steps and progression semantics."
+
+[[package]]
+name = "plugins"
+kind = "integration"
+owner = "repository"
+disposition = "keep"
+responsibility = "Plugin discovery/loading integration boundary; plugins extend canonical contracts rather than create new authorities."
+
+[[package]]
+name = "portability"
+kind = "domain"
+owner = "portability"
+disposition = "keep"
+responsibility = "Canonical export/import and portability semantics across platform-owned resources."
+
+[[package]]
+name = "release"
+kind = "operations"
+owner = "repository"
+disposition = "keep"
+responsibility = "Release construction, signing/verification integration and publication operator workflows."
+
+[[package]]
+name = "repositories"
+kind = "domain"
+owner = "repositories"
+disposition = "keep"
+responsibility = "Canonical repository/project source-control resources and repository service semantics."
+
+[[package]]
+name = "repository_intelligence"
+kind = "migration"
+owner = "repositories"
+disposition = "consolidate"
+responsibility = "Repository intelligence is a repositories subdomain; migrate under repositories while preserving supported import paths."
+
+[[package]]
+name = "research"
+kind = "domain"
+owner = "research"
+disposition = "keep"
+responsibility = "Canonical research work, evidence and research workflow resources."
+
+[[package]]
+name = "search"
+kind = "domain"
+owner = "search"
+disposition = "keep"
+responsibility = "Canonical global/platform search contracts, indexing and query semantics."
+
+[[package]]
+name = "security"
+kind = "domain"
+owner = "security"
+disposition = "keep"
+responsibility = "Canonical authentication, authorization, approval, secrets and security-policy boundaries."
+
+[[package]]
+name = "skills"
+kind = "domain"
+owner = "skills"
+disposition = "keep"
+responsibility = "Canonical skill/capability-package metadata and skill execution integration semantics."
+
+[[package]]
+name = "task_management"
+kind = "domain"
+owner = "task_management"
+disposition = "keep"
+responsibility = "Canonical Task planning metadata, dependencies, priority and task-management application services."
+
+[[package]]
+name = "task_reassignment"
+kind = "migration"
+owner = "task_management"
+disposition = "consolidate"
+responsibility = "Task Project reassignment is a task-management subdomain; migrate to task_management.reassignment with compatibility for the old import path."
+
+[[package]]
+name = "templates"
+kind = "domain"
+owner = "templates"
+disposition = "keep"
+responsibility = "Canonical reusable task/workflow/template resources and rendering semantics."
+
+[[package]]
+name = "terminal"
+kind = "domain"
+owner = "terminal"
+disposition = "keep"
+responsibility = "Terminal/shell capability contracts and governed terminal execution semantics."
+
+[[package]]
+name = "testing"
+kind = "quality"
+owner = "repository"
+disposition = "keep"
+responsibility = "Reusable test doubles, fixtures and platform testing support code."
+
+[[package]]
+name = "upgrade"
+kind = "operations"
+owner = "repository"
+disposition = "keep"
+responsibility = "Schema/runtime upgrade and migration operator workflows."
+
+[[package]]
+name = "verification"
+kind = "domain"
+owner = "verification"
+disposition = "keep"
+responsibility = "Canonical verification evidence, checks and verification-gate semantics."
+
+[[package]]
+name = "workflows"
+kind = "domain"
+owner = "workflows"
+disposition = "keep"
+responsibility = "Canonical workflow definitions and optional durable-workflow integration semantics."
+
+[[package]]
+name = "workspaces"
+kind = "domain"
+owner = "workspaces"
+disposition = "keep"
+responsibility = "Canonical Workspace resources, isolation/materialization and workspace lifecycle semantics."
