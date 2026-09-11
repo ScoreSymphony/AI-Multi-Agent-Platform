@@ -2,19 +2,23 @@
 
 This runbook turns the #860 evaluation plan into a reproducible Worker-side evidence procedure. It does not classify SGLang by itself and it must not be used to synthesize measurements that were not observed on real hardware.
 
-## Pinned upstream
+## Pinned upstream and comparators
 
-The evaluated upstream is `sgl-project/sglang` release `v0.5.19`.
+The campaign uses three exact backend revisions:
 
-Exact Git objects verified on 2026-09-12:
+- SGLang candidate: `v0.5.19`, commit `0bcd822377da7b5718e674eaf9c870d349424dd1`, Apache-2.0;
+- vLLM GPU-serving comparator: `v0.29.0`, commit `98dff2a81d747d1dba01a47f939f48c3526d4206`, Apache-2.0;
+- Ollama lighter local-path comparator: `v0.34.0`, commit `d8ab4b4f0ca24b51d3a46b3bf4f462e58ce66b1f`, MIT.
 
-- annotated tag object: `59f20bffdde59a35cc628372d85d20a979f6271b`;
-- release commit: `0bcd822377da7b5718e674eaf9c870d349424dd1`;
-- release publication timestamp: `2026-09-05T02:27:42Z`;
-- repository license at the release tag: Apache License 2.0;
-- license blob: `9c422689c8f5c317c7c65153b1209349ec57007e`.
+For SGLang, the exact annotated tag object verified on 2026-09-12 is `59f20bffdde59a35cc628372d85d20a979f6271b`; the release publication timestamp is `2026-09-05T02:27:42Z` and the release-tag license blob is `9c422689c8f5c317c7c65153b1209349ec57007e`.
 
-The machine-readable copy is `config/inference-backend-upstream.sglang-v0.5.19.json`.
+Machine-readable upstream provenance is stored in:
+
+- `config/inference-backend-upstream.sglang-v0.5.19.json`;
+- `config/inference-backend-upstream.vllm-v0.29.0.json`;
+- `config/inference-backend-upstream.ollama-v0.34.0.json`.
+
+A report for another pinned-backend commit is not evidence for this campaign even if it reuses the same `campaign_id`.
 
 ## Evidence ownership
 
@@ -27,7 +31,7 @@ All platform-facing evidence remains owned by the existing platform contracts:
 - #34 owns secrets/configuration;
 - #799 may consume the final classification for first-run recommendations.
 
-SGLang-specific endpoint names, model names, launch flags and process metadata are adapter/deployment evidence only. They never become canonical `ModelConfiguration.config_id` values.
+Backend-specific endpoint names, model names, launch flags and process metadata are adapter/deployment evidence only. They never become canonical `ModelConfiguration.config_id` values.
 
 ## Required artifacts per measured run
 
@@ -50,8 +54,7 @@ At minimum retain:
 11. placement result;
 12. raw benchmark/log/telemetry file paths and SHA-256 hashes.
 
-For the SGLang candidate, `backend_revision` must be the full pinned release commit
-`0bcd822377da7b5718e674eaf9c870d349424dd1`. The package/image field may additionally record a release tag, image digest or package version. A report for another SGLang commit is not evidence for this campaign even if it uses the same `campaign_id`.
+`backend_revision` must equal the full commit pinned for SGLang, vLLM or Ollama in the campaign. The package/image field may additionally record a release tag, image digest or package version.
 
 `scenario_id` must uniquely identify the request corpus used for the comparison. Two reports with different scenario IDs are not treated as performance-comparable even if their other dimensions match.
 
@@ -74,6 +77,8 @@ A decision-eligible SGLang-vLLM pair must use the same:
 - concurrency.
 
 If any of these differ, set `comparability.comparable` to `false` and explain the difference in `comparability.reasons`. Do not normalize non-equivalent runs into a headline performance claim. The platform-side readiness gate independently rechecks these dimensions rather than trusting the flag alone.
+
+Ollama is the fixed lighter local-path comparator for this campaign. A direct SGLang-vLLM performance claim does not require Ollama to share an identical GPU-serving topology, but an Ollama run must still retain its exact model/revision/quantization and environment. If the same representative model representation cannot be made sufficiently equivalent, record the Ollama run as non-comparable and state why rather than manufacturing normalized numbers.
 
 ## Worker-side execution sequence
 
@@ -131,6 +136,7 @@ platform-inference-backend-evaluation \
   --campaign config/inference-backend-evaluation.sglang-v0.5.19.json \
   --report evidence/sglang-single-gpu.json \
   --report evidence/vllm-single-gpu.json \
+  --report evidence/ollama-local-path.json \
   --output evidence/issue-860-readiness.json \
   --require-ready
 ```
@@ -143,7 +149,7 @@ Exit codes are:
 
 The gate requires:
 
-- the SGLang report revision to equal the full pinned campaign commit;
+- every submitted report for a pinned SGLang/vLLM/Ollama backend to equal that backend's full campaign commit;
 - all mandatory SGLang contract cases to have a latest passing result;
 - all mandatory SGLang failure/recovery cases to have a latest passing result;
 - at least one decision-eligible SGLang-vLLM performance pair whose comparison dimensions actually match.
@@ -152,7 +158,7 @@ Latest-result selection uses absolute ISO-8601 timestamps rather than string ord
 
 Placement coverage is reported separately so missing hardware remains visible rather than being silently converted into success.
 
-Passing the readiness gate means the repository has enough evidence to make the policy choice. It does **not** automatically choose among `supported_optional`, `experimental_only`, and `reject/defer`; that final classification must reflect the measured resource/performance/operational results and the support burden.
+Passing the readiness gate means the repository has enough core evidence to make the SGLang-vLLM policy choice. It does **not** automatically choose among `supported_optional`, `experimental_only`, and `reject/defer`; that final classification must also reflect the measured resource/performance/operational results, the lighter local-path evidence and the support burden.
 
 ## Current blocker
 
