@@ -21,7 +21,11 @@ from ai_multi_agent_platform.application_distribution import (
     ReleaseVisibility,
     release_manifest,
 )
-from ai_multi_agent_platform.configuration import LocalSecretProvider, SecretAccessContext, SecretMaterial
+from ai_multi_agent_platform.configuration import (
+    LocalSecretProvider,
+    SecretAccessContext,
+    SecretMaterial,
+)
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.domain import OwnerRef, new_id
