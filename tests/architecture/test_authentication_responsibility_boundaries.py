@@ -43,7 +43,9 @@ def _method(class_node: ast.ClassDef, name: str) -> ast.FunctionDef | ast.AsyncF
     raise AssertionError(f"{class_node.name} does not define {name}")
 
 
-def _assert_delegate(method: ast.FunctionDef | ast.AsyncFunctionDef, component: str, call: str) -> None:
+def _assert_delegate(
+    method: ast.FunctionDef | ast.AsyncFunctionDef, component: str, call: str
+) -> None:
     calls = [node for node in ast.walk(method) if isinstance(node, ast.Call)]
     assert any(
         isinstance(item.func, ast.Attribute)
@@ -139,10 +141,7 @@ def test_focused_authentication_components_do_not_depend_back_on_facade() -> Non
 def test_security_sensitive_mechanics_are_not_reimplemented_in_facade() -> None:
     tree = _tree(FACADE)
     imported_modules = {
-        alias.name
-        for node in tree.body
-        if isinstance(node, ast.Import)
-        for alias in node.names
+        alias.name for node in tree.body if isinstance(node, ast.Import) for alias in node.names
     }
     assert "hmac" not in imported_modules
     assert "secrets" not in imported_modules
