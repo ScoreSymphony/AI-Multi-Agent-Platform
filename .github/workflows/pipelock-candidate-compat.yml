@@ -6,6 +6,8 @@ on:
       - ".github/workflows/pipelock-candidate-compat.yml"
       - "src/ai_multi_agent_platform/adapters/pipelock.py"
       - "tests/test_issue_730_pipelock_evaluation.py"
+      - "tests/test_issue_730_pipelock_transports.py"
+      - "tests/fixtures/mcp_*server.py"
       - "docs/upstream/PIPELOCK_CORE_*.md"
       - "upstream/pipelock-core.yaml"
   workflow_dispatch:
@@ -44,6 +46,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
+          python -m pip install "websockets==15.0.1"
 
       - name: Verify reviewed license and build boundaries
         shell: bash
@@ -115,6 +118,14 @@ jobs:
             -k pipelock_mcp_stdio_wraps_canonical_invocation_path \
             --junitxml="$RUNNER_TEMP/pipelock-mcp-stdio-junit.xml"
 
+      - name: Exercise platform MCP HTTP and WebSocket upstreams through pinned Pipelock
+        env:
+          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-audit.yaml
+        run: |
+          pytest -q tests/test_issue_730_pipelock_transports.py \
+            --junitxml="$RUNNER_TEMP/pipelock-mcp-remote-junit.xml"
+
       - name: Exercise audit-only HTTP fetch path
         working-directory: .candidate/pipelock
         shell: bash
@@ -141,6 +152,41 @@ jobs:
           done
           test "$success" -eq 1
           test -s "$RUNNER_TEMP/pipelock-fetch-output.txt"
+
+      - name: Exercise HTTP forward and HTTPS CONNECT paths
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOME="$RUNNER_TEMP/pipelock-home" ./pipelock run \
+            --config "$RUNNER_TEMP/pipelock-audit.yaml" \
+            > "$RUNNER_TEMP/pipelock-forward-connect.log" 2>&1 &
+          pipelock_pid=$!
+          trap 'kill "$pipelock_pid" 2>/dev/null || true' EXIT
+
+          success=0
+          for _ in $(seq 1 20); do
+            if no_proxy= NO_PROXY= http_proxy=http://127.0.0.1:8888 \
+              curl --fail --silent --show-error --max-time 20 \
+              --output "$RUNNER_TEMP/pipelock-forward-output.txt" \
+              --write-out '%{time_total}\n' \
+              http://example.com/ \
+              > "$RUNNER_TEMP/pipelock-forward-latency-seconds.txt"; then
+              success=1
+              break
+            fi
+            sleep 1
+          done
+          test "$success" -eq 1
+          test -s "$RUNNER_TEMP/pipelock-forward-output.txt"
+
+          no_proxy= NO_PROXY= https_proxy=http://127.0.0.1:8888 \
+            curl --fail --silent --show-error --max-time 20 \
+            --output "$RUNNER_TEMP/pipelock-connect-output.txt" \
+            --write-out '%{time_total}\n' \
+            https://example.com/ \
+            > "$RUNNER_TEMP/pipelock-connect-latency-seconds.txt"
+          test -s "$RUNNER_TEMP/pipelock-connect-output.txt"
 
       - name: Verify signed allow receipt on controlled audit pilot
         working-directory: .candidate/pipelock
@@ -236,12 +282,16 @@ jobs:
             ${{ runner.temp }}/pipelock-buildinfo.txt
             ${{ runner.temp }}/pipelock-candidate-sha256.txt
             ${{ runner.temp }}/pipelock-mcp-stdio-junit.xml
+            ${{ runner.temp }}/pipelock-mcp-remote-junit.xml
             ${{ runner.temp }}/pipelock-fetch-latency-seconds.txt
+            ${{ runner.temp }}/pipelock-forward-latency-seconds.txt
+            ${{ runner.temp }}/pipelock-connect-latency-seconds.txt
             ${{ runner.temp }}/pipelock-evidence-files.txt
             ${{ runner.temp }}/pipelock-receipt-action-id.txt
             ${{ runner.temp }}/pipelock-receipt-sha256.txt
             ${{ runner.temp }}/pipelock-receipt-verification.txt
             ${{ runner.temp }}/pipelock-signing.pub
             ${{ runner.temp }}/pipelock-audit.log
+            ${{ runner.temp }}/pipelock-forward-connect.log
             ${{ runner.temp }}/pipelock-receipts.log
           if-no-files-found: error
