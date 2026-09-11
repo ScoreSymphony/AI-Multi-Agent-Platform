@@ -203,10 +203,7 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
                     command=[
                         "python",
                         "-c",
-                        (
-                            "from pathlib import Path; "
-                            "Path('out.txt').write_text('artifact-canary')"
-                        ),
+                        ("from pathlib import Path; Path('out.txt').write_text('artifact-canary')"),
                     ],
                     cwd=remote_workspace,
                 )
@@ -215,8 +212,7 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
                 ReadFileRequest(path=artifact_path, encoding="utf-8")
             )
             evidence["artifact_round_trip"] = bool(
-                artifact_response.exit_code == 0
-                and read_back.content == "artifact-canary"
+                artifact_response.exit_code == 0 and read_back.content == "artifact-canary"
             )
 
             egress = await deployment.runtime.execute(
@@ -251,8 +247,7 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
     )
     if network_none:
         evidence["passed_core_semantics"] = bool(
-            evidence["passed_core_semantics"]
-            and evidence["network_none_blocked_egress"]
+            evidence["passed_core_semantics"] and evidence["network_none_blocked_egress"]
         )
     return evidence
 
@@ -271,9 +266,7 @@ async def _main() -> int:
         if args.backend == "local":
             evidence = await _run_local()
         else:
-            evidence = await _run_docker(
-                network_none=args.backend == "docker-network-none"
-            )
+            evidence = await _run_docker(network_none=args.backend == "docker-network-none")
     except Exception as exc:
         evidence = {
             "backend": args.backend,
