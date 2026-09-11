@@ -75,7 +75,10 @@ class ApplicationDistributionService(_GateApplicationDistributionService):
         release: ApplicationRelease,
         output: dict[str, JsonValue],
     ) -> ApplicationRelease:
-        build = output.get("application_build")
+        nested = output.get("output")
+        if not isinstance(nested, dict):
+            return release
+        build = nested.get("application_build")
         if not isinstance(build, dict):
             return release
         artifact_id = build.get("artifact_id")
