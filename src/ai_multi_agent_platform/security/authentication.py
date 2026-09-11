@@ -55,7 +55,7 @@ from .authentication_tokens import (
     validate_actor_reference,
     validate_credential_kind,
 )
-from .authorization import ActorIdentity, ActorType
+from .authorization import ActorType
 
 
 class LocalAuthenticationService:
