@@ -4,7 +4,7 @@
 The live capture harness intentionally records facts rather than declaring Agent-Sandbox safe.
 This companion gate makes that separation machine-readable. It combines the raw Kubernetes/provider
 capture with an operator-supplied scenario manifest and refuses to report decision readiness while
-required scenarios remain unrun or hard-gate evidence is missing.
+required scenarios or representative-environment metadata remain incomplete.
 
 It does *not* choose the final #798 recommendation. A complete campaign may contain failures and
 still be decision-ready because `reject/defer` is a valid evidence-based outcome.
@@ -16,11 +16,12 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 EVALUATED_REVISION = "d1b7ac007debcb1ba8de91c76afb49bee90d096a"
 TERMINAL_SCENARIO_STATUSES = frozenset({"pass", "fail", "unsupported"})
 ALLOWED_SCENARIO_STATUSES = TERMINAL_SCENARIO_STATUSES | {"not_run"}
+PROFILE_KINDS = frozenset({"upstream-default", "platform-hardened-derivative"})
 
 REQUIRED_SCENARIOS: tuple[str, ...] = (
     "benign_shell_artifact_roundtrip",
@@ -43,7 +44,33 @@ REQUIRED_SCENARIOS: tuple[str, ...] = (
     "malicious_repository_fixture",
 )
 
-type Status = Literal["pass", "fail", "not_run"]
+REQUIRED_ENVIRONMENT_FIELDS: tuple[str, ...] = (
+    "capture_date",
+    "host_class",
+    "vcpu",
+    "memory_gib",
+    "disk_gib",
+    "linux_distribution",
+    "kernel",
+    "kubernetes_distribution",
+    "kubernetes_version",
+    "container_runtime",
+    "runtime_class",
+    "agent_sandbox_revision",
+    "agent_sandbox_image_digest",
+    "sandbox_image_digest",
+    "platform_commit",
+    "cni",
+    "profile_kind",
+    "profile_revision",
+)
+
+_NUMERIC_ENVIRONMENT_FIELDS = frozenset({"vcpu", "memory_gib", "disk_gib"})
+_DIGEST_ENVIRONMENT_FIELDS = frozenset(
+    {"agent_sandbox_image_digest", "sandbox_image_digest"}
+)
+
+Status: TypeAlias = Literal["pass", "fail", "not_run"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +261,48 @@ def _hard_gates(evidence: dict[str, Any]) -> dict[str, GateResult]:
     }
 
 
+def _validate_environment(campaign: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    raw = campaign.get("environment")
+    if raw is None:
+        return {}, list(REQUIRED_ENVIRONMENT_FIELDS)
+    if not isinstance(raw, dict):
+        raise ValueError("campaign environment must be an object")
+
+    unknown = sorted(set(raw) - set(REQUIRED_ENVIRONMENT_FIELDS))
+    if unknown:
+        raise ValueError(f"campaign contains unknown environment fields: {', '.join(unknown)}")
+
+    normalized: dict[str, Any] = {}
+    missing: list[str] = []
+    for name in REQUIRED_ENVIRONMENT_FIELDS:
+        value = raw.get(name)
+        if value is None or value == "":
+            missing.append(name)
+            continue
+        if name in _NUMERIC_ENVIRONMENT_FIELDS:
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+                raise ValueError(f"campaign environment {name} must be a positive number")
+        elif not isinstance(value, str) or not value.strip():
+            raise ValueError(f"campaign environment {name} must be a non-empty string")
+        normalized[name] = value
+
+    revision = normalized.get("agent_sandbox_revision")
+    if revision is not None and revision != EVALUATED_REVISION:
+        raise ValueError("campaign environment Agent-Sandbox revision does not match #798 pin")
+
+    profile_kind = normalized.get("profile_kind")
+    if profile_kind is not None and profile_kind not in PROFILE_KINDS:
+        allowed = ", ".join(sorted(PROFILE_KINDS))
+        raise ValueError(f"campaign environment profile_kind must be one of: {allowed}")
+
+    for field in _DIGEST_ENVIRONMENT_FIELDS:
+        value = normalized.get(field)
+        if value is not None and "sha256:" not in value:
+            raise ValueError(f"campaign environment {field} must contain a sha256 digest")
+
+    return normalized, missing
+
+
 def _validate_campaign(campaign: dict[str, Any]) -> dict[str, dict[str, Any]]:
     if campaign.get("schema_version") != 1:
         raise ValueError("campaign schema_version must be 1")
@@ -280,6 +349,7 @@ def _validate_campaign(campaign: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def evaluate(evidence: dict[str, Any], campaign: dict[str, Any]) -> dict[str, Any]:
     _require_issue_identity(evidence)
     hard = _hard_gates(evidence)
+    environment, missing_environment = _validate_environment(campaign)
     scenarios = _validate_campaign(campaign)
 
     hard_failed = sorted(name for name, result in hard.items() if result.status == "fail")
@@ -295,7 +365,8 @@ def evaluate(evidence: dict[str, Any], campaign: dict[str, Any]) -> dict[str, An
     )
 
     campaign_complete = not scenario_pending
-    decision_ready = campaign_complete and not hard_missing
+    environment_complete = not missing_environment
+    decision_ready = campaign_complete and environment_complete and not hard_missing
     protected_profile_gate = (
         "fail" if hard_failed else "incomplete" if hard_missing else "pass"
     )
@@ -314,6 +385,11 @@ def evaluate(evidence: dict[str, Any], campaign: dict[str, Any]) -> dict[str, An
             and not scenario_unsupported
         ),
         "hard_gates": {name: result.as_dict() for name, result in hard.items()},
+        "environment": {
+            "complete": environment_complete,
+            "metadata": environment,
+            "missing": missing_environment,
+        },
         "campaign": {
             "complete": campaign_complete,
             "scenarios": scenarios,
@@ -324,16 +400,18 @@ def evaluate(evidence: dict[str, Any], campaign: dict[str, Any]) -> dict[str, An
         "blockers": {
             "hard_gate_failures": hard_failed,
             "missing_hard_gate_evidence": hard_missing,
+            "missing_environment_metadata": missing_environment,
             "failed_scenarios": scenario_failed,
             "unsupported_scenarios": scenario_unsupported,
             "pending_scenarios": scenario_pending,
         },
         "interpretation": (
-            "decision_ready means the required evaluation campaign is complete enough to choose "
-            "adopt, optional_provider_only, or reject/defer. It does not mean the provider is safe "
-            "or adopted. adoption_eligible_from_this_gate is intentionally stricter and becomes "
-            "false for any hard-gate failure, failed scenario, unsupported required scenario, or "
-            "missing evidence."
+            "decision_ready means the required evaluation campaign, representative-environment "
+            "metadata and hard-gate capture are complete enough to choose adopt, "
+            "optional_provider_only, or reject/defer. It does not mean the provider is safe or "
+            "adopted. adoption_eligible_from_this_gate is intentionally stricter and becomes "
+            "false for any hard-gate failure, failed scenario, unsupported required scenario, "
+            "missing representative-environment metadata, or missing hard-gate evidence."
         ),
     }
 
