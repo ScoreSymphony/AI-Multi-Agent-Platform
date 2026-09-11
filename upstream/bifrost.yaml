@@ -23,6 +23,8 @@ compatibility_constraints:
   - "Bifrost provider/model names and gateway routing metadata must stay inside adapter/deployment configuration and namespaced diagnostics."
   - "Gateway-side routing, retries, weighted balancing and fallbacks must be disabled or constrained so they cannot escape the candidate set already allowed by platform policy."
   - "A generic OpenAI-compatible provider may target Bifrost directly when no Bifrost-specific wrapper metadata is required."
+  - "Upstream issue #3458 is open as of 2026-09-12 and reports eager providers[0] selection for bare-model catalog resolution before governance/routing. The first supported platform profile must therefore use an explicit provider/model target and must not rely on bare-model catalog routing until the reviewed Bifrost revision is proven conformant."
+  - "Upstream issue #2351 remains open/reopened and reports custom-provider virtual-key behavior requiring an explicit model allowlist on the originally reported version. Do not infer that the reviewed v2.1.1 transport is affected or fixed; test virtual-key/custom-provider governance on the reviewed pin before supporting that mode."
 security_constraints:
   - "GHSA-w98g-5w9p-p3rc / CVE-2026-55245 is a high-severity SSRF advisory affecting github.com/maximhq/bifrost/core before v1.5.17; the reviewed v2.1.1 transport bundles core v1.8.6 and is after the fix."
   - "The advisory demonstrates that local/self-hosted gateway placement is not itself a security boundary; URL-fetch behavior requires explicit regression coverage for loopback, private, link-local, metadata, redirect, DNS-rebinding, CGNAT, 6to4, NAT64 and site-local targets."
@@ -39,7 +41,7 @@ resource_constraints:
   - "A gateway introduces at least one additional process/network hop and therefore must be measured against direct adapters on representative local endpoints."
 required_for_baseline: false
 recurring_paid_service_required: false
-update_review_method: "Before changing the reviewed pin, verify the exact tag/commit and license, review GitHub Security Advisories and release notes, confirm the bundled core/framework versions and current supported-version security policy, rerun OpenAI-compatible conformance, streaming/tool-calling, secret-redaction, SSRF/egress, restart/upgrade and direct-vs-gateway performance tests."
+update_review_method: "Before changing the reviewed pin, verify the exact tag/commit and license, review GitHub Security Advisories, open routing/governance issues and release notes, confirm the bundled core/framework versions and current supported-version security policy, rerun OpenAI-compatible conformance, streaming/tool-calling, secret-redaction, SSRF/egress, restart/upgrade and direct-vs-gateway performance tests."
 exit_replacement_strategy: "Remove the Bifrost deployment/evaluation configuration and point canonical model configurations at direct providers, LiteLLM or another ModelProvider adapter. Canonical Agents, Tasks, model configuration IDs, ModelRegistry state and ModelRouter policy remain valid."
 adr: ""
 notes: "Issue #859 evaluation. Current classification is experimental_only until the required live compatibility, security, restart/upgrade and representative local performance evidence is recorded."
