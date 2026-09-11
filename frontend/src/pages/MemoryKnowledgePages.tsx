@@ -8,6 +8,7 @@ import {
   type MemoryOrigin,
   type MemoryRetention,
   type MemoryScope,
+  type MemoryType,
 } from "../api/memoryKnowledge";
 import type { JsonValue, Page } from "../api/types";
 import { useCursorPagination } from "../app/pagination";
@@ -40,6 +41,14 @@ const DURABLE_MEMORY_SCOPES: Exclude<MemoryScope, "short_term">[] = [
   "historical",
 ];
 const MEMORY_ORIGINS: MemoryOrigin[] = ["user-authored", "agent-derived", "imported"];
+const SEMANTIC_MEMORY_TYPES: Exclude<MemoryType, "unclassified">[] = [
+  "episodic",
+  "semantic",
+  "procedural",
+  "preference",
+  "reflective",
+];
+const MEMORY_TYPES: MemoryType[] = [...SEMANTIC_MEMORY_TYPES, "unclassified"];
 const MEMORY_RETENTIONS: MemoryRetention[] = [
   "ephemeral",
   "task_lifetime",
@@ -50,11 +59,40 @@ const MEMORY_RETENTIONS: MemoryRetention[] = [
 ];
 const KNOWLEDGE_SEARCH_MODES: KnowledgeSearchMode[] = ["keyword", "semantic", "hybrid"];
 
+export type MemoryTypeFilter = MemoryType | "all";
+
+export interface MemoryQueryIdentity {
+  scope: MemoryScope;
+  scopeId: string;
+  projectId: string;
+  search: string;
+  memoryType: MemoryTypeFilter;
+  includeExpired: boolean;
+  includeSuperseded: boolean;
+}
+
+export function memoryTypeFilterValue(value: MemoryTypeFilter): MemoryType | undefined {
+  return value === "all" ? undefined : value;
+}
+
+export function buildMemoryQueryKey(input: MemoryQueryIdentity): string {
+  return [
+    input.scope,
+    input.scopeId.trim(),
+    input.projectId.trim(),
+    input.search.trim(),
+    input.memoryType,
+    input.includeExpired,
+    input.includeSuperseded,
+  ].join("|");
+}
+
 export function MemoryPage({ client }: { client: MemoryKnowledgeClient }) {
   const [scope, setScope] = useState<MemoryScope>("user");
   const [scopeId, setScopeId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [search, setSearch] = useState("");
+  const [memoryType, setMemoryType] = useState<MemoryTypeFilter>("all");
   const [includeExpired, setIncludeExpired] = useState(false);
   const [includeSuperseded, setIncludeSuperseded] = useState(false);
   const [page, setPage] = useState<Page<CanonicalMemoryEntry> | null>(null);
@@ -64,8 +102,16 @@ export function MemoryPage({ client }: { client: MemoryKnowledgeClient }) {
   const [creating, setCreating] = useState(false);
 
   const queryKey = useMemo(
-    () => [scope, scopeId.trim(), projectId.trim(), search.trim(), includeExpired, includeSuperseded].join("|"),
-    [includeExpired, includeSuperseded, projectId, scope, scopeId, search],
+    () => buildMemoryQueryKey({
+      scope,
+      scopeId,
+      projectId,
+      search,
+      memoryType,
+      includeExpired,
+      includeSuperseded,
+    }),
+    [includeExpired, includeSuperseded, memoryType, projectId, scope, scopeId, search],
   );
   const pagination = useCursorPagination(`memory:${queryKey}`);
 
@@ -75,6 +121,7 @@ export function MemoryPage({ client }: { client: MemoryKnowledgeClient }) {
         scope,
         scopeId: blankToUndefined(scopeId),
         projectId: blankToUndefined(projectId),
+        memoryType: memoryTypeFilterValue(memoryType),
         search: blankToUndefined(search),
         includeExpired,
         includeSuperseded,
@@ -87,7 +134,17 @@ export function MemoryPage({ client }: { client: MemoryKnowledgeClient }) {
       setError(nextError);
       setPage(null);
     }
-  }, [client, includeExpired, includeSuperseded, pagination.cursor, projectId, scope, scopeId, search]);
+  }, [
+    client,
+    includeExpired,
+    includeSuperseded,
+    memoryType,
+    pagination.cursor,
+    projectId,
+    scope,
+    scopeId,
+    search,
+  ]);
 
   useEffect(() => {
     void load();
@@ -96,10 +153,14 @@ export function MemoryPage({ client }: { client: MemoryKnowledgeClient }) {
   async function createMemory(value: MemoryCreateDraft) {
     setCreating(true);
     try {
+      if (!value.memoryType) {
+        throw new Error("Memory Type is required for explicit Memory creation");
+      }
       const createdMemory = await client.createMemory({
         scope: value.scope,
         scopeId: value.scopeId.trim(),
         origin: value.origin,
+        memoryType: value.memoryType,
         value: parseJsonValue(value.valueJson, "Memory value"),
         retention: value.retention || undefined,
         expiresAt: blankToUndefined(value.expiresAt),
@@ -123,8 +184,8 @@ export function MemoryPage({ client }: { client: MemoryKnowledgeClient }) {
         <p className="eyebrow">Scoped durable context</p>
         <h1>Memory</h1>
         <p>
-          Canonical scoped Memory content. Chat, Tasks and Events are not silently promoted here;
-          durable entries are created or promoted explicitly and retain canonical provenance.
+          Canonical scoped Memory content. Scope answers where / for whom an entry belongs; Memory
+          Type answers what kind of Memory it represents. These dimensions are independent.
         </p>
       </header>
 
@@ -134,6 +195,20 @@ export function MemoryPage({ client }: { client: MemoryKnowledgeClient }) {
             <span>Scope</span>
             <select value={scope} onChange={(event) => setScope(event.target.value as MemoryScope)}>
               {MEMORY_SCOPES.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span>Memory Type</span>
+            <select
+              value={memoryType}
+              onChange={(event) => setMemoryType(event.target.value as MemoryTypeFilter)}
+            >
+              <option value="all">all types</option>
+              {MEMORY_TYPES.map((value) => (
+                <option key={value} value={value}>
+                  {value === "unclassified" ? "unclassified (legacy compatibility)" : value}
+                </option>
+              ))}
             </select>
           </label>
           <label className="field">
@@ -159,6 +234,10 @@ export function MemoryPage({ client }: { client: MemoryKnowledgeClient }) {
             <span><input type="checkbox" checked={includeSuperseded} onChange={(event) => setIncludeSuperseded(event.target.checked)} /> Include superseded</span>
           </label>
         </div>
+        <p className="muted">
+          Scope identifies where / for whom Memory belongs. Memory Type is the independent canonical
+          semantic classification. “All types” omits the type filter.
+        </p>
       </Card>
 
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
@@ -179,14 +258,19 @@ export function MemoryPage({ client }: { client: MemoryKnowledgeClient }) {
 
       <Card title="Create Memory explicitly">
         <p>
-          Creation requires an explicit canonical scope ID and origin. For Project-scoped Memory use
-          <code>workspace</code> with the canonical Project ID as the scope ID.
+          Creation requires an explicit canonical scope ID, origin and Memory Type. For Project-scoped
+          Memory use <code>workspace</code> with the canonical Project ID as the scope ID.
+        </p>
+        <p className="muted">
+          <code>unclassified</code> is available only as an explicit legacy/import compatibility
+          choice; normal interactive creation should select the semantic type that actually applies.
         </p>
         {actionError ? <ErrorState error={actionError} /> : null}
         <MemoryCreateForm disabled={creating} onSubmit={createMemory} />
         {created ? (
           <p role="status">
             Created <AppLink href={`/memory/${encodeURIComponent(created.id)}`}><CanonicalId value={created.id} /></AppLink>
+            {" · type "}<code>{created.memory_type}</code>
           </p>
         ) : null}
       </Card>
@@ -304,12 +388,18 @@ export function MemoryDetailPage({
       {replacement ? (
         <p role="status">
           New canonical entry: <AppLink href={`/memory/${encodeURIComponent(replacement.id)}`}><CanonicalId value={replacement.id} /></AppLink>
+          {" · type "}<code>{replacement.memory_type}</code>
         </p>
       ) : null}
 
-      <Card title="Scope, provenance and retention">
+      <Card title="Scope, type, provenance and retention">
+        <p className="muted">
+          Scope identifies where / for whom this Memory belongs; Memory Type independently identifies
+          what kind of Memory it represents.
+        </p>
         <dl className="detail-grid">
           <Detail label="Scope">{entry.scope}</Detail>
+          <MemoryTypeDetail entry={entry} />
           <Detail label="Scope ID"><CanonicalId value={entry.scope_id} /></Detail>
           <Detail label="Project">{entry.project_id ? <CanonicalId value={entry.project_id} /> : "—"}</Detail>
           <Detail label="Owner"><code>{entry.owner_ref}</code></Detail>
@@ -333,13 +423,20 @@ export function MemoryDetailPage({
       </Card>
 
       <Card title="Supersede with an explicit update">
-        <p>Updates create a new canonical Memory ID rather than rewriting this entry in place.</p>
+        <p>
+          Updates create a new canonical Memory ID rather than rewriting this entry in place. They
+          preserve Memory Type <code>{entry.memory_type}</code>; semantic reclassification requires a
+          new derived Memory with provenance to its source evidence.
+        </p>
         <MemoryUpdateForm entry={entry} disabled={busy} onSubmit={updateMemory} />
       </Card>
 
       {entry.scope === "short_term" ? (
         <Card title="Promote short-term Memory">
-          <p>Promotion is explicit and preserves a provenance reference to this short-term entry.</p>
+          <p>
+            Promotion is explicit, preserves Memory Type <code>{entry.memory_type}</code>, and keeps a
+            provenance reference to this short-term entry.
+          </p>
           <MemoryPromoteForm disabled={busy} onSubmit={promoteMemory} />
         </Card>
       ) : null}
@@ -642,10 +739,11 @@ function KnowledgeSearchPanel({ client }: { client: MemoryKnowledgeClient }) {
   );
 }
 
-interface MemoryCreateDraft {
+export interface MemoryCreateDraft {
   scope: MemoryScope;
   scopeId: string;
   origin: MemoryOrigin;
+  memoryType: MemoryType | "";
   valueJson: string;
   retention: MemoryRetention | "";
   expiresAt: string;
@@ -654,11 +752,12 @@ interface MemoryCreateDraft {
   metadataJson: string;
 }
 
-function MemoryCreateForm({ disabled, onSubmit }: { disabled: boolean; onSubmit: (draft: MemoryCreateDraft) => Promise<void> }) {
+export function MemoryCreateForm({ disabled, onSubmit }: { disabled: boolean; onSubmit: (draft: MemoryCreateDraft) => Promise<void> }) {
   const [draft, setDraft] = useState<MemoryCreateDraft>({
     scope: "user",
     scopeId: "",
     origin: "user-authored",
+    memoryType: "",
     valueJson: "{}",
     retention: "",
     expiresAt: "",
@@ -676,6 +775,14 @@ function MemoryCreateForm({ disabled, onSubmit }: { disabled: boolean; onSubmit:
       <label className="field"><span>Scope</span><select value={draft.scope} onChange={(event) => set("scope", event.target.value)}>{MEMORY_SCOPES.map((scope) => <option key={scope} value={scope}>{scope}</option>)}</select></label>
       <label className="field"><span>Scope ID</span><input required value={draft.scopeId} onChange={(event) => set("scopeId", event.target.value)} /></label>
       <label className="field"><span>Origin</span><select value={draft.origin} onChange={(event) => set("origin", event.target.value)}>{MEMORY_ORIGINS.map((origin) => <option key={origin} value={origin}>{origin}</option>)}</select></label>
+      <label className="field">
+        <span>Memory Type</span>
+        <select required value={draft.memoryType} onChange={(event) => set("memoryType", event.target.value)}>
+          <option value="" disabled>Select a Memory Type</option>
+          {SEMANTIC_MEMORY_TYPES.map((memoryType) => <option key={memoryType} value={memoryType}>{memoryType}</option>)}
+          <option value="unclassified">unclassified (legacy/import compatibility)</option>
+        </select>
+      </label>
       <label className="field"><span>Retention (optional)</span><select value={draft.retention} onChange={(event) => set("retention", event.target.value)}><option value="">server default</option>{MEMORY_RETENTIONS.map((retention) => <option key={retention} value={retention}>{retention}</option>)}</select></label>
       <label className="field"><span>Expires at ISO timestamp (optional)</span><input value={draft.expiresAt} onChange={(event) => set("expiresAt", event.target.value)} /></label>
       <label className="field"><span>Project ID (optional)</span><input value={draft.projectId} onChange={(event) => set("projectId", event.target.value)} /></label>
@@ -687,7 +794,7 @@ function MemoryCreateForm({ disabled, onSubmit }: { disabled: boolean; onSubmit:
   );
 }
 
-function MemoryUpdateForm({ entry, disabled, onSubmit }: { entry: CanonicalMemoryEntry; disabled: boolean; onSubmit: (valueJson: string, classification: string, metadataJson: string) => Promise<void> }) {
+export function MemoryUpdateForm({ entry, disabled, onSubmit }: { entry: CanonicalMemoryEntry; disabled: boolean; onSubmit: (valueJson: string, classification: string, metadataJson: string) => Promise<void> }) {
   const [valueJson, setValueJson] = useState(JSON.stringify(entry.value, null, 2));
   const [classification, setClassification] = useState(entry.classification ?? "");
   const [metadataJson, setMetadataJson] = useState(JSON.stringify(entry.metadata, null, 2));
@@ -705,7 +812,7 @@ function MemoryUpdateForm({ entry, disabled, onSubmit }: { entry: CanonicalMemor
   );
 }
 
-function MemoryPromoteForm({ disabled, onSubmit }: { disabled: boolean; onSubmit: (scope: Exclude<MemoryScope, "short_term">, scopeId: string, projectId: string) => Promise<void> }) {
+export function MemoryPromoteForm({ disabled, onSubmit }: { disabled: boolean; onSubmit: (scope: Exclude<MemoryScope, "short_term">, scopeId: string, projectId: string) => Promise<void> }) {
   const [scope, setScope] = useState<Exclude<MemoryScope, "short_term">>("user");
   const [scopeId, setScopeId] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -807,14 +914,15 @@ interface KnowledgeSearchDraft {
   projectId: string;
 }
 
-function MemoryTable({ entries }: { entries: CanonicalMemoryEntry[] }) {
+export function MemoryTable({ entries }: { entries: CanonicalMemoryEntry[] }) {
   if (entries.length === 0) return <EmptyState title="No Memory entries" detail="No authorized Memory entries match this scope and query." />;
   return (
-    <div className="table-wrap"><table><thead><tr><th>Memory</th><th>Scope</th><th>Origin</th><th>Retention</th><th>Supersession</th></tr></thead><tbody>
+    <div className="table-wrap"><table><thead><tr><th>Memory</th><th>Scope</th><th>Type</th><th>Origin</th><th>Retention</th><th>Supersession</th></tr></thead><tbody>
       {entries.map((entry) => (
         <tr key={entry.id}>
           <td><AppLink href={`/memory/${encodeURIComponent(entry.id)}`}><CanonicalId value={entry.id} /></AppLink><br /><span className="muted">{formatTimestamp(entry.created_at)}</span></td>
           <td>{entry.scope}<br /><CanonicalId value={entry.scope_id} /></td>
+          <td>{entry.memory_type}</td>
           <td>{entry.origin}</td>
           <td>{entry.retention}{entry.expires_at ? <><br /><span className="muted">{formatTimestamp(entry.expires_at)}</span></> : null}</td>
           <td>{entry.superseded_by_memory_id ? <>superseded by <CanonicalId value={entry.superseded_by_memory_id} /></> : entry.supersedes_memory_id ? <>supersedes <CanonicalId value={entry.supersedes_memory_id} /></> : "current"}</td>
@@ -822,6 +930,10 @@ function MemoryTable({ entries }: { entries: CanonicalMemoryEntry[] }) {
       ))}
     </tbody></table></div>
   );
+}
+
+export function MemoryTypeDetail({ entry }: { entry: CanonicalMemoryEntry }) {
+  return <Detail label="Memory Type">{entry.memory_type}</Detail>;
 }
 
 function KnowledgeSourceTable({ sources }: { sources: CanonicalKnowledgeSource[] }) {
