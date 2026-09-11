@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -9,6 +11,7 @@ from ai_multi_agent_platform.benchmarking.inference_backend_evaluation import (
     assess_inference_backend_evaluation,
     validate_inference_backend_evaluation_report,
 )
+from ai_multi_agent_platform.benchmarking.inference_backend_evaluation_cli import main as cli_main
 
 CAMPAIGN = {
     "campaign_id": "issue-860-sglang-v0.5.19",
@@ -124,6 +127,10 @@ def _report(backend: str) -> dict[str, Any]:
     }
 
 
+def _write_json(path: Path, payload: object) -> None:
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def test_report_validator_accepts_schema_complete_measured_report() -> None:
     validate_inference_backend_evaluation_report(_report("sglang"))
 
@@ -182,3 +189,57 @@ def test_report_validator_rejects_invalid_raw_evidence_hash() -> None:
 
     with pytest.raises(ValueError, match="raw_evidence"):
         validate_inference_backend_evaluation_report(report)
+
+
+def test_cli_writes_machine_readable_ready_result(tmp_path: Path) -> None:
+    campaign_path = tmp_path / "campaign.json"
+    sglang_path = tmp_path / "sglang.json"
+    vllm_path = tmp_path / "vllm.json"
+    output_path = tmp_path / "readiness.json"
+    _write_json(campaign_path, CAMPAIGN)
+    _write_json(sglang_path, _report("sglang"))
+    _write_json(vllm_path, _report("vllm"))
+
+    exit_code = cli_main(
+        [
+            "--campaign",
+            str(campaign_path),
+            "--report",
+            str(sglang_path),
+            "--report",
+            str(vllm_path),
+            "--output",
+            str(output_path),
+            "--require-ready",
+        ]
+    )
+
+    result = json.loads(output_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert result["ready_for_decision"] is True
+    assert result["comparable_sglang_vllm_pairs"] == 1
+
+
+def test_cli_require_ready_returns_three_for_incomplete_evidence(tmp_path: Path) -> None:
+    campaign_path = tmp_path / "campaign.json"
+    sglang_path = tmp_path / "sglang.json"
+    output_path = tmp_path / "readiness.json"
+    _write_json(campaign_path, CAMPAIGN)
+    _write_json(sglang_path, _report("sglang"))
+
+    exit_code = cli_main(
+        [
+            "--campaign",
+            str(campaign_path),
+            "--report",
+            str(sglang_path),
+            "--output",
+            str(output_path),
+            "--require-ready",
+        ]
+    )
+
+    result = json.loads(output_path.read_text(encoding="utf-8"))
+    assert exit_code == 3
+    assert result["ready_for_decision"] is False
+    assert "no comparable decision-eligible SGLang-vLLM performance pair" in result["blockers"]
