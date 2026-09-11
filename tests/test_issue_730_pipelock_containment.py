@@ -17,8 +17,8 @@ PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
 PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_730_CONFIG")
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 MCP_NETWORK_PROBE = FIXTURE_DIR / "mcp_stdio_network_probe_server.py"
-NO_NETWORK_WRAPPER = (
-    Path(__file__).parents[0] / ".." / "scripts" / "ci" / "issue502_no_network_exec.py"
+INET_SOCKET_WRAPPER = (
+    Path(__file__).parents[0] / ".." / "scripts" / "ci" / "issue730_inet_socket_deny_exec.py"
 )
 
 
@@ -80,7 +80,7 @@ async def _invoke_probe(
     if contained:
         child_command = [
             sys.executable,
-            str(NO_NETWORK_WRAPPER.resolve()),
+            str(INET_SOCKET_WRAPPER.resolve()),
             "--",
             *child_command,
         ]
