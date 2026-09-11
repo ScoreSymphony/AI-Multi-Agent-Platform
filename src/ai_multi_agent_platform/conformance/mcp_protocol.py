@@ -14,7 +14,7 @@ from enum import StrEnum
 from pathlib import Path
 
 MCP_PROTOCOL_EVIDENCE_SCHEMA = "ai-multi-agent-platform/mcp-protocol-conformance/v1"
-MCP_COMPATIBILITY_EVIDENCE_SCHEMA = "ai-multi-agent-platform/mcp-compatibility/v1"
+MCP_COMPATIBILITY_EVIDENCE_SCHEMA = "ai-multi-agent-platform/mcp-compatibility/v2"
 MCP_PIN_SCHEMA = "ai-multi-agent-platform/mcp-conformance-pins/v1"
 
 
@@ -27,6 +27,27 @@ class MCPProtocolScenarioStatus(StrEnum):
 class MCPProtocolEvidenceStatus(StrEnum):
     PRESENT = "present"
     MISSING = "missing"
+    UNSUPPORTED = "unsupported"
+
+
+class MCPPlatformEvidenceStatus(StrEnum):
+    PRESENT = "present"
+    MISSING = "missing"
+    UNSUPPORTED = "unsupported"
+
+
+class MCPProfileClaimStatus(StrEnum):
+    CLAIMED = "claimed"
+    NOT_CLAIMED = "not_claimed"
+    UNSUPPORTED = "unsupported"
+
+
+class MCPCompatibilityResult(StrEnum):
+    COMPATIBLE = "compatible"
+    INCOMPATIBLE = "incompatible"
+    INCOMPLETE = "incomplete"
+    NOT_CLAIMED = "not_claimed"
+    UNSUPPORTED = "unsupported"
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +83,8 @@ class MCPProtocolScenarioEvidence:
     diagnostics: str | None
     stdout_sha256: str
     stderr_sha256: str
+    stdout_artifact: str | None = None
+    stderr_artifact: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,64 +179,304 @@ class MCPProtocolEvidence:
 
 
 @dataclass(frozen=True, slots=True)
-class MCPCompatibilityEvidence:
-    schema: str
+class MCPProfileIdentity:
+    protocol_revision: str
+    mode: str
+    transport_profile: str
+
+
+@dataclass(frozen=True, slots=True)
+class MCPPlatformProfileEvidence:
+    identity: MCPProfileIdentity
+    deployment_profile: str
+    platform_commit: str | None
+    platform_release: str | None
+    platform_conformant: bool
+    claimed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class MCPCompatibilityProfileEvidence:
+    identity: MCPProfileIdentity
+    platform_deployment_profile: str | None
+    platform_commit: str | None
+    platform_release: str | None
+    claim_status: str
+    result: str
+    reason: str | None
     protocol_evidence_status: str
-    protocol_revision: str | None
+    protocol_conformant: bool | None
+    platform_evidence_status: str
+    platform_conformant: bool | None
     suite_version: str | None
     suite_commit: str | None
     adapter_revision: str | None
     sdk_version: str | None
-    protocol_conformant: bool | None
-    platform_conformant: bool
-    claimed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class MCPCompatibilityEvidence:
+    schema: str
+    profiles: tuple[MCPCompatibilityProfileEvidence, ...]
 
     @property
     def compatible(self) -> bool:
-        return self.claimed and self.protocol_conformant is True and self.platform_conformant
+        """Whether every claimed profile has both matching evidence dimensions and passes."""
+
+        claimed = [
+            profile
+            for profile in self.profiles
+            if profile.claim_status == MCPProfileClaimStatus.CLAIMED.value
+        ]
+        return bool(claimed) and all(
+            profile.result == MCPCompatibilityResult.COMPATIBLE.value for profile in claimed
+        )
 
     def to_json(self) -> str:
-        payload = asdict(self)
-        payload["compatible"] = self.compatible
-        return json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        # Deliberately no ambiguous top-level ``compatible`` field: compatibility is per profile.
+        return json.dumps(asdict(self), indent=2, sort_keys=True) + "\n"
+
+    def validate(self) -> None:
+        identities = [profile.identity for profile in self.profiles]
+        if len(set(identities)) != len(identities):
+            raise ValueError("MCP compatibility matrix contains duplicate profile identities")
 
 
 def combine_mcp_compatibility(
     protocol: MCPProtocolEvidence,
     *,
-    platform_conformant: bool,
+    platform: MCPPlatformProfileEvidence,
+    additional_profiles: tuple[MCPCompatibilityProfileEvidence, ...] = (),
 ) -> MCPCompatibilityEvidence:
-    """Keep official protocol evidence distinct from #46 platform integration evidence."""
+    """Combine only evidence for the exact same revision/direction/transport profile."""
 
     protocol.validate()
-    return MCPCompatibilityEvidence(
-        schema=MCP_COMPATIBILITY_EVIDENCE_SCHEMA,
-        protocol_evidence_status=MCPProtocolEvidenceStatus.PRESENT.value,
+    protocol_identity = MCPProfileIdentity(
         protocol_revision=protocol.protocol_revision,
-        suite_version=protocol.suite_version,
-        suite_commit=protocol.suite_commit,
-        adapter_revision=protocol.adapter_revision,
-        sdk_version=protocol.sdk_version,
-        protocol_conformant=protocol.protocol_conformant,
-        platform_conformant=platform_conformant,
-        claimed=protocol.claimed,
+        mode=protocol.mode,
+        transport_profile=protocol.transport_profile,
     )
+    profiles: list[MCPCompatibilityProfileEvidence] = []
 
+    if protocol_identity == platform.identity:
+        claim_status = (
+            MCPProfileClaimStatus.CLAIMED
+            if protocol.claimed and platform.claimed
+            else MCPProfileClaimStatus.NOT_CLAIMED
+        )
+        if claim_status is MCPProfileClaimStatus.NOT_CLAIMED:
+            result = MCPCompatibilityResult.NOT_CLAIMED
+        elif protocol.protocol_conformant and platform.platform_conformant:
+            result = MCPCompatibilityResult.COMPATIBLE
+        else:
+            result = MCPCompatibilityResult.INCOMPATIBLE
+        profiles.append(
+            _profile_with_both_evidence(
+                protocol,
+                platform,
+                claim_status=claim_status,
+                result=result,
+            )
+        )
+    else:
+        mismatch_reason = (
+            "protocol and platform evidence refer to different MCP profiles; evidence cannot be "
+            "combined across revision, direction, or transport boundaries"
+        )
+        profiles.append(
+            _protocol_only_profile(
+                protocol,
+                result=(
+                    MCPCompatibilityResult.INCOMPLETE
+                    if protocol.claimed
+                    else MCPCompatibilityResult.NOT_CLAIMED
+                ),
+                reason=mismatch_reason,
+            )
+        )
+        profiles.append(
+            _platform_only_profile(
+                platform,
+                result=(
+                    MCPCompatibilityResult.INCOMPLETE
+                    if platform.claimed
+                    else MCPCompatibilityResult.NOT_CLAIMED
+                ),
+                reason=mismatch_reason,
+            )
+        )
 
-def missing_mcp_protocol_evidence(*, platform_conformant: bool) -> MCPCompatibilityEvidence:
-    """Represent a #46 MCP platform result that has no official protocol proof attached."""
-
-    return MCPCompatibilityEvidence(
+    evidence = MCPCompatibilityEvidence(
         schema=MCP_COMPATIBILITY_EVIDENCE_SCHEMA,
-        protocol_evidence_status=MCPProtocolEvidenceStatus.MISSING.value,
-        protocol_revision=None,
+        profiles=tuple(profiles) + additional_profiles,
+    )
+    evidence.validate()
+    return evidence
+
+
+def missing_mcp_protocol_evidence(
+    *,
+    platform: MCPPlatformProfileEvidence,
+    additional_profiles: tuple[MCPCompatibilityProfileEvidence, ...] = (),
+) -> MCPCompatibilityEvidence:
+    """Represent a #46 MCP platform result with no official proof for that exact profile."""
+
+    evidence = MCPCompatibilityEvidence(
+        schema=MCP_COMPATIBILITY_EVIDENCE_SCHEMA,
+        profiles=(
+            _platform_only_profile(
+                platform,
+                result=(
+                    MCPCompatibilityResult.INCOMPLETE
+                    if platform.claimed
+                    else MCPCompatibilityResult.NOT_CLAIMED
+                ),
+                reason="official MCP protocol evidence is missing for this exact profile",
+            ),
+        )
+        + additional_profiles,
+    )
+    evidence.validate()
+    return evidence
+
+
+def unsupported_mcp_profile(
+    *,
+    protocol_revision: str,
+    mode: str,
+    transport_profile: str,
+    reason: str,
+) -> MCPCompatibilityProfileEvidence:
+    return MCPCompatibilityProfileEvidence(
+        identity=MCPProfileIdentity(protocol_revision, mode, transport_profile),
+        platform_deployment_profile=None,
+        platform_commit=None,
+        platform_release=None,
+        claim_status=MCPProfileClaimStatus.UNSUPPORTED.value,
+        result=MCPCompatibilityResult.UNSUPPORTED.value,
+        reason=reason,
+        protocol_evidence_status=MCPProtocolEvidenceStatus.UNSUPPORTED.value,
+        protocol_conformant=None,
+        platform_evidence_status=MCPPlatformEvidenceStatus.UNSUPPORTED.value,
+        platform_conformant=None,
         suite_version=None,
         suite_commit=None,
         adapter_revision=None,
         sdk_version=None,
+    )
+
+
+def not_claimed_mcp_profile(
+    *,
+    protocol_revision: str,
+    mode: str,
+    transport_profile: str,
+    reason: str,
+) -> MCPCompatibilityProfileEvidence:
+    return MCPCompatibilityProfileEvidence(
+        identity=MCPProfileIdentity(protocol_revision, mode, transport_profile),
+        platform_deployment_profile=None,
+        platform_commit=None,
+        platform_release=None,
+        claim_status=MCPProfileClaimStatus.NOT_CLAIMED.value,
+        result=MCPCompatibilityResult.NOT_CLAIMED.value,
+        reason=reason,
+        protocol_evidence_status=MCPProtocolEvidenceStatus.MISSING.value,
         protocol_conformant=None,
-        platform_conformant=platform_conformant,
-        claimed=False,
+        platform_evidence_status=MCPPlatformEvidenceStatus.MISSING.value,
+        platform_conformant=None,
+        suite_version=None,
+        suite_commit=None,
+        adapter_revision=None,
+        sdk_version=None,
+    )
+
+
+def _profile_with_both_evidence(
+    protocol: MCPProtocolEvidence,
+    platform: MCPPlatformProfileEvidence,
+    *,
+    claim_status: MCPProfileClaimStatus,
+    result: MCPCompatibilityResult,
+) -> MCPCompatibilityProfileEvidence:
+    return MCPCompatibilityProfileEvidence(
+        identity=platform.identity,
+        platform_deployment_profile=platform.deployment_profile,
+        platform_commit=platform.platform_commit,
+        platform_release=platform.platform_release,
+        claim_status=claim_status.value,
+        result=result.value,
+        reason=None,
+        protocol_evidence_status=MCPProtocolEvidenceStatus.PRESENT.value,
+        protocol_conformant=protocol.protocol_conformant,
+        platform_evidence_status=MCPPlatformEvidenceStatus.PRESENT.value,
+        platform_conformant=platform.platform_conformant,
+        suite_version=protocol.suite_version,
+        suite_commit=protocol.suite_commit,
+        adapter_revision=protocol.adapter_revision,
+        sdk_version=protocol.sdk_version,
+    )
+
+
+def _protocol_only_profile(
+    protocol: MCPProtocolEvidence,
+    *,
+    result: MCPCompatibilityResult,
+    reason: str,
+) -> MCPCompatibilityProfileEvidence:
+    return MCPCompatibilityProfileEvidence(
+        identity=MCPProfileIdentity(
+            protocol.protocol_revision,
+            protocol.mode,
+            protocol.transport_profile,
+        ),
+        platform_deployment_profile=None,
+        platform_commit=None,
+        platform_release=None,
+        claim_status=(
+            MCPProfileClaimStatus.CLAIMED.value
+            if protocol.claimed
+            else MCPProfileClaimStatus.NOT_CLAIMED.value
+        ),
+        result=result.value,
+        reason=reason,
+        protocol_evidence_status=MCPProtocolEvidenceStatus.PRESENT.value,
+        protocol_conformant=protocol.protocol_conformant,
+        platform_evidence_status=MCPPlatformEvidenceStatus.MISSING.value,
+        platform_conformant=None,
+        suite_version=protocol.suite_version,
+        suite_commit=protocol.suite_commit,
+        adapter_revision=protocol.adapter_revision,
+        sdk_version=protocol.sdk_version,
+    )
+
+
+def _platform_only_profile(
+    platform: MCPPlatformProfileEvidence,
+    *,
+    result: MCPCompatibilityResult,
+    reason: str,
+) -> MCPCompatibilityProfileEvidence:
+    return MCPCompatibilityProfileEvidence(
+        identity=platform.identity,
+        platform_deployment_profile=platform.deployment_profile,
+        platform_commit=platform.platform_commit,
+        platform_release=platform.platform_release,
+        claim_status=(
+            MCPProfileClaimStatus.CLAIMED.value
+            if platform.claimed
+            else MCPProfileClaimStatus.NOT_CLAIMED.value
+        ),
+        result=result.value,
+        reason=reason,
+        protocol_evidence_status=MCPProtocolEvidenceStatus.MISSING.value,
+        protocol_conformant=None,
+        platform_evidence_status=MCPPlatformEvidenceStatus.PRESENT.value,
+        platform_conformant=platform.platform_conformant,
+        suite_version=None,
+        suite_commit=None,
+        adapter_revision=None,
+        sdk_version=None,
     )
 
 
@@ -284,6 +547,8 @@ def _scenario_from_mapping(value: object) -> MCPProtocolScenarioEvidence:
         diagnostics=_optional_string(value.get("diagnostics")),
         stdout_sha256=_required_string(value.get("stdout_sha256"), "stdout_sha256"),
         stderr_sha256=_required_string(value.get("stderr_sha256"), "stderr_sha256"),
+        stdout_artifact=_optional_string(value.get("stdout_artifact")),
+        stderr_artifact=_optional_string(value.get("stderr_artifact")),
     )
 
 

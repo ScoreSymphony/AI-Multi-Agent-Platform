@@ -19,7 +19,7 @@ from .mcp import MCPClient, MCPServerConfig, MCPTool, MCPToolProvider
 
 
 class MCPPythonSDKClient(MCPClient):
-    """Concrete MCP client supporting Streamable HTTP and stdio subprocesses."""
+    """Concrete MCP client supporting legacy Streamable HTTP and stdio sessions."""
 
     def __init__(self, config: MCPServerConfig) -> None:
         self._config = config
@@ -36,13 +36,35 @@ class MCPPythonSDKClient(MCPClient):
         )
 
     def _client(self) -> Client:
+        # Revision-bound compatibility claims use the explicit pre-2026 initialize handshake.
+        # The modern/stateless family is implemented separately by MCPStatelessHTTPClient.
+        mode = "legacy" if self._config.protocol_revision is not None else "auto"
         return Client(
             self._target(),
             read_timeout_seconds=self._config.read_timeout_seconds,
+            mode=mode,
         )
+
+    def _validate_protocol_revision(self, client: Client) -> None:
+        expected = self._config.protocol_revision
+        if expected is None:
+            return
+        negotiated = client.protocol_version
+        if negotiated != expected:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "MCP negotiated protocol revision does not match the configured compatibility "
+                f"profile: expected {expected!r}, got {negotiated!r}",
+                provider_id=f"mcp:{self._config.server_id}",
+                details={
+                    "expected_protocol_revision": expected,
+                    "negotiated_protocol_revision": negotiated,
+                },
+            )
 
     async def list_tools(self) -> tuple[MCPTool, ...]:
         async with self._client() as client:
+            self._validate_protocol_revision(client)
             listed = await client.list_tools()
             return tuple(
                 MCPTool(
@@ -58,6 +80,7 @@ class MCPPythonSDKClient(MCPClient):
 
     async def call_tool(self, name: str, arguments: dict[str, JsonValue]) -> JsonValue:
         async with self._client() as client:
+            self._validate_protocol_revision(client)
             result = await client.call_tool(name, arguments)
             if result.is_error:
                 raise ContractError(
@@ -74,7 +97,7 @@ class MCPPythonSDKClient(MCPClient):
 
         try:
             async with self._client() as client:
-                _ = client.protocol_version
+                self._validate_protocol_revision(client)
             return True
         except Exception:
             return False

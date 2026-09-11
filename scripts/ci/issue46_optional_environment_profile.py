@@ -16,9 +16,13 @@ from ai_multi_agent_platform.conformance import (
     run_conformance,
 )
 from ai_multi_agent_platform.conformance.mcp_protocol import (
+    MCPPlatformProfileEvidence,
+    MCPProfileIdentity,
     MCPProtocolEvidence,
     combine_mcp_compatibility,
     missing_mcp_protocol_evidence,
+    not_claimed_mcp_profile,
+    unsupported_mcp_profile,
 )
 
 
@@ -33,6 +37,10 @@ class OptionalEnvironmentProfile:
     component_name: str
     expected_version: str
     pytest_node: str
+    protocol_revision: str | None = None
+    protocol_mode: str | None = None
+    transport_profile: str | None = None
+    claimed_protocol_profile: bool = False
 
 
 _PROFILES: dict[str, OptionalEnvironmentProfile] = {
@@ -41,17 +49,21 @@ _PROFILES: dict[str, OptionalEnvironmentProfile] = {
         scenario_id="ENV-MCP",
         owner="#12 MCP capability adapter",
         criterion=(
-            "the pinned official MCP Python SDK stdio transport executes a canonical "
-            "CapabilityInvocation through CapabilityRegistry/CapabilityInvoker"
+            "the pinned official MCP Python SDK executes the exact 2025-11-25 client/tool "
+            "Streamable-HTTP profile through CapabilityRegistry/CapabilityInvoker"
         ),
-        deployment_profile="mcp-sdk-pinned",
+        deployment_profile="mcp-2025-11-25-client-streamable-http",
         distribution="mcp",
         component_name="mcp-python-sdk",
         expected_version="2.1.1",
         pytest_node=(
             "tests/test_mcp_sdk_transport.py::"
-            "test_official_mcp_sdk_stdio_transport_uses_canonical_invocation_path"
+            "test_official_mcp_sdk_streamable_http_uses_exact_claimed_profile"
         ),
+        protocol_revision="2025-11-25",
+        protocol_mode="client",
+        transport_profile="streamable-http",
+        claimed_protocol_profile=True,
     ),
     "litellm": OptionalEnvironmentProfile(
         name="litellm",
@@ -95,7 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--compatibility-report",
         type=Path,
-        help="Destination for the separate protocol/platform MCP compatibility report.",
+        help="Destination for the separate protocol/platform MCP compatibility matrix.",
     )
     parser.add_argument("--probe", action="store_true", help=argparse.SUPPRESS)
     return parser
@@ -146,19 +158,79 @@ def run_profile(
     )
 
 
+def _mcp_platform_evidence(
+    profile: OptionalEnvironmentProfile,
+    report: ConformanceReport,
+) -> MCPPlatformProfileEvidence:
+    if (
+        profile.protocol_revision is None
+        or profile.protocol_mode is None
+        or profile.transport_profile is None
+    ):
+        raise ValueError("MCP environment profile is missing compatibility identity")
+    return MCPPlatformProfileEvidence(
+        identity=MCPProfileIdentity(
+            protocol_revision=profile.protocol_revision,
+            mode=profile.protocol_mode,
+            transport_profile=profile.transport_profile,
+        ),
+        deployment_profile=report.deployment_profile,
+        platform_commit=report.platform_commit,
+        platform_release=report.platform_release,
+        platform_conformant=report.passed,
+        claimed=profile.claimed_protocol_profile,
+    )
+
+
+def _non_claimed_matrix_entries() -> tuple:
+    return (
+        not_claimed_mcp_profile(
+            protocol_revision="2025-11-25",
+            mode="client",
+            transport_profile="stdio",
+            reason=(
+                "STDIO is retained as separate platform transport coverage; no official "
+                "wire-conformance compatibility claim is attached to it"
+            ),
+        ),
+        not_claimed_mcp_profile(
+            protocol_revision="2026-07-28",
+            mode="client",
+            transport_profile="streamable-http-stateless",
+            reason=(
+                "implemented and protocol-tested, but intentionally not claimed while the "
+                "official conformance line remains prerelease"
+            ),
+        ),
+        unsupported_mcp_profile(
+            protocol_revision="2025-11-25",
+            mode="server",
+            transport_profile="streamable-http",
+            reason="the platform currently exposes no MCP server product surface",
+        ),
+    )
+
+
 def _write_mcp_compatibility(
     *,
+    profile: OptionalEnvironmentProfile,
     report: ConformanceReport,
     protocol_evidence_path: Path | None,
     destination: Path,
 ) -> bool:
+    platform = _mcp_platform_evidence(profile, report)
+    additional_profiles = _non_claimed_matrix_entries()
     if protocol_evidence_path is None:
-        compatibility = missing_mcp_protocol_evidence(platform_conformant=report.passed)
+        compatibility = missing_mcp_protocol_evidence(
+            platform=platform,
+            additional_profiles=additional_profiles,
+        )
     else:
         protocol = MCPProtocolEvidence.from_json(protocol_evidence_path.read_text(encoding="utf-8"))
         compatibility = combine_mcp_compatibility(
             protocol,
-            platform_conformant=report.passed,
+            platform=platform,
+            additional_profiles=additional_profiles,
         )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(compatibility.to_json(), encoding="utf-8")
@@ -187,12 +259,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.compatibility_report is not None:
         try:
             compatibility_ok = _write_mcp_compatibility(
+                profile=profile,
                 report=report,
                 protocol_evidence_path=args.protocol_evidence,
                 destination=args.compatibility_report,
             )
         except (OSError, ValueError) as exc:
-            print(f"invalid MCP protocol evidence: {exc}", file=sys.stderr)
+            print(f"invalid MCP compatibility evidence: {exc}", file=sys.stderr)
             return 2
 
     print(report.human_summary())
