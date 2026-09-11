@@ -11,7 +11,7 @@ from types import MappingProxyType
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id, validate_id
-from ai_multi_agent_platform.security import SecretReference, redact_sensitive
+from ai_multi_agent_platform.security import SecretReference, redact_sensitive, redact_text
 from ai_multi_agent_platform.workspaces import validate_relative_path, validate_sha256
 
 APPLICATION_RELEASE_SCHEMA_VERSION = "1.0"
@@ -39,7 +39,21 @@ def _nonblank_tuple(values: tuple[str, ...], field_name: str) -> tuple[str, ...]
 def _command_tokens(values: tuple[str, ...]) -> tuple[str, ...]:
     if any(not value.strip() for value in values):
         raise ValueError("command must not contain blank values")
+    if any(redact_text(value) != value for value in values):
+        raise ValueError(
+            "command must not embed sensitive environment assignments; use secret_environment"
+        )
     return tuple(values)
+
+
+def _safe_mapping(
+    values: Mapping[str, JsonValue],
+    field_name: str,
+) -> MappingProxyType[str, JsonValue]:
+    copied = dict(values)
+    if redact_sensitive(copied) != copied:
+        raise ValueError(f"sensitive-looking {field_name} entries are not allowed")
+    return MappingProxyType(copied)
 
 
 def _environment(values: Mapping[str, str], field_name: str) -> MappingProxyType[str, str]:
@@ -182,7 +196,7 @@ class BuildSpecification:
         object.__setattr__(
             self,
             "resource_hints",
-            MappingProxyType(dict(self.resource_hints)),
+            _safe_mapping(self.resource_hints, "resource_hints"),
         )
         environment = _environment(self.environment, "environment")
         if redact_sensitive(dict(environment)) != dict(environment):
