@@ -165,14 +165,124 @@ E3 proves compatibility for this concrete MCP stdio invocation path and fixture.
 HTTP/WebSocket behavior, arbitrary MCP-server compatibility, descriptor/response attack resistance or
 that the wrapped child process cannot open a direct network socket outside Pipelock.
 
+## Evidence E4: HTTP forward/CONNECT and remote MCP transports
+
+**Status: transport compatibility verified on GitHub Actions run `34577649075`.**
+
+This run keeps the same exact upstream pin and tag-free build boundary and expands the live transport
+matrix. Because `pipelock init --preset audit` generated a configuration with the forward proxy
+disabled in this environment, the workflow creates a controlled copy for the forward/CONNECT probe
+and changes only `forward_proxy.enabled` to `true`. The generated audit configuration itself remains
+unchanged for the other probes.
+
+### Run-specific fingerprints
+
+- **Workflow run:** `34577649075`
+- **Workflow evidence artifact digest:**
+  `sha256:4bdbbce83dbab6e7d654383b24d4e5ed6e82b64bf262e661b5c5c5c44f1c86cb`
+- **Run-specific candidate binary SHA-256:**
+  `f4e5dc3d1d2a8bb0c52bd9d1a15dec46e82a9d529b699753946743fbc0961c5c`
+- **Generated audit configuration SHA-256:**
+  `da732fc3e9800a3223634ef5aad3b960bf13ca32a879be3eb4705055dcee31ad`
+- **Forward-enabled audit-probe configuration SHA-256:**
+  `27b3680db9f362b29c9ddc32bd6d17de0d2628b9bf789a1061beb4d773c36530`
+
+### MCP Streamable HTTP and MCP WebSocket
+
+Two deterministic local MCP fixtures were routed through the pinned binary using
+`pipelock mcp proxy --upstream ...`, while invocation still entered through the platform's canonical
+`CapabilityRegistry` and `CapabilityInvoker` path.
+
+The retained JUnit result records:
+
+- tests: **2**;
+- errors: **0**;
+- failures: **0**;
+- skipped: **0**;
+- Streamable HTTP testcase duration: **1.601 s**;
+- MCP WebSocket testcase duration: **0.622 s**;
+- total JUnit time: **3.625 s**.
+
+These durations include fixture/process startup and are compatibility timings, not measurements of
+Pipelock overhead. The WebSocket fixture is intentionally minimal and proves the MCP WebSocket
+upstream path only; it does not validate Pipelock's generic `/ws` WebSocket proxy.
+
+### HTTP absolute-URI forward proxy
+
+The forward-enabled audit probe accepted a real plaintext forward-proxy request to
+`http://example.com/`:
+
+- destination result: HTTP 200;
+- returned content size reported by Pipelock: 559 bytes;
+- curl end-to-end time through the proxy: **0.053987 s (53.987 ms)**;
+- Pipelock request log `duration_ms`: **42.589163 ms**.
+
+### HTTPS CONNECT
+
+The same probe admitted and completed a CONNECT tunnel to `example.com:443`:
+
+- curl completed successfully;
+- curl end-to-end time: **0.046614 s (46.614 ms)**;
+- Pipelock recorded `tunnel_open` and `tunnel_close`;
+- Pipelock tunnel duration: **55.935855 ms**;
+- total tunneled bytes reported by Pipelock: **5623**.
+
+TLS interception was deliberately not enabled. Therefore this proves CONNECT admission/tunneling and
+host/tunnel-level mediation for the tested path, **not** request-body, header or HTTPS-response content
+inspection inside the opaque TLS tunnel.
+
+### CONNECT receipt anomaly
+
+The successful CONNECT transport log also recorded a best-effort allow-receipt emission error for the
+CONNECT action:
+
+`chain sealed: transcript root already emitted`
+
+The forward/CONNECT probe used the generated audit recorder with `require_receipts: false`, so the
+transport correctly continued under best-effort evidence semantics. This observation is not promoted
+to a claim that CONNECT has complete signed-receipt coverage. A dedicated strict CONNECT receipt test
+is still required to determine whether this is a reproducible upstream limitation or an interaction in
+this multi-process CI harness.
+
+A separate strict `/fetch` receipt step in the **same run** remained healthy and produced a chain that
+verified successfully with an out-of-band pinned public key:
+
+- receipt action ID: `01a08f83-3e7c-7006-a5a2-107308358c0b`;
+- matching segment: `evidence-proxy-65.jsonl`;
+- matching segment SHA-256:
+  `9878ed0a631d662183103f671d78c904d1d73ae5ed867d32ccbb10c7509f1c6c`;
+- receipts: **43**;
+- final sequence: **42**;
+- root hash: `89777ad5822ebd60e84ea50ff06e35bc9e293f91e935ffd95cb8a8698a114413`;
+- pinned signer public key:
+  `b634a7019e61d9476a9aaa4e1b55268a13dafe44a4b250cf7707f87c89c6f47a`;
+- recorded interval: `2026-09-11T08:08:47Z` through `2026-09-11T08:08:58Z`.
+
+That strict chain again reported `Containment: UNKNOWN` / `L-CONTAINMENT-UNPROVEN`. Its validity shows
+that the recorder/verifier path remained functional in the run; it does **not** erase the CONNECT-
+specific receipt error or prove that the CONNECT action was represented by a valid receipt.
+
+### What E4 proves and does not prove
+
+E4 proves live compatibility for:
+
+1. plaintext HTTP absolute-URI forwarding through Pipelock;
+2. HTTPS CONNECT tunneling without TLS interception;
+3. canonical platform MCP Streamable HTTP through Pipelock's remote-upstream wrapper;
+4. canonical platform MCP WebSocket through that wrapper.
+
+E4 does not prove generic `/ws` proxy compatibility, TLS-intercepted HTTPS content inspection,
+CONNECT strict-receipt completeness, redirect/private-target safety, complete host-level mediation,
+representative performance or production suitability.
+
 ## Remaining #730 evidence
 
 Still required before the issue can reach a final `adopt`, `optional_provider`, `reference_only` or
 `reject` decision:
 
-- representative HTTP forward/CONNECT behavior and redirects;
-- WebSocket behavior;
-- MCP HTTP and MCP WebSocket behavior;
+- generic Pipelock `/ws` WebSocket behavior and frame scanning;
+- strict CONNECT receipt reproduction/verification for the observed best-effort receipt anomaly;
+- redirect/private-target behavior;
 - descriptor/tool drift and response-injection corpus;
 - secret/DLP, encoding and multi-stage exfiltration corpus;
 - loopback/private/link-local/metadata, DNS-rebinding and IPv6 corpus;

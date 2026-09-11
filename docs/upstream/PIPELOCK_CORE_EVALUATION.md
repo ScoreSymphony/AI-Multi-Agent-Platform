@@ -66,9 +66,9 @@ Consequences:
 This is intentionally stricter than a repository-level license summary: the build path of the actual
 artifact matters.
 
-The live runs record per-run binary hashes. Two tag-free builds at the same source pin/toolchain have
-not produced the same SHA-256, so byte-for-byte reproducible builds are **not** currently claimed.
-The generated audit configuration hash has remained stable across the recorded runs.
+The live runs record per-run binary hashes. Multiple tag-free builds at the same source pin/toolchain
+have not produced the same SHA-256, so byte-for-byte reproducible builds are **not** currently
+claimed. The generated audit configuration hash has remained stable across the recorded runs.
 
 ## Canonical decision mapping
 
@@ -105,20 +105,25 @@ The workflow verifies the root/Enterprise licenses, Enterprise build constraints
 tag, tag-free `make build`, binary build metadata and generated audit configuration. It records SHA-256
 fingerprints for the built binary and generated configuration as non-secret CI evidence.
 
-At the reviewed revision the upstream audit preset declares `mode: audit` and `enforce: false`. The
-generated configuration passes the upstream validation exercised by `pipelock init`; the recorded
-pilot reports **68 passed, 0 failed**.
+At the reviewed revision the generated upstream audit profile declares `mode: audit` and
+`enforce: false`. The generated configuration passes the upstream validation exercised by
+`pipelock init`; the recorded pilot reports **68 passed, 0 failed**.
 
-GitHub Actions run `34570647932` is the current green live candidate run. It additionally exercises:
+Two green live runs now cover different parts of the matrix:
 
-- audit-only HTTP `/fetch` to `https://example.com/`;
-- the platform MCP SDK stdio fixture through `pipelock mcp proxy -- ...` while retaining canonical
-  `CapabilityRegistry` / `CapabilityInvoker` ownership;
-- signed allow receipt emission with `require_receipts: true`;
-- full proxy writer-chain verification using an out-of-band pinned Ed25519 public key.
+- run `34570647932`: audit-only HTTP `/fetch`, canonical platform MCP stdio, signed allow receipt and
+  pinned-key proxy writer-chain verification;
+- run `34577649075`: canonical MCP Streamable HTTP and MCP WebSocket upstreams, plaintext HTTP forward
+  proxy, HTTPS CONNECT without TLS interception, plus another successful strict `/fetch` receipt-chain
+  verification.
 
-Exact hashes, receipt identifiers, chain statistics and measurement limitations are recorded in
-`PIPELOCK_CORE_LIVE_EVIDENCE.md`.
+The generated `pipelock init --preset audit` configuration used in CI did not enable the forward proxy,
+so the forward/CONNECT probe uses a controlled copy in which only `forward_proxy.enabled` is changed
+to `true`. Its SHA-256 is recorded separately. This is a test-profile mutation, not a claim that the
+unmodified generated profile exposes forward proxying.
+
+Exact hashes, receipt identifiers, chain statistics, transport results and measurement limitations are
+recorded in `PIPELOCK_CORE_LIVE_EVIDENCE.md`.
 
 Canonical denials are blocked by the platform before audit traffic reaches Pipelock.
 
@@ -129,17 +134,24 @@ marked live-validated only where the platform candidate workflow has exercised t
 
 | Transport | Upstream reviewed surface | Platform live validation |
 | --- | --- | --- |
-| HTTP fetch | URL/request/response scanning and receipts | **validated, audit-only** (`34570647932`; earlier E1 smoke also green) |
-| HTTP forward/CONNECT | request/response and intercepted paths | pending |
-| WebSocket | request/frame scanning and receipts | pending |
-| MCP stdio | input/tool/response scanning, policy and chain detection | **validated for canonical platform fixture** (`34570647932`) |
-| MCP HTTP upstream/listener | MCP scanning/receipt surfaces | pending |
-| MCP WebSocket | MCP scanning/receipt surface | pending |
+| HTTP fetch | URL/request/response scanning and receipts | **validated, audit-only** (`34570647932`, `34577649075`) |
+| HTTP forward | absolute-URI request/response path | **validated, audit-only** (`34577649075`) |
+| HTTPS CONNECT | tunnel admission and metadata; opaque without TLS interception | **validated for tunnel connectivity** (`34577649075`); CONNECT-specific signed receipt remains unresolved |
+| Generic WebSocket `/ws` | request/frame scanning and receipts | pending |
+| MCP stdio | input/tool/response scanning, policy and chain detection | **validated for canonical platform fixture** (`34570647932`, later runs retain it) |
+| MCP Streamable HTTP upstream | MCP scanning/remote-upstream wrapper | **validated for canonical platform fixture** (`34577649075`) |
+| MCP WebSocket upstream | MCP scanning/remote-upstream wrapper | **validated for canonical platform fixture** (`34577649075`) |
 | Redirect/private target | documented scanner/proxy decision points | pending |
 | DNS/rebinding/hostname-IP | explicit #730 security-corpus target | pending |
 
-Untested/unsupported platform profiles remain labelled unsupported. The MCP stdio result does not imply
-that a wrapped child process is prevented from creating an independent network socket.
+The CONNECT result must be interpreted narrowly. TLS interception was off, so Pipelock did not inspect
+inner HTTPS headers, request bodies or response content. The run proved successful tunnel admission
+and closure only. It also logged a best-effort CONNECT allow-receipt emission error (`chain sealed:
+transcript root already emitted`). Because `require_receipts` was false for that probe, transport
+continued as designed; however, CONNECT-specific signed-receipt completeness is **not** claimed.
+
+Untested/unsupported platform profiles remain labelled unsupported. The MCP results do not imply that
+a wrapped child process is prevented from creating an independent network socket.
 
 ## Receipt / Flight Recorder assessment
 
@@ -148,19 +160,30 @@ metadata includes action ID, verdict, transport, target, layer, request correlat
 `policy_hash`, signer key and chain linkage. Verification with a pinned public key is stronger than an
 unpinned structural check.
 
-Run `34570647932` provides live evidence for this boundary. With `require_receipts: true`, the candidate
-returned an action correlation ID and produced a proxy writer chain that the pinned verifier accepted
-against the externally retained public key:
+Run `34570647932` provides the first live evidence for this boundary. With `require_receipts: true`, the
+candidate returned an action correlation ID and produced a proxy writer chain that the pinned verifier
+accepted against the externally retained public key:
 
 - receipts: 19;
 - final sequence: 18;
 - root hash: `249ce0676ad2efbe0b6077ae493cfb73859b1db2c713fff5de3b6b896a9abf6f`;
 - signer: `4368c51a94c85941bf0277a2c4dcda535f5400320b60a127ee3e9f3e68d3427e`.
 
-The verifier simultaneously reported containment as **UNKNOWN**. Its own limitation output explicitly
-states that the bundle proves what was routed through the proxy, not that an agent could not bypass it.
-That is the intended #730 interpretation: receipt validity is evidence integrity/provenance, not
-complete-mediation evidence.
+Run `34577649075` independently verified another strict `/fetch` writer chain:
+
+- receipts: 43;
+- final sequence: 42;
+- root hash: `89777ad5822ebd60e84ea50ff06e35bc9e293f91e935ffd95cb8a8698a114413`;
+- signer: `b634a7019e61d9476a9aaa4e1b55268a13dafe44a4b250cf7707f87c89c6f47a`.
+
+Both verifier runs report containment as **UNKNOWN**. This is the intended #730 interpretation: receipt
+validity is evidence integrity/provenance, not complete-mediation evidence.
+
+The second transport run also exposes an evidence-quality caveat: its successful CONNECT tunnel logged
+a best-effort receipt-emission failure (`chain sealed: transcript root already emitted`). The strict
+`/fetch` chain later in that run verifies that the recorder/verifier path itself remained functional,
+but it does not prove the CONNECT action had a valid signed receipt. A dedicated strict CONNECT
+reproduction is therefore required before CONNECT receipt coverage can be called validated.
 
 The platform normalizer treats receipts as external evidence only:
 
@@ -182,7 +205,7 @@ principle create an independent socket unless the execution environment also con
 access.
 
 The successful receipt verifier reinforces this limitation by reporting `L-CONTAINMENT-UNPROVEN` and
-`Containment: UNKNOWN` for the hosted candidate run.
+`Containment: UNKNOWN` for the hosted candidate runs.
 
 Therefore:
 
@@ -220,18 +243,25 @@ The live phase must execute reproducible fixtures for:
 - loopback, RFC1918/private, link-local and cloud-metadata targets;
 - redirect to private targets, DNS rebinding and hostname/IP changes;
 - IPv6 equivalents;
-- WebSocket exfiltration;
+- generic WebSocket `/ws` exfiltration/frame handling;
 - audit/enforced Pipelock outage;
 - direct-network bypass from HTTP, MCP HTTP, MCP stdio child, WebSocket and representative
   Hermes/tool/browser/connector paths.
 
 ## Performance evidence still required
 
-The hosted candidate runs provide smoke timings only. The latest green run observed approximately
-76.262 ms curl end-to-end for one `/fetch` request and 65.737398 ms in that request's Pipelock log;
-an earlier run observed 50.663 ms and 36.345871 ms respectively. These samples include external
-network/runner variance and have no same-run direct-control baseline, so they are **not** used as a
-production overhead measurement.
+The hosted candidate runs provide smoke timings only. Recorded transport samples include:
+
+- `/fetch`: 50.663 ms / 36.345871 ms Pipelock log in an early run; 64.231 ms in run
+  `34577649075`;
+- HTTP forward in `34577649075`: 53.987 ms curl end-to-end, 42.589163 ms Pipelock request log;
+- HTTPS CONNECT in `34577649075`: 46.614 ms curl end-to-end, 55.935855 ms tunnel duration reported by
+  Pipelock;
+- MCP remote compatibility JUnit: 1.601 s for the Streamable HTTP testcase and 0.622 s for the MCP
+  WebSocket testcase, both including fixture/process startup.
+
+These samples include external network/runner variance and have no same-run direct-control baseline,
+so they are **not** used as a production overhead measurement.
 
 The measured phase must compare baseline and mediated paths for request/MCP/WebSocket latency, CPU,
 RAM, startup, log/disk growth, false positives and false negatives on an ordinary single-node/VPS
@@ -247,14 +277,14 @@ The decision criterion is added enforcement strength and verifiable evidence, no
 
 ## Current decision status
 
-**No final #730 adoption outcome yet.** Pipelock remains `candidate` until the remaining transport,
-bypass, failure, adversarial and performance evidence is executed. The final issue decision must be
-exactly one of `adopt`, `optional_provider`, `reference_only` or `reject` and cite the measured
-evidence.
+**No final #730 adoption outcome yet.** Pipelock remains `candidate` until the remaining generic
+WebSocket, redirect/private-target, bypass, failure, adversarial and performance evidence is executed
+and the CONNECT receipt anomaly is understood. The final issue decision must be exactly one of
+`adopt`, `optional_provider`, `reference_only` or `reject` and cite the measured evidence.
 
 The current evidence supports continuing the proof of concept: the canonical architecture remains
-independent, a tag-free Apache-2.0 source path exists, HTTP fetch works in audit mode, the canonical MCP
-stdio fixture works through the wrapper, and a pinned-key receipt chain has been verified. It does
-**not** justify production adoption or a protected-profile claim. The Enterprise-tagged
-Dockerfile/GoReleaser paths also keep a pinned source-built Core artifact as the clearer licensing
-baseline for this project.
+independent, a tag-free Apache-2.0 source path exists, HTTP fetch/forward and CONNECT transport work in
+the tested audit profiles, canonical MCP stdio/Streamable-HTTP/WebSocket fixtures work through the
+wrapper, and pinned-key receipt chains have been verified. It does **not** justify production adoption
+or a protected-profile claim. The Enterprise-tagged Dockerfile/GoReleaser paths also keep a pinned
+source-built Core artifact as the clearer licensing baseline for this project.

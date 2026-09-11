@@ -22,8 +22,12 @@ not Approved or Integrated.
 - [x] Reviewed upstream source/docs expose HTTP, WebSocket and MCP mediation/scanning plus signed
   receipt/flight-recorder evidence surfaces.
 - [x] Audit-only HTTP fetch is live-validated against the exact pinned source build.
+- [x] Plaintext HTTP forward and HTTPS CONNECT transport are live-validated with a dedicated
+  forward-enabled audit probe; TLS interception was not enabled.
 - [x] The canonical platform MCP stdio fixture is live-validated through `pipelock mcp proxy -- ...`.
-- [ ] The remaining transport, bypass, failure and performance matrix is measured.
+- [x] Canonical platform MCP Streamable HTTP and MCP WebSocket fixtures are live-validated through
+  Pipelock remote-upstream wrapping.
+- [ ] Generic `/ws`, redirects/private targets, bypass, failure and performance behavior are measured.
 
 ### Architecture fit
 
@@ -72,20 +76,24 @@ not Approved or Integrated.
 - [x] Proxy/MCP trust boundary and external-process nature are documented.
 - [x] Pipelock cannot grant permissions denied by canonical policy mapping.
 - [x] Receipt trust requires external cryptographic verification rather than self-assertion.
-- [x] A live proxy writer chain is verified with an out-of-band pinned Ed25519 public key.
+- [x] Live proxy writer chains are verified with out-of-band pinned Ed25519 public keys.
 - [x] Raw receipt targets/patterns are excluded from the initial platform evidence normalizer.
 - [x] Direct-network bypass is treated as an explicit unsupported condition until complete mediation is
   proven.
 - [x] The live verifier's `Containment: UNKNOWN` / `L-CONTAINMENT-UNPROVEN` result is retained rather
   than promoted into a non-bypass claim.
+- [ ] CONNECT strict-receipt coverage is proven. The live best-effort CONNECT probe succeeded as a
+  transport but logged `chain sealed: transcript root already emitted` while emitting its allow
+  receipt; this requires a dedicated reproduction.
 - [ ] Adversarial corpus and outage/bypass tests have been executed against the pinned binary.
 
 ### Resource footprint
 
 - [ ] Added HTTP request latency is measured against a same-run direct baseline. Current hosted-runner
-  samples are smoke timings only.
-- [ ] MCP call latency overhead is measured against a direct baseline.
-- [ ] WebSocket overhead is measured.
+  fetch/forward/CONNECT samples are smoke timings only.
+- [ ] MCP call latency overhead is measured against a direct baseline. Current remote-fixture testcase
+  durations include process/fixture startup.
+- [ ] Generic WebSocket overhead is measured.
 - [ ] CPU/RAM/startup/log/disk overhead is measured on the target single-node/VPS profile.
 - [ ] False-positive/false-negative behavior is measured against the maintained corpus.
 
@@ -103,6 +111,8 @@ not Approved or Integrated.
 - [x] No Python runtime dependency is introduced by the initial projection/evidence adapter.
 - [x] Pipelock remains a separately built optional runtime.
 - [x] Enterprise-tagged code is excluded from the intended source-built Core evaluation baseline.
+- [x] The WebSocket transport fixture uses a pinned test-only `websockets==15.0.1`; this is not added to
+  the platform runtime baseline.
 - [ ] Material transitive/runtime dependency footprint of the pinned Core binary is recorded from the
   actual build artifact.
 
@@ -116,6 +126,8 @@ not Approved or Integrated.
   revision in `Pipelock candidate compatibility`.
 - [x] The live MCP stdio check invokes the existing canonical platform fixture rather than only an
   upstream toy process.
+- [x] MCP Streamable HTTP and MCP WebSocket transport probes retain the platform's canonical
+  `CapabilityRegistry` / `CapabilityInvoker` path.
 
 ### Simpler internal alternative
 
@@ -134,15 +146,18 @@ not Approved or Integrated.
 
 ### Decision rationale
 
-The source/provenance review plus the current live pilot are sufficient to continue the proof of
+The source/provenance review plus the current live pilots are sufficient to continue the proof of
 concept without changing canonical architecture or introducing a paid baseline dependency. The live
-candidate now proves the exact tag-free build path, audit-only HTTP fetch, canonical MCP stdio wrapper
-compatibility and a pinned-key proxy receipt chain.
+candidate now proves the exact tag-free build path, audit-only HTTP fetch and forward transport,
+HTTPS CONNECT connectivity without TLS interception, canonical MCP stdio/Streamable-HTTP/WebSocket
+wrapper compatibility and pinned-key proxy receipt chains.
 
-That is still not sufficient for approval. The successful receipt verifier itself reports containment
-as unknown and explicitly does not prove non-bypass. Complete network mediation, enforced-profile
-outage/recovery behavior, the adversarial corpus, remaining transports and representative
-resource/performance costs remain unmeasured.
+That is still not sufficient for approval. The successful receipt verifier reports containment as
+unknown and explicitly does not prove non-bypass. The CONNECT transport probe additionally exposed a
+best-effort receipt-emission error, so successful tunnel transport must not be conflated with validated
+CONNECT receipt completeness. Complete network mediation, generic `/ws`, enforced-profile
+outage/recovery behavior, the adversarial corpus and representative resource/performance costs remain
+unmeasured.
 
 The artifact boundary is material. At the pinned revision, both the repository Dockerfile and the
 GoReleaser definition for the normal `pipelock` binary enable Enterprise build tags. Official release
@@ -159,8 +174,12 @@ established and must not be implied by the run fingerprints.
 - [x] Execute the audit-only pilot using the exact pinned source revision.
 - [x] Record binary/config/signing-key fingerprints and live signed receipt evidence.
 - [x] Exercise a canonical MCP stdio path through the pinned wrapper.
-- [ ] Execute HTTP forward/CONNECT, WebSocket, MCP HTTP/WebSocket and redirect/private-target matrices.
-- [ ] Execute the adversarial injection/DLP/encoding/SSRF/DNS/IPv6 corpus.
+- [x] Execute HTTP forward/CONNECT connectivity and canonical MCP Streamable HTTP/WebSocket transport
+  probes.
+- [ ] Reproduce and resolve/classify the CONNECT best-effort receipt-emission anomaly; prove strict
+  CONNECT receipt behavior if receipt completeness is required by the profile.
+- [ ] Execute generic `/ws`, redirect/private-target and SSRF/DNS/IPv6 transport/security matrices.
+- [ ] Execute the adversarial injection/DLP/encoding corpus.
 - [ ] Prove or explicitly reject protected-profile direct-network bypass resistance.
 - [ ] Exercise fail-open/fail-closed/audit-degradation behavior with live process outages/recovery.
 - [ ] Measure latency/CPU/RAM/startup/log growth and false-positive/false-negative behavior on the
