@@ -269,6 +269,10 @@ def build_single_node_deployment(
     application_release_repository = JsonApplicationReleaseRepository(
         config.database_dir / "application-releases.json"
     )
+    application_build_backend: (
+        DistributedApplicationBuildLifecycleBackend | ApplicationBuildLifecycleBackend
+    )
+    application_target_matcher: DistributedBuildTargetMatcher | LocalBuildTargetMatcher
     if enable_distributed_execution and base.distributed_runtime is not None:
         application_build_backend = DistributedApplicationBuildLifecycleBackend(
             application_release_repository,
