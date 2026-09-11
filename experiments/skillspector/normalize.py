@@ -79,7 +79,15 @@ def _normalize_finding(value: Any) -> NormalizedFinding:
         category=_first(item, "category", "type", "kind"),
         severity=str(severity).lower() if severity is not None else None,
         confidence=normalized_confidence,
-        summary=_first(item, "title", "summary", "message", "description", "finding", "explanation"),
+        summary=_first(
+            item,
+            "title",
+            "summary",
+            "message",
+            "description",
+            "finding",
+            "explanation",
+        ),
         path=_first(location, "file", "path") or _first(item, "file", "path"),
         line=normalized_line,
     )
