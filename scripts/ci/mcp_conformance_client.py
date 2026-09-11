@@ -1,8 +1,8 @@
 """Client harness launched by the official MCP conformance runner.
 
-The harness deliberately uses the platform MCP SDK adapter for the currently claimed
-stateful tool-client profile. Newer stateless revisions fail explicitly until the adapter
-implements and claims those semantics; CI records that prerelease evidence separately.
+The stable revision is exercised through the official Python SDK adapter. The newer
+2026-07-28 revision is exercised through the explicit platform stateless HTTP adapter so
+stateful and stateless protocol families remain independently testable.
 """
 
 from __future__ import annotations
@@ -11,31 +11,44 @@ import asyncio
 import os
 import sys
 
-from ai_multi_agent_platform.adapters.mcp import MCPServerConfig
+from ai_multi_agent_platform.adapters.mcp import MCPClient, MCPServerConfig
 from ai_multi_agent_platform.adapters.mcp_sdk import MCPPythonSDKClient
+from ai_multi_agent_platform.adapters.mcp_stateless import (
+    MCP_STATELESS_PROTOCOL_REVISION,
+    MCPStatelessHTTPClient,
+)
 
-_CLAIMED_PROTOCOL_REVISION = "2025-11-25"
+_STATEFUL_PROTOCOL_REVISION = "2025-11-25"
 _TRACK_PROTOCOL_ENV = "AI_MULTI_AGENT_PLATFORM_MCP_CONFORMANCE_PROTOCOL_REVISION"
 
 
-async def _run(server_url: str, scenario: str, protocol_revision: str) -> None:
-    if protocol_revision != _CLAIMED_PROTOCOL_REVISION:
-        raise RuntimeError(
-            "platform MCP client does not claim protocol revision "
-            f"{protocol_revision!r}; claimed revision is {_CLAIMED_PROTOCOL_REVISION!r}"
-        )
-
-    client = MCPPythonSDKClient(
-        MCPServerConfig(
-            server_id="official-conformance",
-            endpoint=server_url,
-            read_timeout_seconds=10.0,
-        )
+def _client(server_url: str, protocol_revision: str) -> MCPClient:
+    config = MCPServerConfig(
+        server_id="official-conformance",
+        endpoint=server_url,
+        read_timeout_seconds=10.0,
     )
+    if protocol_revision == _STATEFUL_PROTOCOL_REVISION:
+        return MCPPythonSDKClient(config)
+    if protocol_revision == MCP_STATELESS_PROTOCOL_REVISION:
+        return MCPStatelessHTTPClient(config, protocol_revision=protocol_revision)
+    raise RuntimeError(f"unsupported MCP protocol revision: {protocol_revision}")
+
+
+async def _run(server_url: str, scenario: str, protocol_revision: str) -> None:
+    client = _client(server_url, protocol_revision)
 
     if scenario == "initialize":
+        if protocol_revision != _STATEFUL_PROTOCOL_REVISION:
+            raise RuntimeError("initialize is not part of the stateless MCP lifecycle")
         if not await client.ping():
             raise RuntimeError("MCP initialization/negotiation did not become healthy")
+        return
+
+    if scenario in {"request-metadata", "request_metadata"}:
+        if protocol_revision != MCP_STATELESS_PROTOCOL_REVISION:
+            raise RuntimeError("request-metadata applies only to the stateless MCP revision")
+        await client.list_tools()
         return
 
     if scenario in {"tools_call", "tools-call"}:
