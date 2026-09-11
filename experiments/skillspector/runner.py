@@ -50,12 +50,14 @@ def prepare_output_directory(path: Path) -> None:
     ``--cap-drop=ALL`` intentionally removes ``CAP_DAC_OVERRIDE``. The pinned
     image currently runs as uid 0, but without that capability it cannot write a
     host-owned 0755 bind mount. The output directory contains only scanner-owned
-    artifacts and remains beneath a 0700 ``TemporaryDirectory`` on the host, so
-    granting write access on this leaf preserves the surrounding host isolation.
+    artifacts and remains beneath a 0700 ``TemporaryDirectory`` on the host.
+    Granting write+execute (but not read) access to non-owner UIDs on this leaf
+    lets the isolated container create its report without weakening the private
+    parent directory.
     """
     path.mkdir()
     if os.name == "posix":
-        path.chmod(0o777)
+        path.chmod(0o733)
 
 
 def container_command(runtime: str, image: str, input_dir: Path, output_dir: Path) -> list[str]:
