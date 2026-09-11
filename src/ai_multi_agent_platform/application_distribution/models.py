@@ -56,8 +56,8 @@ def _is_sensitive_command_option(value: str) -> tuple[bool, bool]:
     match = _COMMAND_OPTION.fullmatch(value)
     if match is None:
         return False, False
-    option_name = match.group("name").replace("-", "_")
-    probe = {option_name: "value"}
+    option_name = str(match.group("name")).replace("-", "_")
+    probe: JsonValue = {option_name: "value"}
     sensitive = redact_sensitive(probe) != probe
     return sensitive, match.group("value") is not None
 
