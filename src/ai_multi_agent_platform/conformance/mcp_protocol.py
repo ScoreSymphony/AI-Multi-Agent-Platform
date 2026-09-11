@@ -124,18 +124,12 @@ class MCPProtocolEvidence:
             platform_release=_optional_string(raw.get("platform_release")),
             adapter_revision=_required_string(raw.get("adapter_revision"), "adapter_revision"),
             sdk_version=_optional_string(raw.get("sdk_version")),
-            protocol_revision=_required_string(
-                raw.get("protocol_revision"), "protocol_revision"
-            ),
-            suite_repository=_required_string(
-                raw.get("suite_repository"), "suite_repository"
-            ),
+            protocol_revision=_required_string(raw.get("protocol_revision"), "protocol_revision"),
+            suite_repository=_required_string(raw.get("suite_repository"), "suite_repository"),
             suite_version=_required_string(raw.get("suite_version"), "suite_version"),
             suite_commit=_required_string(raw.get("suite_commit"), "suite_commit"),
             mode=_required_string(raw.get("mode"), "mode"),
-            transport_profile=_required_string(
-                raw.get("transport_profile"), "transport_profile"
-            ),
+            transport_profile=_required_string(raw.get("transport_profile"), "transport_profile"),
             claimed=claimed,
             gating=gating,
             protocol_conformant=protocol_conformant,
@@ -153,8 +147,7 @@ class MCPProtocolEvidence:
             unknown = sorted(statuses - known)
             raise ValueError(f"unknown MCP scenario status: {', '.join(unknown)}")
         expected = all(
-            scenario.status == MCPProtocolScenarioStatus.PASS.value
-            for scenario in self.scenarios
+            scenario.status == MCPProtocolScenarioStatus.PASS.value for scenario in self.scenarios
         )
         if self.protocol_conformant != expected:
             raise ValueError("protocol_conformant does not match scenario results")
@@ -177,11 +170,7 @@ class MCPCompatibilityEvidence:
 
     @property
     def compatible(self) -> bool:
-        return (
-            self.claimed
-            and self.protocol_conformant is True
-            and self.platform_conformant
-        )
+        return self.claimed and self.protocol_conformant is True and self.platform_conformant
 
     def to_json(self) -> str:
         payload = asdict(self)
@@ -255,7 +244,9 @@ def load_mcp_conformance_pins(path: Path) -> MCPConformancePins:
         if not isinstance(claimed, bool) or not isinstance(gating, bool):
             raise ValueError(f"MCP conformance track {track_name!r} requires boolean flags")
         if gating and not claimed:
-            raise ValueError(f"MCP conformance track {track_name!r} cannot gate an unclaimed profile")
+            raise ValueError(
+                f"MCP conformance track {track_name!r} cannot gate an unclaimed profile"
+            )
         tracks.append(
             MCPConformanceTrack(
                 name=track_name,
