@@ -13,8 +13,12 @@ from .models import ApplicationRelease
 
 MANIFEST_SCHEMA_VERSION = 1
 
+# Runtime mirror of docs/schemas/application-release-manifest.schema.json. A regression test
+# requires exact equality so the versioned documented schema remains the canonical contract.
 APPLICATION_RELEASE_MANIFEST_SCHEMA: dict[str, object] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ai-multi-agent-platform:schema:application-release-manifest:v1",
+    "title": "Application Release Manifest",
     "type": "object",
     "additionalProperties": False,
     "required": [
@@ -40,23 +44,29 @@ APPLICATION_RELEASE_MANIFEST_SCHEMA: dict[str, object] = {
     ],
     "properties": {
         "schema_version": {"const": MANIFEST_SCHEMA_VERSION},
-        "release_id": {"type": "string", "minLength": 1},
+        "release_id": {"type": "string", "pattern": "^application_release_"},
         "application": {"type": "string", "minLength": 1},
         "display_name": {"type": "string", "minLength": 1},
         "version": {"type": "string", "minLength": 1},
-        "channel": {"type": "string", "minLength": 1},
-        "visibility": {"type": "string", "minLength": 1},
-        "project_id": {"type": "string", "minLength": 1},
-        "workspace_id": {"type": "string", "minLength": 1},
-        "workspace_snapshot_id": {"type": "string", "minLength": 1},
-        "workspace_content_checksum": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "channel": {"enum": ["stable", "beta", "nightly"]},
+        "visibility": {"enum": ["public", "authenticated", "private"]},
+        "project_id": {"type": "string", "pattern": "^project_"},
+        "workspace_id": {"type": "string", "pattern": "^workspace_"},
+        "workspace_snapshot_id": {
+            "type": "string",
+            "pattern": "^workspace_snapshot_",
+        },
+        "workspace_content_checksum": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+        },
         "source_revision": {"type": "string", "minLength": 1},
         "build_specification": {
             "type": "object",
             "additionalProperties": False,
             "required": ["spec_id", "revision"],
             "properties": {
-                "spec_id": {"type": "string", "minLength": 1},
+                "spec_id": {"type": "string", "pattern": "^build_spec_"},
                 "revision": {"type": "integer", "minimum": 1},
             },
         },
@@ -80,60 +90,24 @@ APPLICATION_RELEASE_MANIFEST_SCHEMA: dict[str, object] = {
                     "os": {"type": "string", "minLength": 1},
                     "architecture": {"type": "string", "minLength": 1},
                     "package_type": {"type": "string", "minLength": 1},
-                    "status": {"type": "string", "minLength": 1},
+                    "status": {
+                        "enum": [
+                            "pending",
+                            "queued",
+                            "running",
+                            "succeeded",
+                            "failed",
+                            "unsupported",
+                        ]
+                    },
                     "task_id": {"type": ["string", "null"]},
                     "run_id": {"type": ["string", "null"]},
                     "failure_reason": {"type": ["string", "null"]},
                 },
             },
         },
-        "artifacts": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": [
-                    "artifact_id",
-                    "file_id",
-                    "target",
-                    "filename",
-                    "package_type",
-                    "media_type",
-                    "sha256",
-                    "build_task_id",
-                    "build_run_id",
-                    "evidence_refs",
-                    "download_url",
-                ],
-                "properties": {
-                    "artifact_id": {"type": "string", "minLength": 1},
-                    "file_id": {"type": "string", "minLength": 1},
-                    "target": {"type": "string", "minLength": 1},
-                    "filename": {"type": "string", "minLength": 1},
-                    "package_type": {"type": "string", "minLength": 1},
-                    "media_type": {"type": "string", "minLength": 1},
-                    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-                    "build_task_id": {"type": "string", "minLength": 1},
-                    "build_run_id": {"type": "string", "minLength": 1},
-                    "evidence_refs": {"type": "array", "items": {"type": "string"}},
-                    "download_url": {"type": ["string", "null"]},
-                },
-            },
-        },
-        "gates": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["name", "status", "evidence_refs", "details"],
-                "properties": {
-                    "name": {"type": "string", "minLength": 1},
-                    "status": {"type": "string", "minLength": 1},
-                    "evidence_refs": {"type": "array", "items": {"type": "string"}},
-                    "details": {"type": "object"},
-                },
-            },
-        },
+        "artifacts": {"type": "array", "items": {"type": "object"}},
+        "gates": {"type": "array", "items": {"type": "object"}},
         "release_notes": {"type": ["string", "null"]},
         "release_url": {"type": ["string", "null"]},
         "latest_url": {"type": ["string", "null"]},
