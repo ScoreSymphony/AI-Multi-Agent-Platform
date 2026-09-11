@@ -1,0 +1,44 @@
+name: "Bifrost"
+purpose: "Evaluation candidate for an optional self-hosted model gateway behind the platform-owned ModelProvider and ModelRouter boundaries."
+status: candidate
+integration_categories:
+  - "evaluation-only optional external service"
+  - "potential OpenAI-compatible model gateway adapter"
+canonical_upstream: "https://github.com/maximhq/bifrost"
+pinned_revision: "transports/v2.1.1 / c193745d2a713e9f58f021d43e138df5eb7e038a (bundled core v1.8.6)"
+verified_license: "Apache-2.0 at the reviewed transport commit"
+license_verification_date: "2026-09-12"
+last_review_date: "2026-09-12"
+platform_adapter_or_boundary: "Evaluation uses the existing OpenAI-compatible ModelProvider path. No Bifrost-specific canonical model, routing or lifecycle type is introduced."
+local_source_path: ""
+source_origin_path: "No Bifrost source is copied or vendored; evaluation targets a separately deployed Bifrost service."
+modified_locally: false
+modification_summary: "No upstream source is vendored or modified. The benchmark/evaluation harness is platform-owned code."
+required_notices:
+  - "If Bifrost source or binaries are redistributed in a future change, preserve Apache-2.0 notices and re-run the upstream/license review."
+compatibility_constraints:
+  - "The reviewed HTTP transport target is transports/v2.1.1 at commit c193745d2a713e9f58f021d43e138df5eb7e038a."
+  - "The reviewed release bundles core v1.8.6."
+  - "The platform ModelRouter remains authoritative for canonical model selection and policy."
+  - "Bifrost provider/model names and gateway routing metadata must stay inside adapter/deployment configuration and namespaced diagnostics."
+  - "Gateway-side routing, retries, weighted balancing and fallbacks must be disabled or constrained so they cannot escape the candidate set already allowed by platform policy."
+  - "A generic OpenAI-compatible provider may target Bifrost directly when no Bifrost-specific wrapper metadata is required."
+security_constraints:
+  - "GHSA-w98g-5w9p-p3rc / CVE-2026-55245 is a high-severity SSRF advisory affecting github.com/maximhq/bifrost/core before v1.5.17; the reviewed v2.1.1 transport bundles core v1.8.6 and is after the fix."
+  - "The advisory demonstrates that local/self-hosted gateway placement is not itself a security boundary; URL-fetch behavior requires explicit regression coverage for loopback, private, link-local, metadata, redirect, DNS-rebinding, CGNAT, 6to4, NAT64 and site-local targets."
+  - "Bifrost's upstream security policy states that only the latest minor release of each supported major version receives security patches; any supported integration therefore requires an explicit patch/update policy."
+  - "Provider credentials remain behind the platform #34 SecretReference boundary; ordinary platform configuration and benchmark reports must contain only credential references, never plaintext values."
+  - "Bifrost authentication, virtual keys or governance do not replace platform #15 authorization/approval decisions."
+deployment_constraints:
+  - "Bifrost must remain absent from baseline deployments; normal ModelRouter and direct provider operation cannot depend on the service."
+  - "The evaluation target is a separately deployed HTTP service; deployment may use Docker/binary or Kubernetes/Helm upstream paths."
+  - "Persistence and clustered deployment add database/network operational surface and must be treated as optional deployment concerns rather than canonical platform state."
+resource_constraints:
+  - "The gateway itself does not create a platform-wide GPU requirement; downstream model endpoints determine accelerator requirements."
+  - "A gateway introduces at least one additional process/network hop and therefore must be measured against direct adapters on representative local endpoints."
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Before changing the reviewed pin, verify the exact tag/commit and license, review GitHub Security Advisories and release notes, confirm the bundled core/framework versions, rerun OpenAI-compatible conformance, streaming/tool-calling, secret-redaction, SSRF/egress, restart/upgrade and direct-vs-gateway performance tests."
+exit_replacement_strategy: "Remove the Bifrost deployment/evaluation configuration and point canonical model configurations at direct providers, LiteLLM or another ModelProvider adapter. Canonical Agents, Tasks, model configuration IDs, ModelRegistry state and ModelRouter policy remain valid."
+adr: ""
+notes: "Issue #859 evaluation. Current classification is experimental_only until the required live compatibility, security, restart/upgrade and representative local performance evidence is recorded."
