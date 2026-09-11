@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 # Evaluation modules intentionally live outside the installable platform package. Add the
 # repository root explicitly so these tests behave the same under the repo's `pytest` console
@@ -12,6 +16,8 @@ from experiments.skillspector.fixtures import FIXTURES, write_fixture_corpus  # 
 from experiments.skillspector.normalize import normalize_report  # noqa: E402
 from experiments.skillspector.runner import (  # noqa: E402
     container_command,
+    evaluate,
+    run_command,
     sanitized_environment,
     scan_result_is_usable,
 )
@@ -182,6 +188,24 @@ def test_missing_required_provider_structure_can_never_normalize_to_clean() -> N
     assert "provider_findings_missing" in evidence.degraded_reasons
 
 
+def test_provider_report_schema_mismatch_can_never_normalize_to_clean() -> None:
+    evidence = _normalize(
+        {
+            "execution_successful": True,
+            "analysis_completeness": ["unexpected", "shape"],
+            "issues": {"unexpected": "mapping"},
+        }
+    )
+
+    assert evidence.status == "degraded"
+    assert evidence.complete is False
+    assert any(
+        reason.startswith("provider_analysis_completeness=")
+        for reason in evidence.degraded_reasons
+    )
+    assert "provider_findings_missing" in evidence.degraded_reasons
+
+
 def test_high_risk_recommendation_remains_metadata_not_trust_state() -> None:
     evidence = _normalize(
         _complete_report(
@@ -233,6 +257,59 @@ def test_failed_or_unstructured_scan_result_is_not_usable_evidence() -> None:
     assert scan_result_is_usable(2, _complete_report(execution_successful=False)) is False
     assert scan_result_is_usable(0, {}) is False
     assert scan_result_is_usable(0, "not-json") is False
+
+
+def test_malformed_scanner_output_is_fail_closed() -> None:
+    # A malformed/non-mapping decoded payload can never become usable evidence even
+    # when the process itself exits zero.
+    assert scan_result_is_usable(0, ["not", "a", "report"]) is False
+    assert scan_result_is_usable(0, "{not-valid-json") is False
+    assert scan_result_is_usable(0, None) is False
+
+
+def test_timeout_is_reported_as_explicit_scanner_failure(monkeypatch) -> None:
+    def _timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=["skillspector"], timeout=1)
+
+    monkeypatch.setattr(subprocess, "run", _timeout)
+
+    with pytest.raises(RuntimeError, match="timed out after 1s"):
+        run_command(["skillspector", "scan", "/scan"], timeout_seconds=1)
+
+
+def test_unsupported_non_directory_candidate_is_rejected_before_execution(tmp_path: Path) -> None:
+    source = tmp_path / "SKILL.md"
+    source.write_text("not a candidate directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must be a directory"):
+        evaluate(
+            source,
+            runtime="docker",
+            image="skillspector-eval:2.11.2",
+            allow_local_process=False,
+            timeout_seconds=1,
+        )
+
+
+def test_symlinked_candidate_content_is_rejected_before_execution(tmp_path: Path) -> None:
+    source = tmp_path / "candidate"
+    source.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside candidate", encoding="utf-8")
+    link = source / "escape.txt"
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlinks unavailable in this test environment: {exc}")
+
+    with pytest.raises(ValueError, match="unsupported symlink"):
+        evaluate(
+            source,
+            runtime="docker",
+            image="skillspector-eval:2.11.2",
+            allow_local_process=False,
+            timeout_seconds=1,
+        )
 
 
 def test_container_command_enforces_baseline_isolation(tmp_path: Path) -> None:
