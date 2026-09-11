@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import replace
-
-from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.security import REDACTED, redact_sensitive, redact_text
 
 from .evaluation_gate_orchestration import (
     ApplicationReleaseGateCoordinator as _EvaluationApplicationReleaseGateCoordinator,
 )
 from .models import ApplicationRelease, GateEvidence
-
-_WINDOWS_ABSOLUTE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
+from .provenance import sanitize_runtime_provenance
 
 
 class ApplicationReleaseGateCoordinator(_EvaluationApplicationReleaseGateCoordinator):
@@ -35,30 +30,6 @@ def _sanitize_gate_runtime_provenance(gate: GateEvidence) -> GateEvidence:
     if not isinstance(runtime, dict):
         return gate
 
-    sanitized = _sanitize_provenance_value(redact_sensitive(runtime))
     details = dict(gate.details)
-    details["runtime_provenance"] = sanitized
+    details["runtime_provenance"] = sanitize_runtime_provenance(runtime)
     return replace(gate, details=details)
-
-
-def _sanitize_provenance_value(value: JsonValue) -> JsonValue:
-    if isinstance(value, dict):
-        return {key: _sanitize_provenance_value(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_sanitize_provenance_value(item) for item in value]
-    if isinstance(value, str):
-        redacted = redact_text(value)
-        if _is_host_local_path(redacted):
-            return REDACTED
-        return redacted
-    return value
-
-
-def _is_host_local_path(value: str) -> bool:
-    candidate = value.strip()
-    if not candidate:
-        return False
-    return (
-        candidate.startswith(("/", "~/", "\\\\", "//", "file://"))
-        or _WINDOWS_ABSOLUTE_PATH.match(candidate) is not None
-    )
