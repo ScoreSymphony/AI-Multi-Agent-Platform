@@ -9,9 +9,11 @@ from ai_multi_agent_platform.adapters.pipelock import (
     PipelockAdapterMode,
     PipelockDirective,
     PipelockMappingError,
+    PipelockUnavailableAction,
     ReceiptVerification,
     normalize_pipelock_receipt,
     project_egress_decision,
+    resolve_pipelock_unavailable,
 )
 from ai_multi_agent_platform.contracts import (
     DataClassification,
@@ -137,6 +139,40 @@ def test_decision_digest_binds_payload_and_policy_revision() -> None:
 
     assert len(first.decision_digest) == 64
     assert first.decision_digest != second.decision_digest
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        (PipelockAdapterMode.DISABLED, PipelockUnavailableAction.NOT_REQUIRED),
+        (
+            PipelockAdapterMode.AUDIT_ONLY,
+            PipelockUnavailableAction.CONTINUE_WITH_DEGRADED_EVIDENCE,
+        ),
+        (PipelockAdapterMode.ENFORCE, PipelockUnavailableAction.FAIL_CLOSED),
+    ],
+)
+def test_pipelock_outage_behavior_is_explicit_for_canonical_allow(
+    mode: PipelockAdapterMode,
+    expected: PipelockUnavailableAction,
+) -> None:
+    projection = project_egress_decision(_request(), _decision(), mode=mode)
+
+    assert resolve_pipelock_unavailable(projection) is expected
+
+
+@pytest.mark.parametrize("mode", list(PipelockAdapterMode))
+def test_pipelock_outage_is_irrelevant_when_canonical_policy_already_blocks(
+    mode: PipelockAdapterMode,
+) -> None:
+    projection = project_egress_decision(
+        _request(),
+        _decision(EgressOutcome.DENY),
+        mode=mode,
+    )
+
+    assert projection.directive is PipelockDirective.BLOCK
+    assert resolve_pipelock_unavailable(projection) is PipelockUnavailableAction.NOT_REQUIRED
 
 
 def test_receipt_normalization_preserves_canonical_refs_without_raw_destination() -> None:
