@@ -100,9 +100,7 @@ class ApplicationDistributionService(_GateApplicationDistributionService):
             return release
         metadata.update(safe_runtime)
         artifacts = tuple(
-            replace(item, external_metadata=metadata)
-            if item.artifact_id == artifact_id
-            else item
+            replace(item, external_metadata=metadata) if item.artifact_id == artifact_id else item
             for item in release.artifacts
         )
         updated = replace(
