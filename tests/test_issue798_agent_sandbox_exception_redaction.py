@@ -5,7 +5,9 @@ from pathlib import Path
 
 from ai_multi_agent_platform.adapters.agent_sandbox import (
     AgentSandboxClientRequest,
+    AgentSandboxClientResult,
     AgentSandboxExecutor,
+    AgentSandboxHealth,
 )
 from ai_multi_agent_platform.execution import (
     ExecutionErrorCategory,
@@ -17,13 +19,16 @@ _SECRET = "ISSUE798-PROVIDER-SECRET-CANARY"
 
 
 class SecretBearingFailureClient:
-    async def execute(self, request: AgentSandboxClientRequest) -> None:
+    async def execute(
+        self,
+        request: AgentSandboxClientRequest,
+    ) -> AgentSandboxClientResult:
         raise RuntimeError(f"provider transport failed with token={_SECRET}")
 
     async def cancel(self, request_ref: str) -> None:
         return
 
-    async def health(self) -> None:
+    async def health(self) -> AgentSandboxHealth:
         raise RuntimeError(f"provider health URL contained token={_SECRET}")
 
 
