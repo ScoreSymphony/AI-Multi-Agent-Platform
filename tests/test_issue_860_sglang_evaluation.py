@@ -4,6 +4,8 @@ import json
 import tomllib
 from pathlib import Path
 
+from jsonschema import Draft202012Validator
+
 from ai_multi_agent_platform.contracts import (
     Capability,
     CapabilityKind,
@@ -22,6 +24,14 @@ from ai_multi_agent_platform.testing import FakeModelProvider
 
 ROOT = Path(__file__).resolve().parents[1]
 CAMPAIGN_PATH = ROOT / "config" / "inference-backend-evaluation.sglang-v0.5.19.json"
+REPORT_SCHEMA_PATH = (
+    ROOT
+    / "src"
+    / "ai_multi_agent_platform"
+    / "benchmarking"
+    / "schemas"
+    / "inference-backend-evaluation-report.v1.schema.json"
+)
 
 
 class BaselineLocalProvider(FakeModelProvider):
@@ -144,6 +154,23 @@ def test_sglang_campaign_covers_required_contract_failure_and_comparison_dimensi
         "error_count",
     } <= set(campaign["required_metrics"])
     assert campaign["raw_evidence"]["summary_only_is_sufficient"] is False
+
+
+def test_inference_backend_report_schema_is_valid_and_covers_campaign_metrics() -> None:
+    campaign = json.loads(CAMPAIGN_PATH.read_text(encoding="utf-8"))
+    schema = json.loads(REPORT_SCHEMA_PATH.read_text(encoding="utf-8"))
+
+    Draft202012Validator.check_schema(schema)
+    assert schema["properties"]["schema_version"]["const"] == "1.0"
+    assert set(campaign["required_metrics"]) <= set(
+        schema["properties"]["metrics"]["required"]
+    )
+    assert set(schema["properties"]["backend"]["enum"]) == {
+        "sglang",
+        "vllm",
+        "llama.cpp",
+        "ollama",
+    }
 
 
 def test_sglang_is_not_a_mandatory_python_dependency() -> None:
