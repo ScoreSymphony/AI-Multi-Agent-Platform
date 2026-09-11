@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from typing import Literal, Protocol
 
@@ -115,7 +116,8 @@ class CoordinationProgression:
                     is PredecessorFailurePolicy.CANCEL_DEPENDENT
                     else StepStatus.SKIPPED
                 )
-                updated = current.with_changes(
+                updated = replace(
+                    current,
                     phase=CoordinationPhase.TERMINAL,
                     satisfied_dependency_ids=satisfied,
                     reconciliation_detail="predecessor failed or cancelled",
@@ -146,10 +148,10 @@ class CoordinationProgression:
             try:
                 current = self.repository.get_step_record(step.id)
                 current_step = self.repository.get_plan(step.plan_id).step(step.id)
-                updated = current.with_changes(satisfied_dependency_ids=satisfied)
+                updated = replace(current, satisfied_dependency_ids=satisfied)
                 if set(satisfied) == set(current.dependency_ids):
                     current_step = current_step.transition_to(StepStatus.READY)
-                    updated = updated.with_changes(phase=CoordinationPhase.READY)
+                    updated = replace(updated, phase=CoordinationPhase.READY)
                 self.repository.save_step(
                     step=current_step,
                     record=updated,
@@ -196,7 +198,7 @@ class CoordinationProgression:
                 if current_step.status is not StepStatus.PENDING:
                     return False
                 ready = current_step.transition_to(StepStatus.READY)
-                updated = current.with_changes(phase=CoordinationPhase.READY)
+                updated = replace(current, phase=CoordinationPhase.READY)
                 self.repository.save_step(
                     step=ready,
                     record=updated,
@@ -258,7 +260,8 @@ class CoordinationProgression:
                 attributes={"attempt": attempt},
             )
             running = current_step.transition_to(StepStatus.RUNNING)
-            updated = current.with_changes(
+            updated = replace(
+                current,
                 phase=CoordinationPhase.ATTEMPT_ACTIVE,
                 latest_run_id=run.run_id,
                 current_attempt=attempt,
