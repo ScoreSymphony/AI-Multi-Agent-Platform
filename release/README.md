@@ -11,6 +11,9 @@ This directory contains operator-facing, machine-readable release metadata for i
   update discovery.
 - `upstream-validation-evidence.example.json` documents the revision-bound validation evidence
   required before a reviewed upstream candidate can be recorded into a new compatibility snapshot.
+- `hermes-v0.21.1-observation.json` and `hermes-v0.21.1-validation-evidence.json` are the concrete
+  #733 observation/evidence pair for the accepted Hermes Agent v0.21.1 immutable revision. Their
+  adoption path is reproduced by `tests/release/test_hermes_v0_21_1_adoption_evidence.py`.
 - `release-generation-input.example.json` documents the reviewed inputs consumed by deterministic
   release-manifest generation. It is a template: placeholder evidence must be replaced before a
   release candidate can pass validation.
