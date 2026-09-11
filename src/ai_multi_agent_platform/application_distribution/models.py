@@ -17,6 +17,9 @@ from ai_multi_agent_platform.workspaces import validate_relative_path, validate_
 APPLICATION_RELEASE_SCHEMA_VERSION = "1.0"
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SECRET_REFERENCE_ID = re.compile(r"^secret_ref_[a-z0-9][a-z0-9._-]{0,127}$")
+_COMMAND_OPTION = re.compile(
+    r"^-{1,2}(?P<name>[A-Za-z][A-Za-z0-9_-]*)(?:=(?P<value>.*))?$"
+)
 
 
 def utc_now() -> datetime:
@@ -51,6 +54,16 @@ def _secret_reference_ids(values: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(copied)
 
 
+def _is_sensitive_command_option(value: str) -> tuple[bool, bool]:
+    match = _COMMAND_OPTION.fullmatch(value)
+    if match is None:
+        return False, False
+    option_name = match.group("name").replace("-", "_")
+    probe = {option_name: "value"}
+    sensitive = redact_sensitive(probe) != probe
+    return sensitive, match.group("value") is not None
+
+
 def _command_tokens(values: tuple[str, ...]) -> tuple[str, ...]:
     if any(not value.strip() for value in values):
         raise ValueError("command must not contain blank values")
@@ -58,7 +71,14 @@ def _command_tokens(values: tuple[str, ...]) -> tuple[str, ...]:
         raise ValueError(
             "command must not embed sensitive environment assignments; use secret_environment"
         )
-    return tuple(values)
+    copied = tuple(values)
+    for index, value in enumerate(copied):
+        sensitive, has_inline_value = _is_sensitive_command_option(value)
+        if sensitive and (has_inline_value or index + 1 < len(copied)):
+            raise ValueError(
+                "command must not embed sensitive credential option values; use secret_environment"
+            )
+    return copied
 
 
 def _safe_mapping(
