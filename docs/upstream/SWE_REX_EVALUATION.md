@@ -3,7 +3,7 @@
 Status: **in progress**  
 Provisional outcome: **`experimental_only`**
 
-This document separates verified upstream facts, platform adapter evidence and live evidence that is still required. SWE-ReX is evaluated only as an optional implementation behind the platform-owned Executor and Worker boundaries. It does not own canonical Task, Run, Workspace, File, Artifact, authorization, secret or retry semantics.
+This document separates verified upstream facts, platform adapter evidence and live evidence. SWE-ReX is evaluated only as an optional implementation behind the platform-owned Executor and Worker boundaries. It does not own canonical Task, Run, Workspace, File, Artifact, authorization, secret, retry or dispatch semantics.
 
 ## Evaluated upstream
 
@@ -35,7 +35,7 @@ Canonical ExecutionRequest
 Canonical ExecutionResult / Artifact evidence
 ```
 
-The proof-of-concept in `src/ai_multi_agent_platform/adapters/swe_rex.py` intentionally does **not** import or require `swe-rex`. A future concrete client may use SWE-ReX, but absence of that dependency must not change the reference Executor path.
+The proof-of-concept in `src/ai_multi_agent_platform/adapters/swe_rex.py` intentionally does **not** import or require `swe-rex`. The live bridge in `scripts/benchmarks/issue861_swe_rex_canonical.py` supplies a concrete evaluation-only client against the exact pinned upstream runtime. Absence of SWE-ReX must not change the reference Executor path.
 
 ### Canonical ownership retained
 
@@ -49,17 +49,56 @@ Authorization and policy are not delegated to SWE-ReX. `ExecutionRequest.policy_
 
 SWE-ReX is an execution/runtime abstraction, **not one uniform isolation technology**.
 
-| Backend/path | Reviewed meaning | Isolation claim at this stage |
+| Backend/path | Reviewed meaning | Evidence / isolation claim at this stage |
 | --- | --- | --- |
-| Local | `LocalDeployment` wraps `LocalRuntime` on the host | **None. Unsandboxed host execution.** |
-| Docker/Podman | Starts a container/runtime and communicates with a remote runtime | Container isolation only; live security evidence pending |
-| Remote | Connects to an already-running SWE-ReX server | Depends entirely on remote host/deployment boundary |
+| Local on Linux | `LocalDeployment` wraps `LocalRuntime` on the host | Live functional evidence exists; **no isolation** and outside-Workspace reads are possible |
+| Local on Windows | Native `LocalRuntime` path | Exact pinned package installs, but `LocalDeployment` import fails on the available Windows runner because `pexpect.spawn` is unavailable |
+| Docker/Podman | Starts a container and talks to a SWE-ReX server through `RemoteRuntime` | Evidence campaign in progress; must pin the server image separately from the host package |
+| Remote | Connects to an already-running SWE-ReX server | Depends entirely on remote host/deployment boundary; live evidence pending |
 | Modal | Cloud deployment adapter | Provider-specific; not measured here yet |
 | Fargate | AWS Fargate deployment adapter | Provider-specific; not measured here yet |
 | Daytona | Optional provider integration | Upstream/provider-specific; not measured here yet |
 | Dummy | Test implementation | No production isolation claim |
 
-The platform PoC therefore rejects `backend_kind="local"` unless an explicit `allow_unsandboxed_local=True` opt-in is supplied. Discovery/setup must never label that mode as a sandbox.
+The platform PoC therefore rejects `backend_kind="local"` unless an explicit `allow_unsandboxed_local=True` opt-in is supplied. Discovery/setup must never label local mode as a sandbox.
+
+## Live Linux LocalDeployment evidence
+
+The first GitHub-hosted Ubuntu 24.04 / Python 3.12 campaign against the exact pinned revision demonstrated:
+
+- successful one-shot execution with exit code `0`;
+- separate stdout and stderr;
+- provider file write/read round-trip;
+- timeout signaling via `CommandTimeoutError` at a `0.05s` command timeout;
+- visibility of an explicitly supplied synthetic environment canary in the child process;
+- successful read of a sibling file outside the selected temporary Workspace directory.
+
+This is useful evidence for trusted-host execution semantics, but it directly rejects LocalDeployment as a Workspace containment or sandbox mechanism. Child-process cleanup after timeout/cancellation still requires explicit evidence.
+
+## Native Windows result
+
+On the available Windows Server 2025 / Python 3.12 runner, the exact pinned SWE-ReX revision built and installed successfully. Importing `LocalDeployment` then failed before any command could be executed:
+
+```text
+AttributeError: module 'pexpect' has no attribute 'spawn'
+```
+
+The failure arises while defining `swerex.runtime.local.BashSession`. Therefore #861 currently has **negative native-Windows LocalDeployment evidence**. A Windows-side client targeting a supported Linux/container remote server is a different architecture and remains a separate hypothesis.
+
+## Docker/Remote packaging and provenance findings
+
+The first Docker evidence run exposed an upstream packaging gap before runtime start: `RemoteRuntime` imports `aiohttp`, while the reviewed base SWE-ReX package does not declare/install it. The evidence workflow now installs `aiohttp` explicitly for Docker/remote-runtime evaluation only. This dependency is not added to the platform baseline.
+
+A second provenance issue is equally important: `DockerDeployment` does not automatically propagate the host package revision into the container server. If the selected image does not already contain `swe-rex`, its startup path can fall back to `pipx run swe-rex`, which is not pinned to the host revision.
+
+Therefore reproducible Docker evidence in #861 now:
+
+1. installs the exact evaluated revision on the host;
+2. builds a dedicated container server image from the same exact revision;
+3. passes that image to `DockerDeployment` with `pull="never"`;
+4. records the image identity in workflow logs/evidence.
+
+Docker results from an unpinned fallback server are not accepted as evidence for this issue.
 
 ## Command and result mapping
 
@@ -85,7 +124,7 @@ The platform must continue to:
 4. collect changes as canonical Files/Artifacts;
 5. clean provider-private state independently of Artifact durability.
 
-The PoC enforces steps 2 and 3 at its boundary for returned Artifact evidence. Live remote/container tests are still required to prove that provider-side operations cannot bypass the intended effective boundary.
+The platform PoC validates the selected canonical Workspace and returned Artifact evidence. The live canonical bridge additionally performs explicit provider-to-canonical Artifact collection. Remote/container escape tests are still required to prove the effective provider-side boundary.
 
 ## Remote transport observations
 
@@ -95,7 +134,7 @@ Any supported remote profile must therefore require an appropriately trusted/pri
 
 The server's request-response cache retains only the last processed request and explicitly does not guarantee idempotency for multiple concurrent clients. Canonical #14 worker-job idempotency/dispatch semantics therefore remain authoritative.
 
-## Contract evidence implemented in this branch
+## Contract and bridge evidence implemented in this branch
 
 `tests/test_swe_rex_executor.py` reuses `ExecutorContractSuite` and adds provider-specific assertions for:
 
@@ -111,41 +150,47 @@ The server's request-response cache retains only the last processed request and 
 - explicit opt-in for the unsandboxed local backend;
 - health metadata with the exact reviewed upstream pin.
 
-These are adapter/contract tests with a deterministic fake client. They are not evidence of live backend isolation.
+`scripts/benchmarks/issue861_swe_rex_canonical.py` then exercises the same platform boundary against live SWE-ReX runtime paths. It checks canonical IDs, health/capabilities, success/failure/timeout mapping, provider-private metadata, Artifact collection and the fail-closed Workspace/environment guards. Live bridge results are recorded separately from deterministic fake-client contract tests.
 
-## Cross-platform hypothesis
+## Cross-platform hypothesis after first evidence
 
-SWE-ReX has potential value because one deployment/runtime abstraction can target direct local execution, Docker/Podman, a separately hosted server and several remote/cloud backends. That is materially different from adopting one sandbox runtime only.
+SWE-ReX still has potential value because one deployment/runtime abstraction can target direct local execution, Docker/Podman, a separately hosted server and several remote/cloud backends. That is materially different from adopting one sandbox runtime only.
 
-However, cross-platform value is not accepted from interface shape alone. #861 still requires:
+However, the original cross-platform hypothesis is now weaker:
 
-- live Linux behavior;
-- available Windows-path behavior, including path normalization and process behavior;
-- Docker/Podman or another isolated local path;
-- at least one relevant remote/server path;
-- consistent canonical result mapping across the exercised backends.
+- Linux LocalDeployment is functionally useful but unsandboxed;
+- native Windows LocalDeployment fails on the available runner at the reviewed revision;
+- Docker/Remote paths have an undeclared host dependency (`aiohttp`) at this pin;
+- Docker server provenance must be pinned separately from the host library;
+- security properties remain backend-specific rather than properties of SWE-ReX as a whole.
+
+The remaining value proposition is therefore primarily **backend/runtime abstraction**, not “one portable sandbox.”
 
 ## Current decision
 
-**`experimental_only`** is the only supported conclusion from the current evidence.
+**`experimental_only`** remains the only supported conclusion from the current evidence.
 
 Positive evidence:
 
 - clean structural fit behind the canonical Executor boundary;
-- useful backend abstraction across local/container/remote/cloud deployment types;
+- useful Linux trusted-host runtime semantics;
+- potentially useful abstraction across container/remote/cloud deployment types;
 - command/result and file-transfer primitives are sufficient for a minimal adapter seam;
 - MIT licensing and no mandatory paid service for self-hosted paths;
 - the platform can keep SWE-ReX entirely optional.
 
-Blocking evidence gaps:
+Negative evidence / blockers:
 
-- effective isolation must be measured separately per backend;
+- LocalDeployment has no Workspace containment and therefore cannot satisfy a sandbox-required profile;
+- native Windows LocalDeployment is currently unusable on the exercised runner;
+- base packaging omits `aiohttp` needed by the reviewed RemoteRuntime path;
+- Docker server provenance is not automatically tied to the host package revision;
+- effective container/remote isolation must still be measured per backend;
 - network egress controls/escape paths are not established as a uniform capability;
 - scoped credential delivery and exfiltration tests are pending;
-- live timeout/cancellation/crash/process cleanup are pending;
+- cancellation/crash/child-process cleanup is pending;
 - stdout/stderr streaming claims are unproven;
-- Linux and Windows-path interoperability has not yet been demonstrated in this repository;
 - remote transport hardening and operational burden need measurement;
 - #798 comparison evidence and #799 discovery taxonomy are still in progress.
 
-Promotion to `supported_optional` requires closing those evidence gaps. A failure to demonstrate meaningful cross-platform value or acceptable containment/operations should result in `reject/defer` rather than weakening canonical platform boundaries.
+Promotion to `supported_optional` requires closing the relevant evidence gaps for a precisely defined supported profile. If the viable profile becomes too narrow or SWE-ReX adds little beyond direct platform adapters, the correct outcome should be `reject/defer` rather than weakening canonical platform boundaries.
