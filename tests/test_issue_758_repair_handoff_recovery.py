@@ -136,9 +136,14 @@ async def _needs_changes_stack():
 
 def test_restart_before_and_after_repair_run_creation_reuses_one_canonical_run() -> None:
     async def scenario() -> None:
-        verification, completion, kernel, _lifecycle, task_id, verification_id = (
-            await _needs_changes_stack()
-        )
+        (
+            verification,
+            completion,
+            kernel,
+            _lifecycle,
+            task_id,
+            verification_id,
+        ) = await _needs_changes_stack()
 
         before_restart = VerificationRepairRuntime(verification, completion, kernel)
         first = await before_restart.start_repair(
@@ -168,9 +173,14 @@ def test_restart_before_and_after_repair_run_creation_reuses_one_canonical_run()
 
 def test_restart_after_repair_execution_before_result_attachment_reuses_attachment() -> None:
     async def scenario() -> None:
-        verification, completion, kernel, lifecycle, task_id, verification_id = (
-            await _needs_changes_stack()
-        )
+        (
+            verification,
+            completion,
+            kernel,
+            lifecycle,
+            task_id,
+            verification_id,
+        ) = await _needs_changes_stack()
         repair_runtime = VerificationRepairRuntime(verification, completion, kernel)
         execution = await repair_runtime.start_repair(
             verification_id,
@@ -219,9 +229,14 @@ def test_restart_after_repair_execution_before_result_attachment_reuses_attachme
 
 def test_restart_after_fresh_reverification_request_reuses_exact_descendant() -> None:
     async def scenario() -> None:
-        verification, completion, kernel, lifecycle, task_id, verification_id = (
-            await _needs_changes_stack()
-        )
+        (
+            verification,
+            completion,
+            kernel,
+            lifecycle,
+            task_id,
+            verification_id,
+        ) = await _needs_changes_stack()
         repair_runtime = VerificationRepairRuntime(verification, completion, kernel)
         execution = await repair_runtime.start_repair(
             verification_id,
@@ -286,8 +301,7 @@ def test_restart_after_fresh_reverification_request_reuses_exact_descendant() ->
         descendants = [
             persisted
             for persisted, _result in history
-            if persisted.repair_attempt == 1
-            and persisted.causation_id == execution.run_id
+            if persisted.repair_attempt == 1 and persisted.causation_id == execution.run_id
         ]
         assert len(descendants) == 1
         assert descendants[0].verification_id == first.verification_id
