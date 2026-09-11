@@ -15,6 +15,10 @@
 
 Repository decision-making, ownership, triage and release responsibilities are defined in [`GOVERNANCE.md`](GOVERNANCE.md). The release checklist is maintained in [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md).
 
+For project orientation, use [`README.md`](README.md). Curated point-in-time implementation/integration status lives in [`docs/STATUS.md`](docs/STATUS.md); dependency-driven planning and convergence guidance live in [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md). GitHub issue/dependency state, pull-request checks and merged code remain authoritative for live work-item state, so contributors should not add issue-by-issue progress ledgers back to the README.
+
+When several focused issue branches are being collected through a shared integration branch, keep documentation/status cleanup as a late pass. Reconcile it against the current combined head, preserve newer cross-issue documentation, refresh `docs/STATUS.md` from that combined state, and only then treat the documentation issue as closure-ready.
+
 ## Reconciling stale or superseded branches
 
 When a branch has diverged because equivalent or newer work landed through another pull request, do not resolve conflicts by restoring stale file versions.
@@ -65,6 +69,46 @@ When adding a new feature, prefer explicit responsibility names such as `Convers
 Changes to canonical domain entities, lifecycle semantics, public contracts, adapter boundaries, persistence ownership, security boundaries or distributed-node behavior must be documented in the pull request. Significant changes should add or update an architecture decision record before implementation is treated as stable.
 
 Concrete systems such as orchestrators, execution backends, model gateways, tool protocols, memory systems and storage products must integrate through platform-owned contracts rather than redefine them.
+
+## Python package boundaries
+
+The checked top-level package inventory is [`docs/PACKAGE_BOUNDARIES.toml`](docs/PACKAGE_BOUNDARIES.toml); its design rules and migration policy are in [`docs/PACKAGE_BOUNDARIES.md`](docs/PACKAGE_BOUNDARIES.md).
+
+A pull request that adds a package directly below `src/ai_multi_agent_platform/` must update the inventory in the same change and explain why the functionality cannot live as a module or subpackage under an existing owner. The rationale must identify a durable responsibility, state/contract ownership and dependency direction. A feature name, issue number, endpoint, provider or implementation class is not by itself a root-package boundary.
+
+When changing package layout:
+
+- preserve supported import/API behavior or provide a bounded compatibility namespace and migration plan;
+- add canonical behavior under the package identified as `owner`, not under a package marked `migration`;
+- keep `operations`, `integration`, `surface` and `quality` packages from becoming accidental canonical lifecycle authorities;
+- use nested modules/subpackages for responsibility splits such as #723 unless ownership itself is intentionally changing;
+- update architecture documentation or an ADR when the move changes canonical ownership rather than only source layout;
+- run the architecture tests, affected domain tests, import/package-discovery checks and the normal full validation suite.
+
+The architecture test intentionally fails when the actual root package set and the inventory diverge. Do not bypass that guard by registering a new root package without a meaningful ownership rationale.
+
+## Canonical runtime assets
+
+Runtime resources that must also live inside the installed Python package have one editable source of truth:
+
+| Canonical source | Generated package copy |
+| --- | --- |
+| `schemas/backup-manifest-v1.schema.json` | `src/ai_multi_agent_platform/backup/backup-manifest-v1.schema.json` |
+| `release/compatibility.json` | `src/ai_multi_agent_platform/release/compatibility.json` |
+
+Edit only the canonical source, then refresh the package copies with:
+
+```bash
+python scripts/ci/issue725_materialize_runtime_assets.py
+```
+
+Before committing, verify that no generated copy drifted:
+
+```bash
+python scripts/ci/issue725_materialize_runtime_assets.py --check
+```
+
+CI rejects stale or missing generated copies, materializes the canonical assets immediately before the package build, and verifies that both the wheel and source distribution contain the canonical bytes.
 
 ## Third-party components
 

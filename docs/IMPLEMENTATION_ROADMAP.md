@@ -4,6 +4,10 @@
 
 This roadmap describes the remaining work from current `main` toward the operational v1 baseline and the wider ideal end state. The project is no longer in foundational platform construction. Most canonical domains, runtime boundaries, client surfaces, distributed execution building blocks and operational foundations are implemented; remaining work is concentrated in final planning/client convergence, performance and real-host evidence, platform conformance, optional end-state extensions and narrowly scoped repository maintenance.
 
+For the curated point-in-time implementation/integration summary, use [`STATUS.md`](STATUS.md). This roadmap owns dependency-driven planning, parallel work lanes and convergence guidance; it is not the live work-item tracker. GitHub issue state, explicit issue dependencies, current issue comments, pull-request reviews/checks and merged code remain authoritative when they differ from a dated roadmap or status snapshot.
+
+The current roadmap body below is itself a dated planning snapshot. During a shared integration batch, do not rewrite every lane merely to mirror each staged commit; refresh roadmap planning only when dependency/convergence guidance materially changes, while `STATUS.md` can summarize the integrated state at a meaningful boundary.
+
 GitHub issue state, explicit issue dependencies, current issue comments, pull-request reviews/checks and merged code remain the point-in-time source of truth. The normative product and architecture baseline remains:
 
 - [`PRODUCT_VISION.md`](PRODUCT_VISION.md)

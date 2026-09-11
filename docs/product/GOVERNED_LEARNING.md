@@ -194,7 +194,7 @@ and replaces the Candidate **read projection** with the runtime-aware version de
 
 ## CLI
 
-The distributed `platform` entrypoint registers governed Learning as a first-class domain through `src/ai_multi_agent_platform/cli/issue_81.py` and `src/ai_multi_agent_platform/cli/learning.py`.
+The distributed `platform` entrypoint registers governed Learning as a first-class domain through `src/ai_multi_agent_platform/cli/app.py` and `src/ai_multi_agent_platform/cli/learning.py`.
 
 Read-only inspection is available through both the domain adapter and the generic extension surface:
 

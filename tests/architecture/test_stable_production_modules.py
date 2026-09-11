@@ -8,9 +8,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_ROOT = ROOT / "src" / "ai_multi_agent_platform"
-COMPATIBILITY_MODULES = {
-    SOURCE_ROOT / "cli" / "issue_214.py",
-}
 ISSUE_FILENAME = re.compile(r"^issue_\d+\.py$")
 ISSUE_IMPORT = re.compile(r"(?:^|\.)issue_\d+(?:\.|:|$)")
 
@@ -19,14 +16,12 @@ def test_production_modules_use_stable_structural_names() -> None:
     issue_numbered = {
         path for path in SOURCE_ROOT.rglob("*.py") if ISSUE_FILENAME.fullmatch(path.name)
     }
-    assert issue_numbered == COMPATIBILITY_MODULES
+    assert not issue_numbered
 
 
 def test_canonical_production_imports_do_not_reference_issue_modules() -> None:
     violations: list[str] = []
     for path in SOURCE_ROOT.rglob("*.py"):
-        if path in COMPATIBILITY_MODULES:
-            continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -56,10 +51,3 @@ def test_platform_entrypoint_imports_from_stable_module() -> None:
     module_name, attribute = target.split(":", maxsplit=1)
     module = importlib.import_module(module_name)
     assert callable(getattr(module, attribute))
-
-
-def test_legacy_auth_module_is_only_a_compatibility_alias() -> None:
-    auth = importlib.import_module("ai_multi_agent_platform.cli.auth")
-    compatibility = importlib.import_module("ai_multi_agent_platform.cli.issue_214")
-    assert compatibility.main is auth.main
-    assert compatibility.run_cli is auth.run_cli

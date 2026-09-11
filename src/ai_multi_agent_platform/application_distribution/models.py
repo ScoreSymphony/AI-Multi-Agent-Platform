@@ -11,11 +11,13 @@ from types import MappingProxyType
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id, validate_id
-from ai_multi_agent_platform.security import SecretReference, redact_sensitive
+from ai_multi_agent_platform.security import SecretReference, redact_sensitive, redact_text
 from ai_multi_agent_platform.workspaces import validate_relative_path, validate_sha256
 
 APPLICATION_RELEASE_SCHEMA_VERSION = "1.0"
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_SECRET_REFERENCE_ID = re.compile(r"^secret_ref_[a-z0-9][a-z0-9._-]{0,127}$")
+_COMMAND_OPTION = re.compile(r"^-{1,2}(?P<name>[A-Za-z][A-Za-z0-9_-]*)(?:=(?P<value>.*))?$")
 
 
 def utc_now() -> datetime:
@@ -36,10 +38,55 @@ def _nonblank_tuple(values: tuple[str, ...], field_name: str) -> tuple[str, ...]
     return tuple(values)
 
 
+def _secret_reference_ids(values: tuple[str, ...]) -> tuple[str, ...]:
+    copied: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or _SECRET_REFERENCE_ID.fullmatch(value) is None:
+            raise ValueError(
+                "secret_references must contain opaque secret_ref_* identifiers, "
+                "not secret material"
+            )
+        copied.append(value)
+    if len(copied) != len(set(copied)):
+        raise ValueError("secret_references must not contain duplicates")
+    return tuple(copied)
+
+
+def _is_sensitive_command_option(value: str) -> tuple[bool, bool]:
+    match = _COMMAND_OPTION.fullmatch(value)
+    if match is None:
+        return False, False
+    option_name = str(match.group("name")).replace("-", "_")
+    probe: JsonValue = {option_name: "value"}
+    sensitive = redact_sensitive(probe) != probe
+    return sensitive, match.group("value") is not None
+
+
 def _command_tokens(values: tuple[str, ...]) -> tuple[str, ...]:
     if any(not value.strip() for value in values):
         raise ValueError("command must not contain blank values")
-    return tuple(values)
+    if any(redact_text(value) != value for value in values):
+        raise ValueError(
+            "command must not embed sensitive environment assignments; use secret_environment"
+        )
+    copied = tuple(values)
+    for index, value in enumerate(copied):
+        sensitive, has_inline_value = _is_sensitive_command_option(value)
+        if sensitive and (has_inline_value or index + 1 < len(copied)):
+            raise ValueError(
+                "command must not embed sensitive credential option values; use secret_environment"
+            )
+    return copied
+
+
+def _safe_mapping(
+    values: Mapping[str, JsonValue],
+    field_name: str,
+) -> MappingProxyType[str, JsonValue]:
+    copied = dict(values)
+    if redact_sensitive(copied) != copied:
+        raise ValueError(f"sensitive-looking {field_name} entries are not allowed")
+    return MappingProxyType(copied)
 
 
 def _environment(values: Mapping[str, str], field_name: str) -> MappingProxyType[str, str]:
@@ -100,6 +147,7 @@ class GateStatus(StrEnum):
     PENDING = "pending"
     PASSED = "passed"
     FAILED = "failed"
+    INCONCLUSIVE = "inconclusive"
 
 
 class PackageType(StrEnum):
@@ -172,17 +220,17 @@ class BuildSpecification:
             "test_gates",
             "post_build_checks",
             "required_capabilities",
-            "secret_references",
         ):
             object.__setattr__(
                 self,
                 field_name,
                 _nonblank_tuple(getattr(self, field_name), field_name),
             )
+        object.__setattr__(self, "secret_references", _secret_reference_ids(self.secret_references))
         object.__setattr__(
             self,
             "resource_hints",
-            MappingProxyType(dict(self.resource_hints)),
+            _safe_mapping(self.resource_hints, "resource_hints"),
         )
         environment = _environment(self.environment, "environment")
         if redact_sensitive(dict(environment)) != dict(environment):

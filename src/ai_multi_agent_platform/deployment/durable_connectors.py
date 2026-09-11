@@ -13,6 +13,8 @@ from ai_multi_agent_platform.application_distribution import (
     ApplicationBuildLifecycleBackend,
     ApplicationCommandExecutor,
     ApplicationDistributionService,
+    DistributedApplicationBuildLifecycleBackend,
+    DistributedBuildTargetMatcher,
     GitHubReleasePublisher,
     JsonApplicationReleaseRepository,
     LocalBuildTargetMatcher,
@@ -277,8 +279,23 @@ def build_single_node_deployment(
     application_release_repository = JsonApplicationReleaseRepository(
         config.database_dir / "application-releases.json"
     )
-    application_build_lifecycle = AuthorizedLifecycleBackend(
-        ApplicationBuildLifecycleBackend(
+    application_build_backend: (
+        DistributedApplicationBuildLifecycleBackend | ApplicationBuildLifecycleBackend
+    )
+    application_target_matcher: DistributedBuildTargetMatcher | LocalBuildTargetMatcher
+    if enable_distributed_execution and base.distributed_runtime is not None:
+        application_build_backend = DistributedApplicationBuildLifecycleBackend(
+            application_release_repository,
+            base.files,
+            base.run_workspace_bindings,
+            base.distributed_runtime,
+        )
+        application_target_matcher = DistributedBuildTargetMatcher(
+            base.distributed_runtime.registry,
+            scheduler=base.distributed_runtime.scheduler,
+        )
+    else:
+        application_build_backend = ApplicationBuildLifecycleBackend(
             application_release_repository,
             base.workspaces,
             base.files,
@@ -286,7 +303,10 @@ def build_single_node_deployment(
             ApplicationCommandExecutor(base.workspaces.materialization_root),
             secret_provider=base.secrets,
             secret_consumer_ref=_APPLICATION_BUILD_SECRET_PRINCIPAL,
-        ),
+        )
+        application_target_matcher = LocalBuildTargetMatcher()
+    application_build_lifecycle = AuthorizedLifecycleBackend(
+        application_build_backend,
         base.approval_gate,
         allow_internal_service_reads=True,
     )
@@ -302,7 +322,7 @@ def build_single_node_deployment(
         workspaces=base.workspaces,
         run_workspace_bindings=base.run_workspace_bindings,
         authorization_gate=base.approval_gate,
-        target_matcher=LocalBuildTargetMatcher(),
+        target_matcher=application_target_matcher,
     )
     if base.secrets is not None:
         if not base.authorization.has_policy(_GITHUB_RELEASE_CONNECTOR_PRINCIPAL):

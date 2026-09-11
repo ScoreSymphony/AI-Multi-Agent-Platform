@@ -34,6 +34,7 @@ from .fakes import (
     FakeToolProvider,
     FakeWorkerProvider,
 )
+from .scoped_memory import FakeScopedMemoryProvider, assert_scoped_memory_provider_contract
 
 __all__ = [
     "FakeAuthorizationProvider",
@@ -48,6 +49,7 @@ __all__ = [
     "FakeModelRouter",
     "FakeNodeProvider",
     "FakeOrchestrator",
+    "FakeScopedMemoryProvider",
     "FakeToolProvider",
     "FakeWorkerProvider",
     "assert_authorization_provider_contract",
@@ -64,6 +66,7 @@ __all__ = [
     "assert_node_provider_contract",
     "assert_orchestrator_contract",
     "assert_provider_contract",
+    "assert_scoped_memory_provider_contract",
     "assert_tool_provider_contract",
     "assert_worker_provider_contract",
 ]

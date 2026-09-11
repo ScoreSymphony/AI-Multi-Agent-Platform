@@ -1,5 +1,6 @@
 """Application packaging and provider-neutral release distribution."""
 
+from .build_provenance import ApplicationBuildLifecycleBackend, ApplicationCommandExecutor
 from .contracts import (
     ApplicationReleasePublisher,
     ApplicationReleaseRepository,
@@ -8,13 +9,38 @@ from .contracts import (
     PublishContext,
     PublishedArtifact,
 )
-from .execution import (
-    APPLICATION_BUILD_ACTION,
-    ApplicationBuildLifecycleBackend,
-    ApplicationCommandExecutor,
+from .distributed_execution import (
+    APPLICATION_BUILD_WORKER_INPUT_KEY,
+    APPLICATION_BUILD_WORKER_SCHEMA,
+    ApplicationBuildWorkerLifecycleBackend,
+    DistributedApplicationBuildLifecycleBackend,
+    application_build_worker_input,
+)
+from .execution import APPLICATION_BUILD_ACTION
+from .gate_provenance import ApplicationReleaseGateCoordinator
+from .gates import (
+    DeterministicGateCheck,
+    ReleaseGateKind,
+    ReleaseGatePolicy,
+    ReleaseGateRequirement,
+    StaticReleaseGatePolicy,
+    artifact_subject_revision,
+    bind_gate_to_release,
+    gate_is_current,
+    publication_readiness,
+    release_subject_digest,
+    required_gate_names,
+    verification_subject,
 )
 from .github import GitHubReleasePublisher
-from .manifest import canonical_manifest_bytes, manifest_sha256, release_manifest
+from .manifest import (
+    APPLICATION_RELEASE_MANIFEST_SCHEMA,
+    MANIFEST_SCHEMA_VERSION,
+    canonical_manifest_bytes,
+    manifest_sha256,
+    manifest_validation_errors,
+    release_manifest,
+)
 from .models import (
     APPLICATION_RELEASE_SCHEMA_VERSION,
     ApplicationArtifact,
@@ -30,23 +56,33 @@ from .models import (
     ReleaseStatus,
     ReleaseVisibility,
 )
-from .placement import DistributedBuildTargetMatcher, LocalBuildTargetMatcher
+from .placement import (
+    DistributedBuildTargetMatcher,
+    LocalBuildTargetMatcher,
+    job_requirements_for_target,
+)
+from .provenance_service import ApplicationDistributionService
 from .repository import (
     APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION,
     InMemoryApplicationReleaseRepository,
     JsonApplicationReleaseRepository,
 )
-from .service import ApplicationDistributionService
 
 __all__ = [
     "APPLICATION_BUILD_ACTION",
+    "APPLICATION_BUILD_WORKER_INPUT_KEY",
+    "APPLICATION_BUILD_WORKER_SCHEMA",
+    "APPLICATION_RELEASE_MANIFEST_SCHEMA",
     "APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION",
     "APPLICATION_RELEASE_SCHEMA_VERSION",
+    "MANIFEST_SCHEMA_VERSION",
     "ApplicationArtifact",
     "ApplicationBuildLifecycleBackend",
+    "ApplicationBuildWorkerLifecycleBackend",
     "ApplicationCommandExecutor",
     "ApplicationDistributionService",
     "ApplicationRelease",
+    "ApplicationReleaseGateCoordinator",
     "ApplicationReleasePublisher",
     "ApplicationReleaseRepository",
     "BuildSpecification",
@@ -54,6 +90,8 @@ __all__ = [
     "BuildTargetMatcher",
     "BuildTargetState",
     "BuildTargetStatus",
+    "DeterministicGateCheck",
+    "DistributedApplicationBuildLifecycleBackend",
     "DistributedBuildTargetMatcher",
     "GateEvidence",
     "GateStatus",
@@ -66,9 +104,23 @@ __all__ = [
     "PublishedArtifact",
     "PublishContext",
     "ReleaseChannel",
+    "ReleaseGateKind",
+    "ReleaseGatePolicy",
+    "ReleaseGateRequirement",
     "ReleaseStatus",
     "ReleaseVisibility",
+    "StaticReleaseGatePolicy",
+    "application_build_worker_input",
+    "artifact_subject_revision",
+    "bind_gate_to_release",
     "canonical_manifest_bytes",
+    "gate_is_current",
+    "job_requirements_for_target",
     "manifest_sha256",
+    "manifest_validation_errors",
+    "publication_readiness",
     "release_manifest",
+    "release_subject_digest",
+    "required_gate_names",
+    "verification_subject",
 ]
