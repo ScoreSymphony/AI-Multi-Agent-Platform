@@ -254,7 +254,10 @@ class _CanonicalArtifactProvider(CapabilityToolProvider):
             payload,
             context,
             content_type="text/plain",
-            metadata={"source": "automatic-reviewer-artifact-repair-conformance"},
+            metadata={
+                "source": "automatic-reviewer-artifact-repair-conformance",
+                "data_classification": "internal",
+            },
         )
         artifact_id = new_id("artifact")
         await self._files.link_artifact(record.file_id, artifact_id, context)
