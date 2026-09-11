@@ -147,6 +147,7 @@ class GateStatus(StrEnum):
     PENDING = "pending"
     PASSED = "passed"
     FAILED = "failed"
+    INCONCLUSIVE = "inconclusive"
 
 
 class PackageType(StrEnum):
