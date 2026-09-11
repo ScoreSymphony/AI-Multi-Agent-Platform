@@ -62,15 +62,17 @@ async def _finish_build(
     idempotency_key: str,
 ) -> ApplicationRelease:
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + 30.0
+    deadline = loop.time() + 5.0
+    poll_index = 0
     last_status: BuildTargetStatus | None = None
     while loop.time() < deadline:
         release = await service.request_build(
             release_id,
             target_id=target_id,
-            idempotency_key=idempotency_key,
+            idempotency_key=f"{idempotency_key}:poll:{poll_index}",
             actor_ref="user:tester",
         )
+        poll_index += 1
         target = next(item for item in release.targets if item.target.target_id == target_id)
         last_status = target.status
         if target.status in {
@@ -288,7 +290,7 @@ def test_application_build_dispatches_to_canonical_remote_worker_and_returns_art
             repeated = await service.request_build(
                 release.release_id,
                 target_id="linux-x64",
-                idempotency_key="issue-749-remote-build",
+                idempotency_key="issue-749-remote-build:poll:0",
                 actor_ref="user:tester",
             )
             assert repeated.artifacts == built.artifacts
