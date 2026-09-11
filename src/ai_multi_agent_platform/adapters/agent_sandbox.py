@@ -18,7 +18,6 @@ from typing import Protocol
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.execution.contracts import (
-    CancellationToken,
     ExecutionArtifact,
     ExecutionError,
     ExecutionErrorCategory,
