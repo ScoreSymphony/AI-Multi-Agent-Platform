@@ -73,9 +73,7 @@ class ControlPlaneTaskRunService:
         resources: list[dict[str, JsonValue]] = []
         for task_id in await self.task_ids():
             task = await self._kernel.get_task(task_id)
-            if await self._authorization.allowed_for_task(
-                context, "task:list", task_id, task
-            ):
+            if await self._authorization.allowed_for_task(context, "task:list", task_id, task):
                 resources.append(task_resource(task))
         return paginate(resources, query)
 
@@ -161,9 +159,7 @@ class ControlPlaneTaskRunService:
         for current_task_id in task_ids:
             task = await self._kernel.get_task(current_task_id)
             for run_id in task.run_ids:
-                if await self._authorization.allowed_for_task(
-                    context, "run:list", run_id, task
-                ):
+                if await self._authorization.allowed_for_task(context, "run:list", run_id, task):
                     resources.append(
                         run_resource(await self._kernel.get_run(current_task_id, run_id))
                     )
@@ -185,9 +181,7 @@ class ControlPlaneTaskRunService:
             task = await self._kernel.get_task(current_task_id)
             if run_id in task.run_ids:
                 run = await self._kernel.get_run(current_task_id, run_id)
-                await self._authorization.authorize_for_task(
-                    context, "run:read", run_id, task
-                )
+                await self._authorization.authorize_for_task(context, "run:read", run_id, task)
                 return run_resource(run)
         raise ContractError(ErrorCode.NOT_FOUND, f"run not found: {run_id}")
 
