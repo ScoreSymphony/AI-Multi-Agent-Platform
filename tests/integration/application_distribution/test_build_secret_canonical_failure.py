@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 
 from ai_multi_agent_platform.application_distribution import (
@@ -154,7 +153,7 @@ def test_missing_build_secret_becomes_canonical_failed_run(tmp_path: Path) -> No
                 "retryable": False,
             }
         }
-        serialized = json.dumps(run.output, sort_keys=True)
+        serialized = repr(run.output)
         assert "missing-build-secret" not in serialized
         assert "PRIVATE_INDEX_TOKEN" not in serialized
         assert "secret reference was not found" in serialized
