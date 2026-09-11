@@ -135,7 +135,9 @@ def test_package_smoke_result_flows_through_canonical_verification_authority() -
                 (
                     DeterministicCheck(
                         name="package_smoke",
-                        predicate=lambda current: current.subject.digest == release.artifacts[0].sha256,
+                        predicate=lambda current: (
+                            current.subject.digest == release.artifacts[0].sha256
+                        ),
                         failure_message="package smoke failed",
                     ),
                 ),
@@ -143,9 +145,7 @@ def test_package_smoke_result_flows_through_canonical_verification_authority() -
         )
         assert result.checks_executed == ("package_smoke",)
 
-        projected = (
-            await coordinator.reconcile(replace(release, gates=(pending,)))
-        )[0]
+        projected = (await coordinator.reconcile(replace(release, gates=(pending,))))[0]
         assert projected.status is GateStatus.PASSED
         assert projected.details["verification_id"] == verification_id
         assert projected.details["verification_result_id"] == result.verification_result_id
