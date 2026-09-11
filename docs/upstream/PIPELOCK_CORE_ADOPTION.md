@@ -46,10 +46,10 @@ not Approved or Integrated.
 - [x] Root Core license boundary is Apache-2.0 at the reviewed commit.
 - [x] `enterprise/LICENSE` is Elastic License 2.0 at the reviewed commit.
 - [x] Enterprise source/build-tag boundary is recorded.
-- [x] The upstream `Makefile` tag-free Core build and repository Dockerfile `-tags enterprise`
-  difference is recorded.
-- [ ] Prebuilt artifact composition/provenance is verified; until then it is excluded from Core-only
-  evaluation evidence.
+- [x] Upstream `Makefile` `build` is tag-free at the reviewed revision.
+- [x] The repository Dockerfile builds `pipelock` with `-tags enterprise`.
+- [x] `.goreleaser.yaml` builds the normal `pipelock` release binary with the `enterprise` tag, so
+  release archives/images are not accepted as Core-only artifacts for this evaluation baseline.
 - [x] No upstream source is copied or modified by this candidate adapter.
 
 ### Project health and maintenance
@@ -81,7 +81,7 @@ not Approved or Integrated.
 ### Deployment complexity
 
 - [x] Baseline deployment remains optional/self-hosted.
-- [x] No recurring paid service is required for the Core source-build candidate.
+- [x] No recurring paid service is required for the tag-free Core source-build candidate.
 - [x] Candidate binds behind existing canonical policy instead of imposing a new platform registry or
   lifecycle service.
 - [ ] Enforced deployment topology and OS/container network-containment requirements are proven in a
@@ -91,7 +91,7 @@ not Approved or Integrated.
 
 - [x] No Python runtime dependency is introduced by the initial projection/evidence adapter.
 - [x] Pipelock remains a separately built optional runtime.
-- [x] Enterprise-tagged code is excluded from the intended Core evaluation baseline.
+- [x] Enterprise-tagged code is excluded from the intended source-built Core evaluation baseline.
 - [ ] Material transitive/runtime dependency footprint of the pinned Core binary is recorded from the
   actual build artifact.
 
@@ -125,9 +125,11 @@ architecture or introducing a paid baseline dependency. It is not sufficient for
 network mediation, outage behavior, adversarial coverage and resource/performance costs remain
 unmeasured.
 
-The review also found a material artifact-boundary caveat: the repository Dockerfile at the pinned
-revision builds with the `enterprise` tag. The Core evaluation therefore uses a tag-free source build
-and does not infer Core-only licensing for prebuilt/container artifacts without separate provenance.
+The artifact boundary is material. At the pinned revision, both the repository Dockerfile and the
+GoReleaser definition for the normal `pipelock` binary enable Enterprise build tags. Official release
+archives/images therefore cannot be treated as Apache-Core-only artifacts for this baseline merely
+because paid features may be inactive. The #730 Core pilot deliberately builds the pinned source via
+the tag-free `make build` path instead.
 
 ### Required follow-up before approval/integration
 
@@ -141,3 +143,4 @@ and does not infer Core-only licensing for prebuilt/container artifacts without 
 - [ ] Update `docs/UPSTREAMS.md` only if Pipelock is promoted to approved/integrated status.
 - [x] Add candidate provenance metadata (`upstream/pipelock-core.yaml`).
 - [x] Add platform-owned mapping/evidence contract tests.
+- [x] Add a pinned source-build compatibility workflow for the Core/audit baseline.
