@@ -255,13 +255,8 @@ class _Publisher:
             artifacts=tuple(
                 PublishedArtifact(
                     artifact_id=artifact.artifact_id,
-                    download_url=(
-                        "https://downloads.example/releases/v1.0.0/"
-                        f"{artifact.filename}"
-                    ),
-                    external_metadata={
-                        "reference": {"asset_id": f"asset:{artifact.artifact_id}"}
-                    },
+                    download_url=(f"https://downloads.example/releases/v1.0.0/{artifact.filename}"),
+                    external_metadata={"reference": {"asset_id": f"asset:{artifact.artifact_id}"}},
                 )
                 for artifact in release.artifacts
             ),
@@ -409,7 +404,9 @@ async def _create_and_build(
     return created, built
 
 
-def test_versioned_control_plane_full_release_flow_preserves_canonical_and_download_metadata() -> None:
+def test_versioned_control_plane_full_release_flow_preserves_canonical_and_download_metadata() -> (
+    None
+):
     async def scenario() -> None:
         harness = _harness("allow")
         created, built = await _create_and_build(harness)
@@ -507,9 +504,7 @@ def test_versioned_control_plane_full_release_flow_preserves_canonical_and_downl
         reference_metadata = published_metadata["reference"]
         assert isinstance(reference_metadata, dict)
         assert str(reference_metadata["asset_id"]).startswith("asset:artifact_")
-        assert published["external_metadata"] == {
-            "reference": {"release_id": "release:issue751"}
-        }
+        assert published["external_metadata"] == {"reference": {"release_id": "release:issue751"}}
         assert harness.publisher.publish_calls == 1
 
         final_show = await harness.control_plane.get_extension_resource(
