@@ -54,7 +54,13 @@ class OnboardingComponentSetupService:
         self._state = self.profile_store.load()
 
     def status(self) -> dict[str, JsonValue]:
-        """Return current discovery/compatibility facts plus persisted profile state."""
+        """Return current discovery/compatibility facts plus persisted profile state.
+
+        Persisted profiles are never rewritten merely because discovery changed. Instead each
+        profile receives a live validation projection and, when degraded, a provider-neutral
+        automatic fallback preview. This keeps provider disappearance fail-safe and reversible
+        without silently migrating or activating configuration during a read.
+        """
 
         components = self._components()
         environment = self.discovery.environment()
@@ -63,11 +69,30 @@ class OnboardingComponentSetupService:
             item = component.to_json()
             item["compatibility"] = self.resolver.resolve(component, environment).to_json()
             projected_components.append(item)
+
+        fallback = recommend_setup_profile(
+            components,
+            environment,
+            mode=SetupMode.AUTO,
+            profile_id="recovery-auto-preview",
+            resolver=self.resolver,
+        )
+        projected_profiles: list[JsonValue] = []
+        for profile in self._state.profiles:
+            item = profile.to_json()
+            item["validation"] = self._profile_validation(
+                profile,
+                components=components,
+                environment=environment,
+                fallback=fallback,
+            )
+            projected_profiles.append(item)
+
         return {
             "id": COMPONENT_SETUP_RESOURCE_ID,
             "type": "component_setup",
             "components": projected_components,
-            "profiles": [profile.to_json() for profile in self._state.profiles],
+            "profiles": projected_profiles,
             "active_profile_id": self._state.active_profile_id,
             "available_setup_modes": [mode.value for mode in SetupMode],
         }
@@ -187,6 +212,57 @@ class OnboardingComponentSetupService:
             raise ValueError("component discovery returned duplicate category/component IDs")
         return components
 
+    def _profile_validation(
+        self,
+        profile: SetupProfile,
+        *,
+        components: tuple[DiscoveredComponent, ...],
+        environment: CompatibilityEnvironment,
+        fallback: SetupProfile,
+    ) -> dict[str, JsonValue]:
+        by_key = {component.key: component for component in components}
+        issues: list[JsonValue] = []
+        allowed_states = _allowed_profile_states(profile.mode)
+
+        for category, component_id in profile.defaults.items():
+            component = by_key.get((category, component_id))
+            if component is None:
+                issues.append(
+                    {
+                        "category": category.value,
+                        "component_id": component_id,
+                        "compatibility": CompatibilityState.UNAVAILABLE.value,
+                        "reasons": ["selected component is not currently discovered"],
+                    }
+                )
+                continue
+            result = self.resolver.resolve(component, environment)
+            if result.state not in allowed_states:
+                issues.append(
+                    {
+                        "category": category.value,
+                        "component_id": component_id,
+                        "compatibility": result.state.value,
+                        "reasons": list(result.reasons),
+                    }
+                )
+
+        valid = not issues
+        fallback_preview: JsonValue = None
+        if not valid:
+            fallback_preview = {
+                "mode": fallback.mode.value,
+                "defaults": {
+                    category.value: component_id
+                    for category, component_id in fallback.defaults.items()
+                },
+            }
+        return {
+            "valid": valid,
+            "issues": issues,
+            "fallback": fallback_preview,
+        }
+
     def _validate_explicit_profile(
         self,
         profile: SetupProfile,
@@ -207,13 +283,7 @@ class OnboardingComponentSetupService:
                     },
                 )
             result = self.resolver.resolve(component, environment)
-            allowed_states = {
-                CompatibilityState.COMPATIBLE,
-                CompatibilityState.COMPATIBLE_WITH_CONSTRAINTS,
-            }
-            if profile.mode is SetupMode.ADVANCED:
-                allowed_states.add(CompatibilityState.EXPERIMENTAL)
-            if result.state not in allowed_states:
+            if result.state not in _allowed_profile_states(profile.mode):
                 raise ContractError(
                     ErrorCode.INVALID_REQUEST,
                     "selected component is not compatible with the current environment",
@@ -241,6 +311,16 @@ class OnboardingComponentSetupService:
                 ErrorCode.INVALID_REQUEST,
                 f"component setup requires resource_ref={COMPONENT_SETUP_RESOURCE_ID!r}",
             )
+
+
+def _allowed_profile_states(mode: SetupMode) -> set[CompatibilityState]:
+    states = {
+        CompatibilityState.COMPATIBLE,
+        CompatibilityState.COMPATIBLE_WITH_CONSTRAINTS,
+    }
+    if mode is SetupMode.ADVANCED:
+        states.add(CompatibilityState.EXPERIMENTAL)
+    return states
 
 
 def _profile_result(profile: SetupProfile, *, active: bool) -> dict[str, JsonValue]:
