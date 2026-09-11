@@ -50,6 +50,17 @@ def _assert_delegate(
     ), f"{method.name} must delegate to self.{component}.{call}"
 
 
+def _assert_self_delegate(method: ast.FunctionDef | ast.AsyncFunctionDef, call: str) -> None:
+    calls = [node for node in ast.walk(method) if isinstance(node, ast.Call)]
+    assert any(
+        isinstance(item.func, ast.Attribute)
+        and item.func.attr == call
+        and isinstance(item.func.value, ast.Name)
+        and item.func.value.id == "self"
+        for item in calls
+    ), f"{method.name} must delegate to self.{call}"
+
+
 def _assert_no_facade_dependency(path: Path) -> None:
     violations: list[int] = []
     for node in ast.walk(_tree(path)):
@@ -230,15 +241,15 @@ def test_model_registry_operations_stay_behind_focused_component() -> None:
 
 def test_authorization_stays_behind_shared_boundary() -> None:
     facade = _class(SERVICE, "ControlPlane")
-    delegated = {
-        "_authorize_for_task": "authorize_for_task",
-        "_allowed_for_task": "allowed_for_task",
-        "_authorize": "authorize",
-        "_allowed": "allowed",
-        "_authorization_decision": "decision",
-    }
-    for facade_method, component_method in delegated.items():
-        _assert_delegate(_method(facade, facade_method), "_authorization", component_method)
+    _assert_self_delegate(_method(facade, "_authorize_for_task"), "_authorize")
+    _assert_self_delegate(_method(facade, "_allowed_for_task"), "_allowed")
+    _assert_self_delegate(_method(facade, "_authorize"), "_authorization_decision")
+    _assert_self_delegate(_method(facade, "_allowed"), "_authorization_decision")
+    _assert_delegate(
+        _method(facade, "_authorization_decision"),
+        "_authorization_service",
+        "decision",
+    )
 
     component = _class(AUTHORIZATION, "ControlPlaneAuthorization")
     for component_method in (
