@@ -2,14 +2,23 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+import pytest
+
 from ai_multi_agent_platform.agents import (
+    STANDARD_TEAM_IDS,
     AgentRevisionRef,
     AgentRunRecord,
     AgentRunStatus,
+    AgentRuntime,
+    AgentService,
     AgentTeamRevisionRef,
+    InMemoryAgentRepository,
+    bootstrap_standard_agents,
 )
 from ai_multi_agent_platform.agents.control_plane import _agent_run_resource
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.control_plane.http import ControlPlaneHTTP
+from ai_multi_agent_platform.control_plane.models import api_exception_from_contract
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.verification import (
     CompletionState,
@@ -28,6 +37,7 @@ from ai_multi_agent_platform.verification.control_plane import (
     _requirement_resource,
     _verification_resource,
 )
+from ai_multi_agent_platform.verification.output_workflow import PolicyMetadataReviewerResolver
 
 
 def _agent_verifier(agent_id: str, revision: int = 1) -> VerifierIdentity:
@@ -208,23 +218,81 @@ def test_artifact_repair_budget_and_client_correlation_are_canonical() -> None:
     }
 
 
-def test_routing_failure_is_explicit_instead_of_silent_waiting() -> None:
-    error = ContractError(
-        ErrorCode.INVALID_CONFIGURATION,
-        "scoped reviewer discovery must resolve exactly one enabled candidate",
-        details={
-            "policy_id": new_id("verification_policy"),
-            "policy_version": 1,
-            "stage_id": "review",
-            "match_count": 2,
-            "candidate_agent_count": 2,
-            "candidate_team_count": 0,
-            "reviewer_role": "reviewer",
-            "required_capability_ids": [],
-        },
+def test_ambiguous_reviewer_routing_surfaces_canonical_northbound_reason() -> None:
+    service = AgentService(InMemoryAgentRepository())
+    bootstrap_standard_agents(service)
+    agents = AgentRuntime(service)
+    verification = VerificationService()
+    completion = VerificationCompletionAuthority(verification)
+    policy = verification.register_policy(
+        VerificationPolicy(
+            name="Ambiguous reviewer routing product contract",
+            stages=(VerificationStage("review", VerifierKind.AGENT),),
+            metadata={
+                "automatic_reviewer": {
+                    "enabled": True,
+                    "subject_types": ["result"],
+                    "stages": {
+                        "review": {
+                            "candidate_team_ids": [
+                                STANDARD_TEAM_IDS["software_development"],
+                                STANDARD_TEAM_IDS["research"],
+                            ],
+                            "reviewer_role": "reviewer",
+                        }
+                    },
+                }
+            },
+        )
+    )
+    task_id = new_id("task")
+    result_id = new_id("result")
+    subject = VerificationSubject(
+        subject_type="result",
+        subject_id=result_id,
+        revision="1",
+        digest="sha256:ambiguous-reviewer-routing",
+    )
+    request = completion.request_verification(
+        task_id=task_id,
+        policy_id=policy.policy_id,
+        policy_version=policy.version,
+        stage_id="review",
+        subject=subject,
+        correlation_id="issue-759-routing-failure",
+        run_id=new_id("run"),
+        result_id=result_id,
     )
 
-    assert error.code is ErrorCode.INVALID_CONFIGURATION
-    assert error.message == "scoped reviewer discovery must resolve exactly one enabled candidate"
-    assert error.details["match_count"] == 2
-    assert error.details["stage_id"] == "review"
+    resolver = PolicyMetadataReviewerResolver(completion)
+    with pytest.raises(ContractError) as caught:
+        resolver.resolve(request, agents)
+
+    assert caught.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert caught.value.message == (
+        "scoped reviewer discovery must resolve exactly one enabled candidate"
+    )
+    assert caught.value.details["match_count"] == 2
+    assert caught.value.details["stage_id"] == "review"
+    assert service.repository.list_agent_runs() == ()
+
+    waiting = completion.assess_task_completion(task_id)
+    assert waiting.state is CompletionState.WAITING
+    assert waiting.blocking_verification_ids == (request.verification_id,)
+
+    response = ControlPlaneHTTP._error_response(
+        api_exception_from_contract(caught.value),
+        "request_issue_759",
+        "correlation_issue_759",
+    )
+    assert response.status == 422
+    assert isinstance(response.body, dict)
+    assert response.body["code"] == ErrorCode.INVALID_CONFIGURATION.value
+    assert response.body["category"] == "configuration"
+    assert response.body["message"] == caught.value.message
+    assert response.body["request_id"] == "request_issue_759"
+    assert response.body["correlation_id"] == "correlation_issue_759"
+    details = response.body["details"]
+    assert isinstance(details, Mapping)
+    assert details["match_count"] == 2
+    assert details["stage_id"] == "review"
