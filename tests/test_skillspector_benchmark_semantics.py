@@ -5,6 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from experiments.skillspector.fixtures import FIXTURES  # noqa: E402
 from experiments.skillspector.normalize import normalize_report  # noqa: E402
 from experiments.skillspector.run_benchmark import _finding_signature  # noqa: E402
 
@@ -23,7 +24,7 @@ def _normalize(issue: dict[str, object]):
         mode="static_no_llm_network_none",
         policy_config_version="test-policy-v1",
         candidate_id="fixture",
-        candidate_revision="generated-corpus-v2",
+        candidate_revision="generated-corpus-v3",
         candidate_digest="candidate-digest",
         network_usage={"network_allowed": False, "services": []},
         provider_usage={"llm_assisted": False, "provider": None},
@@ -107,3 +108,32 @@ def test_semantic_signature_detects_real_rule_change() -> None:
     ).to_dict()
 
     assert _finding_signature(first) != _finding_signature(second)
+
+
+def test_corpus_covers_benign_network_and_exfiltration_source_sink_classes() -> None:
+    assert "benign-legitimate-network/SKILL.md" in FIXTURES
+    network_code = FIXTURES["benign-legitimate-network/fixture.py"]
+    assert "requests.get" in network_code
+
+    exfiltration_code = FIXTURES["exfiltration/fixture.py"]
+    for marker in (
+        "os.environ.get",
+        '".ssh"',
+        'Path(".env")',
+        "requests.post",
+        "requests.get",
+    ):
+        assert marker in exfiltration_code
+
+
+def test_corpus_covers_dynamic_execution_privilege_persistence_and_destructive_patterns() -> None:
+    dangerous_code = FIXTURES["dangerous-code/fixture.py"]
+    for marker in (
+        "subprocess.run",
+        "eval(",
+        "os.system",
+        "sudo",
+        "autostart",
+        "shutil.rmtree",
+    ):
+        assert marker in dangerous_code
