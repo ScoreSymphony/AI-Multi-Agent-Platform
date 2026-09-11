@@ -56,9 +56,9 @@ python scripts/benchmarks/issue798_agent_sandbox_live.py \
 `--token-a-env` and `--token-b-env` can select different environment-variable names. Token values
 are never written to the JSON report. The first ownership probe is deliberately read-only: it
 performs same-token and cross-token `GET /sandboxes/{sandboxID}` requests. A protected shared
-provider must allow `A -> A` and `B -> B` while rejecting `A -> B` and `B -> A`. Later lifecycle
-fixtures still need to repeat the ownership check for connect/router, snapshot, pause/resume and
-delete operations.
+provider must allow `A -> A` and `B -> B` while rejecting `A -> B` and `B -> A`. Merely rejecting
+all four requests is **not** evidence of working tenant isolation. Later lifecycle fixtures still
+need to repeat the ownership check for connect/router, snapshot, pause/resume and delete operations.
 
 ## Evidence captured automatically
 
@@ -99,10 +99,11 @@ scripts/benchmarks/issue798_agent_sandbox_evidence_gate.py
 scripts/benchmarks/issue798_agent_sandbox_campaign.example.json
 ```
 
-Copy the example campaign manifest to the retained evidence directory and change a scenario from
-`not_run` only after its live fixture has actually been executed. `pass`, `fail` and `unsupported`
-are terminal evaluation states and require at least one evidence reference; a missing scenario is
-normalized back to `not_run`.
+Copy the example campaign manifest to the retained evidence directory. Fill its `environment`
+object from the actual representative run; do not copy placeholder values from another host or
+campaign. Change a scenario from `not_run` only after its live fixture has actually been executed.
+`pass`, `fail` and `unsupported` are terminal evaluation states and require at least one evidence
+reference; a missing scenario is normalized back to `not_run`.
 
 After the raw capture and lifecycle campaign, run:
 
@@ -113,18 +114,28 @@ python scripts/benchmarks/issue798_agent_sandbox_evidence_gate.py \
   --output artifacts/issue798-agent-sandbox-gate.json
 ```
 
-The gate verifies the pinned provider identity, derives protected-profile hard gates from the raw
-Pod/network/credential/authorization evidence, and checks that every required lifecycle, isolation,
-browser, snapshot and representative-VPS scenario has a terminal result.
+The gate verifies the raw-evidence schema and pinned provider identity, derives protected-profile
+hard gates from the Pod/network/credential/authorization evidence, checks that every required
+lifecycle, isolation, browser, snapshot and representative-VPS scenario has a terminal result, and
+requires the representative host/runtime metadata listed below. It also cross-checks the declared
+runtime class and sandbox image against the raw Pod evidence so metadata from a different run cannot
+silently satisfy readiness.
+
+The provider-authorization hard gate is intentionally two-sided: both legitimate same-token GETs
+must succeed **and** both known-ID cross-token GETs must be rejected. Transport errors or missing
+directional results stay `not_run`; a deployment that simply rejects every request fails rather
+than being credited with tenant isolation.
 
 Its fields have deliberately narrow meanings:
 
 - `protected_profile_gate=pass` means only that all machine-checkable hard gates captured by the
   current raw harness passed;
-- `decision_ready=true` means the required campaign has enough evidence to choose one of
-  `adopt`, `optional_provider_only` or `reject/defer`; failures may still be present;
+- `decision_ready=true` means the required campaign, representative-environment metadata and hard-
+  gate capture are complete and mutually consistent enough to choose one of `adopt`,
+  `optional_provider_only` or `reject/defer`; failures may still be present;
 - `adoption_eligible_from_this_gate=true` is stricter and requires no hard-gate failures, failed
-  scenarios, unsupported required scenarios or missing evidence;
+  scenarios, unsupported required scenarios, missing environment metadata, environment/raw-evidence
+  mismatches or missing hard-gate evidence;
 - none of those fields performs the final architecture/security recommendation for #798.
 
 This separation is intentional: a complete campaign that exposes a vulnerability must become
@@ -144,6 +155,7 @@ supported:
 | unrestricted Internet target reachable | no |
 | metadata/link-local target reachable | no |
 | synthetic secret canary in ReplicaSet annotation | no |
+| same-token provider GET for each disposable tenant sandbox | succeeds |
 | cross-token provider GET for another tenant's known sandbox ID | rejected |
 | host network/PID/IPC namespaces | disabled |
 | privilege escalation | disabled |
@@ -191,7 +203,7 @@ blueprint/profile revision used for the run.
 
 ## Required environment metadata for a representative result
 
-Every retained VPS result must identify at least:
+Every retained VPS campaign must identify at least:
 
 - capture date;
 - host/VPS class and vCPU/RAM/disk;
@@ -199,14 +211,20 @@ Every retained VPS result must identify at least:
 - Kubernetes distribution and version;
 - container runtime and version;
 - runtime class used by sandbox Pods;
-- Agent-Sandbox revision/image digest;
-- sandbox image digest;
-- platform commit/PR under evaluation;
+- Agent-Sandbox revision and digest-pinned image identity;
+- digest-pinned sandbox image identity;
+- platform commit under evaluation;
 - network plugin/CNI relevant to egress enforcement;
-- whether the profile uses default upstream manifests or a platform-hardened derivative.
+- whether the profile uses default upstream manifests or a platform-hardened derivative;
+- the exact profile revision/configuration identity used for the run.
+
+The campaign template represents these as `capture_date`, `host_class`, `vcpu`, `memory_gib`,
+`disk_gib`, `linux_distribution`, `kernel`, `kubernetes_distribution`, `kubernetes_version`,
+`container_runtime`, `runtime_class`, `agent_sandbox_revision`, `agent_sandbox_image_digest`,
+`sandbox_image_digest`, `platform_commit`, `cni`, `profile_kind` and `profile_revision`.
 
 Measurements missing this context may be useful diagnostics but are not sufficient comparison
-evidence.
+evidence and cannot make the machine-readable gate `decision_ready`.
 
 ## Decision rule
 
