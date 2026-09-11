@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import AsyncIterator
 
 import pytest
 
@@ -10,6 +11,7 @@ from ai_multi_agent_platform.adapters.openai_compatible_streaming import (
     OpenAICompatibleModelProvider,
 )
 from ai_multi_agent_platform.contracts import (
+    JsonValue,
     ModelRequest,
     ModelResponse,
     ModelStreamEvent,
@@ -108,12 +110,12 @@ def test_live_bifrost_tool_calling_when_declared_supported() -> None:
     assert tool_calls
     first = tool_calls[0]
     assert isinstance(first, dict)
-    assert first.get("name") == "report_status"
+    assert first.get("tool_name") == "report_status"
 
 
-async def _collect(stream: object) -> list[ModelStreamEvent]:
+async def _collect(stream: AsyncIterator[ModelStreamEvent]) -> list[ModelStreamEvent]:
     events: list[ModelStreamEvent] = []
-    async for event in stream:  # type: ignore[attr-defined]
+    async for event in stream:
         events.append(event)
     return events
 
@@ -133,7 +135,7 @@ def _live_provider_or_skip() -> OpenAICompatibleModelProvider:
     )
 
 
-def _protocol_metadata(response: ModelResponse) -> dict[str, object]:
+def _protocol_metadata(response: ModelResponse) -> dict[str, JsonValue]:
     for metadata in response.adapter_metadata:
         if metadata.namespace == "model-protocol":
             return dict(metadata.values)
