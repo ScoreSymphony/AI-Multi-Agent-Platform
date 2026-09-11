@@ -157,8 +157,7 @@ async def run_model_gateway_comparison(
         throughput_ratio: float | None = None
         if direct.throughput_operations_per_second > 0:
             throughput_ratio = round(
-                result.throughput_operations_per_second
-                / direct.throughput_operations_per_second,
+                result.throughput_operations_per_second / direct.throughput_operations_per_second,
                 6,
             )
         deltas[target_name] = ModelGatewayDelta(
