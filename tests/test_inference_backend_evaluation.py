@@ -52,6 +52,12 @@ CAMPAIGN = {
         "remote-gpu-worker",
         "multi-node-when-environment-valid",
     ],
+    "required_metrics": [
+        "request_throughput_per_second",
+        "ttft_p95_ms",
+        "peak_vram_bytes",
+        "error_count",
+    ],
 }
 
 _METRICS = {
@@ -177,6 +183,20 @@ def test_readiness_requires_contract_failure_and_comparable_vllm_pair() -> None:
         "remote-gpu-worker",
         "multi-node-when-environment-valid",
     }
+
+
+def test_unmeasured_metric_is_valid_but_not_decision_eligible() -> None:
+    sglang = _report("sglang")
+    sglang["metrics"]["ttft_p95_ms"] = None
+    validate_inference_backend_evaluation_report(sglang)
+
+    readiness = assess_inference_backend_evaluation(
+        campaign=CAMPAIGN,
+        reports=[sglang, _report("vllm")],
+    )
+
+    assert readiness.ready_for_decision is False
+    assert readiness.comparable_sglang_vllm_pairs == 0
 
 
 def test_readiness_rejects_candidate_revision_that_does_not_match_campaign() -> None:
