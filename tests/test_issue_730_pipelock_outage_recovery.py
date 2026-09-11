@@ -11,6 +11,7 @@ import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import TextIO
 
 import pytest
 
@@ -75,7 +76,12 @@ def _target_server(tmp_path: Path) -> Iterator[tuple[int, Path]]:
         _stop(process)
 
 
-def _start_pipelock(tmp_path: Path, *, port: int, run_name: str) -> tuple[subprocess.Popen[str], Path]:
+def _start_pipelock(
+    tmp_path: Path,
+    *,
+    port: int,
+    run_name: str,
+) -> tuple[subprocess.Popen[str], Path, TextIO]:
     assert PIPELOCK_TEST_BIN is not None
     log_path = tmp_path / f"{run_name}.log"
     log_handle = log_path.open("w", encoding="utf-8")
@@ -97,16 +103,13 @@ def _start_pipelock(tmp_path: Path, *, port: int, run_name: str) -> tuple[subpro
         text=True,
         env=env,
     )
-    process._pipelock_log_handle = log_handle  # type: ignore[attr-defined]
     _wait_for_tcp(port, process)
-    return process, log_path
+    return process, log_path, log_handle
 
 
-def _stop_pipelock(process: subprocess.Popen[str]) -> None:
+def _stop_pipelock(process: subprocess.Popen[str], log_handle: TextIO) -> None:
     _stop(process)
-    log_handle = getattr(process, "_pipelock_log_handle", None)
-    if log_handle is not None:
-        log_handle.close()
+    log_handle.close()
 
 
 def _fetch(proxy_port: int, target: str) -> str:
@@ -134,11 +137,15 @@ def test_live_enforced_mediation_fails_closed_during_runtime_outage_and_recovers
     with _target_server(tmp_path) as (target_port, count_file):
         target = f"http://127.0.0.1:{target_port}/ok"
 
-        first_process, first_log = _start_pipelock(tmp_path, port=proxy_port, run_name="before-outage")
+        first_process, first_log, first_log_handle = _start_pipelock(
+            tmp_path,
+            port=proxy_port,
+            run_name="before-outage",
+        )
         try:
             first_body = _fetch(proxy_port, target)
         finally:
-            _stop_pipelock(first_process)
+            _stop_pipelock(first_process, first_log_handle)
 
         assert TARGET_SENTINEL in first_body
         assert _target_count(count_file) == 1
@@ -147,7 +154,7 @@ def test_live_enforced_mediation_fails_closed_during_runtime_outage_and_recovers
             _fetch(proxy_port, target)
         assert _target_count(count_file) == 1
 
-        second_process, second_log = _start_pipelock(
+        second_process, second_log, second_log_handle = _start_pipelock(
             tmp_path,
             port=proxy_port,
             run_name="after-recovery",
@@ -155,7 +162,7 @@ def test_live_enforced_mediation_fails_closed_during_runtime_outage_and_recovers
         try:
             recovered_body = _fetch(proxy_port, target)
         finally:
-            _stop_pipelock(second_process)
+            _stop_pipelock(second_process, second_log_handle)
 
         assert TARGET_SENTINEL in recovered_body
         assert _target_count(count_file) == 2
