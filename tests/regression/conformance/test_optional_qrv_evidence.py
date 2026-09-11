@@ -23,7 +23,10 @@ def test_q_claim_keeps_composite_revision_stability_evidence() -> None:
         "test_composite_reapply_keeps_original_revision_until_explicit_upgrade"
     ) in command
     assert "test_reapply_authorizes_instance_and_exact_source_revision" in command
-    assert "test_unauthorized_dependency_blocks_preview_and_apply_before_resource_creation" in command
+    assert (
+        "test_unauthorized_dependency_blocks_preview_and_apply_before_resource_creation"
+        in command
+    )
 
 
 def test_r_claim_uses_public_portability_and_integrity_evidence() -> None:
@@ -43,7 +46,10 @@ def test_v_claim_covers_personal_cross_org_and_historical_boundaries() -> None:
     command = _command_for("V")
 
     assert "test_personal_scope_does_not_require_an_organization" in command
-    assert "test_suspend_remove_and_role_changes_feed_scope_without_becoming_authorization" in command
+    assert (
+        "test_suspend_remove_and_role_changes_feed_scope_without_becoming_authorization"
+        in command
+    )
     assert "test_resource_ownership_sharing_revoke_and_cross_org_isolation" in command
     assert "test_cross_org_share_flag_is_not_a_substitute_for_authorization" in command
     assert "test_historical_task_and_event_identity_survive_membership_removal" in command
