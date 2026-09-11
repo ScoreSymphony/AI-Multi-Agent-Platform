@@ -9,10 +9,16 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, PlatformEvent
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    OperationContext,
+    PlatformEvent,
+)
 from ai_multi_agent_platform.kernel.models import TaskState
-from ai_multi_agent_platform.security import ActorIdentity
+from ai_multi_agent_platform.security import ActorIdentity, ProposedAction
 
+from .activation import PlanningProposalActivation
 from .handoff import PlanningActivationHandoff
 from .inventory import PlanningInventoryBuilder
 from .models import (
@@ -46,18 +52,19 @@ _PROPOSAL_FACTORY = PlanningProposalFactory()
 class PlanningService(BasePlanningService):
     """Planning service with focused internal responsibilities and deterministic supersession.
 
-    Canonical Task/Plan mutation remains owned by the base planning/kernel path. The additional
-    per-Task lock closes the in-process check/use race between competing proposal activations.
-    Once one proposal wins canonical activation, other proposals based on the exact same Task
-    revision and base Plan become durably ``SUPERSEDED``.
+    Canonical Task/Plan mutation remains owned by the kernel. The additional per-Task lock closes
+    the in-process check/use race between competing proposal activations. Once one proposal wins
+    canonical activation, other proposals based on the exact same Task revision and base Plan
+    become durably ``SUPERSEDED``.
 
     Replacement proposals also point to the durable proposal that activated their base Plan. This
     keeps proposal lineage explicit without mutating prior immutable proposal content.
 
     Inventory construction, deterministic proposal validation, immutable proposal construction,
-    bounded replanning support and canonical activation handoff are delegated to focused internal
-    components. ``_inventory`` remains a compatibility seam because ``ReferencePlanningService``
-    intentionally layers trusted environment filtering on top of the canonical base inventory.
+    bounded replanning support, authorization/activation and canonical activation handoff are
+    delegated to focused internal components. ``_inventory`` remains a compatibility seam because
+    ``ReferencePlanningService`` intentionally layers trusted environment filtering on top of the
+    canonical base inventory.
     """
 
     _activation_locks: dict[str, asyncio.Lock]
@@ -106,6 +113,14 @@ class PlanningService(BasePlanningService):
             coordinator=self.coordinator,
         )
 
+    def _activation_service(self) -> PlanningProposalActivation:
+        return PlanningProposalActivation(
+            repository=self.repository,
+            kernel=self.kernel,
+            authorization=self.authorization,
+            coordinator=self.coordinator,
+        )
+
     async def _activated_plan_event(self, proposal: PlanProposal) -> PlatformEvent | None:
         return await self._activation_handoff().activated_plan_event(proposal)
 
@@ -130,6 +145,17 @@ class PlanningService(BasePlanningService):
         event: PlatformEvent,
     ) -> None:
         await self._activation_handoff().handoff(proposal, event, emit=self._emit)
+
+    def _activation_action(
+        self,
+        task: TaskState,
+        record: ProposalRecord,
+        actor: ActorIdentity,
+    ) -> ProposedAction:
+        return self._activation_service().activation_action(task, record, actor)
+
+    def _operation_context(self, task: TaskState, key: str) -> OperationContext:
+        return PlanningProposalActivation.operation_context(task, key)
 
     def _activation_lock(self, task_id: str) -> asyncio.Lock:
         locks = getattr(self, "_activation_locks", None)
@@ -174,11 +200,13 @@ class PlanningService(BasePlanningService):
                     details={"proposal_id": proposal_id},
                 )
             try:
-                activated = await super().activate(
+                activated = await self._activation_service().activate(
                     proposal_id,
                     idempotency_key=idempotency_key,
                     actor=actor,
                     approval_id=approval_id,
+                    prior_plan=self._prior_plan,
+                    emit=self._emit,
                 )
             except ContractError as exc:
                 if exc.code is ErrorCode.CONFLICT:
