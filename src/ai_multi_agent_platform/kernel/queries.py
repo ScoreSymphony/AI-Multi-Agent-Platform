@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Literal
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, PlatformEvent
-from ai_multi_agent_platform.domain import RunStatus, validate_id
+from ai_multi_agent_platform.domain import validate_id
 
 from .models import TERMINAL_RUN_STATUSES, RunState, TaskState
 from .repository import EventRepository, RunRepository, TaskRepository
