@@ -79,8 +79,18 @@ class LifecycleKernelHost(Protocol):
 class KernelLifecycleReconciler:
     """Reconcile lifecycle-backend state into canonical Run/Task events."""
 
-    def __init__(self, host: LifecycleKernelHost) -> None:
+    def __init__(
+        self,
+        host: LifecycleKernelHost,
+        *,
+        lifecycle: LifecycleBackend | None = None,
+        completion_authority: CompletionAuthority | None = None,
+    ) -> None:
         self._host = host
+        # Compatibility-only constructor parameters keep this cohort independently
+        # integrable; runtime behavior deliberately follows the host's current
+        # lifecycle/completion dependencies.
+        _ = lifecycle, completion_authority
 
     async def dispatch_started_run(
         self,
