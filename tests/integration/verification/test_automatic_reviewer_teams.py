@@ -420,6 +420,13 @@ async def _exercise_team_review(
         "revision": request.subject.revision,
         "digest": request.subject.digest,
     }
+    selection = reviewer_run.verification_context.get("reviewer_selection")
+    assert isinstance(selection, Mapping)
+    assert selection["schema"] == "reviewer-selection-v1"
+    assert selection["selected_agent_id"] == reviewer_agent_id
+    assert selection["selected_agent_revision"] == reviewer_agent_revision
+    assert selection["selected_team_id"] == team_id
+    assert selection["selected_team_revision"] == team_revision
 
     if use_cloned_team:
         standard_current = deployment.agents.get_agent_revision(STANDARD_AGENT_IDS["reviewer"])
@@ -433,11 +440,21 @@ async def _exercise_team_review(
         assert isinstance(route, Mapping)
         assert route["candidate_team_ids"] == [team_id]
         assert route["reviewer_role"] == "reviewer_tester"
-        # The persisted selector, exact Verification stage and exact AgentRun Team/revision
-        # explain the deterministic discovery decision without relying on the bundled Reviewer.
+        assert selection["mode"] == "scoped_discovery"
+        assert selection["candidate_agent_ids"] == []
+        assert selection["candidate_team_ids"] == [team_id]
+        assert selection["reviewer_role"] == "reviewer_tester"
+        assert selection["required_capability_ids"] == []
         assert request.stage_id == "agent-review"
         assert reviewer_run.team.team_id in route["candidate_team_ids"]
         assert reviewer_run.team.revision == team_revision == 2
+    else:
+        assert selection["mode"] == "exact_assignment"
+        assert selection["configured_agent_id"] is None
+        assert selection["configured_agent_revision"] is None
+        assert selection["configured_team_id"] == team_id
+        assert selection["configured_team_revision"] == team_revision
+        assert selection["configured_team_role"] == "reviewer_tester"
 
 
 def test_standard_software_development_team_runs_productive_reviewer_tester_flow(
