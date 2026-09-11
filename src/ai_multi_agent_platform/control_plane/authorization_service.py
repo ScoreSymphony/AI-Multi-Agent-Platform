@@ -25,6 +25,12 @@ class ControlPlaneAuthorization:
     def __init__(self, provider: AuthorizationProvider | None) -> None:
         self._provider = provider
 
+    @property
+    def provider(self) -> AuthorizationProvider | None:
+        """Return the configured provider for legacy trust-context request builders."""
+
+        return self._provider
+
     async def authorize_for_task(
         self,
         context: RequestContext,
