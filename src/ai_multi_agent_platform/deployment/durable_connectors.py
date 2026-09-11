@@ -30,7 +30,11 @@ from ai_multi_agent_platform.connectors import (
 from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import DistributedRuntime
-from ai_multi_agent_platform.kernel import EventSourcedTaskRepository, PlatformKernel
+from ai_multi_agent_platform.kernel import (
+    EventSourcedRunRepository,
+    EventSourcedTaskRepository,
+    PlatformKernel,
+)
 from ai_multi_agent_platform.learning.single_node import (
     SingleNodeLearningComposition,
     build_single_node_learning,
@@ -76,6 +80,22 @@ from ai_multi_agent_platform.templates import (
     AutomationTemplateExporter,
     PlatformTemplateEnvironmentResolver,
     register_template_control_plane,
+)
+from ai_multi_agent_platform.verification.agent_repair import (
+    KernelAgentRepairExecutor,
+    ProducerAgentRepairBindingProvider,
+)
+from ai_multi_agent_platform.verification.agent_workflow import AutomaticReviewerWorkflow
+from ai_multi_agent_platform.verification.gate import VerificationCompletionAuthority
+from ai_multi_agent_platform.verification.output_workflow import (
+    AutomaticReviewerOutputCoordinator,
+    PolicyMetadataReviewerResolver,
+    install_automatic_reviewer_output_observer,
+)
+from ai_multi_agent_platform.verification.reference_reviewer import ModelRuntimeReviewerExecutor
+from ai_multi_agent_platform.verification.repair import VerificationRepairRuntime
+from ai_multi_agent_platform.verification.reviewer_input import (
+    KernelFileReviewerSubjectInputProvider,
 )
 
 from .config import SingleNodeConfig
@@ -138,7 +158,8 @@ def build_single_node_deployment(
     explicitly minimal/ephemeral profiles. Public deployment/server composition comes through this
     wrapper so Connector Definitions, Connections, application releases, planning proposals,
     canonical Context Bundle/Run-binding evidence, one durable egress policy runtime, governed
-    Learning and Agent Handoffs survive process restarts without requiring hosted services.
+    Learning, automatic reviewer workflows and Agent Handoffs survive process restarts without
+    requiring hosted services.
     """
 
     config.prepare_directories()
@@ -158,6 +179,45 @@ def build_single_node_deployment(
         enable_distributed_execution=enable_distributed_execution,
         repository_discovery_resolver=effective_repository_resolver,
     )
+
+    # Compose #711 on the normal durable kernel. Ordinary attach_result/attach_artifact calls stay
+    # the only producer API; automatic review remains explicit opt-in in versioned Verification
+    # policy metadata. A needs_changes result routes one bounded canonical repair Step back through
+    # the exact producer Agent before a fresh exact-subject review.
+    completion = base.kernel._completion_authority  # noqa: SLF001
+    if not isinstance(completion, VerificationCompletionAuthority):
+        raise RuntimeError("normal single-node kernel is missing Verification completion authority")
+    reviewer_inputs = KernelFileReviewerSubjectInputProvider(
+        tasks=EventSourcedTaskRepository(base.kernel_repository),
+        runs=EventSourcedRunRepository(base.kernel_repository),
+        files=base.files,
+    )
+    repair_runtime = VerificationRepairRuntime(
+        base.verification,
+        completion,
+        base.kernel,
+        binding_provider=ProducerAgentRepairBindingProvider(),
+    )
+    automatic_reviewer = AutomaticReviewerWorkflow(
+        runtime=base.verification_runtime,
+        completion=completion,
+        agents=base.agent_runtime,
+        resolver=PolicyMetadataReviewerResolver(completion),
+        executor=ModelRuntimeReviewerExecutor(
+            agents=base.agent_runtime,
+            models=base.model_runtime,
+            inputs=reviewer_inputs,
+        ),
+        repair_runtime=repair_runtime,
+        repair_executor=KernelAgentRepairExecutor(base.kernel),
+    )
+    automatic_review_output = AutomaticReviewerOutputCoordinator(
+        kernel=base.kernel,
+        runtime=base.verification_runtime,
+        completion=completion,
+        reviewer=automatic_reviewer,
+    )
+    install_automatic_reviewer_output_observer(base.kernel, automatic_review_output)
 
     egress_runtime = build_durable_egress_runtime(
         config.database_dir / "egress-profiles.json",

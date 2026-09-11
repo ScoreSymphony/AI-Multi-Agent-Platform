@@ -7,8 +7,11 @@ from canonical owners without silently weakening sensitive findings.
 
 from __future__ import annotations
 
+from ai_multi_agent_platform.agents import AgentRepository, AgentRunStatus
+from ai_multi_agent_platform.context.bindings import ContextRunBindingRepository
+from ai_multi_agent_platform.context.classification import effective_context_bundle_classification
 from ai_multi_agent_platform.context.models import ContextDataClassification
-from ai_multi_agent_platform.context.resolver import ContextSourceRequest
+from ai_multi_agent_platform.context.resolver import ContextBundleRepository, ContextSourceRequest
 from ai_multi_agent_platform.context.verification_source import (
     VerificationContextClassificationResolver,
 )
@@ -21,14 +24,30 @@ from ai_multi_agent_platform.contracts import (
 )
 from ai_multi_agent_platform.data.contracts import FileProvider
 from ai_multi_agent_platform.data.models import DataAccessContext, FileRecord
-from ai_multi_agent_platform.verification import VerificationRequest, VerificationResult
+from ai_multi_agent_platform.verification import (
+    VerificationEvidenceResolver,
+    VerificationRequest,
+    VerificationResult,
+)
 
 
 class CanonicalVerificationContextClassificationResolver(VerificationContextClassificationResolver):
     """Inherit exact persisted classifications and fail closed when provenance is incomplete."""
 
-    def __init__(self, files: FileProvider) -> None:
+    def __init__(
+        self,
+        files: FileProvider,
+        *,
+        evidence: VerificationEvidenceResolver | None = None,
+        agents: AgentRepository | None = None,
+        bundles: ContextBundleRepository | None = None,
+        run_bindings: ContextRunBindingRepository | None = None,
+    ) -> None:
         self.files = files
+        self.evidence = evidence
+        self.agents = agents
+        self.bundles = bundles
+        self.run_bindings = run_bindings
 
     async def classify(
         self,
@@ -48,11 +67,12 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
                 )
             )
         else:
-            # Canonical Result output currently has no persisted owner classification. Do not infer
-            # a weaker class from the reviewing Agent, Task or input Context; findings may quote the
-            # Result verbatim. Until the Result owner exposes classification, keep it
-            # reference-only.
-            classifications.append(DataClassification.SECRET)
+            classifications.append(
+                await self._result_classification(
+                    verification_request=verification_request,
+                    result=result,
+                )
+            )
 
         for artifact_id in result.evidence_artifact_ids:
             if (
@@ -70,6 +90,104 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
 
         strongest = strongest_classification(*classifications) or DataClassification.SECRET
         return _context_classification(strongest)
+
+    async def _result_classification(
+        self,
+        *,
+        verification_request: VerificationRequest,
+        result: VerificationResult,
+    ) -> DataClassification:
+        """Inherit the exact producer Context Bundle classification for one Result.
+
+        Result does not own a separate persisted classification today. The only safe weaker-than-
+        secret classification is therefore the immutable Context Bundle actually bound to the
+        canonical producer AgentRun, and only when no tool or Artifact output introduced an
+        additional classification source. Every link in Result -> Verification -> producer
+        AgentRun -> ContextRunBinding -> ContextBundle must agree. Missing or contradictory
+        provenance remains reference-only rather than being inferred from the current
+        repair/reviewer execution.
+        """
+
+        if (
+            self.evidence is None
+            or self.agents is None
+            or self.bundles is None
+            or self.run_bindings is None
+        ):
+            return DataClassification.SECRET
+        if verification_request.subject != result.subject:
+            return DataClassification.SECRET
+
+        try:
+            context = await self.evidence.resolve_context(
+                task_id=verification_request.task_id,
+                subject_type=result.subject.subject_type,
+                subject_id=result.subject.subject_id,
+            )
+        except ContractError:
+            return DataClassification.SECRET
+
+        if (
+            context.subject != result.subject
+            or context.run_id is None
+            or verification_request.run_id != context.run_id
+            or verification_request.producer != context.producer
+        ):
+            return DataClassification.SECRET
+        producer = context.producer
+        if producer is None or producer.agent_id is None or producer.agent_revision is None:
+            return DataClassification.SECRET
+
+        records = tuple(
+            record
+            for record in self.agents.list_agent_runs(context.run_id)
+            if record.task_id == verification_request.task_id
+            and result.subject.subject_id in record.result_ids
+        )
+        if len(records) != 1:
+            return DataClassification.SECRET
+        record = records[0]
+        if (
+            record.status is not AgentRunStatus.SUCCEEDED
+            or record.agent.agent_id != producer.agent_id
+            or record.agent.revision != producer.agent_revision
+            or record.selected_model_config_id != producer.model_config_id
+            or record.selected_provider_id != producer.provider_id
+        ):
+            return DataClassification.SECRET
+
+        # Capability output may carry data that is more sensitive than the input Context Bundle.
+        # Until the Result owner persists the effective output classification, never infer a weaker
+        # class for a Result that consumed tools or emitted Artifacts.
+        if record.tool_invocation_refs or record.artifact_ids:
+            return DataClassification.SECRET
+
+        try:
+            binding = self.run_bindings.get(record.agent_run_id)
+        except KeyError:
+            return DataClassification.SECRET
+        if (
+            binding.run_id != context.run_id
+            or binding.task_id != verification_request.task_id
+            or binding.agent_id != producer.agent_id
+            or binding.agent_revision != producer.agent_revision
+        ):
+            return DataClassification.SECRET
+
+        try:
+            bundle = self.bundles.get(binding.context_bundle_id)
+        except KeyError:
+            return DataClassification.SECRET
+        if (
+            bundle.context_bundle_id != binding.context_bundle_id
+            or bundle.digest != binding.context_bundle_digest
+            or bundle.run_id != binding.run_id
+            or bundle.task_id != binding.task_id
+            or bundle.agent_id != binding.agent_id
+            or bundle.agent_revision != binding.agent_revision
+        ):
+            return DataClassification.SECRET
+        return effective_context_bundle_classification(bundle)
 
     async def _artifact_classification(
         self,
