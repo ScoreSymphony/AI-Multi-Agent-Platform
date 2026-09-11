@@ -60,8 +60,7 @@ def _wait_for_local_server(process: subprocess.Popen[str], port: int) -> None:
         if process.poll() is not None:
             stdout, stderr = process.communicate()
             raise AssertionError(
-                "MCP HTTP fixture exited before becoming ready:\n"
-                f"stdout={stdout}\nstderr={stderr}"
+                f"MCP HTTP fixture exited before becoming ready:\nstdout={stdout}\nstderr={stderr}"
             )
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=0.2):
