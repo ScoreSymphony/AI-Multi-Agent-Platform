@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, ClassVar
 
 
@@ -200,11 +202,23 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
 
+def _prepare_github_actions_bifrost_data_root() -> None:
+    workspace = os.getenv("GITHUB_WORKSPACE")
+    if not workspace:
+        return
+    data_root = Path(workspace) / ".issue859-bifrost-data"
+    data_root.mkdir(parents=True, exist_ok=True)
+    # The reviewed image runs as UID 1000:GID 0 and requires APP_DIR to be writable.
+    # This is a disposable CI-only directory containing synthetic configuration/state.
+    data_root.chmod(0o777)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the issue #859 mock OpenAI endpoint")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=18000)
     args = parser.parse_args(argv)
+    _prepare_github_actions_bifrost_data_root()
     server = ThreadingHTTPServer((args.host, args.port), _Handler)
     try:
         server.serve_forever()
