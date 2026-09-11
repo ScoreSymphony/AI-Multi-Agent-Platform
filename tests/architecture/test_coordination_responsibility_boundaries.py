@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 COORDINATION_ROOT = ROOT / "src" / "ai_multi_agent_platform" / "coordination"
-SERVICE = COORDINATION_ROOT / "service.py"
+SERVICE = COORDINATION_ROOT / "plan_step_coordinator.py"
 REGISTRATION = COORDINATION_ROOT / "registration.py"
 PROGRESSION = COORDINATION_ROOT / "progression.py"
 WAITS = COORDINATION_ROOT / "waits.py"
@@ -37,12 +37,19 @@ def _assert_no_facade_dependency(path: Path) -> None:
     violations: list[str] = []
     for node in ast.walk(_tree(path)):
         if isinstance(node, ast.ImportFrom) and node.module in {
+            "plan_step_coordinator",
             "service",
+            "ai_multi_agent_platform.coordination.plan_step_coordinator",
             "ai_multi_agent_platform.coordination.service",
         }:
             violations.append(f"{path.relative_to(ROOT)}:{node.lineno}")
         elif isinstance(node, ast.Import) and any(
-            alias.name == "ai_multi_agent_platform.coordination.service" for alias in node.names
+            alias.name
+            in {
+                "ai_multi_agent_platform.coordination.plan_step_coordinator",
+                "ai_multi_agent_platform.coordination.service",
+            }
+            for alias in node.names
         ):
             violations.append(f"{path.relative_to(ROOT)}:{node.lineno}")
     assert not violations, (
