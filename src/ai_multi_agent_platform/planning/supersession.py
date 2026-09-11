@@ -9,10 +9,11 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, PlatformEvent
 from ai_multi_agent_platform.kernel.models import TaskState
 from ai_multi_agent_platform.security import ActorIdentity
 
+from .handoff import PlanningActivationHandoff
 from .inventory import PlanningInventoryBuilder
 from .models import (
     PlannerOutput,
@@ -53,10 +54,10 @@ class PlanningService(BasePlanningService):
     Replacement proposals also point to the durable proposal that activated their base Plan. This
     keeps proposal lineage explicit without mutating prior immutable proposal content.
 
-    Inventory construction, deterministic proposal validation, immutable proposal construction and
-    bounded replanning support are delegated to focused internal components. ``_inventory`` remains
-    a compatibility seam because ``ReferencePlanningService`` intentionally layers trusted
-    environment filtering on top of the canonical base inventory.
+    Inventory construction, deterministic proposal validation, immutable proposal construction,
+    bounded replanning support and canonical activation handoff are delegated to focused internal
+    components. ``_inventory`` remains a compatibility seam because ``ReferencePlanningService``
+    intentionally layers trusted environment filtering on top of the canonical base inventory.
     """
 
     _activation_locks: dict[str, asyncio.Lock]
@@ -98,6 +99,37 @@ class PlanningService(BasePlanningService):
             kernel=self.kernel,
             policy=self.replan_policy,
         )
+
+    def _activation_handoff(self) -> PlanningActivationHandoff:
+        return PlanningActivationHandoff(
+            kernel=self.kernel,
+            coordinator=self.coordinator,
+        )
+
+    async def _activated_plan_event(self, proposal: PlanProposal) -> PlatformEvent | None:
+        return await self._activation_handoff().activated_plan_event(proposal)
+
+    @staticmethod
+    def _plan_ref(event: PlatformEvent) -> str:
+        return PlanningActivationHandoff.plan_ref(event)
+
+    @staticmethod
+    def _failed_replan_can_activate(proposal: PlanProposal, task: TaskState) -> bool:
+        return PlanningActivationHandoff.failed_replan_can_activate(proposal, task)
+
+    async def _ensure_handoff_ready(
+        self,
+        proposal: PlanProposal,
+        event: PlatformEvent,
+    ) -> None:
+        await self._activation_handoff().ensure_ready(proposal, event, emit=self._emit)
+
+    async def _handoff_to_coordinator(
+        self,
+        proposal: PlanProposal,
+        event: PlatformEvent,
+    ) -> None:
+        await self._activation_handoff().handoff(proposal, event, emit=self._emit)
 
     def _activation_lock(self, task_id: str) -> asyncio.Lock:
         locks = getattr(self, "_activation_locks", None)
