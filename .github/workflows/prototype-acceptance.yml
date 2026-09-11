@@ -1,7 +1,6 @@
 name: Prototype acceptance
 
 on:
-  pull_request:
   push:
     branches: [main]
   schedule:
