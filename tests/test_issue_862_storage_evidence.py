@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 EVIDENCE = Path(__file__).parent / "evidence" / "issue_862" / "storage_backends.json"
 ALLOWED_CLASSIFICATIONS = {"supported_optional", "experimental_only", "reject/defer"}
 EXPECTED_BACKENDS = {"rustfs", "garage", "seaweedfs"}
