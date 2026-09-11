@@ -38,6 +38,17 @@ def _timeout_payload() -> str:
     return "import time; time.sleep(2); print('unexpected-timeout-completion')"
 
 
+def _timeout_child_payload() -> str:
+    return (
+        "import subprocess,sys,time; "
+        "child_code=\"import pathlib,sys,time; time.sleep(0.25); "
+        "pathlib.Path(sys.argv[1]).write_text('survived')\"; "
+        "subprocess.Popen([sys.executable,'-c',child_code,sys.argv[1]], "
+        "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True); "
+        "time.sleep(2)"
+    )
+
+
 def _egress_payload() -> str:
     return (
         "import urllib.request; "
@@ -122,6 +133,33 @@ async def _run_local() -> dict[str, Any]:
                     "exception_type": type(exc).__name__,
                     "elapsed_seconds": monotonic() - timeout_started,
                 }
+
+            child_marker = workspace / "child-after-timeout.txt"
+            try:
+                await deployment.runtime.execute(
+                    Command(
+                        command=[
+                            sys.executable,
+                            "-c",
+                            _timeout_child_payload(),
+                            str(child_marker),
+                        ],
+                        cwd=str(workspace),
+                        timeout=0.05,
+                    )
+                )
+            except Exception as exc:
+                evidence["timeout_child_cleanup"] = {
+                    "parent_timeout_exception": type(exc).__name__,
+                }
+            else:
+                evidence["timeout_child_cleanup"] = {
+                    "parent_timeout_exception": None,
+                }
+            await asyncio.sleep(0.4)
+            evidence["timeout_child_cleanup"]["child_survived_parent_timeout"] = (
+                child_marker.exists()
+            )
     finally:
         stopped = monotonic()
         await deployment.stop()
@@ -138,13 +176,19 @@ async def _run_local() -> dict[str, Any]:
     return evidence
 
 
-async def _run_docker(*, network_none: bool) -> dict[str, Any]:
+async def _run_docker(*, backend: str) -> dict[str, Any]:
     import swerex
     from swerex.deployment.docker import DockerDeployment
     from swerex.runtime.abstract import Command, ReadFileRequest, UploadRequest
 
-    backend = "docker-network-none" if network_none else "docker"
-    docker_args = ["--network=none"] if network_none else []
+    internal_network = backend == "docker-internal"
+    docker_args: list[str] = []
+    if internal_network:
+        network_name = os.environ.get("ISSUE861_DOCKER_NETWORK")
+        if not network_name:
+            raise RuntimeError("ISSUE861_DOCKER_NETWORK is required for docker-internal evidence")
+        docker_args = [f"--network={network_name}"]
+
     configured_image = os.environ.get("ISSUE861_SWEREX_IMAGE")
     docker_image = configured_image or "python:3.11"
     evidence: dict[str, Any] = {
@@ -215,6 +259,39 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
                 artifact_response.exit_code == 0 and read_back.content == "artifact-canary"
             )
 
+            child_marker = f"{remote_workspace}/child-after-timeout.txt"
+            try:
+                await deployment.runtime.execute(
+                    Command(
+                        command=[
+                            "/usr/local/bin/python3",
+                            "-c",
+                            _timeout_child_payload(),
+                            child_marker,
+                        ],
+                        cwd=remote_workspace,
+                        timeout=0.05,
+                    )
+                )
+            except Exception as exc:
+                evidence["timeout_child_cleanup"] = {
+                    "parent_timeout_exception": type(exc).__name__,
+                }
+            else:
+                evidence["timeout_child_cleanup"] = {
+                    "parent_timeout_exception": None,
+                }
+            await asyncio.sleep(0.4)
+            try:
+                child_read = await deployment.runtime.read_file(
+                    ReadFileRequest(path=child_marker, encoding="utf-8")
+                )
+            except Exception:
+                child_survived = False
+            else:
+                child_survived = child_read.content == "survived"
+            evidence["timeout_child_cleanup"]["child_survived_parent_timeout"] = child_survived
+
             egress = await deployment.runtime.execute(
                 Command(
                     command=["python", "-c", _egress_payload()],
@@ -227,8 +304,8 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
                 "stdout": egress.stdout.strip()[:200],
                 "stderr": egress.stderr.strip()[:500],
             }
-            if network_none:
-                evidence["network_none_blocked_egress"] = egress.exit_code not in (
+            if internal_network:
+                evidence["internal_network_blocked_egress"] = egress.exit_code not in (
                     0,
                     None,
                 )
@@ -245,9 +322,9 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
         and evidence["execute"]["stderr_has_marker"]
         and evidence["artifact_round_trip"]
     )
-    if network_none:
+    if internal_network:
         evidence["passed_core_semantics"] = bool(
-            evidence["passed_core_semantics"] and evidence["network_none_blocked_egress"]
+            evidence["passed_core_semantics"] and evidence["internal_network_blocked_egress"]
         )
     return evidence
 
@@ -256,7 +333,7 @@ async def _main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--backend",
-        choices=("local", "docker", "docker-network-none"),
+        choices=("local", "docker", "docker-internal"),
         required=True,
     )
     parser.add_argument("--output", type=Path)
@@ -266,7 +343,7 @@ async def _main() -> int:
         if args.backend == "local":
             evidence = await _run_local()
         else:
-            evidence = await _run_docker(network_none=args.backend == "docker-network-none")
+            evidence = await _run_docker(backend=args.backend)
     except Exception as exc:
         evidence = {
             "backend": args.backend,
