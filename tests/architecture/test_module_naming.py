@@ -25,16 +25,12 @@ def test_legacy_service_imports_resolve_to_semantic_implementation(
     symbol: str,
 ) -> None:
     legacy = importlib.import_module(f"ai_multi_agent_platform.{package}.service")
-    canonical = importlib.import_module(
-        f"ai_multi_agent_platform.{package}.{canonical_module}"
-    )
+    canonical = importlib.import_module(f"ai_multi_agent_platform.{package}.{canonical_module}")
 
     legacy_symbol = getattr(legacy, symbol)
     canonical_symbol = getattr(canonical, symbol)
     assert legacy_symbol is canonical_symbol
-    assert canonical_symbol.__module__ == (
-        f"ai_multi_agent_platform.{package}.{canonical_module}"
-    )
+    assert canonical_symbol.__module__ == (f"ai_multi_agent_platform.{package}.{canonical_module}")
 
 
 @pytest.mark.parametrize(("package", "canonical_module", "symbol"), RENAMED_MODULES)
