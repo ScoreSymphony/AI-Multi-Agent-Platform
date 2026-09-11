@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from ai_multi_agent_platform.contracts.authorization import AuthorizationRequest
+from ai_multi_agent_platform.contracts.interfaces import AuthorizationProvider
 from ai_multi_agent_platform.contracts.types import (
     AuthorizationDecision,
     OperationContext,
@@ -10,6 +13,7 @@ from ai_multi_agent_platform.contracts.types import (
 )
 from ai_multi_agent_platform.security.authorization import infer_actor_identity
 
+from .authorization_service import ControlPlaneAuthorization
 from .hardened_automation_api import ControlPlane as _CurrentControlPlane
 from .models import RequestContext
 
@@ -24,6 +28,17 @@ class ControlPlane(_CurrentControlPlane):
     performed by the #15 bridge.
     """
 
+    def _authorization_provider(self) -> AuthorizationProvider | None:
+        """Resolve both the extracted authorization façade and legacy composition seams."""
+
+        authorization = cast(
+            AuthorizationProvider | ControlPlaneAuthorization | None,
+            self._authorization,
+        )
+        if isinstance(authorization, ControlPlaneAuthorization):
+            return authorization.provider
+        return authorization
+
     async def _authorization_decision(
         self,
         context: RequestContext,
@@ -35,7 +50,7 @@ class ControlPlane(_CurrentControlPlane):
         project_id: str | None = None,
         request_payload_digest: str | None = None,
     ) -> AuthorizationDecision | None:
-        provider = self._authorization.provider
+        provider = self._authorization_provider()
         if provider is None:
             return None
         effective_owner_type = owner_type if owner_type is not None else context.actor.owner_type
