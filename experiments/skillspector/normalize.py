@@ -7,6 +7,7 @@ output into a small, replaceable evidence envelope used by the #800 evaluation.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from hashlib import sha256
 import json
 from typing import Any, Mapping
@@ -29,11 +30,18 @@ class SecurityEvidence:
     provider_version: str
     provider_revision: str
     mode: str
+    policy_config_version: str
+    observed_at: str
+    candidate_id: str
+    candidate_revision: str
     candidate_digest: str
     status: str
     complete: bool
     degraded_reasons: tuple[str, ...]
     findings: tuple[NormalizedFinding, ...]
+    suppressed_findings: tuple[Mapping[str, Any], ...]
+    network_usage: Mapping[str, Any]
+    provider_usage: Mapping[str, Any]
     provider_metadata: Mapping[str, Any]
     raw_report_sha256: str
 
@@ -84,11 +92,33 @@ def _finding_values(report: Mapping[str, Any]) -> list[Any] | None:
     return None
 
 
+def _suppressed_values(report: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    values = report.get("suppressed")
+    if not isinstance(values, list):
+        return ()
+    return tuple(dict(item) for item in values if isinstance(item, Mapping))
+
+
+def _observed_at(report: Mapping[str, Any], override: str | None) -> str:
+    if override:
+        return override
+    skill = report.get("skill")
+    if isinstance(skill, Mapping):
+        scanned_at = skill.get("scanned_at")
+        if isinstance(scanned_at, str) and scanned_at:
+            return scanned_at
+    return datetime.now(UTC).isoformat()
+
+
 def _provider_metadata(report: Mapping[str, Any]) -> dict[str, Any]:
     metadata: dict[str, Any] = {}
-    risk_assessment = report.get("risk_assessment")
-    if isinstance(risk_assessment, Mapping):
-        metadata["risk_assessment"] = dict(risk_assessment)
+    for mapping_key in ("risk_assessment", "analysis_completeness", "metadata"):
+        value = report.get(mapping_key)
+        if isinstance(value, Mapping):
+            metadata[mapping_key] = dict(value)
+    skill = report.get("skill")
+    if isinstance(skill, Mapping):
+        metadata["skill"] = dict(skill)
     for key in (
         "risk_score",
         "risk_severity",
@@ -108,7 +138,13 @@ def normalize_report(
     provider_version: str,
     provider_revision: str,
     mode: str,
+    policy_config_version: str,
+    candidate_id: str,
+    candidate_revision: str,
     candidate_digest: str,
+    network_usage: Mapping[str, Any],
+    provider_usage: Mapping[str, Any],
+    observed_at: str | None = None,
     process_ok: bool = True,
     degraded_reasons: tuple[str, ...] = (),
 ) -> SecurityEvidence:
@@ -178,11 +214,18 @@ def normalize_report(
         provider_version=provider_version,
         provider_revision=provider_revision,
         mode=mode,
+        policy_config_version=policy_config_version,
+        observed_at=_observed_at(report, observed_at),
+        candidate_id=candidate_id,
+        candidate_revision=candidate_revision,
         candidate_digest=candidate_digest,
         status=evidence_status,
         complete=complete,
         degraded_reasons=tuple(dict.fromkeys(reasons)),
         findings=findings,
+        suppressed_findings=_suppressed_values(report),
+        network_usage=dict(network_usage),
+        provider_usage=dict(provider_usage),
         provider_metadata=_provider_metadata(report),
         raw_report_sha256=sha256(raw).hexdigest(),
     )
