@@ -8,6 +8,7 @@ from pathlib import Path
 from ai_multi_agent_platform.application_distribution import (
     APPLICATION_BUILD_ACTION,
     ApplicationDistributionService,
+    ApplicationRelease,
     BuildSpecification,
     BuildTarget,
     BuildTargetStatus,
@@ -51,6 +52,31 @@ from ai_multi_agent_platform.workspaces import (
     LocalWorkspaceProvider,
     WorkspaceType,
 )
+
+
+async def _finish_build(
+    service: ApplicationDistributionService,
+    release_id: str,
+    *,
+    target_id: str,
+    idempotency_key: str,
+) -> ApplicationRelease:
+    for _ in range(50):
+        release = await service.request_build(
+            release_id,
+            target_id=target_id,
+            idempotency_key=idempotency_key,
+            actor_ref="user:tester",
+        )
+        target = next(item for item in release.targets if item.target.target_id == target_id)
+        if target.status in {
+            BuildTargetStatus.SUCCEEDED,
+            BuildTargetStatus.FAILED,
+            BuildTargetStatus.UNSUPPORTED,
+        }:
+            return release
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"remote application build did not complete: {target_id}")
 
 
 def test_application_build_dispatches_to_canonical_remote_worker_and_returns_artifact(
@@ -118,7 +144,10 @@ def test_application_build_dispatches_to_canonical_remote_worker_and_returns_art
             files=files,
             workspaces=workspaces,
             run_workspace_bindings=bindings,
-            target_matcher=DistributedBuildTargetMatcher(registry),
+            target_matcher=DistributedBuildTargetMatcher(
+                registry,
+                scheduler=runtime.scheduler,
+            ),
         )
 
         transport = InProcessMessageTransport(provider_id="issue-749-workspace")
@@ -194,11 +223,11 @@ def test_application_build_dispatches_to_canonical_remote_worker_and_returns_art
         )
 
         try:
-            built = await service.request_build(
+            built = await _finish_build(
+                service,
                 release.release_id,
                 target_id="linux-x64",
                 idempotency_key="issue-749-remote-build",
-                actor_ref="user:tester",
             )
 
             assert built.status is ReleaseStatus.READY
