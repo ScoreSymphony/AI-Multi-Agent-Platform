@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -73,19 +74,21 @@ class ApplicationDistributionService(_GateApplicationDistributionService):
     async def _persist_runtime_provenance(
         self,
         release: ApplicationRelease,
-        output: dict[str, JsonValue],
+        output: Mapping[str, JsonValue],
     ) -> ApplicationRelease:
+        # Canonical Event payloads may freeze nested JSON objects behind MappingProxyType.
+        # Treat the provider-neutral JSON contract as Mapping rather than requiring mutable dicts.
         nested = output.get("output")
-        if not isinstance(nested, dict):
+        if not isinstance(nested, Mapping):
             return release
         build = nested.get("application_build")
-        if not isinstance(build, dict):
+        if not isinstance(build, Mapping):
             return release
         artifact_id = build.get("artifact_id")
         runtime = build.get("runtime_provenance")
-        if not isinstance(runtime, dict):
+        if not isinstance(runtime, Mapping):
             runtime = nested.get("runtime_provenance")
-        if not isinstance(artifact_id, str) or not isinstance(runtime, dict):
+        if not isinstance(artifact_id, str) or not isinstance(runtime, Mapping):
             return release
 
         safe_runtime = sanitize_runtime_provenance(runtime)
