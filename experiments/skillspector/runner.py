@@ -7,13 +7,13 @@ host execution is opt-in because a subprocess alone is not a security boundary.
 from __future__ import annotations
 
 import argparse
-from hashlib import sha256
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from hashlib import sha256
+from pathlib import Path
 from typing import Mapping, Sequence
 
 PINNED_VERSION = "2.11.2"
@@ -175,11 +175,19 @@ def evaluate(
         completed = run_command(command, timeout_seconds=timeout_seconds)
         report_path = output / "report.json"
         report: object = None
+        raw_report_text: str | None = None
+        raw_report_sha256: str | None = None
+        raw_report_size_bytes: int | None = None
         if report_path.exists():
+            raw_report_bytes = report_path.read_bytes()
+            raw_report_sha256 = sha256(raw_report_bytes).hexdigest()
+            raw_report_size_bytes = len(raw_report_bytes)
             try:
-                report = json.loads(report_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
+                raw_report_text = raw_report_bytes.decode("utf-8")
+                report = json.loads(raw_report_text)
+            except (UnicodeDecodeError, json.JSONDecodeError):
                 report = None
+
         process_ok = scan_result_is_usable(completed.returncode, report)
         return {
             "candidate_digest": candidate_digest,
@@ -190,6 +198,9 @@ def evaluate(
             "stdout": completed.stdout,
             "stderr": completed.stderr,
             "report": report,
+            "raw_report_text": raw_report_text,
+            "raw_report_sha256": raw_report_sha256,
+            "raw_report_size_bytes": raw_report_size_bytes,
         }
 
 
@@ -208,7 +219,9 @@ def main() -> int:
         allow_local_process=args.allow_local_process,
         timeout_seconds=args.timeout,
     )
-    print(json.dumps(result, indent=2, sort_keys=True))
+    printable = dict(result)
+    printable.pop("raw_report_text", None)
+    print(json.dumps(printable, indent=2, sort_keys=True))
     return 0 if result["process_ok"] is True else 2
 
 
