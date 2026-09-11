@@ -6,6 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 KERNEL_ROOT = ROOT / "src" / "ai_multi_agent_platform" / "kernel"
 KERNEL_FACADE = KERNEL_ROOT / "kernel.py"
+DATA_ROOT = ROOT / "src" / "ai_multi_agent_platform" / "data"
+DATA_FACADE = DATA_ROOT / "reference.py"
 
 
 def _class(path: Path, name: str) -> ast.ClassDef:
@@ -78,4 +80,39 @@ def test_extracted_kernel_components_do_not_depend_on_concrete_facade() -> None:
     assert not violations, (
         "focused kernel components must depend on narrow contracts/protocols, not the concrete "
         "PlatformKernel façade:\n" + "\n".join(violations)
+    )
+
+
+def test_data_reference_facade_does_not_reabsorb_provider_implementations() -> None:
+    tree = ast.parse(DATA_FACADE.read_text(encoding="utf-8"), filename=str(DATA_FACADE))
+    classes = [node.name for node in tree.body if isinstance(node, ast.ClassDef)]
+    assert not classes, (
+        "data/reference.py is a compatibility façade after #723; provider implementations must "
+        f"remain in responsibility-focused modules, found classes: {classes}"
+    )
+
+
+def test_data_reference_providers_have_focused_implementation_modules() -> None:
+    expected = {
+        "reference_file.py": "LocalFileProvider",
+        "reference_memory.py": "LocalMemoryProvider",
+        "reference_knowledge.py": "LocalKnowledgeProvider",
+    }
+    for filename, class_name in expected.items():
+        _class(DATA_ROOT / filename, class_name)
+
+
+def test_focused_data_provider_modules_do_not_depend_on_reference_facade() -> None:
+    violations: list[str] = []
+    for filename in ("reference_file.py", "reference_memory.py", "reference_knowledge.py"):
+        path = DATA_ROOT / filename
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if node.module in {"reference", "ai_multi_agent_platform.data.reference"}:
+                violations.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+    assert not violations, (
+        "focused data provider modules must not depend on the compatibility façade:\n"
+        + "\n".join(violations)
     )
