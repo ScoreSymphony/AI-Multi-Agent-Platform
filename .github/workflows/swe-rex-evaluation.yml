@@ -58,6 +58,8 @@ jobs:
       fail-fast: false
       matrix:
         backend: [docker, docker-network-none]
+    env:
+      ISSUE861_SWEREX_IMAGE: issue861-swerex:5c995c365dfb1fd5bc56fda688be5d8538f9931f
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -69,6 +71,22 @@ jobs:
           python -m pip install
           "git+https://github.com/SWE-agent/SWE-ReX.git@5c995c365dfb1fd5bc56fda688be5d8538f9931f"
           "aiohttp>=3.11,<4"
+      - name: Build pinned SWE-ReX server image
+        shell: bash
+        run: |
+          cat > /tmp/issue861-swe-rex.Dockerfile <<'EOF'
+          FROM python:3.11-slim
+          ARG SWE_REX_REVISION
+          RUN python -m pip install --no-cache-dir \
+              "https://github.com/SWE-agent/SWE-ReX/archive/${SWE_REX_REVISION}.zip"
+          RUN swe-rex --version
+          EOF
+          docker build \
+            --build-arg SWE_REX_REVISION=5c995c365dfb1fd5bc56fda688be5d8538f9931f \
+            --tag "$ISSUE861_SWEREX_IMAGE" \
+            --file /tmp/issue861-swe-rex.Dockerfile \
+            .
+          docker image inspect "$ISSUE861_SWEREX_IMAGE" --format '{{.Id}}'
       - name: Run Docker runtime evidence
         run: >-
           python scripts/benchmarks/issue861_swe_rex_live.py
