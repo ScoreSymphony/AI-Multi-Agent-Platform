@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import ClassVar
 
 SCRIPT = Path("scripts/benchmarks/issue798_agent_sandbox_live.py")
 
@@ -111,6 +115,8 @@ def _run(
     *,
     canary: str | None = None,
     allowed_host: str | None = None,
+    extra_args: tuple[str, ...] = (),
+    env: dict[str, str] | None = None,
 ) -> dict[str, object]:
     output = tmp_path / "evidence.json"
     command = [
@@ -129,14 +135,64 @@ def _run(
         command.extend(("--canary", canary))
     if allowed_host is not None:
         command.extend(("--allowed-host", allowed_host))
+    command.extend(extra_args)
+    process_env = os.environ.copy()
+    if env is not None:
+        process_env.update(env)
     completed = subprocess.run(
         command,
         check=False,
         capture_output=True,
         text=True,
+        env=process_env,
     )
     assert completed.returncode == 0, completed.stderr
     return json.loads(output.read_text(encoding="utf-8"))
+
+
+class _TenantAwareHandler(BaseHTTPRequestHandler):
+    owners: ClassVar[dict[str, str]] = {
+        "sandbox-a": "token-a",
+        "sandbox-b": "token-b",
+    }
+    allow_cross_tenant: ClassVar[bool] = False
+
+    def do_GET(self) -> None:  # noqa: N802 - stdlib handler contract
+        sandbox_id = self.path.rstrip("/").rsplit("/", 1)[-1]
+        token = self.headers.get("X-Api-Key", "")
+        allowed = token == self.owners.get(sandbox_id)
+        if self.allow_cross_tenant and token in self.owners.values():
+            allowed = True
+        self.send_response(200 if allowed else 404)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b"{}")
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+
+def _provider_server(*, allow_cross_tenant: bool) -> tuple[ThreadingHTTPServer, threading.Thread]:
+    class Handler(_TenantAwareHandler):
+        pass
+
+    Handler.allow_cross_tenant = allow_cross_tenant
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread
+
+
+def _provider_args(server: ThreadingHTTPServer) -> tuple[str, ...]:
+    host, port = server.server_address
+    return (
+        "--provider-base-url",
+        f"http://{host}:{port}/e2b/v1",
+        "--sandbox-a-id",
+        "sandbox-a",
+        "--sandbox-b-id",
+        "sandbox-b",
+    )
 
 
 def test_live_harness_captures_protected_profile_evidence(tmp_path: Path) -> None:
@@ -159,6 +215,7 @@ def test_live_harness_captures_protected_profile_evidence(tmp_path: Path) -> Non
     assert report["probes"]["metadata"]["reachable"] is False
     assert report["probes"]["allowed_host"]["reachable"] is True
     assert report["secret_canary"]["performed"] is False
+    assert report["provider_authorization"]["performed"] is False
 
 
 def test_live_harness_surfaces_unsafe_profile_and_secret_annotation(
@@ -178,3 +235,58 @@ def test_live_harness_surfaces_unsafe_profile_and_secret_annotation(
         "found": True,
         "matches": ["sandbox-rs"],
     }
+
+
+def test_live_harness_proves_cross_token_get_is_blocked(tmp_path: Path) -> None:
+    kubectl = _write_fake_kubectl(tmp_path)
+    server, thread = _provider_server(allow_cross_tenant=False)
+    try:
+        report = _run(
+            tmp_path,
+            kubectl,
+            extra_args=_provider_args(server),
+            env={
+                "AGENT_SANDBOX_TOKEN_A": "token-a",
+                "AGENT_SANDBOX_TOKEN_B": "token-b",
+            },
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    authorization = report["provider_authorization"]
+    assert authorization["performed"] is True
+    assert authorization["same_tenant"]["a_to_a"]["authorized"] is True
+    assert authorization["same_tenant"]["b_to_b"]["authorized"] is True
+    assert authorization["cross_tenant"]["a_to_b"]["authorized"] is False
+    assert authorization["cross_tenant"]["b_to_a"]["authorized"] is False
+    assert authorization["cross_tenant_blocked"] is True
+    serialized = json.dumps(report, sort_keys=True)
+    assert "token-a" not in serialized
+    assert "token-b" not in serialized
+
+
+def test_live_harness_surfaces_cross_token_get_exposure(tmp_path: Path) -> None:
+    kubectl = _write_fake_kubectl(tmp_path)
+    server, thread = _provider_server(allow_cross_tenant=True)
+    try:
+        report = _run(
+            tmp_path,
+            kubectl,
+            extra_args=_provider_args(server),
+            env={
+                "AGENT_SANDBOX_TOKEN_A": "token-a",
+                "AGENT_SANDBOX_TOKEN_B": "token-b",
+            },
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    authorization = report["provider_authorization"]
+    assert authorization["performed"] is True
+    assert authorization["cross_tenant"]["a_to_b"]["authorized"] is True
+    assert authorization["cross_tenant"]["b_to_a"]["authorized"] is True
+    assert authorization["cross_tenant_blocked"] is False
