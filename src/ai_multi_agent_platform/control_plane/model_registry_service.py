@@ -18,7 +18,9 @@ class ControlPlaneModelRegistry:
 
     def list_providers(self) -> list[dict[str, JsonValue]]:
         registry = self.require_registry()
-        return [_model_provider_resource(registry, provider) for provider in registry.list_providers()]
+        return [
+            _model_provider_resource(registry, provider) for provider in registry.list_providers()
+        ]
 
     def get_provider(self, provider_id: str) -> dict[str, JsonValue]:
         registry = self.require_registry()
