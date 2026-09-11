@@ -44,6 +44,20 @@ def sanitized_environment() -> dict[str, str]:
     return {key: value for key, value in os.environ.items() if key in SAFE_ENV_KEYS}
 
 
+def prepare_output_directory(path: Path) -> None:
+    """Create the private bind target writable by a capability-dropped container.
+
+    ``--cap-drop=ALL`` intentionally removes ``CAP_DAC_OVERRIDE``. The pinned
+    image currently runs as uid 0, but without that capability it cannot write a
+    host-owned 0755 bind mount. The output directory contains only scanner-owned
+    artifacts and remains beneath a 0700 ``TemporaryDirectory`` on the host, so
+    granting write access on this leaf preserves the surrounding host isolation.
+    """
+    path.mkdir()
+    if os.name == "posix":
+        path.chmod(0o777)
+
+
 def container_command(runtime: str, image: str, input_dir: Path, output_dir: Path) -> list[str]:
     """Build the isolated static-scan command for the pinned upstream image.
 
@@ -152,7 +166,7 @@ def evaluate(
         staged = root / "candidate"
         output = root / "output"
         shutil.copytree(source, staged, symlinks=False)
-        output.mkdir()
+        prepare_output_directory(output)
         candidate_digest = digest_tree(staged)
 
         selected_runtime = runtime
