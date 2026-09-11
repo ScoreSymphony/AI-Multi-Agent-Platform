@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from ai_multi_agent_platform.application_distribution import (
     BuildSpecification,
     BuildTarget,
+    DistributedBuildTargetMatcher,
     PackageType,
 )
 from ai_multi_agent_platform.application_distribution.execution import APPLICATION_BUILD_ACTION
 from ai_multi_agent_platform.application_distribution.placement import job_requirements_for_target
+from ai_multi_agent_platform.distributed import (
+    DistributedRegistry,
+    NodeRecord,
+    RegistrationRequest,
+    WorkerRecord,
+)
+from ai_multi_agent_platform.domain import new_id
 
 
 def _target() -> BuildTarget:
@@ -67,3 +77,83 @@ def test_application_target_rejects_conflicting_resource_hint_aliases() -> None:
 
     with pytest.raises(ValueError, match="cannot define both cpu_cores_min and cpu_cores"):
         job_requirements_for_target(specification, _target())
+
+
+def test_distributed_matcher_requires_architecture_and_explicit_build_capability() -> None:
+    async def scenario() -> None:
+        registry = DistributedRegistry()
+        specification = BuildSpecification(
+            command=("python", "build.py"),
+            targets=(_target(),),
+            required_capabilities=("builder:archive",),
+        )
+        required = ("builder:archive", "toolchain:python")
+
+        missing_action_node = new_id("node")
+        missing_action_worker = new_id("worker")
+        registry.register(
+            RegistrationRequest(
+                node=NodeRecord(
+                    node_id=missing_action_node,
+                    display_name="missing-build-action",
+                    os_name="linux",
+                    architecture="x86_64",
+                ),
+                workers=(
+                    WorkerRecord(
+                        worker_id=missing_action_worker,
+                        node_id=missing_action_node,
+                        capability_refs=required,
+                    ),
+                ),
+                service_identity_ref=missing_action_worker,
+            )
+        )
+        matcher = DistributedBuildTargetMatcher(registry)
+        assert await matcher.supports(specification, _target()) is False
+
+        wrong_arch_node = new_id("node")
+        wrong_arch_worker = new_id("worker")
+        registry.register(
+            RegistrationRequest(
+                node=NodeRecord(
+                    node_id=wrong_arch_node,
+                    display_name="wrong-architecture",
+                    os_name="linux",
+                    architecture="arm64",
+                ),
+                workers=(
+                    WorkerRecord(
+                        worker_id=wrong_arch_worker,
+                        node_id=wrong_arch_node,
+                        capability_refs=(APPLICATION_BUILD_ACTION, *required),
+                    ),
+                ),
+                service_identity_ref=wrong_arch_worker,
+            )
+        )
+        assert await matcher.supports(specification, _target()) is False
+
+        matching_node = new_id("node")
+        matching_worker = new_id("worker")
+        registry.register(
+            RegistrationRequest(
+                node=NodeRecord(
+                    node_id=matching_node,
+                    display_name="matching-builder",
+                    os_name="linux",
+                    architecture="x86_64",
+                ),
+                workers=(
+                    WorkerRecord(
+                        worker_id=matching_worker,
+                        node_id=matching_node,
+                        capability_refs=(APPLICATION_BUILD_ACTION, *required),
+                    ),
+                ),
+                service_identity_ref=matching_worker,
+            )
+        )
+        assert await matcher.supports(specification, _target()) is True
+
+    asyncio.run(scenario())
