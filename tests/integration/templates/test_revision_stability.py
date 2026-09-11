@@ -64,8 +64,7 @@ class _RecordingAgentHandler:
             TemplateResourceRef(
                 resource_type="agent",
                 resource_id=(
-                    f"agent-from-revision-{revision.revision}-"
-                    f"instance-{context.instance_id}"
+                    f"agent-from-revision-{revision.revision}-instance-{context.instance_id}"
                 ),
             ),
         )
