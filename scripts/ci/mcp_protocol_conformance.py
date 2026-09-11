@@ -7,6 +7,7 @@ import json
 import os
 import platform
 import shlex
+import shutil
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -110,6 +111,47 @@ def _diagnostics(stdout: str, stderr: str, *, limit: int = 4000) -> str | None:
     return combined[-limit:]
 
 
+def _scenario_slug(scenario: str) -> str:
+    return "".join(character if character.isalnum() or character in "-_." else "_" for character in scenario)
+
+
+def _result_directories(results_root: Path) -> set[Path]:
+    if not results_root.is_dir():
+        return set()
+    return {path.resolve() for path in results_root.iterdir() if path.is_dir()}
+
+
+def _retain_scenario_artifacts(
+    *,
+    scenario: str,
+    completed: subprocess.CompletedProcess[str],
+    artifact_root: Path,
+    official_results_root: Path,
+    results_before: set[Path],
+) -> tuple[str, str]:
+    scenario_root = artifact_root / _scenario_slug(scenario)
+    scenario_root.mkdir(parents=True, exist_ok=True)
+    stdout_path = scenario_root / "runner.stdout.txt"
+    stderr_path = scenario_root / "runner.stderr.txt"
+    stdout_path.write_text(completed.stdout, encoding="utf-8")
+    stderr_path.write_text(completed.stderr, encoding="utf-8")
+
+    created_results = _result_directories(official_results_root) - results_before
+    if created_results:
+        # A single-scenario runner normally creates one directory. If upstream creates more,
+        # retain all of them rather than guessing which detail file is authoritative.
+        official_destination = scenario_root / "official-results"
+        official_destination.mkdir(parents=True, exist_ok=True)
+        for result_dir in sorted(created_results, key=lambda path: path.name):
+            shutil.copytree(
+                result_dir,
+                official_destination / result_dir.name,
+                dirs_exist_ok=True,
+            )
+
+    return str(stdout_path), str(stderr_path)
+
+
 def run_track(args: argparse.Namespace) -> MCPProtocolEvidence:
     repository_root = args.repository_root.resolve()
     manifest_path = args.pin_manifest
@@ -140,6 +182,10 @@ def run_track(args: argparse.Namespace) -> MCPProtocolEvidence:
             "Run npm ci and npm run build in the pinned checkout first."
         )
 
+    artifact_root = args.json_report.parent / f"{args.json_report.stem}-artifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    official_results_root = repository_root / "results"
+
     scenario_results: list[MCPProtocolScenarioEvidence] = []
     conformance_env = {
         **os.environ,
@@ -157,6 +203,7 @@ def run_track(args: argparse.Namespace) -> MCPProtocolEvidence:
             "--scenario",
             scenario,
         )
+        results_before = _result_directories(official_results_root)
         completed = subprocess.run(
             command,
             cwd=repository_root,
@@ -164,6 +211,13 @@ def run_track(args: argparse.Namespace) -> MCPProtocolEvidence:
             check=False,
             capture_output=True,
             text=True,
+        )
+        stdout_artifact, stderr_artifact = _retain_scenario_artifacts(
+            scenario=scenario,
+            completed=completed,
+            artifact_root=artifact_root,
+            official_results_root=official_results_root,
+            results_before=results_before,
         )
         status = (
             MCPProtocolScenarioStatus.PASS
@@ -182,6 +236,8 @@ def run_track(args: argparse.Namespace) -> MCPProtocolEvidence:
                 ),
                 stdout_sha256=sha256_text(completed.stdout),
                 stderr_sha256=sha256_text(completed.stderr),
+                stdout_artifact=stdout_artifact,
+                stderr_artifact=stderr_artifact,
             )
         )
 
