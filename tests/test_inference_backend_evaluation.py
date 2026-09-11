@@ -166,6 +166,20 @@ def test_readiness_rejects_superficially_comparable_pair_with_different_workload
     assert "no comparable decision-eligible SGLang-vLLM performance pair" in readiness.blockers
 
 
+def test_readiness_rejects_pair_with_different_driver_environment() -> None:
+    sglang = _report("sglang")
+    vllm = _report("vllm")
+    vllm["environment"]["driver_version"] = "different-driver"
+
+    readiness = assess_inference_backend_evaluation(
+        campaign=CAMPAIGN,
+        reports=[sglang, vllm],
+    )
+
+    assert readiness.ready_for_decision is False
+    assert readiness.comparable_sglang_vllm_pairs == 0
+
+
 def test_latest_failure_result_must_not_be_failing() -> None:
     initial = _report("sglang")
     later = deepcopy(initial)
@@ -181,6 +195,23 @@ def test_latest_failure_result_must_not_be_failing() -> None:
     assert readiness.ready_for_decision is False
     assert CAMPAIGN["failure_cases"][0] in readiness.failed_failure_cases
     assert "mandatory SGLang failure/recovery cases are failing" in readiness.blockers
+
+
+def test_latest_failure_result_uses_absolute_timestamp_across_offsets() -> None:
+    earlier = _report("sglang")
+    earlier["started_at"] = "2026-09-12T01:50:00+02:00"
+    earlier["completed_at"] = "2026-09-12T02:00:00+02:00"
+    later = deepcopy(earlier)
+    later["started_at"] = "2026-09-12T01:20:00+00:00"
+    later["completed_at"] = "2026-09-12T01:30:00+00:00"
+    later["failure_results"][0]["status"] = "fail"
+
+    readiness = assess_inference_backend_evaluation(
+        campaign=CAMPAIGN,
+        reports=[earlier, later, _report("vllm")],
+    )
+
+    assert CAMPAIGN["failure_cases"][0] in readiness.failed_failure_cases
 
 
 def test_report_validator_rejects_invalid_raw_evidence_hash() -> None:
