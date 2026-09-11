@@ -23,6 +23,7 @@ from ai_multi_agent_platform.conformance.mcp_protocol import (
 )
 
 _DEFAULT_PIN_MANIFEST = Path("conformance/mcp/pins.json")
+_TRACK_PROTOCOL_ENV = "AI_MULTI_AGENT_PLATFORM_MCP_CONFORMANCE_PROTOCOL_REVISION"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -140,6 +141,10 @@ def run_track(args: argparse.Namespace) -> MCPProtocolEvidence:
         )
 
     scenario_results: list[MCPProtocolScenarioEvidence] = []
+    conformance_env = {
+        **os.environ,
+        _TRACK_PROTOCOL_ENV: track.protocol_revision,
+    }
     for scenario in track.scenarios:
         command = (
             "node",
@@ -155,6 +160,7 @@ def run_track(args: argparse.Namespace) -> MCPProtocolEvidence:
         completed = subprocess.run(
             command,
             cwd=repository_root,
+            env=conformance_env,
             check=False,
             capture_output=True,
             text=True,
