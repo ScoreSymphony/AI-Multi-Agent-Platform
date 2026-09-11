@@ -19,6 +19,7 @@ from experiments.skillspector.runner import (  # noqa: E402
 
 VERSION = "2.11.2"
 REVISION = "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc"
+OBSERVED_AT = "2026-09-12T00:00:00+00:00"
 HIGH_RISK_ISSUE = {
     "finding_id": "finding-upstream-1",
     "id": "P1",
@@ -35,19 +36,36 @@ HIGH_RISK_ASSESSMENT = {
 }
 
 
-def _normalize(report: dict[str, object], *, process_ok: bool = True):
+def _normalize(
+    report: dict[str, object],
+    *,
+    process_ok: bool = True,
+    raw_report_sha256: str | None = None,
+):
     return normalize_report(
         report,
         provider_version=VERSION,
         provider_revision=REVISION,
-        mode="static",
+        mode="static_no_llm_network_none",
+        policy_config_version="test-policy-v1",
+        candidate_id="test-skill",
+        candidate_revision="revision-1",
         candidate_digest="candidate-sha256",
+        network_usage={"network_allowed": False, "services": []},
+        provider_usage={"llm_assisted": False, "provider": None},
+        observed_at=OBSERVED_AT,
+        raw_report_sha256=raw_report_sha256,
         process_ok=process_ok,
     )
 
 
 def _complete_report(**overrides: object) -> dict[str, object]:
     report: dict[str, object] = {
+        "skill": {
+            "name": "test-skill",
+            "source": "/scan",
+            "scanned_at": OBSERVED_AT,
+        },
         "execution_successful": True,
         "analysis_completeness": {
             "is_complete": True,
@@ -63,6 +81,7 @@ def _complete_report(**overrides: object) -> dict[str, object]:
             "recommendation": "SAFE",
         },
         "suppressed_count": 0,
+        "suppressed": [],
     }
     report.update(overrides)
     return report
@@ -75,6 +94,13 @@ def test_empty_completed_report_is_clean_advisory_evidence() -> None:
     assert evidence.complete is True
     assert evidence.provider == "nvidia/skillspector"
     assert evidence.provider_revision == REVISION
+    assert evidence.mode == "static_no_llm_network_none"
+    assert evidence.policy_config_version == "test-policy-v1"
+    assert evidence.observed_at == OBSERVED_AT
+    assert evidence.candidate_id == "test-skill"
+    assert evidence.candidate_revision == "revision-1"
+    assert evidence.network_usage == {"network_allowed": False, "services": []}
+    assert evidence.provider_usage == {"llm_assisted": False, "provider": None}
 
 
 def test_provider_issues_are_normalized_without_becoming_trust_state() -> None:
@@ -168,6 +194,30 @@ def test_high_risk_recommendation_remains_metadata_not_trust_state() -> None:
     assert evidence.status == "findings"
     assert evidence.provider_metadata["risk_assessment"]["recommendation"] == "DO_NOT_INSTALL"
     assert not hasattr(evidence, "trust_state")
+
+
+def test_suppressed_finding_is_preserved_as_evidence_not_approval() -> None:
+    suppressed = {
+        "finding": HIGH_RISK_ISSUE,
+        "suppression_reason": "reviewed false positive",
+    }
+    evidence = _normalize(
+        _complete_report(
+            suppressed_count=1,
+            suppressed=[suppressed],
+        )
+    )
+
+    assert evidence.status == "clean"
+    assert evidence.suppressed_findings == (suppressed,)
+    assert evidence.provider_metadata["suppressed_count"] == 1
+    assert not hasattr(evidence, "approved")
+
+
+def test_exact_raw_report_digest_overrides_canonical_fallback() -> None:
+    evidence = _normalize(_complete_report(), raw_report_sha256="a" * 64)
+
+    assert evidence.raw_report_sha256 == "a" * 64
 
 
 def test_exit_code_one_with_successful_report_is_usable_evidence() -> None:
