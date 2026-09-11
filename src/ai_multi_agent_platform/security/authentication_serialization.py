@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .authentication_models import AuthenticatedActor, BrowserSession, StoredCredential
 from .authentication_tokens import authentication_now
 
 
-def safe_session(session: BrowserSession, *, now: object | None = None) -> dict[str, JsonValue]:
-    # Keep the historical callable surface while centralizing serialization ownership.
-    current = authentication_now(now if hasattr(now, "tzinfo") else None)
+def safe_session(
+    session: BrowserSession,
+    *,
+    now: datetime | None = None,
+) -> dict[str, JsonValue]:
+    current = authentication_now(now)
     return {
         "id": session.session_id,
         "user_id": session.user_id,
