@@ -1,8 +1,8 @@
 """Optional Pipelock Core projection/evidence adapter for canonical egress decisions.
 
 The platform remains the policy authority. This module never evaluates authorization or data-egress
-policy itself; it only projects an already-canonical ``EgressDecision`` into an adapter directive and
-normalizes Pipelock receipt metadata as non-canonical evidence.
+policy itself; it only projects an already-canonical ``EgressDecision`` into an adapter directive
+and normalizes Pipelock receipt metadata as non-canonical evidence.
 """
 
 from __future__ import annotations
@@ -113,8 +113,9 @@ def project_egress_decision(
     """Project canonical #591 output without granting or redefining permissions.
 
     Canonical non-allow outcomes are blocked before an upstream enforcement adapter is consulted.
-    Only an explicit canonical ``ALLOW`` may become audit traffic or a mediated allow. Unknown future
-    outcomes fail closed through ``PipelockMappingError`` rather than being optimistically forwarded.
+    Only an explicit canonical ``ALLOW`` may become audit traffic or a mediated allow. Unknown
+    future outcomes fail closed through ``PipelockMappingError`` rather than being optimistically
+    forwarded.
     """
 
     decision.validate_against(request)
