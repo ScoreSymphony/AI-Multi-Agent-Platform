@@ -431,6 +431,16 @@ class CanonicalVerificationRuntime:
         )
         result_id = subject_id if subject_type == "result" else None
         artifact_ids = (subject_id,) if subject_type == "artifact" else ()
+        existing = self._existing_reverification_after_repair(
+            previous=previous,
+            context=context,
+            result_id=result_id,
+            artifact_ids=artifact_ids,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+        )
+        if existing is not None:
+            return existing
         return self._completion.request_canonical_reverification_after_repair(
             verification_id,
             new_subject=context.subject,
@@ -443,6 +453,72 @@ class CanonicalVerificationRuntime:
             producer=context.producer,
             causation_id=causation_id,
         )
+
+    def _existing_reverification_after_repair(
+        self,
+        *,
+        previous: VerificationRequest,
+        context: VerificationEvidenceContext,
+        result_id: str | None,
+        artifact_ids: tuple[str, ...],
+        correlation_id: str,
+        causation_id: str | None,
+    ) -> VerificationRequest | None:
+        next_attempt = previous.repair_attempt + 1
+        candidates = tuple(
+            request
+            for request, _result in self._completion.verification.history(task_id=previous.task_id)
+            if request.verification_id != previous.verification_id
+            and request.policy_id == previous.policy_id
+            and request.policy_version == previous.policy_version
+            and request.stage_id == previous.stage_id
+            and request.repair_attempt == next_attempt
+        )
+        exact = tuple(
+            request
+            for request in candidates
+            if request.requested_verifier_kind is previous.requested_verifier_kind
+            and request.subject == context.subject
+            and request.run_id == context.run_id
+            and request.result_id == result_id
+            and request.artifact_ids == artifact_ids
+            and request.project_id == context.project_id
+            and request.capability_ids == context.capability_ids
+            and request.producer == context.producer
+            and request.correlation_id == correlation_id
+            and request.causation_id == causation_id
+        )
+        if len(exact) == 1:
+            return exact[0]
+        if len(exact) > 1:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "repair output maps to multiple canonical reverification requests",
+                details={
+                    "source_verification_id": previous.verification_id,
+                    "verification_ids": [request.verification_id for request in exact],
+                },
+            )
+
+        lineage_conflicts = tuple(
+            request
+            for request in candidates
+            if request.run_id == context.run_id
+            or (causation_id is not None and request.causation_id == causation_id)
+        )
+        if lineage_conflicts:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "persisted repair reverification conflicts with current canonical evidence",
+                details={
+                    "source_verification_id": previous.verification_id,
+                    "verification_ids": [request.verification_id for request in lineage_conflicts],
+                    "repair_attempt": next_attempt,
+                    "subject_id": context.subject.subject_id,
+                    "run_id": context.run_id,
+                },
+            )
+        return None
 
 
 def _file_context(
