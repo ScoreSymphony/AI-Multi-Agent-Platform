@@ -39,6 +39,7 @@ from .models import (
     WaitResolution,
     WaitType,
 )
+from .progression import CoordinationProgression
 from .registration import CoordinationRegistration
 from .repository import CoordinatorRepository
 
@@ -116,7 +117,6 @@ _TERMINAL_STEPS = frozenset(
 _TERMINAL_RUNS = frozenset(
     {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED, RunStatus.TIMED_OUT}
 )
-_SUCCESSFUL_PREDECESSORS = frozenset({StepStatus.SUCCEEDED, StepStatus.SKIPPED})
 
 
 class DurablePlanStepCoordinator:
@@ -141,6 +141,7 @@ class DurablePlanStepCoordinator:
         self.telemetry = telemetry or Telemetry()
         self.claim_ttl = claim_ttl
         self._registration = CoordinationRegistration(repository=repository, kernel=kernel)
+        self._progression = CoordinationProgression(repository=repository, kernel=kernel)
 
     async def register_plan(
         self,
@@ -737,133 +738,14 @@ class DurablePlanStepCoordinator:
         by_id: dict[str, Step],
         now: datetime,
     ) -> bool:
-        if step.status is not StepStatus.PENDING:
-            return False
-        satisfied = tuple(
-            dependency_id
-            for dependency_id in record.dependency_ids
-            if by_id[dependency_id].status in _SUCCESSFUL_PREDECESSORS
+        return await self._progression.refresh_dependencies(
+            step,
+            record,
+            by_id,
+            now,
+            claim=self._claim,
+            emit=self._emit,
         )
-        failed = tuple(
-            dependency_id
-            for dependency_id in record.dependency_ids
-            if by_id[dependency_id].status in {StepStatus.FAILED, StepStatus.CANCELLED}
-        )
-        if failed:
-            claim = self._claim(step.id, now)
-            if claim is None:
-                return False
-            try:
-                current = self.repository.get_step_record(step.id)
-                current_step = self.repository.get_plan(step.plan_id).step(step.id)
-                if current_step.status is not StepStatus.PENDING:
-                    return False
-                terminal = current_step.transition_to(
-                    StepStatus.CANCELLED
-                    if current.predecessor_failure_policy
-                    is PredecessorFailurePolicy.CANCEL_DEPENDENT
-                    else StepStatus.SKIPPED
-                )
-                updated = replace(
-                    current,
-                    phase=CoordinationPhase.TERMINAL,
-                    satisfied_dependency_ids=satisfied,
-                    reconciliation_detail="predecessor failed or cancelled",
-                )
-                self.repository.save_step(
-                    step=terminal,
-                    record=updated,
-                    expected_revision=current.revision,
-                    claim=claim,
-                    now=now,
-                )
-                self._emit(
-                    "coordination.barrier.failed",
-                    current.task_id,
-                    current.plan_id,
-                    current.step_id,
-                    outcome=TelemetryOutcome.FAILED,
-                    attributes={"failed_predecessors": list(failed)},
-                )
-                return True
-            finally:
-                self.repository.release_claim(claim)
-
-        if set(satisfied) != set(record.satisfied_dependency_ids):
-            claim = self._claim(step.id, now)
-            if claim is None:
-                return False
-            try:
-                current = self.repository.get_step_record(step.id)
-                current_step = self.repository.get_plan(step.plan_id).step(step.id)
-                updated = replace(current, satisfied_dependency_ids=satisfied)
-                if set(satisfied) == set(current.dependency_ids):
-                    current_step = current_step.transition_to(StepStatus.READY)
-                    updated = replace(updated, phase=CoordinationPhase.READY)
-                self.repository.save_step(
-                    step=current_step,
-                    record=updated,
-                    expected_revision=current.revision,
-                    claim=claim,
-                    now=now,
-                )
-                self._emit(
-                    "coordination.barrier.progress",
-                    current.task_id,
-                    current.plan_id,
-                    current.step_id,
-                    attributes={
-                        "satisfied": len(satisfied),
-                        "required": len(current.dependency_ids),
-                    },
-                )
-                if updated.phase is CoordinationPhase.READY:
-                    self._emit(
-                        "coordination.barrier.completed",
-                        current.task_id,
-                        current.plan_id,
-                        current.step_id,
-                        outcome=TelemetryOutcome.SUCCEEDED,
-                        attributes={"required": len(current.dependency_ids)},
-                    )
-                    self._emit(
-                        "coordination.step.ready",
-                        current.task_id,
-                        current.plan_id,
-                        current.step_id,
-                    )
-                return True
-            finally:
-                self.repository.release_claim(claim)
-
-        if not record.dependency_ids:
-            claim = self._claim(step.id, now)
-            if claim is None:
-                return False
-            try:
-                current = self.repository.get_step_record(step.id)
-                current_step = self.repository.get_plan(step.plan_id).step(step.id)
-                if current_step.status is not StepStatus.PENDING:
-                    return False
-                ready = current_step.transition_to(StepStatus.READY)
-                updated = replace(current, phase=CoordinationPhase.READY)
-                self.repository.save_step(
-                    step=ready,
-                    record=updated,
-                    expected_revision=current.revision,
-                    claim=claim,
-                    now=now,
-                )
-                self._emit(
-                    "coordination.step.ready",
-                    current.task_id,
-                    current.plan_id,
-                    current.step_id,
-                )
-                return True
-            finally:
-                self.repository.release_claim(claim)
-        return False
 
     async def _start_attempt(
         self,
@@ -871,81 +753,13 @@ class DurablePlanStepCoordinator:
         record: StepCoordinationRecord,
         now: datetime,
     ) -> bool:
-        claim = self._claim(step.id, now)
-        if claim is None:
-            return False
-        try:
-            current = self.repository.get_step_record(step.id)
-            current_step = self.repository.get_plan(step.plan_id).step(step.id)
-            if (
-                current.phase is not CoordinationPhase.READY
-                or current_step.status is not StepStatus.READY
-            ):
-                return False
-            attempt = current.current_attempt + 1
-            run = await self.kernel.create_run(
-                idempotency_key=self._attempt_key(current, attempt),
-                task_id=current.task_id,
-                subject_type="step",
-                subject_id=current.step_id,
-                source="platform-coordinator",
-            )
-            if run.attempt != attempt:
-                raise ContractError(
-                    ErrorCode.CONFLICT,
-                    "kernel Run attempt does not match coordinator attempt",
-                    details={"expected_attempt": attempt, "run_attempt": run.attempt},
-                )
-            self._emit(
-                "coordination.attempt.created",
-                current.task_id,
-                current.plan_id,
-                current.step_id,
-                run_id=run.run_id,
-                attributes={"attempt": attempt},
-            )
-            running = current_step.transition_to(StepStatus.RUNNING)
-            updated = replace(
-                current,
-                phase=CoordinationPhase.ATTEMPT_ACTIVE,
-                latest_run_id=run.run_id,
-                current_attempt=attempt,
-                retry_due_at=None,
-                reconciliation=ReconciliationDisposition.CONSISTENT,
-                reconciliation_detail=None,
-            )
-            self.repository.save_step(
-                step=running,
-                record=updated,
-                expected_revision=current.revision,
-                claim=claim,
-                now=now,
-            )
-            await self.kernel.start_run(
-                idempotency_key=self._start_key(current, attempt),
-                task_id=current.task_id,
-                run_id=run.run_id,
-                source="platform-coordinator",
-            )
-            self._emit(
-                "coordination.attempt.dispatched",
-                current.task_id,
-                current.plan_id,
-                current.step_id,
-                run_id=run.run_id,
-                attributes={"attempt": attempt, "reconciled": False},
-            )
-            self._emit(
-                "coordination.run.started",
-                current.task_id,
-                current.plan_id,
-                current.step_id,
-                run_id=run.run_id,
-                attributes={"attempt": attempt},
-            )
-            return True
-        finally:
-            self.repository.release_claim(claim)
+        return await self._progression.start_attempt(
+            step,
+            record,
+            now,
+            claim=self._claim,
+            emit=self._emit,
+        )
 
     async def _activate_retry(
         self,
