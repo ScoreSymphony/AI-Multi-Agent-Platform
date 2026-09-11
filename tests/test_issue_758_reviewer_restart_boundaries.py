@@ -387,7 +387,9 @@ def test_staged_repair_output_is_reused_after_restart_before_reverification(tmp_
     asyncio.run(scenario())
 
 
-def test_duplicate_reviewer_completion_after_restart_is_rejected_without_new_result(tmp_path) -> None:
+def test_duplicate_reviewer_completion_after_restart_is_rejected_without_new_result(
+    tmp_path,
+) -> None:
     async def scenario() -> None:
         agents, verification, evidence, completion, runtime, request, resolver = _setup(tmp_path)
         executor = QueueReviewerExecutor(VerificationOutcome.PASS)
