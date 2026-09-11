@@ -90,7 +90,12 @@ for raw in runs_path.read_text(encoding="utf-8").splitlines():
     candidates.append(row)
     workflow_counts[(workflow_id, path, name)] += 1
 
-candidates.sort(key=lambda row: (row[2], int(row[0])))
+# GitHub keeps a retired workflow in the Actions sidebar until all runs for its
+# path are gone. Process the smallest complete path histories first so stale
+# sidebar entries disappear quickly instead of being blocked behind workflows
+# with thousands of historical runs.
+path_counts: Counter[str] = Counter(row[2] for row in candidates)
+candidates.sort(key=lambda row: (path_counts[row[2]], row[2], int(row[0])))
 
 (out_dir / "stale-runs.tsv").write_text(
     "".join("\t".join(row) + "\n" for row in candidates),
@@ -99,7 +104,7 @@ candidates.sort(key=lambda row: (row[2], int(row[0])))
 
 workflow_lines = []
 for (workflow_id, path, name), count in sorted(
-    workflow_counts.items(), key=lambda item: (-item[1], item[0][1])
+    workflow_counts.items(), key=lambda item: (path_counts[item[0][1]], item[0][1], item[0][2])
 ):
     workflow_lines.append(f"{workflow_id}\t{path}\t{name}\t{count}\n")
 (out_dir / "stale-workflows.tsv").write_text("".join(workflow_lines), encoding="utf-8")
@@ -111,6 +116,7 @@ summary = [
     f"- Protected workflow paths (main + open PR heads): {len(protected)}",
     f"- Stale workflow identities: {len(workflow_counts)}",
     f"- Candidate runs to delete: {len(candidates)}",
+    "- Deletion order: smallest complete stale workflow paths first",
     "",
     "Only completed runs whose workflow path is absent from both `main` and every open PR head are candidates.",
 ]
@@ -172,9 +178,9 @@ apply_cleanup() {
       break
     fi
 
-    # The plan is sorted by workflow path. Refresh the protection set whenever
-    # processing moves to a new path, so a workflow added after planning is safe
-    # without spending API requests on every individual historical run.
+    # The plan keeps each workflow path contiguous. Refresh the protection set
+    # whenever processing moves to a new path, so a workflow added after
+    # planning is safe without spending API requests on every historical run.
     if [[ "$path" != "$current_path" ]]; then
       current_path="$path"
       collect_protected_paths "$protected_now"
