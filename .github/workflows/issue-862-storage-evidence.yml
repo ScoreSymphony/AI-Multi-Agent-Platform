@@ -25,6 +25,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install platform runtime dependencies
+        shell: bash
+        run: python -m pip install -e .
+
       - name: Generate synthetic runtime credentials
         shell: bash
         run: |
