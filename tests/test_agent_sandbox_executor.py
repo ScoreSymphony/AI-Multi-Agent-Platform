@@ -30,7 +30,10 @@ class FakeAgentSandboxClient:
         self.cancelled: list[str] = []
         self.requests: list[AgentSandboxClientRequest] = []
 
-    async def execute(self, request: AgentSandboxClientRequest) -> AgentSandboxClientResult:
+    async def execute(
+        self,
+        request: AgentSandboxClientRequest,
+    ) -> AgentSandboxClientResult:
         self.requests.append(request)
         if request.action == "echo":
             text = str(request.arguments.get("text", ""))
@@ -56,7 +59,11 @@ class FakeAgentSandboxClient:
             )
         if request.action == "sleep":
             seconds_value = request.arguments.get("seconds", 0.0)
-            seconds = float(seconds_value) if isinstance(seconds_value, (int, float)) else 0.0
+            seconds = (
+                float(seconds_value)
+                if isinstance(seconds_value, (int, float))
+                else 0.0
+            )
             await asyncio.sleep(seconds)
             return AgentSandboxClientResult(
                 status=AgentSandboxExecutionStatus.SUCCEEDED,
@@ -139,7 +146,9 @@ def _executor(
     return executor, client
 
 
-def test_provider_ids_are_namespaced_and_canonical_ids_are_preserved(tmp_path: Path) -> None:
+def test_provider_ids_are_namespaced_and_canonical_ids_are_preserved(
+    tmp_path: Path,
+) -> None:
     executor, _ = _executor(tmp_path)
     result = asyncio.run(
         executor.execute(
@@ -162,7 +171,9 @@ def test_provider_ids_are_namespaced_and_canonical_ids_are_preserved(tmp_path: P
     assert result.adapter_metadata["agent_sandbox"]["session_id"] == "session-provider-1"
 
 
-def test_provider_request_refs_are_private_and_unique_per_execution(tmp_path: Path) -> None:
+def test_provider_request_refs_are_private_and_unique_per_execution(
+    tmp_path: Path,
+) -> None:
     executor, client = _executor(tmp_path)
     request = ExecutionRequest(
         task_id="task-1",
@@ -241,7 +252,9 @@ def test_health_is_translated_without_making_provider_canonical(tmp_path: Path) 
     assert descriptor.metadata["evaluated_revision"] == AGENT_SANDBOX_EVALUATED_REVISION
 
 
-def test_inflight_cancellation_is_forwarded_once_by_private_request_ref(tmp_path: Path) -> None:
+def test_inflight_cancellation_is_forwarded_once_by_private_request_ref(
+    tmp_path: Path,
+) -> None:
     executor, client = _executor(tmp_path)
     token = CancellationToken()
     request = ExecutionRequest(
@@ -288,9 +301,14 @@ def test_timeout_is_forwarded_once_by_private_request_ref(tmp_path: Path) -> Non
     assert client.cancelled[0] != "run-1"
 
 
-def test_provider_cannot_report_artifact_outside_canonical_workspace(tmp_path: Path) -> None:
+def test_provider_cannot_report_artifact_outside_canonical_workspace(
+    tmp_path: Path,
+) -> None:
     class EscapingClient(FakeAgentSandboxClient):
-        async def execute(self, request: AgentSandboxClientRequest) -> AgentSandboxClientResult:
+        async def execute(
+            self,
+            request: AgentSandboxClientRequest,
+        ) -> AgentSandboxClientResult:
             self.requests.append(request)
             return AgentSandboxClientResult(
                 status=AgentSandboxExecutionStatus.SUCCEEDED,
@@ -322,9 +340,14 @@ def test_provider_cannot_report_artifact_outside_canonical_workspace(tmp_path: P
     assert "outside the execution workspace" in result.error.message
 
 
-def test_backend_unavailability_is_normalized_without_adapter_retry(tmp_path: Path) -> None:
+def test_backend_unavailability_is_normalized_without_adapter_retry(
+    tmp_path: Path,
+) -> None:
     class UnavailableClient(FakeAgentSandboxClient):
-        async def execute(self, request: AgentSandboxClientRequest) -> AgentSandboxClientResult:
+        async def execute(
+            self,
+            request: AgentSandboxClientRequest,
+        ) -> AgentSandboxClientResult:
             self.requests.append(request)
             return AgentSandboxClientResult(
                 status=AgentSandboxExecutionStatus.FAILED,
@@ -360,7 +383,9 @@ def test_backend_unavailability_is_normalized_without_adapter_retry(tmp_path: Pa
     assert len(client.requests) == 1
 
 
-def test_environment_projection_fails_closed_without_provider_dispatch(tmp_path: Path) -> None:
+def test_environment_projection_fails_closed_without_provider_dispatch(
+    tmp_path: Path,
+) -> None:
     executor, client = _executor(tmp_path)
     result = asyncio.run(
         executor.execute(
@@ -382,9 +407,14 @@ def test_environment_projection_fails_closed_without_provider_dispatch(tmp_path:
     assert client.requests == []
 
 
-def test_untrusted_provider_metadata_is_filtered_before_canonical_evidence(tmp_path: Path) -> None:
+def test_untrusted_provider_metadata_is_filtered_before_canonical_evidence(
+    tmp_path: Path,
+) -> None:
     class MetadataClient(FakeAgentSandboxClient):
-        async def execute(self, request: AgentSandboxClientRequest) -> AgentSandboxClientResult:
+        async def execute(
+            self,
+            request: AgentSandboxClientRequest,
+        ) -> AgentSandboxClientResult:
             self.requests.append(request)
             return AgentSandboxClientResult(
                 status=AgentSandboxExecutionStatus.SUCCEEDED,
