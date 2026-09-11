@@ -130,8 +130,7 @@ class _ScenarioTransport:
                 "name": name,
                 "digest": f"sha256:{digest}",
                 "browser_download_url": (
-                    "https://github.com/ScoreSymphony/example-app/releases/download/"
-                    f"v1.0.0/{name}"
+                    f"https://github.com/ScoreSymphony/example-app/releases/download/v1.0.0/{name}"
                 ),
             }
             self.assets.append(asset)
