@@ -43,7 +43,7 @@ from ai_multi_agent_platform.workspaces import (
 async def _remote_build_fixture(
     tmp_path: Path,
     *,
-    secret_environment: dict[str, SecretReference] | None = None,
+    include_secret_environment: bool = False,
     authorization: FakeAuthorizationProvider | None = None,
 ) -> tuple[
     ApplicationDistributionService,
@@ -84,13 +84,13 @@ async def _remote_build_fixture(
                 display_name="issue-749-secure-worker",
                 os_name="linux",
                 architecture="x86_64",
+                trust_level="trusted",
             ),
             workers=(
                 WorkerRecord(
                     worker_id=worker_id,
                     node_id=node_id,
                     capability_refs=(APPLICATION_BUILD_ACTION,),
-                    trust_level="trusted",
                 ),
             ),
             service_identity_ref=worker_id,
@@ -128,10 +128,21 @@ async def _remote_build_fixture(
         package_type=PackageType.ARCHIVE,
         output_path="dist/app.bin",
     )
+    secret_environment = (
+        {
+            "PRIVATE_INDEX_TOKEN": SecretReference(
+                provider="local-secrets",
+                secret_id="application-build-token",
+                scope=project_id,
+            )
+        }
+        if include_secret_environment
+        else {}
+    )
     specification = BuildSpecification(
         command=("tool", "build"),
         targets=(target,),
-        secret_environment=secret_environment or {},
+        secret_environment=secret_environment,
     )
     release = await service.create_release(
         application_id="secure-remote-app",
@@ -153,15 +164,9 @@ def test_secret_backed_remote_build_fails_before_worker_dispatch_until_scoped_de
     tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
-        project_id = new_id("project")
-        reference = SecretReference(
-            provider="local-secrets",
-            secret_id="application-build-token",
-            scope=project_id,
-        )
         service, release, runtime, worker_lifecycle, _ = await _remote_build_fixture(
             tmp_path,
-            secret_environment={"PRIVATE_INDEX_TOKEN": reference},
+            include_secret_environment=True,
         )
 
         with pytest.raises(ContractError) as exc_info:
