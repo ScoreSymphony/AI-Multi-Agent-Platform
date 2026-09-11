@@ -18,11 +18,14 @@ from .models import (
     PlannerOutput,
     PlanningInventory,
     PlanningRequest,
+    PlanningTrigger,
     PlanProposal,
+    PriorPlanSnapshot,
     ProposalRecord,
     ProposalStatus,
     ProposalValidation,
 )
+from .replanning import PlanningReplanSupport
 from .repository import advance_record
 from .service import PlanningService as BasePlanningService
 from .validation import PlanningProposalValidator
@@ -38,7 +41,7 @@ _PROPOSAL_VALIDATOR = PlanningProposalValidator()
 
 
 class PlanningService(BasePlanningService):
-    """Planning service with focused inventory/validation and deterministic supersession.
+    """Planning service with focused internal responsibilities and deterministic supersession.
 
     Canonical Task/Plan mutation remains owned by the base planning/kernel path. The additional
     per-Task lock closes the in-process check/use race between competing proposal activations.
@@ -48,9 +51,10 @@ class PlanningService(BasePlanningService):
     Replacement proposals also point to the durable proposal that activated their base Plan. This
     keeps proposal lineage explicit without mutating prior immutable proposal content.
 
-    Inventory construction and deterministic proposal validation are delegated to focused internal
-    components. ``_inventory`` remains a compatibility seam because ``ReferencePlanningService``
-    intentionally layers trusted environment filtering on top of the canonical base inventory.
+    Inventory construction, deterministic proposal validation and bounded replanning support are
+    delegated to focused internal components. ``_inventory`` remains a compatibility seam because
+    ``ReferencePlanningService`` intentionally layers trusted environment filtering on top of the
+    canonical base inventory.
     """
 
     _activation_locks: dict[str, asyncio.Lock]
@@ -64,6 +68,34 @@ class PlanningService(BasePlanningService):
 
     def validate(self, proposal: PlanProposal, request: PlanningRequest) -> ProposalValidation:
         return _PROPOSAL_VALIDATOR.validate(proposal, request)
+
+    async def _prior_plan(self, task: TaskState) -> PriorPlanSnapshot | None:
+        return await self._replan_support().prior_plan(task)
+
+    def _enforce_replan_budget(self, task_id: str, trigger: PlanningTrigger) -> None:
+        self._replan_support().enforce_budget(task_id, trigger)
+
+    def _trigger_fingerprint(
+        self,
+        *,
+        task: TaskState,
+        trigger: PlanningTrigger,
+        reason: str | None,
+        evidence_refs: tuple[str, ...],
+    ) -> str:
+        return PlanningReplanSupport.trigger_fingerprint(
+            task=task,
+            trigger=trigger,
+            reason=reason,
+            evidence_refs=evidence_refs,
+        )
+
+    def _replan_support(self) -> PlanningReplanSupport:
+        return PlanningReplanSupport(
+            repository=self.repository,
+            kernel=self.kernel,
+            policy=self.replan_policy,
+        )
 
     def _activation_lock(self, task_id: str) -> asyncio.Lock:
         locks = getattr(self, "_activation_locks", None)
