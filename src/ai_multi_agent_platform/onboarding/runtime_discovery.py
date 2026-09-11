@@ -5,7 +5,7 @@ from __future__ import annotations
 from ai_multi_agent_platform.contracts import HealthStatus
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.distributed.models import NodeStatus, WorkerStatus
-from ai_multi_agent_platform.models import ModelRegistry
+from ai_multi_agent_platform.models import ModelLocation, ModelRegistry
 
 from .components import (
     CompatibilityEnvironment,
@@ -116,10 +116,12 @@ class SingleNodeComponentDiscoverySource:
                 and not node.draining
                 and not node.maintenance
             )
+            usable_node_ids = {node.node_id for node in usable_nodes}
             usable_workers = tuple(
                 worker
                 for worker in workers
-                if worker.status in {WorkerStatus.HEALTHY, WorkerStatus.DEGRADED}
+                if worker.node_id in usable_node_ids
+                and worker.status in {WorkerStatus.HEALTHY, WorkerStatus.DEGRADED}
                 and not worker.draining
             )
             if usable_nodes and usable_workers:
@@ -148,6 +150,19 @@ class SingleNodeComponentDiscoverySource:
                 HealthStatus.HEALTHY,
                 HealthStatus.DEGRADED,
             }
+            configured_models = self.models.list_models(
+                provider_id=descriptor.provider_id,
+                enabled=True,
+            )
+            model_locations = {model.location for model in configured_models}
+            local_compatible = bool(
+                model_locations & {ModelLocation.LOCAL, ModelLocation.SELF_HOSTED}
+            )
+            recommended_modes = (
+                frozenset({SetupMode.AUTO, SetupMode.LOCAL, SetupMode.MULTI_NODE})
+                if local_compatible
+                else frozenset({SetupMode.ADVANCED})
+            )
             capabilities = {
                 capability.name for capability in descriptor.capabilities if capability.name.strip()
             }
@@ -168,14 +183,14 @@ class SingleNodeComponentDiscoverySource:
                     lifecycle=ComponentLifecycle.SUPPORTED,
                     version=descriptor.contract_version,
                     capabilities=frozenset(capabilities),
-                    recommended_modes=frozenset(
-                        {SetupMode.AUTO, SetupMode.LOCAL, SetupMode.MULTI_NODE}
-                    ),
+                    recommended_modes=recommended_modes,
                     source_ref=f"model-provider:{descriptor.provider_type}",
                     metadata={
                         "health": health.value,
                         "provider_type": descriptor.provider_type,
                         "supported_operations": list(descriptor.supported_operations),
+                        "model_locations": sorted(location.value for location in model_locations),
+                        "configured_model_count": len(configured_models),
                     },
                 )
             )
