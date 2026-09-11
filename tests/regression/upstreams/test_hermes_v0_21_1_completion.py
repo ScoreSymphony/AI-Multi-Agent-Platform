@@ -132,7 +132,11 @@ def test_restart_while_waiting_reconciles_and_cancels_same_external_run() -> Non
         before_restart = HermesOrchestrator(
             HermesAdapterConfig(enabled=True),
             transport=FakeHermesTransport(
-                [HermesHttpResponse(200, {"run_id": external_run_id, "status": "waiting_for_approval"})]
+                [
+                    HermesHttpResponse(
+                        200, {"run_id": external_run_id, "status": "waiting_for_approval"}
+                    )
+                ]
             ),
             secret_resolver=lambda _: None,
         )
@@ -142,7 +146,9 @@ def test_restart_while_waiting_reconciles_and_cancels_same_external_run() -> Non
 
         restarted_transport = FakeHermesTransport(
             [
-                HermesHttpResponse(200, {"run_id": external_run_id, "status": "waiting_for_approval"}),
+                HermesHttpResponse(
+                    200, {"run_id": external_run_id, "status": "waiting_for_approval"}
+                ),
                 HermesHttpResponse(200, {"ok": True}),
                 HermesHttpResponse(200, {"run_id": external_run_id, "status": "cancelled"}),
             ]
