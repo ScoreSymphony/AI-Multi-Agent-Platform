@@ -155,10 +155,7 @@ def _write_hosts(content: str) -> None:
 
 
 def _resolved_addresses(hostname: str) -> set[str]:
-    return {
-        item[4][0]
-        for item in socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
-    }
+    return {item[4][0] for item in socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)}
 
 
 @pytest.mark.integration
@@ -216,13 +213,11 @@ def test_multistage_secret_split_across_independent_fetches_reaches_upstream(
 
     with _target_server(tmp_path) as (target_port, marker):
         with _pipelock(tmp_path, name="multistage") as (proxy_port, log_path):
-            first_target = (
-                f"http://{TEST_NET_IP}:{target_port}/collect?"
-                + urllib.parse.urlencode({"fragment": first})
+            first_target = f"http://{TEST_NET_IP}:{target_port}/collect?" + urllib.parse.urlencode(
+                {"fragment": first}
             )
-            second_target = (
-                f"http://{TEST_NET_IP}:{target_port}/collect?"
-                + urllib.parse.urlencode({"fragment": second})
+            second_target = f"http://{TEST_NET_IP}:{target_port}/collect?" + urllib.parse.urlencode(
+                {"fragment": second}
             )
             first_status, first_body = _fetch(proxy_port, first_target)
             second_status, second_body = _fetch(proxy_port, second_target)
@@ -260,9 +255,7 @@ def test_same_hostname_rebinding_from_allowlisted_to_loopback_is_blocked(
                 assert TARGET_SENTINEL in first_body
                 assert len(_records(marker)) == 1
 
-                _write_hosts(
-                    _with_hosts_mapping(original_hosts, REBINDS_HOSTNAME, "127.0.0.1")
-                )
+                _write_hosts(_with_hosts_mapping(original_hosts, REBINDS_HOSTNAME, "127.0.0.1"))
                 assert "127.0.0.1" in _resolved_addresses(REBINDS_HOSTNAME)
 
                 second_status, _second_body = _fetch(proxy_port, target)
