@@ -433,9 +433,7 @@ async def _run(backend: str) -> dict[str, Any]:
                     environment.error.category.value if environment.error else None
                 ),
                 "traversal_status": traversal.status.value,
-                "traversal_category": (
-                    traversal.error.category.value if traversal.error else None
-                ),
+                "traversal_category": (traversal.error.category.value if traversal.error else None),
                 "provider_dispatches": guards_dispatched,
             }
 
