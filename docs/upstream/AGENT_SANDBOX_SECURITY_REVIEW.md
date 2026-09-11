@@ -11,11 +11,13 @@ must not be used as evidence that a Kubernetes deployment is a strong isolation 
 
 The upstream architecture remains worth evaluating, but the reviewed default deployment and
 sandbox blueprint are **not acceptable unchanged as the platform's protected high-isolation
-profile**. The main blockers are default credential/configuration handling and missing explicit Pod
-hardening in the default blueprint.
+profile**. The main blockers are default credential/configuration handling, missing explicit Pod
+hardening in the default blueprint and an unresolved tenant-ownership authorization boundary for
+ID-addressed sandbox operations.
 
 A future supported integration would need a platform-owned hardened deployment/blueprint profile,
-strictly scoped provider credentials, explicit egress projection and live bypass/isolation tests.
+strictly scoped provider credentials, explicit egress projection, explicit object-ownership
+validation and live bypass/isolation tests.
 
 ## Findings
 
@@ -101,9 +103,11 @@ values. This conflicts with #34's requirement to minimise effective secret mater
 persisting secrets in broad control-plane metadata.
 
 **Platform requirement:** do **not** project platform secrets through upstream `EnvVars` on the
-reviewed default blueprint. A supported profile needs a secret-delivery mechanism that does not
-serialize secret values into `sandbox-data` (for example a custom hardened blueprint using scoped
-Secret references or an ephemeral delivery channel) and must prove cleanup/revocation.
+reviewed default blueprint. The PoC adapter therefore fails closed when a canonical
+`ExecutionRequest` contains direct environment entries. A supported profile needs a secret-delivery
+mechanism that does not serialize secret values into `sandbox-data` (for example a custom hardened
+blueprint using scoped Secret references or an ephemeral delivery channel) and must prove
+cleanup/revocation.
 
 **Live gate:** inject a synthetic canary credential using the proposed platform path and prove it is
 absent from ReplicaSet annotations, events, logs, API responses and retained evidence.
@@ -157,6 +161,38 @@ with Internet access disabled.
 **Live gate:** verify IPv4/IPv6, DNS, redirects, private/link-local/cluster/metadata destinations and
 a direct-socket bypass fixture. Fail closed if enforcement is unavailable.
 
+### AS-SEC-009 — ID-addressed sandbox operations need explicit tenant-ownership proof
+
+**Severity:** high if a deployment exposes more than one API token/user and sandbox identifiers can
+be learned across trust boundaries.  
+**Evidence:** the pinned authentication middleware validates the API token and stores that token as
+the request-context `user`. `ListSandboxes` uses that user to call `controller.List(user)`, which
+filters on the sandbox user label. By contrast, pinned `GetSandbox`, `DeleteSandbox`, snapshot and
+related ID-addressed handlers call `controller.GetByID(sandboxID)` and/or
+`DeleteByIDWithReason(sandboxID, ...)` without passing the authenticated user. `Controller.GetByID`
+selects by sandbox ID and pool state only; `DeleteByIDWithReason` likewise selects by sandbox ID.
+
+This is a **source-level authorization concern**, not a claim that cross-tenant access has already
+been demonstrated. A deeper layer, deployment topology or unguessable identifier may reduce
+practical exploitability, but the reviewed call path does not itself establish object ownership.
+
+**Impact:** if two independently trusted callers share one Agent-Sandbox service and one caller can
+obtain another caller's sandbox ID, ID-addressed read/lifecycle operations may lack the same
+per-user selection visible in the list path. That is incompatible with claiming provider-native
+multi-tenant isolation until proven otherwise.
+
+**Platform requirement:** do not rely on Agent-Sandbox's reviewed token model as the platform's
+canonical tenant authorization boundary. #15 remains authoritative. Prefer a platform-mediated
+provider credential/topology that prevents untrusted callers from invoking provider APIs directly;
+if multiple provider credentials are used, enforce sandbox ownership before every ID-addressed
+operation or isolate tenants at a stronger deployment boundary.
+
+**Live gate:** create sandbox A with token/user A and sandbox B with token/user B, then attempt from
+A to get, connect/router, snapshot, pause/resume, inspect and delete B by its known ID, and repeat in
+the opposite direction. Every cross-token operation that changes or reveals B must be rejected for
+a profile claiming multi-tenant isolation. Retain HTTP status/body evidence without retaining
+secret token values.
+
 ## Positive source-level properties worth retaining in the evaluation
 
 The static review also found useful properties:
@@ -182,11 +218,13 @@ A representative live profile should at minimum use:
 6. a pinned approved runtime class for the profile;
 7. digest-pinned approved images;
 8. deny-by-default egress plus canonical allow projection;
-9. no secret values in provider metadata/annotations;
+9. no secret values in provider metadata/annotations and no direct upstream `EnvVars` secret path;
 10. explicit CPU/memory/ephemeral-storage/process constraints;
 11. network separation between sandbox workloads, provider control plane and unrelated platform
     services;
-12. retained evidence for rendered Pod spec, effective RBAC and each isolation/bypass fixture.
+12. explicit cross-token/object-ownership tests for every ID-addressed provider operation when more
+    than one provider user/token shares a service;
+13. retained evidence for rendered Pod spec, effective RBAC and each isolation/bypass fixture.
 
 ## Current security recommendation
 
