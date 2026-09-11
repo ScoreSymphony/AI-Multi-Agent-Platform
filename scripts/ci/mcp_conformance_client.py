@@ -27,6 +27,9 @@ def _client(server_url: str, protocol_revision: str) -> MCPClient:
         server_id="official-conformance",
         endpoint=server_url,
         read_timeout_seconds=10.0,
+        protocol_revision=(
+            protocol_revision if protocol_revision == _STATEFUL_PROTOCOL_REVISION else None
+        ),
     )
     if protocol_revision == _STATEFUL_PROTOCOL_REVISION:
         return MCPPythonSDKClient(config)
