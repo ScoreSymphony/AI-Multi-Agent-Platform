@@ -8,7 +8,12 @@ from pathlib import Path
 SCRIPT = Path("scripts/benchmarks/issue798_agent_sandbox_live.py")
 
 
-def _write_fake_kubectl(tmp_path: Path, *, unsafe: bool = False, canary: str | None = None) -> Path:
+def _write_fake_kubectl(
+    tmp_path: Path,
+    *,
+    unsafe: bool = False,
+    canary: str | None = None,
+) -> Path:
     pod = {
         "metadata": {"creationTimestamp": "2026-09-12T10:00:00Z"},
         "spec": {
@@ -18,7 +23,10 @@ def _write_fake_kubectl(tmp_path: Path, *, unsafe: bool = False, canary: str | N
             "hostIPC": False,
             "runtimeClassName": "gvisor" if not unsafe else None,
             "serviceAccountName": "sandbox-untrusted",
-            "securityContext": {"runAsNonRoot": True, "seccompProfile": {"type": "RuntimeDefault"}},
+            "securityContext": {
+                "runAsNonRoot": True,
+                "seccompProfile": {"type": "RuntimeDefault"},
+            },
             "containers": [
                 {
                     "name": "sandbox",
@@ -51,7 +59,16 @@ def _write_fake_kubectl(tmp_path: Path, *, unsafe: bool = False, canary: str | N
     annotations = {"sandbox-data": "ordinary-evaluation-metadata"}
     if canary is not None:
         annotations["sandbox-data"] += f" secret={canary}"
-    replica_sets = {"items": [{"metadata": {"name": "sandbox-rs", "annotations": annotations}}]}
+    replica_sets = {
+        "items": [
+            {
+                "metadata": {
+                    "name": "sandbox-rs",
+                    "annotations": annotations,
+                }
+            }
+        ]
+    }
     cluster = {
         "clientVersion": {"gitVersion": "v1.35.0"},
         "serverVersion": {"gitVersion": "v1.35.0"},
@@ -112,7 +129,12 @@ def _run(
         command.extend(("--canary", canary))
     if allowed_host is not None:
         command.extend(("--allowed-host", allowed_host))
-    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
     assert completed.returncode == 0, completed.stderr
     return json.loads(output.read_text(encoding="utf-8"))
 
@@ -139,7 +161,9 @@ def test_live_harness_captures_protected_profile_evidence(tmp_path: Path) -> Non
     assert report["secret_canary"]["performed"] is False
 
 
-def test_live_harness_surfaces_unsafe_profile_and_secret_annotation(tmp_path: Path) -> None:
+def test_live_harness_surfaces_unsafe_profile_and_secret_annotation(
+    tmp_path: Path,
+) -> None:
     canary = "ISSUE798-SYNTHETIC-CANARY"
     kubectl = _write_fake_kubectl(tmp_path, unsafe=True, canary=canary)
     report = _run(tmp_path, kubectl, canary=canary)
