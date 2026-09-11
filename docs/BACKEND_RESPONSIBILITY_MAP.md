@@ -17,7 +17,7 @@ Status: implementation guide for issue #723. This document records responsibilit
 | Hotspot | Responsibilities currently combined | Target internal boundaries | Stable façade / ownership to preserve | Primary regression focus | Status in #723 |
 | --- | --- | --- | --- | --- | --- |
 | `kernel/kernel.py` | Task commands; Run commands; Task/Run/Event reads; active-run selection; lifecycle dispatch/reconciliation; recovery; event/command commit mechanics; completion integration | query/read service; recovery coordinator; Task command service; Run command service; lifecycle reconciler; canonical event/command commit support | public `PlatformKernel`; kernel remains canonical Task/Run/Event lifecycle authority; `OutputObservingPlatformKernel` remains compatible | lifecycle transitions, idempotency, event history, cancellation races, recovery/restart, completion verification | **implemented**: queries, recovery, Task commands, Run commands, lifecycle reconciliation and canonical commit support extracted behind the façade |
-| `distributed/workspace_transport.py` | Worker-local materialization state; chunk staging/commit; result collection; path/symlink safety; control-side transport client; worker-side transport endpoint; workspace-bound worker routing; wire codecs/checksums | materialization store; control-side remote materializer; worker endpoint; workspace-bound dispatcher; workspace wire codec | `RemoteWorkspaceMaterializer` contract; canonical Workspace/Snapshot/File identity remains control-plane owned; worker paths remain local deployment detail | interrupted transfers, duplicate chunks, checksum failure, cache replay, result collection, cleanup, read-only enforcement, request/reply correlation | audited; split pending |
+| `distributed/workspace_transport.py` | Worker-local materialization state; chunk staging/commit; result collection; path/symlink safety; control-side transport client; worker-side transport endpoint; workspace-bound worker routing; wire codecs/checksums | materialization store; control-side remote materializer; worker endpoint; workspace-bound dispatcher; workspace wire codec | `RemoteWorkspaceMaterializer` contract; canonical Workspace/Snapshot/File identity remains control-plane owned; worker paths remain local deployment detail | interrupted transfers, duplicate chunks, checksum failure, cache replay, result collection, cleanup, read-only enforcement, request/reply correlation | **in progress**: worker-local materialization/filesystem state and workspace-specific wire/manifest codecs extracted; control-side client, worker endpoint and workspace-bound routing remain |
 | `coordination/service.py` | Plan registration/graph validation; dependency barriers; Run-attempt creation/dispatch; Run outcome observation; retry scheduling; durable waits and resolution; cancellation; restart reconciliation; task aggregation; claims; telemetry | graph/registration validator; progression engine; attempt/retry coordinator; wait coordinator; recovery/reconciliation coordinator; task aggregation; telemetry adapter | `DurablePlanStepCoordinator` façade; kernel owns canonical Run/Task truth; repository owns durable coordination projection | contention/claim races, duplicate observations, retry due-times, waits, cancellation, restart/reconcile, predecessor failure, aggregate completion | audited; split pending |
 | `data/reference.py` | SQLite helpers plus three independent reference providers: File, Memory, Knowledge; each includes schema initialization, persistence mapping, scope checks and provider compatibility methods | shared SQLite connection/serialization primitives only where semantically shared; `LocalFileProvider`; `LocalMemoryProvider`; `LocalKnowledgeProvider` in dedicated modules | `FileProvider`, `MemoryProvider`, `KnowledgeProvider` contracts and current public exports | persistence restart, scope isolation, tombstones/orphans, memory expiry/supersession, knowledge revisions/index status/search | **implemented**: provider implementations split; `data.reference` retained as compatibility façade |
 | `planning/service.py` | trigger/idempotency handling; prior-plan reconstruction; inventory construction; planner invocation; proposal construction; structural/capability/model validation; authorization/approval; activation; canonical event provenance lookup; coordinator handoff; bounded replanning; telemetry | proposal service façade; inventory builder; proposal validator; activation/authorization service; canonical plan handoff/reconstruction; prior-plan/replan policy support | `PlanningService`; planning never executes Steps or creates Runs; coordinator receives canonical Plan/Step graph only | deterministic validation, stale proposal rejection, approval binding, bounded replanning, restart activation recovery, exact coordinator handoff | audited; split pending |
@@ -98,6 +98,18 @@ The sixth implementation cohort moves shared command/idempotency/event persisten
 
 Architecture guards cover both instance delegation and static helper delegation and include `commit_support.py` in the no-concrete-façade dependency rule.
 
+## Cohort 7 — Workspace materialization state and wire codec extraction
+
+The seventh implementation cohort starts the distributed Workspace hotspot without changing the existing `distributed.workspace_transport` import surface:
+
+- `distributed/workspace_materialization_store.py` owns `WorkerWorkspaceMaterializationStore`, incoming transfer state, chunk assembly, restart/cache validation, worker-local path/symlink safety, read-only enforcement, result scanning and cleanup.
+- `distributed/workspace_transport_codec.py` owns the transport-specific manifest record, deterministic materialization/checksum helpers, request/receipt/cleanup serialization, base64 decoding and wire-value validation.
+- `distributed/workspace_transport.py` keeps importing and exposing `WorkerWorkspaceMaterializationStore`, `_ManifestEntry` and `_canonical_snapshot_checksum`, preserving the existing production and regression-test import paths while no longer implementing those responsibilities itself.
+- The focused store and codec modules do not depend back on `workspace_transport.py`, preventing a façade cycle.
+- Canonical Workspace, Snapshot and File identity remains on the Control Plane; the extracted store persists only worker-local materialization state and never publishes local filesystem paths as canonical identifiers.
+
+Architecture guards require the store and codec implementations to remain outside the façade and prevent either focused module from depending back on `workspace_transport.py`.
+
 ## Planned implementation cohorts
 
 ### Kernel
@@ -112,8 +124,8 @@ The order is chosen so each extraction can be reviewed against the same `Platfor
 
 ### Distributed workspace transport
 
-1. Extract worker-local `WorkerWorkspaceMaterializationStore` and its filesystem safety/state persistence.
-2. Extract transport-specific request/response codecs and checksums into a workspace-specific wire module.
+1. Extract worker-local `WorkerWorkspaceMaterializationStore` and its filesystem safety/state persistence. *(implemented)*
+2. Extract transport-specific request/response codecs and checksums into a workspace-specific wire module. *(implemented)*
 3. Extract `TransportRemoteWorkspaceMaterializer` as the control-side transport client.
 4. Extract `WorkerWorkspaceTransportEndpoint` as the worker-side command endpoint.
 5. Extract `WorkspaceBoundLocalWorker` routing from transfer mechanics.
