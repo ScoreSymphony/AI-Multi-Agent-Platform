@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
-mcp = FastMCP("platform-mcp-http-fixture", json_response=True)
+mcp = MCPServer("platform-mcp-http-fixture")
 
 
 @mcp.tool()
@@ -21,6 +21,5 @@ if __name__ == "__main__":
         transport="streamable-http",
         host="127.0.0.1",
         port=int(os.environ["MCP_FIXTURE_PORT"]),
-        streamable_http_path="/mcp",
         json_response=True,
     )
