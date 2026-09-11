@@ -309,6 +309,7 @@ def test_automatic_workflow_enforces_agent_model_and_provider_independence() -> 
         assert result.completion.state is CompletionState.ACCEPTED
         assert result.latest.verification_result is not None
         verifier = result.latest.verification_result.verifier
+        assert request.producer is not None
         assert verifier.agent_id == reviewer.agent_id
         assert verifier.agent_id != producer.agent_id
         assert verifier.model_config_id == "reviewer-model"
@@ -323,9 +324,24 @@ def test_automatic_workflow_enforces_agent_model_and_provider_independence() -> 
 @pytest.mark.parametrize(
     ("independence", "producer_model", "producer_provider", "same_agent"),
     [
-        (ReviewerIndependence(producer_agent_must_differ=True), "producer-model", "automatic-review-provider-a", True),
-        (ReviewerIndependence(model_must_differ=True), "reviewer-model", "automatic-review-provider-a", False),
-        (ReviewerIndependence(provider_must_differ=True), "producer-model", "automatic-review-provider-b", False),
+        (
+            ReviewerIndependence(producer_agent_must_differ=True),
+            "producer-model",
+            "automatic-review-provider-a",
+            True,
+        ),
+        (
+            ReviewerIndependence(model_must_differ=True),
+            "reviewer-model",
+            "automatic-review-provider-a",
+            False,
+        ),
+        (
+            ReviewerIndependence(provider_must_differ=True),
+            "producer-model",
+            "automatic-review-provider-b",
+            False,
+        ),
         (ReviewerIndependence(model_must_differ=True), None, "automatic-review-provider-a", False),
         (ReviewerIndependence(provider_must_differ=True), "producer-model", None, False),
     ],
@@ -398,4 +414,6 @@ def test_canonical_automatic_review_modules_have_no_provider_private_dependency(
     for module in modules:
         source = inspect.getsource(module).casefold()
         for token in forbidden:
-            assert token not in source, f"{module.__name__} leaks provider-private dependency {token}"
+            assert token not in source, (
+                f"{module.__name__} leaks provider-private dependency {token}"
+            )
