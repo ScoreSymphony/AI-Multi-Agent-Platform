@@ -126,6 +126,44 @@ def test_kernel_lifecycle_reconciliation_stays_behind_focused_component() -> Non
         )
 
 
+def test_kernel_commit_support_stays_behind_focused_component() -> None:
+    facade = _class(KERNEL_FACADE, "PlatformKernel")
+    for method_name in (
+        "_task_command",
+        "_existing_command",
+        "_commit_task_command",
+        "_append_system_events",
+        "_build_events",
+        "_mirror",
+    ):
+        method = _method(facade, method_name)
+        assert _delegated_attribute(method) == "_commit_support", (
+            f"PlatformKernel.{method_name} reabsorbed canonical commit mechanics; keep "
+            "idempotency/event/commit support behind KernelCommitSupport"
+        )
+
+
+def test_kernel_commit_static_helpers_delegate_to_commit_support() -> None:
+    facade = _class(KERNEL_FACADE, "PlatformKernel")
+    expected = {
+        "_require_same_command": "require_same_command",
+        "_event": "event",
+        "_command": "command",
+        "_context": "context",
+        "_require_key": "require_key",
+    }
+    for method_name, target_name in expected.items():
+        method = _method(facade, method_name)
+        calls = [node for node in ast.walk(method) if isinstance(node, ast.Call)]
+        assert any(
+            isinstance(call.func, ast.Attribute)
+            and isinstance(call.func.value, ast.Name)
+            and call.func.value.id == "KernelCommitSupport"
+            and call.func.attr == target_name
+            for call in calls
+        ), f"PlatformKernel.{method_name} must delegate to KernelCommitSupport.{target_name}"
+
+
 def test_extracted_kernel_components_do_not_depend_on_concrete_facade() -> None:
     violations: list[str] = []
     for filename in (
@@ -134,6 +172,7 @@ def test_extracted_kernel_components_do_not_depend_on_concrete_facade() -> None:
         "task_commands.py",
         "run_commands.py",
         "lifecycle.py",
+        "commit_support.py",
     ):
         path = KERNEL_ROOT / filename
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
