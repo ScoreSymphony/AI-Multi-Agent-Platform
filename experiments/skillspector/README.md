@@ -9,31 +9,40 @@ canonical Skill trust lifecycle from #588.
 - Project: `NVIDIA/SkillSpector`
 - Version: `v2.11.2`
 - Commit: `69dcdfb74487d361ba4c811d088cfdea2ff3a9dc`
-- License: Apache-2.0 (verify again before any production adoption)
+- License: Apache-2.0
 
-The pinned upstream CLI supports static scans with `--no-llm` and JSON output. The source
-audit for this evaluation therefore treats static/no-LLM scanning as the baseline. LLM
-analysis is a separate mode because it changes data-egress, reproducibility, cost and
-policy properties.
+The pinned upstream CLI supports static scans with `--no-llm` and JSON output. `--no-llm`
+does **not** by itself mean offline: the pinned supply-chain SC4 path can query OSV.dev and
+fall back when unavailable. The canonical #800 baseline therefore combines `--no-llm` with
+container `--network=none` and records the mode as `static_no_llm_network_none`.
+
+LLM analysis is a separate mode because it changes data-egress, reproducibility, cost and
+policy properties. `source_audit.md` records the pinned provider/network behavior and the
+integration boundary.
 
 The pinned JSON contract exposes `issues`, `risk_assessment`, `execution_successful` and
 `analysis_completeness`. A CLI exit code of `1` can represent a policy-relevant risk score,
-not a scanner crash. The harness therefore treats a parsed report with
-`execution_successful: true` as usable evidence even when the upstream CLI exits `1`.
-Exit code `2`, malformed output, missing required report structure or incomplete analysis
-is never normalized into a clean result.
+not a scanner crash. The harness therefore treats a parsed, complete report with
+`execution_successful: true` as usable evidence for exit `0` or `1`. Exit `2`, malformed
+output, missing required report structure or incomplete analysis is never normalized into a
+clean result.
 
 ## Safety boundary
 
 `runner.py` rejects candidate symlinks, stages a copy of a candidate into a temporary
 directory and prefers Docker or Podman with networking disabled, a read-only root
-filesystem, dropped capabilities, `no-new-privileges`, resource limits and a read-only
-candidate mount. It refuses host execution by default. `--allow-local-process` exists only
-for explicit diagnostic use and must not be treated as a security boundary.
+filesystem, dropped capabilities, `no-new-privileges`, resource limits, a bounded temporary
+filesystem and a read-only candidate mount. It refuses host execution by default.
+`--allow-local-process` exists only for explicit diagnostic use and must not be treated as a
+security boundary.
 
 The harness passes only a small environment allowlist to the scanner. It does not forward
-common platform/API credential variables. Input fixtures are non-destructive and contain
-no live credentials.
+common platform/API credential variables. Input fixtures are non-destructive and contain no
+live credentials.
+
+The adapter contract deliberately supplies a **local staged snapshot**, not a Git URL or
+arbitrary web URL. Canonical platform intake owns fetching/source/version/provenance; the
+scanner only inspects that snapshot.
 
 The harness does **not** make trust decisions. A SkillSpector score, severity or
 recommendation remains provider-native metadata. `normalize.py` maps a report to advisory
@@ -42,9 +51,10 @@ evidence, never a clean pass.
 
 ## Deterministic corpus
 
-`fixtures.py` creates benign plus synthetic prompt-injection, exfiltration,
-dangerous-code, MCP tool-poisoning, supply-chain and obfuscation fixtures. The malicious
-examples are inert documentation/pseudocode and are not intended to execute.
+`fixtures.py` creates benign controls plus synthetic prompt-injection, hidden/parameter
+injection, memory-poisoning, exfiltration, dangerous-code, MCP tool-poisoning, supply-chain,
+obfuscation, mixed-content and resource-abuse fixtures. Dangerous examples are inert static
+analysis inputs and contain no live credentials.
 
 Example corpus generation:
 
@@ -63,14 +73,24 @@ image must itself be built from the pinned upstream revision. The harness does n
 images automatically because an evaluation of network behavior must not silently add a
 network fetch.
 
-## What must still be measured
+## Executed benchmark path
 
-The source audit alone cannot establish detection quality. `benchmark.md` records the
-reproducible benchmark plan and deliberately leaves execution-derived values unclaimed
-until the pinned scanner is run in an isolated environment.
+`.github/workflows/skillspector-evaluation.yml` checks out the exact upstream commit, verifies
+the pin/license, builds the evaluation image, runs the harness regression tests and executes
+each deterministic fixture three times under the network-disabled baseline. Raw reports and
+machine-readable summaries are retained as a workflow artifact.
 
-Before production adoption, record at minimum false positives, known false negatives,
-repeated-run stability, latency/resource use, behavior with network disabled, dependency
-vulnerability lookups, malformed/resource-abuse inputs, LLM-mode egress and the exact raw
-report schema. Any production adapter must remain replaceable and platform policy must
-remain authoritative for trust, approval, installation and activation.
+`run_benchmark.py` records individual results, normalized evidence, report/finding stability
+and wall-clock latency. `benchmark.md` is updated only from reviewed execution evidence; it
+must not infer detection performance from source inspection.
+
+## Remaining adoption gates
+
+Before production adoption, review at minimum false positives, known false negatives,
+repeated-run stability, latency/resource behavior, dependency-vulnerability degradation,
+malformed/resource-abuse handling, LLM-mode data egress and the exact raw report schema.
+External LLM execution must not be performed merely to complete this evaluation unless the
+provider/endpoint and Skill-content egress have first been explicitly authorized.
+
+Any production adapter must remain replaceable and platform policy must remain authoritative
+for trust, Approval, installation and activation.
