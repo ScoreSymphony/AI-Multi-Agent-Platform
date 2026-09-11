@@ -348,7 +348,9 @@ def main() -> int:
     try:
         evidence = run_probe(args)
     except (S3ProbeError, ValueError) as exc:
-        print(json.dumps({"issue": 862, "backend": args.backend, "status": "fail", "error": str(exc)}))
+        print(
+            json.dumps({"issue": 862, "backend": args.backend, "status": "fail", "error": str(exc)})
+        )
         return 1
     print(json.dumps(evidence, indent=2, sort_keys=True))
     return 0
