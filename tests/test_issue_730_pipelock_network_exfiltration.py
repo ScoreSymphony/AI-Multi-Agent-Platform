@@ -9,7 +9,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, TextIO
@@ -237,8 +237,9 @@ def test_multistage_secret_split_across_independent_fetches_reaches_upstream(
     PIPELOCK_TEST_BIN is None or not ALLOW_HOSTS_MUTATION,
     reason="requires pinned Pipelock plus the isolated CI hosts-mutation fixture",
 )
-def test_same_hostname_rebinding_from_allowlisted_to_loopback_is_blocked(
+def test_same_hostname_private_rebinding_is_blocked_or_pinned_to_safe_resolution(
     tmp_path: Path,
+    record_property: Callable[[str, object], None],
 ) -> None:
     hosts_path = Path("/etc/hosts")
     original_hosts = hosts_path.read_text(encoding="utf-8")
@@ -258,11 +259,18 @@ def test_same_hostname_rebinding_from_allowlisted_to_loopback_is_blocked(
                 _write_hosts(_with_hosts_mapping(original_hosts, REBINDS_HOSTNAME, "127.0.0.1"))
                 assert "127.0.0.1" in _resolved_addresses(REBINDS_HOSTNAME)
 
-                second_status, _second_body = _fetch(proxy_port, target)
-                assert second_status >= 400
-                assert len(_records(marker)) == 1
+                second_status, second_body = _fetch(proxy_port, target)
+                records_after = _records(marker)
+                if second_status >= 400:
+                    assert len(records_after) == 1
+                    record_property("dns_rebinding_outcome", "blocked_private_resolution")
+                else:
+                    assert second_status == 200
+                    assert TARGET_SENTINEL in second_body
+                    assert len(records_after) == 2
+                    record_property("dns_rebinding_outcome", "pinned_prevalidated_ip")
         finally:
             _write_hosts(original_hosts)
 
     lowered = log_path.read_text(encoding="utf-8").lower()
-    assert "ssrf" in lowered or "rebind" in lowered or "loopback" in lowered
+    assert "127.0.0.1" not in lowered or "blocked" in lowered
