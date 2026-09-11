@@ -277,7 +277,8 @@ def build_single_node_deployment(
             base.distributed_runtime,
         )
         application_target_matcher = DistributedBuildTargetMatcher(
-            base.distributed_runtime.registry
+            base.distributed_runtime.registry,
+            scheduler=base.distributed_runtime.scheduler,
         )
     else:
         application_build_backend = ApplicationBuildLifecycleBackend(
