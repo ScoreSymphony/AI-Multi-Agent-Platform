@@ -16,23 +16,24 @@
     "plugin_interface_versions": {}
   },
   "generated_from": "upstream/*.yaml + canonical VersionSnapshot",
-  "last_reviewed_at": "2026-09-06T15:55:00Z",
+  "last_reviewed_at": "2026-09-11T00:00:00Z",
   "components": [
     {
       "component": "Hermes Agent",
       "source_url": "https://github.com/NousResearch/hermes-agent",
-      "revision": "63279301bcbdc185c1b07b98a9312eb0c862f26d",
+      "revision": "2237be355906fbe6065ce1815711eee52b2d646e",
       "status": "tested",
       "integration_mode": "optional external service plus platform-owned adapter",
       "boundary": "Orchestrator / AgentOrchestratorMapper adapter",
       "license": "MIT",
-      "last_checked_at": "2026-09-03T00:00:00Z",
-      "latest_known_revision": "63279301bcbdc185c1b07b98a9312eb0c862f26d",
+      "last_checked_at": "2026-09-11T00:00:00Z",
+      "latest_known_revision": "2237be355906fbe6065ce1815711eee52b2d646e",
       "update_risk": "high",
       "local_modifications": false,
       "patches": [],
       "notes": [
         "Optional external service; canonical lifecycle and authorization remain platform-owned.",
+        "Hermes Agent v0.21.1 / tag v2026.9.7 resolves to this exact commit.",
         "Update requires pinned API compatibility, security and regression review."
       ]
     },
