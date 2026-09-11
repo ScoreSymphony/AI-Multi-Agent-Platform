@@ -290,9 +290,7 @@ def _measure_sync(action: Callable[[], None], iterations: int, warmup: int) -> T
     return _summary(samples)
 
 
-async def _measure_async(
-    action: Callable[[], Any], iterations: int, warmup: int
-) -> TimingSummary:
+async def _measure_async(action: Callable[[], Any], iterations: int, warmup: int) -> TimingSummary:
     for _ in range(warmup):
         await action()
     samples: list[float] = []
@@ -355,9 +353,7 @@ def _invocation(index: int) -> CapabilityInvocation:
     )
 
 
-async def _mcp_benchmark(
-    config: MCPServerConfig, iterations: int, warmup: int
-) -> TimingSummary:
+async def _mcp_benchmark(config: MCPServerConfig, iterations: int, warmup: int) -> TimingSummary:
     registry = CapabilityRegistry()
     await registry.register_provider(build_mcp_provider(config))
     invoker = CapabilityInvoker(registry)
@@ -367,7 +363,10 @@ async def _mcp_benchmark(
         nonlocal counter
         counter += 1
         result = await invoker.invoke(_invocation(counter))
-        if not isinstance(result.output, dict) or result.output.get("transport") != "streamable-http":
+        if (
+            not isinstance(result.output, dict)
+            or result.output.get("transport") != "streamable-http"
+        ):
             raise RuntimeError("unexpected MCP benchmark response")
 
     return await _measure_async(action, iterations, warmup)
@@ -384,9 +383,7 @@ def _overhead(direct: TimingSummary, mediated: TimingSummary) -> dict[str, float
     }
 
 
-def _transport_report(
-    direct: TimingSummary, mediated: TimingSummary
-) -> dict[str, object]:
+def _transport_report(direct: TimingSummary, mediated: TimingSummary) -> dict[str, object]:
     return {
         "direct": direct.as_dict(),
         "mediated": mediated.as_dict(),
@@ -526,8 +523,7 @@ def main() -> int:
                         ),
                     },
                     "interpretation": {
-                        "hosted_runner_is_not_vps_evidence": os.getenv("GITHUB_ACTIONS")
-                        == "true",
+                        "hosted_runner_is_not_vps_evidence": os.getenv("GITHUB_ACTIONS") == "true",
                         "mcp_resource_scope": (
                             "MCP proxy subprocess resources are represented by call latency, not "
                             "persistent run-proxy RSS/CPU"
@@ -536,9 +532,7 @@ def main() -> int:
                 }
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
