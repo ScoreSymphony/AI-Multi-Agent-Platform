@@ -26,9 +26,7 @@ def application_workspace_lifecycle(
 
     parts = PurePosixPath(execution_workspace).parts
     if len(parts) != 2 or any(part in {"", ".", ".."} for part in parts):
-        raise ValueError(
-            "remote application Workspace token must contain workspace_id/snapshot_id"
-        )
+        raise ValueError("remote application Workspace token must contain workspace_id/snapshot_id")
     workspace_id, snapshot_id = parts
     fallback = ExecutorLifecycleBackend(
         reference_executor,
