@@ -1,0 +1,33 @@
+version: 1
+mode: balanced
+enforce: true
+
+fetch_proxy:
+  listen: "127.0.0.1:8888"
+  timeout_seconds: 5
+  monitoring:
+    max_url_length: 4096
+    entropy_threshold: 4.5
+
+dlp:
+  include_defaults: true
+
+request_body_scanning:
+  enabled: true
+  action: block
+
+response_scanning:
+  enabled: true
+  action: block
+  include_defaults: true
+
+# This fixture intentionally permits only the deterministic loopback target used
+# to observe whether mediated requests reach the server before/during/after the
+# Pipelock process outage. It does not establish host-level network containment.
+ssrf:
+  ip_allowlist:
+    - "127.0.0.1/32"
+
+internal:
+  - "127.0.0.0/8"
+  - "::1/128"
