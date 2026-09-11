@@ -35,7 +35,6 @@ SWE_REX_EVALUATED_LICENSE = "MIT"
 
 _SAFE_PROVIDER_METADATA_KEYS = frozenset(
     {
-        "backend_kind",
         "image",
         "platform",
         "provider_version",
@@ -128,7 +127,11 @@ _ERROR_MAP: dict[str, ExecutionErrorCategory] = {
 
 
 def _safe_provider_metadata(metadata: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    return {key: value for key, value in metadata.items() if key in _SAFE_PROVIDER_METADATA_KEYS}
+    return {
+        key: value
+        for key, value in metadata.items()
+        if key in _SAFE_PROVIDER_METADATA_KEYS
+    }
 
 
 class SwerexExecutor(Executor):
@@ -146,9 +149,10 @@ class SwerexExecutor(Executor):
     ) -> None:
         if not executor_id.strip():
             raise ValueError("executor_id must not be blank")
-        if not backend_kind.strip():
+        normalized_backend_kind = backend_kind.strip().casefold()
+        if not normalized_backend_kind:
             raise ValueError("backend_kind must not be blank")
-        if backend_kind == "local" and not allow_unsandboxed_local:
+        if normalized_backend_kind == "local" and not allow_unsandboxed_local:
             raise ValueError(
                 "SWE-ReX LocalDeployment executes directly on the host; "
                 "explicit allow_unsandboxed_local=True is required"
@@ -157,7 +161,7 @@ class SwerexExecutor(Executor):
         self._root = Path(workspace_root).resolve()
         self._root.mkdir(parents=True, exist_ok=True)
         self._capabilities = tuple(dict.fromkeys(capabilities))
-        self._backend_kind = backend_kind
+        self._backend_kind = normalized_backend_kind
         self._allow_unsandboxed_local = allow_unsandboxed_local
         self._executor_id = executor_id
 
@@ -187,7 +191,7 @@ class SwerexExecutor(Executor):
                 healthy=False,
                 metadata={
                     **self.descriptor.metadata,
-                    "health_error": str(exc),
+                    "health_error_type": type(exc).__name__,
                 },
             )
         capabilities = health.capabilities or self._capabilities
@@ -272,7 +276,7 @@ class SwerexExecutor(Executor):
                 started_at,
                 started,
                 ExecutionErrorCategory.INTERNAL,
-                str(exc),
+                f"SWE-ReX client error: {type(exc).__name__}",
                 retryable=True,
             )
 
@@ -358,18 +362,30 @@ class SwerexExecutor(Executor):
                     ExecutionErrorCategory.INTERNAL,
                     "SWE-ReX returned artifact evidence outside the execution workspace",
                 )
+            if not artifact_path.exists() or not artifact_path.is_file():
+                return self._failure(
+                    request,
+                    started_at,
+                    started,
+                    ExecutionErrorCategory.INTERNAL,
+                    "SWE-ReX returned artifact evidence before canonical collection",
+                )
             artifacts.append(
                 ExecutionArtifact(
                     relative_path=artifact.relative_path,
                     media_type=artifact.media_type,
-                    size_bytes=artifact.size_bytes,
+                    size_bytes=artifact_path.stat().st_size,
                 )
             )
 
         error: ExecutionError | None = None
         if status is not ExecutionStatus.SUCCEEDED:
             category = self._error_category(backend)
-            message = backend.error_message or backend.stderr or f"SWE-ReX execution {backend.status}"
+            message = (
+                backend.error_message
+                or backend.stderr
+                or f"SWE-ReX execution {backend.status}"
+            )
             details: dict[str, JsonValue] = {}
             if backend.error_code is not None:
                 details["swe_rex_error_code"] = backend.error_code
