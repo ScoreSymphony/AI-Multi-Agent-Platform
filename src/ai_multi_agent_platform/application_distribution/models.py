@@ -42,7 +42,8 @@ def _secret_reference_ids(values: tuple[str, ...]) -> tuple[str, ...]:
     for value in values:
         if not isinstance(value, str) or _SECRET_REFERENCE_ID.fullmatch(value) is None:
             raise ValueError(
-                "secret_references must contain opaque secret_ref_* identifiers, not secret material"
+                "secret_references must contain opaque secret_ref_* identifiers, "
+                "not secret material"
             )
         copied.append(value)
     if len(copied) != len(set(copied)):
