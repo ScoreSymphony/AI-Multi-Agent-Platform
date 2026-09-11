@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import pytest
 
 from ai_multi_agent_platform.application_distribution import (
     ApplicationBuildLifecycleBackend,
@@ -13,8 +16,10 @@ from ai_multi_agent_platform.application_distribution import (
     PackageType,
     ReleaseChannel,
     ReleaseVisibility,
+    execution,
 )
 from ai_multi_agent_platform.configuration import LocalSecretProvider
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.security import SecretReference
 from ai_multi_agent_platform.workspaces import InMemoryRunWorkspaceBindingRepository
@@ -160,3 +165,28 @@ def test_new_build_resolution_uses_rotated_secret_value(tmp_path: Path) -> None:
         assert "second-value" not in repr(release)
 
     asyncio.run(scenario())
+
+
+def test_secret_lease_bounds_application_build_timeout() -> None:
+    lease_expires_at = datetime.now(UTC) + timedelta(seconds=30)
+
+    lease_only = execution._lease_bound_timeout_seconds(  # noqa: SLF001
+        None,
+        lease_expires_at,
+    )
+    configured_shorter = execution._lease_bound_timeout_seconds(  # noqa: SLF001
+        5.0,
+        lease_expires_at,
+    )
+
+    assert lease_only is not None
+    assert 0 < lease_only <= 30
+    assert configured_shorter is not None
+    assert 0 < configured_shorter <= 5
+
+    with pytest.raises(ContractError) as raised:
+        execution._lease_bound_timeout_seconds(  # noqa: SLF001
+            None,
+            datetime.now(UTC) - timedelta(seconds=1),
+        )
+    assert raised.value.code is ErrorCode.FORBIDDEN
