@@ -73,9 +73,11 @@ A public or open-source repository is not automatically safe to copy. Prefer the
 
 ## Current implementation status
 
-Implementation status is intentionally not duplicated in this file because it changes faster than repository rules. The current GitHub issue state and milestone assignment are authoritative; [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) explains the dependency-driven execution lanes and convergence gates.
+Implementation status is intentionally not duplicated in this file because it changes faster than repository rules. [`docs/STATUS.md`](docs/STATUS.md) is the curated point-in-time status home, while the current GitHub issue state, dependency declarations, pull-request checks and merged code remain authoritative for live work-item state. [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) explains dependency-driven execution lanes and convergence gates rather than replacing the status or issue trackers.
 
-Always re-check the roadmap, the target milestone and the target issue immediately before assigning work. Newly merged changes can move the execution frontier without any change in issue numbering.
+Always re-check the status document, roadmap, target milestone and target issue immediately before assigning work. Newly merged changes can move the execution frontier without any change in issue numbering.
+
+When work is being collected through a shared integration branch, documentation/status cleanup should be reconciled against the current combined head before closure. Preserve newer cross-issue policy/documentation changes, then refresh status from the final integrated state instead of letting a stale documentation branch overwrite them.
 
 ## Top-level Python package ownership
 
@@ -94,5 +96,5 @@ When adding functionality:
 
 - `src/ai_multi_agent_platform/` — platform-owned runtime, domain, adapter and Worker code; root package ownership is governed by `docs/PACKAGE_BOUNDARIES.md`
 - `frontend/` — web frontend
-- `docs/` — authoritative architecture/product documentation
+- `docs/` — authoritative architecture/product documentation and curated project status
 - `tests/` — unit, contract, integration and end-to-end tests
