@@ -4,11 +4,24 @@ Issue #46 requires retained evidence for the optional MCP and LiteLLM paths in a
 
 ## MCP (`ENV-MCP`)
 
-The MCP profile requires the exact optional dependency `mcp==2.1.1`. It starts the maintained real stdio fixture through the official Model Context Protocol Python SDK and invokes `tool.lookup` through the same canonical `CapabilityRegistry` and `CapabilityInvoker` path used by native capabilities.
+The MCP platform profile requires the exact optional dependency `mcp==2.1.1`. It starts the maintained real stdio fixture through the official Model Context Protocol Python SDK and invokes `tool.lookup` through the same canonical `CapabilityRegistry` and `CapabilityInvoker` path used by native capabilities.
 
 The profile fails closed when the MCP distribution is absent or its installed version differs from the repository pin. A passing run produces a normal `ai-multi-agent-platform/platform-conformance/v1` report with deployment profile `mcp-sdk-pinned` and records `mcp-python-sdk=2.1.1` in adapter versions.
 
-CI retains the report as `platform-conformance-mcp` / `conformance-mcp.json` from the required `test` job. This does not make MCP a production dependency: the normal package dependencies remain MCP-free and the SDK stays in the optional `mcp` extra (also present in the development test environment).
+This `ENV-MCP` result is **platform integration evidence**, not wire-level protocol certification. Issue #731 adds a separate official-suite evidence path documented in [`MCP_PROTOCOL_CONFORMANCE.md`](MCP_PROTOCOL_CONFORMANCE.md). For a claimed MCP profile, CI combines both dimensions into `ai-multi-agent-platform/mcp-compatibility/v1`:
+
+- `protocol_conformant` — exact pinned official `modelcontextprotocol/conformance` result for the named protocol revision/profile;
+- `platform_conformant` — this #46 canonical CapabilityRegistry/CapabilityInvoker environment path.
+
+Neither dimension implies the other. Missing official protocol evidence is reported explicitly and cannot become a compatibility claim.
+
+The stable #731 workflow retains three artifacts for the claimed `2025-11-25` tool-client profile:
+
+- `mcp-protocol-2025-11-25.json` — official protocol evidence;
+- `conformance-mcp-platform.json` — #46 platform integration evidence;
+- `mcp-compatibility-2025-11-25.json` — combined claim state with both dimensions preserved.
+
+The existing required `test` job may continue to run `ENV-MCP` independently as a regression for the canonical platform path. This does not make MCP a production dependency: the normal package dependencies remain MCP-free and the SDK stays in the optional `mcp` extra (also present in the development test environment).
 
 ## LiteLLM (`ENV-LITELLM`)
 
