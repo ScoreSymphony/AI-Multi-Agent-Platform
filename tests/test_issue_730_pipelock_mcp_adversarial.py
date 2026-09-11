@@ -133,8 +133,8 @@ def test_pipelock_blocks_poisoned_mcp_tool_description(tmp_path: Path) -> None:
     assert '"error"' in body
     assert "~/.ssh/id_rsa" not in body
     log_text = log_path.read_text(encoding="utf-8")
-    assert "mcp_tool_scanning" in log_text
     assert "tool poisoning detected in tools/list" in log_text
+    assert '"message":"request blocked"' in log_text
 
 
 @pytest.mark.integration
