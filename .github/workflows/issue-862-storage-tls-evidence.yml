@@ -69,6 +69,9 @@ jobs:
               region="us-east-1"
               cp "$RUNNER_TEMP/issue862-tls/cert.pem" "$RUNNER_TEMP/issue862-tls/rustfs_cert.pem"
               cp "$RUNNER_TEMP/issue862-tls/key.pem" "$RUNNER_TEMP/issue862-tls/rustfs_key.pem"
+              sudo chown 10001:10001 \
+                "$RUNNER_TEMP/issue862-tls/rustfs_cert.pem" \
+                "$RUNNER_TEMP/issue862-tls/rustfs_key.pem"
               chmod 644 "$RUNNER_TEMP/issue862-tls/rustfs_cert.pem"
               chmod 600 "$RUNNER_TEMP/issue862-tls/rustfs_key.pem"
               docker volume create issue862-tls-rustfs-data >/dev/null
