@@ -171,7 +171,7 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
             except Exception:
                 return _gate(
                     requirement,
-                    GateStatus.INCONCLUSIVE,
+                    GateStatus.PENDING,
                     blocking_reason="canonical Evaluation configuration is unavailable",
                     details=_artifact_details(artifact),
                 )
