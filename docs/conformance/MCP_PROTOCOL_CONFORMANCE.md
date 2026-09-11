@@ -33,6 +33,7 @@ Exact pins live in `conformance/mcp/pins.json`.
 - direction: client;
 - official runner transport: Streamable HTTP/HTTP test server;
 - currently selected scenarios: `initialize`, `tools_call`;
+- runtime implementation under test: `MCPPythonSDKClient` using the pinned official Python SDK;
 - status: claimed and gating.
 
 This is intentionally a narrow tool-client claim. It does not claim every MCP extension, authorization profile or server behavior merely because the Python SDK supports additional features.
@@ -44,10 +45,13 @@ This is intentionally a narrow tool-client claim. It does not claim every MCP ex
 - exact suite commit: `a983ba93c91e0bb31d0b6849eeb52f0ad1083107`;
 - direction: client;
 - transport profile: stateless HTTP;
-- selected probe scenarios: `tools_call`, `request-metadata`;
-- status: **not claimed**, non-gating/informational.
+- selected scenarios: `tools_call`, `request-metadata`;
+- runtime implementation under test: explicit `MCPStatelessHTTPClient` behind the same platform-owned `MCPClient` seam;
+- status: **implemented and tested, but not yet a production compatibility claim** while the official conformance line remains prerelease; CI is non-gating/informational.
 
-The current platform MCP adapter is stateful through the pinned Python SDK abstraction and does not yet claim the newer stateless request semantics. The conformance harness therefore rejects `2026-07-28` explicitly rather than silently negotiating or reporting support. A future change may promote this track only after the adapter implementation and official suite evidence both pass.
+The stateless adapter does not perform a legacy `initialize` handshake. Every request carries the `MCP-Protocol-Version` header and the required `io.modelcontextprotocol/*` `_meta` fields. An `Unsupported protocol version` (`-32022`) response is retried once only when the server advertises the configured revision as supported; absence of a common revision fails closed instead of silently falling back to an untested protocol.
+
+The stable Python-SDK path remains the default MCP builder. The stateless implementation is explicitly opt-in through `build_mcp_stateless_provider`; introducing the newer protocol therefore does not silently change existing MCP deployments.
 
 ## STDIO versus official protocol evidence
 
@@ -74,9 +78,19 @@ python scripts/ci/mcp_protocol_conformance.py \
   --json-report mcp-protocol-2025-11-25.json
 ```
 
-After dependencies/checkouts are present, the conformance run itself needs no hosted MCP provider or paid API service.
+For the prerelease stateless track, use the exact `a983ba93c91e0bb31d0b6849eeb52f0ad1083107` checkout and run:
 
-To combine the official protocol evidence with the existing #46 MCP platform path:
+```bash
+python scripts/ci/mcp_protocol_conformance.py \
+  --track prerelease \
+  --suite-root .upstream/mcp-conformance \
+  --json-report mcp-protocol-2026-07-28.json \
+  --strict
+```
+
+After dependencies/checkouts are present, either conformance run itself needs no hosted MCP provider or paid API service.
+
+To combine the stable official protocol evidence with the existing #46 MCP platform path:
 
 ```bash
 python scripts/ci/issue46_optional_environment_profile.py \
@@ -104,6 +118,6 @@ Updating the suite requires an explicit upstream-review PR under #42 discipline:
 `.github/workflows/mcp-protocol-conformance.yml` has two tracks:
 
 - `mcp-protocol-2025-11-25`: stable claimed track; unexpected scenario failures fail the job and prevent that compatibility claim;
-- `mcp-protocol-2026-07-28-informational`: exact prerelease probe; non-gating while the revision remains unclaimed.
+- `mcp-protocol-2026-07-28-informational`: exact prerelease stateless track; it runs in strict mode so protocol regressions are visible, but the job is non-gating while the upstream suite/profile remains prerelease and unclaimed.
 
 Both retain machine-readable artifacts. The reference/native platform remains MCP-independent.
