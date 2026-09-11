@@ -8,6 +8,13 @@ from .contracts import (
     PublishContext,
     PublishedArtifact,
 )
+from .distributed_execution import (
+    APPLICATION_BUILD_WORKER_INPUT_KEY,
+    APPLICATION_BUILD_WORKER_SCHEMA,
+    ApplicationBuildWorkerLifecycleBackend,
+    DistributedApplicationBuildLifecycleBackend,
+    application_build_worker_input,
+)
 from .execution import (
     APPLICATION_BUILD_ACTION,
     ApplicationBuildLifecycleBackend,
@@ -30,7 +37,11 @@ from .models import (
     ReleaseStatus,
     ReleaseVisibility,
 )
-from .placement import DistributedBuildTargetMatcher, LocalBuildTargetMatcher
+from .placement import (
+    DistributedBuildTargetMatcher,
+    LocalBuildTargetMatcher,
+    job_requirements_for_target,
+)
 from .repository import (
     APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION,
     InMemoryApplicationReleaseRepository,
@@ -40,10 +51,13 @@ from .service import ApplicationDistributionService
 
 __all__ = [
     "APPLICATION_BUILD_ACTION",
+    "APPLICATION_BUILD_WORKER_INPUT_KEY",
+    "APPLICATION_BUILD_WORKER_SCHEMA",
     "APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION",
     "APPLICATION_RELEASE_SCHEMA_VERSION",
     "ApplicationArtifact",
     "ApplicationBuildLifecycleBackend",
+    "ApplicationBuildWorkerLifecycleBackend",
     "ApplicationCommandExecutor",
     "ApplicationDistributionService",
     "ApplicationRelease",
@@ -54,6 +68,7 @@ __all__ = [
     "BuildTargetMatcher",
     "BuildTargetState",
     "BuildTargetStatus",
+    "DistributedApplicationBuildLifecycleBackend",
     "DistributedBuildTargetMatcher",
     "GateEvidence",
     "GateStatus",
@@ -68,7 +83,9 @@ __all__ = [
     "ReleaseChannel",
     "ReleaseStatus",
     "ReleaseVisibility",
+    "application_build_worker_input",
     "canonical_manifest_bytes",
+    "job_requirements_for_target",
     "manifest_sha256",
     "release_manifest",
 ]

@@ -255,6 +255,13 @@ class DeterministicScheduler:
             reasons.append(self._reason(RejectionCode.RUNTIME_UNSUPPORTED, "runtime unavailable"))
         if requirements.os_name is not None and requirements.os_name != node.os_name:
             reasons.append(self._reason(RejectionCode.OS_UNSUPPORTED, "OS constraint mismatch"))
+        if requirements.architecture is not None and requirements.architecture != node.architecture:
+            reasons.append(
+                self._reason(
+                    RejectionCode.ARCHITECTURE_UNSUPPORTED,
+                    "architecture constraint mismatch",
+                )
+            )
 
         available = self.registry.available_node_resources(node.node_id)
         if requirements.cpu_cores_min > available.cpu_cores_available:
