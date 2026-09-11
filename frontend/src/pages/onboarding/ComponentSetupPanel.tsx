@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type ComponentCategory,
+  type ComponentCompatibilityState,
   type ComponentSetupMode,
   type ComponentSetupProfile,
   type ComponentSetupStatus,
@@ -35,6 +36,20 @@ const ADVANCED_COMPATIBLE_STATES = new Set([
   "compatible_with_constraints",
   "experimental",
 ]);
+
+interface ProfileValidationProjection {
+  valid: boolean;
+  issues: Array<{
+    category: ComponentCategory;
+    component_id: string;
+    compatibility: ComponentCompatibilityState;
+    reasons: string[];
+  }>;
+  fallback: {
+    mode: "auto";
+    defaults: Partial<Record<ComponentCategory, string>>;
+  } | null;
+}
 
 export interface ComponentSetupPanelProps {
   onboarding: OnboardingClient;
@@ -250,21 +265,28 @@ export function ComponentSetupPanel({ onboarding, manifest, surface }: Component
         ) : (
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Profile</th><th>Mode</th><th>Revision</th><th>Defaults</th><th>Status</th><th>Action</th></tr></thead>
+              <thead>
+                <tr><th>Profile</th><th>Mode</th><th>Revision</th><th>Defaults</th><th>Status</th><th>Validation / fallback</th><th>Action</th></tr>
+              </thead>
               <tbody>
                 {status.profiles.map((profile) => {
                   const active = profile.profile_id === status.active_profile_id;
+                  const validation = readProfileValidation(profile);
+                  const profileStatus = validation?.valid === false
+                    ? (active ? "degraded" : "invalid")
+                    : (active ? "active" : "valid");
                   return (
                     <tr key={profile.profile_id}>
                       <td><code>{profile.profile_id}</code></td>
                       <td>{MODE_LABELS[profile.mode]}</td>
                       <td>{profile.revision}</td>
                       <td>{formatDefaults(profile.defaults)}</td>
-                      <td><StatusBadge value={active ? "active" : "inactive"} /></td>
+                      <td><StatusBadge value={profileStatus} /></td>
+                      <td><ProfileValidationDetails validation={validation} /></td>
                       <td>
                         <button
                           className="secondary"
-                          disabled={busy || active || !selectAvailable}
+                          disabled={busy || active || !selectAvailable || validation?.valid === false}
                           onClick={() => void selectProfile(profile)}
                         >
                           Activate
@@ -312,9 +334,40 @@ function lifecycleRank(component: DiscoveredComponent): number {
 function compactDefaults(
   defaults: Partial<Record<ComponentCategory, string>>,
 ): Partial<Record<ComponentCategory, string>> {
-  return Object.fromEntries(
-    Object.entries(defaults).filter((entry): entry is [ComponentCategory, string] => Boolean(entry[1])),
-  ) as Partial<Record<ComponentCategory, string>>;
+  const compact: Partial<Record<ComponentCategory, string>> = {};
+  for (const category of CATEGORY_ORDER) {
+    const componentId = defaults[category];
+    if (componentId) compact[category] = componentId;
+  }
+  return compact;
+}
+
+function readProfileValidation(profile: ComponentSetupProfile): ProfileValidationProjection | null {
+  const candidate = (profile as ComponentSetupProfile & { validation?: ProfileValidationProjection }).validation;
+  return candidate ?? null;
+}
+
+function ProfileValidationDetails({ validation }: { validation: ProfileValidationProjection | null }) {
+  if (validation === null) return <>Not reported by this Control Plane version.</>;
+  if (validation.valid) return <>Valid against current discovery.</>;
+  return (
+    <div>
+      <ul>
+        {validation.issues.map((issue) => (
+          <li key={`${issue.category}:${issue.component_id}:${issue.compatibility}`}>
+            <code>{issue.component_id}</code>: {issue.compatibility}
+            {issue.reasons.length > 0 ? ` — ${issue.reasons.join("; ")}` : ""}
+          </li>
+        ))}
+      </ul>
+      {validation.fallback ? (
+        <p>
+          Safe fallback preview ({MODE_LABELS[validation.fallback.mode]}): {formatDefaults(validation.fallback.defaults)}.
+          Save it explicitly to change the active configuration; discovery never migrates profiles silently.
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function ComponentDiscoveryTable({ components }: { components: DiscoveredComponent[] }) {
