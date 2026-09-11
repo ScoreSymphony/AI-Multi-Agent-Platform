@@ -161,7 +161,9 @@ def test_pinned_hermes_reconciliation_survives_adapter_recreation() -> None:
             canonical_task_id = new_id("task")
             request = PlanRequest(
                 task_id=canonical_task_id,
-                objective="Prove restart-safe reconciliation against the exact pinned Hermes runtime",
+                objective=(
+                    "Prove restart-safe reconciliation against the exact pinned Hermes runtime"
+                ),
                 context=OperationContext(
                     correlation_id="issue-733-pinned-restart",
                     control=OperationControl(
