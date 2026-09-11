@@ -2,10 +2,24 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.data import FileProvider
+from ai_multi_agent_platform.kernel import PlatformKernel
+from ai_multi_agent_platform.security import AuthorizationGate
+from ai_multi_agent_platform.workspaces import (
+    RunWorkspaceBindingRepository,
+    WorkspaceProvider,
+)
 
-from .contracts import PublishContext
+from .contracts import (
+    ApplicationReleasePublisher,
+    ApplicationReleaseRepository,
+    BuildTargetMatcher,
+    PublishContext,
+)
 from .gates import (
     ApplicationReleaseGateCoordinator,
     bind_gate_to_release,
@@ -13,31 +27,54 @@ from .gates import (
     publication_readiness,
     required_gate_names,
 )
-from .models import ApplicationRelease, GateEvidence, GateStatus
+from .models import ApplicationRelease, GateEvidence, GateStatus, ReleaseStatus
 from .service import ApplicationDistributionService as _BaseApplicationDistributionService
 
 
 class ApplicationDistributionService(_BaseApplicationDistributionService):
     """Application distribution with canonical release-gate reconciliation.
 
-    The base service remains the owner of build/publication state.  This subclass adds the
+    The base service remains the owner of build/publication state. This subclass adds the
     narrow evidence bridge required by #750 and deliberately delegates Verification and
     Evaluation truth to their canonical services through ``ApplicationReleaseGateCoordinator``.
     """
 
-    def __init__(self, *args: object, gate_coordinator: ApplicationReleaseGateCoordinator | None = None, **kwargs: object) -> None:
-        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+    def __init__(
+        self,
+        repository: ApplicationReleaseRepository,
+        *,
+        kernel: PlatformKernel,
+        files: FileProvider,
+        workspaces: WorkspaceProvider | None = None,
+        run_workspace_bindings: RunWorkspaceBindingRepository | None = None,
+        authorization_gate: AuthorizationGate | None = None,
+        target_matcher: BuildTargetMatcher | None = None,
+        publishers: tuple[ApplicationReleasePublisher, ...] = (),
+        gate_coordinator: ApplicationReleaseGateCoordinator | None = None,
+    ) -> None:
+        super().__init__(
+            repository,
+            kernel=kernel,
+            files=files,
+            workspaces=workspaces,
+            run_workspace_bindings=run_workspace_bindings,
+            authorization_gate=authorization_gate,
+            target_matcher=target_matcher,
+            publishers=publishers,
+        )
         self.gate_coordinator = gate_coordinator
 
     async def reconcile_gates(self, release_id: str) -> ApplicationRelease:
         release = await self.repository.get(release_id)
-        if self.gate_coordinator is None or not required_gate_names(release):
+        if (
+            release.status is ReleaseStatus.PUBLISHED
+            or self.gate_coordinator is None
+            or not required_gate_names(release)
+        ):
             return release
         gates = await self.gate_coordinator.reconcile(release)
         if gates == release.gates:
             return release
-        from dataclasses import replace
-
         updated = replace(release, gates=gates, revision=release.revision + 1)
         return await self.repository.save(updated, expected_revision=release.revision)
 
@@ -80,11 +117,11 @@ class ApplicationDistributionService(_BaseApplicationDistributionService):
     @staticmethod
     def _require_publishable(release: ApplicationRelease) -> None:
         _BaseApplicationDistributionService._require_publishable(release)
+        gates = {gate.name: gate for gate in release.gates}
         stale = [
             name
             for name in required_gate_names(release)
-            if (gate := next((item for item in release.gates if item.name == name), None)) is None
-            or not gate_is_current(gate, release)
+            if name not in gates or not gate_is_current(gates[name], release)
         ]
         if stale:
             raise ContractError(
@@ -93,9 +130,9 @@ class ApplicationDistributionService(_BaseApplicationDistributionService):
                 details={"stale_gates": stale},
             )
         nonpassing = [
-            gate.name
-            for gate in release.gates
-            if gate.name in required_gate_names(release) and gate.status is not GateStatus.PASSED
+            name
+            for name in required_gate_names(release)
+            if gates[name].status is not GateStatus.PASSED
         ]
         if nonpassing:
             raise ContractError(
