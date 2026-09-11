@@ -15,6 +15,7 @@ from ai_multi_agent_platform.contracts.types import (
     OperationControl,
 )
 from ai_multi_agent_platform.kernel import TaskState
+from ai_multi_agent_platform.security.authorization import infer_actor_identity
 
 from .models import RequestContext
 
@@ -30,6 +31,12 @@ class ControlPlaneAuthorization:
         """Return the configured provider for legacy trust-context request builders."""
 
         return self._provider
+
+    @provider.setter
+    def provider(self, provider: AuthorizationProvider | None) -> None:
+        """Replace the provider while keeping extracted services on the same façade."""
+
+        self._provider = provider
 
     async def authorize_for_task(
         self,
@@ -126,9 +133,13 @@ class ControlPlaneAuthorization:
             return None
         effective_owner_type = owner_type if owner_type is not None else context.actor.owner_type
         effective_owner_id = owner_id if owner_id is not None else context.actor.owner_id
+        actor_type = context.actor.actor_type
+        if actor_type is None:
+            actor_type = infer_actor_identity(context.actor.principal_ref).actor_type.value
         return await self._provider.authorize(
             AuthorizationRequest(
                 principal_ref=context.actor.principal_ref,
+                actor_type=actor_type,
                 action=action,
                 resource_ref=resource_ref,
                 context=OperationContext(
@@ -138,6 +149,7 @@ class ControlPlaneAuthorization:
                     project_id=project_id,
                     control=OperationControl(idempotency_key=context.idempotency_key),
                 ),
+                trust_context=context.actor.trust_context,
                 request_payload_digest=request_payload_digest,
             )
         )
