@@ -39,7 +39,6 @@ _SINGLE_NODE_SCHEMA = ConfigurationSchema(
                     },
                     "registry_catalog": {"type": ["string", "null"]},
                     "registry_signature_keys": {"type": ["string", "null"]},
-                    "application_release_gate_policy": {"type": ["string", "null"]},
                 },
             }
         },
@@ -57,7 +56,6 @@ _DEFAULTS = ConfigLayer(
             "log_level": "info",
             "registry_catalog": None,
             "registry_signature_keys": None,
-            "application_release_gate_policy": None,
         }
     },
     ConfigSource("single-node-defaults", "built-in"),
@@ -75,7 +73,6 @@ class SingleNodeConfig:
     log_level: str = "info"
     registry_catalog: Path | None = None
     registry_signature_keys: Path | None = None
-    application_release_gate_policy: Path | None = None
 
     @property
     def database_dir(self) -> Path:
@@ -178,11 +175,6 @@ def load_single_node_config(environ: Mapping[str, str] | None = None) -> SingleN
         target["registry_signature_keys"] = _optional_path_text(
             source["AI_MAP_REGISTRY_SIGNATURE_KEYS"], "AI_MAP_REGISTRY_SIGNATURE_KEYS"
         )
-    if "AI_MAP_APPLICATION_RELEASE_GATE_POLICY" in source:
-        target["application_release_gate_policy"] = _optional_path_text(
-            source["AI_MAP_APPLICATION_RELEASE_GATE_POLICY"],
-            "AI_MAP_APPLICATION_RELEASE_GATE_POLICY",
-        )
 
     layers = [_DEFAULTS]
     if target:
@@ -215,9 +207,6 @@ def load_single_node_config(environ: Mapping[str, str] | None = None) -> SingleN
         log_level=str(deployment["log_level"]),
         registry_catalog=_resolved_path(deployment.get("registry_catalog")),
         registry_signature_keys=_resolved_path(deployment.get("registry_signature_keys")),
-        application_release_gate_policy=_resolved_path(
-            deployment.get("application_release_gate_policy")
-        ),
     )
 
 

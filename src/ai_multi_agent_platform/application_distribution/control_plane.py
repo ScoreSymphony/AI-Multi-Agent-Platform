@@ -16,16 +16,14 @@ from ai_multi_agent_platform.security import (
 )
 
 from .contracts import PublishContext
-from .gated_service import ApplicationDistributionService
-from .gates import publication_readiness
 from .models import (
-    ApplicationRelease,
     BuildSpecification,
     BuildTarget,
     PackageType,
     ReleaseChannel,
     ReleaseVisibility,
 )
+from .service import ApplicationDistributionService
 
 APPLICATION_RELEASE_COLLECTION = "application-releases"
 APPLICATION_RELEASE_COMMANDS = (
@@ -48,11 +46,10 @@ class ApplicationReleaseResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        resources: list[dict[str, JsonValue]] = []
-        for release in await self.service.repository.list():
-            reconciled = await self.service.reconcile_gates(release.release_id)
-            resources.append(_resource(reconciled))
-        return tuple(resources)
+        return tuple(
+            json_object(release) | {"id": release.release_id, "type": "application_release"}
+            for release in await self.service.repository.list()
+        )
 
     async def get_resource(
         self,
@@ -60,8 +57,11 @@ class ApplicationReleaseResourceService:
         resource_id: str,
     ) -> dict[str, JsonValue]:
         del context
-        release = await self.service.reconcile_gates(resource_id)
-        return _resource(release)
+        release = await self.service.repository.get(resource_id)
+        return json_object(release) | {
+            "id": release.release_id,
+            "type": "application_release",
+        }
 
 
 class ApplicationReleaseCommandHandlers:
@@ -120,7 +120,6 @@ class ApplicationReleaseCommandHandlers:
             actor_ref=context.actor.principal_ref,
             approval_id=_optional_string(payload, "approval_id"),
         )
-        release = await self.service.reconcile_gates(release.release_id)
         return _resource(release)
 
     async def preview(
@@ -141,11 +140,9 @@ class ApplicationReleaseCommandHandlers:
                 ),
             ),
         )
-        release = await self.service.repository.get(resource_ref)
         return {
             "id": resource_ref,
             "type": "application_release_preview",
-            "release_gate_state": publication_readiness(release),
             **preview,
         }
 
@@ -191,11 +188,16 @@ def register_application_distribution_control_plane(
             control_plane.register_command(command, handler)
 
 
-def _resource(release: ApplicationRelease) -> dict[str, JsonValue]:
+def _resource(release: object) -> dict[str, JsonValue]:
     resource = json_object(release)
-    resource["id"] = release.release_id
+    release_id = resource.get("release_id")
+    if not isinstance(release_id, str):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "release projection has no release_id",
+        )
+    resource["id"] = release_id
     resource["type"] = "application_release"
-    resource["release_gate_state"] = publication_readiness(release)
     return resource
 
 

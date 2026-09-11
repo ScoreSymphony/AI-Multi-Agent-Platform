@@ -15,11 +15,7 @@ from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.configuration import LocalSecretProvider
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext
-from ai_multi_agent_platform.deployment import (
-    SingleNodeDeployment,
-    build_single_node_deployment,
-    load_application_release_gate_policy,
-)
+from ai_multi_agent_platform.deployment import SingleNodeDeployment, build_single_node_deployment
 from ai_multi_agent_platform.deployment.config import SingleNodeConfig
 from ai_multi_agent_platform.deployment.server import main as run_server
 from ai_multi_agent_platform.distribution import (
@@ -75,17 +71,11 @@ def build_default_single_node_deployment(
     """Build the shipped profile with installed bridges and optional #240 execution routing."""
 
     secrets = LocalSecretProvider()
-    release_gate_policy = (
-        None
-        if config.application_release_gate_policy is None
-        else load_application_release_gate_policy(config.application_release_gate_policy)
-    )
     deployment = build_single_node_deployment(
         config,
         onboarding_model_adapters=(OpenAICompatibleOnboardingAdapter(secret_provider=secrets),),
         secret_provider=secrets,
         enable_distributed_execution=enable_distributed_execution,
-        application_release_gate_policy=release_gate_policy,
     )
     asyncio.run(
         deployment.capabilities.register_provider(
