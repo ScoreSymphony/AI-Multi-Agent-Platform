@@ -17,9 +17,7 @@ from ai_multi_agent_platform.workspaces import validate_relative_path, validate_
 APPLICATION_RELEASE_SCHEMA_VERSION = "1.0"
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SECRET_REFERENCE_ID = re.compile(r"^secret_ref_[a-z0-9][a-z0-9._-]{0,127}$")
-_COMMAND_OPTION = re.compile(
-    r"^-{1,2}(?P<name>[A-Za-z][A-Za-z0-9_-]*)(?:=(?P<value>.*))?$"
-)
+_COMMAND_OPTION = re.compile(r"^-{1,2}(?P<name>[A-Za-z][A-Za-z0-9_-]*)(?:=(?P<value>.*))?$")
 
 
 def utc_now() -> datetime:
