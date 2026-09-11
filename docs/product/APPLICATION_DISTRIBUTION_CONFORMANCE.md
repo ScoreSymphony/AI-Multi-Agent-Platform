@@ -23,6 +23,10 @@ Proves with a controlled GitHub REST transport:
 - public/private repository visibility semantics;
 - recognizable fixture credential non-disclosure from provider outputs and representative errors.
 
+`tests/integration/application_distribution/test_issue751_github_validation_failure.py`
+
+Adds the connection-validation boundary: a controlled GitHub validation outage preserves the canonical retryable provider-error category while proving the recognizable credential from the provider response cannot escape through the exception surface.
+
 ### Versioned Control Plane and publication security
 
 `tests/integration/application_distribution/test_issue751_control_plane_security.py`
@@ -44,6 +48,10 @@ Proves through the registered `application-releases` Control Plane surface:
 - side-effect-free publication preview;
 - provider failure leaving canonical state un-published;
 - preservation of canonical build provenance when publisher metadata is added.
+
+`tests/integration/application_distribution/test_issue751_connector_authorization.py`
+
+Proves the application-release publication gate and Connector authorization boundary compose rather than replace one another. Even when the application publication proposal is allowed, `ConnectorService` can still deny the `github.release.create` external action and canonical release state remains ready and unpublished.
 
 ### Generic CLI parity
 
@@ -89,6 +97,7 @@ These fixtures prove that publication readiness is derived from current canonica
 The acceptance suite uses recognizable fixture secrets. Required evidence is split deliberately by owning boundary:
 
 - GitHub connector tests resolve a real fixture value from `LocalSecretProvider` and scan provider outputs/errors for that value;
+- the GitHub connection-validation fixture injects the recognizable value into a provider failure body and proves canonical error mapping does not disclose it;
 - application build/secret tests owned by #748 prove resolved build-secret values do not persist into canonical state, manifests or recovery state;
 - the #751 Control Plane fixture exposes only `SecretReference` metadata, never raw secret material;
 - publisher external metadata remains provider-namespaced and does not contain raw connection credentials.
@@ -101,7 +110,9 @@ The platform-wide #46 suite should treat the following as the application-distri
 
 ```text
 tests/integration/application_distribution/test_issue751_github_conformance.py
+tests/integration/application_distribution/test_issue751_github_validation_failure.py
 tests/integration/application_distribution/test_issue751_control_plane_security.py
+tests/integration/application_distribution/test_issue751_connector_authorization.py
 tests/integration/application_distribution/test_issue751_client_parity.py
 tests/integration/application_distribution/test_remote_worker_multitarget.py
 tests/integration/application_distribution/test_remote_worker_result_evidence.py
