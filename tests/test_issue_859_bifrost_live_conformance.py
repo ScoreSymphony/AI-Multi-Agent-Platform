@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import AsyncIterator
+from urllib import request as urlrequest
 
 import pytest
 
@@ -11,6 +12,8 @@ from ai_multi_agent_platform.adapters.openai_compatible_streaming import (
     OpenAICompatibleModelProvider,
 )
 from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
     JsonValue,
     ModelRequest,
     ModelResponse,
@@ -115,6 +118,43 @@ def test_live_bifrost_tool_calling_when_declared_supported() -> None:
     assert first.get("tool_name") == "report_status"
 
 
+@pytest.mark.integration
+def test_live_bifrost_unavailable_upstream_maps_to_canonical_error_when_configured() -> None:
+    control_url = os.getenv("BIFROST_EVAL_UPSTREAM_CONTROL_URL")
+    if not control_url:
+        pytest.skip("live #859 upstream fault control is not configured")
+
+    provider = _live_provider_or_skip()
+    canonical_model_id = "issue-859-live-bifrost-model"
+    _set_upstream_availability(control_url, available=False)
+    try:
+        with pytest.raises(ContractError) as captured:
+            asyncio.run(
+                provider.generate(
+                    ModelRequest(
+                        request_id="issue-859-upstream-unavailable",
+                        messages=("Reply with the single word: ready",),
+                        context=OperationContext(
+                            correlation_id="issue-859:upstream-unavailable"
+                        ),
+                        requirements={"model_config_id": canonical_model_id},
+                    )
+                )
+            )
+    finally:
+        _set_upstream_availability(control_url, available=True)
+
+    assert captured.value.code in {
+        ErrorCode.BACKEND_ERROR,
+        ErrorCode.TRANSIENT_FAILURE,
+        ErrorCode.UNAVAILABLE,
+        ErrorCode.TIMEOUT,
+    }
+    rendered = str(captured.value)
+    assert "synthetic-secret" not in rendered
+    assert "must-not-leak" not in rendered
+
+
 async def _collect(stream: AsyncIterator[ModelStreamEvent]) -> list[ModelStreamEvent]:
     events: list[ModelStreamEvent] = []
     async for event in stream:
@@ -142,3 +182,10 @@ def _protocol_metadata(response: ModelResponse) -> dict[str, JsonValue]:
         if metadata.namespace == "model-protocol":
             return dict(metadata.values)
     raise AssertionError("model-protocol metadata missing")
+
+
+def _set_upstream_availability(base_url: str, *, available: bool) -> None:
+    state = "available" if available else "unavailable"
+    request = urlrequest.Request(f"{base_url.rstrip('/')}/{state}", data=b"", method="POST")
+    with urlrequest.urlopen(request, timeout=5.0) as response:
+        assert response.status == 200
