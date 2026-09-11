@@ -1,0 +1,32 @@
+{
+  "schema": "ai-multi-agent-platform/mcp-conformance-pins/v1",
+  "upstream_repository": "https://github.com/modelcontextprotocol/conformance",
+  "tracks": {
+    "stable": {
+      "suite_version": "v0.1.16",
+      "suite_commit": "21a9a2febd7100d7c17ac1021ee7f2ed9f66a1e0",
+      "protocol_revision": "2025-11-25",
+      "mode": "client",
+      "transport_profile": "streamable-http",
+      "claimed": true,
+      "gating": true,
+      "scenarios": [
+        "initialize",
+        "tools_call"
+      ]
+    },
+    "prerelease": {
+      "suite_version": "0.2.0-alpha.11",
+      "suite_commit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "protocol_revision": "2026-07-28",
+      "mode": "client",
+      "transport_profile": "streamable-http-stateless",
+      "claimed": false,
+      "gating": false,
+      "scenarios": [
+        "tools_call",
+        "request-metadata"
+      ]
+    }
+  }
+}
