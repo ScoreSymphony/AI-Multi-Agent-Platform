@@ -615,6 +615,11 @@ class ApplicationDistributionService:
                 "output_path": target.target.output_path,
                 "source_revision": release.source_revision,
                 "workspace_snapshot_id": release.workspace_snapshot_id,
+                "environment": dict(release.build_specification.environment),
+                "secret_environment": {
+                    name: reference.to_dict()
+                    for name, reference in release.build_specification.secret_environment.items()
+                },
                 "secret_references": list(release.build_specification.secret_references),
             },
         )
