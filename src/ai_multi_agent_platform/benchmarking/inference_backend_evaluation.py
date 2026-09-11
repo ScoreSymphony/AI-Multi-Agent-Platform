@@ -145,7 +145,9 @@ def assess_inference_backend_evaluation(
     return InferenceBackendEvaluationReadiness(
         ready_for_decision=not blockers,
         report_count=len(normalized_reports),
-        backends_seen=tuple(sorted({_require_str(report, "backend") for report in normalized_reports})),
+        backends_seen=tuple(
+            sorted({_require_str(report, "backend") for report in normalized_reports})
+        ),
         missing_contract_cases=missing_contract,
         failed_contract_cases=failed_contract,
         missing_failure_cases=missing_failure,
