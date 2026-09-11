@@ -42,7 +42,7 @@ _PROVIDER_MODEL = "qwen-team-review"
 
 
 class _PassTransport:
-    """Drive one local Planner output and one canonical reviewer PASS."""
+    """Drive one local Developer output and one canonical reviewer PASS."""
 
     def __init__(self) -> None:
         self.chat_calls = 0
@@ -64,7 +64,7 @@ class _PassTransport:
 
         self.chat_calls += 1
         if self.chat_calls == 1:
-            content = "canonical planner result for automatic team review"
+            content = "canonical developer result for automatic team review"
         elif self.chat_calls == 2:
             content = json.dumps(
                 {
@@ -260,7 +260,7 @@ async def _exercise_team_review(
             headers=_headers(token, key="automatic-team-review:task"),
             body={
                 "title": "Automatic AgentTeam reviewer Task",
-                "objective": "Produce a planner result and independently verify it.",
+                "objective": "Produce a developer result and independently verify it.",
                 "project_id": project_id,
             },
         )
@@ -275,7 +275,7 @@ async def _exercise_team_review(
         task_id=task_id,
         metadata=encode_agent_execution_binding(
             AgentExecutionBinding(
-                agent_id=STANDARD_AGENT_IDS["planner"],
+                agent_id=STANDARD_AGENT_IDS["developer"],
                 agent_revision=1,
                 model_config_id=_MODEL_ID,
                 workspace_id=workspace_id,
