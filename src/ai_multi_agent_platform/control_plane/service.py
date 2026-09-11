@@ -8,18 +8,34 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import (
     AuthorizationProvider,
     EventProvider,
+    ModelProvider,
     ProviderContract,
 )
-from ai_multi_agent_platform.contracts.types import AuthorizationDecision, JsonValue, OperationControl
+from ai_multi_agent_platform.contracts.types import (
+    AuthorizationDecision,
+    JsonValue,
+    OperationControl,
+)
 from ai_multi_agent_platform.domain import Project
 from ai_multi_agent_platform.kernel import PlatformKernel, RunState, TaskState
 from ai_multi_agent_platform.kernel.repository import EventRepository
-from ai_multi_agent_platform.models import ModelRegistry
+from ai_multi_agent_platform.models import ModelConfiguration, ModelRegistry
 
 from .authorization_service import ControlPlaneAuthorization
 from .health import ControlPlaneHealth
-from .model_registry_service import ControlPlaneModelRegistry
-from .models import ActorContext, OwnerType, PageQuery, RequestContext, WorkspaceIdentity, paginate
+from .model_registry_service import (
+    ControlPlaneModelRegistry,
+    _model_provider_resource as model_provider_resource,
+    _model_resource as model_resource,
+)
+from .models import (
+    ActorContext,
+    OwnerType,
+    PageQuery,
+    RequestContext,
+    WorkspaceIdentity,
+    paginate,
+)
 from .request_validation import (
     optional_string,
     require_key,
@@ -574,6 +590,20 @@ def _references_for_task(
 
 def _event_resource(event: object) -> dict[str, JsonValue]:
     return event_resource(event)
+
+
+def _model_provider_resource(
+    registry: ModelRegistry,
+    provider: ModelProvider,
+) -> dict[str, JsonValue]:
+    return model_provider_resource(registry, provider)
+
+
+def _model_resource(
+    registry: ModelRegistry,
+    config: ModelConfiguration,
+) -> dict[str, JsonValue]:
+    return model_resource(registry, config)
 
 
 def _deduplicate(items: list[dict[str, JsonValue]]) -> list[dict[str, JsonValue]]:
