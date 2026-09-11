@@ -106,6 +106,144 @@ def _pipelock(tmp_path: Path, *, name: str) -> Iterator[tuple[int, Path]]:
         log_handle.close()
 
 
+@contextmanager
+def _pipelock_from_config(
+    *,
+    config: Path,
+    home: Path,
+    tmp_path: Path,
+    name: str,
+) -> Iterator[tuple[int, Path]]:
+    assert PIPELOCK_TEST_BIN is not None
+    port = _free_loopback_port()
+    log_path = tmp_path / f"{name}.log"
+    log_handle = log_path.open("w", encoding="utf-8")
+    env = dict(os.environ)
+    env["HOME"] = str(home)
+    process = subprocess.Popen(
+        (
+            PIPELOCK_TEST_BIN,
+            "run",
+            "--config",
+            str(config),
+            "--listen",
+            f"127.0.0.1:{port}",
+        ),
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env=env,
+    )
+    try:
+        _wait_for_tcp(port, process)
+        yield port, log_path
+    finally:
+        _stop(process)
+        log_handle.close()
+
+
+def _replace_nested_scalar(text: str, *, section: str, key: str, value: str) -> str:
+    lines = text.splitlines(keepends=True)
+    in_section = False
+    changed = False
+    for index, line in enumerate(lines):
+        if line.startswith(f"{section}:"):
+            in_section = True
+            continue
+        if in_section and line.strip() and not line.startswith((" ", "\t", "#")):
+            break
+        if not in_section:
+            continue
+        stripped = line.lstrip()
+        if not stripped.startswith(f"{key}:"):
+            continue
+        indent = line[: len(line) - len(stripped)]
+        lines[index] = f"{indent}{key}: {value}\n"
+        changed = True
+        break
+    if not changed:
+        raise AssertionError(f"missing {section}.{key} in generated Pipelock config")
+    return "".join(lines)
+
+
+def _strict_connect_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    assert PIPELOCK_TEST_BIN is not None
+    home = tmp_path / "strict-connect-home"
+    home.mkdir()
+    config = tmp_path / "strict-connect.yaml"
+    recorder = tmp_path / "strict-connect-recorder"
+    pubkey = tmp_path / "strict-connect.pub"
+    env = dict(os.environ)
+    env["HOME"] = str(home)
+
+    subprocess.run(
+        (
+            PIPELOCK_TEST_BIN,
+            "init",
+            "--scan-home",
+            str(home),
+            "--output",
+            str(config),
+            "--preset",
+            "audit",
+            "--skip-canary",
+        ),
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    text = config.read_text(encoding="utf-8")
+    text = _replace_nested_scalar(
+        text,
+        section="forward_proxy",
+        key="enabled",
+        value="true",
+    )
+    text = _replace_nested_scalar(
+        text,
+        section="flight_recorder",
+        key="require_receipts",
+        value="true",
+    )
+    text = _replace_nested_scalar(
+        text,
+        section="flight_recorder",
+        key="dir",
+        value=f'"{recorder}"',
+    )
+    config.write_text(text, encoding="utf-8")
+
+    subprocess.run(
+        (
+            PIPELOCK_TEST_BIN,
+            "signing",
+            "pubkey",
+            "--config",
+            str(config),
+            "--out",
+            str(pubkey),
+        ),
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return home, config, recorder, pubkey
+
+
+def _wait_for_log_event(log_path: Path, event: str) -> str:
+    needle = f'"event":"{event}"'
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        text = log_path.read_text(encoding="utf-8")
+        if needle in text:
+            return text
+        time.sleep(0.05)
+    raise AssertionError(f"Pipelock log did not record {event!r} before timeout")
+
+
 def _marker_lines(marker: Path) -> list[str]:
     if not marker.exists():
         return []
@@ -248,3 +386,66 @@ def test_websocket_blocks_server_prompt_injection_before_client(tmp_path: Path) 
         log_text = log_path.read_text(encoding="utf-8").lower()
         assert "injection" in log_text
         assert "response" in log_text or "response_scan" in log_text
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    PIPELOCK_TEST_BIN is None,
+    reason="requires the pinned Pipelock #730 compatibility runtime",
+)
+def test_connect_require_receipts_uses_fresh_writer_and_verifies_chain(tmp_path: Path) -> None:
+    assert PIPELOCK_TEST_BIN is not None
+    home, config, recorder, pubkey = _strict_connect_fixture(tmp_path)
+    output = tmp_path / "strict-connect-output.txt"
+
+    with _pipelock_from_config(
+        config=config,
+        home=home,
+        tmp_path=tmp_path,
+        name="strict-connect",
+    ) as (proxy_port, log_path):
+        completed = subprocess.run(
+            (
+                "curl",
+                "--fail",
+                "--silent",
+                "--show-error",
+                "--max-time",
+                "20",
+                "--proxy",
+                f"http://127.0.0.1:{proxy_port}",
+                "--noproxy",
+                "",
+                "--output",
+                str(output),
+                "https://example.com/",
+            ),
+            capture_output=True,
+            text=True,
+            timeout=25,
+        )
+        assert completed.returncode == 0, completed.stderr
+        assert output.stat().st_size > 0
+        running_log = _wait_for_log_event(log_path, "tunnel_close")
+        assert '"event":"tunnel_open"' in running_log
+        assert "receipt_emission_failed" not in running_log
+        assert "chain sealed: transcript root already emitted" not in running_log
+
+    final_log = log_path.read_text(encoding="utf-8")
+    assert "chain sealed: transcript root already emitted" not in final_log
+
+    verification = subprocess.run(
+        (
+            PIPELOCK_TEST_BIN,
+            "verify-receipt",
+            "--chain",
+            str(recorder),
+            "--key",
+            str(pubkey),
+        ),
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert "CHAIN VALID" in verification.stdout
