@@ -12,7 +12,7 @@ import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 import pytest
 
@@ -126,7 +126,7 @@ def _fetch(proxy_port: int, target: str) -> tuple[int, str]:
         return int(exc.code), exc.read().decode("utf-8", errors="replace")
 
 
-def _records(marker: Path) -> list[dict[str, object]]:
+def _records(marker: Path) -> list[dict[str, Any]]:
     if not marker.exists():
         return []
     return [json.loads(line) for line in marker.read_text(encoding="utf-8").splitlines()]
@@ -155,7 +155,10 @@ def _write_hosts(content: str) -> None:
 
 
 def _resolved_addresses(hostname: str) -> set[str]:
-    return {item[4][0] for item in socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)}
+    return {
+        item[4][0]
+        for item in socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    }
 
 
 @pytest.mark.integration
@@ -172,7 +175,10 @@ def _resolved_addresses(hostname: str) -> set[str]:
         "http://localhost:9/",
     ],
 )
-def test_private_ipv4_and_hostname_resolution_are_blocked(target: str, tmp_path: Path) -> None:
+def test_private_ipv4_and_hostname_resolution_are_blocked(
+    target: str,
+    tmp_path: Path,
+) -> None:
     with _pipelock(tmp_path, name="private-ipv4") as (proxy_port, log_path):
         status, _body = _fetch(proxy_port, target)
 
@@ -202,7 +208,6 @@ def test_ipv6_loopback_equivalent_is_blocked(tmp_path: Path) -> None:
 )
 def test_multistage_secret_split_across_independent_fetches_reaches_upstream(
     tmp_path: Path,
-    record_property: pytest.FixtureRequest,
 ) -> None:
     first = SYNTHETIC_AWS_ACCESS_ID[:10]
     second = SYNTHETIC_AWS_ACCESS_ID[10:]
@@ -226,7 +231,7 @@ def test_multistage_secret_split_across_independent_fetches_reaches_upstream(
     assert second_status == 200
     assert TARGET_SENTINEL in first_body
     assert TARGET_SENTINEL in second_body
-    fragments = [str(record["query"]["fragment"][0]) for record in _records(marker)]  # type: ignore[index]
+    fragments = [str(record["query"]["fragment"][0]) for record in _records(marker)]
     assert fragments == [first, second]
     assert "".join(fragments) == SYNTHETIC_AWS_ACCESS_ID
     assert SYNTHETIC_AWS_ACCESS_ID not in log_path.read_text(encoding="utf-8")
@@ -237,7 +242,9 @@ def test_multistage_secret_split_across_independent_fetches_reaches_upstream(
     PIPELOCK_TEST_BIN is None or not ALLOW_HOSTS_MUTATION,
     reason="requires pinned Pipelock plus the isolated CI hosts-mutation fixture",
 )
-def test_same_hostname_rebinding_from_allowlisted_to_loopback_is_blocked(tmp_path: Path) -> None:
+def test_same_hostname_rebinding_from_allowlisted_to_loopback_is_blocked(
+    tmp_path: Path,
+) -> None:
     hosts_path = Path("/etc/hosts")
     original_hosts = hosts_path.read_text(encoding="utf-8")
 
@@ -253,7 +260,9 @@ def test_same_hostname_rebinding_from_allowlisted_to_loopback_is_blocked(tmp_pat
                 assert TARGET_SENTINEL in first_body
                 assert len(_records(marker)) == 1
 
-                _write_hosts(_with_hosts_mapping(original_hosts, REBINDS_HOSTNAME, "127.0.0.1"))
+                _write_hosts(
+                    _with_hosts_mapping(original_hosts, REBINDS_HOSTNAME, "127.0.0.1")
+                )
                 assert "127.0.0.1" in _resolved_addresses(REBINDS_HOSTNAME)
 
                 second_status, _second_body = _fetch(proxy_port, target)
