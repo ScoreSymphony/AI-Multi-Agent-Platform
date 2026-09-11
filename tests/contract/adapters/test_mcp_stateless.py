@@ -16,9 +16,7 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 
 class _ScriptedStatelessClient(MCPStatelessHTTPClient):
     def __init__(self, responses: list[_WireResponse]) -> None:
-        super().__init__(
-            MCPServerConfig(server_id="test", endpoint="http://localhost.invalid/mcp")
-        )
+        super().__init__(MCPServerConfig(server_id="test", endpoint="http://localhost.invalid/mcp"))
         self.responses = responses
         self.requests: list[dict[str, JsonValue]] = []
 
