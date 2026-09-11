@@ -378,12 +378,8 @@ def _reviewer_selection_context(
         "selected_team_revision": team_revision,
     }
     if has_discovery:
-        provenance["candidate_agent_ids"] = _selection_string_list(
-            route.get("candidate_agent_ids")
-        )
-        provenance["candidate_team_ids"] = _selection_string_list(
-            route.get("candidate_team_ids")
-        )
+        provenance["candidate_agent_ids"] = _selection_string_list(route.get("candidate_agent_ids"))
+        provenance["candidate_team_ids"] = _selection_string_list(route.get("candidate_team_ids"))
         provenance["reviewer_role"] = _selection_optional_string(route.get("reviewer_role"))
         provenance["required_capability_ids"] = _selection_string_list(
             route.get("required_capability_ids")
