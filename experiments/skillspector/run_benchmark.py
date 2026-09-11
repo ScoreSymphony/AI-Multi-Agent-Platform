@@ -26,7 +26,7 @@ from experiments.skillspector.runner import (
 )
 
 POLICY_CONFIG_VERSION = "skillspector-eval-policy-v1"
-CANDIDATE_REVISION = "generated-corpus-v1"
+CANDIDATE_REVISION = "generated-corpus-v2"
 NETWORK_USAGE = {"network_allowed": False, "services": []}
 PROVIDER_USAGE = {"llm_assisted": False, "provider": None}
 
