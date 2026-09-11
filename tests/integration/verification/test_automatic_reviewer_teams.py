@@ -13,6 +13,7 @@ from ai_multi_agent_platform.adapters.onboarding_openai_compatible import (
 from ai_multi_agent_platform.agents import (
     STANDARD_AGENT_IDS,
     STANDARD_TEAM_IDS,
+    AgentRevisionRef,
     AgentRunStatus,
     bootstrap_standard_agents,
     clone_standard_team,
@@ -185,18 +186,58 @@ async def _exercise_team_review(
 
     bootstrap_standard_agents(deployment.agents)
     if use_cloned_team:
+        custom_reviewer = deployment.agents.clone_agent(
+            STANDARD_AGENT_IDS["reviewer"],
+            revision=1,
+            owner_ref=OwnerRef(type="user", id=admin.user_id),
+            project_id=project_id,
+            workspace_id=workspace_id,
+            name="Custom Team Reviewer",
+        )
+        standard_reviewer = deployment.agents.get_agent_revision(STANDARD_AGENT_IDS["reviewer"])
+        deployment.agents.update_agent(
+            standard_reviewer.agent_id,
+            replace(standard_reviewer.profile, enabled=False),
+        )
+
         team = clone_standard_team(
             deployment.agents,
             "software_development",
             owner_ref=OwnerRef(type="user", id=admin.user_id),
             name="Custom Software Review Team",
         )
+        members = tuple(
+            replace(
+                member,
+                agent=(
+                    AgentRevisionRef(
+                        agent_id=custom_reviewer.agent_id,
+                        revision=custom_reviewer.revision,
+                    )
+                    if member.agent.agent_id == STANDARD_AGENT_IDS["reviewer"]
+                    else member.agent
+                ),
+                can_delegate_to=tuple(
+                    custom_reviewer.agent_id
+                    if delegate == STANDARD_AGENT_IDS["reviewer"]
+                    else delegate
+                    for delegate in member.can_delegate_to
+                ),
+            )
+            for member in team.profile.members
+        )
         team = deployment.agents.update_team(
             team.team_id,
-            replace(team.profile, description="Current custom reviewer Team revision"),
+            replace(
+                team.profile,
+                description="Current custom reviewer Team revision",
+                members=members,
+            ),
         )
         team_id = team.team_id
         team_revision = team.revision
+        reviewer_agent_id = custom_reviewer.agent_id
+        reviewer_agent_revision = custom_reviewer.revision
         reviewer_route: dict[str, JsonValue] = {
             "candidate_team_ids": [team_id],
             "reviewer_role": "reviewer_tester",
@@ -204,6 +245,8 @@ async def _exercise_team_review(
     else:
         team_id = STANDARD_TEAM_IDS["software_development"]
         team_revision = 1
+        reviewer_agent_id = STANDARD_AGENT_IDS["reviewer"]
+        reviewer_agent_revision = 1
         reviewer_route = {
             "team_id": team_id,
             "team_revision": team_revision,
@@ -333,15 +376,15 @@ async def _exercise_team_review(
     assert result.outcome is VerificationOutcome.PASS
     assert request.subject.subject_id == result_id
     assert result.subject == request.subject
-    assert result.verifier.agent_id == STANDARD_AGENT_IDS["reviewer"]
-    assert result.verifier.agent_revision == 1
+    assert result.verifier.agent_id == reviewer_agent_id
+    assert result.verifier.agent_revision == reviewer_agent_revision
     assert result.verifier.model_config_id == _MODEL_ID
     assert result.verifier.provider_id == _PROVIDER_ID
 
     reviewer_runs = [
         record
         for record in deployment.agents.repository.list_agent_runs()
-        if record.agent.agent_id == STANDARD_AGENT_IDS["reviewer"]
+        if record.agent.agent_id == reviewer_agent_id
         and record.verification_context.get("verification_id") == request.verification_id
     ]
     assert len(reviewer_runs) == 1
@@ -358,6 +401,9 @@ async def _exercise_team_review(
     }
 
     if use_cloned_team:
+        standard_current = deployment.agents.get_agent_revision(STANDARD_AGENT_IDS["reviewer"])
+        assert standard_current.profile.enabled is False
+        assert reviewer_agent_id != STANDARD_AGENT_IDS["reviewer"]
         automatic = policy.metadata["automatic_reviewer"]
         assert isinstance(automatic, Mapping)
         stages = automatic["stages"]
@@ -366,8 +412,8 @@ async def _exercise_team_review(
         assert isinstance(route, Mapping)
         assert route["candidate_team_ids"] == [team_id]
         assert route["reviewer_role"] == "reviewer_tester"
-        # These persisted policy facts plus the exact Verification stage and AgentRun Team/revision
-        # are sufficient to explain the deterministic scoped discovery decision after the fact.
+        # The persisted selector, exact Verification stage and exact AgentRun Team/revision
+        # explain the deterministic discovery decision without relying on the bundled Reviewer.
         assert request.stage_id == "agent-review"
         assert reviewer_run.team.team_id in route["candidate_team_ids"]
         assert reviewer_run.team.revision == team_revision == 2
@@ -379,7 +425,7 @@ def test_standard_software_development_team_runs_productive_reviewer_tester_flow
     asyncio.run(_exercise_team_review(tmp_path, use_cloned_team=False))
 
 
-def test_cloned_software_development_team_uses_scoped_role_discovery(
+def test_cloned_software_development_team_uses_custom_reviewer_without_fallback(
     tmp_path: Path,
 ) -> None:
     asyncio.run(_exercise_team_review(tmp_path, use_cloned_team=True))
