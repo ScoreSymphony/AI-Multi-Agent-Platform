@@ -24,6 +24,7 @@ compatibility_constraints:
   - "Live Linux LocalDeployment evidence on Ubuntu 24.04/Python 3.12 succeeded for one-shot stdout/stderr, file round-trip and timeout semantics, while also confirming no Workspace containment."
   - "Native Windows LocalDeployment failed at import on the available Windows Server 2025/Python 3.12 runner because the installed pexpect module exposes no spawn attribute referenced by swerex.runtime.local.BashSession."
   - "The reviewed base package does not declare aiohttp even though Docker/Remote paths import RemoteRuntime which imports aiohttp; the evaluation workflow installs aiohttp explicitly only to continue measuring those paths."
+  - "DockerDeployment does not automatically propagate the host-side SWE-ReX revision into the container server: its default startup falls back to an unpinned `pipx run swe-rex`. Reproducible evidence must use an explicitly pinned server image."
   - "Docker, remote and cloud backends require backend-specific isolation, lifecycle and network evidence before security claims are made."
   - "Provider deployment/runtime/session identifiers remain namespaced adapter metadata rather than canonical platform IDs."
   - "SWE-ReX command/file/session APIs do not replace canonical Workspace, File, Artifact, Authorization or Secret semantics."
@@ -41,6 +42,7 @@ deployment_constraints:
   - "The proof-of-concept intentionally adds no swe-rex package dependency."
   - "LocalDeployment is host execution, not a sandbox, and requires explicit unsafe opt-in in the evaluation adapter."
   - "A supported Docker/Remote profile would need to account for the effective aiohttp dependency observed at the pinned revision without making it a baseline platform dependency."
+  - "The issue #861 Docker fixture builds a dedicated server image from the exact evaluated revision and passes it with pull=never; results from an unpinned fallback server are not accepted as reproducible evidence."
   - "Modal, Fargate and Daytona paths may require external accounts/services and are not baseline requirements."
 resource_constraints:
   - "Linux LocalDeployment startup/stop overhead was negligible in the first GitHub-hosted fixture; broader CPU/RAM/concurrency measurements remain pending."
@@ -48,7 +50,7 @@ resource_constraints:
   - "Native Windows LocalDeployment is currently unavailable on the exercised runner; a Windows remote-client path remains a separate hypothesis."
 required_for_baseline: false
 recurring_paid_service_required: false
-update_review_method: "Pin every evaluated revision; re-check license/version, dependency metadata, deployment/runtime APIs, local-vs-isolated semantics, Windows behavior, remote authentication/transport, file/path behavior, cancellation, networking and supported backends; rerun contract/security/live evidence before promotion."
+update_review_method: "Pin every evaluated revision and every remote/container server image; re-check license/version, dependency metadata, deployment/runtime APIs, local-vs-isolated semantics, Windows behavior, remote authentication/transport, file/path behavior, cancellation, networking and supported backends; rerun contract/security/live evidence before promotion."
 exit_replacement_strategy: "Disable/remove the optional adapter. Canonical Task/Run/Workspace/File/Artifact identities and the reference Executor require no migration because SWE-ReX owns none of them."
 adr: ""
-notes: "Issue #861 provisional classification remains experimental_only. Campaign 1 demonstrated useful Linux local runtime semantics but rejected LocalDeployment as containment, exposed native Windows LocalDeployment incompatibility on the available runner and found an undeclared aiohttp dependency blocking Docker/Remote imports. Evaluation details: docs/upstream/SWE_REX_EVALUATION.md and docs/upstream/SWE_REX_LIVE_EVIDENCE.md"
+notes: "Issue #861 provisional classification remains experimental_only. Campaign 1 demonstrated useful Linux local runtime semantics but rejected LocalDeployment as containment, exposed native Windows LocalDeployment incompatibility on the available runner and found an undeclared aiohttp dependency blocking Docker/Remote imports. Docker evidence additionally requires an exact server-side pin because the default Docker startup can fall back to an unpinned pipx install. Evaluation details: docs/upstream/SWE_REX_EVALUATION.md and docs/upstream/SWE_REX_LIVE_EVIDENCE.md"
