@@ -65,7 +65,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python experiments/skillspector/run_benchmark.py \
+          python -m experiments.skillspector.run_benchmark \
             --output "$RUNNER_TEMP/skillspector-evidence" \
             --repeats 3 \
             --image skillspector-eval:2.11.2 \
