@@ -97,9 +97,7 @@ def test_base_planning_facade_retains_orchestration_not_component_implementation
     service = _class(SERVICE, "PlanningService")
     for method_name in ("propose", "reject", "history", "_emit"):
         _method(service, method_name)
-    class_names = {
-        node.name for node in _tree(SERVICE).body if isinstance(node, ast.ClassDef)
-    }
+    class_names = {node.name for node in _tree(SERVICE).body if isinstance(node, ast.ClassDef)}
     assert class_names == {"PlanningKernel", "PlanningService"}
 
 
