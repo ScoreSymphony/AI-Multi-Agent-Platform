@@ -5,6 +5,7 @@ from __future__ import annotations
 import platform
 import shutil
 from collections.abc import Mapping
+from typing import Literal
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import (
@@ -226,13 +227,19 @@ def _boolean_hint(hints: Mapping[str, JsonValue], key: str) -> bool:
     return value
 
 
-def _gpu_hint(hints: Mapping[str, JsonValue]) -> str:
+def _gpu_hint(
+    hints: Mapping[str, JsonValue],
+) -> Literal["optional", "required", "forbidden"]:
     value = hints.get("gpu")
     if value is None:
         return "optional"
     if not isinstance(value, str) or value not in {"optional", "required", "forbidden"}:
         raise ValueError("build resource_hints.gpu must be one of optional, required or forbidden")
-    return value
+    if value == "required":
+        return "required"
+    if value == "forbidden":
+        return "forbidden"
+    return "optional"
 
 
 def _string_tuple_hint(hints: Mapping[str, JsonValue], key: str) -> tuple[str, ...]:
