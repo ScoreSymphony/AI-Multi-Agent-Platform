@@ -246,9 +246,7 @@ class AutomaticReviewerOutputCoordinator:
             return await self._no_review(task_id)
 
         missing_routes = tuple(
-            stage.stage_id
-            for stage in agent_stages
-            if stage.stage_id not in configuration.routes
+            stage.stage_id for stage in agent_stages if stage.stage_id not in configuration.routes
         )
         if missing_routes:
             raise ContractError(
@@ -549,12 +547,8 @@ def _automatic_review_configuration(
         try:
             if has_discovery:
                 routes[stage_id] = ReviewerDiscoverySelector(
-                    candidate_agent_ids=_optional_string_tuple(
-                        stage_raw, "candidate_agent_ids"
-                    ),
-                    candidate_team_ids=_optional_string_tuple(
-                        stage_raw, "candidate_team_ids"
-                    ),
+                    candidate_agent_ids=_optional_string_tuple(stage_raw, "candidate_agent_ids"),
+                    candidate_team_ids=_optional_string_tuple(stage_raw, "candidate_team_ids"),
                     reviewer_role=_optional_string(stage_raw, "reviewer_role"),
                     required_capability_ids=_optional_string_tuple(
                         stage_raw, "required_capability_ids"
