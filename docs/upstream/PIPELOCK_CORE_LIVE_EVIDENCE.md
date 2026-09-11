@@ -275,17 +275,126 @@ E4 does not prove generic `/ws` proxy compatibility, TLS-intercepted HTTPS conte
 CONNECT strict-receipt completeness, redirect/private-target safety, complete host-level mediation,
 representative performance or production suitability.
 
+## Evidence E5: generic WebSocket and SSRF redirect/link-local boundaries
+
+**Status: verified on GitHub Actions run `34580183382`.**
+
+This run uses the same exact upstream pin and tag-free Core build path and extends the existing
+transport suite with a generic WebSocket proxy check plus two concrete SSRF boundary cases. The
+positive WebSocket fixture explicitly allowlists loopback only for the controlled test; that setting
+is not a production recommendation.
+
+### Run-specific fingerprints and test result
+
+- **Workflow run:** `34580183382`
+- **Workflow evidence artifact digest:**
+  `sha256:d3b0eeca4d8f94c225f29cc5ae79b1c68ae70a37a1eb4e3db1bb9f05be4bc8f9`
+- **Run-specific candidate binary SHA-256:**
+  `6996ff730d4fbed0af82771f7190572c6d287479b389201c465bbcbb06aeb025`
+- **Generated audit configuration SHA-256:**
+  `da732fc3e9800a3223634ef5aad3b960bf13ca32a879be3eb4705055dcee31ad`
+- **JUnit transport/boundary suite:** **5 tests, 0 errors, 0 failures, 0 skipped**;
+- total JUnit time: **4.012 s**.
+
+Per-test hosted-runner durations were:
+
+- MCP Streamable HTTP: **1.402 s**;
+- MCP WebSocket: **0.632 s**;
+- generic Pipelock `/ws`: **0.222 s**;
+- redirect-to-private boundary: **0.244 s**;
+- link-local metadata boundary: **0.120 s**.
+
+These durations include fixture/process startup and are compatibility timings, not Pipelock-overhead
+measurements.
+
+### Generic `/ws` WebSocket path
+
+A deterministic local WebSocket echo server was reached through Pipelock's
+`/ws?url=...` endpoint. A clean text frame was sent through Pipelock and the identical echoed frame
+was received successfully. Compression was disabled for the fixture so the test isolates the basic
+bidirectional text-frame path.
+
+The fixture configuration explicitly allowlists `127.0.0.0/8` and `::1/128` so the local test server
+can be reached. This proves generic `/ws` transport compatibility for a clean text-frame round trip;
+it does **not** prove production safety for loopback/private targets or adversarial frame scanning.
+
+### Redirect to a private target
+
+The redirect fixture separates the first and second hop deliberately:
+
+1. the first hop is served on `127.0.0.2` and only `127.0.0.2/32` is placed in the test SSRF
+   allowlist;
+2. a direct fixture health check verifies that `/start` returns HTTP 302 with a `Location` pointing to
+   a second server on `127.0.0.1`;
+3. the second server writes a marker file if it is ever reached;
+4. the same first-hop URL is fetched through Pipelock;
+5. Pipelock returns a blocking response, and the private-target marker remains absent.
+
+This proves that the evaluated `/fetch` path did not treat an allowlisted first hop as permission to
+follow the tested redirect onto the non-allowlisted private loopback target.
+
+### Link-local metadata-style target
+
+The same suite sends `/fetch` directly toward
+`http://169.254.169.254/latest/meta-data/`. The evaluated Pipelock path returns a blocking response;
+the request is classified/logged through the SSRF/link-local boundary rather than being admitted as a
+normal external fetch.
+
+This is one concrete cloud-metadata-style link-local case. It is not a substitute for the broader
+private-range, IPv6, DNS-rebinding or hostname-resolution corpus still required by #730.
+
+### Reproduced CONNECT receipt anomaly
+
+Run `34580183382` reproduced the E4 best-effort CONNECT allow-receipt error:
+
+`chain sealed: transcript root already emitted`
+
+The CONNECT tunnel itself again completed successfully, with Pipelock reporting **5625** tunneled
+bytes and a tunnel duration of **34.816573 ms** in this hosted-runner sample. Because the transport
+probe still uses `require_receipts: false`, this confirms reproducibility of the observation across
+multiple live runs but does not yet establish whether the root cause is Pipelock itself or the current
+multi-process evaluation harness.
+
+The separate strict `/fetch` receipt verification in the same run remained valid:
+
+- receipt action ID: `01a08f9f-5ee8-7d21-95b8-0ccf0f736f02`;
+- matching receipt-segment SHA-256:
+  `b0e4959e196d5d4c3e9efe89ce4c78eb0abd9e02cd60c9626d78f5b6c4c0efd9`;
+- receipts: **43**;
+- final sequence: **42**;
+- root hash: `32d9159af6ae336116bba0d011a994226a46bc5a761891f9371c3190eb894afc`;
+- pinned signer public key:
+  `af586066111408bf932d42d81db967c6fe9c515320ff41d4f807572d5840177f`;
+- recorded interval: `2026-09-11T08:39:30Z` through `2026-09-11T08:39:41Z`.
+
+The verifier again reported `Containment: UNKNOWN` / `L-CONTAINMENT-UNPROVEN`. The valid strict fetch
+chain therefore does not prove CONNECT receipt completeness or network-bypass resistance.
+
+### What E5 proves and does not prove
+
+E5 supports these additional claims for the exact pinned build and controlled fixtures:
+
+1. Pipelock's generic `/ws` proxy can relay a clean bidirectional text-frame round trip;
+2. the tested `/fetch` redirect cannot move from the explicitly allowlisted first hop onto the tested
+   non-allowlisted private loopback target;
+3. the tested `169.254.169.254` metadata-style link-local target is blocked;
+4. the previously observed best-effort CONNECT receipt anomaly is reproducible across live runs.
+
+E5 does **not** prove WebSocket DLP/injection resistance, DNS-rebinding resistance, IPv6/private-range
+coverage, complete containment, direct-socket bypass resistance, strict CONNECT receipt validity,
+representative performance or production suitability.
+
 ## Remaining #730 evidence
 
 Still required before the issue can reach a final `adopt`, `optional_provider`, `reference_only` or
 `reject` decision:
 
-- generic Pipelock `/ws` WebSocket behavior and frame scanning;
-- strict CONNECT receipt reproduction/verification for the observed best-effort receipt anomaly;
-- redirect/private-target behavior;
+- adversarial generic `/ws` frame scanning for DLP, injection and encoded/fragmented payloads;
+- strict CONNECT receipt root-cause isolation and verification under `require_receipts: true`;
 - descriptor/tool drift and response-injection corpus;
 - secret/DLP, encoding and multi-stage exfiltration corpus;
-- loopback/private/link-local/metadata, DNS-rebinding and IPv6 corpus;
+- broader loopback/private-range, DNS-rebinding and IPv6 corpus; one redirect-to-loopback and one
+  `169.254.169.254` link-local metadata case are now covered;
 - direct-network bypass tests, including child-process direct sockets;
 - controlled outage/recovery tests for audit-only and enforced profiles;
 - baseline-vs-mediated latency plus CPU, RAM, startup and disk/log measurements;
