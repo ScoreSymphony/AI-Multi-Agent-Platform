@@ -1,0 +1,176 @@
+"""Subprocess/container harness for the SkillSpector #800 evaluation.
+
+The default path requires a container runtime and disables networking.  Direct
+host execution is opt-in because a subprocess alone is not a security boundary.
+"""
+
+from __future__ import annotations
+
+import argparse
+from hashlib import sha256
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+from typing import Sequence
+
+PINNED_VERSION = "2.11.2"
+PINNED_REVISION = "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc"
+DEFAULT_IMAGE = f"skillspector-eval:{PINNED_VERSION}"
+MAX_CAPTURE_BYTES = 256_000
+SAFE_ENV_KEYS = {"PATH", "LANG", "LC_ALL", "TMPDIR"}
+
+
+def digest_tree(root: Path) -> str:
+    digest = sha256()
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        digest.update(path.relative_to(root).as_posix().encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def sanitized_environment() -> dict[str, str]:
+    return {key: value for key, value in os.environ.items() if key in SAFE_ENV_KEYS}
+
+
+def container_command(runtime: str, image: str, input_dir: Path, output_dir: Path) -> list[str]:
+    return [
+        runtime,
+        "run",
+        "--rm",
+        "--network=none",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--pids-limit=256",
+        "--memory=1g",
+        "--cpus=1.0",
+        "-v",
+        f"{input_dir}:/scan:ro",
+        "-v",
+        f"{output_dir}:/out:rw",
+        image,
+        "skillspector",
+        "scan",
+        "/scan",
+        "--no-llm",
+        "--format",
+        "json",
+        "--output",
+        "/out/report.json",
+    ]
+
+
+def local_command(input_dir: Path, output_dir: Path) -> list[str]:
+    return [
+        "skillspector",
+        "scan",
+        str(input_dir),
+        "--no-llm",
+        "--format",
+        "json",
+        "--output",
+        str(output_dir / "report.json"),
+    ]
+
+
+def run_command(command: Sequence[str], *, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
+    try:
+        completed = subprocess.run(
+            list(command),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            env=sanitized_environment(),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"SkillSpector timed out after {timeout_seconds}s") from exc
+    if len(completed.stdout.encode()) > MAX_CAPTURE_BYTES:
+        completed.stdout = completed.stdout.encode()[:MAX_CAPTURE_BYTES].decode(errors="replace")
+    if len(completed.stderr.encode()) > MAX_CAPTURE_BYTES:
+        completed.stderr = completed.stderr.encode()[:MAX_CAPTURE_BYTES].decode(errors="replace")
+    return completed
+
+
+def evaluate(
+    source: Path,
+    *,
+    runtime: str | None,
+    image: str,
+    allow_local_process: bool,
+    timeout_seconds: int,
+) -> dict[str, object]:
+    source = source.resolve(strict=True)
+    if not source.is_dir():
+        raise ValueError("evaluation source must be a directory")
+
+    with tempfile.TemporaryDirectory(prefix="skillspector-800-") as temp:
+        root = Path(temp)
+        staged = root / "candidate"
+        output = root / "output"
+        shutil.copytree(source, staged, symlinks=False)
+        output.mkdir()
+        candidate_digest = digest_tree(staged)
+
+        selected_runtime = runtime
+        if selected_runtime is None:
+            selected_runtime = shutil.which("docker") or shutil.which("podman")
+        if selected_runtime:
+            command = container_command(selected_runtime, image, staged, output)
+            isolation = "container_network_none"
+        elif allow_local_process:
+            if shutil.which("skillspector") is None:
+                raise RuntimeError("skillspector executable not found")
+            command = local_command(staged, output)
+            isolation = "local_process_not_security_boundary"
+        else:
+            raise RuntimeError(
+                "no container sandbox available; refusing host execution without "
+                "--allow-local-process"
+            )
+
+        completed = run_command(command, timeout_seconds=timeout_seconds)
+        report_path = output / "report.json"
+        report: object = None
+        if report_path.exists():
+            try:
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                report = None
+        return {
+            "candidate_digest": candidate_digest,
+            "isolation": isolation,
+            "command": command,
+            "returncode": completed.returncode,
+            "stdout": completed.stdout,
+            "stderr": completed.stderr,
+            "report": report,
+        }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source", type=Path)
+    parser.add_argument("--runtime", choices=("docker", "podman"))
+    parser.add_argument("--image", default=DEFAULT_IMAGE)
+    parser.add_argument("--allow-local-process", action="store_true")
+    parser.add_argument("--timeout", type=int, default=120)
+    args = parser.parse_args()
+    result = evaluate(
+        args.source,
+        runtime=args.runtime,
+        image=args.image,
+        allow_local_process=args.allow_local_process,
+        timeout_seconds=args.timeout,
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if result["returncode"] == 0 and isinstance(result["report"], dict) else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
