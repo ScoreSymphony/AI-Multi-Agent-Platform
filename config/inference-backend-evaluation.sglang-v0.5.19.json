@@ -8,7 +8,7 @@
     "backend": "sglang",
     "upstream": "https://github.com/sgl-project/sglang",
     "release": "v0.5.19",
-    "release_commit": "0bcd822",
+    "release_commit": "0bcd822377da7b5718e674eaf9c870d349424dd1",
     "license": "Apache-2.0",
     "integration_boundary": "ModelProvider",
     "mandatory_dependency": false
@@ -122,7 +122,7 @@
   ],
   "required_environment_fields": [
     "platform_commit",
-    "backend_release",
+    "backend_revision",
     "backend_image_or_package",
     "model_id",
     "model_revision",
