@@ -40,6 +40,7 @@ FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures"
 WEBSOCKET_FIXTURE = FIXTURE_DIR / "websocket_echo_server.py"
 MCP_FIXTURE = FIXTURE_DIR / "mcp_streamable_http_server.py"
 DEFAULT_PROXY_CONFIG = FIXTURE_DIR / "pipelock_websocket_audit.yaml"
+HTTP_MARKER = b"pipelock-benchmark-http-ok"
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,12 +120,11 @@ class _HTTPHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def do_GET(self) -> None:  # noqa: N802
-        body = b'{"ok":true,"transport":"http"}'
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(HTTP_MARKER)))
         self.end_headers()
-        self.wfile.write(body)
+        self.wfile.write(HTTP_MARKER)
 
     def log_message(self, _format: str, *_args: object) -> None:
         return
@@ -305,7 +305,7 @@ def _http_get(url: str) -> None:
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(url, timeout=10) as response:
         body = response.read()
-        if int(response.status) != 200 or b'"ok":true' not in body:
+        if int(response.status) != 200 or HTTP_MARKER not in body:
             raise RuntimeError(f"unexpected HTTP benchmark response from {url}")
 
 
