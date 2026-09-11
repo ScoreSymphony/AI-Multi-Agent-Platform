@@ -17,7 +17,11 @@ from typing import Protocol
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
-from ai_multi_agent_platform.evaluation import EvaluationOutcome, EvaluationRunStatus
+from ai_multi_agent_platform.evaluation import (
+    EvaluationOutcome,
+    EvaluationRun,
+    EvaluationRunStatus,
+)
 from ai_multi_agent_platform.evaluation.contracts import EvaluationHistoryRepository
 from ai_multi_agent_platform.security import infer_actor_identity
 from ai_multi_agent_platform.verification import (
@@ -238,16 +242,17 @@ class ApplicationReleaseGateCoordinator:
         verification_id = _detail_string(existing, "verification_id")
         if verification_id is not None:
             try:
-                request = self.verification.get_request(verification_id)
+                existing_request = self.verification.get_request(verification_id)
             except ContractError as exc:
                 if exc.code is not ErrorCode.NOT_FOUND:
                     raise
-                request = None
-            if request is None or request.subject != subject:
                 verification_id = None
+            else:
+                if existing_request.subject != subject:
+                    verification_id = None
 
         if verification_id is None:
-            request = self.verification_access.request_verification(
+            created = self.verification_access.request_verification(
                 task_id=artifact.build_task_id,
                 policy_id=requirement.verification_policy_id or "",
                 policy_version=requirement.verification_policy_version or 0,
@@ -261,14 +266,14 @@ class ApplicationReleaseGateCoordinator:
             return _gate(
                 requirement,
                 GateStatus.PENDING,
-                evidence_refs=(request.verification_id,),
+                evidence_refs=(created.verification_id,),
                 blocking_reason="verification is pending",
                 details=_artifact_details(artifact)
                 | {
-                    "verification_id": request.verification_id,
-                    "verification_policy_id": request.policy_id,
-                    "verification_policy_version": request.policy_version,
-                    "verification_stage_id": request.stage_id,
+                    "verification_id": created.verification_id,
+                    "verification_policy_id": created.policy_id,
+                    "verification_policy_version": created.policy_version,
+                    "verification_stage_id": created.stage_id,
                     "verification_subject_revision": subject.revision,
                 },
             )
@@ -353,7 +358,7 @@ class ApplicationReleaseGateCoordinator:
                 details=_artifact_details(artifact),
             )
         revision = artifact_subject_revision(release, artifact)
-        matches = []
+        matches: list[EvaluationRun] = []
         for run in self.evaluations.list_runs(
             suite_id=requirement.evaluation_suite_id,
             suite_version=requirement.evaluation_suite_version,
