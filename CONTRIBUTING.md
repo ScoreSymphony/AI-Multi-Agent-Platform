@@ -15,6 +15,10 @@
 
 Repository decision-making, ownership, triage and release responsibilities are defined in [`GOVERNANCE.md`](GOVERNANCE.md). The release checklist is maintained in [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md).
 
+For project orientation, use [`README.md`](README.md). Curated point-in-time implementation/integration status lives in [`docs/STATUS.md`](docs/STATUS.md); dependency-driven planning and convergence guidance live in [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md). GitHub issue/dependency state, pull-request checks and merged code remain authoritative for live work-item state, so contributors should not add issue-by-issue progress ledgers back to the README.
+
+When several focused issue branches are being collected through a shared integration branch, keep documentation/status cleanup as a late pass. Reconcile it against the current combined head, preserve newer cross-issue documentation, refresh `docs/STATUS.md` from that combined state, and only then treat the documentation issue as closure-ready.
+
 ## Reconciling stale or superseded branches
 
 When a branch has diverged because equivalent or newer work landed through another pull request, do not resolve conflicts by restoring stale file versions.
