@@ -55,7 +55,7 @@ from ai_multi_agent_platform.verification import (
 )
 from ai_multi_agent_platform.verification.repair import VERIFICATION_REPAIR_SOURCE
 
-_PASSWORD = "correct horse battery staple"
+_PASSWORD = "issue-759-test-password"
 _MODEL_ID = "model-local-artifact-repair"
 _PROVIDER_ID = "local-artifact-repair-provider"
 _PROVIDER_MODEL = "qwen-artifact-repair"
