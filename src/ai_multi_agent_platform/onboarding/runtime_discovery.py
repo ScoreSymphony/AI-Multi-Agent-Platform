@@ -94,9 +94,7 @@ class SingleNodeComponentDiscoverySource:
         distributed = self._distributed_component()
         if distributed is not None:
             components.append(distributed)
-        return tuple(
-            sorted(components, key=lambda item: (item.category.value, item.component_id))
-        )
+        return tuple(sorted(components, key=lambda item: (item.category.value, item.component_id)))
 
     def environment(self) -> CompatibilityEnvironment:
         capabilities = {
@@ -167,9 +165,7 @@ class SingleNodeComponentDiscoverySource:
                 capability.name for capability in descriptor.capabilities if capability.name.strip()
             }
             for capability in descriptor.capabilities:
-                capabilities.update(
-                    feature for feature in capability.features if feature.strip()
-                )
+                capabilities.update(feature for feature in capability.features if feature.strip())
             components.append(
                 DiscoveredComponent(
                     component_id=descriptor.provider_id,
