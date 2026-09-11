@@ -100,3 +100,18 @@ def test_task_reassignment_is_owned_by_task_management() -> None:
     assert packages["task_management"]["owner"] == "task_management"
     assert packages["task_reassignment"]["kind"] == "migration"
     assert packages["task_reassignment"]["owner"] == "task_management"
+
+
+def test_task_reassignment_compatibility_import_preserves_public_objects() -> None:
+    from ai_multi_agent_platform import task_reassignment as compatibility
+    from ai_multi_agent_platform.task_management import reassignment as canonical
+
+    public_names = (
+        "DefaultTaskProjectCompatibilityPolicy",
+        "PreparedTaskProjectMove",
+        "TaskProjectCompatibilityPolicy",
+        "TaskProjectMoveRequest",
+        "TaskProjectReassignmentService",
+    )
+    for name in public_names:
+        assert getattr(compatibility, name) is getattr(canonical, name)
