@@ -11,8 +11,10 @@ from .workspace_remote_materializer import (
     WorkspaceDataContextResolver,
 )
 from .workspace_transport_codec import (
-    _ManifestEntry as _ManifestEntry,
     _canonical_snapshot_checksum as _canonical_snapshot_checksum,
+)
+from .workspace_transport_codec import (
+    _ManifestEntry as _ManifestEntry,
 )
 from .workspace_transport_contract import (
     DEFAULT_WORKSPACE_CHUNK_BYTES,
