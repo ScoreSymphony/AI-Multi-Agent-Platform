@@ -1,0 +1,64 @@
+{
+  "issue": 862,
+  "captured_at": "2026-09-12",
+  "platform_invariants": {
+    "metadata_authority": "platform_metadata_db",
+    "content_store_role": "opaque_blob_content_only",
+    "canonical_checksum": "sha256",
+    "etag_is_canonical_checksum": false,
+    "local_filesystem_remains_valid": true,
+    "object_store_is_mandatory": false
+  },
+  "required_s3_surface": {
+    "contract_path": "src/ai_multi_agent_platform/data/contracts.py",
+    "required": ["PutObject", "GetObject", "HeadObject", "DeleteObject"],
+    "required_for_repair_and_orphan_detection": ["ListObjectsV2"],
+    "conditional_when_large_object_support_is_enabled": [
+      "CreateMultipartUpload",
+      "UploadPart",
+      "CompleteMultipartUpload",
+      "AbortMultipartUpload"
+    ],
+    "explicitly_not_assumed": ["ACLs", "bucket versioning", "object lock", "S3 lifecycle rules", "ETag as SHA-256"]
+  },
+  "backends": {
+    "rustfs": {
+      "source_url": "https://github.com/rustfs/rustfs",
+      "reviewed_ref": "1.0.0-rc.6-preview.1",
+      "reviewed_commit": "5cd58319ed6148ed7f09f2a4d0b4e46e429f043a",
+      "license": "Apache-2.0",
+      "project_status": "pre-release release-candidate line",
+      "proposed_classification": "experimental_only",
+      "classification_is_final": false,
+      "known_s3_evidence": "Official compatibility matrix documents tested put/get/inspect/delete, ListObjects/ListObjectsV2, range reads and core multipart workflow; it also records excluded/planned behavior.",
+      "open_evidence": ["platform contract probe", "restart/failure campaign", "multi-node campaign", "backup/restore", "upgrade/rollback", "VPS resource measurements"]
+    },
+    "garage": {
+      "source_url": "https://github.com/deuxfleurs-org/garage",
+      "reviewed_ref": "v2.3.0",
+      "reviewed_commit": "7b119c0b4fa58ab3cb6d5db435fe52d990f6a7aa",
+      "license": "AGPL-3.0",
+      "project_status": "stable tagged release",
+      "proposed_classification": "supported_optional",
+      "classification_is_final": false,
+      "known_s3_evidence": "Project describes an S3-compatible object store for small self-hosted geo-distributed deployments; compatibility must be validated only for the platform-required subset.",
+      "open_evidence": ["platform contract probe", "restart/failure campaign", "multi-node campaign", "backup/restore", "upgrade/rollback", "VPS resource measurements", "AGPL deployment-boundary review"]
+    },
+    "seaweedfs": {
+      "source_url": "https://github.com/seaweedfs/seaweedfs",
+      "reviewed_ref": "4.46",
+      "reviewed_commit": "d997fba1575583a89cf0cc50dc0150642286c86d",
+      "license": "Apache-2.0",
+      "project_status": "comparison baseline",
+      "proposed_classification": "supported_optional",
+      "classification_is_final": false,
+      "known_s3_evidence": "SeaweedFS exposes S3 through a stateless gateway in front of the filer and supports multi-node replication/topologies.",
+      "open_evidence": ["same platform contract probe used for candidates", "same resource campaign used for candidates"]
+    }
+  },
+  "gate": {
+    "final_classification_requires_runtime_evidence": true,
+    "setup_wizard_recommendation_requires_issue": 799,
+    "issue_799_currently_blocks_final_wizard_integration": true
+  }
+}
