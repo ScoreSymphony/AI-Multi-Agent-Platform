@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -53,7 +52,10 @@ def _write_fake_kubectl(tmp_path: Path, *, unsafe: bool = False, canary: str | N
     if canary is not None:
         annotations["sandbox-data"] += f" secret={canary}"
     replica_sets = {"items": [{"metadata": {"name": "sandbox-rs", "annotations": annotations}}]}
-    cluster = {"clientVersion": {"gitVersion": "v1.35.0"}, "serverVersion": {"gitVersion": "v1.35.0"}}
+    cluster = {
+        "clientVersion": {"gitVersion": "v1.35.0"},
+        "serverVersion": {"gitVersion": "v1.35.0"},
+    }
 
     executable = tmp_path / "kubectl-fake"
     executable.write_text(
