@@ -1,5 +1,25 @@
 {
   "schema_version": 1,
+  "environment": {
+    "capture_date": null,
+    "host_class": null,
+    "vcpu": null,
+    "memory_gib": null,
+    "disk_gib": null,
+    "linux_distribution": null,
+    "kernel": null,
+    "kubernetes_distribution": null,
+    "kubernetes_version": null,
+    "container_runtime": null,
+    "runtime_class": null,
+    "agent_sandbox_revision": null,
+    "agent_sandbox_image_digest": null,
+    "sandbox_image_digest": null,
+    "platform_commit": null,
+    "cni": null,
+    "profile_kind": null,
+    "profile_revision": null
+  },
   "scenarios": {
     "benign_shell_artifact_roundtrip": {"status": "not_run", "evidence": []},
     "cpu_runaway": {"status": "not_run", "evidence": []},
