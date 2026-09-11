@@ -54,6 +54,8 @@ At minimum retain:
 11. placement result;
 12. raw benchmark/log/telemetry file paths and SHA-256 hashes.
 
+Every metric key remains present in the v1 report. If a metric was genuinely not measured, record `null`; never use numeric zero as a substitute for unknown evidence. A report may still be retained for contract/failure evidence with `null` metrics, but a SGLang-vLLM performance pair is decision-eligible only when all metrics listed in the campaign's `required_metrics` are non-null on both reports.
+
 `backend_revision` must equal the full commit pinned for SGLang, vLLM or Ollama in the campaign. The package/image field may additionally record a release tag, image digest or package version.
 
 `scenario_id` must uniquely identify the request corpus used for the comparison. Two reports with different scenario IDs are not treated as performance-comparable even if their other dimensions match.
@@ -149,9 +151,11 @@ Exit codes are:
 
 The gate requires:
 
-- every submitted report for a pinned SGLang/vLLM/Ollama backend to equal that backend's full campaign commit;
+- every submitted report to name a backend explicitly declared by this campaign;
+- every submitted report for pinned SGLang/vLLM/Ollama to equal that backend's full campaign commit;
 - all mandatory SGLang contract cases to have a latest passing result;
 - all mandatory SGLang failure/recovery cases to have a latest passing result;
+- all campaign-required performance metrics to be actually measured rather than `null` on the decision-eligible SGLang-vLLM pair;
 - at least one decision-eligible SGLang-vLLM performance pair whose comparison dimensions actually match.
 
 Latest-result selection uses absolute ISO-8601 timestamps rather than string ordering, so evidence from Workers with different timezone offsets is ordered correctly.
