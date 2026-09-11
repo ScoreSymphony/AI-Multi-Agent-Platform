@@ -273,6 +273,89 @@ jobs:
             --run-id "restart-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             > "evidence/${{ matrix.backend }}-restart-after.json"
 
+      - name: Seed Garage state before metadata snapshot
+        if: matrix.backend == 'garage'
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/garage_snapshot_restore_probe.py seed \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "snapshot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > evidence/garage-snapshot-seed.json
+
+      - name: Take native Garage metadata snapshot
+        if: matrix.backend == 'garage'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec "$ISSUE862_CONTAINER" /garage meta snapshot --all
+          docker run --rm \
+            -v issue862-garage-meta:/meta:ro \
+            alpine:3.22 \
+            sh -euc 'find /meta/snapshots -maxdepth 1 -type f -print | sort' \
+            > evidence/garage-snapshot-files.txt
+          test -s evidence/garage-snapshot-files.txt
+
+      - name: Mutate Garage state after metadata snapshot
+        if: matrix.backend == 'garage'
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/garage_snapshot_restore_probe.py mutate \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "snapshot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > evidence/garage-snapshot-mutation.json
+
+      - name: Restore Garage SQLite metadata from native snapshot
+        if: matrix.backend == 'garage'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker stop "$ISSUE862_CONTAINER"
+          docker run --rm \
+            -v issue862-garage-meta:/meta \
+            alpine:3.22 \
+            sh -euc '
+              snapshot="$(find /meta/snapshots -maxdepth 1 -type f | sort | tail -n 1)"
+              test -n "$snapshot"
+              test -f "$snapshot"
+              test -f /meta/db.sqlite
+              cp /meta/db.sqlite /meta/db.sqlite.pre-issue862-restore
+              cp "$snapshot" /meta/db.sqlite
+            '
+          docker start "$ISSUE862_CONTAINER"
+          for _ in $(seq 1 90); do
+            if python - <<'PY'
+          import socket
+
+          try:
+              with socket.create_connection(("127.0.0.1", 3900), timeout=1):
+                  pass
+          except OSError:
+              raise SystemExit(1)
+          PY
+            then
+              sleep 2
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$ISSUE862_CONTAINER" || true
+          exit 1
+
+      - name: Verify Garage state after metadata restore
+        if: matrix.backend == 'garage'
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/garage_snapshot_restore_probe.py verify \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "snapshot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > evidence/garage-snapshot-restore.json
+
       - name: Upload backend evidence
         if: always()
         uses: actions/upload-artifact@v7
