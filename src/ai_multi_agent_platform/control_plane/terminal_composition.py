@@ -214,7 +214,7 @@ class ControlPlane(_BaseControlPlane):
     ) -> None:
         """Authorize Terminal with its canonical project/workspace and #36 trust context."""
 
-        provider = self._authorization.provider
+        provider = self._authorization
         if provider is None:
             return
         actor_type = context.actor.actor_type
