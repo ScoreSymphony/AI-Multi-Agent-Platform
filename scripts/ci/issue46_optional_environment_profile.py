@@ -15,6 +15,11 @@ from ai_multi_agent_platform.conformance import (
     ConformanceScenario,
     run_conformance,
 )
+from ai_multi_agent_platform.conformance.mcp_protocol import (
+    MCPProtocolEvidence,
+    combine_mcp_compatibility,
+    missing_mcp_protocol_evidence,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +87,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Destination for the machine-readable #46 conformance report.",
     )
+    parser.add_argument(
+        "--protocol-evidence",
+        type=Path,
+        help="Official MCP protocol-conformance evidence to combine with ENV-MCP.",
+    )
+    parser.add_argument(
+        "--compatibility-report",
+        type=Path,
+        help="Destination for the separate protocol/platform MCP compatibility report.",
+    )
     parser.add_argument("--probe", action="store_true", help=argparse.SUPPRESS)
     return parser
 
@@ -131,18 +146,63 @@ def run_profile(
     )
 
 
+def _write_mcp_compatibility(
+    *,
+    report: ConformanceReport,
+    protocol_evidence_path: Path | None,
+    destination: Path,
+) -> bool:
+    if protocol_evidence_path is None:
+        compatibility = missing_mcp_protocol_evidence(platform_conformant=report.passed)
+    else:
+        protocol = MCPProtocolEvidence.from_json(
+            protocol_evidence_path.read_text(encoding="utf-8")
+        )
+        compatibility = combine_mcp_compatibility(
+            protocol,
+            platform_conformant=report.passed,
+        )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(compatibility.to_json(), encoding="utf-8")
+    return compatibility.compatible
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     profile = _PROFILES[args.profile]
     if args.probe:
         return _probe(profile)
 
+    if args.protocol_evidence is not None and profile.name != "mcp":
+        print("--protocol-evidence is only valid for the MCP profile", file=sys.stderr)
+        return 2
+    if args.compatibility_report is not None and profile.name != "mcp":
+        print("--compatibility-report is only valid for the MCP profile", file=sys.stderr)
+        return 2
+
     report = run_profile(profile, repository_root=args.repository_root)
     if args.json_report is not None:
         args.json_report.parent.mkdir(parents=True, exist_ok=True)
         args.json_report.write_text(report.to_json(), encoding="utf-8")
+
+    compatibility_ok: bool | None = None
+    if args.compatibility_report is not None:
+        try:
+            compatibility_ok = _write_mcp_compatibility(
+                report=report,
+                protocol_evidence_path=args.protocol_evidence,
+                destination=args.compatibility_report,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"invalid MCP protocol evidence: {exc}", file=sys.stderr)
+            return 2
+
     print(report.human_summary())
-    return 0 if report.passed else 1
+    if not report.passed:
+        return 1
+    if compatibility_ok is False:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
