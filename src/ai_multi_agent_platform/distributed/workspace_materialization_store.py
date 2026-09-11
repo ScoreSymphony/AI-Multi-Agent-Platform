@@ -28,12 +28,12 @@ from ai_multi_agent_platform.workspaces import (
 
 from .registry import RegistryError
 from .workspace_transport_codec import (
-    _ManifestEntry,
     _array,
     _canonical_snapshot_checksum,
     _decode_request,
     _encode_request,
     _entry_token,
+    _ManifestEntry,
     _mapping,
     _materialization_ref,
     _receipt,
