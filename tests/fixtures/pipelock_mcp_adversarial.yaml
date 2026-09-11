@@ -1,0 +1,34 @@
+version: 1
+mode: audit
+
+fetch_proxy:
+  listen: "127.0.0.1:8888"
+  timeout_seconds: 10
+  monitoring:
+    max_url_length: 4096
+    entropy_threshold: 4.5
+
+dlp:
+  include_defaults: true
+
+request_body_scanning:
+  enabled: true
+  action: block
+
+response_scanning:
+  enabled: true
+  action: block
+  include_defaults: true
+
+mcp_input_scanning:
+  enabled: true
+  action: block
+
+mcp_tool_scanning:
+  enabled: true
+  action: block
+  detect_drift: true
+
+# The deterministic fixture is an explicitly local upstream. This keeps the
+# evaluation focused on MCP content scanning rather than SSRF policy.
+internal: []

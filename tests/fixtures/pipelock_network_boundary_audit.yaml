@@ -1,0 +1,28 @@
+version: 1
+mode: audit
+
+fetch_proxy:
+  listen: "127.0.0.1:8888"
+  timeout_seconds: 10
+  monitoring:
+    max_url_length: 4096
+    entropy_threshold: 4.5
+
+dlp:
+  include_defaults: true
+
+request_body_scanning:
+  enabled: true
+  action: block
+
+response_scanning:
+  enabled: true
+  action: block
+  include_defaults: true
+
+ssrf:
+  ip_allowlist:
+    - "192.0.2.123/32"
+
+internal:
+  - "192.0.2.123/32"

@@ -97,6 +97,9 @@ from ai_multi_agent_platform.verification.repair import VerificationRepairRuntim
 from ai_multi_agent_platform.verification.reviewer_input import (
     KernelFileReviewerSubjectInputProvider,
 )
+from ai_multi_agent_platform.verification.reviewer_recovery import (
+    AutomaticReviewerStartupReconciler,
+)
 
 from .config import SingleNodeConfig
 from .context_operationalization import (
@@ -140,6 +143,7 @@ class SingleNodeDeployment(BaseSingleNodeDeployment):
     context: SingleNodeContextComposition
     learning: SingleNodeLearningComposition
     handoffs: HandoffDeploymentComposition
+    reviewer_recovery: AutomaticReviewerStartupReconciler
 
 
 def build_single_node_deployment(
@@ -211,6 +215,12 @@ def build_single_node_deployment(
         ),
         repair_runtime=repair_runtime,
         repair_executor=KernelAgentRepairExecutor(base.kernel),
+    )
+    reviewer_recovery = AutomaticReviewerStartupReconciler(
+        workflow=automatic_reviewer,
+        agents=base.agent_runtime,
+        verification=base.verification,
+        tasks=base.kernel,
     )
     automatic_review_output = AutomaticReviewerOutputCoordinator(
         kernel=base.kernel,
@@ -438,6 +448,7 @@ def build_single_node_deployment(
         context=context,
         learning=learning,
         handoffs=handoffs,
+        reviewer_recovery=reviewer_recovery,
     )
 
 

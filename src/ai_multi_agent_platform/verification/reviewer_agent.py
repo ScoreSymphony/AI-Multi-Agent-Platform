@@ -1,4 +1,4 @@
-"""Reviewer-Agent bridge between canonical Verification and the normal Agent runtime (#86)."""
+"""Reviewer-Agent bridge between canonical Verification and the normal Agent runtime (#86, #759)."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from .evidence import CanonicalVerificationRuntime, VerificationEvidenceResolver
 from .models import (
     VerificationFinding,
     VerificationOutcome,
+    VerificationPolicy,
     VerificationRequest,
     VerificationResult,
     VerifierIdentity,
@@ -27,7 +28,19 @@ from .models import (
 from .service import VerificationService
 
 _REVIEW_CONTEXT_SCHEMA = "verification-reviewer-agent-v1"
+_REVIEWER_SELECTION_SCHEMA = "reviewer-selection-v1"
 _RESERVED_TASK_CONTEXT_KEY = "verification"
+_EXACT_SELECTION_FIELDS = frozenset(
+    {"agent_id", "agent_revision", "team_id", "team_revision", "team_role"}
+)
+_DISCOVERY_SELECTION_FIELDS = frozenset(
+    {
+        "candidate_agent_ids",
+        "candidate_team_ids",
+        "reviewer_role",
+        "required_capability_ids",
+    }
+)
 
 
 class ReviewerAgentRuntime:
@@ -154,8 +167,20 @@ class ReviewerAgentRuntime:
             read_only=read_only,
         )
         self._verification.validate_verifier(request.verification_id, verifier)
+        reviewer_selection = _reviewer_selection_context(
+            policy,
+            request.stage_id,
+            agent_id=spec.agent_revision.agent_id,
+            agent_revision=spec.agent_revision.revision,
+            team_id=None if bound_team is None else bound_team.team_id,
+            team_revision=None if bound_team is None else bound_team.revision,
+        )
         verification_context = _review_context(
-            request, verifier, spec.capability_ids, spec.capability_versions
+            request,
+            verifier,
+            spec.capability_ids,
+            spec.capability_versions,
+            reviewer_selection=reviewer_selection,
         )
         merged_task_context = dict(task_context or {})
         merged_task_context[_RESERVED_TASK_CONTEXT_KEY] = dict(verification_context)
@@ -214,7 +239,22 @@ class ReviewerAgentRuntime:
         request = self._verification.get_request(verification_id)
         read_only = _required_context_bool(context, "read_only")
         verifier = _verifier_from_record(record, read_only=read_only)
-        _require_exact_review_binding(request, record, verifier, context)
+        policy = self._verification.get_policy(request.policy_id, request.policy_version)
+        reviewer_selection = _reviewer_selection_context(
+            policy,
+            request.stage_id,
+            agent_id=record.agent.agent_id,
+            agent_revision=record.agent.revision,
+            team_id=None if record.team is None else record.team.team_id,
+            team_revision=None if record.team is None else record.team.revision,
+        )
+        _require_exact_review_binding(
+            request,
+            record,
+            verifier,
+            context,
+            reviewer_selection=reviewer_selection,
+        )
         self._verification.validate_verifier(verification_id, verifier)
 
         if record.status is AgentRunStatus.RUNNING:
@@ -302,13 +342,90 @@ def _verifier_from_record(record: AgentRunRecord, *, read_only: bool) -> Verifie
     )
 
 
+def _reviewer_selection_context(
+    policy: VerificationPolicy,
+    stage_id: str,
+    *,
+    agent_id: str,
+    agent_revision: int,
+    team_id: str | None,
+    team_revision: int | None,
+) -> dict[str, JsonValue] | None:
+    """Project validated policy routing into immutable reviewer-selection provenance."""
+
+    automatic = policy.metadata.get("automatic_reviewer")
+    if not isinstance(automatic, Mapping):
+        return None
+    stages = automatic.get("stages")
+    if not isinstance(stages, Mapping):
+        return None
+    route = stages.get(stage_id)
+    if not isinstance(route, Mapping):
+        return None
+
+    route_fields = set(route)
+    has_exact = bool(route_fields.intersection(_EXACT_SELECTION_FIELDS))
+    has_discovery = bool(route_fields.intersection(_DISCOVERY_SELECTION_FIELDS))
+    if has_exact == has_discovery:
+        return None
+
+    provenance: dict[str, JsonValue] = {
+        "schema": _REVIEWER_SELECTION_SCHEMA,
+        "mode": "scoped_discovery" if has_discovery else "exact_assignment",
+        "selected_agent_id": agent_id,
+        "selected_agent_revision": agent_revision,
+        "selected_team_id": team_id,
+        "selected_team_revision": team_revision,
+    }
+    if has_discovery:
+        provenance["candidate_agent_ids"] = _selection_string_list(route.get("candidate_agent_ids"))
+        provenance["candidate_team_ids"] = _selection_string_list(route.get("candidate_team_ids"))
+        provenance["reviewer_role"] = _selection_optional_string(route.get("reviewer_role"))
+        provenance["required_capability_ids"] = _selection_string_list(
+            route.get("required_capability_ids")
+        )
+    else:
+        provenance["configured_agent_id"] = _selection_optional_string(route.get("agent_id"))
+        provenance["configured_agent_revision"] = _selection_optional_positive_int(
+            route.get("agent_revision")
+        )
+        provenance["configured_team_id"] = _selection_optional_string(route.get("team_id"))
+        provenance["configured_team_revision"] = _selection_optional_positive_int(
+            route.get("team_revision")
+        )
+        provenance["configured_team_role"] = _selection_optional_string(route.get("team_role"))
+    return provenance
+
+
+def _selection_string_list(value: object) -> list[JsonValue]:
+    result: list[JsonValue] = []
+    if not isinstance(value, (list, tuple)):
+        return result
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            result.append(item)
+    return result
+
+
+def _selection_optional_string(value: object) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _selection_optional_positive_int(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
+        return value
+    return None
+
+
 def _review_context(
     request: VerificationRequest,
     verifier: VerifierIdentity,
     capability_ids: tuple[str, ...],
     capability_versions: Mapping[str, str],
+    *,
+    reviewer_selection: Mapping[str, JsonValue] | None = None,
 ) -> dict[str, JsonValue]:
-    return {
+    context: dict[str, JsonValue] = {
         "schema": _REVIEW_CONTEXT_SCHEMA,
         "verification_id": request.verification_id,
         "task_id": request.task_id,
@@ -331,6 +448,9 @@ def _review_context(
         "capability_ids": list(capability_ids),
         "capability_versions": dict(capability_versions),
     }
+    if reviewer_selection is not None:
+        context["reviewer_selection"] = dict(reviewer_selection)
+    return context
 
 
 def _bound_review_context(record: AgentRunRecord) -> Mapping[str, JsonValue]:
@@ -348,8 +468,16 @@ def _require_exact_review_binding(
     record: AgentRunRecord,
     verifier: VerifierIdentity,
     context: Mapping[str, JsonValue],
+    *,
+    reviewer_selection: Mapping[str, JsonValue] | None = None,
 ) -> None:
-    expected = _review_context(request, verifier, record.capability_ids, record.capability_versions)
+    expected = _review_context(
+        request,
+        verifier,
+        record.capability_ids,
+        record.capability_versions,
+        reviewer_selection=reviewer_selection,
+    )
     if dict(context) != expected:
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
