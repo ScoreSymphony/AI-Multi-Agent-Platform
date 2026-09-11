@@ -16,6 +16,7 @@ from ai_multi_agent_platform.workspaces import validate_relative_path, validate_
 
 APPLICATION_RELEASE_SCHEMA_VERSION = "1.0"
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_SECRET_REFERENCE_ID = re.compile(r"^secret_ref_[a-z0-9][a-z0-9._-]{0,127}$")
 
 
 def utc_now() -> datetime:
@@ -34,6 +35,19 @@ def _nonblank_tuple(values: tuple[str, ...], field_name: str) -> tuple[str, ...]
     if len(values) != len(set(values)):
         raise ValueError(f"{field_name} must not contain duplicates")
     return tuple(values)
+
+
+def _secret_reference_ids(values: tuple[str, ...]) -> tuple[str, ...]:
+    copied: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or _SECRET_REFERENCE_ID.fullmatch(value) is None:
+            raise ValueError(
+                "secret_references must contain opaque secret_ref_* identifiers, not secret material"
+            )
+        copied.append(value)
+    if len(copied) != len(set(copied)):
+        raise ValueError("secret_references must not contain duplicates")
+    return tuple(copied)
 
 
 def _command_tokens(values: tuple[str, ...]) -> tuple[str, ...]:
@@ -187,13 +201,13 @@ class BuildSpecification:
             "test_gates",
             "post_build_checks",
             "required_capabilities",
-            "secret_references",
         ):
             object.__setattr__(
                 self,
                 field_name,
                 _nonblank_tuple(getattr(self, field_name), field_name),
             )
+        object.__setattr__(self, "secret_references", _secret_reference_ids(self.secret_references))
         object.__setattr__(
             self,
             "resource_hints",
