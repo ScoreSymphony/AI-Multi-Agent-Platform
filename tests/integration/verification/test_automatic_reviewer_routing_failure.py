@@ -184,7 +184,10 @@ def test_productive_ambiguous_reviewer_routing_fails_closed_with_canonical_reaso
                 headers=_headers(token, key="issue-759-routing-failure:task"),
                 body={
                     "title": "Ambiguous automatic reviewer routing",
-                    "objective": "Produce a Result whose reviewer route is intentionally ambiguous.",
+                    "objective": (
+                        "Produce a Result whose reviewer route is intentionally "
+                        "ambiguous."
+                    ),
                     "project_id": project_id,
                 },
             )
