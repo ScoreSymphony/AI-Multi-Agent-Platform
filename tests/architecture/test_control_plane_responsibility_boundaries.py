@@ -8,6 +8,7 @@ CONTROL_PLANE_ROOT = ROOT / "src" / "ai_multi_agent_platform" / "control_plane"
 SERVICE = CONTROL_PLANE_ROOT / "service.py"
 SCOPE_STORE = CONTROL_PLANE_ROOT / "scope_store.py"
 HEALTH = CONTROL_PLANE_ROOT / "health.py"
+MODEL_REGISTRY = CONTROL_PLANE_ROOT / "model_registry_service.py"
 
 
 def _tree(path: Path) -> ast.Module:
@@ -92,6 +93,7 @@ def test_control_plane_imports_scope_store_from_focused_module() -> None:
 def test_focused_control_plane_components_do_not_depend_back_on_facade() -> None:
     _assert_no_facade_dependency(SCOPE_STORE)
     _assert_no_facade_dependency(HEALTH)
+    _assert_no_facade_dependency(MODEL_REGISTRY)
 
 
 def test_control_plane_keeps_scope_store_as_injected_stable_boundary() -> None:
@@ -116,3 +118,22 @@ def test_health_aggregation_stays_behind_focused_component() -> None:
     _assert_delegate(_method(facade, "health"), "_health", "health")
     health = _class(HEALTH, "ControlPlaneHealth")
     _method(health, "health")
+
+
+def test_model_registry_operations_stay_behind_focused_component() -> None:
+    facade = _class(SERVICE, "ControlPlane")
+    delegated = {
+        "list_model_providers": "list_providers",
+        "get_model_provider": "get_provider",
+        "set_model_provider_enabled": "set_provider_enabled",
+        "refresh_model_provider_health": "refresh_provider_health",
+        "list_models": "list_models",
+        "get_model": "get_model",
+        "set_model_enabled": "set_model_enabled",
+    }
+    for facade_method, component_method in delegated.items():
+        _assert_delegate(_method(facade, facade_method), "_models", component_method)
+
+    component = _class(MODEL_REGISTRY, "ControlPlaneModelRegistry")
+    for component_method in (*delegated.values(), "require_registry"):
+        _method(component, component_method)
