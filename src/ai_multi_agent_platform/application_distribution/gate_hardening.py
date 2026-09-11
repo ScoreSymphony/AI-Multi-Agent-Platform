@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.verification import VerificationOutcome
+from ai_multi_agent_platform.verification import VerificationOutcome, VerificationRequest
 
 from .gates import (
     ApplicationReleaseGateCoordinator as _BaseApplicationReleaseGateCoordinator,
@@ -156,22 +157,38 @@ class ApplicationReleaseGateCoordinator(_BaseApplicationReleaseGateCoordinator):
         if artifact is None or self.verification is None:
             return super()._verification(release, requirement, existing)
 
+        subject = verification_subject(release, artifact)
         existing_id = _detail_string(existing, "verification_id")
         if existing_id is not None:
-            return super()._verification(release, requirement, existing)
+            try:
+                existing_request = self.verification.get_request(existing_id)
+            except ContractError as exc:
+                if exc.code is not ErrorCode.NOT_FOUND:
+                    raise
+                return super()._verification(release, requirement, existing)
+            if _verification_request_matches(
+                existing_request,
+                release,
+                requirement,
+                artifact,
+                subject,
+            ):
+                return super()._verification(release, requirement, existing)
+            # A GateEvidence projection is derived state. A stale or incorrectly rebound request
+            # reference must not grant the current requirement authority merely because its subject
+            # digest happens to match. Discard the projection and recover/create the exact request.
+            existing = None
 
-        subject = verification_subject(release, artifact)
         matches = [
             (request, result)
             for request, result in self.verification.history(task_id=artifact.build_task_id)
-            if request.policy_id == requirement.verification_policy_id
-            and request.policy_version == requirement.verification_policy_version
-            and request.stage_id == requirement.verification_stage_id
-            and request.subject == subject
-            and request.correlation_id == release.release_id
-            and request.run_id == artifact.build_run_id
-            and artifact.artifact_id in request.artifact_ids
-            and request.project_id == release.project_id
+            if _verification_request_matches(
+                request,
+                release,
+                requirement,
+                artifact,
+                subject,
+            )
         ]
         terminal = [(request, result) for request, result in matches if result is not None]
         terminal_states = {
@@ -214,6 +231,26 @@ class ApplicationReleaseGateCoordinator(_BaseApplicationReleaseGateCoordinator):
             return super()._verification(release, requirement, recovered)
 
         return super()._verification(release, requirement, existing)
+
+
+def _verification_request_matches(
+    request: VerificationRequest,
+    release: ApplicationRelease,
+    requirement: ReleaseGateRequirement,
+    artifact: ApplicationArtifact,
+    subject: object,
+) -> bool:
+    return (
+        request.task_id == artifact.build_task_id
+        and request.policy_id == requirement.verification_policy_id
+        and request.policy_version == requirement.verification_policy_version
+        and request.stage_id == requirement.verification_stage_id
+        and request.subject == subject
+        and request.correlation_id == release.release_id
+        and request.run_id == artifact.build_run_id
+        and request.artifact_ids == (artifact.artifact_id,)
+        and request.project_id == release.project_id
+    )
 
 
 def _verification_gate_status(outcome: VerificationOutcome) -> GateStatus:

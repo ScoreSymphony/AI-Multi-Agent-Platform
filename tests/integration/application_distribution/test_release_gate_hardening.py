@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.application_distribution import (
     ApplicationArtifact,
     ApplicationDistributionService,
@@ -365,7 +366,7 @@ def test_evaluation_failure_mismatch_unavailable_and_optional_absence_are_fail_c
         failed = EvaluationRun(
             suite_id="release-suite",
             suite_version="1",
-            snapshot=ConfigurationSnapshot(platform_version="test", references=(reference,)),
+            snapshot=ConfigurationSnapshot(platform_version=__version__, references=(reference,)),
             status=EvaluationRunStatus.FAILED,
             completed_at=datetime.now(UTC),
         )

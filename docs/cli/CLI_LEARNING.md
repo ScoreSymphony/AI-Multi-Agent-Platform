@@ -6,7 +6,7 @@ The Learning CLI is API-first. It reads and mutates governed Learning state only
 
 ## Public entrypoint
 
-The distributed `platform` command registers the first-class governed Learning domain through `src/ai_multi_agent_platform/cli/issue_81.py` and `src/ai_multi_agent_platform/cli/learning.py`.
+The distributed `platform` command registers the first-class governed Learning domain through `src/ai_multi_agent_platform/cli/app.py` and `src/ai_multi_agent_platform/cli/learning.py`.
 
 ```bash
 platform learning --help

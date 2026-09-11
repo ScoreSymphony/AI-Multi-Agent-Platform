@@ -23,6 +23,8 @@ jobs:
           python -m pip install -e ".[dev]"
           echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Verify canonical runtime assets
+        run: python scripts/ci/issue725_materialize_runtime_assets.py --check
       - name: Ruff format
         run: ruff format --check .
       - name: Ruff lint
@@ -33,8 +35,12 @@ jobs:
         run: pytest
       - name: Deterministic evaluation gate
         run: python scripts/ci/issue19_evaluation_gate.py --platform-commit "$GITHUB_SHA"
+      - name: Materialize runtime assets
+        run: python scripts/ci/issue725_materialize_runtime_assets.py
       - name: Build package
         run: python -m build
+      - name: Verify built runtime assets
+        run: python scripts/ci/issue725_verify_distribution_assets.py dist
       - name: Run MCP environment conformance
         run: |
           python scripts/ci/issue46_optional_environment_profile.py \
