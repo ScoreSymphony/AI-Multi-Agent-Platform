@@ -34,6 +34,10 @@ function requireText(haystack, needle, label) {
   }
 }
 
+function cardByHeading(page, name) {
+  return page.getByRole("heading", { name, exact: true }).locator("..");
+}
+
 let browser;
 try {
   await waitForVite();
@@ -94,15 +98,9 @@ try {
   await page.goto(`${baseUrl}/tests/memoryTypesHarness.html`);
   await page.getByRole("heading", { name: "Memory", exact: true }).waitFor();
 
-  const queryCard = page.locator("section.card").filter({
-    has: page.getByRole("heading", { name: "Scope and query", exact: true }),
-  });
-  const createCard = page.locator("section.card").filter({
-    has: page.getByRole("heading", { name: "Create Memory explicitly", exact: true }),
-  });
-  const entriesCard = page.locator("section.card").filter({
-    has: page.getByRole("heading", { name: "Memory entries", exact: true }),
-  });
+  const queryCard = cardByHeading(page, "Scope and query");
+  const createCard = cardByHeading(page, "Create Memory explicitly");
+  const entriesCard = cardByHeading(page, "Memory entries");
 
   await queryCard.getByLabel("Scope", { exact: true }).selectOption("short_term");
   await queryCard.getByLabel("Scope ID", { exact: true }).fill("session-browser");
@@ -149,19 +147,13 @@ try {
   await entriesCard.locator("tbody a").first().click();
   await page.getByRole("heading", { name: "Memory detail", exact: true }).waitFor();
 
-  const detailCard = page.locator("section.card").filter({
-    has: page.getByRole("heading", { name: "Scope, type, provenance and retention", exact: true }),
-  });
+  const detailCard = cardByHeading(page, "Scope, type, provenance and retention");
   const detailText = await detailCard.innerText();
   requireText(detailText, "Memory Type", "Memory detail type label");
   requireText(detailText, "procedural", "Memory detail type value");
 
-  const updateCard = page.locator("section.card").filter({
-    has: page.getByRole("heading", { name: "Supersede with an explicit update", exact: true }),
-  });
-  const promoteCard = page.locator("section.card").filter({
-    has: page.getByRole("heading", { name: "Promote short-term Memory", exact: true }),
-  });
+  const updateCard = cardByHeading(page, "Supersede with an explicit update");
+  const promoteCard = cardByHeading(page, "Promote short-term Memory");
   if (await updateCard.getByLabel("Memory Type", { exact: true }).count()) {
     throw new Error("Ordinary Memory update unexpectedly exposes a Memory Type mutation control");
   }
