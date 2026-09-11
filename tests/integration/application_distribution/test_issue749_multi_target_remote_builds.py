@@ -67,14 +67,16 @@ async def _finish_build(
 ) -> ApplicationRelease:
     loop = asyncio.get_running_loop()
     deadline = loop.time() + 5.0
+    poll_index = 0
     last_status: BuildTargetStatus | None = None
     while loop.time() < deadline:
         release = await service.request_build(
             release_id,
             target_id=target_id,
-            idempotency_key=idempotency_key,
+            idempotency_key=f"{idempotency_key}:poll:{poll_index}",
             actor_ref="user:tester",
         )
+        poll_index += 1
         target = next(item for item in release.targets if item.target.target_id == target_id)
         last_status = target.status
         if target.status in {
