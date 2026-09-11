@@ -42,16 +42,25 @@ def _imports_workspace_transport(filename: str) -> bool:
     return False
 
 
-def test_workspace_transport_facade_delegates_worker_materialization_store() -> None:
+def test_workspace_transport_facade_delegates_all_implementation_responsibilities() -> None:
     definitions = _top_level_definitions("workspace_transport.py")
-    assert "WorkerWorkspaceMaterializationStore" not in definitions
-    assert "WorkerWorkspaceMaterializationStore" in _relative_imports(
-        "workspace_transport.py",
-        "workspace_materialization_store",
-    )
-    assert "WorkerWorkspaceMaterializationStore" in _top_level_definitions(
-        "workspace_materialization_store.py"
-    )
+    expected = {
+        "workspace_materialization_store": {"WorkerWorkspaceMaterializationStore"},
+        "workspace_remote_materializer": {
+            "TransportRemoteWorkspaceMaterializer",
+            "WorkspaceDataContextResolver",
+        },
+        "workspace_transport_endpoint": {"WorkerWorkspaceTransportEndpoint"},
+        "workspace_bound_worker": {
+            "WorkspaceBoundLocalWorker",
+            "WorkspaceLifecycleFactory",
+        },
+        "workspace_transport_contract": {"worker_workspace_command_topic"},
+    }
+    for module, names in expected.items():
+        assert names.isdisjoint(definitions)
+        assert names <= _relative_imports("workspace_transport.py", module)
+        assert names <= _top_level_definitions(f"{module}.py")
 
 
 def test_workspace_transport_facade_delegates_manifest_and_checksum_codecs() -> None:
@@ -69,5 +78,13 @@ def test_workspace_transport_facade_delegates_manifest_and_checksum_codecs() -> 
 
 
 def test_workspace_transport_components_do_not_depend_back_on_facade() -> None:
-    assert not _imports_workspace_transport("workspace_materialization_store.py")
-    assert not _imports_workspace_transport("workspace_transport_codec.py")
+    focused_modules = (
+        "workspace_materialization_store.py",
+        "workspace_transport_codec.py",
+        "workspace_transport_contract.py",
+        "workspace_remote_materializer.py",
+        "workspace_transport_endpoint.py",
+        "workspace_bound_worker.py",
+    )
+    for filename in focused_modules:
+        assert not _imports_workspace_transport(filename)
