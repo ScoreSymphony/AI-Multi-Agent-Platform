@@ -13,11 +13,8 @@ def _tree(filename: str) -> ast.Module:
 
 def _top_level_definitions(filename: str) -> set[str]:
     tree = _tree(filename)
-    return {
-        node.name
-        for node in tree.body
-        if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef)
-    }
+    definition_types = (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+    return {node.name for node in tree.body if isinstance(node, definition_types)}
 
 
 def _relative_imports(filename: str, module: str) -> set[str]:
