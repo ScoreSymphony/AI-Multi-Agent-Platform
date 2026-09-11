@@ -16,6 +16,7 @@ from ai_multi_agent_platform.distributed import (
     RegistrationRequest,
     RejectionCode,
     ResourceSnapshot,
+    SchedulingDecision,
     WorkerJobRequest,
     WorkerRecord,
     WorkerStatus,
@@ -99,9 +100,8 @@ def _register_worker(
     return node_id, worker_id
 
 
-def _reason_codes(decision: object, worker_id: str) -> set[RejectionCode]:
-    evaluations = getattr(decision, "evaluations")
-    evaluation = next(item for item in evaluations if item.worker_id == worker_id)
+def _reason_codes(decision: SchedulingDecision, worker_id: str) -> set[RejectionCode]:
+    evaluation = next(item for item in decision.evaluations if item.worker_id == worker_id)
     return {reason.code for reason in evaluation.reasons}
 
 
