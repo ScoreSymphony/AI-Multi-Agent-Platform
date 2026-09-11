@@ -14,6 +14,7 @@ from ai_multi_agent_platform.benchmarking.inference_backend_evaluation import (
 from ai_multi_agent_platform.benchmarking.inference_backend_evaluation_cli import main as cli_main
 
 SGLANG_REVISION = "0bcd822377da7b5718e674eaf9c870d349424dd1"
+VLLM_REVISION = "98dff2a81d747d1dba01a47f939f48c3526d4206"
 
 CAMPAIGN = {
     "campaign_id": "issue-860-sglang-v0.5.19",
@@ -21,6 +22,20 @@ CAMPAIGN = {
         "backend": "sglang",
         "release_commit": SGLANG_REVISION,
     },
+    "comparison_backends": [
+        {
+            "backend": "sglang",
+            "release_commit": SGLANG_REVISION,
+        },
+        {
+            "backend": "vllm",
+            "release_commit": VLLM_REVISION,
+        },
+        {
+            "backend": "llama.cpp-or-ollama",
+            "revision_policy": "record-exact-revision-per-run",
+        },
+    ],
     "contract_cases": [
         "chat-completion-non-streaming",
         "chat-completion-streaming",
@@ -71,7 +86,11 @@ def _result(case_id: str, status: str = "pass") -> dict[str, Any]:
 
 
 def _report(backend: str) -> dict[str, Any]:
-    backend_revision = SGLANG_REVISION if backend == "sglang" else f"{backend}-revision"
+    revisions = {
+        "sglang": SGLANG_REVISION,
+        "vllm": VLLM_REVISION,
+    }
+    backend_revision = revisions.get(backend, f"{backend}-revision")
     return {
         "schema_version": "1.0",
         "campaign_id": "issue-860-sglang-v0.5.19",
@@ -166,6 +185,17 @@ def test_readiness_rejects_candidate_revision_that_does_not_match_campaign() -> 
         assess_inference_backend_evaluation(
             campaign=CAMPAIGN,
             reports=[sglang, _report("vllm")],
+        )
+
+
+def test_readiness_rejects_vllm_revision_that_does_not_match_campaign() -> None:
+    vllm = _report("vllm")
+    vllm["backend_revision"] = "f" * 40
+
+    with pytest.raises(ValueError, match="vllm report backend_revision"):
+        assess_inference_backend_evaluation(
+            campaign=CAMPAIGN,
+            reports=[_report("sglang"), vllm],
         )
 
 
