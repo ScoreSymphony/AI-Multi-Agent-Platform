@@ -35,9 +35,7 @@ class ReviewerDiscoverySelector:
 
     def __post_init__(self) -> None:
         if not self.candidate_agent_ids and not self.candidate_team_ids:
-            raise ValueError(
-                "reviewer discovery requires an explicit Agent/Team candidate scope"
-            )
+            raise ValueError("reviewer discovery requires an explicit Agent/Team candidate scope")
         if self.reviewer_role is None and not self.required_capability_ids:
             raise ValueError("reviewer discovery requires a role and/or capability selector")
         if self.reviewer_role is not None and not self.reviewer_role.strip():
@@ -114,9 +112,7 @@ class CapabilityRoleReviewerResolver(ReviewerAssignmentResolver):
         for agent_id in selector.candidate_agent_ids:
             try:
                 definition = repository.get_agent(agent_id)
-                revision = repository.get_agent_revision(
-                    agent_id, definition.current_revision
-                )
+                revision = repository.get_agent_revision(agent_id, definition.current_revision)
             except ContractError as exc:
                 if exc.code is ErrorCode.NOT_FOUND:
                     continue
@@ -128,10 +124,7 @@ class CapabilityRoleReviewerResolver(ReviewerAssignmentResolver):
             if not _capabilities_match(
                 selector.required_capability_ids,
                 revision.profile.capabilities.allowed,
-                tuple(
-                    item.capability_id
-                    for item in revision.profile.capabilities.constraints
-                ),
+                tuple(item.capability_id for item in revision.profile.capabilities.constraints),
             ):
                 continue
             matches.append(
@@ -173,10 +166,7 @@ class CapabilityRoleReviewerResolver(ReviewerAssignmentResolver):
                 if not _capabilities_match(
                     selector.required_capability_ids,
                     revision.profile.capabilities.allowed,
-                    tuple(
-                        item.capability_id
-                        for item in revision.profile.capabilities.constraints
-                    ),
+                    tuple(item.capability_id for item in revision.profile.capabilities.constraints),
                     team.profile.shared_capability_ids,
                 ):
                     continue
