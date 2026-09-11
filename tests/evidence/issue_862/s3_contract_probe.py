@@ -280,6 +280,12 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         timings["concurrent_round_trip_seconds"] = time.perf_counter() - started
         created_keys.extend(item["key"] for item in concurrent_results)
 
+        delete_started = time.perf_counter()
+        for created_key in reversed(created_keys):
+            client.delete_object(args.bucket, created_key)
+        timings["delete_all_seconds"] = time.perf_counter() - delete_started
+        created_keys.clear()
+
         safe_endpoint = urllib.parse.urlsplit(args.endpoint)
         return {
             "schema_version": 1,
@@ -295,7 +301,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 "GetObject": "pass",
                 "RangeGetObject": "pass",
                 "ListObjectsV2": "pass",
-                "DeleteObject": "pending_cleanup",
+                "DeleteObject": "pass",
                 "concurrent_round_trip": "pass",
             },
             "primary": {
