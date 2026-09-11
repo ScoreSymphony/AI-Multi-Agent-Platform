@@ -81,7 +81,9 @@ Release evidence is bound to source revision, Workspace snapshot/checksum, Build
 
 Verification reconciliation uses canonical #86 history to recover an exact request/result after process restart or loss of the derived GateEvidence projection. It reuses the existing request instead of creating a duplicate. Conflicting terminal outcomes for the same exact subject are surfaced as `inconclusive` and block publication.
 
-Evaluation reconciliation matches only #19 runs whose suite ID/version and Artifact reference/version/revision exactly match the current release subject. Missing, unavailable, pending, failed, inconclusive or mismatched mandatory evidence blocks publication. Evaluation remains optional when the BuildSpecification does not require its gate name.
+For a configured #19 evaluation gate, reconciliation first reuses any canonical run whose suite ID/version and `application_release_artifact` reference exactly match the current Artifact ID, SHA-256 and source/build/target revision. If no such run exists, the gate coordinator asks the canonical `EvaluationService` to execute that exact suite version with the exact release Artifact reference in its immutable configuration snapshot. Application distribution never constructs an `EvaluationRun` or `EvaluationResult` itself. Concurrent retries through one coordinator are serialized, and restart reconciliation sees the persisted canonical run before deciding whether another launch is needed.
+
+Evaluation projection then accepts only those exact-subject #19 runs. Missing, unavailable, pending, failed, inconclusive or mismatched mandatory evidence blocks publication. A changed source, BuildSpecification revision or Artifact produces a different subject and therefore requires a fresh run. Evaluation remains optional when the BuildSpecification does not require its gate name.
 
 ## Control Plane and publication
 
