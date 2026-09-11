@@ -3,7 +3,7 @@
 
 This harness is intentionally optional: it requires an already-provisioned Kubernetes
 Agent-Sandbox evaluation deployment and never participates in baseline platform operation.
-It uses kubectl only and emits JSON evidence suitable for attaching to the issue/PR.
+It uses kubectl plus Python's standard library and emits JSON evidence suitable for review.
 """
 
 from __future__ import annotations
@@ -11,8 +11,12 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import platform
 import subprocess
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -68,6 +72,11 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--peer-pod-ip")
     parser.add_argument("--internet-host", default="example.com")
     parser.add_argument("--metadata-ip", default="169.254.169.254")
+    parser.add_argument("--provider-base-url")
+    parser.add_argument("--sandbox-a-id")
+    parser.add_argument("--sandbox-b-id")
+    parser.add_argument("--token-a-env", default="AGENT_SANDBOX_TOKEN_A")
+    parser.add_argument("--token-b-env", default="AGENT_SANDBOX_TOKEN_B")
     return parser.parse_args()
 
 
@@ -249,6 +258,79 @@ def _cluster_version(kubectl: Kubectl) -> dict[str, Any]:
     return {"available": True, "payload": payload}
 
 
+def _provider_get(base_url: str, sandbox_id: str, token: str) -> dict[str, Any]:
+    quoted_id = urllib.parse.quote(sandbox_id, safe="")
+    url = f"{base_url.rstrip('/')}/sandboxes/{quoted_id}"
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"X-Api-Key": token, "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5.0) as response:
+            return {
+                "status": response.status,
+                "authorized": 200 <= response.status < 300,
+                "transport_error": None,
+            }
+    except urllib.error.HTTPError as exc:
+        return {
+            "status": exc.code,
+            "authorized": False,
+            "transport_error": None,
+        }
+    except urllib.error.URLError as exc:
+        return {
+            "status": None,
+            "authorized": None,
+            "transport_error": type(exc.reason).__name__,
+        }
+
+
+def _provider_authorization_probe(args: argparse.Namespace) -> dict[str, Any]:
+    requested = any(
+        (
+            args.provider_base_url,
+            args.sandbox_a_id,
+            args.sandbox_b_id,
+        )
+    )
+    if not requested:
+        return {"performed": False, "reason": "provider authorization probe not requested"}
+    if not all((args.provider_base_url, args.sandbox_a_id, args.sandbox_b_id)):
+        return {
+            "performed": False,
+            "reason": (
+                "provider authorization probe requires --provider-base-url, --sandbox-a-id "
+                "and --sandbox-b-id"
+            ),
+        }
+
+    token_a = os.environ.get(args.token_a_env, "")
+    token_b = os.environ.get(args.token_b_env, "")
+    if not token_a or not token_b:
+        return {
+            "performed": False,
+            "reason": "provider authorization token environment variables are missing",
+            "token_env_names": [args.token_a_env, args.token_b_env],
+        }
+
+    a_to_a = _provider_get(args.provider_base_url, args.sandbox_a_id, token_a)
+    b_to_b = _provider_get(args.provider_base_url, args.sandbox_b_id, token_b)
+    a_to_b = _provider_get(args.provider_base_url, args.sandbox_b_id, token_a)
+    b_to_a = _provider_get(args.provider_base_url, args.sandbox_a_id, token_b)
+    cross_tenant_blocked = a_to_b["authorized"] is False and b_to_a["authorized"] is False
+
+    return {
+        "performed": True,
+        "token_values_retained": False,
+        "same_tenant": {"a_to_a": a_to_a, "b_to_b": b_to_b},
+        "cross_tenant": {"a_to_b": a_to_b, "b_to_a": b_to_a},
+        "cross_tenant_blocked": cross_tenant_blocked,
+        "expected": "same-tenant GET succeeds and cross-token GET is rejected",
+    }
+
+
 def _main() -> int:
     args = _args()
     kubectl = Kubectl(args.kubectl)
@@ -334,6 +416,7 @@ def _main() -> int:
             args.controller_service_account,
         ),
         "secret_canary": _canary_scan(replica_sets, args.canary),
+        "provider_authorization": _provider_authorization_probe(args),
         "probes": probes,
         "interpretation": {
             "protected_profile_expected": {
@@ -342,6 +425,7 @@ def _main() -> int:
                 "metadata_reachable": False,
                 "ambient_host_paths_readable": False,
                 "secret_canary_in_replicaset_annotations": False,
+                "cross_tenant_provider_get_blocked": True,
             },
             "note": (
                 "This file is raw evaluation evidence. A failed probe is not by itself proof of "
