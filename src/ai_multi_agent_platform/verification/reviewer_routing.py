@@ -111,8 +111,11 @@ class CapabilityRoleReviewerResolver(ReviewerAssignmentResolver):
 
         for agent_id in selector.candidate_agent_ids:
             try:
-                definition = repository.get_agent(agent_id)
-                revision = repository.get_agent_revision(agent_id, definition.current_revision)
+                agent_definition = repository.get_agent(agent_id)
+                revision = repository.get_agent_revision(
+                    agent_id,
+                    agent_definition.current_revision,
+                )
             except ContractError as exc:
                 if exc.code is ErrorCode.NOT_FOUND:
                     continue
@@ -136,8 +139,11 @@ class CapabilityRoleReviewerResolver(ReviewerAssignmentResolver):
 
         for team_id in selector.candidate_team_ids:
             try:
-                definition = repository.get_team(team_id)
-                team = repository.get_team_revision(team_id, definition.current_revision)
+                team_definition = repository.get_team(team_id)
+                team = repository.get_team_revision(
+                    team_id,
+                    team_definition.current_revision,
+                )
             except ContractError as exc:
                 if exc.code is ErrorCode.NOT_FOUND:
                     continue
