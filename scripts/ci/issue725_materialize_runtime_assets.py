@@ -41,8 +41,7 @@ def check_assets(root: Path) -> list[str]:
             continue
         if not target.is_file():
             problems.append(
-                f"missing generated runtime asset: {asset.generated} "
-                f"(run {MATERIALIZE_COMMAND})"
+                f"missing generated runtime asset: {asset.generated} (run {MATERIALIZE_COMMAND})"
             )
             continue
         if source.read_bytes() != target.read_bytes():
