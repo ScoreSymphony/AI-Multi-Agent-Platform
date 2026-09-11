@@ -80,9 +80,9 @@ class ModelGatewayTargetResult:
 class ModelGatewayDelta:
     """Gateway overhead relative to the direct endpoint using the same workload."""
 
-    p50_latency_delta_ms: float
-    p95_latency_delta_ms: float
-    p99_latency_delta_ms: float
+    p50_latency_delta_ms: float | None
+    p95_latency_delta_ms: float | None
+    p99_latency_delta_ms: float | None
     throughput_ratio: float | None
 
 
@@ -160,10 +160,23 @@ async def run_model_gateway_comparison(
                 result.throughput_operations_per_second / direct.throughput_operations_per_second,
                 6,
             )
+        latency_comparable = direct.latency.count > 0 and result.latency.count > 0
         deltas[target_name] = ModelGatewayDelta(
-            p50_latency_delta_ms=round(result.latency.p50_ms - direct.latency.p50_ms, 3),
-            p95_latency_delta_ms=round(result.latency.p95_ms - direct.latency.p95_ms, 3),
-            p99_latency_delta_ms=round(result.latency.p99_ms - direct.latency.p99_ms, 3),
+            p50_latency_delta_ms=(
+                round(result.latency.p50_ms - direct.latency.p50_ms, 3)
+                if latency_comparable
+                else None
+            ),
+            p95_latency_delta_ms=(
+                round(result.latency.p95_ms - direct.latency.p95_ms, 3)
+                if latency_comparable
+                else None
+            ),
+            p99_latency_delta_ms=(
+                round(result.latency.p99_ms - direct.latency.p99_ms, 3)
+                if latency_comparable
+                else None
+            ),
             throughput_ratio=throughput_ratio,
         )
 
@@ -217,10 +230,9 @@ async def _run_target(
                 error_counts["unexpected_error"] += 1
             else:
                 successful += 1
+                latencies.append(time.perf_counter() - operation_started)
                 if response.model_ref != spec.canonical_model_id:
                     identity_preserved = False
-            finally:
-                latencies.append(time.perf_counter() - operation_started)
 
     target_started = time.perf_counter()
     await asyncio.gather(*(invoke(index) for index in range(spec.operation_count)))
