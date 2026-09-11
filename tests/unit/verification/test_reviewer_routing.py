@@ -67,9 +67,7 @@ def _resolver(
     policy: VerificationPolicy,
     selector: ReviewerDiscoverySelector,
 ) -> CapabilityRoleReviewerResolver:
-    return CapabilityRoleReviewerResolver(
-        {(policy.policy_id, policy.version, "review"): selector}
-    )
+    return CapabilityRoleReviewerResolver({(policy.policy_id, policy.version, "review"): selector})
 
 
 def test_scoped_role_resolution_pins_current_agent_revision() -> None:
