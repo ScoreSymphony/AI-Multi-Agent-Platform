@@ -22,8 +22,30 @@ def _normalize(report: dict[str, object], *, process_ok: bool = True):
     )
 
 
+def _complete_report(**overrides: object) -> dict[str, object]:
+    report: dict[str, object] = {
+        "execution_successful": True,
+        "analysis_completeness": {
+            "is_complete": True,
+            "status": "complete",
+            "coverage_percent": 100.0,
+            "ledger_exceptions": [],
+            "limitations": [],
+        },
+        "issues": [],
+        "risk_assessment": {
+            "score": 0,
+            "severity": "LOW",
+            "recommendation": "SAFE",
+        },
+        "suppressed_count": 0,
+    }
+    report.update(overrides)
+    return report
+
+
 def test_empty_completed_report_is_clean_advisory_evidence() -> None:
-    evidence = _normalize({"findings": [], "analysis_completeness": "complete"})
+    evidence = _normalize(_complete_report())
 
     assert evidence.status == "clean"
     assert evidence.complete is True
@@ -31,34 +53,52 @@ def test_empty_completed_report_is_clean_advisory_evidence() -> None:
     assert evidence.provider_revision == REVISION
 
 
-def test_provider_findings_are_normalized_without_becoming_trust_state() -> None:
+def test_provider_issues_are_normalized_without_becoming_trust_state() -> None:
     evidence = _normalize(
-        {
-            "findings": [
+        _complete_report(
+            issues=[
                 {
-                    "id": "UPSTREAM-1",
+                    "finding_id": "finding-upstream-1",
+                    "id": "P1",
                     "category": "prompt_injection",
                     "severity": "HIGH",
                     "confidence": 0.9,
-                    "title": "Synthetic finding",
-                    "location": {"path": "SKILL.md", "line": 4},
+                    "message": "Synthetic finding",
+                    "location": {"file": "SKILL.md", "start_line": 4},
                 }
             ],
-            "safe_to_install": False,
-            "risk_score": 91,
-        }
+            risk_assessment={
+                "score": 91,
+                "severity": "CRITICAL",
+                "recommendation": "DO_NOT_INSTALL",
+            },
+        )
     )
 
     assert evidence.status == "findings"
     assert evidence.findings[0].severity == "high"
-    assert evidence.findings[0].provider_id == "UPSTREAM-1"
-    assert evidence.provider_metadata["safe_to_install"] is False
+    assert evidence.findings[0].provider_id == "finding-upstream-1"
+    assert evidence.findings[0].path == "SKILL.md"
+    assert evidence.findings[0].line == 4
+    assert evidence.provider_metadata["risk_assessment"] == {
+        "score": 91,
+        "severity": "CRITICAL",
+        "recommendation": "DO_NOT_INSTALL",
+    }
     assert not hasattr(evidence, "trust_state")
     assert not hasattr(evidence, "approved")
 
 
-def test_scanner_failure_can_never_normalize_to_clean() -> None:
-    evidence = _normalize({"findings": []}, process_ok=False)
+def test_provider_execution_failure_can_never_normalize_to_clean() -> None:
+    evidence = _normalize(_complete_report(execution_successful=False))
+
+    assert evidence.status == "degraded"
+    assert evidence.complete is False
+    assert "provider_execution_failed" in evidence.degraded_reasons
+
+
+def test_scanner_process_failure_can_never_normalize_to_clean() -> None:
+    evidence = _normalize(_complete_report(), process_ok=False)
 
     assert evidence.status == "degraded"
     assert evidence.complete is False
@@ -66,11 +106,37 @@ def test_scanner_failure_can_never_normalize_to_clean() -> None:
 
 
 def test_partial_provider_report_can_never_normalize_to_clean() -> None:
-    evidence = _normalize({"findings": [], "analysis_completeness": "partial"})
+    evidence = _normalize(
+        _complete_report(
+            analysis_completeness={
+                "is_complete": False,
+                "status": "partial",
+                "coverage_percent": 75.0,
+                "ledger_exceptions": [{"reason_code": "read_error"}],
+            }
+        )
+    )
 
     assert evidence.status == "degraded"
     assert evidence.complete is False
-    assert "provider_analysis_completeness=partial" in evidence.degraded_reasons
+    assert "provider_analysis_incomplete" in evidence.degraded_reasons
+    assert "provider_analysis_status=partial" in evidence.degraded_reasons
+
+
+def test_high_risk_recommendation_remains_metadata_not_failure() -> None:
+    evidence = _normalize(
+        _complete_report(
+            risk_assessment={
+                "score": 100,
+                "severity": "CRITICAL",
+                "recommendation": "DO_NOT_INSTALL",
+            }
+        )
+    )
+
+    assert evidence.complete is True
+    assert evidence.status == "clean"
+    assert evidence.provider_metadata["risk_assessment"]["recommendation"] == "DO_NOT_INSTALL"
 
 
 def test_container_command_enforces_baseline_isolation(tmp_path: Path) -> None:
