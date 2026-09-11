@@ -1,6 +1,6 @@
 # AI Multi-Agent Platform
 
-A general-purpose, self-hostable, model-agnostic and hardware-agnostic AI multi-agent platform.
+A general-purpose, self-hostable, model-agnostic and hardware-agnostic platform for defining, orchestrating, executing, observing and evaluating AI-assisted work across one or many machines.
 
 The platform is built around canonical tasks, plans, steps, runs, agents, tools, models, workers, nodes, workspaces, files, artifacts, results, verification, approvals and events. Concrete systems such as Hermes, Forge, LiteLLM, MCP-compatible tool servers, model runtimes, storage engines or workflow engines integrate behind replaceable platform-owned contracts rather than defining the platform itself.
 
@@ -17,17 +17,132 @@ The platform is built around canonical tasks, plans, steps, runs, agents, tools,
 
 ## Architecture at a glance
 
-The platform-owned kernel is the authority for externally visible Task/Run lifecycle state. Orchestrators, executors and other integrations consume platform contracts and must not become implicit owners of canonical lifecycle or domain state.
+The platform owns the canonical workflow and lifecycle model:
+
+```text
+Goal
+  ↓
+Task
+  ↓
+Plan
+  ↓
+Steps / Subtasks
+  ↓
+Runs / Worker Jobs
+  ↓
+Artifacts
+  ↓
+Result
+```
+
+The platform-owned kernel is authoritative for externally visible Task/Run lifecycle state. Orchestrators, executors, model providers, tool providers, storage systems and other integrations consume platform contracts and must not become implicit owners of canonical lifecycle or domain state.
+
+```text
+Clients / External Applications
+            │
+            ▼
+      Control Plane API
+            │
+            ▼
+      Platform Kernel
+            │
+   ┌────────┼────────┐
+   ▼        ▼        ▼
+Orchestration  Execution  Providers
+   │           │       models / tools /
+   │           │       memory / files /
+   │           │       knowledge / events
+   └───────────┴───────────────┐
+                               ▼
+                       Nodes / Workers
+```
 
 The authoritative product direction lives in [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md). Non-negotiable architecture boundaries and invariants live in [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md). The canonical domain model is defined in [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md), replaceable provider boundaries in [`docs/CONTRACTS.md`](docs/CONTRACTS.md), Task/Run lifecycle ownership and recovery in [`docs/KERNEL.md`](docs/KERNEL.md), and top-level Python package ownership in [`docs/PACKAGE_BOUNDARIES.md`](docs/PACKAGE_BOUNDARIES.md).
 
 Material architecture decisions are recorded under [`docs/adr/`](docs/adr/README.md). Implementations must not silently contradict the normative product or architecture documents.
 
+## Implemented platform areas
+
+The repository has moved beyond foundational scaffolding into active product integration, acceptance, hardening and operating-envelope work. Implemented platform areas include:
+
+- canonical lifecycle/domain ownership and Control Plane APIs;
+- execution, model, tool and provider boundaries;
+- Agents and Agent Teams;
+- authentication, authorization and approvals;
+- Workspaces, files, Artifacts and results;
+- Memory, Knowledge and Search;
+- Automations and durable coordination of Plans and Steps;
+- distributed Worker execution and compute abstractions;
+- Registry/Marketplace foundations;
+- release/update foundations and conformance infrastructure.
+
+This is deliberately a stable capability summary rather than an issue-by-issue progress ledger. For the curated current integration state, use [`docs/STATUS.md`](docs/STATUS.md). For individual work items, GitHub issues, dependencies, pull-request checks and the exact merged repository state remain authoritative.
+
+## Quickstart for development
+
+Requirements:
+
+- Python 3.12+
+- Git
+
+Clone the repository and create an isolated environment:
+
+```bash
+git clone https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git
+cd AI-Multi-Agent-Platform
+python -m venv .venv
+```
+
+Activate it on Linux/macOS:
+
+```bash
+source .venv/bin/activate
+```
+
+or in Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Install the project with development dependencies:
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+Run the CI-equivalent validation path:
+
+```bash
+ruff format --check .
+ruff check .
+mypy
+pytest
+python -m build
+```
+
+The complete development setup and validation contract lives in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+
+## Repository layout
+
+```text
+AI-Multi-Agent-Platform/
+├── src/ai_multi_agent_platform/   # platform runtime, domain and adapters
+├── frontend/                      # web/control-plane client
+├── tests/                         # automated validation and conformance tests
+├── docs/                          # product, architecture, operations and acceptance docs
+├── upstream/                      # upstream provenance material
+├── pyproject.toml
+├── CONTRIBUTING.md
+└── AGENTS.md
+```
+
+Runtime integrations implement platform-owned contracts under `src/ai_multi_agent_platform/` rather than creating parallel ownership of canonical domain state.
+
 ## Start here
 
 For a fresh checkout, environment setup and the CI-equivalent local validation path, follow [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). Contribution and architecture-change rules live in [`CONTRIBUTING.md`](CONTRIBUTING.md), and coding-agent execution/dependency rules live in [`AGENTS.md`](AGENTS.md).
-
-Platform-owned Python runtime, domain, adapter and Worker implementations live under `src/ai_multi_agent_platform/`; `frontend/` contains the web client; `tests/` contains automated validation; and `docs/` contains product, architecture, operations and acceptance documentation.
 
 The canonical single-node prototype profiles are documented in [`docs/PROTOTYPE_ACCEPTANCE.md`](docs/PROTOTYPE_ACCEPTANCE.md). Wider platform acceptance and optional-profile reporting live in [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md).
 
