@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import Mapping
 
 import pytest
 
@@ -25,7 +24,6 @@ from ai_multi_agent_platform.contracts import (
     HealthStatus,
     ProviderDescriptor,
 )
-from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.models import (
     ModelCapabilities,
