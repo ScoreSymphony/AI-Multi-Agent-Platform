@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
 from ai_multi_agent_platform.agents import AgentRunRecord, AgentRunStatus, AgentRuntime
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.domain import TaskStatus
 
 from .agent_workflow import AutomaticReviewerWorkflow, ReviewerRuntimeOptions
 from .models import VerificationRequest, VerificationRequestStatus, VerifierKind
@@ -21,6 +23,19 @@ _REVIEW_CONTEXT_SCHEMA = "verification-reviewer-agent-v1"
 _STAGED_DECISION_KEY = "automatic_reviewer_decision"
 _RECOVERY_TELEMETRY_KEY = "automatic_reviewer_recovery"
 _RECOVERY_TELEMETRY_SCHEMA = "automatic-reviewer-recovery-v1"
+_RECOVERY_CAUSATION_ID = "automatic-reviewer-startup-recovery"
+
+
+class ReviewerTaskState(Protocol):
+    """Minimum canonical Task projection needed by reviewer recovery."""
+
+    status: TaskStatus
+
+
+class ReviewerTaskReader(Protocol):
+    """Read canonical Task state without taking lifecycle authority."""
+
+    async def get_task(self, task_id: str) -> ReviewerTaskState: ...
 
 
 class ReviewerRecoveryDisposition(StrEnum):
@@ -71,10 +86,12 @@ class AutomaticReviewerStartupReconciler:
         workflow: AutomaticReviewerWorkflow,
         agents: AgentRuntime,
         verification: VerificationService,
+        tasks: ReviewerTaskReader | None = None,
     ) -> None:
         self._workflow = workflow
         self._agents = agents
         self._verification = verification
+        self._tasks = tasks
 
     async def reconcile_startup(
         self,
@@ -119,6 +136,44 @@ class AutomaticReviewerStartupReconciler:
     ) -> ReviewerRecoveryRecord:
         runs_before = self._review_runs_for(request.verification_id)
         running = tuple(run for run in runs_before if run.status is AgentRunStatus.RUNNING)
+
+        task_cancelled = await self._task_cancelled(request)
+        if isinstance(task_cancelled, ReviewerRecoveryRecord):
+            return task_cancelled
+        if task_cancelled:
+            if request.status is VerificationRequestStatus.PENDING:
+                request = self._verification.cancel_request(
+                    request.verification_id,
+                    causation_id=_RECOVERY_CAUSATION_ID,
+                )
+            for run in running:
+                self._terminalize_stale_run(
+                    run,
+                    status=AgentRunStatus.CANCELLED,
+                    reason=(
+                        "automatic reviewer startup recovery cancelled stale execution because "
+                        "canonical Task is cancelled"
+                    ),
+                )
+            if len(running) > 1:
+                return ReviewerRecoveryRecord(
+                    verification_id=request.verification_id,
+                    task_id=request.task_id,
+                    disposition=ReviewerRecoveryDisposition.BLOCKED,
+                    reviewer_agent_run_id=_latest_run_id(running),
+                    reason=(
+                        "cancelled Task had multiple running reviewer AgentRuns; stale executions "
+                        "were cancelled but the conflicting history requires operator review"
+                    ),
+                )
+            return ReviewerRecoveryRecord(
+                verification_id=request.verification_id,
+                task_id=request.task_id,
+                disposition=ReviewerRecoveryDisposition.CANCELLED_STALE_RUN,
+                reviewer_agent_run_id=_latest_run_id(running),
+                reason="canonical Task is cancelled",
+            )
+
         if len(running) > 1:
             return ReviewerRecoveryRecord(
                 verification_id=request.verification_id,
@@ -237,6 +292,26 @@ class AutomaticReviewerStartupReconciler:
             replacement_agent_run_id=replacement,
         )
 
+    async def _task_cancelled(
+        self,
+        request: VerificationRequest,
+    ) -> bool | ReviewerRecoveryRecord:
+        if self._tasks is None:
+            return False
+        try:
+            task = await self._tasks.get_task(request.task_id)
+        except Exception as exc:  # noqa: BLE001 - missing/corrupt Task must fail closed
+            return ReviewerRecoveryRecord(
+                verification_id=request.verification_id,
+                task_id=request.task_id,
+                disposition=ReviewerRecoveryDisposition.BLOCKED,
+                reviewer_agent_run_id=_latest_run_id(
+                    self._review_runs_for(request.verification_id)
+                ),
+                reason=f"cannot resolve canonical Task during reviewer recovery: {exc}",
+            )
+        return task.status is TaskStatus.CANCELLED
+
     def _terminalize_stale_run(
         self,
         run: AgentRunRecord,
@@ -284,4 +359,5 @@ __all__ = [
     "AutomaticReviewerStartupReconciler",
     "ReviewerRecoveryDisposition",
     "ReviewerRecoveryRecord",
+    "ReviewerTaskReader",
 ]
