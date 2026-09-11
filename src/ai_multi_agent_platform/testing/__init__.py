@@ -34,7 +34,8 @@ from .fakes import (
     FakeToolProvider,
     FakeWorkerProvider,
 )
-from .scoped_memory import FakeScopedMemoryProvider, assert_scoped_memory_provider_contract
+from .scoped_memory import FakeScopedMemoryProvider
+from .scoped_memory_hardening import assert_scoped_memory_provider_contract
 
 __all__ = [
     "FakeAuthorizationProvider",
