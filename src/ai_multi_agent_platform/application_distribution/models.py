@@ -186,15 +186,11 @@ class BuildSpecification:
         )
         environment = _environment(self.environment, "environment")
         if redact_sensitive(dict(environment)) != dict(environment):
-            raise ValueError(
-                "sensitive-looking environment variables must use secret_environment"
-            )
+            raise ValueError("sensitive-looking environment variables must use secret_environment")
         secret_environment = _secret_environment(self.secret_environment)
         overlap = set(environment) & set(secret_environment)
         if overlap:
-            raise ValueError(
-                "environment and secret_environment must not define the same variable"
-            )
+            raise ValueError("environment and secret_environment must not define the same variable")
         object.__setattr__(self, "environment", environment)
         object.__setattr__(self, "secret_environment", secret_environment)
 
