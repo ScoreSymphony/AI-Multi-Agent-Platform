@@ -44,12 +44,12 @@ from ai_multi_agent_platform.verification import (
 
 from .models import (
     TERMINAL_RUN_STATUSES,
-    RecoveryDisposition,
-    RecoveryEntry,
     RecoveryReport,
     RunState,
     TaskState,
 )
+from .queries import KernelQueries
+from .recovery import KernelRecovery
 from .repository import (
     CommandRecord,
     EventRepository,
@@ -92,8 +92,14 @@ class PlatformKernel:
         self._repository = repository or InMemoryKernelRepository()
         self._tasks = task_repository or EventSourcedTaskRepository(self._repository)
         self._runs = run_repository or EventSourcedRunRepository(self._repository)
+        self._queries = KernelQueries(
+            repository=self._repository,
+            task_repository=self._tasks,
+            run_repository=self._runs,
+        )
         self._event_sink = event_sink
         self._completion_authority = completion_authority
+        self._recovery = KernelRecovery(self)
 
     async def create_task(
         self,
@@ -175,23 +181,13 @@ class PlatformKernel:
         return await self.get_task(canonical_task_id)
 
     async def get_task(self, task_id: str) -> TaskState:
-        validate_id(task_id, "task")
-        return await self._tasks.get_task(task_id)
+        return await self._queries.get_task(task_id)
 
     async def get_run(self, task_id: str, run_id: str) -> RunState:
-        validate_id(task_id, "task")
-        validate_id(run_id, "run")
-        run = await self._runs.get_run(task_id, run_id)
-        if run.run.correlation_id != task_id:
-            raise ContractError(
-                ErrorCode.NOT_FOUND,
-                f"run {run_id} does not belong to task {task_id}",
-            )
-        return run
+        return await self._queries.get_run(task_id, run_id)
 
     async def history(self, task_id: str) -> tuple[PlatformEvent, ...]:
-        validate_id(task_id, "task")
-        return await self._repository.read_events(task_id)
+        return await self._queries.history(task_id)
 
     async def update_task(
         self,
@@ -1093,84 +1089,10 @@ class PlatformKernel:
             authority.invalidate_task_subject(task_id)
 
     async def recover_task(self, task_id: str) -> RecoveryReport:
-        task = await self.get_task(task_id)
-        entries: list[RecoveryEntry] = []
-        for run_id in task.run_ids:
-            run = await self.get_run(task_id, run_id)
-            before = run.status
-            disposition: RecoveryDisposition
-            if before is RunStatus.QUEUED:
-                disposition = RecoveryDisposition.QUEUED_PENDING
-            elif before is RunStatus.STARTING:
-                try:
-                    snapshot = await self._lifecycle.get(
-                        run_id,
-                        self._context(task, f"recovery:{run_id}"),
-                    )
-                except ContractError as exc:
-                    if exc.code is not ErrorCode.NOT_FOUND:
-                        raise
-                    await self._dispatch_started_run(
-                        task_id=task_id,
-                        run_id=run_id,
-                        causation_id=f"recovery:{run_id}",
-                        actor_ref="service:platform-kernel",
-                        source="recovery",
-                    )
-                    disposition = RecoveryDisposition.REDISPATCHED
-                else:
-                    await self._apply_snapshot_system(
-                        task_id=task_id,
-                        run_id=run_id,
-                        snapshot=snapshot,
-                        causation_id=f"recovery:{run_id}",
-                        source="recovery",
-                    )
-                    disposition = RecoveryDisposition.RECONCILED
-            elif before is RunStatus.RUNNING:
-                try:
-                    snapshot = await self._lifecycle.get(
-                        run_id,
-                        self._context(task, f"recovery:{run_id}"),
-                    )
-                except ContractError as exc:
-                    if exc.code is not ErrorCode.NOT_FOUND:
-                        raise
-                    await self._mark_recovery_required(
-                        task_id=task_id,
-                        run_id=run_id,
-                        reason="canonical_running_backend_not_found",
-                        causation_id=f"recovery:{run_id}",
-                    )
-                    disposition = RecoveryDisposition.ORPHANED_RECONCILIATION_REQUIRED
-                else:
-                    await self._apply_snapshot_system(
-                        task_id=task_id,
-                        run_id=run_id,
-                        snapshot=snapshot,
-                        causation_id=f"recovery:{run_id}",
-                        source="recovery",
-                    )
-                    disposition = RecoveryDisposition.RECONCILED
-            else:
-                disposition = RecoveryDisposition.TERMINAL_UNCHANGED
-            after = (await self.get_run(task_id, run_id)).status
-            entries.append(
-                RecoveryEntry(
-                    run_id=run_id,
-                    before=before,
-                    after=after,
-                    disposition=disposition,
-                )
-            )
-        return RecoveryReport(task_id=task_id, entries=tuple(entries))
+        return await self._recovery.recover_task(task_id)
 
     async def recover_all(self) -> tuple[RecoveryReport, ...]:
-        reports: list[RecoveryReport] = []
-        for stream_id in await self._repository.list_stream_ids():
-            if stream_id.startswith("task_"):
-                reports.append(await self.recover_task(stream_id))
-        return tuple(reports)
+        return await self._recovery.recover_all()
 
     async def _dispatch_started_run(
         self,
@@ -1612,32 +1534,10 @@ class PlatformKernel:
         subject_type: RunSubjectType,
         subject_id: str,
     ) -> None:
-        if subject_type == "task":
-            if subject_id != task.task_id:
-                raise ContractError(
-                    ErrorCode.CONFLICT,
-                    f"task run subject {subject_id} does not match owning task {task.task_id}",
-                )
-            return
-        if task.plan_ref is None:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"task {task.task_id} has no canonical plan for step run {subject_id}",
-            )
-        if subject_id not in task.step_ids:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"step {subject_id} does not belong to current plan {task.plan_ref} "
-                f"for task {task.task_id}",
-            )
+        KernelQueries.validate_run_subject(task, subject_type, subject_id)
 
     async def _active_runs(self, task: TaskState) -> tuple[RunState, ...]:
-        active: list[RunState] = []
-        for run_id in task.run_ids:
-            run = await self.get_run(task.task_id, run_id)
-            if run.status not in TERMINAL_RUN_STATUSES:
-                active.append(run)
-        return tuple(active)
+        return await self._queries.active_runs(task)
 
     async def _active_run_for_subject(
         self,
@@ -1645,15 +1545,7 @@ class PlatformKernel:
         subject_type: RunSubjectType,
         subject_id: str,
     ) -> RunState | None:
-        for run_id in reversed(task.run_ids):
-            run = await self.get_run(task.task_id, run_id)
-            if (
-                run.run.subject_type == subject_type
-                and run.run.subject_id == subject_id
-                and run.status not in TERMINAL_RUN_STATUSES
-            ):
-                return run
-        return None
+        return await self._queries.active_run_for_subject(task, subject_type, subject_id)
 
     async def _next_attempt(
         self,
@@ -1661,19 +1553,10 @@ class PlatformKernel:
         subject_type: RunSubjectType,
         subject_id: str,
     ) -> int:
-        latest = 0
-        for run_id in task.run_ids:
-            run = await self.get_run(task.task_id, run_id)
-            if run.run.subject_type == subject_type and run.run.subject_id == subject_id:
-                latest = max(latest, run.run.attempt)
-        return latest + 1
+        return await self._queries.next_attempt(task, subject_type, subject_id)
 
     async def _latest_active_run(self, task: TaskState) -> RunState | None:
-        for run_id in reversed(task.run_ids):
-            run = await self.get_run(task.task_id, run_id)
-            if run.status not in TERMINAL_RUN_STATUSES:
-                return run
-        return None
+        return await self._queries.latest_active_run(task)
 
     async def _task_command(
         self,
