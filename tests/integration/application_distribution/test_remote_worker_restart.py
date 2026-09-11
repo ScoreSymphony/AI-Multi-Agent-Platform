@@ -158,9 +158,14 @@ def test_control_plane_restart_reconciles_same_application_build_without_redispa
     tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
-        release, releases, bindings, request, workspace_id, snapshot_id = (
-            await _release_and_binding()
-        )
+        (
+            release,
+            releases,
+            bindings,
+            request,
+            workspace_id,
+            snapshot_id,
+        ) = await _release_and_binding()
         files = LocalFileProvider(tmp_path / "files", tmp_path / "files.sqlite3")
         state_path = tmp_path / "distributed-state.json"
         base_time = datetime.now(UTC)
@@ -246,9 +251,14 @@ def test_selected_worker_disappearing_before_dispatch_fails_retryably_without_st
     tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
-        _release, releases, bindings, request, _workspace_id, _snapshot_id = (
-            await _release_and_binding()
-        )
+        (
+            _release,
+            releases,
+            bindings,
+            request,
+            _workspace_id,
+            _snapshot_id,
+        ) = await _release_and_binding()
         files = LocalFileProvider(tmp_path / "files", tmp_path / "files.sqlite3")
         registry = DistributedRegistry()
         runtime = DistributedRuntime(registry)
