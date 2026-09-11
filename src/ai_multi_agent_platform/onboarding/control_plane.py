@@ -10,6 +10,7 @@ from ai_multi_agent_platform.control_plane.extensions import CommandHandler, Res
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
 from .component_setup import (
+    COMPONENT_SETUP_RESOURCE_ID,
     ONBOARDING_SAVE_COMPONENT_PROFILE_COMMAND,
     ONBOARDING_SELECT_COMPONENT_PROFILE_COMMAND,
     OnboardingComponentSetupService,
@@ -21,6 +22,8 @@ from .service import (
     ONBOARDING_CONFIGURE_MODEL_COMMAND,
     OnboardingService,
 )
+
+COMPONENT_SETUP_COLLECTION = "component-setup"
 
 
 class OnboardingControlPlane(Protocol):
@@ -66,6 +69,54 @@ class OnboardingResourceService:
         if self.component_setup is not None:
             status["component_setup"] = self.component_setup.status()
         return status
+
+
+class ComponentSetupResourceService:
+    """Expose provider-neutral discovery/profile state through the versioned Control Plane."""
+
+    def __init__(self, component_setup: OnboardingComponentSetupService) -> None:
+        self.component_setup = component_setup
+
+    async def list_resources(
+        self,
+        context: RequestContext,
+        query: PageQuery,
+    ) -> tuple[dict[str, JsonValue], ...]:
+        del context, query
+        return (self.component_setup.status(),)
+
+    async def get_resource(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> dict[str, JsonValue]:
+        del context
+        if resource_id != COMPONENT_SETUP_RESOURCE_ID:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"component setup resource not found: {resource_id}",
+            )
+        return self.component_setup.status()
+
+
+def register_component_setup_control_plane(
+    control_plane: OnboardingControlPlane,
+    component_setup: OnboardingComponentSetupService,
+) -> None:
+    """Register #799 discovery/profile surfaces without replacing owner-domain APIs."""
+
+    control_plane.register_resource_service(
+        COMPONENT_SETUP_COLLECTION,
+        ComponentSetupResourceService(component_setup),
+    )
+    control_plane.register_command(
+        ONBOARDING_SAVE_COMPONENT_PROFILE_COMMAND,
+        component_setup.save_profile,
+    )
+    control_plane.register_command(
+        ONBOARDING_SELECT_COMPONENT_PROFILE_COMMAND,
+        component_setup.select_profile,
+    )
 
 
 def register_onboarding_control_plane(
