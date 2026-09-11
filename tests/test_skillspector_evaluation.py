@@ -13,6 +13,20 @@ from experiments.skillspector.runner import (
 
 VERSION = "2.11.2"
 REVISION = "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc"
+HIGH_RISK_ISSUE = {
+    "finding_id": "finding-upstream-1",
+    "id": "P1",
+    "category": "prompt_injection",
+    "severity": "HIGH",
+    "confidence": 0.9,
+    "message": "Synthetic finding",
+    "location": {"file": "SKILL.md", "start_line": 4},
+}
+HIGH_RISK_ASSESSMENT = {
+    "score": 91,
+    "severity": "CRITICAL",
+    "recommendation": "DO_NOT_INSTALL",
+}
 
 
 def _normalize(report: dict[str, object], *, process_ok: bool = True):
@@ -60,22 +74,8 @@ def test_empty_completed_report_is_clean_advisory_evidence() -> None:
 def test_provider_issues_are_normalized_without_becoming_trust_state() -> None:
     evidence = _normalize(
         _complete_report(
-            issues=[
-                {
-                    "finding_id": "finding-upstream-1",
-                    "id": "P1",
-                    "category": "prompt_injection",
-                    "severity": "HIGH",
-                    "confidence": 0.9,
-                    "message": "Synthetic finding",
-                    "location": {"file": "SKILL.md", "start_line": 4},
-                }
-            ],
-            risk_assessment={
-                "score": 91,
-                "severity": "CRITICAL",
-                "recommendation": "DO_NOT_INSTALL",
-            },
+            issues=[HIGH_RISK_ISSUE],
+            risk_assessment=HIGH_RISK_ASSESSMENT,
         )
     )
 
@@ -84,11 +84,7 @@ def test_provider_issues_are_normalized_without_becoming_trust_state() -> None:
     assert evidence.findings[0].provider_id == "finding-upstream-1"
     assert evidence.findings[0].path == "SKILL.md"
     assert evidence.findings[0].line == 4
-    assert evidence.provider_metadata["risk_assessment"] == {
-        "score": 91,
-        "severity": "CRITICAL",
-        "recommendation": "DO_NOT_INSTALL",
-    }
+    assert evidence.provider_metadata["risk_assessment"] == HIGH_RISK_ASSESSMENT
     assert not hasattr(evidence, "trust_state")
     assert not hasattr(evidence, "approved")
 
@@ -154,24 +150,27 @@ def test_missing_required_provider_structure_can_never_normalize_to_clean() -> N
     assert "provider_findings_missing" in evidence.degraded_reasons
 
 
-def test_high_risk_recommendation_remains_metadata_not_failure() -> None:
+def test_high_risk_recommendation_remains_metadata_not_trust_state() -> None:
     evidence = _normalize(
         _complete_report(
-            risk_assessment={
-                "score": 100,
-                "severity": "CRITICAL",
-                "recommendation": "DO_NOT_INSTALL",
-            }
+            issues=[HIGH_RISK_ISSUE],
+            risk_assessment=HIGH_RISK_ASSESSMENT,
         )
     )
 
     assert evidence.complete is True
-    assert evidence.status == "clean"
+    assert evidence.status == "findings"
     assert evidence.provider_metadata["risk_assessment"]["recommendation"] == "DO_NOT_INSTALL"
+    assert not hasattr(evidence, "trust_state")
 
 
 def test_exit_code_one_with_successful_report_is_usable_evidence() -> None:
-    assert scan_result_is_usable(1, _complete_report()) is True
+    report = _complete_report(
+        issues=[HIGH_RISK_ISSUE],
+        risk_assessment=HIGH_RISK_ASSESSMENT,
+    )
+
+    assert scan_result_is_usable(1, report) is True
 
 
 def test_failed_or_unstructured_scan_result_is_not_usable_evidence() -> None:
