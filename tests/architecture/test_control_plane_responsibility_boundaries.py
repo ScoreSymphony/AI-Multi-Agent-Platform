@@ -9,6 +9,7 @@ SERVICE = CONTROL_PLANE_ROOT / "service.py"
 SCOPE_STORE = CONTROL_PLANE_ROOT / "scope_store.py"
 HEALTH = CONTROL_PLANE_ROOT / "health.py"
 MODEL_REGISTRY = CONTROL_PLANE_ROOT / "model_registry_service.py"
+AUTHORIZATION = CONTROL_PLANE_ROOT / "authorization_service.py"
 
 
 def _tree(path: Path) -> ast.Module:
@@ -94,6 +95,7 @@ def test_focused_control_plane_components_do_not_depend_back_on_facade() -> None
     _assert_no_facade_dependency(SCOPE_STORE)
     _assert_no_facade_dependency(HEALTH)
     _assert_no_facade_dependency(MODEL_REGISTRY)
+    _assert_no_facade_dependency(AUTHORIZATION)
 
 
 def test_control_plane_keeps_scope_store_as_injected_stable_boundary() -> None:
@@ -136,4 +138,28 @@ def test_model_registry_operations_stay_behind_focused_component() -> None:
 
     component = _class(MODEL_REGISTRY, "ControlPlaneModelRegistry")
     for component_method in (*delegated.values(), "require_registry"):
+        _method(component, component_method)
+
+
+def test_authorization_stays_behind_shared_boundary() -> None:
+    facade = _class(SERVICE, "ControlPlane")
+    delegated = {
+        "_authorize_for_task": "authorize_for_task",
+        "_allowed_for_task": "allowed_for_task",
+        "_authorize": "authorize",
+        "_allowed": "allowed",
+        "_authorization_decision": "decision",
+    }
+    for facade_method, component_method in delegated.items():
+        _assert_delegate(_method(facade, facade_method), "_authorization", component_method)
+
+    component = _class(AUTHORIZATION, "ControlPlaneAuthorization")
+    for component_method in (
+        "authorize_for_task",
+        "allowed_for_task",
+        "authorize",
+        "allowed",
+        "decision",
+        "payload_digest",
+    ):
         _method(component, component_method)
