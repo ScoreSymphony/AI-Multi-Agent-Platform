@@ -31,17 +31,21 @@ This evaluation must not:
 
 ## Pinned upstream evidence
 
-| Field | Evaluated value |
-| --- | --- |
-| Upstream | `sgl-project/sglang` |
-| Release | `v0.5.19` |
-| Release commit | `0bcd822` (GitHub release commit identifier) |
-| Release date | 2026-09-05 |
-| License | Apache-2.0 |
-| Python | upstream package metadata requires Python >= 3.10 |
-| Platform evaluation date | 2026-09-12 |
+The measured campaign is frozen to exact backend revisions so later upstream releases cannot silently change the comparison basis.
 
-Primary upstream sources:
+| Backend | Role | Release | Commit | License |
+| --- | --- | --- | --- | --- |
+| SGLang | candidate | `v0.5.19` | `0bcd822377da7b5718e674eaf9c870d349424dd1` | Apache-2.0 |
+| vLLM | GPU-serving comparator | `v0.29.0` | `98dff2a81d747d1dba01a47f939f48c3526d4206` | Apache-2.0 |
+| Ollama | lighter local-path comparator | `v0.34.0` | `d8ab4b4f0ca24b51d3a46b3bf4f462e58ce66b1f` | MIT |
+
+Machine-readable source/revision/license provenance is stored in:
+
+- `config/inference-backend-upstream.sglang-v0.5.19.json`;
+- `config/inference-backend-upstream.vllm-v0.29.0.json`;
+- `config/inference-backend-upstream.ollama-v0.34.0.json`.
+
+Primary SGLang upstream sources used to design the campaign:
 
 - repository / license: <https://github.com/sgl-project/sglang>
 - release `v0.5.19`: <https://github.com/sgl-project/sglang/releases/tag/v0.5.19>
@@ -52,7 +56,7 @@ Primary upstream sources:
 - observability: <https://docs.sglang.ai/advanced_features/observability.html>
 - server arguments: <https://github.com/sgl-project/sglang/blob/main/docs/advanced_features/server_arguments.md>
 
-The release tag is the reproducibility anchor for this issue. A later SGLang release requires a new evidence run; documentation observed on `main` is capability-discovery evidence only and is not evidence that every documented feature behaves identically on `v0.5.19`.
+The exact release commits are the reproducibility anchors. Moving `main`/`stable` documentation is capability-discovery evidence only and is not evidence that every documented feature behaves identically at a pinned revision.
 
 ## Verified upstream capabilities
 
@@ -73,15 +77,15 @@ The following claims are supported by upstream source/documentation and may be u
 
 ## Deployment assumptions to verify
 
-The candidate profile is **GPU-first Linux self-hosting**. No assumption is made that SGLang is appropriate for CPU-only, low-RAM VPS or every local workstation profile.
+The SGLang candidate profile is **GPU-first Linux self-hosting**. No assumption is made that SGLang is appropriate for CPU-only, low-RAM VPS or every local workstation profile. vLLM is the fixed GPU-serving comparator; Ollama is the fixed lighter local-path comparator for this campaign.
 
 The measured campaign must record, per run:
 
 - platform commit;
-- SGLang release/tag and image/package identity;
+- exact backend revision and image/package identity;
 - exact model and model revision;
 - quantization / dtype;
-- launch command and relevant SGLang flags;
+- launch command and relevant backend flags;
 - OS/kernel, Python, CUDA/ROCm and driver versions;
 - GPU model/count/VRAM and CPU/RAM;
 - Worker/node identity and network topology for distributed runs;
@@ -93,27 +97,29 @@ Raw benchmark output must be retained. Summary tables without the raw evidence a
 
 ## Representative comparison matrix
 
-Every row must use the same model revision and equivalent quantization/dtype where the backends support it. If exact equivalence is impossible, the run must be marked non-comparable instead of normalizing away the difference.
+SGLang and vLLM performance rows must use the same model revision and equivalent quantization/dtype. Ollama must use the same representative model representation where sufficiently equivalent. If equivalence is impossible, the local-path run must be marked non-comparable instead of normalizing away the difference.
 
-| Dimension | SGLang | vLLM | llama.cpp / Ollama path |
+| Dimension | SGLang | vLLM | Ollama local path |
 | --- | --- | --- | --- |
-| OpenAI contract | pending | pending | pending |
+| OpenAI contract | pending | pending | pending where supported |
 | cold model load | pending | pending | pending |
 | warm restart | pending | pending | pending |
-| streaming TTFT | pending | pending | pending |
-| steady-state TPOT / ITL | pending | pending | pending |
-| request throughput | pending | pending | pending |
-| concurrency 1 / 4 / 16 / 32 | pending | pending | pending |
+| streaming TTFT | pending | pending | pending where comparable |
+| steady-state TPOT / ITL | pending | pending | pending where comparable |
+| request throughput | pending | pending | pending where comparable |
+| concurrency 1 / 4 / 16 / 32 | pending | pending | pending where comparable |
 | VRAM peak / steady | pending | pending | pending |
 | host RAM peak / steady | pending | pending | pending |
-| structured JSON | pending | pending | pending |
-| tool calling | pending | pending | pending |
+| structured JSON | pending | pending | pending where supported |
+| tool calling | pending | pending | pending where supported |
 | cancellation | pending | pending | pending |
 | backend unavailable | pending | pending | pending |
 | OOM behavior / recovery | pending | pending | pending |
-| multi-GPU | pending | pending | not necessarily comparable |
-| multi-node / remote Worker | pending | pending | not necessarily comparable |
+| multi-GPU | pending | pending | not required for local-path role |
+| multi-node / remote Worker | pending | pending | not required for local-path role |
 | operational upgrade burden | pending | pending | pending |
+
+The source-backed pre-measurement operational comparison is recorded in `docs/evaluations/SGLANG_VLLM_OPERATIONAL_COMPARISON.md`. It narrows the live test plan but does not substitute for measured installation, resource, latency or recovery evidence.
 
 ## Required campaign
 
@@ -122,7 +128,7 @@ The machine-readable campaign definition lives in
 
 ### 1. Contract coverage
 
-Run the same canonical model requests through the platform `ModelRuntime -> ModelProvider` path for each candidate backend. Required cases:
+Run the same canonical model requests through the platform `ModelRuntime -> ModelProvider` path for each backend where the backend claims the relevant operation. Required SGLang cases:
 
 1. model discovery/health;
 2. non-streaming chat completion;
@@ -137,7 +143,7 @@ The OpenAI-compatible wire surface is an adapter detail. Passing raw `/v1/chat/c
 
 ### 2. Performance measurements
 
-Use an identical request corpus and fixed model revision. At minimum retain:
+Use an identical request corpus and fixed model revision for the decision-eligible SGLang-vLLM comparison. At minimum retain:
 
 - cold load time;
 - ready-to-first-request time;
@@ -183,13 +189,16 @@ A missing suitable multi-node environment is reported as `not_measured`, not as 
 
 | Evidence | Status | Reason |
 | --- | --- | --- |
-| upstream source/release/license pinned | complete | release `v0.5.19`, commit identifier `0bcd822`, Apache-2.0 |
-| documented API/capability research | complete | official upstream sources captured above |
+| SGLang source/release/license pinned | complete | `v0.5.19`, exact commit, Apache-2.0 |
+| vLLM comparator pinned | complete | `v0.29.0`, exact commit, Apache-2.0 |
+| Ollama local comparator pinned | complete | `v0.34.0`, exact commit, MIT |
+| documented API/capability research | complete | official upstream sources captured separately from measured claims |
+| source-backed operational surface | complete | comparison document records install/distribution/topology facts without performance claims |
 | architecture boundary | complete | remains behind #10 `ModelProvider`; #19/#799 ownership preserved |
-| reproducible campaign definition | complete | checked-in machine-readable campaign asset |
+| reproducible campaign/report contracts | complete | machine-readable campaign, report schema, revision validation and readiness CLI checked in |
 | live SGLang model smoke | not measured | requires compatible GPU Worker/runtime |
 | SGLang vs vLLM performance | not measured | requires same model/hardware campaign |
-| llama.cpp/Ollama comparison | not measured | requires same workload and comparability record |
+| Ollama local-path measurement | not measured | requires same workload and explicit comparability record |
 | VRAM/RAM evidence | not measured | requires live Worker telemetry |
 | failure/recovery campaign | not measured | requires live backend process/Worker |
 | multi-GPU/remote Worker | not measured | requires compatible hardware/topology |
@@ -203,6 +212,6 @@ No final #860 classification is asserted yet. The only valid final outcomes are:
 - `experimental_only` — useful and functional, but compatibility, recovery, operational burden or hardware coverage is not strong enough for a normal recommendation;
 - `reject/defer` — evidence does not justify integration/maintenance now.
 
-A final outcome requires all mandatory contract and failure cases plus at least one comparable SGLang-vLLM performance run on the same Worker/model revision. Missing multi-node hardware may remain explicitly `not_measured` if the decision does not claim multi-node support.
+A final outcome requires all mandatory SGLang contract and failure cases plus at least one comparable SGLang-vLLM performance run on the same Worker/model revision. Submitted reports for SGLang, vLLM or Ollama must use the exact campaign-pinned backend revision. Missing multi-node hardware may remain explicitly `not_measured` if the decision does not claim multi-node support. The lighter local-path evidence must be considered in the final policy classification even when exact model representation makes a direct performance comparison non-comparable.
 
 Until that gate is met, #799 must treat SGLang as **evaluated candidate, not recommended backend**.
