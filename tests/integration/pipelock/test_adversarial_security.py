@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
+PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_730_CONFIG")
 FIXTURE_DIR = Path(__file__).parents[2] / "fixtures"
 WEBSOCKET_CONFIG = FIXTURE_DIR / "pipelock_websocket_audit.yaml"
 ADVERSARIAL_SERVER = FIXTURE_DIR / "websocket_adversarial_server.py"
@@ -168,6 +169,7 @@ def _replace_nested_scalar(text: str, *, section: str, key: str, value: str) -> 
 
 def _strict_connect_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     assert PIPELOCK_TEST_BIN is not None
+    assert PIPELOCK_TEST_CONFIG is not None
     home = tmp_path / "strict-connect-home"
     home.mkdir()
     config = tmp_path / "strict-connect.yaml"
@@ -177,26 +179,7 @@ def _strict_connect_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     env["HOME"] = str(home)
     candidate_dir = Path(PIPELOCK_TEST_BIN).parent
 
-    subprocess.run(
-        (
-            PIPELOCK_TEST_BIN,
-            "init",
-            "--scan-home",
-            str(home),
-            "--output",
-            str(config),
-            "--preset",
-            "audit",
-            "--skip-canary",
-        ),
-        check=True,
-        capture_output=True,
-        text=True,
-        env=env,
-        cwd=candidate_dir,
-    )
-
-    text = config.read_text(encoding="utf-8")
+    text = Path(PIPELOCK_TEST_CONFIG).read_text(encoding="utf-8")
     text = _replace_nested_scalar(
         text,
         section="forward_proxy",
@@ -217,7 +200,7 @@ def _strict_connect_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     )
     config.write_text(text, encoding="utf-8")
 
-    subprocess.run(
+    completed = subprocess.run(
         (
             PIPELOCK_TEST_BIN,
             "signing",
@@ -227,12 +210,13 @@ def _strict_connect_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
             "--out",
             str(pubkey),
         ),
-        check=True,
         capture_output=True,
         text=True,
         env=env,
         cwd=candidate_dir,
     )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert pubkey.stat().st_size > 0
     return home, config, recorder, pubkey
 
 
@@ -393,8 +377,8 @@ def test_websocket_blocks_server_prompt_injection_before_client(tmp_path: Path) 
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    PIPELOCK_TEST_BIN is None or PIPELOCK_TEST_CONFIG is None,
+    reason="requires the pinned Pipelock #730 compatibility runtime and generated audit config",
 )
 def test_connect_require_receipts_uses_fresh_writer_and_verifies_chain(tmp_path: Path) -> None:
     assert PIPELOCK_TEST_BIN is not None
