@@ -1,6 +1,6 @@
 """Optional Agent-Sandbox proof-of-concept behind the platform Executor contract.
 
-The adapter deliberately contains no Agent-Sandbox or E2B runtime dependency.  A
+The adapter deliberately contains no Agent-Sandbox or E2B runtime dependency. A
 concrete client owns provider transport/lifecycle details while this module proves
 that provider-private sandbox identities and controls can remain behind the
 platform-owned execution boundary.
@@ -15,6 +15,7 @@ from enum import StrEnum
 from pathlib import Path
 from time import monotonic
 from typing import Protocol
+from uuid import uuid4
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.execution.contracts import (
@@ -44,7 +45,7 @@ class AgentSandboxExecutionStatus(StrEnum):
 class AgentSandboxSecurityProfile:
     """Provider-private controls projected from an already-authorized platform request.
 
-    This is intentionally not a canonical policy model.  The future production
+    This is intentionally not a canonical policy model. The future production
     client must derive it from platform-owned authorization/egress policy rather
     than accepting arbitrary agent input.
     """
@@ -217,7 +218,7 @@ class AgentSandboxExecutor(Executor):
             return self._cancelled(request, started_at, started)
 
         backend_request = AgentSandboxClientRequest(
-            request_ref=request.run_id,
+            request_ref=uuid4().hex,
             task_id=request.task_id,
             run_id=request.run_id,
             step_id=request.step_id,
@@ -235,7 +236,7 @@ class AgentSandboxExecutor(Executor):
         try:
             backend_result = await self._execute_backend(request, backend_request)
         except TimeoutError:
-            await self._cancel_backend(request.run_id)
+            await self._cancel_backend(backend_request.request_ref)
             return self._failure(
                 request,
                 started_at,
@@ -245,7 +246,7 @@ class AgentSandboxExecutor(Executor):
                 status=ExecutionStatus.TIMED_OUT,
             )
         except asyncio.CancelledError:
-            await self._cancel_backend(request.run_id)
+            await self._cancel_backend(backend_request.request_ref)
             return self._cancelled(request, started_at, started)
         except Exception as exc:
             return self._failure(
@@ -274,27 +275,22 @@ class AgentSandboxExecutor(Executor):
 
         result_task = asyncio.create_task(self._client.execute(backend_request))
         cancel_task = asyncio.create_task(request.cancellation.wait())
-        done, pending = await asyncio.wait(
-            {result_task, cancel_task},
-            timeout=request.timeout_seconds,
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        if not done:
-            await self._cancel_backend(request.run_id)
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-            raise TimeoutError
-
-        if cancel_task in done and request.cancellation.cancelled:
-            await self._cancel_backend(request.run_id)
-            result_task.cancel()
-            await asyncio.gather(result_task, return_exceptions=True)
-            raise asyncio.CancelledError
-
-        cancel_task.cancel()
-        await asyncio.gather(cancel_task, return_exceptions=True)
-        return result_task.result()
+        try:
+            done, _ = await asyncio.wait(
+                {result_task, cancel_task},
+                timeout=request.timeout_seconds,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:
+                raise TimeoutError
+            if cancel_task in done and request.cancellation.cancelled:
+                raise asyncio.CancelledError
+            return result_task.result()
+        finally:
+            for task in (result_task, cancel_task):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(result_task, cancel_task, return_exceptions=True)
 
     def _workspace(self, workspace: str) -> Path:
         candidate = (self._root / workspace).resolve()
