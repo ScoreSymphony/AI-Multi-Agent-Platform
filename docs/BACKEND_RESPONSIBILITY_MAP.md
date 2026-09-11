@@ -9,7 +9,7 @@ Status: implementation and review guide for issue #723. This document records re
 3. New modules must have one named responsibility; no generic `utils.py`, `helpers.py`, or catch-all `common.py` modules.
 4. Internal services may depend on narrow protocols, but issue #723 must not reopen private kernel command primitives to external callers. The encapsulation established by #567 remains authoritative.
 5. Restart, retry, idempotency, ordering, cancellation, authorization, and fail-closed behavior are invariants, not implementation details.
-6. Semantic/package naming cleanup is intentionally deferred to dedicated follow-up work, including #727, once boundaries are stable.
+6. Responsibility-specific module naming is governed by #727 and [`PYTHON_MODULE_NAMING.md`](PYTHON_MODULE_NAMING.md); compatibility façades remain only where supported imports require them.
 7. File size is diagnostic only. A large cohesive module may remain large; a smaller module with unrelated ownership must still be split.
 
 ## Hotspot map
@@ -18,9 +18,9 @@ Status: implementation and review guide for issue #723. This document records re
 | --- | --- | --- | --- | --- | --- |
 | `kernel/kernel.py` | Task commands; Run commands; reads; active-run selection; lifecycle dispatch/reconciliation; recovery; event/command commits; completion integration | `queries.py`, `recovery.py`, `task_commands.py`, `run_commands.py`, `lifecycle.py`, `commit_support.py` | public `PlatformKernel`; kernel remains canonical Task/Run/Event lifecycle authority; `OutputObservingPlatformKernel` remains compatible | lifecycle transitions, idempotency, event history, cancellation races, recovery/restart, completion verification | **implemented** |
 | `distributed/workspace_transport.py` | worker materialization; chunk staging/commit; result collection; path/symlink safety; control client; worker endpoint; workspace-bound routing; wire codecs/checksums | materialization store, wire codec/contract, remote materializer, worker endpoint, workspace-bound worker | `RemoteWorkspaceMaterializer` contract; canonical Workspace/Snapshot/File identity stays control-plane owned; worker paths remain local deployment detail | interrupted transfers, duplicate chunks, checksum failure, cache replay, result collection, cleanup, read-only enforcement, request/reply correlation | **implemented** |
-| `coordination/service.py` | Plan registration; graph validation; dependency barriers; Run attempts; outcome observation; retries; durable waits; cancellation; restart reconciliation; task aggregation; claims; telemetry | `registration.py`, `progression.py`, `attempt_outcomes.py`, `waits.py`, `cancellation.py`, `reconciliation.py`, `aggregation.py` | `DurablePlanStepCoordinator`; kernel owns canonical Run/Task truth; repository owns durable coordination projection | claim races, duplicate observations, retry due-times, waits, cancellation, restart/reconcile, predecessor failure, aggregate completion | **implemented** |
+| `coordination/plan_step_coordinator.py` | Plan registration; graph validation; dependency barriers; Run attempts; outcome observation; retries; durable waits; cancellation; restart reconciliation; task aggregation; claims; telemetry | `registration.py`, `progression.py`, `attempt_outcomes.py`, `waits.py`, `cancellation.py`, `reconciliation.py`, `aggregation.py` | `DurablePlanStepCoordinator`; kernel owns canonical Run/Task truth; repository owns durable coordination projection; `coordination/service.py` is import-only compatibility | claim races, duplicate observations, retry due-times, waits, cancellation, restart/reconcile, predecessor failure, aggregate completion | **implemented** |
 | `data/reference.py` | shared SQLite primitives plus File, Memory and Knowledge provider implementations | `reference_support.py`, `reference_file.py`, `reference_memory.py`, `reference_knowledge.py` | `FileProvider`, `MemoryProvider`, `KnowledgeProvider` contracts and existing `data.reference` import surface | restart persistence, scope isolation, tombstones/orphans, expiry/supersession, knowledge revisions/search | **implemented** |
-| `planning/service.py` | trigger/idempotency handling; inventory; proposal construction/validation; authorization/approval; activation; prior-plan reconstruction; bounded replanning; coordinator handoff | `inventory.py`, `validation.py`, `replanning.py`, `proposals.py`, `handoff.py`, `activation.py`; specialized supersession/composition layers remain above the base façade | `PlanningService`; planning never executes Steps or creates Runs; coordinator receives the canonical Plan/Step graph | deterministic validation, stale proposal rejection, approval binding, bounded replanning, restart activation recovery, exact handoff | **implemented** |
+| `planning/planning_facade.py` | trigger/idempotency handling; inventory; proposal construction/validation; authorization/approval; activation; prior-plan reconstruction; bounded replanning; coordinator handoff | `inventory.py`, `validation.py`, `replanning.py`, `proposals.py`, `handoff.py`, `activation.py`; specialized supersession/composition layers remain above the base façade | `PlanningService`; planning never executes Steps or creates Runs; coordinator receives the canonical Plan/Step graph; `planning/service.py` is import-only compatibility | deterministic validation, stale proposal rejection, approval binding, bounded replanning, restart activation recovery, exact handoff | **implemented** |
 | `security/authentication.py` | auth records; password hashing; identity/session/credential store; brute-force/replay protection; local password flows; sessions/CSRF; bearer/worker auth; external identities; audit; serializers; tokens | `authentication_models.py`, `authentication_passwords.py`, `authentication_store.py`, `authentication_protection.py`, `authentication_accounts.py`, `authentication_sessions.py`, `authentication_credentials.py`, `authentication_external.py`, `authentication_audit.py`, `authentication_serialization.py`, `authentication_tokens.py` | `LocalAuthenticationService`; authorization remains separate; failures remain fail-closed and secrets non-retrievable/redacted | disabled/locked accounts, timing-safe password path, expiry/revocation/CSRF, worker replay, external mapping, redaction | **implemented** |
 | `control_plane/service.py` | scope identity; health; Project/Workspace APIs; Task/Run APIs; reference projections; timeline/subscription; model/provider APIs; authorization; validation/serialization | `scope_store.py`, `scope_service.py`, `task_run_service.py`, `reference_event_service.py`, `model_registry_service.py`, `health.py`, `authorization_service.py`, `request_validation.py`, `resources.py` | `ControlPlane` northbound façade and existing API contracts; kernel/domain/provider ownership unchanged | API snapshots, idempotency, authorization allow/deny/list filtering, event cursors, provider health, model enable/disable | **implemented** |
 
@@ -106,7 +106,7 @@ Claims and expected-revision writes remain repository-governed throughout the sp
 - `planning/proposals.py` owns immutable proposal construction.
 - `planning/handoff.py` owns canonical activated-plan reconstruction and coordinator handoff.
 - `planning/activation.py` owns activation authorization/approval and canonical Plan commit mechanics.
-- The public/base `PlanningService` retains proposal-history/orchestration behavior and delegates focused mechanics; supersession/composition layers remain layered above those seams.
+- The public/base `PlanningService` retains proposal-history/orchestration behavior in `planning/planning_facade.py` and delegates focused mechanics; supersession/composition layers remain layered above those seams.
 
 Planning remains incapable of Step execution or Worker dispatch.
 
@@ -136,8 +136,8 @@ Architecture tests enforce the decomposition rather than relying on convention a
 - focused kernel components cannot depend back on `PlatformKernel`;
 - focused workspace transport components cannot depend back on `workspace_transport.py`;
 - File/Memory/Knowledge implementations cannot move back into `data.reference`;
-- focused coordination components cannot depend back on `coordination.service` and façade entrypoints must delegate to the correct component;
-- focused planning components cannot depend back on the planning service/supersession façades;
+- focused coordination components cannot depend back on `coordination.plan_step_coordinator` or the legacy `coordination.service` shim, and coordinator entrypoints must delegate to the correct component;
+- focused planning components cannot depend back on `planning.planning_facade`, the legacy `planning.service` shim or the supersession façade;
 - focused authentication components cannot depend back on `security.authentication`, and security-sensitive primitives cannot be reintroduced there;
 - focused Control Plane components cannot depend back on `control_plane.service`, and northbound scope, Task/Run, references/events, model, health and authorization operations must remain delegated.
 
@@ -149,7 +149,7 @@ When another active issue touches one of these hotspot files:
 
 - do not merge that issue into #723 merely to reduce local conflicts;
 - rebase/merge accepted `main` prerequisites only when necessary;
-- resolve semantic/package naming work after responsibility boundaries are stable;
+- apply semantic/package naming work only after responsibility boundaries are stable;
 - preserve compatibility shims at package façades when extraction would otherwise force broad downstream edits.
 
 ## Acceptance evidence required before #723 can close

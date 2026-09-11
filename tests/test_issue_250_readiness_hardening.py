@@ -157,7 +157,7 @@ def _first_blocker(status: dict[str, JsonValue]) -> dict[str, JsonValue]:
 
 def test_public_onboarding_service_uses_one_authoritative_implementation() -> None:
     assert OnboardingService is ServiceOnboardingService
-    assert OnboardingService.__module__ == "ai_multi_agent_platform.onboarding.service"
+    assert OnboardingService.__module__ == "ai_multi_agent_platform.onboarding.first_run_service"
 
 
 def test_restored_unknown_provider_health_is_not_reported_ready_until_revalidated(
