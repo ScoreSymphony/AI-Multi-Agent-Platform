@@ -16,7 +16,7 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal
 
 EVALUATED_REVISION = "d1b7ac007debcb1ba8de91c76afb49bee90d096a"
 TERMINAL_SCENARIO_STATUSES = frozenset({"pass", "fail", "unsupported"})
@@ -43,7 +43,7 @@ REQUIRED_SCENARIOS: tuple[str, ...] = (
     "malicious_repository_fixture",
 )
 
-Status: TypeAlias = Literal["pass", "fail", "not_run"]
+type Status = Literal["pass", "fail", "not_run"]
 
 
 @dataclass(frozen=True, slots=True)
