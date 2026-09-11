@@ -317,7 +317,9 @@ def test_new_provider_is_visible_without_profile_migration(tmp_path: Path) -> No
     assert profiles[0]["defaults"] == {"executor": "reference"}
 
 
-def test_payload_rejects_secret_or_unknown_fields_instead_of_persisting_them(tmp_path: Path) -> None:
+def test_payload_rejects_secret_or_unknown_fields_instead_of_persisting_them(
+    tmp_path: Path,
+) -> None:
     discovery = MutableDiscovery((_component("reference", ComponentCategory.EXECUTOR),))
     service = _service(tmp_path, discovery)
 
