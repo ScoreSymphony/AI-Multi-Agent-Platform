@@ -44,7 +44,7 @@ from .persistence import (
     SqliteVerificationCompletionAuthority,
     SqliteVerificationService,
 )
-from .service import VerificationService
+from .verification_authority import VerificationService
 
 __all__ = [
     "CanonicalVerificationAccess",
