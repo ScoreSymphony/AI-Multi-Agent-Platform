@@ -153,9 +153,7 @@ def test_adversarial_corpus_tracks_every_required_issue_730_attack_class() -> No
 
 def test_live_secret_fixtures_are_explicitly_synthetic() -> None:
     live_secret_cases = [
-        case
-        for case in _corpus()
-        if case["status"] == "live" and "dlp" in case["category"]
+        case for case in _corpus() if case["status"] == "live" and "dlp" in case["category"]
     ]
 
     assert live_secret_cases
