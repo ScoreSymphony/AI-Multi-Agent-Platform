@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Execute one #730 evaluation command with new IPv4/IPv6 sockets denied.
 
-This helper is intentionally narrow evaluation infrastructure, not a production sandbox. It installs
-an unprivileged Linux x86-64 seccomp filter after ``PR_SET_NO_NEW_PRIVS`` and then execs the requested
-command. The filter denies ``socket(AF_INET, ...)`` and ``socket(AF_INET6, ...)`` with ``EPERM`` while
-leaving Unix-domain sockets/socketpair available so Python asyncio and MCP stdio can operate normally.
+This helper is intentionally narrow evaluation infrastructure, not a production sandbox.
+It installs an unprivileged Linux x86-64 seccomp filter after ``PR_SET_NO_NEW_PRIVS`` and
+then execs the requested command. The filter denies ``socket(AF_INET, ...)`` and
+``socket(AF_INET6, ...)`` with ``EPERM`` while leaving Unix-domain sockets/socketpair
+available so Python asyncio and MCP stdio can operate normally.
 
-The wrapper assumes the parent did not pass unrelated network file descriptors to the child. It proves
-only that the exercised child cannot create a fresh IPv4/IPv6 socket of its own.
+The wrapper assumes the parent did not pass unrelated network file descriptors to the child.
+It proves only that the exercised child cannot create a fresh IPv4/IPv6 socket of its own.
 """
 
 from __future__ import annotations
