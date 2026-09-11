@@ -202,8 +202,7 @@ def run_track(args: argparse.Namespace) -> MCPProtocolEvidence:
         claimed=track.claimed,
         gating=track.gating,
         protocol_conformant=all(
-            result.status == MCPProtocolScenarioStatus.PASS.value
-            for result in scenario_results
+            result.status == MCPProtocolScenarioStatus.PASS.value for result in scenario_results
         ),
         timestamp_utc=datetime.now(UTC).isoformat(),
         environment={
