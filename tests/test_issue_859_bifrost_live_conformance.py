@@ -82,7 +82,9 @@ def test_live_bifrost_tool_calling_when_declared_supported() -> None:
         provider.generate(
             ModelRequest(
                 request_id="issue-859-tool",
-                messages=("Call the report_status tool with status ready. Do not answer directly.",),
+                messages=(
+                    "Call the report_status tool with status ready. Do not answer directly.",
+                ),
                 context=OperationContext(correlation_id="issue-859:tool"),
                 requirements={
                     "model_config_id": canonical_model_id,
