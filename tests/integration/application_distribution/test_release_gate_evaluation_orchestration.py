@@ -25,7 +25,6 @@ from ai_multi_agent_platform.application_distribution import (
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.evaluation import (
     ComparisonOperator,
-    ConfigurationSnapshot,
     DeterministicAssertion,
     DeterministicAssertionEvaluator,
     EvaluationAttempt,
