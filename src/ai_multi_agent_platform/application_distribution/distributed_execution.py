@@ -169,11 +169,46 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
             raise
         except RegistryError as exc:
             raise _registry_error(exc, provider_id=self.descriptor.provider_id) from exc
+        except Exception as exc:
+            uncertain: DispatchRecord | None = None
+            try:
+                uncertain = self.runtime.get_record(job.worker_job_id)
+            except RegistryError:
+                pass
+            if (
+                uncertain is not None
+                and uncertain.state is DispatchState.LOST
+                and uncertain.last_error == "dispatch_outcome_unknown"
+            ):
+                raise ContractError(
+                    ErrorCode.UNAVAILABLE,
+                    (
+                        "distributed application build dispatch outcome is unknown; "
+                        "retry after reconciliation"
+                    ),
+                    retryable=True,
+                    provider_id=self.descriptor.provider_id,
+                ) from exc
+            raise
 
-        if record.handle is None:
+        if (
+            record.handle is None
+            and record.state is DispatchState.LOST
+            and record.last_error == "dispatch_outcome_unknown"
+        ):
+            await self.runtime.reconcile()
+            record = self.runtime.get_record(job.worker_job_id)
+        if record.state in {DispatchState.LOST, DispatchState.CANCEL_PENDING}:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                f"distributed application build is not currently reachable: {request.run_id}",
+                retryable=True,
+                provider_id=self.descriptor.provider_id,
+            )
+        if record.handle is None and record.snapshot is None:
             raise ContractError(
                 ErrorCode.INVALID_PROVIDER_RESPONSE,
-                "distributed application build dispatch returned no execution handle",
+                "distributed application build dispatch returned no execution handle or snapshot",
                 provider_id=self.descriptor.provider_id,
             )
         return _handle(record, release, target, self._node_id(record))
@@ -213,6 +248,15 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
             result = await self.runtime.result(worker_job_id)
         except RegistryError as exc:
             raise _registry_error(exc, provider_id=self.descriptor.provider_id) from exc
+        except ContractError:
+            raise
+        except Exception as exc:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                f"distributed application build result is temporarily unavailable: {run_id}",
+                retryable=True,
+                provider_id=self.descriptor.provider_id,
+            ) from exc
         if result is None or result.execution is None:
             raise ContractError(
                 ErrorCode.INVALID_PROVIDER_RESPONSE,
@@ -747,11 +791,14 @@ def _handle(
     target: BuildTargetState,
     node_id: str | None,
 ) -> ExecutionHandle:
-    assert record.handle is not None
+    handle = record.handle or ExecutionHandle(
+        run_id=record.job.execution.run_id,
+        backend_ref=f"distributed-application-build:{record.job.worker_job_id}",
+    )
     return replace(
-        record.handle,
+        handle,
         adapter_metadata=(
-            *record.handle.adapter_metadata,
+            *handle.adapter_metadata,
             _metadata(record, release, target, node_id),
         ),
     )
