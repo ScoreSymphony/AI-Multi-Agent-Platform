@@ -290,6 +290,7 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
         self._results: dict[str, ExecutionResult] = {}
         self._cancellations: dict[str, CancellationToken] = {}
         self._finished: dict[str, asyncio.Event] = {}
+        self._secret_deadlines: dict[str, datetime] = {}
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -329,6 +330,10 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                 task_id=binding.task_id,
                 run_id=request.run_id,
                 timeout_seconds=timeout_seconds,
+            )
+            timeout_seconds = _lease_bound_timeout_seconds(
+                timeout_seconds,
+                self._secret_deadlines.pop(request.run_id, None),
             )
             context = _data_context(request.context, binding.task_id, request.run_id)
             materialization = await self._workspaces.materialize(
@@ -463,6 +468,7 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                 "application build requires a SecretProvider for secret_environment",
             )
         secret_keys: list[str] = []
+        earliest_expiry: datetime | None = None
         lifetime = _secret_lifetime_seconds(timeout_seconds)
         for name, reference in specification.secret_environment.items():
             if reference.scope != release.project_id:
@@ -484,8 +490,17 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                     requested_lifetime_seconds=lifetime,
                 ),
             )
+            if material.expires_at <= datetime.now(UTC):
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "application build secret lease expired before execution",
+                )
+            if earliest_expiry is None or material.expires_at < earliest_expiry:
+                earliest_expiry = material.expires_at
             environment[name] = material.reveal()
             secret_keys.append(name)
+        if earliest_expiry is not None:
+            self._secret_deadlines[run_id] = earliest_expiry
         return environment, tuple(secret_keys)
 
     async def _release_for_run(self, run_id: str) -> ApplicationRelease:
@@ -632,6 +647,23 @@ def _secret_lifetime_seconds(timeout_seconds: float | None) -> int:
     if timeout_seconds is None:
         return _DEFAULT_SECRET_LIFETIME_SECONDS
     return max(1, ceil(timeout_seconds))
+
+
+def _lease_bound_timeout_seconds(
+    timeout_seconds: float | None,
+    secret_expires_at: datetime | None,
+) -> float | None:
+    if secret_expires_at is None:
+        return timeout_seconds
+    remaining = (secret_expires_at - datetime.now(UTC)).total_seconds()
+    if remaining <= 0:
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "application build secret lease expired before execution",
+        )
+    if timeout_seconds is None:
+        return remaining
+    return min(timeout_seconds, remaining)
 
 
 def _command(value: object) -> tuple[str, ...]:
