@@ -10,6 +10,7 @@ COMPOSITION = PLANNING_ROOT / "composition.py"
 INVENTORY = PLANNING_ROOT / "inventory.py"
 VALIDATION = PLANNING_ROOT / "validation.py"
 REPLANNING = PLANNING_ROOT / "replanning.py"
+PROPOSALS = PLANNING_ROOT / "proposals.py"
 
 
 def _tree(path: Path) -> ast.Module:
@@ -97,6 +98,19 @@ def test_public_planning_service_delegates_replan_support() -> None:
         ), f"PlanningService.{method_name} must delegate to focused replanning support"
 
 
+def test_public_planning_service_delegates_immutable_proposal_construction() -> None:
+    service = _class(SUPERSESSION, "PlanningService")
+    method = _method(service, "_proposal")
+    calls = [node for node in ast.walk(method) if isinstance(node, ast.Call)]
+    assert any(
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr == "build"
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == "_PROPOSAL_FACTORY"
+        for call in calls
+    ), "PlanningService._proposal must delegate base proposal construction to PlanningProposalFactory"
+
+
 def test_reference_inventory_filtering_remains_layered_on_public_inventory_seam() -> None:
     service = _class(COMPOSITION, "ReferencePlanningService")
     method = _method(service, "_inventory")
@@ -139,3 +153,9 @@ def test_replan_component_owns_prior_plan_trigger_and_budget_policy() -> None:
     _method(support, "enforce_budget")
     _method(support, "trigger_fingerprint")
     _assert_no_service_dependency(REPLANNING)
+
+
+def test_proposal_factory_owns_immutable_base_proposal_construction() -> None:
+    factory = _class(PROPOSALS, "PlanningProposalFactory")
+    _method(factory, "build")
+    _assert_no_service_dependency(PROPOSALS)
