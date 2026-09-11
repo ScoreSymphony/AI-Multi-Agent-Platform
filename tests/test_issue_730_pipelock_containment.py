@@ -17,7 +17,9 @@ PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
 PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_730_CONFIG")
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 MCP_NETWORK_PROBE = FIXTURE_DIR / "mcp_stdio_network_probe_server.py"
-NO_NETWORK_WRAPPER = Path(__file__).parents[0] / ".." / "scripts" / "ci" / "issue502_no_network_exec.py"
+NO_NETWORK_WRAPPER = (
+    Path(__file__).parents[0] / ".." / "scripts" / "ci" / "issue502_no_network_exec.py"
+)
 
 
 @contextmanager
@@ -106,18 +108,19 @@ async def _invoke_probe(
     project_id = new_id("project")
 
     async def invoke(capability_id: str, arguments: dict[str, object]) -> dict[str, object]:
+        correlation_id = new_id("correlation")
         invocation = CapabilityInvocation(
             invocation_id=new_id("invocation"),
             capability_id=capability_id,
             arguments=arguments,
             context=OperationContext(
-                correlation_id=new_id("correlation"),
+                correlation_id=correlation_id,
                 owner_type="user",
                 owner_id="user-730-containment",
                 project_id=project_id,
             ),
             trace=InvocationTrace(
-                correlation_id=new_id("correlation"),
+                correlation_id=correlation_id,
                 task_id=new_id("task"),
                 run_id=new_id("run"),
                 agent_id=new_id("agent"),
@@ -132,8 +135,7 @@ async def _invoke_probe(
     assert lookup == {"query": "containment-stdio-still-works", "transport": "stdio"}
 
     return [
-        await invoke("tool.probe-direct-network", {"protocol": protocol})
-        for protocol in protocols
+        await invoke("tool.probe-direct-network", {"protocol": protocol}) for protocol in protocols
     ]
 
 
