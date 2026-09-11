@@ -1,0 +1,275 @@
+name: Issue 862 storage evidence
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/issue-862-storage-evidence.yml"
+      - "tests/evidence/issue_862/**"
+      - "tests/test_issue_862_storage_evidence.py"
+      - "docs/research/issue-862-object-storage-evaluation.md"
+
+jobs:
+  live-s3-subset:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'issue-862-rustfs-garage-storage-evaluation'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [rustfs, garage, seaweedfs]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Generate synthetic runtime credentials
+        shell: bash
+        run: |
+          if [ "${{ matrix.backend }}" = "garage" ]; then
+            access_key="GK$(openssl rand -hex 16)"
+          else
+            access_key="I862$(openssl rand -hex 10)"
+          fi
+          secret_key="$(openssl rand -hex 32)"
+          echo "AWS_ACCESS_KEY_ID=$access_key" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=$secret_key" >> "$GITHUB_ENV"
+
+      - name: Start pinned backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+
+          case "${{ matrix.backend }}" in
+            rustfs)
+              image="rustfs/rustfs:1.0.0-rc.6"
+              container="issue862-rustfs"
+              endpoint="http://127.0.0.1:9000"
+              bucket="issue-862"
+              region="us-east-1"
+              mkdir -p "$RUNNER_TEMP/issue862-rustfs-data"
+              sudo chown -R 10001:10001 "$RUNNER_TEMP/issue862-rustfs-data"
+              docker run -d \
+                --name "$container" \
+                -p 9000:9000 \
+                -e RUSTFS_VOLUMES=/data \
+                -e RUSTFS_ADDRESS=0.0.0.0:9000 \
+                -e RUSTFS_CONSOLE_ENABLE=false \
+                -e RUSTFS_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+                -e RUSTFS_SECRET_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -v "$RUNNER_TEMP/issue862-rustfs-data:/data" \
+                "$image"
+              ;;
+            garage)
+              image="dxflrs/garage:v2.3.0"
+              container="issue862-garage"
+              endpoint="http://127.0.0.1:3900"
+              bucket="issue-862"
+              region="garage"
+              rpc_secret="$(openssl rand -hex 32)"
+              admin_token="$(openssl rand -hex 32)"
+              metrics_token="$(openssl rand -hex 32)"
+              cat > "$RUNNER_TEMP/issue862-garage.toml" <<EOF
+          metadata_dir = "/var/lib/garage/meta"
+          data_dir = "/var/lib/garage/data"
+          db_engine = "sqlite"
+          replication_factor = 1
+          rpc_bind_addr = "[::]:3901"
+          rpc_public_addr = "127.0.0.1:3901"
+          rpc_secret = "$rpc_secret"
+
+          [s3_api]
+          s3_region = "garage"
+          api_bind_addr = "[::]:3900"
+          root_domain = ".s3.garage.localhost"
+
+          [admin]
+          api_bind_addr = "[::]:3903"
+          admin_token = "$admin_token"
+          metrics_token = "$metrics_token"
+          EOF
+              docker run -d \
+                --name "$container" \
+                -p 3900:3900 \
+                -v "$RUNNER_TEMP/issue862-garage.toml:/etc/garage.toml:ro" \
+                -v issue862-garage-meta:/var/lib/garage/meta \
+                -v issue862-garage-data:/var/lib/garage/data \
+                -e GARAGE_DEFAULT_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+                -e GARAGE_DEFAULT_SECRET_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -e GARAGE_DEFAULT_BUCKET="$bucket" \
+                "$image" \
+                /garage server --single-node --default-bucket
+              ;;
+            seaweedfs)
+              image="chrislusf/seaweedfs:4.46"
+              container="issue862-seaweedfs"
+              endpoint="http://127.0.0.1:8333"
+              bucket="issue-862"
+              region="us-east-1"
+              docker run -d \
+                --name "$container" \
+                -p 8333:8333 \
+                -v issue862-seaweedfs-data:/data \
+                -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+                -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -e S3_BUCKET="$bucket" \
+                "$image"
+              ;;
+          esac
+
+          echo "ISSUE862_IMAGE=$image" >> "$GITHUB_ENV"
+          echo "ISSUE862_CONTAINER=$container" >> "$GITHUB_ENV"
+          echo "ISSUE862_ENDPOINT=$endpoint" >> "$GITHUB_ENV"
+          echo "ISSUE862_BUCKET=$bucket" >> "$GITHUB_ENV"
+          echo "ISSUE862_REGION=$region" >> "$GITHUB_ENV"
+
+      - name: Wait for backend readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.backend }}" = "rustfs" ]; then
+            for _ in $(seq 1 90); do
+              if curl -fsS "$ISSUE862_ENDPOINT/health/ready" >/dev/null; then
+                exit 0
+              fi
+              sleep 1
+            done
+          else
+            port="${ISSUE862_ENDPOINT##*:}"
+            for _ in $(seq 1 90); do
+              if python - "$port" <<'PY'
+          import socket
+          import sys
+
+          try:
+              with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+                  pass
+          except OSError:
+              raise SystemExit(1)
+          PY
+              then
+                sleep 2
+                exit 0
+              fi
+              sleep 1
+            done
+          fi
+          docker logs "$ISSUE862_CONTAINER" || true
+          exit 1
+
+      - name: Record pinned image identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "backend=${{ matrix.backend }}"
+            echo "image=$ISSUE862_IMAGE"
+            echo "image_id=$(docker image inspect "$ISSUE862_IMAGE" --format '{{.Id}}')"
+            echo "repo_digests=$(docker image inspect "$ISSUE862_IMAGE" --format '{{json .RepoDigests}}')"
+          } > "evidence/${{ matrix.backend }}-image.txt"
+
+      - name: Run canonical S3 subset and concurrency probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          create_bucket=()
+          if [ "${{ matrix.backend }}" = "rustfs" ]; then
+            create_bucket=(--create-bucket)
+          fi
+          python tests/evidence/issue_862/s3_contract_probe.py \
+            --backend "${{ matrix.backend }}" \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            "${create_bucket[@]}" \
+            > "evidence/${{ matrix.backend }}-contract.json"
+
+      - name: Record post-workload resource observation
+        shell: bash
+        run: |
+          docker stats --no-stream \
+            --format '{{json .}}' \
+            "$ISSUE862_CONTAINER" \
+            > "evidence/${{ matrix.backend }}-docker-stats.json"
+
+      - name: Write restart sentinel
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_restart_probe.py write \
+            --backend "${{ matrix.backend }}" \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "restart-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > "evidence/${{ matrix.backend }}-restart-before.json"
+
+      - name: Restart backend process
+        shell: bash
+        run: docker restart "$ISSUE862_CONTAINER"
+
+      - name: Wait after restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.backend }}" = "rustfs" ]; then
+            for _ in $(seq 1 90); do
+              if curl -fsS "$ISSUE862_ENDPOINT/health/ready" >/dev/null; then
+                exit 0
+              fi
+              sleep 1
+            done
+          else
+            port="${ISSUE862_ENDPOINT##*:}"
+            for _ in $(seq 1 90); do
+              if python - "$port" <<'PY'
+          import socket
+          import sys
+
+          try:
+              with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+                  pass
+          except OSError:
+              raise SystemExit(1)
+          PY
+              then
+                sleep 2
+                exit 0
+              fi
+              sleep 1
+            done
+          fi
+          docker logs "$ISSUE862_CONTAINER" || true
+          exit 1
+
+      - name: Verify acknowledged object after restart
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_restart_probe.py verify \
+            --backend "${{ matrix.backend }}" \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "restart-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > "evidence/${{ matrix.backend }}-restart-after.json"
+
+      - name: Upload backend evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-862-${{ matrix.backend }}-evidence
+          path: evidence/${{ matrix.backend }}-*
+          if-no-files-found: warn
+
+      - name: Show backend logs on failure
+        if: failure()
+        shell: bash
+        run: docker logs "$ISSUE862_CONTAINER" || true
+
+      - name: Stop backend
+        if: always()
+        shell: bash
+        run: docker rm -f "$ISSUE862_CONTAINER" 2>/dev/null || true
