@@ -25,6 +25,7 @@ from .models import (
     ProposalStatus,
     ProposalValidation,
 )
+from .proposals import PlanningProposalFactory
 from .replanning import PlanningReplanSupport
 from .repository import advance_record
 from .service import PlanningService as BasePlanningService
@@ -38,6 +39,7 @@ _SUPERSEDABLE_STATUSES = frozenset(
     }
 )
 _PROPOSAL_VALIDATOR = PlanningProposalValidator()
+_PROPOSAL_FACTORY = PlanningProposalFactory()
 
 
 class PlanningService(BasePlanningService):
@@ -51,10 +53,10 @@ class PlanningService(BasePlanningService):
     Replacement proposals also point to the durable proposal that activated their base Plan. This
     keeps proposal lineage explicit without mutating prior immutable proposal content.
 
-    Inventory construction, deterministic proposal validation and bounded replanning support are
-    delegated to focused internal components. ``_inventory`` remains a compatibility seam because
-    ``ReferencePlanningService`` intentionally layers trusted environment filtering on top of the
-    canonical base inventory.
+    Inventory construction, deterministic proposal validation, immutable proposal construction and
+    bounded replanning support are delegated to focused internal components. ``_inventory`` remains
+    a compatibility seam because ``ReferencePlanningService`` intentionally layers trusted
+    environment filtering on top of the canonical base inventory.
     """
 
     _activation_locks: dict[str, asyncio.Lock]
@@ -109,7 +111,7 @@ class PlanningService(BasePlanningService):
         return lock
 
     def _proposal(self, request: PlanningRequest, output: PlannerOutput) -> PlanProposal:
-        proposal = super()._proposal(request, output)
+        proposal = _PROPOSAL_FACTORY.build(request, output)
         prior = request.prior_plan
         if prior is None:
             return proposal
