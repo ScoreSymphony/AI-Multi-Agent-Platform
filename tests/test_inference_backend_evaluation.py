@@ -13,8 +13,14 @@ from ai_multi_agent_platform.benchmarking.inference_backend_evaluation import (
 )
 from ai_multi_agent_platform.benchmarking.inference_backend_evaluation_cli import main as cli_main
 
+SGLANG_REVISION = "0bcd822377da7b5718e674eaf9c870d349424dd1"
+
 CAMPAIGN = {
     "campaign_id": "issue-860-sglang-v0.5.19",
+    "candidate": {
+        "backend": "sglang",
+        "release_commit": SGLANG_REVISION,
+    },
     "contract_cases": [
         "chat-completion-non-streaming",
         "chat-completion-streaming",
@@ -65,11 +71,12 @@ def _result(case_id: str, status: str = "pass") -> dict[str, Any]:
 
 
 def _report(backend: str) -> dict[str, Any]:
+    backend_revision = SGLANG_REVISION if backend == "sglang" else f"{backend}-revision"
     return {
         "schema_version": "1.0",
         "campaign_id": "issue-860-sglang-v0.5.19",
         "backend": backend,
-        "backend_revision": "backend-revision",
+        "backend_revision": backend_revision,
         "platform_commit": "a" * 40,
         "started_at": "2026-09-12T00:00:00Z",
         "completed_at": "2026-09-12T00:10:00Z",
@@ -151,6 +158,17 @@ def test_readiness_requires_contract_failure_and_comparable_vllm_pair() -> None:
     }
 
 
+def test_readiness_rejects_candidate_revision_that_does_not_match_campaign() -> None:
+    sglang = _report("sglang")
+    sglang["backend_revision"] = "f" * 40
+
+    with pytest.raises(ValueError, match="does not match pinned revision"):
+        assess_inference_backend_evaluation(
+            campaign=CAMPAIGN,
+            reports=[sglang, _report("vllm")],
+        )
+
+
 def test_readiness_rejects_superficially_comparable_pair_with_different_workload() -> None:
     sglang = _report("sglang")
     vllm = _report("vllm")
@@ -163,7 +181,7 @@ def test_readiness_rejects_superficially_comparable_pair_with_different_workload
 
     assert readiness.ready_for_decision is False
     assert readiness.comparable_sglang_vllm_pairs == 0
-    assert "no comparable decision-eligible SGLang-vLLM performance pair" in readiness.blockers
+    assert "no comparable decision-eligible sglang-vLLM performance pair" in readiness.blockers
 
 
 def test_readiness_rejects_pair_with_different_driver_environment() -> None:
@@ -194,7 +212,7 @@ def test_latest_failure_result_must_not_be_failing() -> None:
 
     assert readiness.ready_for_decision is False
     assert CAMPAIGN["failure_cases"][0] in readiness.failed_failure_cases
-    assert "mandatory SGLang failure/recovery cases are failing" in readiness.blockers
+    assert "mandatory sglang failure/recovery cases are failing" in readiness.blockers
 
 
 def test_latest_failure_result_uses_absolute_timestamp_across_offsets() -> None:
@@ -273,4 +291,4 @@ def test_cli_require_ready_returns_three_for_incomplete_evidence(tmp_path: Path)
     result = json.loads(output_path.read_text(encoding="utf-8"))
     assert exit_code == 3
     assert result["ready_for_decision"] is False
-    assert "no comparable decision-eligible SGLang-vLLM performance pair" in result["blockers"]
+    assert "no comparable decision-eligible sglang-vLLM performance pair" in result["blockers"]
