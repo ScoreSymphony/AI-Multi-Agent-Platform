@@ -46,21 +46,25 @@ class InferenceBackendEvaluationReadiness:
 
 
 @lru_cache(maxsize=1)
-def _report_validator() -> Draft202012Validator:
+def _report_schema() -> Mapping[str, object]:
     schema_path = files("ai_multi_agent_platform.benchmarking").joinpath(
         "schemas",
         "inference-backend-evaluation-report.v1.schema.json",
     )
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    raw: object = json.loads(schema_path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("inference backend evaluation report schema must be a JSON object")
+    schema = cast(dict[str, object], raw)
     Draft202012Validator.check_schema(schema)
-    return Draft202012Validator(schema, format_checker=FormatChecker())
+    return schema
 
 
 def validate_inference_backend_evaluation_report(report: Mapping[str, Any]) -> None:
     """Validate one measured report against the packaged v1 evidence schema."""
 
+    validator = Draft202012Validator(_report_schema(), format_checker=FormatChecker())
     errors = sorted(
-        _report_validator().iter_errors(dict(report)),
+        validator.iter_errors(dict(report)),
         key=lambda error: tuple(str(part) for part in error.absolute_path),
     )
     if not errors:
