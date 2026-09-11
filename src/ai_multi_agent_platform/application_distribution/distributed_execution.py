@@ -791,8 +791,10 @@ def _optional_string_field(payload: Mapping[str, object], key: str) -> str | Non
 
 def _string_array(payload: Mapping[str, object], key: str) -> list[JsonValue]:
     raw = payload.get(key)
-    if not isinstance(raw, list) or not raw or any(
-        not isinstance(item, str) or not item.strip() for item in raw
+    if (
+        not isinstance(raw, list)
+        or not raw
+        or any(not isinstance(item, str) or not item.strip() for item in raw)
     ):
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
