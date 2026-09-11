@@ -7,6 +7,7 @@ on:
       - ".github/workflows/swe-rex-evaluation.yml"
       - "scripts/benchmarks/issue861_swe_rex_live.py"
       - "scripts/benchmarks/issue861_swe_rex_canonical.py"
+      - "scripts/benchmarks/issue861_swe_rex_remote.py"
       - "src/ai_multi_agent_platform/adapters/swe_rex.py"
       - "tests/test_swe_rex_executor.py"
       - "docs/upstream/SWE_REX_*.md"
@@ -117,4 +118,31 @@ jobs:
           path: |
             swe-rex-${{ matrix.backend }}.json
             swe-rex-canonical-${{ matrix.backend }}.json
+          if-no-files-found: warn
+
+  remote-loopback:
+    name: remote-loopback
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install pinned SWE-ReX revision and remote-runtime dependency
+        run: >-
+          python -m pip install
+          "git+https://github.com/SWE-agent/SWE-ReX.git@5c995c365dfb1fd5bc56fda688be5d8538f9931f"
+          "aiohttp>=3.11,<4"
+      - name: Run remote loopback evidence
+        run: >-
+          python scripts/benchmarks/issue861_swe_rex_remote.py
+          --output swe-rex-remote-loopback.json
+      - name: Upload remote evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: swe-rex-remote-loopback
+          path: swe-rex-remote-loopback.json
           if-no-files-found: warn
