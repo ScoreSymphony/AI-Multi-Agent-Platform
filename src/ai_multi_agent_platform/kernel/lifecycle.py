@@ -7,7 +7,7 @@ while canonical Task/Run persistence stays behind narrow kernel-host capabilitie
 
 from __future__ import annotations
 
-from typing import Literal, Protocol
+from typing import Protocol
 
 from ai_multi_agent_platform.contracts import (
     ContractError,
@@ -25,7 +25,6 @@ from ai_multi_agent_platform.verification import CompletionAuthority, Completion
 from .models import TERMINAL_RUN_STATUSES, RunState, TaskState
 from .repository import CommandRecord
 
-OwnerType = Literal["user", "organization", "team", "service"]
 EventSpec = tuple[
     str,
     str,
@@ -44,6 +43,9 @@ _TERMINAL_EXECUTION_TO_RUN: dict[ExecutionStatus, RunStatus] = {
 
 class LifecycleKernelHost(Protocol):
     """Internal canonical-kernel capabilities required for lifecycle reconciliation."""
+
+    _lifecycle: LifecycleBackend
+    _completion_authority: CompletionAuthority | None
 
     async def get_task(self, task_id: str) -> TaskState: ...
 
@@ -77,16 +79,8 @@ class LifecycleKernelHost(Protocol):
 class KernelLifecycleReconciler:
     """Reconcile lifecycle-backend state into canonical Run/Task events."""
 
-    def __init__(
-        self,
-        host: LifecycleKernelHost,
-        *,
-        lifecycle: LifecycleBackend,
-        completion_authority: CompletionAuthority | None,
-    ) -> None:
+    def __init__(self, host: LifecycleKernelHost) -> None:
         self._host = host
-        self._lifecycle = lifecycle
-        self._completion_authority = completion_authority
 
     async def dispatch_started_run(
         self,
@@ -126,7 +120,7 @@ class KernelLifecycleReconciler:
             context=self._host._context(task, causation_id),
             input={"plan_ref": task.plan_ref} if task.plan_ref is not None else {},
         )
-        handle = await self._lifecycle.start(request)
+        handle = await self._host._lifecycle.start(request)
         if handle.run_id != run_id:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
@@ -166,7 +160,7 @@ class KernelLifecycleReconciler:
         if run.status not in {RunStatus.STARTING, RunStatus.RUNNING}:
             return
         try:
-            snapshot = await self._lifecycle.get(
+            snapshot = await self._host._lifecycle.get(
                 run_id,
                 self._host._context(task, causation_id),
             )
@@ -202,7 +196,7 @@ class KernelLifecycleReconciler:
         run = await self._host.get_run(task_id, run_id)
         if run.status in TERMINAL_RUN_STATUSES:
             return
-        snapshot = await self._lifecycle.cancel(
+        snapshot = await self._host._lifecycle.cancel(
             run_id,
             self._host._context(task, causation_id),
         )
@@ -463,9 +457,9 @@ class KernelLifecycleReconciler:
         return tuple(specs)
 
     def completion_task_spec(self, task_id: str) -> EventSpec:
-        if self._completion_authority is None:
+        if self._host._completion_authority is None:
             return ("task.succeeded", "task", task_id, {}, ())
-        decision = self._completion_authority.assess_task_completion(task_id)
+        decision = self._host._completion_authority.assess_task_completion(task_id)
         if decision.state is CompletionState.ACCEPTED:
             return ("task.succeeded", "task", task_id, {}, ())
 
