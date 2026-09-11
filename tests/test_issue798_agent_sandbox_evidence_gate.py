@@ -29,6 +29,29 @@ REQUIRED_SCENARIOS = (
 )
 
 
+def _environment() -> dict[str, object]:
+    return {
+        "capture_date": "2026-09-12",
+        "host_class": "representative-vps",
+        "vcpu": 8,
+        "memory_gib": 32,
+        "disk_gib": 200,
+        "linux_distribution": "Ubuntu 24.04",
+        "kernel": "6.8.0",
+        "kubernetes_distribution": "k3s",
+        "kubernetes_version": "v1.35.0",
+        "container_runtime": "containerd 2.x",
+        "runtime_class": "gvisor",
+        "agent_sandbox_revision": REVISION,
+        "agent_sandbox_image_digest": "example.invalid/agent-sandbox@sha256:def",
+        "sandbox_image_digest": "example.invalid/sandbox@sha256:abc",
+        "platform_commit": "0123456789abcdef0123456789abcdef01234567",
+        "cni": "cilium",
+        "profile_kind": "platform-hardened-derivative",
+        "profile_revision": "issue798-eval-profile-v1",
+    }
+
+
 def _evidence(*, unsafe: bool = False, complete: bool = True) -> dict[str, object]:
     return {
         "issue": 798,
@@ -82,12 +105,14 @@ def _campaign(
     *,
     status: str = "pass",
     overrides: dict[str, str] | None = None,
+    environment: dict[str, object] | None = None,
 ) -> dict[str, object]:
     statuses = {scenario: status for scenario in REQUIRED_SCENARIOS}
     if overrides:
         statuses.update(overrides)
     return {
         "schema_version": 1,
+        "environment": _environment() if environment is None else environment,
         "scenarios": {
             scenario: {
                 "status": scenario_status,
@@ -150,6 +175,8 @@ def test_gate_keeps_missing_live_evidence_and_scenarios_incomplete(tmp_path: Pat
         "cross_token_provider_get_blocked",
         "secret_canary_absent",
     ]
+    assert "host_class" in blockers["missing_environment_metadata"]
+    assert "runtime_class" in blockers["missing_environment_metadata"]
     assert set(blockers["pending_scenarios"]) == set(REQUIRED_SCENARIOS)
 
 
@@ -184,14 +211,37 @@ def test_gate_reports_complete_passing_campaign_as_adoption_eligible(tmp_path: P
     assert report["protected_profile_gate"] == "pass"
     assert report["decision_ready"] is True
     assert report["adoption_eligible_from_this_gate"] is True
+    assert report["environment"]["complete"] is True
     assert report["campaign"]["complete"] is True
     assert report["blockers"] == {
         "hard_gate_failures": [],
         "missing_hard_gate_evidence": [],
+        "missing_environment_metadata": [],
         "failed_scenarios": [],
         "unsupported_scenarios": [],
         "pending_scenarios": [],
     }
+
+
+def test_gate_requires_representative_metadata_for_decision_readiness(tmp_path: Path) -> None:
+    completed, report = _run(
+        tmp_path,
+        evidence=_evidence(),
+        campaign=_campaign(environment={}),
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert report is not None
+    assert report["protected_profile_gate"] == "pass"
+    assert report["campaign"]["complete"] is True
+    assert report["environment"]["complete"] is False
+    assert report["decision_ready"] is False
+    assert report["adoption_eligible_from_this_gate"] is False
+    missing = report["blockers"]["missing_environment_metadata"]
+    assert "host_class" in missing
+    assert "vcpu" in missing
+    assert "cni" in missing
+    assert "profile_revision" in missing
 
 
 def test_gate_allows_unsupported_result_for_decision_but_not_adoption(tmp_path: Path) -> None:
@@ -227,3 +277,18 @@ def test_gate_rejects_terminal_scenario_without_evidence_reference(tmp_path: Pat
     assert completed.returncode != 0
     assert report is None
     assert "requires evidence references" in completed.stderr
+
+
+def test_gate_rejects_campaign_with_wrong_upstream_revision(tmp_path: Path) -> None:
+    environment = _environment()
+    environment["agent_sandbox_revision"] = "different-revision"
+
+    completed, report = _run(
+        tmp_path,
+        evidence=_evidence(),
+        campaign=_campaign(environment=environment),
+    )
+
+    assert completed.returncode != 0
+    assert report is None
+    assert "does not match #798 pin" in completed.stderr
