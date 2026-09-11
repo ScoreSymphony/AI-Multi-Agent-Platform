@@ -192,6 +192,17 @@ jobs:
             "${create_bucket[@]}" \
             > "evidence/${{ matrix.backend }}-contract.json"
 
+      - name: Verify invalid S3 credentials are rejected
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_auth_probe.py \
+            --backend "${{ matrix.backend }}" \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "auth-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > "evidence/${{ matrix.backend }}-auth.json"
+
       - name: Run canonical platform FileProvider conformance
         shell: bash
         env:
