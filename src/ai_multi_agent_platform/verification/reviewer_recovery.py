@@ -24,6 +24,10 @@ _STAGED_DECISION_KEY = "automatic_reviewer_decision"
 _RECOVERY_TELEMETRY_KEY = "automatic_reviewer_recovery"
 _RECOVERY_TELEMETRY_SCHEMA = "automatic-reviewer-recovery-v1"
 _RECOVERY_CAUSATION_ID = "automatic-reviewer-startup-recovery"
+_RECOVERY_ABANDONED = "abandoned_after_process_restart"
+_RECOVERY_TASK_CANCELLED = "cancelled_due_to_task"
+_RECOVERY_VERIFICATION_TERMINAL = "cancelled_due_to_terminal_verification"
+_RECOVERY_COMPLETED_STALE = "cancelled_after_verification_completed"
 
 
 class ReviewerTaskState(Protocol):
@@ -137,6 +141,17 @@ class AutomaticReviewerStartupReconciler:
         *,
         options: ReviewerRuntimeOptions,
     ) -> ReviewerRecoveryRecord:
+        binding_conflict = self._review_binding_conflict(request)
+        if binding_conflict is not None:
+            conflicting_run, reason = binding_conflict
+            return ReviewerRecoveryRecord(
+                verification_id=request.verification_id,
+                task_id=request.task_id,
+                disposition=ReviewerRecoveryDisposition.BLOCKED,
+                reviewer_agent_run_id=conflicting_run.agent_run_id,
+                reason=reason,
+            )
+
         runs_before = self._review_runs_for(request.verification_id)
         all_before_ids = {
             run.agent_run_id for run in self._all_review_runs_for_task(request.task_id)
@@ -156,6 +171,7 @@ class AutomaticReviewerStartupReconciler:
                 self._terminalize_stale_run(
                     run,
                     status=AgentRunStatus.CANCELLED,
+                    recovery_disposition=_RECOVERY_TASK_CANCELLED,
                     reason=(
                         "automatic reviewer startup recovery cancelled stale execution because "
                         "canonical Task is cancelled"
@@ -197,6 +213,7 @@ class AutomaticReviewerStartupReconciler:
                 cancelled = self._terminalize_stale_run(
                     running[0],
                     status=AgentRunStatus.CANCELLED,
+                    recovery_disposition=_RECOVERY_VERIFICATION_TERMINAL,
                     reason=(
                         "automatic reviewer startup recovery cancelled stale execution for "
                         f"{request.status.value} Verification"
@@ -235,6 +252,7 @@ class AutomaticReviewerStartupReconciler:
             stale = self._terminalize_stale_run(
                 running[0],
                 status=AgentRunStatus.CANCELLED,
+                recovery_disposition=_RECOVERY_COMPLETED_STALE,
                 reason=(
                     "automatic reviewer startup recovery cancelled stale execution because "
                     "canonical Verification is already completed"
@@ -245,6 +263,7 @@ class AutomaticReviewerStartupReconciler:
             abandoned = self._terminalize_stale_run(
                 running[0],
                 status=AgentRunStatus.FAILED,
+                recovery_disposition=_RECOVERY_ABANDONED,
                 reason=(
                     "automatic reviewer execution owner disappeared during Control Plane "
                     "restart; bounded retry required"
@@ -279,14 +298,22 @@ class AutomaticReviewerStartupReconciler:
 
         if abandoned_run_id is not None:
             disposition = ReviewerRecoveryDisposition.ABANDONED_RETRIED
+            reason = (
+                "prior single-node reviewer execution ownership disappeared; stale AgentRun was "
+                "terminalized before one bounded retry"
+            )
         elif staged_before and not completed_before:
             disposition = ReviewerRecoveryDisposition.STAGED_DECISION_REUSED
+            reason = "reused durable staged reviewer decision without another reviewer execution"
         elif not runs_before and runs_after:
             disposition = ReviewerRecoveryDisposition.DISPATCHED
+            reason = "pending Verification had no reviewer AgentRun; dispatched one bounded attempt"
         elif completed_before and replacement is None and not resumed_descendant:
             disposition = ReviewerRecoveryDisposition.ALREADY_COMPLETED
+            reason = "canonical Verification is already completed; no reviewer dispatch required"
         else:
             disposition = ReviewerRecoveryDisposition.RECONCILED
+            reason = "existing canonical reviewer or repair lineage reconciled idempotently"
 
         return ReviewerRecoveryRecord(
             verification_id=request.verification_id,
@@ -298,6 +325,7 @@ class AutomaticReviewerStartupReconciler:
                 or (None if latest is None else latest.agent_run_id)
             ),
             replacement_agent_run_id=replacement,
+            reason=reason,
         )
 
     async def _task_cancelled(
@@ -325,6 +353,7 @@ class AutomaticReviewerStartupReconciler:
         run: AgentRunRecord,
         *,
         status: AgentRunStatus,
+        recovery_disposition: str,
         reason: str,
     ) -> AgentRunRecord:
         current = self._agents.service.repository.get_agent_run(run.agent_run_id)
@@ -333,8 +362,9 @@ class AutomaticReviewerStartupReconciler:
         telemetry = dict(current.telemetry)
         telemetry[_RECOVERY_TELEMETRY_KEY] = {
             "schema": _RECOVERY_TELEMETRY_SCHEMA,
-            "disposition": "abandoned_after_process_restart",
+            "disposition": recovery_disposition,
             "reason": reason,
+            "terminal_status": status.value,
             "verification_id": current.verification_context.get("verification_id"),
         }
         return self._agents.finish_agent_run(
@@ -343,6 +373,57 @@ class AutomaticReviewerStartupReconciler:
             error=reason,
             telemetry=telemetry,
         )
+
+    def _review_binding_conflict(
+        self,
+        request: VerificationRequest,
+    ) -> tuple[AgentRunRecord, str] | None:
+        """Reject AgentRuns that claim this Verification without its exact durable binding."""
+
+        for record in self._agents.service.repository.list_agent_runs():
+            context = record.verification_context
+            if context.get("verification_id") != request.verification_id:
+                continue
+            if context.get("schema") != _REVIEW_CONTEXT_SCHEMA:
+                return (
+                    record,
+                    "reviewer AgentRun claims Verification with an unexpected binding schema",
+                )
+            read_only = context.get("read_only")
+            if not isinstance(read_only, bool):
+                return (
+                    record,
+                    "reviewer AgentRun claims Verification with malformed read_only binding",
+                )
+            expected = {
+                "schema": _REVIEW_CONTEXT_SCHEMA,
+                "verification_id": request.verification_id,
+                "task_id": request.task_id,
+                "policy_id": request.policy_id,
+                "policy_version": request.policy_version,
+                "stage_id": request.stage_id,
+                "subject": {
+                    "type": request.subject.subject_type,
+                    "id": request.subject.subject_id,
+                    "revision": request.subject.revision,
+                    "digest": request.subject.digest,
+                },
+                "repair_attempt": request.repair_attempt,
+                "correlation_id": request.correlation_id,
+                "agent_id": record.agent.agent_id,
+                "agent_revision": record.agent.revision,
+                "model_config_id": record.selected_model_config_id,
+                "provider_id": record.selected_provider_id,
+                "read_only": read_only,
+                "capability_ids": list(record.capability_ids),
+                "capability_versions": dict(record.capability_versions),
+            }
+            if record.task_id != request.task_id or dict(context) != expected:
+                return (
+                    record,
+                    "reviewer AgentRun no longer matches its exact canonical Verification binding",
+                )
+        return None
 
     def _review_runs_for(self, verification_id: str) -> tuple[AgentRunRecord, ...]:
         return tuple(
