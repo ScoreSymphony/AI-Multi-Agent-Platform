@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from ai_multi_agent_platform.contracts import HealthStatus
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.distributed.models import NodeStatus, WorkerStatus
 from ai_multi_agent_platform.models import ModelLocation, ModelRegistry
@@ -185,7 +188,10 @@ class SingleNodeComponentDiscoverySource:
                         "health": health.value,
                         "provider_type": descriptor.provider_type,
                         "supported_operations": list(descriptor.supported_operations),
-                        "model_locations": sorted(location.value for location in model_locations),
+                        "model_locations": cast(
+                            list[JsonValue],
+                            sorted(location.value for location in model_locations),
+                        ),
                         "configured_model_count": len(configured_models),
                     },
                 )

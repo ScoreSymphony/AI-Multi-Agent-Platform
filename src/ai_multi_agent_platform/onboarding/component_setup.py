@@ -6,7 +6,7 @@ owning installation, trust, authorization, secrets or any canonical provider lif
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -390,5 +390,5 @@ def _reject_unknown_fields(payload: dict[str, JsonValue], *, allowed: frozenset[
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             "component setup payload contains unsupported fields",
-            details={"unknown_fields": unknown},
+            details={"unknown_fields": cast(list[JsonValue], unknown)},
         )

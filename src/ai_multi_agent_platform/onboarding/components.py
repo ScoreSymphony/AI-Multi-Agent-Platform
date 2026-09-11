@@ -156,7 +156,7 @@ class DiscoveredComponent:
             "availability": self.availability.value,
             "lifecycle": self.lifecycle.value,
             "version": self.version,
-            "capabilities": sorted(self.capabilities),
+            "capabilities": cast(list[JsonValue], sorted(self.capabilities)),
             "requirements": [
                 {
                     "kind": requirement.kind.value,
@@ -166,7 +166,9 @@ class DiscoveredComponent:
                 }
                 for requirement in self.requirements
             ],
-            "recommended_modes": sorted(mode.value for mode in self.recommended_modes),
+            "recommended_modes": cast(
+                list[JsonValue], sorted(mode.value for mode in self.recommended_modes)
+            ),
             "priority": self.priority,
             "source_ref": self.source_ref,
             "metadata": dict(self.metadata),
