@@ -348,9 +348,7 @@ def test_evaluation_failure_mismatch_unavailable_and_optional_absence_are_fail_c
             suite_version="1",
             snapshot=ConfigurationSnapshot(
                 platform_version="test",
-                references=(
-                    replace(reference, revision="different-subject"),
-                ),
+                references=(replace(reference, revision="different-subject"),),
             ),
             status=EvaluationRunStatus.COMPLETED,
             completed_at=datetime.now(UTC),
