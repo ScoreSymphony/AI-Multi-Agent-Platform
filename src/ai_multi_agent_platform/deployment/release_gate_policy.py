@@ -74,7 +74,10 @@ def load_application_release_gate_policy(path: Path) -> StaticReleaseGatePolicy:
     except json.JSONDecodeError as exc:
         raise ConfigurationError("application release gate policy must be valid JSON") from exc
 
-    errors = sorted(_POLICY_VALIDATOR.iter_errors(raw), key=lambda item: list(item.absolute_path))
+    errors = sorted(
+        _POLICY_VALIDATOR.iter_errors(raw),
+        key=lambda item: tuple(str(part) for part in item.absolute_path),
+    )
     if errors:
         locations = []
         for error in errors:
@@ -100,19 +103,13 @@ def load_application_release_gate_policy(path: Path) -> StaticReleaseGatePolicy:
                         if deterministic is None
                         else DeterministicGateCheck(cast(str, deterministic))
                     ),
-                    verification_policy_id=cast(
-                        str | None, item.get("verification_policy_id")
-                    ),
+                    verification_policy_id=cast(str | None, item.get("verification_policy_id")),
                     verification_policy_version=cast(
                         int | None, item.get("verification_policy_version")
                     ),
-                    verification_stage_id=cast(
-                        str | None, item.get("verification_stage_id")
-                    ),
+                    verification_stage_id=cast(str | None, item.get("verification_stage_id")),
                     evaluation_suite_id=cast(str | None, item.get("evaluation_suite_id")),
-                    evaluation_suite_version=cast(
-                        str | None, item.get("evaluation_suite_version")
-                    ),
+                    evaluation_suite_version=cast(str | None, item.get("evaluation_suite_version")),
                 )
             )
         return StaticReleaseGatePolicy(tuple(requirements))
