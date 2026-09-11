@@ -75,6 +75,7 @@ class ControlPlane:
         self._authorization = ControlPlaneAuthorization(authorization)
         self._live_events = live_events
         self._health = ControlPlaneHealth(health_providers)
+        self._model_registry = model_registry
         self._models = ControlPlaneModelRegistry(model_registry)
         self._scope_resources = ControlPlaneScopeService(
             scopes=self._scopes,
@@ -487,3 +488,6 @@ def _model_resource(
 
 def _deduplicate(items: list[dict[str, JsonValue]]) -> list[dict[str, JsonValue]]:
     return deduplicate(items)
+
+
+__all__ = ["ControlPlane", "ReferenceCollection", "ScopeStore"]
