@@ -29,7 +29,8 @@ _RECOVERY_CAUSATION_ID = "automatic-reviewer-startup-recovery"
 class ReviewerTaskState(Protocol):
     """Minimum canonical Task projection needed by reviewer recovery."""
 
-    status: TaskStatus
+    @property
+    def status(self) -> TaskStatus: ...
 
 
 class ReviewerTaskReader(Protocol):
