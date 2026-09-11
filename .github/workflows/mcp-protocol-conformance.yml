@@ -1,0 +1,138 @@
+name: MCP protocol conformance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mcp-protocol-conformance.yml"
+      - "conformance/mcp/**"
+      - "scripts/ci/mcp_conformance_client.py"
+      - "scripts/ci/mcp_protocol_conformance.py"
+      - "scripts/ci/issue46_optional_environment_profile.py"
+      - "src/ai_multi_agent_platform/adapters/mcp.py"
+      - "src/ai_multi_agent_platform/adapters/mcp_sdk.py"
+      - "src/ai_multi_agent_platform/adapters/mcp_stateless.py"
+      - "src/ai_multi_agent_platform/conformance/mcp_protocol.py"
+      - "tests/**mcp**"
+      - "pyproject.toml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mcp-protocol-conformance.yml"
+      - "conformance/mcp/**"
+      - "scripts/ci/mcp_conformance_client.py"
+      - "scripts/ci/mcp_protocol_conformance.py"
+      - "scripts/ci/issue46_optional_environment_profile.py"
+      - "src/ai_multi_agent_platform/adapters/mcp.py"
+      - "src/ai_multi_agent_platform/adapters/mcp_sdk.py"
+      - "src/ai_multi_agent_platform/adapters/mcp_stateless.py"
+      - "src/ai_multi_agent_platform/conformance/mcp_protocol.py"
+      - "tests/**mcp**"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stable-2025-11-25:
+    name: mcp-protocol-2025-11-25
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.2"
+      - name: Pin supported npm
+        run: npm install --global npm@11.6.0
+      - name: Install platform MCP test environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Checkout pinned official MCP conformance suite
+        uses: actions/checkout@v7
+        with:
+          repository: modelcontextprotocol/conformance
+          ref: 21a9a2febd7100d7c17ac1021ee7f2ed9f66a1e0
+          path: .upstream/mcp-conformance
+          persist-credentials: false
+      - name: Build pinned official MCP conformance suite
+        working-directory: .upstream/mcp-conformance
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Run official MCP 2025-11-25 client conformance
+        run: |
+          python scripts/ci/mcp_protocol_conformance.py \
+            --track stable \
+            --suite-root .upstream/mcp-conformance \
+            --platform-commit "$GITHUB_SHA" \
+            --json-report mcp-protocol-2025-11-25.json
+      - name: Combine official protocol and platform integration evidence
+        if: always()
+        run: |
+          python scripts/ci/issue46_optional_environment_profile.py \
+            mcp \
+            --protocol-evidence mcp-protocol-2025-11-25.json \
+            --json-report conformance-mcp-platform.json \
+            --compatibility-report mcp-compatibility-2025-11-25.json
+      - name: Upload MCP compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcp-conformance-2025-11-25
+          path: |
+            mcp-protocol-2025-11-25.json
+            conformance-mcp-platform.json
+            mcp-compatibility-2025-11-25.json
+          if-no-files-found: warn
+
+  prerelease-2026-07-28:
+    name: mcp-protocol-2026-07-28-informational
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.2"
+      - name: Pin supported npm
+        run: npm install --global npm@11.6.0
+      - name: Install platform MCP test environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Checkout exact prerelease MCP conformance revision
+        uses: actions/checkout@v7
+        with:
+          repository: modelcontextprotocol/conformance
+          ref: a983ba93c91e0bb31d0b6849eeb52f0ad1083107
+          path: .upstream/mcp-conformance
+          persist-credentials: false
+      - name: Build exact prerelease MCP conformance suite
+        working-directory: .upstream/mcp-conformance
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Probe unclaimed MCP 2026-07-28 stateless profile
+        run: |
+          python scripts/ci/mcp_protocol_conformance.py \
+            --track prerelease \
+            --suite-root .upstream/mcp-conformance \
+            --platform-commit "$GITHUB_SHA" \
+            --json-report mcp-protocol-2026-07-28.json \
+            --strict
+      - name: Upload informational 2026-07-28 evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcp-conformance-2026-07-28-informational
+          path: mcp-protocol-2026-07-28.json
+          if-no-files-found: warn

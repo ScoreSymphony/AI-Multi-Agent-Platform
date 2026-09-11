@@ -64,7 +64,7 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | J-cli — client consistency | CLI reads shared canonical Task/Run/Result fixtures through versioned Control Plane routes | #17 / #46 |
 | J-web — client consistency | Web reads the same canonical Task/Run/Result fixtures through the same versioned API routes | #17 / #395 |
 | U — runtime verification | Verification gates completion, binds exact revisions, works deterministically without an LLM, enforces reviewer independence and keeps repair loops bounded and auditable | #86 |
-| ARCH — architecture invariants | optional backend isolation + mandatory-dependency guard | #46 |
+| ARCH — architecture invariants | optional-backend import/dependency isolation, backend-private public-type guard and platform-owned canonical identity | #46 |
 
 The fast tier is intentionally local/reference-only and deterministic. It requires no paid AI/API service and no Hermes, Forge, LiteLLM, Registry, remote distributed deployment or HA service. D-vertical does instantiate an in-process local Worker/Node fixture so the canonical Executor/Worker boundary is continuously exercised without claiming the optional distributed deployment profile.
 
@@ -91,9 +91,9 @@ The reference release tier extends integration with representative operational p
 | K — Task-centric Chat | message-to-Task Control Plane handoff is canonical and bidirectionally linked | #72 |
 | L — Terminal | project/workspace-scoped Control Plane session create/list/get/terminate with idempotency | #73 |
 | M — Browser | canonical download File/Artifact path plus policy-gated form upload through File permissions | #74 |
-| O — Usage/resources | Task/Run/Executor accounting is canonically attributed, idempotent and aggregated | #76 |
-| P — Standard Agents/Teams | starter catalog lifecycle uses the real Control Plane bootstrap/clone path | #77 |
-| W — Task management | priority/deadline/not-before, assignment and dependency semantics stay canonical metadata | #88 |
+| O — Usage/resources | Task/Run/Executor/model/Worker/Node usage is canonically attributed, provider-neutral resource gauges are retained and unavailable measurements are explicit rather than fabricated | #76 |
+| P — Standard Agents/Teams | catalog discovery is non-installing; Control Plane bootstrap/clone/delete supports independent user Agent and AgentTeam customization/removal while bundled definitions remain protected | #77 |
+| W — Task management | priority/deadline/not-before, assignment and dependency semantics stay canonical metadata; bulk updates preflight authorization and urgent priority cannot bypass distributed Worker admission | #88 |
 
 G is intentionally one coherent test rather than two unrelated assertions: a real canonical Run fails through the lifecycle backend, the Task becomes failed, `retry_task()` creates a distinct second Run with `attempt == 2`, canonical history contains the failed and retry events, and the Observability event provider emits exactly one `platform.run.retries` metric for that retry.
 
@@ -121,16 +121,22 @@ The following optional scenarios have maintained executable #46 evidence and can
 | B — Hermes | real pinned Hermes `/v1/runs` API compatibility test through the platform adapter |
 | C — Forge | real execution-only Forge Rust sidecar integration test |
 | E — Distributed Worker | authorization context + canonical terminal result identity + correlated safe distributed telemetry |
-| N — Notifications | recipient scope, authenticated anti-spoofing, idempotent inbox commands and replay-safe event projection |
-| Q — Templates | exact-source reapply authorization, dependency denial before side effects, compatibility/version blockers, secret rejection before instantiation, guarded composite compensation and final Single-Node owner-domain composition |
-| R — Import/export | package integrity, secret/runtime-state exclusion, successful import and rollback on failed import |
+| N — Notifications | authenticated recipient scope, Task success/failure plus Approval/Verification source linkage, deduplication and replay-safe projection |
+| Q — Templates | exact-source authorization, dependency/compatibility/secret blockers, guarded composite compensation, composed Single-Node integrations and composite revision stability: later published Template revisions do not alter an existing instance/reapply unless an upgrade revision is explicitly selected |
+| R — Import/export | canonical Control Plane/CLI export-preview-import flow with server-owned deterministic ID mapping, File/Artifact reference remapping, checksum enforcement, conflict preview, secret/runtime-state exclusion and rollback on failed import |
 | S — Registry | Registry-disabled single-node startup, configured local/offline composition sharing canonical plugin lifecycle, server-resolved preview validation and authoritative signature verification |
 | T — Repository/Git | exact repository revision -> canonical Workspace/Run -> change Artifact/commit provenance and retry identity |
-| V — Organizations | membership suspension/removal plus resource sharing/revocation and cross-organization isolation |
+| V — Organizations | personal operation without Organization membership, membership suspension/removal, intentional resource sharing/revocation, explicit cross-organization authorization/isolation and preserved historical Task/Event actor provenance |
 | X — HA | stale-leader fencing, promotion reconciliation preserving Worker identity and duplicate-command replay without duplicate Task/Run |
 | Y — durable Plan/Step coordination | crash/restart-safe Run creation, waits/retries/fan-in, stale-fence rejection, real distributed lost-ack/cancellation reconciliation, restore/history consistency, orchestrator-replacement invariance, conservative authorized repair and explicit coordination observability |
 
 Q, S and Y were previously unavailable while their owning implementation issues were still open. Their owning work is now complete and each has retained executable evidence. They remain optional deployment claims rather than becoming implicit requirements of the reference release profile, and therefore report `disabled` by default unless explicitly enabled.
+
+For Q, a maintained integration regression applies a published composite revision with a pinned dependency, publishes later dependency/composite revisions, then proves default reapply keeps the original source/dependency revisions while an explicit upgrade selects the newer revision. Existing instance records and resources are not silently rewritten.
+
+For R, the maintained public path goes through the versioned Control Plane commands and CLI rather than trusting a client-owned import plan. The server generates the import mapping, rejects a forged mapping, preserves deterministic replay/idempotency, validates File/Artifact checksums and references, reports conflicts before mutation and excludes plaintext secrets/backend-private runtime state.
+
+For V, the enabled claim includes personal scope without a synthetic Organization, Organization/Team sharing and isolation, an explicit authorization check for requested cross-Organization sharing, immediate loss of future Membership-derived scope after suspension/removal, and unchanged historical Task ownership/Event actor provenance.
 
 B and C still require prepared external Hermes/Forge environments. Explicit activation remains fail-closed when those external preconditions are absent.
 
@@ -173,10 +179,12 @@ Scenarios may emit a structured runtime-evidence envelope after their maintained
 
 ## Architecture invariants
 
-`tests/test_issue_46_architecture_invariants.py` currently automates two baseline invariants:
+`tests/test_issue_46_architecture_invariants.py` currently automates four platform-boundary invariant families plus a focused self-test of the annotation guard:
 
 1. canonical `contracts`, `domain` and `kernel` source must not import platform adapter implementations or Hermes/Forge/LiteLLM/MCP runtime packages;
-2. optional backend packages such as LiteLLM/MCP/provider SDKs must not become mandatory platform runtime dependencies.
+2. public canonical type annotations, including quoted/forward-reference annotations, must not expose backend-private Hermes/Forge/LiteLLM/MCP classes;
+3. even canonical-shaped backend Task/Run IDs remain namespaced `ExternalRef` metadata while the platform generates its own canonical Task/Run identities;
+4. optional backend packages such as LiteLLM/MCP/provider SDKs must not become mandatory platform runtime dependencies.
 
 Additional #46 invariants should be added as they can be checked reliably without encoding brittle implementation details.
 

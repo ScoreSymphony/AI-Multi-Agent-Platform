@@ -82,6 +82,31 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **ADR:** none required for the SDK choice; the canonical architecture explicitly treats MCP as an optional adapter.
 - **Adoption review:** `docs/upstream/MCP_PYTHON_SDK_ADOPTION.md`.
 
+### Model Context Protocol Conformance Test Suite
+
+- **Purpose:** official wire-level MCP protocol conformance evidence for compatibility claims that cannot be established by platform-internal integration tests alone.
+- **Status:** approved for test/evidence integration through #731; not a runtime dependency or canonical protocol authority.
+- **Integration category/categories:** protocol/specification integration; development/test tooling.
+- **Canonical upstream repository:** `https://github.com/modelcontextprotocol/conformance`.
+- **Pinned version/tag/commit or deployed revision:** stable claimed track `v0.1.16` / `21a9a2febd7100d7c17ac1021ee7f2ed9f66a1e0`; prerelease informational track `0.2.0-alpha.11` / `a983ba93c91e0bb31d0b6849eeb52f0ad1083107`.
+- **Verified license:** MIT.
+- **License verification date:** 2026-09-11.
+- **Last review date:** 2026-09-11.
+- **Platform adapter/boundary:** test/evidence-only code in `conformance/mcp/`, `scripts/ci/mcp_protocol_conformance.py`, `scripts/ci/mcp_conformance_client.py` and `ai_multi_agent_platform.conformance.mcp_protocol`; canonical Capability/Task/Run contracts remain independent.
+- **Local source path:** none; the official repository is checked out only into `.upstream/mcp-conformance` in CI/developer environments.
+- **Source origin/path:** no upstream source is copied or vendored; exact reviewed commits are checked out and built from their upstream lockfile.
+- **Modified locally:** no.
+- **Required notices / attribution:** the temporary upstream checkout retains its MIT license/package metadata; no copied-source notice is required in this repository.
+- **Known compatibility constraints:** the stable production claim is intentionally limited to the tested `2025-11-25` client/tool Streamable-HTTP profile. The `2026-07-28` stateless profile is implemented and exercised against the exact pinned prerelease official suite, but remains unclaimed/non-gating until a deliberate promotion decision after upstream stability/evidence review. Existing real STDIO coverage is platform/transport integration evidence, not relabeled official HTTP-runner protocol evidence. The platform currently exposes no MCP server profile and therefore makes no server-conformance claim.
+- **Security/deployment/resource constraints:** execute only exact reviewed suite commits; fixtures use local processes/localhost and require no production credentials, hosted provider or GPU. Node.js/npm are CI/developer-only prerequisites.
+- **Required for baseline:** no; native/reference capabilities and production runtime remain MCP-conformance-suite independent.
+- **Recurring paid service required:** no.
+- **Update/review method:** explicit #42-style pin update PR; re-review suite release/spec/scenario/license changes, run protocol and platform conformance separately, and never promote an informational revision merely by changing metadata.
+- **Exit/replacement strategy:** remove the conformance checkout/workflow/evidence integration; runtime adapters, canonical contracts and persisted application data require no migration.
+- **ADR:** none required because canonical runtime architecture is unchanged.
+- **Provenance:** `upstream/mcp-conformance.yaml`.
+- **Adoption review:** `docs/upstream/MCP_CONFORMANCE_ADOPTION.md`.
+
 ### LiteLLM
 
 - **Purpose:** optional model-gateway compatibility layer for in-process model calls or a separately deployed OpenAI-compatible proxy, behind the platform-owned `ModelProvider` and `ModelRouter` boundaries.
@@ -110,13 +135,13 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 ### NousResearch Hermes Agent
 
 - **Purpose:** optional production-oriented orchestration/planning runtime behind the platform-owned `Orchestrator` and `AgentOrchestratorMapper` boundaries.
-- **Status:** integrated through #8.
+- **Status:** integrated through #8; v0.21.1 compatibility revalidated through #733.
 - **Integration category/categories:** optional external service; orchestrator adapter integration.
 - **Canonical upstream repository:** `https://github.com/NousResearch/hermes-agent`.
-- **Pinned version/tag/commit or deployed revision:** `63279301bcbdc185c1b07b98a9312eb0c862f26d`.
+- **Pinned version/tag/commit or deployed revision:** Hermes Agent v0.21.1 / tag `v2026.9.7` / `2237be355906fbe6065ce1815711eee52b2d646e`.
 - **Verified license:** MIT.
-- **License verification date:** 2026-09-03.
-- **Last review date:** 2026-09-03.
+- **License verification date:** 2026-09-11.
+- **Last review date:** 2026-09-11.
 - **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.hermes.HermesOrchestrator` implements the canonical `Orchestrator`; `HermesAgentMapper` implements the platform-owned Agent/Team mapping seam. The baseline transport is the separately deployed Hermes API server `/v1/runs` surface.
 - **Local source path:** `src/ai_multi_agent_platform/adapters/hermes.py` contains platform-owned adapter code only; no Hermes source is vendored.
 - **Source origin/path:** no upstream source is copied. Compatibility is pinned to the documented API-server run/status/stop/health surface at the revision above.
@@ -130,7 +155,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Exit/replacement strategy:** remove the Hermes adapter/configuration and external service, then select another canonical `Orchestrator`/Agent mapper. No canonical Task/Run/Agent/Team/Plan/Event migration is required.
 - **ADR:** none required while Hermes remains a subordinate optional adapter; any proposal to move canonical lifecycle/domain/approval ownership into Hermes requires explicit architecture review.
 - **Provenance:** `upstream/hermes-agent.yaml`.
-- **Adoption/mapping review:** `docs/upstream/HERMES_AGENT_ADOPTION.md` and `docs/HERMES_ADAPTER.md`.
+- **Adoption/mapping review:** `docs/upstream/HERMES_AGENT_ADOPTION.md`, `docs/upstream/HERMES_AGENT_V0_21_1_VALIDATION.md` and `docs/integrations/HERMES_ADAPTER.md`.
 
 ### ScoreSymphony AI-Agent-VPS Forge subsystem
 
