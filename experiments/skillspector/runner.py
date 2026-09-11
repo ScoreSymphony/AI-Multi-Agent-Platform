@@ -45,6 +45,13 @@ def sanitized_environment() -> dict[str, str]:
 
 
 def container_command(runtime: str, image: str, input_dir: Path, output_dir: Path) -> list[str]:
+    """Build the isolated static-scan command for the pinned upstream image.
+
+    The upstream SkillSpector Dockerfile already declares ``ENTRYPOINT [\"skillspector\"]``.
+    We nevertheless override it explicitly so the harness is deterministic across a locally
+    rebuilt image and any future evaluation image. Only CLI arguments follow the image name;
+    this avoids accidentally executing ``skillspector skillspector scan ...``.
+    """
     return [
         runtime,
         "run",
@@ -56,12 +63,17 @@ def container_command(runtime: str, image: str, input_dir: Path, output_dir: Pat
         "--pids-limit=256",
         "--memory=1g",
         "--cpus=1.0",
+        "--tmpfs",
+        "/tmp:rw,noexec,nosuid,size=64m",
+        "-e",
+        "HOME=/tmp",
         "-v",
         f"{input_dir}:/scan:ro",
         "-v",
         f"{output_dir}:/out:rw",
-        image,
+        "--entrypoint",
         "skillspector",
+        image,
         "scan",
         "/scan",
         "--no-llm",
