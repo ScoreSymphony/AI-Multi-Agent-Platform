@@ -19,7 +19,7 @@ The harness requires only Python and `kubectl`. It targets an **already provisio
 sandbox Pod** and writes raw JSON evidence. It does not install Agent-Sandbox and does not make
 Kubernetes a platform dependency.
 
-Example:
+Basic example:
 
 ```bash
 python scripts/benchmarks/issue798_agent_sandbox_live.py \
@@ -34,6 +34,31 @@ python scripts/benchmarks/issue798_agent_sandbox_live.py \
 
 Never use a real production credential as `--canary`. The canary is intentionally synthetic and is
 used only to detect accidental persistence in provider/Kubernetes metadata.
+
+### Optional cross-token ownership probe
+
+To exercise AS-SEC-009, create two disposable evaluation sandboxes through two distinct provider
+API tokens/users. Put the tokens in environment variables rather than command-line arguments:
+
+```bash
+export AGENT_SANDBOX_TOKEN_A='<evaluation-token-a>'
+export AGENT_SANDBOX_TOKEN_B='<evaluation-token-b>'
+
+python scripts/benchmarks/issue798_agent_sandbox_live.py \
+  --namespace agent-sandbox-eval \
+  --sandbox-pod <sandbox-pod-name> \
+  --provider-base-url http://127.0.0.1:10000/e2b/v1 \
+  --sandbox-a-id <sandbox-created-by-a> \
+  --sandbox-b-id <sandbox-created-by-b> \
+  --output artifacts/issue798-agent-sandbox-live.json
+```
+
+`--token-a-env` and `--token-b-env` can select different environment-variable names. Token values
+are never written to the JSON report. The first ownership probe is deliberately read-only: it
+performs same-token and cross-token `GET /sandboxes/{sandboxID}` requests. A protected shared
+provider must allow `A -> A` and `B -> B` while rejecting `A -> B` and `B -> A`. Later lifecycle
+fixtures still need to repeat the ownership check for connect/router, snapshot, pause/resume and
+delete operations.
 
 ## Evidence captured automatically
 
@@ -60,7 +85,8 @@ The current harness records:
 - optional explicitly allowed-host reachability probe;
 - optional peer-sandbox reachability probe;
 - effective controller ServiceAccount `kubectl auth can-i --list` output;
-- synthetic-canary presence in ReplicaSet annotations.
+- synthetic-canary presence in ReplicaSet annotations;
+- optional same-token/cross-token provider `GET` authorization results, without token values.
 
 The harness output is **raw evidence**, not an automatic adoption decision.
 
@@ -77,6 +103,7 @@ supported:
 | unrestricted Internet target reachable | no |
 | metadata/link-local target reachable | no |
 | synthetic secret canary in ReplicaSet annotation | no |
+| cross-token provider GET for another tenant's known sandbox ID | rejected |
 | host network/PID/IPC namespaces | disabled |
 | privilege escalation | disabled |
 | non-root execution | enabled unless a separately reviewed workload requires otherwise |
@@ -87,6 +114,8 @@ supported:
 
 An allowed-host success is meaningful only if the same profile also proves deny behavior for
 unapproved destinations. A failed network connection alone is not proof of complete mediation.
+Likewise, a blocked cross-token `GET` is necessary but does not by itself prove ownership checks on
+mutating provider endpoints.
 
 ## Remaining live cases not fully automated by the first harness
 
@@ -101,14 +130,15 @@ The following still require additional provider/API lifecycle fixtures around th
 7. DNS, redirects, IPv6 and alternate-port/protocol egress bypass cases;
 8. internal Kubernetes service/control-plane reachability;
 9. synthetic scoped credential delivery, use, revocation and exfiltration attempt;
-10. browser/download/screenshot path through the canonical #74 boundary;
-11. pause/resume process-state behavior;
-12. snapshot restore, stale snapshot and incompatible-image behavior;
-13. sandbox crash/restart and retained-state cleanup;
-14. repeated cold starts and warm-pool allocation latency;
-15. idle CPU/RAM/disk measurement;
-16. concurrent sandbox density on the representative VPS class;
-17. malicious/untrusted repository execution fixture.
+10. cross-token ownership for connect/router, snapshot, pause/resume and delete operations;
+11. browser/download/screenshot path through the canonical #74 boundary;
+12. pause/resume process-state behavior;
+13. snapshot restore, stale snapshot and incompatible-image behavior;
+14. sandbox crash/restart and retained-state cleanup;
+15. repeated cold starts and warm-pool allocation latency;
+16. idle CPU/RAM/disk measurement;
+17. concurrent sandbox density on the representative VPS class;
+18. malicious/untrusted repository execution fixture.
 
 These cases must use the same pinned upstream revision and record any platform-owned hardened
 blueprint/profile revision used for the run.
