@@ -51,9 +51,9 @@ async def _run() -> dict[str, Any]:
     from swerex.deployment.remote import RemoteDeployment
     from swerex.runtime.abstract import Command, ReadFileRequest, WriteFileRequest
 
-    executable = shutil.which("swe-rex")
+    executable = shutil.which("swerex-remote")
     if executable is None:
-        raise RuntimeError("swe-rex executable was not found after pinned installation")
+        raise RuntimeError("swerex-remote executable was not found after pinned installation")
 
     port = _free_port()
     server = subprocess.Popen(
