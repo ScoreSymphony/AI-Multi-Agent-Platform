@@ -16,21 +16,28 @@ audit for this evaluation therefore treats static/no-LLM scanning as the baselin
 analysis is a separate mode because it changes data-egress, reproducibility, cost and
 policy properties.
 
+The pinned JSON contract exposes `issues`, `risk_assessment`, `execution_successful` and
+`analysis_completeness`. A CLI exit code of `1` can represent a policy-relevant risk score,
+not a scanner crash. The harness therefore treats a parsed report with
+`execution_successful: true` as usable evidence even when the upstream CLI exits `1`.
+Exit code `2`, malformed output, missing required report structure or incomplete analysis
+is never normalized into a clean result.
+
 ## Safety boundary
 
-`runner.py` stages a copy of a candidate into a temporary directory and prefers Docker or
-Podman with networking disabled, a read-only root filesystem, dropped capabilities,
-`no-new-privileges`, resource limits and a read-only candidate mount. It refuses host
-execution by default. `--allow-local-process` exists only for explicit diagnostic use and
-must not be treated as a security boundary.
+`runner.py` rejects candidate symlinks, stages a copy of a candidate into a temporary
+directory and prefers Docker or Podman with networking disabled, a read-only root
+filesystem, dropped capabilities, `no-new-privileges`, resource limits and a read-only
+candidate mount. It refuses host execution by default. `--allow-local-process` exists only
+for explicit diagnostic use and must not be treated as a security boundary.
 
-The harness passes only a small environment allowlist to the scanner. It never reads or
-forwards platform secrets intentionally. Input fixtures are non-destructive and contain no
-live credentials.
+The harness passes only a small environment allowlist to the scanner. It does not forward
+common platform/API credential variables. Input fixtures are non-destructive and contain
+no live credentials.
 
-The harness does **not** make trust decisions. A SkillSpector score, `safe_to_install`
-value, severity or recommendation remains provider-native metadata. `normalize.py` maps a
-report to advisory evidence only. Scanner failure or an incomplete scan becomes degraded
+The harness does **not** make trust decisions. A SkillSpector score, severity or
+recommendation remains provider-native metadata. `normalize.py` maps a report to advisory
+evidence only. Scanner failure, malformed output or an incomplete scan becomes degraded
 evidence, never a clean pass.
 
 ## Deterministic corpus
