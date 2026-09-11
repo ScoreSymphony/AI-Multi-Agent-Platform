@@ -37,6 +37,14 @@ class PipelockDirective(StrEnum):
     BLOCK = "block"
 
 
+class PipelockUnavailableAction(StrEnum):
+    """Platform behavior when a projection cannot reach the optional Pipelock runtime."""
+
+    NOT_REQUIRED = "not_required"
+    CONTINUE_WITH_DEGRADED_EVIDENCE = "continue_with_degraded_evidence"
+    FAIL_CLOSED = "fail_closed"
+
+
 class ReceiptVerification(StrEnum):
     """External cryptographic verification state for Pipelock evidence."""
 
@@ -154,6 +162,25 @@ def project_egress_decision(
         decision_digest=_decision_digest(request, decision),
         approval_ref=decision.approval_ref,
         mode=mode,
+    )
+
+
+def resolve_pipelock_unavailable(projection: PipelockProjection) -> PipelockUnavailableAction:
+    """Resolve outage behavior without changing the canonical egress decision.
+
+    Audit-only operation may continue with explicitly degraded evidence because canonical policy has
+    already allowed the request. Enforced mediation fails closed. Projections that never needed the
+    optional runtime remain unaffected by its availability.
+    """
+
+    if not projection.requires_pipelock:
+        return PipelockUnavailableAction.NOT_REQUIRED
+    if projection.mode is PipelockAdapterMode.AUDIT_ONLY:
+        return PipelockUnavailableAction.CONTINUE_WITH_DEGRADED_EVIDENCE
+    if projection.mode is PipelockAdapterMode.ENFORCE:
+        return PipelockUnavailableAction.FAIL_CLOSED
+    raise PipelockMappingError(
+        f"projection requires Pipelock in unsupported adapter mode: {projection.mode!r}"
     )
 
 
