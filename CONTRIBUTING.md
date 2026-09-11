@@ -46,29 +46,6 @@ python -m build
 
 These checks are intended to stay aligned with `.github/workflows/ci.yml`.
 
-## Canonical runtime assets
-
-Runtime resources that must also live inside the installed Python package have one editable source of truth:
-
-| Canonical source | Generated package copy |
-| --- | --- |
-| `schemas/backup-manifest-v1.schema.json` | `src/ai_multi_agent_platform/backup/backup-manifest-v1.schema.json` |
-| `release/compatibility.json` | `src/ai_multi_agent_platform/release/compatibility.json` |
-
-Edit only the canonical source, then refresh the package copies with:
-
-```bash
-python scripts/ci/issue725_materialize_runtime_assets.py
-```
-
-Before committing, verify that no generated copy drifted:
-
-```bash
-python scripts/ci/issue725_materialize_runtime_assets.py --check
-```
-
-CI rejects stale or missing generated copies, materializes the canonical assets immediately before the package build, and verifies that both the wheel and source distribution contain the canonical bytes.
-
 ## Frontend feature modules
 
 Frontend page code should be organized by product responsibility rather than allowed to grow into cross-domain page monoliths.
@@ -105,6 +82,29 @@ When changing package layout:
 - run the architecture tests, affected domain tests, import/package-discovery checks and the normal full validation suite.
 
 The architecture test intentionally fails when the actual root package set and the inventory diverge. Do not bypass that guard by registering a new root package without a meaningful ownership rationale.
+
+## Canonical runtime assets
+
+Runtime resources that must also live inside the installed Python package have one editable source of truth:
+
+| Canonical source | Generated package copy |
+| --- | --- |
+| `schemas/backup-manifest-v1.schema.json` | `src/ai_multi_agent_platform/backup/backup-manifest-v1.schema.json` |
+| `release/compatibility.json` | `src/ai_multi_agent_platform/release/compatibility.json` |
+
+Edit only the canonical source, then refresh the package copies with:
+
+```bash
+python scripts/ci/issue725_materialize_runtime_assets.py
+```
+
+Before committing, verify that no generated copy drifted:
+
+```bash
+python scripts/ci/issue725_materialize_runtime_assets.py --check
+```
+
+CI rejects stale or missing generated copies, materializes the canonical assets immediately before the package build, and verifies that both the wheel and source distribution contain the canonical bytes.
 
 ## Third-party components
 
