@@ -10,7 +10,9 @@ from ai_multi_agent_platform.verification import (
     VerifierKind,
 )
 from ai_multi_agent_platform.verification.agent_workflow import ReviewerAssignment
-from ai_multi_agent_platform.verification.output_workflow import _automatic_review_configuration
+from ai_multi_agent_platform.verification.output_workflow import (
+    _automatic_review_configuration,
+)
 from ai_multi_agent_platform.verification.reviewer_routing import ReviewerDiscoverySelector
 
 
@@ -46,7 +48,7 @@ def test_exact_assignment_metadata_remains_backward_compatible() -> None:
     assert route.team_role == "reviewer_tester"
 
 
-def test_policy_metadata_accepts_explicitly_scoped_role_capability_discovery() -> None:
+def test_scoped_discovery_metadata_accepts_role_and_capability() -> None:
     configuration = _automatic_review_configuration(
         _policy(
             {
@@ -96,7 +98,7 @@ def test_policy_metadata_rejects_unbounded_discovery() -> None:
     assert caught.value.code is ErrorCode.INVALID_CONFIGURATION
 
 
-def test_policy_metadata_rejects_discovery_scope_without_semantic_selector() -> None:
+def test_policy_metadata_rejects_scope_without_semantic_selector() -> None:
     with pytest.raises(ContractError) as caught:
         _automatic_review_configuration(
             _policy({"candidate_agent_ids": [STANDARD_AGENT_IDS["reviewer"]]}),
