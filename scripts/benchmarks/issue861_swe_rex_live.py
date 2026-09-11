@@ -15,6 +15,7 @@ import os
 import platform
 import sys
 import tempfile
+import traceback
 from pathlib import Path
 from time import monotonic
 from typing import Any
@@ -246,10 +247,25 @@ async def _main() -> int:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
-    if args.backend == "local":
-        evidence = await _run_local()
-    else:
-        evidence = await _run_docker(network_none=args.backend == "docker-network-none")
+    try:
+        if args.backend == "local":
+            evidence = await _run_local()
+        else:
+            evidence = await _run_docker(network_none=args.backend == "docker-network-none")
+    except Exception as exc:
+        evidence = {
+            "backend": args.backend,
+            "expected_version": EXPECTED_VERSION,
+            "pinned_revision": PINNED_REVISION,
+            "host_platform": platform.platform(),
+            "python": sys.version,
+            "passed_core_semantics": False,
+            "fatal_error": {
+                "type": type(exc).__name__,
+                "message": str(exc),
+                "traceback": traceback.format_exc()[-4000:],
+            },
+        }
 
     rendered = json.dumps(evidence, indent=2, sort_keys=True)
     print(rendered)
