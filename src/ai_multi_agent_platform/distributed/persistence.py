@@ -396,6 +396,7 @@ def _job_requirements(value: JsonValue) -> JobRequirements:
         model_ref=_optional_string(data.get("model_ref"), "model_ref"),
         runtime=_optional_string(data.get("runtime"), "runtime"),
         os_name=_optional_string(data.get("os_name"), "os_name"),
+        architecture=_optional_string(data.get("architecture"), "architecture"),
         network_required=_boolean(
             _required(data, "network_required"),
             "network_required",
