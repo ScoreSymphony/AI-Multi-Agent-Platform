@@ -690,8 +690,10 @@ def _execution_environment(values: dict[str, str]) -> dict[str, str]:
 def _sensitive_environment_values(request: ExecutionRequest) -> tuple[str, ...]:
     raw_keys = request.policy_context.get("sensitive_environment_keys")
     configured: set[str] = set()
-    if isinstance(raw_keys, list) and all(isinstance(item, str) for item in raw_keys):
-        configured.update(raw_keys)
+    if isinstance(raw_keys, list):
+        for item in raw_keys:
+            if isinstance(item, str):
+                configured.add(item)
     for name, value in request.environment.items():
         if redact_sensitive({name: value}) != {name: value}:
             configured.add(name)
