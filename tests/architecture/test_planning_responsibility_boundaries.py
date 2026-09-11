@@ -12,6 +12,7 @@ VALIDATION = PLANNING_ROOT / "validation.py"
 REPLANNING = PLANNING_ROOT / "replanning.py"
 PROPOSALS = PLANNING_ROOT / "proposals.py"
 HANDOFF = PLANNING_ROOT / "handoff.py"
+ACTIVATION = PLANNING_ROOT / "activation.py"
 
 
 def _tree(path: Path) -> ast.Module:
@@ -65,8 +66,7 @@ def _assert_delegated_call(
     method = _method(service, method_name)
     calls = [node for node in ast.walk(method) if isinstance(node, ast.Call)]
     assert any(
-        isinstance(call.func, ast.Attribute) and call.func.attr == delegated_call
-        for call in calls
+        isinstance(call.func, ast.Attribute) and call.func.attr == delegated_call for call in calls
     ), f"PlanningService.{method_name} must delegate to {delegated_call}"
 
 
@@ -117,7 +117,9 @@ def test_public_planning_service_delegates_immutable_proposal_construction() -> 
         and isinstance(call.func.value, ast.Name)
         and call.func.value.id == "_PROPOSAL_FACTORY"
         for call in calls
-    ), "PlanningService._proposal must delegate base proposal construction to PlanningProposalFactory"
+    ), (
+        "PlanningService._proposal must delegate base proposal construction to PlanningProposalFactory"
+    )
 
 
 def test_public_planning_service_delegates_canonical_activation_handoff() -> None:
@@ -131,6 +133,30 @@ def test_public_planning_service_delegates_canonical_activation_handoff() -> Non
     }
     for method_name, delegated_call in expected.items():
         _assert_delegated_call(service, method_name, delegated_call)
+
+
+def test_public_planning_service_delegates_authorized_activation() -> None:
+    service = _class(SUPERSESSION, "PlanningService")
+    activate = _method(service, "activate")
+    calls = [node for node in ast.walk(activate) if isinstance(node, ast.Call)]
+    assert any(
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr == "activate"
+        and isinstance(call.func.value, ast.Call)
+        and isinstance(call.func.value.func, ast.Attribute)
+        and call.func.value.func.attr == "_activation_service"
+        for call in calls
+    ), "PlanningService.activate must delegate canonical authorization/activation"
+    assert not any(
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr == "activate"
+        and isinstance(call.func.value, ast.Call)
+        and isinstance(call.func.value.func, ast.Name)
+        and call.func.value.func.id == "super"
+        for call in calls
+    ), "PlanningService.activate must not fall back to the legacy base activation implementation"
+    _assert_delegated_call(service, "_activation_action", "activation_action")
+    _assert_delegated_call(service, "_operation_context", "operation_context")
 
 
 def test_reference_inventory_filtering_remains_layered_on_public_inventory_seam() -> None:
@@ -194,3 +220,11 @@ def test_handoff_component_owns_canonical_plan_reconstruction_and_registration()
     ):
         _method(handoff, method_name)
     _assert_no_service_dependency(HANDOFF)
+
+
+def test_activation_component_owns_authorization_and_canonical_plan_commit() -> None:
+    activation = _class(ACTIVATION, "PlanningProposalActivation")
+    _method(activation, "activate")
+    _method(activation, "activation_action")
+    _method(activation, "operation_context")
+    _assert_no_service_dependency(ACTIVATION)
