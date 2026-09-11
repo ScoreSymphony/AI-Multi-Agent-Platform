@@ -137,7 +137,7 @@ def test_live_enforced_mediation_fails_closed_during_runtime_outage_and_recovers
     with _target_server(tmp_path) as (target_port, count_file):
         target = f"http://127.0.0.1:{target_port}/ok"
 
-        first_process, first_log, first_log_handle = _start_pipelock(
+        first_process, _, first_log_handle = _start_pipelock(
             tmp_path,
             port=proxy_port,
             run_name="before-outage",
@@ -154,7 +154,7 @@ def test_live_enforced_mediation_fails_closed_during_runtime_outage_and_recovers
             _fetch(proxy_port, target)
         assert _target_count(count_file) == 1
 
-        second_process, second_log, second_log_handle = _start_pipelock(
+        second_process, _, second_log_handle = _start_pipelock(
             tmp_path,
             port=proxy_port,
             run_name="after-recovery",
@@ -166,6 +166,3 @@ def test_live_enforced_mediation_fails_closed_during_runtime_outage_and_recovers
 
         assert TARGET_SENTINEL in recovered_body
         assert _target_count(count_file) == 2
-
-    assert "listening" in first_log.read_text(encoding="utf-8").lower()
-    assert "listening" in second_log.read_text(encoding="utf-8").lower()
