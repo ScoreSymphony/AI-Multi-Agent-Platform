@@ -16,7 +16,7 @@ Status: implementation guide for issue #723. This document records responsibilit
 
 | Hotspot | Responsibilities currently combined | Target internal boundaries | Stable façade / ownership to preserve | Primary regression focus | Status in #723 |
 | --- | --- | --- | --- | --- | --- |
-| `kernel/kernel.py` | Task commands; Run commands; Task/Run/Event reads; active-run selection; lifecycle dispatch/reconciliation; recovery; event/command commit mechanics; completion integration | query/read service; recovery coordinator; Task command service; Run command service; lifecycle reconciler; canonical event/command commit support | public `PlatformKernel`; kernel remains canonical Task/Run/Event lifecycle authority; `OutputObservingPlatformKernel` remains compatible | lifecycle transitions, idempotency, event history, cancellation races, recovery/restart, completion verification | **in progress**: queries, recovery, Task commands, Run commands and lifecycle reconciliation extracted behind the façade |
+| `kernel/kernel.py` | Task commands; Run commands; Task/Run/Event reads; active-run selection; lifecycle dispatch/reconciliation; recovery; event/command commit mechanics; completion integration | query/read service; recovery coordinator; Task command service; Run command service; lifecycle reconciler; canonical event/command commit support | public `PlatformKernel`; kernel remains canonical Task/Run/Event lifecycle authority; `OutputObservingPlatformKernel` remains compatible | lifecycle transitions, idempotency, event history, cancellation races, recovery/restart, completion verification | **implemented**: queries, recovery, Task commands, Run commands, lifecycle reconciliation and canonical commit support extracted behind the façade |
 | `distributed/workspace_transport.py` | Worker-local materialization state; chunk staging/commit; result collection; path/symlink safety; control-side transport client; worker-side transport endpoint; workspace-bound worker routing; wire codecs/checksums | materialization store; control-side remote materializer; worker endpoint; workspace-bound dispatcher; workspace wire codec | `RemoteWorkspaceMaterializer` contract; canonical Workspace/Snapshot/File identity remains control-plane owned; worker paths remain local deployment detail | interrupted transfers, duplicate chunks, checksum failure, cache replay, result collection, cleanup, read-only enforcement, request/reply correlation | audited; split pending |
 | `coordination/service.py` | Plan registration/graph validation; dependency barriers; Run-attempt creation/dispatch; Run outcome observation; retry scheduling; durable waits and resolution; cancellation; restart reconciliation; task aggregation; claims; telemetry | graph/registration validator; progression engine; attempt/retry coordinator; wait coordinator; recovery/reconciliation coordinator; task aggregation; telemetry adapter | `DurablePlanStepCoordinator` façade; kernel owns canonical Run/Task truth; repository owns durable coordination projection | contention/claim races, duplicate observations, retry due-times, waits, cancellation, restart/reconcile, predecessor failure, aggregate completion | audited; split pending |
 | `data/reference.py` | SQLite helpers plus three independent reference providers: File, Memory, Knowledge; each includes schema initialization, persistence mapping, scope checks and provider compatibility methods | shared SQLite connection/serialization primitives only where semantically shared; `LocalFileProvider`; `LocalMemoryProvider`; `LocalKnowledgeProvider` in dedicated modules | `FileProvider`, `MemoryProvider`, `KnowledgeProvider` contracts and current public exports | persistence restart, scope isolation, tombstones/orphans, memory expiry/supersession, knowledge revisions/index status/search | **implemented**: provider implementations split; `data.reference` retained as compatibility façade |
@@ -80,11 +80,23 @@ The fifth implementation cohort moves backend-facing lifecycle reconciliation ou
 
 - `kernel/lifecycle.py` owns backend dispatch after canonical `run.starting`, backend snapshot reconciliation, cancellation completion, recovery markers and Run/Task terminal event construction.
 - `PlatformKernel` preserves the existing internal capability surface consumed by `KernelRunCommands` and `KernelRecovery`, but those methods are now thin delegations to `KernelLifecycleReconciler`.
-- `KernelLifecycleReconciler` depends on a narrow host protocol for canonical reads and event/command commits and receives the lifecycle backend plus completion authority explicitly; it does not import the concrete `PlatformKernel` façade.
+- `KernelLifecycleReconciler` depends on a narrow host protocol for canonical reads, current lifecycle/completion dependencies and event/command commits; it does not import the concrete `PlatformKernel` façade.
 - Canonical Task/Run state remains event-sourced through the existing kernel repository and commit path; the lifecycle component cannot establish a second state authority.
 - Completion verification remains part of terminal transition construction, so successful Run reconciliation still respects the existing completion authority and waiting/repair behavior.
 
 Architecture guards require the lifecycle methods to stay delegated and include `lifecycle.py` in the no-concrete-façade dependency rule.
+
+## Cohort 6 — Kernel canonical commit support extraction
+
+The sixth implementation cohort moves shared command/idempotency/event persistence mechanics out of `PlatformKernel` while preserving the private kernel capability surface used by the focused command and lifecycle components:
+
+- `kernel/commit_support.py` owns idempotency lookup/validation, canonical `PlatformEvent` and `CommandRecord` construction, optimistic event-store commits, operation-context construction and event-sink mirroring.
+- `PlatformKernel` retains compatibility wrappers for the existing private capabilities, but their implementation delegates to `KernelCommitSupport`.
+- Domain command components still decide which Task/Run transitions occur; commit support only applies the shared canonical persistence mechanics and therefore does not become a second domain authority.
+- `KernelCommitSupport` depends only on a narrow host protocol exposing the existing canonical repository and optional event sink and never imports the concrete `PlatformKernel` façade.
+- Canonical payload versioning, stream revisions, adapter-metadata namespace validation, idempotency conflict behavior and optimistic-revision semantics remain unchanged.
+
+Architecture guards cover both instance delegation and static helper delegation and include `commit_support.py` in the no-concrete-façade dependency rule.
 
 ## Planned implementation cohorts
 
@@ -94,7 +106,7 @@ Architecture guards require the lifecycle methods to stay delegated and include 
 2. **Task commands** — create/update/ready/wait/resume/complete/fail/cancel behind an internal command component. *(implemented)*
 3. **Run commands** — create/retry/start/refresh/outcome/cancel and output attachment orchestration. *(implemented)*
 4. **Lifecycle reconciliation** — backend dispatch, snapshot reconciliation and cancellation completion. *(implemented)*
-5. **Commit support** — command/idempotency/event construction and mirroring, kept internal to the kernel package.
+5. **Commit support** — command/idempotency/event construction and mirroring, kept internal to the kernel package. *(implemented)*
 
 The order is chosen so each extraction can be reviewed against the same `PlatformKernel` façade and existing tests.
 
@@ -167,7 +179,7 @@ When another active issue touches one of these hotspot files:
 ## Acceptance evidence expected before #723 can close
 
 - all seven hotspot audits above are reflected in code or explicitly justified as cohesive;
-- `PlatformKernel` no longer directly implements every Task command, Run command, query, recovery and lifecycle concern in one object/file;
+- `PlatformKernel` no longer directly implements every Task command, Run command, query, recovery, lifecycle and commit-support concern in one object/file;
 - Control Plane northbound behavior and authorization decisions are unchanged;
 - authentication remains fail-closed and secret-safe;
 - File/Memory/Knowledge persistence and scope behavior survives restart tests;
