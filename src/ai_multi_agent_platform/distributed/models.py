@@ -65,6 +65,7 @@ class RejectionCode(StrEnum):
     CAPABILITY_UNSUPPORTED = "capability_unsupported"
     RUNTIME_UNSUPPORTED = "runtime_unsupported"
     OS_UNSUPPORTED = "os_unsupported"
+    ARCHITECTURE_UNSUPPORTED = "architecture_unsupported"
     CPU_INSUFFICIENT = "cpu_insufficient"
     RAM_INSUFFICIENT = "ram_insufficient"
     STORAGE_INSUFFICIENT = "storage_insufficient"
@@ -226,6 +227,7 @@ class JobRequirements:
     model_ref: str | None = None
     runtime: str | None = None
     os_name: str | None = None
+    architecture: str | None = None
     network_required: bool = False
     required_labels: tuple[str, ...] = ()
     preferred_labels: tuple[str, ...] = ()

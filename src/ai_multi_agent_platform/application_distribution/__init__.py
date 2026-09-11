@@ -9,6 +9,13 @@ from .contracts import (
     PublishContext,
     PublishedArtifact,
 )
+from .distributed_execution import (
+    APPLICATION_BUILD_WORKER_INPUT_KEY,
+    APPLICATION_BUILD_WORKER_SCHEMA,
+    ApplicationBuildWorkerLifecycleBackend,
+    DistributedApplicationBuildLifecycleBackend,
+    application_build_worker_input,
+)
 from .execution import APPLICATION_BUILD_ACTION
 from .gate_provenance import ApplicationReleaseGateCoordinator
 from .gates import (
@@ -49,7 +56,11 @@ from .models import (
     ReleaseStatus,
     ReleaseVisibility,
 )
-from .placement import DistributedBuildTargetMatcher, LocalBuildTargetMatcher
+from .placement import (
+    DistributedBuildTargetMatcher,
+    LocalBuildTargetMatcher,
+    job_requirements_for_target,
+)
 from .provenance_service import ApplicationDistributionService
 from .repository import (
     APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION,
@@ -59,12 +70,15 @@ from .repository import (
 
 __all__ = [
     "APPLICATION_BUILD_ACTION",
+    "APPLICATION_BUILD_WORKER_INPUT_KEY",
+    "APPLICATION_BUILD_WORKER_SCHEMA",
     "APPLICATION_RELEASE_MANIFEST_SCHEMA",
     "APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION",
     "APPLICATION_RELEASE_SCHEMA_VERSION",
     "MANIFEST_SCHEMA_VERSION",
     "ApplicationArtifact",
     "ApplicationBuildLifecycleBackend",
+    "ApplicationBuildWorkerLifecycleBackend",
     "ApplicationCommandExecutor",
     "ApplicationDistributionService",
     "ApplicationRelease",
@@ -77,6 +91,7 @@ __all__ = [
     "BuildTargetState",
     "BuildTargetStatus",
     "DeterministicGateCheck",
+    "DistributedApplicationBuildLifecycleBackend",
     "DistributedBuildTargetMatcher",
     "GateEvidence",
     "GateStatus",
@@ -95,10 +110,12 @@ __all__ = [
     "ReleaseStatus",
     "ReleaseVisibility",
     "StaticReleaseGatePolicy",
+    "application_build_worker_input",
     "artifact_subject_revision",
     "bind_gate_to_release",
     "canonical_manifest_bytes",
     "gate_is_current",
+    "job_requirements_for_target",
     "manifest_sha256",
     "manifest_validation_errors",
     "publication_readiness",
