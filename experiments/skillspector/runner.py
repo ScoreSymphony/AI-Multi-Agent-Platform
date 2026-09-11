@@ -78,7 +78,9 @@ def local_command(input_dir: Path, output_dir: Path) -> list[str]:
     ]
 
 
-def run_command(command: Sequence[str], *, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
+def run_command(
+    command: Sequence[str], *, timeout_seconds: int
+) -> subprocess.CompletedProcess[str]:
     try:
         completed = subprocess.run(
             list(command),
