@@ -1,0 +1,35 @@
+name: "Model Context Protocol Conformance Test Suite"
+purpose: "Official wire-level protocol conformance evidence for MCP adapter compatibility claims"
+status: approved
+integration_categories:
+  - protocol/specification integration
+  - library dependency
+canonical_upstream: "https://github.com/modelcontextprotocol/conformance"
+pinned_revision: "stable v0.1.16@21a9a2febd7100d7c17ac1021ee7f2ed9f66a1e0; prerelease 0.2.0-alpha.11@a983ba93c91e0bb31d0b6849eeb52f0ad1083107"
+verified_license: "MIT"
+license_verification_date: "2026-09-11"
+last_review_date: "2026-09-11"
+platform_adapter_or_boundary: "test/evidence-only conformance/mcp and scripts/ci boundary; never canonical runtime authority"
+local_source_path: ""
+source_origin_path: "No upstream source is copied; CI/developers checkout exact reviewed commits."
+modified_locally: false
+modification_summary: ""
+required_notices: []
+compatibility_constraints:
+  - "Stable gating track certifies only the explicitly selected 2025-11-25 client/tool profile."
+  - "2026-07-28 is informational and unclaimed until stateless adapter semantics are implemented and proven."
+  - "STDIO platform integration evidence is separate from the official HTTP client-runner protocol evidence."
+  - "No MCP server profile is claimed by the platform at this stage."
+security_constraints:
+  - "Execute only exact reviewed suite commits; never uncontrolled latest in gating CI."
+  - "Conformance fixtures use local processes/localhost and require no production credentials."
+deployment_constraints:
+  - "CI/developer tooling only; requires Node.js and npm ci against the pinned upstream lockfile."
+resource_constraints:
+  - "No GPU or hosted service required."
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Explicit #42-style pin update PR; review release/spec/scenario/license changes, then run protocol and platform conformance before promoting a new claim."
+exit_replacement_strategy: "Remove the test-tool checkout/workflow and evidence integration; canonical runtime contracts and stored platform data require no migration."
+adr: ""
+notes: "Adoption review: docs/upstream/MCP_CONFORMANCE_ADOPTION.md. Exact track pins: conformance/mcp/pins.json."
