@@ -215,9 +215,10 @@ def test_conflicting_exact_subject_verification_history_is_explicitly_inconclusi
 
         conflicted = (await coordinator.reconcile(replace(release, gates=())))[0]
         assert conflicted.status is GateStatus.INCONCLUSIVE
-        assert "conflicting exact-subject Verification evidence" == conflicted.details[
-            "blocking_reason"
-        ]
+        assert (
+            "conflicting exact-subject Verification evidence"
+            == conflicted.details["blocking_reason"]
+        )
         assert first_id in conflicted.evidence_refs
         assert duplicate.verification_id in conflicted.evidence_refs
 
