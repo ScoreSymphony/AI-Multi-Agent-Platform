@@ -188,6 +188,19 @@ jobs:
             "${create_bucket[@]}" \
             > "evidence/${{ matrix.backend }}-contract.json"
 
+      - name: Run canonical platform FileProvider conformance
+        shell: bash
+        env:
+          PYTHONPATH: src
+        run: |
+          python tests/evidence/issue_862/platform_file_contract_probe.py \
+            --backend "${{ matrix.backend }}" \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "provider-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > "evidence/${{ matrix.backend }}-platform-contract.json"
+
       - name: Record post-workload resource observation
         shell: bash
         run: |
