@@ -42,6 +42,9 @@ class ApplicationBuildLifecycleBackend(_BaseApplicationBuildLifecycleBackend):
 
         raw: dict[str, JsonValue] = dict(self._executor.descriptor.metadata)  # noqa: SLF001
         raw["executor_id"] = self._executor.descriptor.executor_id  # noqa: SLF001
+        raw["executor_version"] = __version__
+        raw["runtime_id"] = "python"
+        raw["runtime_version"] = platform.python_version()
         raw["build_provider_version"] = __version__
         os_name = platform.system().strip().lower()
         architecture = platform.machine().strip()
