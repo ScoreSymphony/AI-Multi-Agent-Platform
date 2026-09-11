@@ -98,6 +98,8 @@ def _load_object(path: Path) -> dict[str, Any]:
 
 
 def _require_issue_identity(evidence: dict[str, Any]) -> None:
+    if evidence.get("schema_version") != 1:
+        raise ValueError("evidence schema_version must be 1")
     if evidence.get("issue") != 798:
         raise ValueError("evidence issue must be 798")
     if evidence.get("provider") != "agent-sandbox":
@@ -182,11 +184,34 @@ def _canary_gate(value: object) -> GateResult:
 def _provider_auth_gate(value: object) -> GateResult:
     if not isinstance(value, dict) or value.get("performed") is not True:
         return GateResult("not_run", "cross-token provider authorization probe was not performed")
-    if value.get("cross_tenant_blocked") is True:
-        return GateResult("pass", "cross-token provider GET was rejected in both directions")
-    if value.get("cross_tenant_blocked") is False:
+
+    same_tenant = value.get("same_tenant")
+    cross_tenant = value.get("cross_tenant")
+    if not isinstance(same_tenant, dict) or not isinstance(cross_tenant, dict):
+        return GateResult("not_run", "provider authorization direction results are incomplete")
+
+    pairs = {
+        "a_to_a": same_tenant.get("a_to_a"),
+        "b_to_b": same_tenant.get("b_to_b"),
+        "a_to_b": cross_tenant.get("a_to_b"),
+        "b_to_a": cross_tenant.get("b_to_a"),
+    }
+    authorized: dict[str, bool] = {}
+    for name, result in pairs.items():
+        if not isinstance(result, dict) or not isinstance(result.get("authorized"), bool):
+            return GateResult("not_run", f"provider authorization result {name} is unknown")
+        authorized[name] = result["authorized"]
+
+    if not authorized["a_to_a"] or not authorized["b_to_b"]:
+        return GateResult("fail", "same-token provider GET did not succeed in both directions")
+    if authorized["a_to_b"] or authorized["b_to_a"]:
         return GateResult("fail", "cross-token provider GET exposed another sandbox")
-    return GateResult("not_run", "cross-token provider authorization result is unknown")
+    if value.get("cross_tenant_blocked") is not True:
+        return GateResult("fail", "provider authorization summary conflicts with direction results")
+    return GateResult(
+        "pass",
+        "same-token provider GET succeeded and cross-token GET was rejected in both directions",
+    )
 
 
 def _hard_gates(evidence: dict[str, Any]) -> dict[str, GateResult]:
@@ -303,6 +328,29 @@ def _validate_environment(campaign: dict[str, Any]) -> tuple[dict[str, Any], lis
     return normalized, missing
 
 
+def _environment_evidence_mismatches(
+    evidence: dict[str, Any],
+    environment: dict[str, Any],
+) -> list[str]:
+    pod = evidence.get("pod_security")
+    pod = pod if isinstance(pod, dict) else {}
+    mismatches: list[str] = []
+
+    runtime_class = environment.get("runtime_class")
+    captured_runtime_class = pod.get("runtime_class_name")
+    if runtime_class is not None and captured_runtime_class is not None:
+        if runtime_class != captured_runtime_class:
+            mismatches.append("runtime_class")
+
+    sandbox_image = environment.get("sandbox_image_digest")
+    captured_image = pod.get("image")
+    if sandbox_image is not None and captured_image is not None:
+        if sandbox_image != captured_image:
+            mismatches.append("sandbox_image_digest")
+
+    return mismatches
+
+
 def _validate_campaign(campaign: dict[str, Any]) -> dict[str, dict[str, Any]]:
     if campaign.get("schema_version") != 1:
         raise ValueError("campaign schema_version must be 1")
@@ -350,6 +398,7 @@ def evaluate(evidence: dict[str, Any], campaign: dict[str, Any]) -> dict[str, An
     _require_issue_identity(evidence)
     hard = _hard_gates(evidence)
     environment, missing_environment = _validate_environment(campaign)
+    environment_mismatches = _environment_evidence_mismatches(evidence, environment)
     scenarios = _validate_campaign(campaign)
 
     hard_failed = sorted(name for name, result in hard.items() if result.status == "fail")
@@ -365,7 +414,7 @@ def evaluate(evidence: dict[str, Any], campaign: dict[str, Any]) -> dict[str, An
     )
 
     campaign_complete = not scenario_pending
-    environment_complete = not missing_environment
+    environment_complete = not missing_environment and not environment_mismatches
     decision_ready = campaign_complete and environment_complete and not hard_missing
     protected_profile_gate = (
         "fail" if hard_failed else "incomplete" if hard_missing else "pass"
@@ -389,6 +438,7 @@ def evaluate(evidence: dict[str, Any], campaign: dict[str, Any]) -> dict[str, An
             "complete": environment_complete,
             "metadata": environment,
             "missing": missing_environment,
+            "evidence_mismatches": environment_mismatches,
         },
         "campaign": {
             "complete": campaign_complete,
@@ -401,17 +451,19 @@ def evaluate(evidence: dict[str, Any], campaign: dict[str, Any]) -> dict[str, An
             "hard_gate_failures": hard_failed,
             "missing_hard_gate_evidence": hard_missing,
             "missing_environment_metadata": missing_environment,
+            "environment_evidence_mismatches": environment_mismatches,
             "failed_scenarios": scenario_failed,
             "unsupported_scenarios": scenario_unsupported,
             "pending_scenarios": scenario_pending,
         },
         "interpretation": (
             "decision_ready means the required evaluation campaign, representative-environment "
-            "metadata and hard-gate capture are complete enough to choose adopt, "
-            "optional_provider_only, or reject/defer. It does not mean the provider is safe or "
-            "adopted. adoption_eligible_from_this_gate is intentionally stricter and becomes "
+            "metadata and hard-gate capture are complete and mutually consistent enough to choose "
+            "adopt, optional_provider_only, or reject/defer. It does not mean the provider is safe "
+            "or adopted. adoption_eligible_from_this_gate is intentionally stricter and becomes "
             "false for any hard-gate failure, failed scenario, unsupported required scenario, "
-            "missing representative-environment metadata, or missing hard-gate evidence."
+            "missing or inconsistent representative-environment metadata, or missing hard-gate "
+            "evidence."
         ),
     }
 
