@@ -57,7 +57,7 @@ Workflow run `34654695281` exercised the same dependency-free SigV4 probe agains
 |---|---|---|---|---:|---|
 | Garage `v2.3.0` | pass | pass | pass | 5.93 MiB | single-node CI evidence only |
 | SeaweedFS `4.46` | pass | pass | pass | 137 MiB | single-node CI baseline only |
-| RustFS `1.0.0-rc.6` | pending in this run | pending | pending | pending | no result yet |
+| RustFS `1.0.0-rc.6` | pass | pass | pass | 119.3 MiB | single-node CI evidence only |
 
 The resource snapshots above are diagnostics from a GitHub-hosted runner and **are not VPS sizing evidence**. They must not be used as the final resource comparison requested by #862.
 
@@ -72,6 +72,14 @@ The normalized evidence is committed at `tests/evidence/issue_862/results/garage
 The SeaweedFS artifact passed the same raw S3 operations and eight concurrent round trips. Its 1 MiB restart sentinel retained SHA-256 `da61ea71ca4c706ea437b4751836b6c286badf69ae2dfcd84fe247edd1f536f4` across restart. The pinned image digest was `chrislusf/seaweedfs@sha256:08d516132314207d10c8e37cbffc1f32b147d870169688734cc61c6231625b62`.
 
 The normalized evidence is committed at `tests/evidence/issue_862/results/seaweedfs-ci-34654695281.json`.
+
+### Verified RustFS evidence
+
+RustFS passed the same raw S3 operations and eight concurrent round trips. Its 1 MiB restart sentinel retained SHA-256 `3c94f7ce1ed272455d71da4b52f7ca89ebdd464e97a7c87b58ee93272bb949bc` across restart. The pinned runtime image digest was `rustfs/rustfs@sha256:97171b3d72cd47dc81000f92ea84de25608bfc35a94c965501afaeb5d99f6035`.
+
+The normalized evidence is committed at `tests/evidence/issue_862/results/rustfs-ci-34654695281.json`.
+
+The first identical live stage therefore does **not** distinguish the candidates on basic S3 compatibility, concurrent integrity or single-process restart persistence: all three passed. The remaining decision must be based on maturity, operational recovery, upgrade behavior, distributed failure handling, security/deployment boundaries, licensing and actual VPS measurements.
 
 These results validate only the raw storage subset and single-process restart persistence. A newer workflow revision additionally runs the platform's existing `assert_file_provider_contract(...)` helper through a minimal test adapter so the final evidence proves the canonical provider seam instead of only proving raw S3 calls.
 
@@ -97,4 +105,4 @@ The setup wizard (#799) may recommend a supported backend only after these gates
 
 The machine-readable source/revision/invariant manifest lives at `tests/evidence/issue_862/storage_backends.json`, with repository tests guarding the architecture boundary. The common harness lives under `tests/evidence/issue_862/` and the live workflow in `.github/workflows/issue-862-storage-evidence.yml`.
 
-The next gates are: RustFS live evidence, canonical `FileProvider` conformance for all live backends, backend-appropriate backup plus verified restore, upgrade/rollback evidence, TLS/auth evidence, distributed partial-failure evidence, and target-VPS resource measurements. Final setup-wizard integration remains blocked on #799.
+The next gates are: canonical `FileProvider` conformance for all live backends, backend-appropriate backup plus verified restore, upgrade/rollback evidence, TLS/auth evidence, distributed partial-failure evidence, and target-VPS resource measurements. Final setup-wizard integration remains blocked on #799.
