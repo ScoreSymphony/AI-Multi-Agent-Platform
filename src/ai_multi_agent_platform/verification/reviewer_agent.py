@@ -378,37 +378,37 @@ def _reviewer_selection_context(
         "selected_team_revision": team_revision,
     }
     if has_discovery:
-        provenance.update(
-            {
-                "candidate_agent_ids": _selection_string_list(route.get("candidate_agent_ids")),
-                "candidate_team_ids": _selection_string_list(route.get("candidate_team_ids")),
-                "reviewer_role": _selection_optional_string(route.get("reviewer_role")),
-                "required_capability_ids": _selection_string_list(
-                    route.get("required_capability_ids")
-                ),
-            }
+        provenance["candidate_agent_ids"] = _selection_string_list(
+            route.get("candidate_agent_ids")
+        )
+        provenance["candidate_team_ids"] = _selection_string_list(
+            route.get("candidate_team_ids")
+        )
+        provenance["reviewer_role"] = _selection_optional_string(route.get("reviewer_role"))
+        provenance["required_capability_ids"] = _selection_string_list(
+            route.get("required_capability_ids")
         )
     else:
-        provenance.update(
-            {
-                "configured_agent_id": _selection_optional_string(route.get("agent_id")),
-                "configured_agent_revision": _selection_optional_positive_int(
-                    route.get("agent_revision")
-                ),
-                "configured_team_id": _selection_optional_string(route.get("team_id")),
-                "configured_team_revision": _selection_optional_positive_int(
-                    route.get("team_revision")
-                ),
-                "configured_team_role": _selection_optional_string(route.get("team_role")),
-            }
+        provenance["configured_agent_id"] = _selection_optional_string(route.get("agent_id"))
+        provenance["configured_agent_revision"] = _selection_optional_positive_int(
+            route.get("agent_revision")
         )
+        provenance["configured_team_id"] = _selection_optional_string(route.get("team_id"))
+        provenance["configured_team_revision"] = _selection_optional_positive_int(
+            route.get("team_revision")
+        )
+        provenance["configured_team_role"] = _selection_optional_string(route.get("team_role"))
     return provenance
 
 
-def _selection_string_list(value: object) -> list[str]:
+def _selection_string_list(value: object) -> list[JsonValue]:
+    result: list[JsonValue] = []
     if not isinstance(value, (list, tuple)):
-        return []
-    return [item for item in value if isinstance(item, str) and item.strip()]
+        return result
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            result.append(item)
+    return result
 
 
 def _selection_optional_string(value: object) -> str | None:
