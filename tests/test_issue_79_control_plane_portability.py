@@ -233,6 +233,21 @@ def test_control_plane_binds_export_preview_and_import_without_client_owned_plan
         assert target_id != "demo_source"
         assert target == {}
 
+        repeated_preview = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/portability.preview",
+                headers=_headers("portable-preview-2"),
+                body={"resource_ref": package_id},
+            )
+        )
+        assert repeated_preview.status == 200
+        assert isinstance(repeated_preview.body, dict)
+        assert repeated_preview.body["preview_id"] == preview_id
+        assert repeated_preview.body["id_mapping"] == mapping
+        assert repeated_preview.body["import_order"] == previewed.body["import_order"]
+        assert target == {}
+
         forged = await http.handle(
             HTTPRequest(
                 method="POST",
