@@ -1,0 +1,97 @@
+name: Pipelock bypass and containment
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/pipelock-bypass-containment.yml"
+      - "tests/test_issue_730_pipelock_bypass_containment.py"
+      - "tests/fixtures/pipelock_bypass_audit.yaml"
+      - "tests/fixtures/pipelock_bypass_http_target.py"
+      - "tests/fixtures/mcp_stdio_direct_egress_server.py"
+      - "tests/fixtures/websocket_echo_server.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-core-bypass-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out platform
+        uses: actions/checkout@v7
+
+      - name: Check out exact Pipelock Core candidate
+        uses: actions/checkout@v7
+        with:
+          repository: luckyPipewrench/pipelock
+          ref: f7d1816f1a5ad63d501b0c48f36066f836f59022
+          path: .candidate/pipelock
+          persist-credentials: false
+
+      - name: Set up Go from pinned upstream module
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .candidate/pipelock/go.mod
+          cache-dependency-path: .candidate/pipelock/go.sum
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install platform test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install "websockets==15.0.1"
+
+      - name: Build tag-free Core candidate
+        working-directory: .candidate/pipelock
+        run: make build
+
+      - name: Reject Enterprise-tagged candidate binaries
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          go version -m ./pipelock | tee "$RUNNER_TEMP/pipelock-bypass-buildinfo.txt"
+          if grep -Eq 'tags=.*enterprise' "$RUNNER_TEMP/pipelock-bypass-buildinfo.txt"; then
+            echo "candidate binary contains Enterprise build tag" >&2
+            exit 1
+          fi
+
+      - name: Generate audit configuration for MCP stdio wrapper
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pipelock-bypass-home"
+          HOME="$RUNNER_TEMP/pipelock-bypass-home" ./pipelock init \
+            --scan-home "$RUNNER_TEMP/pipelock-bypass-home" \
+            --output "$RUNNER_TEMP/pipelock-bypass-generated-audit.yaml" \
+            --preset audit \
+            --skip-canary
+
+      - name: Exercise uncontained direct-network bypass cases
+        env:
+          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-bypass-generated-audit.yaml
+        run: |
+          pytest -q tests/test_issue_730_pipelock_bypass_containment.py \
+            --basetemp="$RUNNER_TEMP/pipelock-bypass" \
+            --junitxml="$RUNNER_TEMP/pipelock-bypass-junit.xml"
+
+      - name: Upload bypass evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pipelock-bypass-containment-evidence
+          path: |
+            ${{ runner.temp }}/pipelock-bypass-buildinfo.txt
+            ${{ runner.temp }}/pipelock-bypass-generated-audit.yaml
+            ${{ runner.temp }}/pipelock-bypass-junit.xml
+            ${{ runner.temp }}/pipelock-bypass/**/*.log
+            ${{ runner.temp }}/pipelock-bypass/**/*count.txt
+          if-no-files-found: warn
