@@ -61,7 +61,10 @@ async def _finish_build(
     target_id: str,
     idempotency_key: str,
 ) -> ApplicationRelease:
-    for _ in range(50):
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 5.0
+    last_status: BuildTargetStatus | None = None
+    while loop.time() < deadline:
         release = await service.request_build(
             release_id,
             target_id=target_id,
@@ -69,14 +72,18 @@ async def _finish_build(
             actor_ref="user:tester",
         )
         target = next(item for item in release.targets if item.target.target_id == target_id)
+        last_status = target.status
         if target.status in {
             BuildTargetStatus.SUCCEEDED,
             BuildTargetStatus.FAILED,
             BuildTargetStatus.UNSUPPORTED,
         }:
             return release
-        await asyncio.sleep(0.01)
-    raise AssertionError(f"remote application build did not complete: {target_id}")
+        await asyncio.sleep(0.02)
+    status = last_status.value if last_status is not None else "unknown"
+    raise AssertionError(
+        f"remote application build did not complete: {target_id}; last_status={status}"
+    )
 
 
 def test_application_build_dispatches_to_canonical_remote_worker_and_returns_artifact(
