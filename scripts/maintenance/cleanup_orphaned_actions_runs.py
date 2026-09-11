@@ -11,6 +11,7 @@ Examples:
     python scripts/maintenance/cleanup_orphaned_actions_runs.py --execute
     python scripts/maintenance/cleanup_orphaned_actions_runs.py --execute --max-delete 4000
 """
+
 from __future__ import annotations
 
 import argparse
