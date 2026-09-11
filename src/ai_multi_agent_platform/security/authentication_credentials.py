@@ -241,6 +241,26 @@ class AuthenticationCredentialService:
             request_id=request_id,
             correlation_id=correlation_id,
         )
+        return self.authenticate_worker_actor(
+            actor,
+            nonce=nonce,
+            issued_at=issued_at,
+            tls_peer_ref=tls_peer_ref,
+            now=current,
+        )
+
+    def authenticate_worker_actor(
+        self,
+        actor: AuthenticatedActor,
+        *,
+        nonce: str,
+        issued_at: datetime,
+        tls_peer_ref: str | None = None,
+        now: datetime | None = None,
+    ) -> AuthenticatedActor:
+        """Validate replay protection for an already authenticated worker actor."""
+
+        current = authentication_now(now)
         if actor.identity.actor_type is not ActorType.WORKER or actor.credential_id is None:
             raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS)
         if not self.replay_protector.accept(
