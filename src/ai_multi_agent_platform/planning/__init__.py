@@ -43,6 +43,7 @@ from .models import (
     ReplanPolicy,
     new_plan_proposal_id,
 )
+from .planning_facade import ActivatedPlanCoordinator, PlanningKernel
 from .providers import (
     DeterministicReferencePlanner,
     ModelBackedPlanner,
@@ -56,7 +57,6 @@ from .repository import (
     JsonPlanningRepository,
     PlanningRepository,
 )
-from .service import ActivatedPlanCoordinator, PlanningKernel
 from .supersession import PlanningService
 
 __all__ = [
