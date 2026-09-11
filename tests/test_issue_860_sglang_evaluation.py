@@ -176,9 +176,7 @@ def test_inference_backend_report_schema_is_valid_and_covers_campaign_fields() -
 
     Draft202012Validator.check_schema(schema)
     assert schema["properties"]["schema_version"]["const"] == "1.0"
-    assert set(campaign["required_metrics"]) <= set(
-        schema["properties"]["metrics"]["required"]
-    )
+    assert set(campaign["required_metrics"]) <= set(schema["properties"]["metrics"]["required"])
     report_environment_fields = {
         "platform_commit",
         "backend_revision",
