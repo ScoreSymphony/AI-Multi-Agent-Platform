@@ -118,7 +118,8 @@ def test_public_planning_service_delegates_immutable_proposal_construction() -> 
         and call.func.value.id == "_PROPOSAL_FACTORY"
         for call in calls
     ), (
-        "PlanningService._proposal must delegate base proposal construction to PlanningProposalFactory"
+        "PlanningService._proposal must delegate base proposal construction "
+        "to PlanningProposalFactory"
     )
 
 
