@@ -162,7 +162,21 @@ The initial candidate decision passed on platform revision `256b5fc4380e81a0d6f7
 - **Security/dependency gates:** CodeQL run `34567628481` and Dependency review run `34567628611` — success.
 - **Final head of the original PR:** CI run `34569728229` also passed after the documentation evidence commit.
 
-The #733 completion follow-up extends those gates with the machine-readable #42 adoption check, explicit failed-state mapping, approval-wait cancellation/restart coverage, real pinned-runtime adapter recreation, and pinned upstream startup/auth/health validation. The follow-up PR's final-head workflow evidence is recorded before merge; a failing required gate leaves #733 open.
+### Completion follow-up evidence
+
+The missing evidence identified by the post-merge audit was completed on PR #767 at platform revision `2960cef6573a30bef2dd00b893968cec458ca22e`.
+
+- **CI workflow:** run `34575804957` — success.
+- **Core test job:** success, including Ruff format/lint, mypy, the full pytest suite, package build and MCP environment conformance.
+- **#42 adoption regression:** `tests/release/test_hermes_v0_21_1_adoption_evidence.py` passed inside the full pytest suite and exercised the real read-only `upstream-adoption-check` path.
+- **#19 deterministic evaluation/regression gate:** success inside the core `test` job.
+- **Hermes pinned compatibility job:** `hermes-pinned-compat` — success after checking out exact Hermes commit `2237be355906fbe6065ce1815711eee52b2d646e`.
+- **#46 Scenario B completion:** success, including explicit failed-state mapping, approval-wait fail-closed/cancellation/restart behavior, pinned-runtime adapter recreation, startup-key/authentication behavior and `/health` compatibility.
+- **Hermes conformance artifact:** `platform-conformance-hermes`, artifact id `10189815331`, digest `sha256:7b9c6ce296793dc67e92f19432cae46b89e447521bc9acfe10cfc288970088ca`.
+- **Reference execution independence:** `forge-sidecar-integration` also passed in CI run `34575804957`, confirming the completion work did not regress the independent Forge execution profile.
+- **Security/dependency gates:** CodeQL run `34575804898` and Dependency review run `34575804897` — success.
+
+The follow-up closes the previously missing evidence without changing the accepted Hermes revision. The final documentation-only PR head is revalidated before merge; a failing required check still blocks merge.
 
 ## Rollback
 
