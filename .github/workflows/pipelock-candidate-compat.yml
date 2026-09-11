@@ -223,7 +223,7 @@ jobs:
           sha256sum "$receipt_file" > "$RUNNER_TEMP/pipelock-receipt-sha256.txt"
 
           ./pipelock verify-receipt \
-            "$receipt_file" \
+            --chain "$RUNNER_TEMP/recorder" \
             --key "$RUNNER_TEMP/pipelock-signing.pub" \
             | tee "$RUNNER_TEMP/pipelock-receipt-verification.txt"
 
