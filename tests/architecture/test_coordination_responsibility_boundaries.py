@@ -9,6 +9,7 @@ SERVICE = COORDINATION_ROOT / "service.py"
 REGISTRATION = COORDINATION_ROOT / "registration.py"
 PROGRESSION = COORDINATION_ROOT / "progression.py"
 WAITS = COORDINATION_ROOT / "waits.py"
+ATTEMPT_OUTCOMES = COORDINATION_ROOT / "attempt_outcomes.py"
 
 
 def _tree(path: Path) -> ast.Module:
@@ -103,6 +104,20 @@ def test_progression_compatibility_shims_delegate_to_progression_component() -> 
     _assert_delegate(_method(coordinator, "_start_attempt"), "_progression", "start_attempt")
 
 
+def test_attempt_outcome_entrypoints_stay_behind_focused_component() -> None:
+    coordinator = _class(SERVICE, "DurablePlanStepCoordinator")
+    _assert_delegate(
+        _method(coordinator, "observe_run"),
+        "_attempt_outcomes",
+        "observe_run",
+    )
+    _assert_delegate(
+        _method(coordinator, "_activate_retry"),
+        "_attempt_outcomes",
+        "activate_retry",
+    )
+
+
 def test_wait_entrypoints_stay_behind_focused_component() -> None:
     coordinator = _class(SERVICE, "DurablePlanStepCoordinator")
     _assert_delegate(_method(coordinator, "wait_step"), "_waits", "wait_step")
@@ -139,6 +154,7 @@ def test_focused_coordination_components_do_not_depend_back_on_facade() -> None:
     _assert_no_facade_dependency(REGISTRATION)
     _assert_no_facade_dependency(PROGRESSION)
     _assert_no_facade_dependency(WAITS)
+    _assert_no_facade_dependency(ATTEMPT_OUTCOMES)
 
 
 def test_registration_component_owns_graph_validation() -> None:
@@ -151,6 +167,13 @@ def test_progression_component_owns_dependency_and_attempt_mechanics() -> None:
     progression = _class(PROGRESSION, "CoordinationProgression")
     _method(progression, "refresh_dependencies")
     _method(progression, "start_attempt")
+
+
+def test_attempt_outcome_component_owns_retry_decisions_and_activation() -> None:
+    outcomes = _class(ATTEMPT_OUTCOMES, "CoordinationAttemptOutcomes")
+    _method(outcomes, "observe_run")
+    _method(outcomes, "activate_retry")
+    _method(outcomes, "run_outcome")
 
 
 def test_wait_component_owns_wait_validation_and_resolution() -> None:
