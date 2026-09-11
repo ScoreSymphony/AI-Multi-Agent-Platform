@@ -15,6 +15,7 @@ from ai_multi_agent_platform.benchmarking.inference_backend_evaluation_cli impor
 
 SGLANG_REVISION = "0bcd822377da7b5718e674eaf9c870d349424dd1"
 VLLM_REVISION = "98dff2a81d747d1dba01a47f939f48c3526d4206"
+OLLAMA_REVISION = "d8ab4b4f0ca24b51d3a46b3bf4f462e58ce66b1f"
 
 CAMPAIGN = {
     "campaign_id": "issue-860-sglang-v0.5.19",
@@ -32,8 +33,8 @@ CAMPAIGN = {
             "release_commit": VLLM_REVISION,
         },
         {
-            "backend": "llama.cpp-or-ollama",
-            "revision_policy": "record-exact-revision-per-run",
+            "backend": "ollama",
+            "release_commit": OLLAMA_REVISION,
         },
     ],
     "contract_cases": [
@@ -89,6 +90,7 @@ def _report(backend: str) -> dict[str, Any]:
     revisions = {
         "sglang": SGLANG_REVISION,
         "vllm": VLLM_REVISION,
+        "ollama": OLLAMA_REVISION,
     }
     backend_revision = revisions.get(backend, f"{backend}-revision")
     return {
@@ -196,6 +198,17 @@ def test_readiness_rejects_vllm_revision_that_does_not_match_campaign() -> None:
         assess_inference_backend_evaluation(
             campaign=CAMPAIGN,
             reports=[_report("sglang"), vllm],
+        )
+
+
+def test_readiness_rejects_ollama_revision_that_does_not_match_campaign() -> None:
+    ollama = _report("ollama")
+    ollama["backend_revision"] = "f" * 40
+
+    with pytest.raises(ValueError, match="ollama report backend_revision"):
+        assess_inference_backend_evaluation(
+            campaign=CAMPAIGN,
+            reports=[_report("sglang"), _report("vllm"), ollama],
         )
 
 
