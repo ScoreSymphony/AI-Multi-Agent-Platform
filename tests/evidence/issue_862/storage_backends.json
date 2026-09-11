@@ -19,41 +19,75 @@
       "CompleteMultipartUpload",
       "AbortMultipartUpload"
     ],
-    "explicitly_not_assumed": ["ACLs", "bucket versioning", "object lock", "S3 lifecycle rules", "ETag as SHA-256"]
+    "explicitly_not_assumed": [
+      "ACLs",
+      "bucket versioning",
+      "object lock",
+      "S3 lifecycle rules",
+      "ETag as SHA-256"
+    ]
   },
   "backends": {
     "rustfs": {
       "source_url": "https://github.com/rustfs/rustfs",
       "reviewed_ref": "1.0.0-rc.6-preview.1",
       "reviewed_commit": "5cd58319ed6148ed7f09f2a4d0b4e46e429f043a",
+      "runtime_ref": "1.0.0-rc.6",
+      "runtime_commit": "5cd58319ed6148ed7f09f2a4d0b4e46e429f043a",
+      "runtime_image": "rustfs/rustfs:1.0.0-rc.6",
+      "runtime_note": "The preview tag is the latest release label but intentionally publishes no Docker image. The published rc.6 runtime tag resolves to the same source commit.",
       "license": "Apache-2.0",
       "project_status": "pre-release release-candidate line",
       "proposed_classification": "experimental_only",
       "classification_is_final": false,
       "known_s3_evidence": "Official compatibility matrix documents tested put/get/inspect/delete, ListObjects/ListObjectsV2, range reads and core multipart workflow; it also records excluded/planned behavior.",
-      "open_evidence": ["platform contract probe", "restart/failure campaign", "multi-node campaign", "backup/restore", "upgrade/rollback", "VPS resource measurements"]
+      "open_evidence": [
+        "platform contract probe",
+        "restart/failure campaign",
+        "multi-node campaign",
+        "backup/restore",
+        "upgrade/rollback",
+        "VPS resource measurements"
+      ]
     },
     "garage": {
       "source_url": "https://github.com/deuxfleurs-org/garage",
       "reviewed_ref": "v2.3.0",
       "reviewed_commit": "7b119c0b4fa58ab3cb6d5db435fe52d990f6a7aa",
+      "runtime_ref": "v2.3.0",
+      "runtime_commit": "7b119c0b4fa58ab3cb6d5db435fe52d990f6a7aa",
+      "runtime_image": "dxflrs/garage:v2.3.0",
       "license": "AGPL-3.0",
       "project_status": "stable tagged release",
       "proposed_classification": "supported_optional",
       "classification_is_final": false,
       "known_s3_evidence": "Project describes an S3-compatible object store for small self-hosted geo-distributed deployments; compatibility must be validated only for the platform-required subset.",
-      "open_evidence": ["platform contract probe", "restart/failure campaign", "multi-node campaign", "backup/restore", "upgrade/rollback", "VPS resource measurements", "AGPL deployment-boundary review"]
+      "open_evidence": [
+        "platform contract probe",
+        "restart/failure campaign",
+        "multi-node campaign",
+        "backup/restore",
+        "upgrade/rollback",
+        "VPS resource measurements",
+        "AGPL deployment-boundary review"
+      ]
     },
     "seaweedfs": {
       "source_url": "https://github.com/seaweedfs/seaweedfs",
       "reviewed_ref": "4.46",
       "reviewed_commit": "d997fba1575583a89cf0cc50dc0150642286c86d",
+      "runtime_ref": "4.46",
+      "runtime_commit": "d997fba1575583a89cf0cc50dc0150642286c86d",
+      "runtime_image": "chrislusf/seaweedfs:4.46",
       "license": "Apache-2.0",
       "project_status": "comparison baseline",
       "proposed_classification": "supported_optional",
       "classification_is_final": false,
       "known_s3_evidence": "SeaweedFS exposes S3 through a stateless gateway in front of the filer and supports multi-node replication/topologies.",
-      "open_evidence": ["same platform contract probe used for candidates", "same resource campaign used for candidates"]
+      "open_evidence": [
+        "same platform contract probe used for candidates",
+        "same resource campaign used for candidates"
+      ]
     }
   },
   "gate": {
