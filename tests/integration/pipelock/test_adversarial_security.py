@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 import urllib.parse
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -234,6 +234,15 @@ def _wait_for_log_event(log_path: Path, event: str) -> str:
     raise AssertionError(f"Pipelock log did not record {event!r} before timeout")
 
 
+def _verification_field(text: str, label: str) -> str:
+    prefix = f"{label}:"
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(prefix):
+            return stripped.removeprefix(prefix).strip()
+    raise AssertionError(f"receipt verifier did not report {label!r}")
+
+
 def _marker_lines(marker: Path) -> list[str]:
     if not marker.exists():
         return []
@@ -383,7 +392,10 @@ def test_websocket_blocks_server_prompt_injection_before_client(tmp_path: Path) 
     PIPELOCK_TEST_BIN is None or PIPELOCK_TEST_CONFIG is None,
     reason="requires the pinned Pipelock #730 compatibility runtime and generated audit config",
 )
-def test_connect_require_receipts_uses_fresh_writer_and_verifies_chain(tmp_path: Path) -> None:
+def test_connect_require_receipts_uses_fresh_writer_and_verifies_chain(
+    tmp_path: Path,
+    record_property: Callable[[str, object], None],
+) -> None:
     assert PIPELOCK_TEST_BIN is not None
     home, config, recorder, pubkey = _strict_connect_fixture(tmp_path)
     output = tmp_path / "strict-connect-output.txt"
@@ -439,3 +451,11 @@ def test_connect_require_receipts_uses_fresh_writer_and_verifies_chain(tmp_path:
         timeout=15,
     )
     assert "CHAIN VALID" in verification.stdout
+    record_property("strict_connect_chain_valid", "true")
+    record_property("strict_connect_receipts", _verification_field(verification.stdout, "Receipts"))
+    record_property("strict_connect_final_seq", _verification_field(verification.stdout, "Final seq"))
+    record_property("strict_connect_root_hash", _verification_field(verification.stdout, "Root hash"))
+    record_property("strict_connect_signer", _verification_field(verification.stdout, "Signer"))
+    containment = _verification_field(verification.stdout, "Containment").split(" —", 1)[0]
+    record_property("strict_connect_containment", containment)
+    record_property("strict_connect_sealed_chain_error", "false")
