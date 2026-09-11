@@ -20,7 +20,7 @@ The repository is in active product-integration, acceptance, hardening and opera
 
 Current work is deliberately being developed on focused issue branches and then staged through the shared `integration/active-issue-batch` branch before anything reaches `main`. The corresponding integration pull request is [PR #782](https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/pull/782). Its live PR body and checks are the authoritative source for the exact batch composition.
 
-The #728 staging branch is kept synchronized with the active integration branch at meaningful convergence points. This lets README/status cleanup absorb already-staged cross-issue documentation changes while remaining a late final documentation pass rather than a competing integration branch. At this convergence point, the #728 branch is based directly on integration commit `9fffe722be01acc4f92773a7bbc8c4872c240b65`, including the staged #750 release-gate hardening. Later integration commits must still be incorporated before final closure.
+The #728 staging branch is kept synchronized with the active integration branch at meaningful convergence points. This lets README/status cleanup absorb already-staged cross-issue documentation changes while remaining a late final documentation pass rather than a competing integration branch. At this convergence point, the #728 branch is reconstructed directly on integration commit `b09969b8b3bb1b1dd043e532a79e38bd4d0bd0e0`, including the currently staged #750 release-gate hardening. Further integration commits may still arrive before final #728 closure.
 
 The integration policy is:
 
