@@ -142,7 +142,7 @@ def _model_payload() -> dict[str, JsonValue]:
         "location": "local",
         "capabilities": {
             "context_window": 32768,
-            "tool_calling": False,
+            "tool_calling": True,
             "structured_output": True,
             "streaming": False,
             "modalities": ["text"],
