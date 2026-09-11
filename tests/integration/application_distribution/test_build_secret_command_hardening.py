@@ -36,7 +36,10 @@ def _target() -> BuildTarget:
 def test_build_specification_rejects_sensitive_credential_argv_values(
     command: tuple[str, ...],
 ) -> None:
-    with pytest.raises(ValueError, match="sensitive credential option values"):
+    with pytest.raises(
+        ValueError,
+        match="sensitive (?:credential option values|environment assignments)",
+    ):
         BuildSpecification(command=command, targets=(_target(),))
 
 
