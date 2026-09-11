@@ -32,8 +32,18 @@ PROVIDER_USAGE = {"llm_assisted": False, "provider": None}
 
 
 def _finding_signature(evidence: Mapping[str, Any]) -> str:
+    """Hash semantic finding content, excluding per-run upstream occurrence UUIDs."""
     findings = evidence.get("findings")
-    canonical = json.dumps(findings, sort_keys=True, separators=(",", ":"))
+    stable_findings: list[Any] = []
+    if isinstance(findings, (list, tuple)):
+        for finding in findings:
+            if isinstance(finding, Mapping):
+                item = dict(finding)
+                item.pop("provider_id", None)
+                stable_findings.append(item)
+            else:
+                stable_findings.append(finding)
+    canonical = json.dumps(stable_findings, sort_keys=True, separators=(",", ":"))
     return sha256(canonical.encode()).hexdigest()
 
 
