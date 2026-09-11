@@ -74,9 +74,7 @@ def _import_targets(path: Path) -> tuple[tuple[int, str], ...]:
             continue
         targets.append((node.lineno, base))
         targets.extend(
-            (node.lineno, f"{base}.{alias.name}")
-            for alias in node.names
-            if alias.name != "*"
+            (node.lineno, f"{base}.{alias.name}") for alias in node.names if alias.name != "*"
         )
 
     return tuple(targets)
@@ -142,8 +140,7 @@ def test_migration_packages_do_not_reverse_canonical_dependency_direction() -> N
                     )
 
     assert not violations, (
-        "canonical owners must not depend on their migration namespaces:\n"
-        + "\n".join(violations)
+        "canonical owners must not depend on their migration namespaces:\n" + "\n".join(violations)
     )
 
 
