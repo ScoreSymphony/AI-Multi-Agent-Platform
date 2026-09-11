@@ -35,7 +35,13 @@ from .components import (
     recommend_setup_profile,
     resolve_component_selection,
 )
-from .control_plane import OnboardingResourceService, register_onboarding_control_plane
+from .control_plane import (
+    COMPONENT_SETUP_COLLECTION,
+    ComponentSetupResourceService,
+    OnboardingResourceService,
+    register_component_setup_control_plane,
+    register_onboarding_control_plane,
+)
 from .first_task import ONBOARDING_RUN_FIRST_TASK_COMMAND, FirstRunTaskService
 from .persistence import (
     ONBOARDING_PROVIDER_SCHEMA_VERSION,
@@ -55,6 +61,7 @@ from .service import (
 )
 
 __all__ = [
+    "COMPONENT_SETUP_COLLECTION",
     "COMPONENT_SETUP_RESOURCE_ID",
     "FIRST_RUN_AGENT_EXECUTION_PROFILE",
     "FIRST_RUN_AGENT_ID_KEY",
@@ -79,6 +86,7 @@ __all__ = [
     "ComponentLifecycle",
     "ComponentRequirement",
     "ComponentSelectionLayer",
+    "ComponentSetupResourceService",
     "DiscoveredComponent",
     "FirstRunAgentLifecycleBackend",
     "FirstRunTaskService",
@@ -99,6 +107,7 @@ __all__ = [
     "SetupProfileState",
     "SingleNodeComponentDiscoverySource",
     "recommend_setup_profile",
+    "register_component_setup_control_plane",
     "register_onboarding_control_plane",
     "resolve_component_selection",
 ]
