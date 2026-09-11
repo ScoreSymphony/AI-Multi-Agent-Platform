@@ -185,7 +185,7 @@ async def _run_docker(*, network_none: bool) -> dict[str, Any]:
 
             response = await deployment.runtime.execute(
                 Command(
-                    command=["python", "-c", _command_payload()],
+                    command=["/usr/local/bin/python3", "-c", _command_payload()],
                     cwd=remote_workspace,
                     env={"ISSUE861_SECRET": SYNTHETIC_SECRET},
                 )
