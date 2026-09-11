@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
-from experiments.skillspector.fixtures import FIXTURES, write_fixture_corpus
-from experiments.skillspector.normalize import normalize_report
-from experiments.skillspector.runner import (
+# Evaluation modules intentionally live outside the installable platform package. Add the
+# repository root explicitly so these tests behave the same under the repo's `pytest` console
+# entry point and under `python -m pytest`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from experiments.skillspector.fixtures import FIXTURES, write_fixture_corpus  # noqa: E402
+from experiments.skillspector.normalize import normalize_report  # noqa: E402
+from experiments.skillspector.runner import (  # noqa: E402
     container_command,
     sanitized_environment,
     scan_result_is_usable,
