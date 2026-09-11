@@ -1,6 +1,6 @@
 """Subprocess/container harness for the SkillSpector #800 evaluation.
 
-The default path requires a container runtime and disables networking.  Direct
+The default path requires a container runtime and disables networking. Direct
 host execution is opt-in because a subprocess alone is not a security boundary.
 """
 
@@ -14,7 +14,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from typing import Sequence
+from typing import Mapping, Sequence
 
 PINNED_VERSION = "2.11.2"
 PINNED_REVISION = "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc"
@@ -31,6 +31,13 @@ def digest_tree(root: Path) -> str:
         digest.update(path.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def reject_symlinks(root: Path) -> None:
+    """Reject candidate symlinks so staging cannot escape the candidate tree."""
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise ValueError(f"evaluation source contains unsupported symlink: {path}")
 
 
 def sanitized_environment() -> dict[str, str]:
@@ -92,11 +99,27 @@ def run_command(
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"SkillSpector timed out after {timeout_seconds}s") from exc
+    except OSError as exc:
+        raise RuntimeError(f"SkillSpector process could not start: {exc}") from exc
     if len(completed.stdout.encode()) > MAX_CAPTURE_BYTES:
         completed.stdout = completed.stdout.encode()[:MAX_CAPTURE_BYTES].decode(errors="replace")
     if len(completed.stderr.encode()) > MAX_CAPTURE_BYTES:
         completed.stderr = completed.stderr.encode()[:MAX_CAPTURE_BYTES].decode(errors="replace")
     return completed
+
+
+def scan_result_is_usable(returncode: int, report: object) -> bool:
+    """Return whether the scanner produced a structurally usable evidence report.
+
+    SkillSpector v2.11.2 uses exit code 1 for policy-relevant risk findings, so
+    return code 1 is not itself a scanner failure. Exit code 2 and reports whose
+    `execution_successful` flag is not explicitly true are fail-closed.
+    """
+    return (
+        returncode in {0, 1}
+        and isinstance(report, Mapping)
+        and report.get("execution_successful") is True
+    )
 
 
 def evaluate(
@@ -110,6 +133,7 @@ def evaluate(
     source = source.resolve(strict=True)
     if not source.is_dir():
         raise ValueError("evaluation source must be a directory")
+    reject_symlinks(source)
 
     with tempfile.TemporaryDirectory(prefix="skillspector-800-") as temp:
         root = Path(temp)
@@ -144,11 +168,13 @@ def evaluate(
                 report = json.loads(report_path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 report = None
+        process_ok = scan_result_is_usable(completed.returncode, report)
         return {
             "candidate_digest": candidate_digest,
             "isolation": isolation,
             "command": command,
             "returncode": completed.returncode,
+            "process_ok": process_ok,
             "stdout": completed.stdout,
             "stderr": completed.stderr,
             "report": report,
@@ -171,7 +197,7 @@ def main() -> int:
         timeout_seconds=args.timeout,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result["returncode"] == 0 and isinstance(result["report"], dict) else 2
+    return 0 if result["process_ok"] is True else 2
 
 
 if __name__ == "__main__":
