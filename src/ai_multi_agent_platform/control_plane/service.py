@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import (
     AuthorizationProvider,
     EventProvider,
@@ -72,28 +73,38 @@ class ControlPlane:
         self._kernel = kernel
         self._events = events
         self._scopes = scopes or ScopeStore()
-        self._authorization = ControlPlaneAuthorization(authorization)
+        self._authorization_service = ControlPlaneAuthorization(authorization)
         self._live_events = live_events
         self._health = ControlPlaneHealth(health_providers)
         self._model_registry = model_registry
         self._models = ControlPlaneModelRegistry(model_registry)
         self._scope_resources = ControlPlaneScopeService(
             scopes=self._scopes,
-            authorization=self._authorization,
+            authorization=self._authorization_service,
         )
         self._task_runs = ControlPlaneTaskRunService(
             kernel=kernel,
             events=events,
             scopes=self._scopes,
-            authorization=self._authorization,
+            authorization=self._authorization_service,
         )
         self._reference_events = ControlPlaneReferenceEventService(
             kernel=kernel,
             events=events,
-            authorization=self._authorization,
+            authorization=self._authorization_service,
             task_runs=self._task_runs,
             live_events=live_events,
         )
+
+    @property
+    def _authorization(self) -> AuthorizationProvider | None:
+        """Preserve the legacy provider seam used by composed Control Plane layers."""
+
+        return self._authorization_service.provider
+
+    @_authorization.setter
+    def _authorization(self, provider: AuthorizationProvider | None) -> None:
+        self._authorization_service.provider = provider
 
     @property
     def scopes(self) -> ScopeStore:
@@ -346,7 +357,14 @@ class ControlPlane:
         resource_ref: str,
         task: TaskState,
     ) -> None:
-        await self._authorization.authorize_for_task(context, action, resource_ref, task)
+        await self._authorize(
+            context,
+            action,
+            resource_ref,
+            owner_type=task.task.owner_ref.type,
+            owner_id=task.task.owner_ref.id,
+            project_id=task.task.project_id,
+        )
 
     async def _allowed_for_task(
         self,
@@ -355,7 +373,14 @@ class ControlPlane:
         resource_ref: str,
         task: TaskState,
     ) -> bool:
-        return await self._authorization.allowed_for_task(context, action, resource_ref, task)
+        return await self._allowed(
+            context,
+            action,
+            resource_ref,
+            owner_type=task.task.owner_ref.type,
+            owner_id=task.task.owner_ref.id,
+            project_id=task.task.project_id,
+        )
 
     async def _authorize(
         self,
@@ -368,7 +393,7 @@ class ControlPlane:
         project_id: str | None = None,
         request_payload_digest: str | None = None,
     ) -> None:
-        await self._authorization.authorize(
+        decision = await self._authorization_decision(
             context,
             action,
             resource_ref,
@@ -377,6 +402,11 @@ class ControlPlane:
             project_id=project_id,
             request_payload_digest=request_payload_digest,
         )
+        if decision is not None and not decision.allowed:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                decision.reason or "operation is forbidden",
+            )
 
     async def _allowed(
         self,
@@ -389,7 +419,7 @@ class ControlPlane:
         project_id: str | None = None,
         request_payload_digest: str | None = None,
     ) -> bool:
-        return await self._authorization.allowed(
+        decision = await self._authorization_decision(
             context,
             action,
             resource_ref,
@@ -398,6 +428,7 @@ class ControlPlane:
             project_id=project_id,
             request_payload_digest=request_payload_digest,
         )
+        return decision is None or decision.allowed
 
     async def _authorization_decision(
         self,
@@ -410,7 +441,7 @@ class ControlPlane:
         project_id: str | None = None,
         request_payload_digest: str | None = None,
     ) -> AuthorizationDecision | None:
-        return await self._authorization.decision(
+        return await self._authorization_service.decision(
             context,
             action,
             resource_ref,
