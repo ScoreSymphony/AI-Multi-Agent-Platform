@@ -30,7 +30,6 @@ from ai_multi_agent_platform.domain import (
     Run,
     RunStatus,
     Step,
-    Task,
     TaskStatus,
     new_id,
     validate_id,
@@ -59,11 +58,11 @@ from .repository import (
     RunRepository,
     TaskRepository,
 )
+from .task_commands import KernelTaskCommands
 
 OwnerType = Literal["user", "organization", "team", "service"]
 RunSubjectType = Literal["task", "step"]
 
-_TASK_CREATE_SCOPE = "task:create"
 _KERNEL_SOURCE = "platform-kernel"
 _TERMINAL_EXECUTION_TO_RUN: dict[ExecutionStatus, RunStatus] = {
     ExecutionStatus.SUCCEEDED: RunStatus.SUCCEEDED,
@@ -100,6 +99,7 @@ class PlatformKernel:
         self._event_sink = event_sink
         self._completion_authority = completion_authority
         self._recovery = KernelRecovery(self)
+        self._task_commands = KernelTaskCommands(self)
 
     async def create_task(
         self,
@@ -114,71 +114,17 @@ class PlatformKernel:
         actor_ref: str | None = None,
         source: str = _KERNEL_SOURCE,
     ) -> TaskState:
-        """Create exactly one canonical Task for a retriable logical command."""
-
-        self._require_key(idempotency_key)
-        existing = await self._existing_command(_TASK_CREATE_SCOPE, idempotency_key, "create_task")
-        if existing is not None:
-            return await self.get_task(existing.result_id)
-
-        if not title.strip() or not objective.strip() or not owner_id.strip():
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "task title/objective/owner must not be blank",
-            )
-        if owner_type not in {"user", "organization", "team", "service"}:
-            raise ContractError(ErrorCode.INVALID_REQUEST, f"unsupported owner type: {owner_type}")
-
-        canonical_task_id = task_id or new_id("task")
-        validate_id(canonical_task_id, "task")
-        Task(
-            id=canonical_task_id,
+        return await self._task_commands.create_task(
+            idempotency_key=idempotency_key,
             title=title,
-            description=objective,
-            owner_ref=OwnerRef(type=owner_type, id=owner_id),
-            project_id=project_id,
-            correlation_id=canonical_task_id,
-            causation_id=idempotency_key,
-        )
-
-        event = self._event(
-            stream_id=canonical_task_id,
-            event_type="task.created",
-            subject_type="task",
-            subject_id=canonical_task_id,
-            causation_id=idempotency_key,
+            objective=objective,
             owner_type=owner_type,
             owner_id=owner_id,
             project_id=project_id,
-            actor_ref=actor_ref or f"{owner_type}:{owner_id}",
+            task_id=task_id,
+            actor_ref=actor_ref,
             source=source,
-            revision=1,
-            payload={
-                "title": title,
-                "objective": objective,
-                "owner_type": owner_type,
-                "owner_id": owner_id,
-            },
         )
-        command = self._command(
-            scope=_TASK_CREATE_SCOPE,
-            key=idempotency_key,
-            operation="create_task",
-            stream_id=canonical_task_id,
-            result_id=canonical_task_id,
-            event=event,
-        )
-        result = await self._repository.commit(
-            stream_id=canonical_task_id,
-            expected_revision=0,
-            events=(event,),
-            command=command,
-        )
-        if not result.applied:
-            duplicate = self._require_same_command(result.command, "create_task", idempotency_key)
-            return await self.get_task(duplicate.result_id)
-        await self._mirror((event,))
-        return await self.get_task(canonical_task_id)
 
     async def get_task(self, task_id: str) -> TaskState:
         return await self._queries.get_task(task_id)
@@ -200,36 +146,15 @@ class PlatformKernel:
         actor_ref: str | None = None,
         source: str = _KERNEL_SOURCE,
     ) -> TaskState:
-        task = await self.get_task(task_id)
-        duplicate = await self._task_command(task_id, idempotency_key, "update_task")
-        if duplicate is not None:
-            return await self.get_task(task_id)
-        if task.status in {TaskStatus.SUCCEEDED, TaskStatus.CANCELLED}:
-            raise ContractError(ErrorCode.CONFLICT, f"task {task_id} is terminal")
-        if title is None and objective is None and metadata is None:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "task update contains no changes")
-        if title is not None and not title.strip():
-            raise ContractError(ErrorCode.INVALID_REQUEST, "task title must not be blank")
-        if objective is not None and not objective.strip():
-            raise ContractError(ErrorCode.INVALID_REQUEST, "task objective must not be blank")
-
-        payload: dict[str, JsonValue] = {}
-        if title is not None:
-            payload["title"] = title
-        if objective is not None:
-            payload["objective"] = objective
-        if metadata is not None:
-            payload["metadata"] = metadata
-        await self._commit_task_command(
-            task=task,
-            key=idempotency_key,
-            operation="update_task",
-            event_specs=(("task.updated", "task", task_id, payload, ()),),
-            result_id=task_id,
+        return await self._task_commands.update_task(
+            idempotency_key=idempotency_key,
+            task_id=task_id,
+            title=title,
+            objective=objective,
+            metadata=metadata,
             actor_ref=actor_ref,
             source=source,
         )
-        return await self.get_task(task_id)
 
     async def ready_task(
         self,
@@ -239,24 +164,12 @@ class PlatformKernel:
         actor_ref: str | None = None,
         source: str = _KERNEL_SOURCE,
     ) -> TaskState:
-        task = await self.get_task(task_id)
-        if await self._task_command(task_id, idempotency_key, "ready_task") is not None:
-            return await self.get_task(task_id)
-        if task.status not in {TaskStatus.DRAFT, TaskStatus.FAILED}:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"task {task_id} cannot become ready from {task.status.value}",
-            )
-        await self._commit_task_command(
-            task=task,
-            key=idempotency_key,
-            operation="ready_task",
-            event_specs=(("task.ready", "task", task_id, {}, ()),),
-            result_id=task_id,
+        return await self._task_commands.ready_task(
+            idempotency_key=idempotency_key,
+            task_id=task_id,
             actor_ref=actor_ref,
             source=source,
         )
-        return await self.get_task(task_id)
 
     async def wait_task(
         self,
@@ -268,28 +181,14 @@ class PlatformKernel:
         actor_ref: str | None = None,
         source: str = _KERNEL_SOURCE,
     ) -> TaskState:
-        task = await self.get_task(task_id)
-        if await self._task_command(task_id, idempotency_key, "wait_task") is not None:
-            return await self.get_task(task_id)
-        if task.status is not TaskStatus.RUNNING:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"task {task_id} cannot wait from {task.status.value}",
-            )
-        if not reason.strip():
-            raise ContractError(ErrorCode.INVALID_REQUEST, "waiting reason must not be blank")
-        await self._commit_task_command(
-            task=task,
-            key=idempotency_key,
-            operation="wait_task",
-            event_specs=(
-                ("task.waiting", "task", task_id, {"reason": reason, "blocked": blocked}, ()),
-            ),
-            result_id=task_id,
+        return await self._task_commands.wait_task(
+            idempotency_key=idempotency_key,
+            task_id=task_id,
+            reason=reason,
+            blocked=blocked,
             actor_ref=actor_ref,
             source=source,
         )
-        return await self.get_task(task_id)
 
     async def resume_task(
         self,
@@ -299,24 +198,12 @@ class PlatformKernel:
         actor_ref: str | None = None,
         source: str = _KERNEL_SOURCE,
     ) -> TaskState:
-        task = await self.get_task(task_id)
-        if await self._task_command(task_id, idempotency_key, "resume_task") is not None:
-            return await self.get_task(task_id)
-        if task.status is not TaskStatus.WAITING:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"task {task_id} cannot resume from {task.status.value}",
-            )
-        await self._commit_task_command(
-            task=task,
-            key=idempotency_key,
-            operation="resume_task",
-            event_specs=(("task.resumed", "task", task_id, {}, ()),),
-            result_id=task_id,
+        return await self._task_commands.resume_task(
+            idempotency_key=idempotency_key,
+            task_id=task_id,
             actor_ref=actor_ref,
             source=source,
         )
-        return await self.get_task(task_id)
 
     async def complete_task(
         self,
@@ -326,49 +213,12 @@ class PlatformKernel:
         actor_ref: str | None = None,
         source: str = _KERNEL_SOURCE,
     ) -> TaskState:
-        task = await self.get_task(task_id)
-        if await self._task_command(task_id, idempotency_key, "complete_task") is not None:
-            return await self.get_task(task_id)
-        verification_wait = (
-            self._completion_authority is not None
-            and task.status is TaskStatus.WAITING
-            and task.wait_reason is not None
-            and task.wait_reason.startswith("verification:")
-        )
-        if task.status is not TaskStatus.RUNNING and not verification_wait:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"task {task_id} cannot succeed from {task.status.value}",
-            )
-        active = await self._latest_active_run(task)
-        if active is not None:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"task {task_id} cannot succeed while run {active.run_id} is {active.status.value}",
-            )
-        completion_spec = self._completion_task_spec(task_id)
-        specs: list[EventSpec] = []
-        if task.status is TaskStatus.WAITING and completion_spec[0] == "task.succeeded":
-            specs.append(
-                (
-                    "task.resumed",
-                    "task",
-                    task_id,
-                    {"verification_completed": True},
-                    (),
-                )
-            )
-        specs.append(completion_spec)
-        await self._commit_task_command(
-            task=task,
-            key=idempotency_key,
-            operation="complete_task",
-            event_specs=tuple(specs),
-            result_id=task_id,
+        return await self._task_commands.complete_task(
+            idempotency_key=idempotency_key,
+            task_id=task_id,
             actor_ref=actor_ref,
             source=source,
         )
-        return await self.get_task(task_id)
 
     async def fail_task(
         self,
@@ -379,33 +229,13 @@ class PlatformKernel:
         actor_ref: str | None = None,
         source: str = _KERNEL_SOURCE,
     ) -> TaskState:
-        task = await self.get_task(task_id)
-        if await self._task_command(task_id, idempotency_key, "fail_task") is not None:
-            return await self.get_task(task_id)
-        if task.status not in {TaskStatus.RUNNING, TaskStatus.WAITING}:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"task {task_id} cannot fail from {task.status.value}",
-            )
-        active = await self._latest_active_run(task)
-        if active is not None:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"task {task_id} cannot fail while run {active.run_id} is {active.status.value}",
-            )
-        payload: dict[str, JsonValue] = {}
-        if reason is not None:
-            payload["reason"] = reason
-        await self._commit_task_command(
-            task=task,
-            key=idempotency_key,
-            operation="fail_task",
-            event_specs=(("task.failed", "task", task_id, payload, ()),),
-            result_id=task_id,
+        return await self._task_commands.fail_task(
+            idempotency_key=idempotency_key,
+            task_id=task_id,
+            reason=reason,
             actor_ref=actor_ref,
             source=source,
         )
-        return await self.get_task(task_id)
 
     async def cancel_task(
         self,
@@ -415,82 +245,12 @@ class PlatformKernel:
         actor_ref: str | None = None,
         source: str = _KERNEL_SOURCE,
     ) -> TaskState:
-        task = await self.get_task(task_id)
-        if await self._task_command(task_id, idempotency_key, "cancel_task") is not None:
-            return await self.get_task(task_id)
-        if task.status is TaskStatus.SUCCEEDED:
-            raise ContractError(ErrorCode.CONFLICT, f"task {task_id} already succeeded")
-        if task.status is TaskStatus.FAILED:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "canonical lifecycle requires failed tasks to be retried to ready "
-                "rather than cancelled",
-            )
-        if task.status not in {
-            TaskStatus.DRAFT,
-            TaskStatus.READY,
-            TaskStatus.RUNNING,
-            TaskStatus.WAITING,
-            TaskStatus.CANCELLED,
-        }:
-            raise ContractError(ErrorCode.CONFLICT, f"task {task_id} cannot be cancelled")
-
-        active_runs = await self._active_runs(task)
-        step_runs = tuple(run for run in active_runs if run.run.subject_type == "step")
-        task_runs = tuple(run for run in active_runs if run.run.subject_type == "task")
-        for run in (*step_runs, *task_runs):
-            await self.cancel_run(
-                idempotency_key=f"{idempotency_key}:run:{run.run_id}",
-                task_id=task_id,
-                run_id=run.run_id,
-                actor_ref=actor_ref,
-                source=source,
-            )
-
-        refreshed = await self.get_task(task_id)
-        remaining = await self._active_runs(refreshed)
-        if remaining:
-            remaining_ids = ", ".join(run.run_id for run in remaining)
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"task {task_id} cancellation is incomplete; active runs: {remaining_ids}",
-            )
-
-        if refreshed.status in {TaskStatus.SUCCEEDED, TaskStatus.FAILED}:
-            await self._commit_task_command(
-                task=refreshed,
-                key=idempotency_key,
-                operation="cancel_task",
-                event_specs=(
-                    (
-                        "task.cancel_lost_race",
-                        "task",
-                        task_id,
-                        {"status": refreshed.status.value},
-                        (),
-                    ),
-                ),
-                result_id=task_id,
-                actor_ref=actor_ref,
-                source=source,
-            )
-            return await self.get_task(task_id)
-
-        event_type = (
-            "task.cancel_acknowledged"
-            if refreshed.status is TaskStatus.CANCELLED
-            else "task.cancelled"
-        )
-        await self._commit_task_command(
-            task=refreshed,
-            key=idempotency_key,
-            operation="cancel_task",
-            event_specs=((event_type, "task", task_id, {}, ()),),
-            result_id=task_id,
+        return await self._task_commands.cancel_task(
+            idempotency_key=idempotency_key,
+            task_id=task_id,
             actor_ref=actor_ref,
             source=source,
         )
-        return await self.get_task(task_id)
 
     async def plan_task(
         self,
