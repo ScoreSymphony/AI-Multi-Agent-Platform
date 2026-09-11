@@ -1,6 +1,9 @@
 from pathlib import Path
+import sys
 
-from experiments.skillspector.runner import container_command
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from experiments.skillspector.runner import container_command  # noqa: E402
 
 
 def test_container_command_uses_explicit_entrypoint_without_duplicate_binary(tmp_path: Path) -> None:
