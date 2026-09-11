@@ -1,0 +1,47 @@
+name: "SWE-ReX"
+purpose: "Optional cross-platform execution/runtime abstraction candidate behind platform-owned Executor and Worker boundaries."
+status: candidate
+integration_categories:
+  - "executor adapter"
+  - "runtime abstraction"
+  - "optional sandbox backend abstraction"
+canonical_upstream: "https://github.com/SWE-agent/SWE-ReX"
+pinned_revision: "5c995c365dfb1fd5bc56fda688be5d8538f9931f"
+evaluated_version: "1.4.0"
+verified_license: "MIT at the reviewed revision (LICENSE.txt)."
+license_verification_date: "2026-09-12"
+last_review_date: "2026-09-12"
+platform_adapter_or_boundary: "Optional SwerexExecutor behind canonical #7 Executor and #14 Worker/Node boundaries; Task/Run/Workspace/File/Artifact identities and policy remain platform-owned."
+local_source_path: "src/ai_multi_agent_platform/adapters/swe_rex.py"
+source_origin_path: "No SWE-ReX source is copied; the platform proof-of-concept contains only adapter-owned contracts and test doubles."
+modified_locally: false
+modification_summary: "Platform-owned adapter proof-of-concept only; no upstream source modifications."
+required_notices:
+  - "Retain upstream MIT copyright and permission notice for any future redistributed SWE-ReX source or substantial portions."
+compatibility_constraints:
+  - "Reviewed deployment types include local, Docker/Podman, remote, Modal, Fargate, dummy and Daytona paths."
+  - "LocalDeployment directly uses LocalRuntime and is not an isolation boundary; it is disabled by default by the evaluation adapter."
+  - "Docker, remote and cloud backends require backend-specific isolation, lifecycle and network evidence before security claims are made."
+  - "Provider deployment/runtime/session identifiers remain namespaced adapter metadata rather than canonical platform IDs."
+  - "SWE-ReX command/file/session APIs do not replace canonical Workspace, File, Artifact, Authorization or Secret semantics."
+security_constraints:
+  - "Authorization #15, secret handling #34, Workspace #37 and security policy #43 remain authoritative."
+  - "Direct ExecutionRequest.environment projection is disabled by the evaluation adapter until scoped #34-safe delivery is proven."
+  - "The reviewed remote server exposes execute/read/write/upload operations against LocalRuntime paths and therefore requires an external canonical Workspace boundary."
+  - "The reviewed remote transport uses X-API-Key authentication and supports plain HTTP; protected deployments require a trusted/private transport or TLS termination outside SWE-ReX."
+  - "Network egress guarantees are backend-specific and must be measured rather than inferred from the SWE-ReX abstraction."
+  - "Remote request IDs are provider mechanics and do not replace canonical worker/job idempotency or dispatch semantics."
+deployment_constraints:
+  - "SWE-ReX remains optional and baseline/reference Executor operation must not depend on it."
+  - "The proof-of-concept intentionally adds no swe-rex package dependency."
+  - "LocalDeployment is host execution, not a sandbox, and requires explicit unsafe opt-in in the evaluation adapter."
+  - "Modal, Fargate and Daytona paths may require external accounts/services and are not baseline requirements."
+resource_constraints:
+  - "Cold start, memory/CPU overhead, cleanup behavior and concurrency density remain unmeasured for live backends."
+  - "Windows-path behavior, Docker/Podman isolation and remote-provider behavior require live evidence before promotion."
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Pin every evaluated revision; re-check license/version, deployment/runtime APIs, local-vs-isolated semantics, remote authentication/transport, file/path behavior, cancellation, networking and supported backends; rerun contract/security/live evidence before promotion."
+exit_replacement_strategy: "Disable/remove the optional adapter. Canonical Task/Run/Workspace/File/Artifact identities and the reference Executor require no migration because SWE-ReX owns none of them."
+adr: ""
+notes: "Issue #861 provisional classification is experimental_only until live Linux/available Windows, remote/backend isolation, egress, credential, cancellation/crash/cleanup and operational evidence is complete. Evaluation details: docs/upstream/SWE_REX_EVALUATION.md"
