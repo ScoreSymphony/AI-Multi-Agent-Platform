@@ -231,9 +231,7 @@ def _gpu_hint(hints: Mapping[str, JsonValue]) -> str:
     if value is None:
         return "optional"
     if not isinstance(value, str) or value not in {"optional", "required", "forbidden"}:
-        raise ValueError(
-            "build resource_hints.gpu must be one of optional, required or forbidden"
-        )
+        raise ValueError("build resource_hints.gpu must be one of optional, required or forbidden")
     return value
 
 
