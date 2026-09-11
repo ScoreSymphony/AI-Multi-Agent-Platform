@@ -85,6 +85,11 @@ def assess_inference_backend_evaluation(
     candidate = _require_mapping(campaign.get("candidate"), "candidate")
     candidate_backend = _require_str(candidate, "backend")
     candidate_revision = _require_str(candidate, "release_commit")
+    pinned_revisions = _pinned_backend_revisions(
+        campaign,
+        candidate_backend=candidate_backend,
+        candidate_revision=candidate_revision,
+    )
     required_contract_cases = _require_string_set(campaign, "contract_cases")
     required_failure_cases = _require_string_set(campaign, "failure_cases")
     required_placement_cases = _require_string_set(campaign, "placement_cases")
@@ -97,13 +102,13 @@ def assess_inference_backend_evaluation(
                 f"report campaign_id {_require_str(report, 'campaign_id')!r} "
                 f"does not match {campaign_id!r}"
             )
-        if (
-            _require_str(report, "backend") == candidate_backend
-            and _require_str(report, "backend_revision") != candidate_revision
-        ):
+        backend = _require_str(report, "backend")
+        backend_revision = _require_str(report, "backend_revision")
+        pinned_revision = pinned_revisions.get(backend)
+        if pinned_revision is not None and backend_revision != pinned_revision:
             raise ValueError(
-                f"candidate report backend_revision {_require_str(report, 'backend_revision')!r} "
-                f"does not match pinned revision {candidate_revision!r}"
+                f"{backend} report backend_revision {backend_revision!r} "
+                f"does not match pinned revision {pinned_revision!r}"
             )
         normalized_reports.append(report)
 
@@ -179,6 +184,29 @@ def assess_inference_backend_evaluation(
         comparable_sglang_vllm_pairs=comparable_pairs,
         blockers=tuple(blockers),
     )
+
+
+def _pinned_backend_revisions(
+    campaign: Mapping[str, Any],
+    *,
+    candidate_backend: str,
+    candidate_revision: str,
+) -> dict[str, str]:
+    pinned = {candidate_backend: candidate_revision}
+    entries = _require_sequence(campaign.get("comparison_backends"), "comparison_backends")
+    for item in entries:
+        entry = _require_mapping(item, "comparison_backends")
+        backend = _require_str(entry, "backend")
+        raw_revision = entry.get("release_commit")
+        if raw_revision is None:
+            continue
+        if not isinstance(raw_revision, str) or not raw_revision:
+            raise ValueError("comparison_backends release_commit must be a non-empty string")
+        existing = pinned.get(backend)
+        if existing is not None and existing != raw_revision:
+            raise ValueError(f"conflicting pinned revisions for backend {backend!r}")
+        pinned[backend] = raw_revision
+    return pinned
 
 
 def _latest_case_statuses(
