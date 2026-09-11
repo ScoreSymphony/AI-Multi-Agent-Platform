@@ -50,21 +50,21 @@ release-gate integration, not the general component registry and not distributed
 `task_management` owns canonical Task planning/application metadata such as priority, dependencies,
 responsibility references and the Task management service.
 
-`task_reassignment` implements Task-to-Project reassignment and already depends on
-`TaskManagementService`. Reassignment therefore belongs to the `task_management` domain rather than
-forming another durable top-level domain. The target layout is `task_management.reassignment`.
+Task-to-Project reassignment already depends on `TaskManagementService`, so reassignment belongs to
+the `task_management` domain rather than forming another durable top-level domain. #726 applies that
+low-risk consolidation directly:
 
-The current implementation is deliberately not moved in #726 because the reassignment module imports
-the existing `task_management` public surface. A mechanical move combined with package-level
-re-exports would introduce circular-import risk into an architecture-policy change. The migration is:
+- the canonical implementation now lives at `task_management.reassignment`;
+- `ai_multi_agent_platform.task_reassignment` is a behavior-free compatibility namespace that
+  re-exports the same public objects;
+- architecture coverage asserts object identity across the canonical and compatibility imports;
+- new reassignment behavior must be implemented under `task_management`;
+- the compatibility namespace may be removed only under the repository's normal compatibility
+  policy after supported callers have migrated.
 
-1. establish `task_management` as the canonical owner and stop adding new root-level reassignment
-   modules;
-2. extract a canonical `task_management.reassignment` implementation/facade in a focused migration
-   change with import-cycle coverage;
-3. retain `ai_multi_agent_platform.task_reassignment` as a bounded compatibility namespace while
-   supported callers migrate;
-4. remove the compatibility namespace only under the repository's normal compatibility policy.
+The canonical implementation imports `TaskManagementService` from its sibling `service` module rather
+than from the package root. This keeps the new ownership direction explicit and avoids introducing a
+package-level circular import merely for re-export convenience.
 
 ### Other explicit consolidation candidates
 
