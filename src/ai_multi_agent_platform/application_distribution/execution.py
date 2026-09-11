@@ -325,16 +325,6 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                     "application build Run binding differs from release provenance",
                 )
             timeout_seconds = _timeout_seconds(release, request.context)
-            environment, secret_environment_keys = await self._build_environment(
-                release,
-                task_id=binding.task_id,
-                run_id=request.run_id,
-                timeout_seconds=timeout_seconds,
-            )
-            timeout_seconds = _lease_bound_timeout_seconds(
-                timeout_seconds,
-                self._secret_deadlines.pop(request.run_id, None),
-            )
             context = _data_context(request.context, binding.task_id, request.run_id)
             materialization = await self._workspaces.materialize(
                 release.workspace_id,
@@ -349,6 +339,16 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
             self._finished[request.run_id] = finished
             outcome = MaterializationOutcome.FAILED
             try:
+                environment, secret_environment_keys = await self._build_environment(
+                    release,
+                    task_id=binding.task_id,
+                    run_id=request.run_id,
+                    timeout_seconds=timeout_seconds,
+                )
+                timeout_seconds = _lease_bound_timeout_seconds(
+                    timeout_seconds,
+                    self._secret_deadlines.pop(request.run_id, None),
+                )
                 result = await self._executor.execute(
                     ExecutionRequest(
                         task_id=binding.task_id,
@@ -382,6 +382,7 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
                     outcome = MaterializationOutcome.CANCELLED
                 self._results[request.run_id] = result
             finally:
+                self._secret_deadlines.pop(request.run_id, None)
                 self._cancellations.pop(request.run_id, None)
                 await self._workspaces.release_materialization(materialization.id, outcome)
                 finished.set()
