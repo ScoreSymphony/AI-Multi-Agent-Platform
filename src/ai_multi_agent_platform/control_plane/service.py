@@ -18,9 +18,11 @@ from ai_multi_agent_platform.models import ModelConfiguration, ModelRegistry
 
 from .authorization_service import ControlPlaneAuthorization
 from .health import ControlPlaneHealth
+from .model_registry_service import ControlPlaneModelRegistry
 from .model_registry_service import (
-    ControlPlaneModelRegistry,
     _model_provider_resource as model_provider_resource,
+)
+from .model_registry_service import (
     _model_resource as model_resource,
 )
 from .models import (
