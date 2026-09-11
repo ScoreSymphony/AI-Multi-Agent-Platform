@@ -21,7 +21,9 @@ not Approved or Integrated.
   network/MCP egress decisions.
 - [x] Reviewed upstream source/docs expose HTTP, WebSocket and MCP mediation/scanning plus signed
   receipt/flight-recorder evidence surfaces.
-- [ ] Live platform transport, bypass, failure and performance behavior is measured.
+- [x] Audit-only HTTP fetch is live-validated against the exact pinned source build.
+- [x] The canonical platform MCP stdio fixture is live-validated through `pipelock mcp proxy -- ...`.
+- [ ] The remaining transport, bypass, failure and performance matrix is measured.
 
 ### Architecture fit
 
@@ -51,29 +53,38 @@ not Approved or Integrated.
 - [x] `.goreleaser.yaml` builds the normal `pipelock` release binary with the `enterprise` tag, so
   release archives/images are not accepted as Core-only artifacts for this evaluation baseline.
 - [x] No upstream source is copied or modified by this candidate adapter.
+- [ ] Byte-for-byte reproducible Core binary builds are demonstrated. Recorded runs at the same source
+  pin/toolchain currently have different binary SHA-256 values, so only run-specific fingerprints are
+  claimed.
 
 ### Project health and maintenance
 
-- [x] The exact reviewed main commit and its signed GitHub commit metadata are recorded as the current
-  evaluation pin rather than relying on an unpinned branch.
+- [x] The exact reviewed main commit is recorded as the evaluation pin rather than relying on an
+  unpinned branch.
 - [ ] Release/update cadence is quantified before approval.
 - [ ] Bus-factor/abandonment risk is assessed before approval.
-- [ ] Security/advisory handling is reviewed before approval.
+- [x] Security/advisory handling is reviewed before approval. The reviewed upstream security policy
+  provides a private GitHub-advisory reporting path, supported-version guidance and severity-targeted
+  acknowledgement/patch-or-mitigation windows.
 
 ### Security implications
 
 - [x] Proxy/MCP trust boundary and external-process nature are documented.
 - [x] Pipelock cannot grant permissions denied by canonical policy mapping.
 - [x] Receipt trust requires external cryptographic verification rather than self-assertion.
+- [x] A live proxy writer chain is verified with an out-of-band pinned Ed25519 public key.
 - [x] Raw receipt targets/patterns are excluded from the initial platform evidence normalizer.
 - [x] Direct-network bypass is treated as an explicit unsupported condition until complete mediation is
   proven.
+- [x] The live verifier's `Containment: UNKNOWN` / `L-CONTAINMENT-UNPROVEN` result is retained rather
+  than promoted into a non-bypass claim.
 - [ ] Adversarial corpus and outage/bypass tests have been executed against the pinned binary.
 
 ### Resource footprint
 
-- [ ] Added HTTP request latency is measured.
-- [ ] MCP call latency is measured.
+- [ ] Added HTTP request latency is measured against a same-run direct baseline. Current hosted-runner
+  samples are smoke timings only.
+- [ ] MCP call latency overhead is measured against a direct baseline.
 - [ ] WebSocket overhead is measured.
 - [ ] CPU/RAM/startup/log/disk overhead is measured on the target single-node/VPS profile.
 - [ ] False-positive/false-negative behavior is measured against the maintained corpus.
@@ -101,7 +112,10 @@ not Approved or Integrated.
   canonical contracts.
 - [x] Adapter contract tests cover mapping and evidence normalization.
 - [x] Unknown/unmapped canonical policy state is designed to fail closed.
-- [ ] Live upstream CLI/config/receipt compatibility tests are automated against the pinned revision.
+- [x] Live upstream CLI/config/receipt compatibility tests are automated against the exact pinned
+  revision in `Pipelock candidate compatibility`.
+- [x] The live MCP stdio check invokes the existing canonical platform fixture rather than only an
+  upstream toy process.
 
 ### Simpler internal alternative
 
@@ -120,10 +134,15 @@ not Approved or Integrated.
 
 ### Decision rationale
 
-The source/provenance review is sufficient to continue a proof of concept without changing canonical
-architecture or introducing a paid baseline dependency. It is not sufficient for approval: complete
-network mediation, outage behavior, adversarial coverage and resource/performance costs remain
-unmeasured.
+The source/provenance review plus the current live pilot are sufficient to continue the proof of
+concept without changing canonical architecture or introducing a paid baseline dependency. The live
+candidate now proves the exact tag-free build path, audit-only HTTP fetch, canonical MCP stdio wrapper
+compatibility and a pinned-key proxy receipt chain.
+
+That is still not sufficient for approval. The successful receipt verifier itself reports containment
+as unknown and explicitly does not prove non-bypass. Complete network mediation, enforced-profile
+outage/recovery behavior, the adversarial corpus, remaining transports and representative
+resource/performance costs remain unmeasured.
 
 The artifact boundary is material. At the pinned revision, both the repository Dockerfile and the
 GoReleaser definition for the normal `pipelock` binary enable Enterprise build tags. Official release
@@ -131,14 +150,21 @@ archives/images therefore cannot be treated as Apache-Core-only artifacts for th
 because paid features may be inactive. The #730 Core pilot deliberately builds the pinned source via
 the tag-free `make build` path instead.
 
+The recorded tag-free binary SHA-256 has also differed between runs at the same pin/toolchain. This is
+not currently treated as a functional failure, but byte-for-byte build reproducibility has not been
+established and must not be implied by the run fingerprints.
+
 ### Required follow-up before approval/integration
 
-- [ ] Execute the audit-only pilot using the exact pinned source revision.
-- [ ] Record binary/config/signing-key fingerprints and live receipts.
-- [ ] Execute HTTP/WebSocket/MCP transport and adversarial test matrices.
+- [x] Execute the audit-only pilot using the exact pinned source revision.
+- [x] Record binary/config/signing-key fingerprints and live signed receipt evidence.
+- [x] Exercise a canonical MCP stdio path through the pinned wrapper.
+- [ ] Execute HTTP forward/CONNECT, WebSocket, MCP HTTP/WebSocket and redirect/private-target matrices.
+- [ ] Execute the adversarial injection/DLP/encoding/SSRF/DNS/IPv6 corpus.
 - [ ] Prove or explicitly reject protected-profile direct-network bypass resistance.
-- [ ] Exercise fail-open/fail-closed/audit-degradation behavior.
-- [ ] Measure latency/CPU/RAM/startup/log growth and false-positive/false-negative behavior.
+- [ ] Exercise fail-open/fail-closed/audit-degradation behavior with live process outages/recovery.
+- [ ] Measure latency/CPU/RAM/startup/log growth and false-positive/false-negative behavior on the
+  target single-node/VPS profile.
 - [ ] Choose the final #730 outcome: `adopt`, `optional_provider`, `reference_only` or `reject`.
 - [ ] Update `docs/UPSTREAMS.md` only if Pipelock is promoted to approved/integrated status.
 - [x] Add candidate provenance metadata (`upstream/pipelock-core.yaml`).

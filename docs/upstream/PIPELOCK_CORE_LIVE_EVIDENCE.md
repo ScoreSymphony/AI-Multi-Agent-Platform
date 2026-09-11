@@ -33,7 +33,7 @@ The run checked the reviewed repository state before execution:
 The evaluated binary was therefore built from the exact source pin through the tag-free Core build
 path rather than taken from the repository Dockerfile or normal release archive.
 
-### Reproducibility fingerprints
+### Run-specific fingerprints
 
 - **Candidate binary SHA-256:**
   `3637525c41832e9eb2abb9f09e9bd6a8b023712a063f2fe90a8b5525d73d186f`
@@ -44,6 +44,11 @@ path rather than taken from the repository Dockerfile or normal release archive.
 
 The generated configuration passed Pipelock's own validation with **68 passed, 0 failed** and declared
 `mode: audit` with `enforce: false`.
+
+A later green run at the same source pin/toolchain produced a different binary SHA-256 while retaining
+the same generated audit-config SHA-256. These values are therefore treated as run fingerprints, not
+as evidence of byte-for-byte reproducible builds. Deterministic binary reproducibility remains
+unproven.
 
 ### Live HTTP result
 
@@ -77,20 +82,88 @@ adoption recommendation.
 
 ## Evidence E2: signed allow receipt verification
 
-**Status: pending successful rerun.**
+**Status: verified on GitHub Actions run `34570647932`.**
 
-The next compatibility revision adds a controlled copy of the generated audit configuration with
-`flight_recorder.require_receipts: true`, derives the corresponding public key, performs an HTTP fetch,
-requires an `X-Pipelock-Receipt` correlation header, locates the generated JSONL evidence and verifies
-the receipt chain using `pipelock verify-receipt --chain ... --key ...`.
+The successful run used the same exact upstream pin and tag-free build path, copied the generated
+audit configuration, enabled `flight_recorder.require_receipts: true`, derived the corresponding
+public key, performed an HTTP fetch, required an `X-Pipelock-Receipt` correlation header and verified
+the complete proxy writer chain with the pinned public key.
 
-An initial attempt correctly failed before execution because the workflow's text mutation damaged YAML
-indentation. That was a test-fixture defect, not an upstream runtime result. The mutation now preserves
-the generated indentation and E2 remains unproven until the corrected workflow is green.
+### Retained evidence
+
+- **Workflow run:** `34570647932`
+- **Workflow evidence artifact digest:**
+  `sha256:99e6fbbd073d6f234aa1a86de74af8717611ff9ac5572be7b5aa12bf1471d975`
+- **Run-specific candidate binary SHA-256:**
+  `fe6e0dd3e310fbf950c376324477486294e73ef23153df9ef45fdac5c221635d`
+- **Generated audit configuration SHA-256:**
+  `da732fc3e9800a3223634ef5aad3b960bf13ca32a879be3eb4705055dcee31ad`
+- **Receipt action ID returned by Pipelock:**
+  `01a08f31-fc04-784a-9614-51e214dc95b6`
+- **Receipt-containing rotated segment:** `evidence-proxy-24.jsonl`
+- **Receipt-containing segment SHA-256:**
+  `a09d5f9fe70837fc4bbcbff3130c7cfe2ddf4295b6460265e37694fb961defe7`
+- **Pinned Ed25519 public key:**
+  `4368c51a94c85941bf0277a2c4dcda535f5400320b60a127ee3e9f3e68d3427e`
+
+The verifier accepted the complete proxy session chain:
+
+- receipts: **19**;
+- final sequence: **18**;
+- root hash: `249ce0676ad2efbe0b6077ae493cfb73859b1db2c713fff5de3b6b896a9abf6f`;
+- recorded interval: `2026-09-11T06:40:08Z` through `2026-09-11T06:40:13Z`;
+- signer matched the pinned public key above.
+
+The workflow deliberately hashes the rotated segment that contains the returned action ID but verifies
+`--chain` against the full recorder directory. This matters because the matching rotated segment began
+after genesis; verifying that segment alone correctly failed the chain-genesis check in an earlier
+harness attempt.
+
+### Receipt-evidence limitations
+
+The successful verifier explicitly reported containment as **UNKNOWN** because no posture capsule was
+supplied. It also reports limitations including key-holder omission, compromised/forged signer keys,
+malicious or disabled recorders, verifier drift, concurrent recorder writers and unproven
+containment. Therefore E2 proves cryptographic integrity/provenance for the receipts in this writer
+stream; it does **not** prove evidence completeness or that the process could not bypass Pipelock.
 
 Private signing material and raw receipt payloads are deliberately not uploaded as CI artifacts. The
-intended retained evidence is limited to the public key, action correlation ID, receipt-file digest,
+retained artifact is limited to the public key, action correlation ID, receipt-file digest,
 verification output, build metadata and non-secret runtime logs.
+
+### Harness history
+
+Three fixture defects were resolved before E2 was promoted:
+
+1. an initial configuration mutation damaged YAML indentation;
+2. a later attempt selected an unrelated JSONL recorder directory and found no proxy receipts;
+3. the next attempt found the correct rotated proxy segment but verified that non-genesis segment in
+   isolation instead of the complete writer chain.
+
+The final green run validates the corrected full-chain procedure rather than reclassifying those
+harness failures as upstream product failures.
+
+## Evidence E3: canonical platform MCP stdio through Pipelock
+
+**Status: verified on GitHub Actions run `34570647932`.**
+
+The repository's existing MCP SDK stdio fixture was launched through the exact pinned candidate using
+`pipelock mcp proxy -- ...`. Invocation still flowed through the platform's canonical
+`CapabilityRegistry` and `CapabilityInvoker`; Pipelock wrapped the external MCP stdio process rather
+than replacing platform capability ownership.
+
+The retained JUnit result records:
+
+- tests: **1**;
+- errors: **0**;
+- failures: **0**;
+- skipped: **0**;
+- testcase: `test_pipelock_mcp_stdio_wraps_canonical_invocation_path`;
+- testcase duration: **3.482 s** on the hosted runner.
+
+E3 proves compatibility for this concrete MCP stdio invocation path and fixture. It does not prove MCP
+HTTP/WebSocket behavior, arbitrary MCP-server compatibility, descriptor/response attack resistance or
+that the wrapped child process cannot open a direct network socket outside Pipelock.
 
 ## Remaining #730 evidence
 
@@ -99,7 +172,7 @@ Still required before the issue can reach a final `adopt`, `optional_provider`, 
 
 - representative HTTP forward/CONNECT behavior and redirects;
 - WebSocket behavior;
-- MCP stdio and MCP HTTP behavior;
+- MCP HTTP and MCP WebSocket behavior;
 - descriptor/tool drift and response-injection corpus;
 - secret/DLP, encoding and multi-stage exfiltration corpus;
 - loopback/private/link-local/metadata, DNS-rebinding and IPv6 corpus;
