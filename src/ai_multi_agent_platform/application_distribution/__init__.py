@@ -1,5 +1,6 @@
 """Application packaging and provider-neutral release distribution."""
 
+from .build_provenance import ApplicationBuildLifecycleBackend
 from .contracts import (
     ApplicationReleasePublisher,
     ApplicationReleaseRepository,
@@ -8,13 +9,8 @@ from .contracts import (
     PublishContext,
     PublishedArtifact,
 )
-from .execution import (
-    APPLICATION_BUILD_ACTION,
-    ApplicationBuildLifecycleBackend,
-    ApplicationCommandExecutor,
-)
+from .execution import APPLICATION_BUILD_ACTION, ApplicationCommandExecutor
 from .gate_provenance import ApplicationReleaseGateCoordinator
-from .gated_service import ApplicationDistributionService
 from .gates import (
     DeterministicGateCheck,
     ReleaseGateKind,
@@ -54,6 +50,7 @@ from .models import (
     ReleaseVisibility,
 )
 from .placement import DistributedBuildTargetMatcher, LocalBuildTargetMatcher
+from .provenance_service import ApplicationDistributionService
 from .repository import (
     APPLICATION_RELEASE_REPOSITORY_SCHEMA_VERSION,
     InMemoryApplicationReleaseRepository,
