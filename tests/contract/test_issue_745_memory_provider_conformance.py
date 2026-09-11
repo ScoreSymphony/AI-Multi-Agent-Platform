@@ -6,7 +6,13 @@ from dataclasses import replace
 import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
-from ai_multi_agent_platform.data import DataAccessContext, MemoryEntry, MemoryQuery, MemoryScope, MemoryType
+from ai_multi_agent_platform.data import (
+    DataAccessContext,
+    MemoryEntry,
+    MemoryQuery,
+    MemoryScope,
+    MemoryType,
+)
 from ai_multi_agent_platform.security import (
     ActorType,
     AuthorizationAction,
