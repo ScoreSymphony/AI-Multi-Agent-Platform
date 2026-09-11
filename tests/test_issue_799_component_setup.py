@@ -72,9 +72,7 @@ def test_compatibility_distinguishes_hardware_runtime_and_capability_gaps() -> N
     capability = _component(
         "tool-aware-orchestrator",
         ComponentCategory.ORCHESTRATOR,
-        requirements=(
-            ComponentRequirement(RequirementKind.CAPABILITY, "tools:canonical"),
-        ),
+        requirements=(ComponentRequirement(RequirementKind.CAPABILITY, "tools:canonical"),),
     )
 
     assert resolver.resolve(hardware, environment).state is CompatibilityState.INSUFFICIENT_HARDWARE
