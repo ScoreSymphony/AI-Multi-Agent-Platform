@@ -24,6 +24,7 @@ from ai_multi_agent_platform.testing import FakeModelProvider
 
 ROOT = Path(__file__).resolve().parents[1]
 CAMPAIGN_PATH = ROOT / "config" / "inference-backend-evaluation.sglang-v0.5.19.json"
+UPSTREAM_EVIDENCE_PATH = ROOT / "config" / "inference-backend-upstream.sglang-v0.5.19.json"
 REPORT_SCHEMA_PATH = (
     ROOT
     / "src"
@@ -100,7 +101,7 @@ def test_sglang_campaign_is_pinned_and_does_not_claim_a_decision_without_measure
         "backend": "sglang",
         "upstream": "https://github.com/sgl-project/sglang",
         "release": "v0.5.19",
-        "release_commit": "0bcd822",
+        "release_commit": "0bcd822377da7b5718e674eaf9c870d349424dd1",
         "license": "Apache-2.0",
         "integration_boundary": "ModelProvider",
         "mandatory_dependency": False,
@@ -112,6 +113,19 @@ def test_sglang_campaign_is_pinned_and_does_not_claim_a_decision_without_measure
         "reject/defer",
     }
     assert campaign["decision"]["requires_live_measurements"] is True
+
+
+def test_sglang_upstream_evidence_matches_campaign_pin() -> None:
+    campaign = json.loads(CAMPAIGN_PATH.read_text(encoding="utf-8"))
+    upstream = json.loads(UPSTREAM_EVIDENCE_PATH.read_text(encoding="utf-8"))
+
+    assert upstream["backend"] == campaign["candidate"]["backend"]
+    assert upstream["release"] == campaign["candidate"]["release"]
+    assert upstream["release_commit_sha"] == campaign["candidate"]["release_commit"]
+    assert upstream["license"] == campaign["candidate"]["license"]
+    assert len(upstream["release_commit_sha"]) == 40
+    assert len(upstream["annotated_tag_sha"]) == 40
+    assert len(upstream["license_blob_sha"]) == 40
 
 
 def test_sglang_campaign_covers_required_contract_failure_and_comparison_dimensions() -> None:
@@ -156,7 +170,7 @@ def test_sglang_campaign_covers_required_contract_failure_and_comparison_dimensi
     assert campaign["raw_evidence"]["summary_only_is_sufficient"] is False
 
 
-def test_inference_backend_report_schema_is_valid_and_covers_campaign_metrics() -> None:
+def test_inference_backend_report_schema_is_valid_and_covers_campaign_fields() -> None:
     campaign = json.loads(CAMPAIGN_PATH.read_text(encoding="utf-8"))
     schema = json.loads(REPORT_SCHEMA_PATH.read_text(encoding="utf-8"))
 
@@ -165,6 +179,14 @@ def test_inference_backend_report_schema_is_valid_and_covers_campaign_metrics() 
     assert set(campaign["required_metrics"]) <= set(
         schema["properties"]["metrics"]["required"]
     )
+    report_environment_fields = {
+        "platform_commit",
+        "backend_revision",
+        *schema["properties"]["model"]["required"],
+        *schema["properties"]["environment"]["required"],
+        *schema["properties"]["workload"]["required"],
+    }
+    assert set(campaign["required_environment_fields"]) <= report_environment_fields
     assert set(schema["properties"]["backend"]["enum"]) == {
         "sglang",
         "vllm",
