@@ -57,9 +57,9 @@ def _normalize_finding(value: Any) -> NormalizedFinding:
         normalized_confidence = float(confidence) if confidence is not None else None
     except (TypeError, ValueError):
         normalized_confidence = None
-    line = _first(location, "start_line", "line") or _first(
-        item, "start_line", "line", "line_number"
-    )
+    line = _first(location, "start_line", "line")
+    if line is None:
+        line = _first(item, "start_line", "line", "line_number")
     try:
         normalized_line = int(line) if line is not None else None
     except (TypeError, ValueError):
@@ -75,13 +75,13 @@ def _normalize_finding(value: Any) -> NormalizedFinding:
     )
 
 
-def _finding_values(report: Mapping[str, Any]) -> list[Any]:
+def _finding_values(report: Mapping[str, Any]) -> list[Any] | None:
     """Return findings from the pinned public JSON shape, with fallback aliases."""
     for key in ("issues", "findings", "results"):
         value = report.get(key)
         if isinstance(value, list):
             return value
-    return []
+    return None
 
 
 def _provider_metadata(report: Mapping[str, Any]) -> dict[str, Any]:
@@ -122,13 +122,18 @@ def normalize_report(
     reasons = list(degraded_reasons)
     complete = bool(process_ok)
 
-    if report.get("execution_successful") is False:
+    execution_successful = report.get("execution_successful")
+    if execution_successful is not True:
         complete = False
-        reasons.append("provider_execution_failed")
+        reasons.append(
+            "provider_execution_failed"
+            if execution_successful is False
+            else "provider_execution_status_missing"
+        )
 
     completeness = report.get("analysis_completeness")
     if isinstance(completeness, Mapping):
-        if completeness.get("is_complete") is False:
+        if completeness.get("is_complete") is not True:
             complete = False
             reasons.append("provider_analysis_incomplete")
         if completeness.get("execution_successful") is False:
@@ -138,7 +143,10 @@ def normalize_report(
         if isinstance(status, str) and status.lower() in {"partial", "failed"}:
             complete = False
             reasons.append(f"provider_analysis_status={status.lower()}")
-    elif completeness is not None and str(completeness).lower() not in {
+    elif completeness is None:
+        complete = False
+        reasons.append("provider_analysis_completeness_missing")
+    elif str(completeness).lower() not in {
         "complete",
         "completed",
         "full",
@@ -148,10 +156,16 @@ def normalize_report(
         complete = False
         reasons.append(f"provider_analysis_completeness={completeness}")
 
+    finding_values = _finding_values(report)
+    if finding_values is None:
+        complete = False
+        reasons.append("provider_findings_missing")
+        finding_values = []
+
     if not process_ok:
         reasons.append("scanner_process_failed")
 
-    findings = tuple(_normalize_finding(item) for item in _finding_values(report))
+    findings = tuple(_normalize_finding(item) for item in finding_values)
     if not complete:
         evidence_status = "degraded"
     elif findings:
