@@ -25,6 +25,7 @@ from ai_multi_agent_platform.testing import FakeModelProvider
 ROOT = Path(__file__).resolve().parents[1]
 CAMPAIGN_PATH = ROOT / "config" / "inference-backend-evaluation.sglang-v0.5.19.json"
 UPSTREAM_EVIDENCE_PATH = ROOT / "config" / "inference-backend-upstream.sglang-v0.5.19.json"
+VLLM_EVIDENCE_PATH = ROOT / "config" / "inference-backend-upstream.vllm-v0.29.0.json"
 REPORT_SCHEMA_PATH = (
     ROOT
     / "src"
@@ -115,9 +116,11 @@ def test_sglang_campaign_is_pinned_and_does_not_claim_a_decision_without_measure
     assert campaign["decision"]["requires_live_measurements"] is True
 
 
-def test_sglang_upstream_evidence_matches_campaign_pin() -> None:
+def test_upstream_evidence_matches_candidate_and_vllm_comparator_pins() -> None:
     campaign = json.loads(CAMPAIGN_PATH.read_text(encoding="utf-8"))
     upstream = json.loads(UPSTREAM_EVIDENCE_PATH.read_text(encoding="utf-8"))
+    vllm_upstream = json.loads(VLLM_EVIDENCE_PATH.read_text(encoding="utf-8"))
+    comparators = {entry["backend"]: entry for entry in campaign["comparison_backends"]}
 
     assert upstream["backend"] == campaign["candidate"]["backend"]
     assert upstream["release"] == campaign["candidate"]["release"]
@@ -126,6 +129,13 @@ def test_sglang_upstream_evidence_matches_campaign_pin() -> None:
     assert len(upstream["release_commit_sha"]) == 40
     assert len(upstream["annotated_tag_sha"]) == 40
     assert len(upstream["license_blob_sha"]) == 40
+
+    assert vllm_upstream["backend"] == "vllm"
+    assert vllm_upstream["release"] == comparators["vllm"]["release"]
+    assert vllm_upstream["release_commit_sha"] == comparators["vllm"]["release_commit"]
+    assert vllm_upstream["license"] == "Apache-2.0"
+    assert len(vllm_upstream["release_commit_sha"]) == 40
+    assert len(vllm_upstream["license_blob_sha"]) == 40
 
 
 def test_sglang_campaign_covers_required_contract_failure_and_comparison_dimensions() -> None:
