@@ -16,13 +16,13 @@ from ai_multi_agent_platform.application_distribution import (
     BuildSpecification,
     BuildTarget,
     BuildTargetState,
+    control_plane,
     InMemoryApplicationReleaseRepository,
     JsonApplicationReleaseRepository,
     PackageType,
     ReleaseChannel,
     ReleaseStatus,
     ReleaseVisibility,
-    control_plane,
 )
 from ai_multi_agent_platform.configuration import (
     LocalSecretProvider,
