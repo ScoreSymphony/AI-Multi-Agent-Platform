@@ -332,8 +332,7 @@ def _secret_environment_mapping(
         return {}
     data = _json_object(value, "secret_environment")
     return {
-        name: _secret_reference(item, f"secret_environment.{name}")
-        for name, item in data.items()
+        name: _secret_reference(item, f"secret_environment.{name}") for name, item in data.items()
     }
 
 
