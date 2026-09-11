@@ -85,8 +85,8 @@ class PlanningService(BasePlanningService):
     def _enforce_replan_budget(self, task_id: str, trigger: PlanningTrigger) -> None:
         self._replan_support().enforce_budget(task_id, trigger)
 
+    @staticmethod
     def _trigger_fingerprint(
-        self,
         *,
         task: TaskState,
         trigger: PlanningTrigger,
