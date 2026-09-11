@@ -5,10 +5,8 @@ Canonical implementation lives in
 New production imports must use that module or the supported package-level exports.
 """
 
-from .verification_authority import (
-    VerificationService as VerificationService,
-    _CANONICAL_RESULT_TOKEN as _CANONICAL_RESULT_TOKEN,
-    _CANONICAL_SUBJECT_TOKEN as _CANONICAL_SUBJECT_TOKEN,
-)
+from .verification_authority import _CANONICAL_RESULT_TOKEN as _CANONICAL_RESULT_TOKEN
+from .verification_authority import _CANONICAL_SUBJECT_TOKEN as _CANONICAL_SUBJECT_TOKEN
+from .verification_authority import VerificationService as VerificationService
 
 __all__ = ["VerificationService"]

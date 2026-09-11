@@ -4,12 +4,10 @@ Canonical implementation lives in :mod:`ai_multi_agent_platform.planning.plannin
 New production imports must use that module or the supported package-level exports.
 """
 
-from .planning_facade import (
-    ActivatedPlanCoordinator as ActivatedPlanCoordinator,
-    PlanningEventSink as PlanningEventSink,
-    PlanningKernel as PlanningKernel,
-    PlanningService as PlanningService,
-)
+from .planning_facade import ActivatedPlanCoordinator as ActivatedPlanCoordinator
+from .planning_facade import PlanningEventSink as PlanningEventSink
+from .planning_facade import PlanningKernel as PlanningKernel
+from .planning_facade import PlanningService as PlanningService
 
 __all__ = [
     "ActivatedPlanCoordinator",

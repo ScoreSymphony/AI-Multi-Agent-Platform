@@ -5,10 +5,8 @@ Canonical implementation lives in
 New production imports must use that module or the supported package-level exports.
 """
 
-from .governed_learning_workflow import (
-    LearningQualityGate as LearningQualityGate,
-    LearningService as LearningService,
-    _promotion_action as _promotion_action,
-)
+from .governed_learning_workflow import LearningQualityGate as LearningQualityGate
+from .governed_learning_workflow import LearningService as LearningService
+from .governed_learning_workflow import _promotion_action as _promotion_action
 
 __all__ = ["LearningQualityGate", "LearningService"]
