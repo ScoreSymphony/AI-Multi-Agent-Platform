@@ -11,7 +11,7 @@ mkdir -p "$OUT_DIR"
 
 collect_protected_paths() {
   local output="$1"
-  local tmp
+  local tmp head_repo head_sha
   tmp="$(mktemp)"
   : >"$tmp"
 
@@ -20,17 +20,17 @@ collect_protected_paths() {
     "/repos/${REPO}/contents/.github/workflows?ref=main" \
     --jq '.[] | select(.type == "file") | .path' >>"$tmp"
 
-  while IFS= read -r head_sha; do
-    [[ -n "$head_sha" ]] || continue
+  while IFS=$'\t' read -r head_repo head_sha; do
+    [[ -n "$head_repo" && -n "$head_sha" ]] || continue
     gh api \
       -H "X-GitHub-Api-Version: ${API_VERSION}" \
-      "/repos/${REPO}/contents/.github/workflows?ref=${head_sha}" \
+      "/repos/${head_repo}/contents/.github/workflows?ref=${head_sha}" \
       --jq '.[] | select(.type == "file") | .path' >>"$tmp" 2>/dev/null || true
   done < <(
     gh api --paginate \
       -H "X-GitHub-Api-Version: ${API_VERSION}" \
       "/repos/${REPO}/pulls?state=open&per_page=100" \
-      --jq '.[].head.sha'
+      --jq '.[] | select(.head.repo != null) | [.head.repo.full_name, .head.sha] | @tsv'
   )
 
   sort -u "$tmp" >"$output"
@@ -140,8 +140,8 @@ rate_guard() {
 
 apply_cleanup() {
   local plan_file protected_now summary_file continuation_file
-  local started total deleted skipped missing failed processed
-  local run_id workflow_id path name created_at conclusion
+  local started total deleted skipped missing failed processed remaining continuation
+  local run_id workflow_id path name created_at conclusion current_path delete_output delete_rc
 
   plan_file="${OUT_DIR}/stale-runs.tsv"
   protected_now="${OUT_DIR}/protected-workflow-paths-now.txt"
@@ -162,6 +162,7 @@ apply_cleanup() {
   missing=0
   failed=0
   processed=0
+  current_path=""
 
   while IFS=$'\t' read -r run_id workflow_id path name created_at conclusion; do
     [[ -n "$run_id" ]] || continue
@@ -169,6 +170,14 @@ apply_cleanup() {
     if (( $(date +%s) - started >= MAX_SECONDS )); then
       echo "Cleanup time budget reached after ${processed}/${total} planned runs."
       break
+    fi
+
+    # The plan is sorted by workflow path. Refresh the protection set whenever
+    # processing moves to a new path, so a workflow added after planning is safe
+    # without spending API requests on every individual historical run.
+    if [[ "$path" != "$current_path" ]]; then
+      current_path="$path"
+      collect_protected_paths "$protected_now"
     fi
 
     if grep -Fqx "$path" "$protected_now"; then
@@ -179,12 +188,6 @@ apply_cleanup() {
 
     if (( deleted % 50 == 0 )); then
       rate_guard
-      collect_protected_paths "$protected_now"
-      if grep -Fqx "$path" "$protected_now"; then
-        skipped=$(( skipped + 1 ))
-        processed=$(( processed + 1 ))
-        continue
-      fi
     fi
 
     set +e
