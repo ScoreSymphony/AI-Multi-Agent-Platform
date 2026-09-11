@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/skillspector-evaluation.yml"
-      - "experiments/skillspector/**"
+      - "experiments/skillspector/*.py"
       - "tests/test_skillspector_evaluation.py"
       - "tests/test_skillspector_container_command.py"
       - "tests/test_skillspector_benchmark_semantics.py"
