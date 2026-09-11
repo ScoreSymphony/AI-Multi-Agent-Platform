@@ -42,6 +42,13 @@ from .control_plane import (
     register_component_setup_control_plane,
     register_onboarding_control_plane,
 )
+from .first_run_service import (
+    FIRST_RUN_RESOURCE_ID,
+    ONBOARDING_COLLECTION,
+    ONBOARDING_COMMANDS,
+    ONBOARDING_CONFIGURE_MODEL_COMMAND,
+    OnboardingService,
+)
 from .first_task import ONBOARDING_RUN_FIRST_TASK_COMMAND, FirstRunTaskService
 from .persistence import (
     ONBOARDING_PROVIDER_SCHEMA_VERSION,
@@ -52,13 +59,6 @@ from .persistence import (
 )
 from .providers import OnboardingModelAdapter, OnboardingModelEndpoint
 from .runtime_discovery import SingleNodeComponentDiscoverySource
-from .service import (
-    FIRST_RUN_RESOURCE_ID,
-    ONBOARDING_COLLECTION,
-    ONBOARDING_COMMANDS,
-    ONBOARDING_CONFIGURE_MODEL_COMMAND,
-    OnboardingService,
-)
 
 __all__ = [
     "COMPONENT_SETUP_COLLECTION",
