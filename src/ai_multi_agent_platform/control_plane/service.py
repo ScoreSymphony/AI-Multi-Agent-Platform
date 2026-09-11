@@ -26,6 +26,7 @@ from ai_multi_agent_platform.kernel import PlatformKernel, RunState, TaskState
 from ai_multi_agent_platform.kernel.repository import EventRepository
 from ai_multi_agent_platform.models import ModelConfiguration, ModelRegistry
 
+from .health import ControlPlaneHealth
 from .models import (
     ActorContext,
     OwnerType,
@@ -59,7 +60,7 @@ class ControlPlane:
         self._scopes = scopes or ScopeStore()
         self._authorization = authorization
         self._live_events = live_events
-        self._health_providers = health_providers
+        self._health = ControlPlaneHealth(health_providers)
         self._model_registry = model_registry
 
     @property
@@ -67,27 +68,7 @@ class ControlPlane:
         return self._scopes
 
     async def health(self) -> dict[str, JsonValue]:
-        providers: list[JsonValue] = []
-        ready = True
-        for provider in self._health_providers:
-            descriptor = provider.descriptor
-            status = await provider.health()
-            if not descriptor.available or status.value == "unavailable":
-                ready = False
-            providers.append(
-                {
-                    "id": descriptor.provider_id,
-                    "type": descriptor.provider_type,
-                    "status": status.value,
-                    "available": descriptor.available,
-                }
-            )
-        return {
-            "status": "healthy",
-            "ready": ready,
-            "api_version": "v1",
-            "providers": providers,
-        }
+        return await self._health.health()
 
     async def create_project(
         self,
