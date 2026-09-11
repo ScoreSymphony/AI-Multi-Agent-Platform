@@ -14,11 +14,32 @@ The canonical flow is:
 
 `ApplicationDistributionService.request_build()` creates a canonical Task and Run for each target, binds the Run to the release's immutable Workspace snapshot and persists that Run-to-release association before dispatch. The shipped single-node profile routes these build Runs through a dedicated `ApplicationBuildLifecycleBackend` and `ApplicationCommandExecutor`; ordinary agent Runs keep their existing lifecycle unchanged.
 
-The command executor runs explicit argv with `create_subprocess_exec()` inside an isolated materialized Workspace copy. It passes only a small environment allowlist, uses no shell, rejects paths escaping the materialization and requires the declared `output_path` to exist as a regular file after a successful process exit.
+The command executor runs explicit argv with `create_subprocess_exec()` inside an isolated materialized Workspace copy. It starts from a small host-environment allowlist and adds only the explicit build environment delivered through the execution contract; it never inherits the arbitrary parent process environment. It uses no shell, rejects paths escaping the materialization and requires the declared `output_path` to exist as a regular file after a successful process exit.
 
 After execution, the Workspace provider captures the declared output as a canonical File, verifies its digest and links a deterministic canonical Artifact ID. The service then attaches that Artifact to the canonical Run and admits it into the release only after the Run has succeeded and the immutable Workspace binding, File linkage and checksum all agree. An arbitrary local path therefore cannot be promoted directly into release state.
 
-Build execution itself is a high-risk external side effect. When the authorization/Approval runtime is present, the proposed action is bound to the release, target, exact argv, source path, output path, source revision, Workspace snapshot and referenced secrets before dispatch. Build permission and publication permission are separate.
+Build execution itself is a high-risk external side effect. When the authorization/Approval runtime is present, the proposed action is bound to the release, target, exact argv, source path, output path, source revision, Workspace snapshot, explicit non-secret environment and referenced secrets before dispatch. Build permission and publication permission are separate.
+
+## Build environment and SecretReferences
+
+`BuildSpecification.environment` contains explicit non-secret string environment values. Environment names that look sensitive under the central security redaction policy, such as token/password/API-key variables, are rejected from this plaintext field and must use `BuildSpecification.secret_environment` instead.
+
+`BuildSpecification.secret_environment` maps an environment variable name to a canonical `SecretReference`. The reference is durable application-release metadata; the secret material is not. The Control Plane and JSON application-release repository serialize only provider/reference/scope/version metadata.
+
+The local application build lifecycle resolves each secret as late as possible, after the canonical Task/Run and immutable Workspace binding are known and immediately before materialization/execution. Resolution uses the configured canonical `SecretProvider` with a `SecretAccessContext` bound to:
+
+- the dedicated application-build secret consumer identity;
+- release project and Workspace;
+- canonical Task and Run;
+- `application.build.command` action/capability;
+- the explicit application-build purpose;
+- a bounded requested lifetime derived from the build timeout.
+
+The reference scope must match the release project. Missing SecretProvider support, unresolved/revoked references or authorization failures therefore fail closed instead of falling back to ambient host credentials.
+
+Resolved values exist only in the ephemeral `ExecutionRequest.environment` supplied to the executor. The executor records only the names of secret-backed environment entries in its safe policy context so their resolved values can be removed from captured stdout/stderr with the central text-redaction helper. Secret material is not copied into `ApplicationRelease`, Task objectives, manifests, artifact metadata or persisted application-release retry/recovery state.
+
+The normal single-node/server composition gives secret resolution a dedicated service principal with only the `INVOKE_SENSITIVE_CAPABILITY`/`SECRET_REFERENCE` permission. This avoids expanding the ordinary application-build Run principal into a general credential-management identity.
 
 ## Target placement
 
@@ -34,7 +55,7 @@ The package-type enum includes executable, archive, installer, Linux package, ma
 
 `release_manifest()` generates deterministic machine-readable content. Artifacts include canonical Artifact/File IDs, target, package/media type, SHA-256, build Task/Run provenance, evidence references and, after publication, provider-returned download URLs. Deterministic JSON bytes and a manifest SHA-256 are available for publication or future update-discovery clients.
 
-The versioned schema lives in `docs/schemas/application-release-manifest.schema.json`. It contains enough version/channel/target/digest information for a later explicit updater without implementing automatic application updates in this issue.
+The versioned schema lives in `docs/schemas/application-release-manifest.schema.json`. It contains enough version/channel/target/digest information for a later explicit updater without implementing automatic application updates in this issue. Build environment values and SecretReferences are intentionally not copied into the public release manifest; only the build specification identity/revision is exposed there.
 
 ## Publishing
 
@@ -59,12 +80,12 @@ Idempotency is explicit. Creating the same application/version/channel with iden
 - `application-release.preview`
 - `application-release.publish`
 
-These use the normal versioned extension surface, including Control Plane idempotency keys for mutations. `application-release.build` accepts an optional `approval_id` for the exact high-risk build proposal. Preview/publish accept safe `publisher_configuration`; publication forwards `approval_id` through both the application-release authorization gate and the Connector authorization boundary.
+These use the normal versioned extension surface, including Control Plane idempotency keys for mutations. `application-release.create` accepts explicit non-secret `environment` values and typed `secret_environment` SecretReference objects inside `build_specification`. `application-release.build` accepts an optional `approval_id` for the exact high-risk build proposal; that proposal includes both environment configuration and SecretReference metadata, never resolved secret material. Preview/publish accept safe `publisher_configuration`; publication forwards `approval_id` through both the application-release authorization gate and the Connector authorization boundary.
 
 Clients should present `visibility`, immutable `release_url`, per-artifact `download_url`, checksums and target metadata distinctly. A private/authenticated URL must never be described as public.
 
 ## Reference limitations
 
-The current reference implementation intentionally does not claim a universal installer generator, automatic application updater, signing/notarization implementation or remote cross-OS build farm. Build secrets are represented as references and approval evidence but are not automatically injected into arbitrary command environments. Signing remains a separate capability seam.
+The current reference implementation intentionally does not claim a universal installer generator, automatic application updater, signing/notarization implementation or remote cross-OS build farm. Signing remains a separate capability seam.
 
-The local command executor is a reference execution path for self-hosted builds; it is not a replacement for the broader Executor/Worker sandbox architecture. Remote Worker build dispatch can replace this path later without changing `ApplicationRelease`, `BuildSpecification`, manifest or publisher contracts. No recurring paid build/distribution service is required by the reference implementation.
+The local command executor is a reference execution path for self-hosted builds; it is not a replacement for the broader Executor/Worker sandbox architecture. Remote Worker build dispatch can replace this path later without changing `ApplicationRelease`, `BuildSpecification`, manifest or publisher contracts. The secret-environment contract is also designed so remote execution can carry SecretReferences/scoped delivery metadata rather than persisting plaintext material in canonical Worker jobs. No recurring paid build/distribution service is required by the reference implementation.
