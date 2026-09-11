@@ -8,12 +8,12 @@ from .contracts import (
     PublishContext,
     PublishedArtifact,
 )
-from .evaluation_gate_orchestration import ApplicationReleaseGateCoordinator
 from .execution import (
     APPLICATION_BUILD_ACTION,
     ApplicationBuildLifecycleBackend,
     ApplicationCommandExecutor,
 )
+from .gate_provenance import ApplicationReleaseGateCoordinator
 from .gated_service import ApplicationDistributionService
 from .gates import (
     DeterministicGateCheck,
