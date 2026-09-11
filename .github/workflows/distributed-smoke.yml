@@ -6,8 +6,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  distributed-faults-smoke:
+  distributed-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -18,7 +19,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-      - name: Validate distributed fault implementation
+
+      - name: Validate distributed fault smoke
+        if: always()
         run: |
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/distributed_faults.py \
@@ -32,8 +35,6 @@ jobs:
             src/ai_multi_agent_platform/benchmarking/distributed_faults.py \
             src/ai_multi_agent_platform/benchmarking/distributed_faults_cli.py
           pytest tests/performance/test_issue_440_distributed_faults.py
-      - name: Run tiny distributed fault profile
-        run: |
           mkdir -p artifacts/benchmarks/pr-distributed-faults
           platform-distributed-faults \
             --worker-count 3 \
@@ -48,8 +49,6 @@ jobs:
             --safety-max-payload-bytes 4096 \
             --platform-commit "$GITHUB_SHA" \
             --output artifacts/benchmarks/pr-distributed-faults/report.json
-      - name: Validate distributed fault report
-        run: |
           python - <<'PY'
           import json
           from pathlib import Path
@@ -101,19 +100,8 @@ jobs:
           path: artifacts/benchmarks/pr-distributed-faults
           if-no-files-found: ignore
 
-  distributed-scale-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-      - name: Install benchmark environment
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-      - name: Validate distributed scale implementation
+      - name: Validate distributed scale smoke
+        if: always()
         run: |
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/distributed_scale.py \
@@ -127,8 +115,6 @@ jobs:
             src/ai_multi_agent_platform/benchmarking/distributed_scale.py \
             src/ai_multi_agent_platform/benchmarking/distributed_scale_cli.py
           pytest tests/performance/test_issue_440_distributed_scale.py
-      - name: Run tiny distributed scale profile
-        run: |
           mkdir -p artifacts/benchmarks/pr-distributed-scale
           platform-distributed-scale \
             --worker-count 2 \
@@ -140,8 +126,6 @@ jobs:
             --safety-max-fixture-bytes 4096 \
             --platform-commit "$GITHUB_SHA" \
             --output artifacts/benchmarks/pr-distributed-scale/report.json
-      - name: Validate distributed scale report
-        run: |
           python - <<'PY'
           import json
           from pathlib import Path
@@ -187,19 +171,8 @@ jobs:
           path: artifacts/benchmarks/pr-distributed-scale
           if-no-files-found: ignore
 
-  ha-failover-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-      - name: Install benchmark environment
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-      - name: Validate HA failover benchmark implementation
+      - name: Validate HA failover smoke
+        if: always()
         run: |
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/ha_failover.py \
@@ -213,8 +186,6 @@ jobs:
             src/ai_multi_agent_platform/benchmarking/ha_failover.py \
             src/ai_multi_agent_platform/benchmarking/ha_failover_cli.py
           pytest tests/performance/test_issue_440_ha_failover_benchmark.py
-      - name: Run tiny HA failover profile
-        run: |
           mkdir -p artifacts/benchmarks/pr-ha-failover
           platform-ha-failover \
             --active-task-count 2 \
@@ -222,8 +193,6 @@ jobs:
             --safety-max-tasks 2 \
             --platform-commit "$GITHUB_SHA" \
             --output artifacts/benchmarks/pr-ha-failover/report.json
-      - name: Validate HA failover report
-        run: |
           python - <<'PY'
           import json
           from pathlib import Path
@@ -270,19 +239,8 @@ jobs:
           path: artifacts/benchmarks/pr-ha-failover
           if-no-files-found: ignore
 
-  heterogeneous-placement-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-      - name: Install benchmark environment
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-      - name: Validate heterogeneous placement implementation
+      - name: Validate heterogeneous placement smoke
+        if: always()
         run: |
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/heterogeneous_placement.py \
@@ -296,16 +254,12 @@ jobs:
             src/ai_multi_agent_platform/benchmarking/heterogeneous_placement.py \
             src/ai_multi_agent_platform/benchmarking/heterogeneous_placement_cli.py
           pytest tests/performance/test_issue_440_heterogeneous_placement.py
-      - name: Run tiny heterogeneous placement profile
-        run: |
           mkdir -p artifacts/benchmarks/pr-heterogeneous-placement
           platform-heterogeneous-placement \
             --iterations-per-profile 2 \
             --safety-max-operations 8 \
             --platform-commit "$GITHUB_SHA" \
             --output artifacts/benchmarks/pr-heterogeneous-placement/report.json
-      - name: Validate heterogeneous placement report
-        run: |
           python - <<'PY'
           import json
           from pathlib import Path
