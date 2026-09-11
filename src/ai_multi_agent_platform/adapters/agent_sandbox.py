@@ -33,6 +33,17 @@ AGENT_SANDBOX_UPSTREAM_REPOSITORY = "https://github.com/agent-sandbox/agent-sand
 AGENT_SANDBOX_EVALUATED_REVISION = "d1b7ac007debcb1ba8de91c76afb49bee90d096a"
 AGENT_SANDBOX_EVALUATED_LICENSE = "Apache-2.0"
 
+_SAFE_PROVIDER_METADATA_KEYS = frozenset(
+    {
+        "image_digest",
+        "provider_version",
+        "runtime_class",
+        "sandbox_state",
+        "template_id",
+        "transport",
+    }
+)
+
 
 class AgentSandboxExecutionStatus(StrEnum):
     SUCCEEDED = "succeeded"
@@ -136,6 +147,10 @@ _ERROR_MAP: dict[str, ExecutionErrorCategory] = {
 }
 
 
+def _safe_provider_metadata(metadata: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    return {key: value for key, value in metadata.items() if key in _SAFE_PROVIDER_METADATA_KEYS}
+
+
 class AgentSandboxExecutor(Executor):
     """Translate canonical execution into an optional Agent-Sandbox backend."""
 
@@ -188,7 +203,10 @@ class AgentSandboxExecutor(Executor):
             executor_id=self._executor_id,
             capabilities=capabilities,
             healthy=health.healthy,
-            metadata={**self.descriptor.metadata, **health.metadata},
+            metadata={
+                **self.descriptor.metadata,
+                **_safe_provider_metadata(health.metadata),
+            },
         )
 
     async def execute(self, request: ExecutionRequest) -> ExecutionResult:
@@ -216,6 +234,17 @@ class AgentSandboxExecutor(Executor):
             )
         if request.cancellation is not None and request.cancellation.cancelled:
             return self._cancelled(request, started_at, started)
+        if request.environment:
+            return self._failure(
+                request,
+                started_at,
+                started,
+                ExecutionErrorCategory.INVALID_REQUEST,
+                (
+                    "direct environment projection to Agent-Sandbox is disabled until a "
+                    "#34-safe environment/secret delivery path is proven"
+                ),
+            )
 
         backend_request = AgentSandboxClientRequest(
             request_ref=uuid4().hex,
@@ -226,9 +255,9 @@ class AgentSandboxExecutor(Executor):
             action=request.action,
             workspace_path=str(workspace),
             arguments=dict(request.arguments),
-            environment=dict(request.environment),
+            environment={},
             timeout_seconds=request.timeout_seconds,
-            policy_context=dict(request.policy_context),
+            policy_context={},
             expected_artifacts=request.expected_artifacts,
             security_profile=self._security_profile,
         )
@@ -368,7 +397,7 @@ class AgentSandboxExecutor(Executor):
 
         provider_metadata: dict[str, JsonValue] = {
             "backend_status": backend.status.value,
-            **backend.metadata,
+            **_safe_provider_metadata(backend.metadata),
         }
         if backend.sandbox_id is not None:
             provider_metadata["sandbox_id"] = backend.sandbox_id
