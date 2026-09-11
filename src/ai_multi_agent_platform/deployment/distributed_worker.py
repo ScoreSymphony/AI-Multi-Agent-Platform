@@ -17,6 +17,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from ai_multi_agent_platform.application_distribution.worker import (
+    application_workspace_lifecycle,
+)
 from ai_multi_agent_platform.distributed import (
     Heartbeat,
     LinuxHostPressureProvider,
@@ -106,9 +109,10 @@ class DistributedWorkerProcess:
         executor = ReferenceExecutor(config.workspace_root)
         ExecutorLifecycleBackend.ensure_workspace(config.workspace_root, _REFERENCE_WORKSPACE)
         self._lifecycle_factory: WorkspaceLifecycleFactory = lifecycle_factory or (
-            lambda execution_workspace: ExecutorLifecycleBackend(
+            lambda execution_workspace: application_workspace_lifecycle(
+                config.workspace_root,
                 executor,
-                workspace=execution_workspace,
+                execution_workspace,
             )
         )
         fallback = LocalWorker(
