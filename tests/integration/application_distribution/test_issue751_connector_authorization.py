@@ -51,7 +51,9 @@ class _ConnectorDenyPolicy(FakeAuthorizationProvider):
                 reason="issue751 connector publication denied",
                 policy_id="issue751-connector-policy",
             )
-        return AuthorizationDecision(AuthorizationOutcome.ALLOW, reason="issue751 connector allowed")
+        return AuthorizationDecision(
+            AuthorizationOutcome.ALLOW, reason="issue751 connector allowed"
+        )
 
 
 def _ready_release() -> ApplicationRelease:
