@@ -44,11 +44,22 @@ jobs:
           grep -q 'go build -tags enterprise' .candidate/pipelock/Dockerfile
           python - <<'PY'
           from pathlib import Path
+          import re
 
-          text = Path(".candidate/pipelock/Makefile").read_text(encoding="utf-8")
-          build = text.split("\nbuild:\n", 1)[1].split("\n\n", 1)[0]
+          makefile = Path(".candidate/pipelock/Makefile").read_text(encoding="utf-8")
+          build = makefile.split("\nbuild:\n", 1)[1].split("\n\n", 1)[0]
           if "-tags enterprise" in build:
               raise SystemExit("upstream default make build unexpectedly enables Enterprise tags")
+
+          goreleaser = Path(".candidate/pipelock/.goreleaser.yaml").read_text(encoding="utf-8")
+          release_build = re.search(
+              r"(?ms)^  - id: pipelock\n(?P<body>.*?)(?=^  - id:|^archives:)",
+              goreleaser,
+          )
+          if release_build is None or not re.search(
+              r"(?m)^    tags:\n      - enterprise$", release_build.group("body")
+          ):
+              raise SystemExit("expected pinned GoReleaser pipelock build to be Enterprise-tagged")
           PY
 
       - name: Build tag-free Core candidate
@@ -72,7 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/pipelock-home"
-          ./pipelock init \
+          HOME="$RUNNER_TEMP/pipelock-home" ./pipelock init \
             --scan-home "$RUNNER_TEMP/pipelock-home" \
             --output "$RUNNER_TEMP/pipelock-audit.yaml" \
             --preset audit \
@@ -84,6 +95,36 @@ jobs:
           sha256sum ./pipelock "$RUNNER_TEMP/pipelock-audit.yaml" \
             > "$RUNNER_TEMP/pipelock-candidate-sha256.txt"
 
+      - name: Exercise audit-only HTTP fetch path
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOME="$RUNNER_TEMP/pipelock-home" ./pipelock run \
+            --config "$RUNNER_TEMP/pipelock-audit.yaml" \
+            > "$RUNNER_TEMP/pipelock-audit.log" 2>&1 &
+          pipelock_pid=$!
+          trap 'kill "$pipelock_pid" 2>/dev/null || true' EXIT
+
+          success=0
+          for _ in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 20 \
+              --get --data-urlencode 'url=https://example.com/' \
+              --output "$RUNNER_TEMP/pipelock-fetch-output.txt" \
+              --write-out '%{time_total}\n' \
+              http://127.0.0.1:8888/fetch \
+              > "$RUNNER_TEMP/pipelock-fetch-latency-seconds.txt"; then
+              success=1
+              break
+            fi
+            sleep 1
+          done
+          test "$success" -eq 1
+          test -s "$RUNNER_TEMP/pipelock-fetch-output.txt"
+
+          find "$RUNNER_TEMP/pipelock-home" -type f -name '*.jsonl' -print \
+            > "$RUNNER_TEMP/pipelock-evidence-files.txt" || true
+
       - name: Upload non-secret candidate evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -92,4 +133,7 @@ jobs:
           path: |
             ${{ runner.temp }}/pipelock-buildinfo.txt
             ${{ runner.temp }}/pipelock-candidate-sha256.txt
+            ${{ runner.temp }}/pipelock-fetch-latency-seconds.txt
+            ${{ runner.temp }}/pipelock-evidence-files.txt
+            ${{ runner.temp }}/pipelock-audit.log
           if-no-files-found: error
