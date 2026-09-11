@@ -76,8 +76,10 @@ class AutomaticReviewerStartupReconciler:
     in-process execution owner and is explicitly terminalized before the bounded normal retry
     path is invoked.
 
-    Multi-process deployments need a durable lease/claim protocol and must not use this
-    process-loss inference as cross-process liveness evidence.
+    Completed NEEDS_CHANGES requests are still driven through the normal workflow so durable
+    repair/reverification lineage can resume idempotently. Multi-process deployments need a
+    durable lease/claim protocol and must not use this process-loss inference as cross-process
+    liveness evidence.
     """
 
     def __init__(
@@ -182,26 +184,6 @@ class AutomaticReviewerStartupReconciler:
                 reason="verification maps to multiple running reviewer AgentRuns",
             )
 
-        if request.status is VerificationRequestStatus.COMPLETED:
-            stale_run_id = None
-            if running:
-                stale = self._terminalize_stale_run(
-                    running[0],
-                    status=AgentRunStatus.CANCELLED,
-                    reason=(
-                        "automatic reviewer startup recovery cancelled stale execution because "
-                        "canonical Verification is already completed"
-                    ),
-                )
-                stale_run_id = stale.agent_run_id
-            return ReviewerRecoveryRecord(
-                verification_id=request.verification_id,
-                task_id=request.task_id,
-                disposition=ReviewerRecoveryDisposition.ALREADY_COMPLETED,
-                reviewer_agent_run_id=stale_run_id or _latest_run_id(runs_before),
-                reason="canonical Verification is already completed",
-            )
-
         if request.status in {
             VerificationRequestStatus.CANCELLED,
             VerificationRequestStatus.EXPIRED,
@@ -225,7 +207,10 @@ class AutomaticReviewerStartupReconciler:
                 reason=f"verification is {request.status.value}",
             )
 
-        if request.status is not VerificationRequestStatus.PENDING:
+        if request.status not in {
+            VerificationRequestStatus.PENDING,
+            VerificationRequestStatus.COMPLETED,
+        }:
             return ReviewerRecoveryRecord(
                 verification_id=request.verification_id,
                 task_id=request.task_id,
@@ -234,20 +219,34 @@ class AutomaticReviewerStartupReconciler:
                 reason=f"unsupported Verification status during recovery: {request.status.value}",
             )
 
+        completed_before = request.status is VerificationRequestStatus.COMPLETED
+        staged_before = any(
+            _has_staged_decision(run)
+            for run in runs_before
+            if run.status in {AgentRunStatus.RUNNING, AgentRunStatus.SUCCEEDED}
+        )
+        stale_completed_run_id: str | None = None
         abandoned_run_id: str | None = None
-        staged_before = False
-        if running:
-            staged_before = _has_staged_decision(running[0])
-            if not staged_before:
-                abandoned = self._terminalize_stale_run(
-                    running[0],
-                    status=AgentRunStatus.FAILED,
-                    reason=(
-                        "automatic reviewer execution owner disappeared during Control Plane "
-                        "restart; bounded retry required"
-                    ),
-                )
-                abandoned_run_id = abandoned.agent_run_id
+        if completed_before and running:
+            stale = self._terminalize_stale_run(
+                running[0],
+                status=AgentRunStatus.CANCELLED,
+                reason=(
+                    "automatic reviewer startup recovery cancelled stale execution because "
+                    "canonical Verification is already completed"
+                ),
+            )
+            stale_completed_run_id = stale.agent_run_id
+        elif running and not staged_before:
+            abandoned = self._terminalize_stale_run(
+                running[0],
+                status=AgentRunStatus.FAILED,
+                reason=(
+                    "automatic reviewer execution owner disappeared during Control Plane "
+                    "restart; bounded retry required"
+                ),
+            )
+            abandoned_run_id = abandoned.agent_run_id
 
         before_ids = {run.agent_run_id for run in runs_before}
         try:
@@ -260,23 +259,30 @@ class AutomaticReviewerStartupReconciler:
                 verification_id=request.verification_id,
                 task_id=request.task_id,
                 disposition=ReviewerRecoveryDisposition.BLOCKED,
-                reviewer_agent_run_id=abandoned_run_id or _latest_run_id(runs_before),
+                reviewer_agent_run_id=(
+                    abandoned_run_id
+                    or stale_completed_run_id
+                    or _latest_run_id(runs_before)
+                ),
                 reason=f"{type(exc).__name__}: {exc}",
             )
 
         runs_after = self._review_runs_for(request.verification_id)
+        all_runs_after = self._all_review_runs_for_task(request.task_id)
         replacement = next(
-            (run.agent_run_id for run in runs_after if run.agent_run_id not in before_ids),
+            (run.agent_run_id for run in all_runs_after if run.agent_run_id not in before_ids),
             None,
         )
         latest = result.latest.reviewer_run
 
         if abandoned_run_id is not None:
             disposition = ReviewerRecoveryDisposition.ABANDONED_RETRIED
-        elif staged_before:
+        elif staged_before and not completed_before:
             disposition = ReviewerRecoveryDisposition.STAGED_DECISION_REUSED
         elif not runs_before and runs_after:
             disposition = ReviewerRecoveryDisposition.DISPATCHED
+        elif completed_before and replacement is None:
+            disposition = ReviewerRecoveryDisposition.ALREADY_COMPLETED
         else:
             disposition = ReviewerRecoveryDisposition.RECONCILED
 
@@ -286,8 +292,8 @@ class AutomaticReviewerStartupReconciler:
             disposition=disposition,
             reviewer_agent_run_id=(
                 abandoned_run_id
-                if abandoned_run_id is not None
-                else (None if latest is None else latest.agent_run_id)
+                or stale_completed_run_id
+                or (None if latest is None else latest.agent_run_id)
             ),
             replacement_agent_run_id=replacement,
         )
@@ -342,6 +348,14 @@ class AutomaticReviewerStartupReconciler:
             for record in self._agents.service.repository.list_agent_runs()
             if record.verification_context.get("schema") == _REVIEW_CONTEXT_SCHEMA
             and record.verification_context.get("verification_id") == verification_id
+        )
+
+    def _all_review_runs_for_task(self, task_id: str) -> tuple[AgentRunRecord, ...]:
+        return tuple(
+            record
+            for record in self._agents.service.repository.list_agent_runs()
+            if record.task_id == task_id
+            and record.verification_context.get("schema") == _REVIEW_CONTEXT_SCHEMA
         )
 
 
