@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PLANNING_ROOT = ROOT / "src" / "ai_multi_agent_platform" / "planning"
+SERVICE = PLANNING_ROOT / "service.py"
 SUPERSESSION = PLANNING_ROOT / "supersession.py"
 COMPOSITION = PLANNING_ROOT / "composition.py"
 INVENTORY = PLANNING_ROOT / "inventory.py"
@@ -68,6 +69,38 @@ def _assert_delegated_call(
     assert any(
         isinstance(call.func, ast.Attribute) and call.func.attr == delegated_call for call in calls
     ), f"PlanningService.{method_name} must delegate to {delegated_call}"
+
+
+def test_base_planning_facade_delegates_focused_responsibilities() -> None:
+    service = _class(SERVICE, "PlanningService")
+    expected = {
+        "validate": "validate",
+        "activate": "activate",
+        "_inventory": "build",
+        "_proposal": "build",
+        "_prior_plan": "prior_plan",
+        "_enforce_replan_budget": "enforce_budget",
+        "_trigger_fingerprint": "trigger_fingerprint",
+        "_activated_plan_event": "activated_plan_event",
+        "_plan_ref": "plan_ref",
+        "_failed_replan_can_activate": "failed_replan_can_activate",
+        "_ensure_handoff_ready": "ensure_ready",
+        "_handoff_to_coordinator": "handoff",
+        "_activation_action": "activation_action",
+        "_operation_context": "operation_context",
+    }
+    for method_name, delegated_call in expected.items():
+        _assert_delegated_call(service, method_name, delegated_call)
+
+
+def test_base_planning_facade_retains_orchestration_not_component_implementations() -> None:
+    service = _class(SERVICE, "PlanningService")
+    for method_name in ("propose", "reject", "history", "_emit"):
+        _method(service, method_name)
+    class_names = {
+        node.name for node in _tree(SERVICE).body if isinstance(node, ast.ClassDef)
+    }
+    assert class_names == {"PlanningKernel", "PlanningService"}
 
 
 def test_public_planning_service_delegates_base_inventory_construction() -> None:
