@@ -66,6 +66,5 @@ def test_final_classification_is_gated_on_runtime_evidence_and_setup_wizard() ->
     assert gate["setup_wizard_recommendation_requires_issue"] == 799
     assert gate["issue_799_currently_blocks_final_wizard_integration"] is True
     assert all(
-        backend["classification_is_final"] is False
-        for backend in manifest["backends"].values()
+        backend["classification_is_final"] is False for backend in manifest["backends"].values()
     )
