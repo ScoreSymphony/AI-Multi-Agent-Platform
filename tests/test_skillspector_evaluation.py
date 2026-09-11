@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 # Evaluation modules intentionally live outside the installable platform package. Add the
 # repository root explicitly so these tests behave the same under the repo's `pytest` console
