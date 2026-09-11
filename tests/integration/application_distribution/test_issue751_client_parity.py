@@ -113,7 +113,9 @@ def _invoke(
     return code, output, stderr.getvalue()
 
 
-def test_generic_cli_preserves_application_release_list_and_show_state(tmp_path: Path) -> None:
+def test_generic_cli_preserves_application_release_list_and_show_state(
+    tmp_path: Path,
+) -> None:
     transport = _ApplicationReleaseTransport()
     config = tmp_path / "cli.json"
 
