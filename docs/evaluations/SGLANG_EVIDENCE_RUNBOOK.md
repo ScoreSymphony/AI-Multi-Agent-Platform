@@ -50,6 +50,9 @@ At minimum retain:
 11. placement result;
 12. raw benchmark/log/telemetry file paths and SHA-256 hashes.
 
+For the SGLang candidate, `backend_revision` must be the full pinned release commit
+`0bcd822377da7b5718e674eaf9c870d349424dd1`. The package/image field may additionally record a release tag, image digest or package version. A report for another SGLang commit is not evidence for this campaign even if it uses the same `campaign_id`.
+
 `scenario_id` must uniquely identify the request corpus used for the comparison. Two reports with different scenario IDs are not treated as performance-comparable even if their other dimensions match.
 
 ## Comparison discipline
@@ -140,6 +143,7 @@ Exit codes are:
 
 The gate requires:
 
+- the SGLang report revision to equal the full pinned campaign commit;
 - all mandatory SGLang contract cases to have a latest passing result;
 - all mandatory SGLang failure/recovery cases to have a latest passing result;
 - at least one decision-eligible SGLang-vLLM performance pair whose comparison dimensions actually match.
