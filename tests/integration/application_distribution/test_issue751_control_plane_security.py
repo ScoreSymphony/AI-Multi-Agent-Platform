@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
@@ -112,7 +112,12 @@ class _BuildKernel:
     async def start_run(self, **kwargs: object) -> object:
         key = (str(kwargs["task_id"]), str(kwargs["run_id"]))
         current = self.runs[key]
-        running = replace(current, status=RunStatus.RUNNING)
+        running = SimpleNamespace(
+            run_id=current.run_id,
+            status=RunStatus.RUNNING,
+            artifact_ids=current.artifact_ids,
+            output=current.output,
+        )
         self.runs[key] = running
         return running
 
@@ -379,7 +384,9 @@ def _harness(mode: str) -> _Harness:
     )
 
 
-async def _create_and_build(harness: _Harness) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:
+async def _create_and_build(
+    harness: _Harness,
+) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:
     created = await harness.control_plane.execute_command(
         _context("issue751-create"),
         "application-release.create",
@@ -422,12 +429,16 @@ def test_versioned_control_plane_full_release_flow_preserves_canonical_and_downl
         artifact = artifacts[0]
         assert isinstance(target, dict)
         assert isinstance(artifact, dict)
-        assert target["target"]["os_name"] == "linux"
-        assert target["target"]["architecture"] == "x86_64"
-        assert target["target"]["package_type"] == "archive"
+        target_definition = target["target"]
+        assert isinstance(target_definition, dict)
+        assert target_definition["os_name"] == "linux"
+        assert target_definition["architecture"] == "x86_64"
+        assert target_definition["package_type"] == "archive"
         assert artifact["sha256"] == _ARTIFACT_SHA
-        assert artifact["external_metadata"]["worker_id"] == "worker_issue751_linux"
-        assert artifact["external_metadata"]["node_id"] == "node_issue751_remote"
+        artifact_metadata = artifact["external_metadata"]
+        assert isinstance(artifact_metadata, dict)
+        assert artifact_metadata["worker_id"] == "worker_issue751_linux"
+        assert artifact_metadata["node_id"] == "node_issue751_remote"
 
         listed = await harness.control_plane.list_extension_resources(
             _read_context(),
@@ -435,7 +446,9 @@ def test_versioned_control_plane_full_release_flow_preserves_canonical_and_downl
             PageQuery(),
         )
         assert listed["total"] == 1
-        assert listed["items"][0]["id"] == release_id
+        listed_items = listed["items"]
+        assert isinstance(listed_items, list)
+        assert listed_items[0]["id"] == release_id
         shown = await harness.control_plane.get_extension_resource(
             _read_context(),
             APPLICATION_RELEASE_COLLECTION,
@@ -481,9 +494,13 @@ def test_versioned_control_plane_full_release_flow_preserves_canonical_and_downl
         assert published_artifact["download_url"] == (
             "https://downloads.example/releases/v1.0.0/example-app-linux-x64.tar.gz"
         )
-        assert published_artifact["external_metadata"]["reference"]["asset_id"].startswith(
-            "asset:artifact_"
-        )
+        published_metadata = published_artifact["external_metadata"]
+        assert isinstance(published_metadata, dict)
+        assert published_metadata["worker_id"] == "worker_issue751_linux"
+        assert published_metadata["node_id"] == "node_issue751_remote"
+        reference_metadata = published_metadata["reference"]
+        assert isinstance(reference_metadata, dict)
+        assert str(reference_metadata["asset_id"]).startswith("asset:artifact_")
         assert published["external_metadata"] == {
             "reference": {"release_id": "release:issue751"}
         }
