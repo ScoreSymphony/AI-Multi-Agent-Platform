@@ -1,6 +1,6 @@
 # Automatic reviewer-Agent workflows
 
-Issue #711 connects the canonical Verification subsystem from #86 to normal Agent/AgentTeam execution without creating another review lifecycle.
+Issue #711 connects the canonical Verification subsystem from #86 to normal Agent/AgentTeam execution without creating another review lifecycle. Issue #759 completes deterministic scoped reviewer discovery, productive Artifact repair/re-review, replaceability coverage and the client-visible reviewer-selection contract.
 
 The reviewer/repair integration remains an explicit submodule boundary because it depends on Agent and Kernel runtime code. It is not re-exported wholesale from `verification.__init__`, which preserves the existing package dependency boundary.
 
@@ -44,7 +44,7 @@ The normal durable single-node deployment installs this observer and its local r
 
 Automatic review is explicitly enabled in versioned `VerificationPolicy.metadata`. There is no hidden bundled Reviewer fallback.
 
-A representative policy configuration is:
+An exact-assignment policy can pin one immutable reviewer identity directly:
 
 ```python
 VerificationPolicy(
@@ -65,15 +65,40 @@ VerificationPolicy(
 )
 ```
 
-`subject_types` may contain `result`, `artifact`, or both. Every automatically executed AGENT stage must resolve to an exact reviewer assignment. Supported assignments are:
+`subject_types` may contain `result`, `artifact`, or both. Every automatically executed AGENT stage must configure exactly one reviewer route. Exact routes support:
 
 - exact standalone Agent ID + revision;
 - exact AgentTeam ID + revision + exact member Agent ID/revision;
 - exact AgentTeam ID + revision + one unique Team role.
 
-`PolicyMetadataReviewerResolver` reads this versioned configuration and delegates exact resolution to the same canonical reviewer-assignment rules used by `ConfiguredReviewerResolver`. Unknown fields, invalid revisions, missing stage assignments, disabled Teams, or ambiguous Team-role matches fail closed.
+Issue #759 additionally supports deterministic role/capability discovery inside an explicit policy-owned candidate scope. A scoped route uses stable candidate identities and resolves their current canonical revisions exactly once at dispatch:
 
-The bundled Software Development Team from #77 is supported through its real `reviewer_tester` role, but remains only a replaceable reference configuration. Cloned/custom Reviewer Agents and Teams behave identically.
+```python
+VerificationPolicy(
+    name="scoped-software-review",
+    stages=(VerificationStage("review", VerifierKind.AGENT),),
+    metadata={
+        "automatic_reviewer": {
+            "enabled": True,
+            "subject_types": ["result", "artifact"],
+            "stages": {
+                "review": {
+                    "candidate_agent_ids": [custom_reviewer_id],
+                    "candidate_team_ids": [software_team_id],
+                    "reviewer_role": "reviewer_tester",
+                    "required_capability_ids": ["tool.file.read"],
+                }
+            },
+        }
+    },
+)
+```
+
+Scoped discovery is deliberately bounded: it never scans arbitrary global Agents. At least one candidate Agent/Team identity and at least one semantic selector (`reviewer_role` and/or `required_capability_ids`) are required. Exact-assignment fields and scoped-discovery fields cannot be mixed in one stage.
+
+`PolicyMetadataReviewerResolver` validates the versioned route and delegates either to `ConfiguredReviewerResolver` for exact assignments or `CapabilityRoleReviewerResolver` for scoped discovery. Scoped discovery succeeds only when exactly one enabled candidate matches; zero matches, multiple matches, missing definitions, disabled candidates or disabled Teams fail closed. Exact routing likewise rejects disabled Agent/Team definitions before a resolved reviewer is returned. The bundled Software Development Team from #77 may participate through its real `reviewer_tester` role, but remains only replaceable configuration and is never an implicit fallback.
+
+The selected exact Agent revision, selected Team revision where applicable, configured/discovery mode and policy selection criteria are persisted as `reviewer-selection-v1` provenance inside the canonical reviewer AgentRun verification context. This makes the selection explainable and restart-verifiable without granting the routing layer Verification authority.
 
 A Task without a Verification requirement, a policy without `automatic_reviewer` metadata, a disabled automatic-review configuration, or an output type not selected by that configuration follows the normal no-review path.
 
@@ -119,13 +144,13 @@ The repair runtime then replans through the normal orchestrator. Once the exact 
 
 Reviewer findings, evidence IDs and the exact reviewed subject are added to the repair objective as bounded, explicitly untrusted diagnostic context. They are not policy, authorization, capability grants or executable control data. The public reference path rejects repair when exact producer Agent identity cannot be established.
 
-`VerificationRepairRuntime` then resumes the Task, creates one canonical repair Step/Run and starts it through the normal lifecycle backend. `KernelAgentRepairExecutor` reconciles that existing Run; it never creates a parallel repair lifecycle. The successful Agent Run must expose a canonical `result_id`, which is attached to that same terminal repair Run before re-verification.
+`VerificationRepairRuntime` then resumes the Task, creates one canonical repair Step/Run and starts it through the normal lifecycle backend. `KernelAgentRepairExecutor` reconciles that existing Run; it never creates a parallel repair lifecycle. The successful Agent Run must expose exactly one canonical output of the same kind being repaired: a Result repair requires `result_id`, while an Artifact repair accepts one canonical `artifact_id`/`artifact_refs` identity and rejects missing, malformed or ambiguous Artifact output. The resolved Result or Artifact is attached to that same terminal repair Run before re-verification; an Artifact repair is never fabricated as a Result.
 
-That internal repaired-Result attachment uses provenance source `verification-repair`. `AutomaticReviewerOutputObserver` deliberately ignores only this source because the surrounding repair workflow immediately creates the lineage-preserving request through `request_reverification_after_repair()`. Treating the internal attachment as a new top-level producer event would otherwise create a second unrelated Verification with repair attempt zero.
+That internal repaired-output attachment uses provenance source `verification-repair`. `AutomaticReviewerOutputObserver` deliberately ignores only this source because the surrounding repair workflow immediately creates the lineage-preserving request through `request_reverification_after_repair()`. Treating the internal Result/Artifact attachment as a new top-level producer event would otherwise create a second unrelated Verification with repair attempt zero.
 
 The resulting `RepairOutput` is staged durably in the bound reviewer AgentRun telemetry **before** a fresh reverification request is created. If the workflow stops after repair output exists but before `request_reverification_after_repair()` succeeds, a later invocation validates and reuses that exact staged output instead of executing repair again. The staged identity includes the source Verification, repair Run and repair attempt.
 
-The repaired Result/Artifact is then resolved again through canonical evidence, producing a fresh exact Verification subject/revision/digest and incremented repair attempt. An older Verification can never certify modified output. The #86 repair budget remains authoritative and bounds the loop.
+The repaired Result/Artifact is then resolved again through canonical evidence, producing a fresh exact Verification subject/revision/digest and incremented repair attempt. An older Verification can never certify modified output. The #86 repair budget remains authoritative and bounds the loop. When the budget is exhausted, a further `NEEDS_CHANGES` result becomes a canonical rejected completion with `verification repair limit exhausted`; no additional repair Run is created.
 
 A successful re-review can leave the Task in `RUNNING` because Step terminalization does not itself complete the parent Task. `AutomaticReviewerOutputCoordinator` therefore asks the normal kernel completion path to finish an accepted Task when it is `WAITING` or `RUNNING` **and** no canonical Run is still active. This also preserves the existing safety rule for Artifacts attached while producer work is still running.
 
@@ -146,7 +171,7 @@ Direct `asyncio.CancelledError` and canonical `ContractError(ErrorCode.CANCELLED
 
 If cancellation occurs after a decision has already been staged, the decision remains recoverable. A pre-existing running reviewer without a staged decision is treated as in-flight work and is not executed a second time. Completed Verification reuses its immutable canonical result.
 
-The repair path has equivalent recovery boundaries. Canonical Plan/Step/Run creation is idempotent, an already-created queued repair Run can still be started, an active repair Run is reconciled rather than duplicated, the repaired Result attachment is idempotent, and staged repair output prevents completed repair work from being executed twice after an interruption.
+The repair path has equivalent recovery boundaries. Canonical Plan/Step/Run creation is idempotent, an already-created queued repair Run can still be started, an active repair Run is reconciled rather than duplicated, the repaired Result/Artifact attachment is idempotent, and staged repair output prevents completed repair work from being executed twice after an interruption.
 
 The process-local serialization matches the current reference AgentRepository write boundary. A future deployment with multiple independent Control Plane writers must provide an equivalent durable uniqueness/claim guarantee at the AgentRepository boundary before enabling concurrent cross-process reviewer dispatch.
 
@@ -154,7 +179,7 @@ The process-local serialization matches the current reference AgentRepository wr
 
 `ReviewWorkflowResult` exposes the canonical request, bound reviewer AgentRun, VerificationResult, optional canonical `VerificationRepairExecution`, and current `CompletionGateDecision`. `status_for()` reads review state without executing/retrying work.
 
-The existing Verification Control Plane collections remain the public source for canonical request/result/completion state. Normal AgentRun resources expose their `verification_context`, allowing clients to correlate the reviewer execution with its exact Verification and subject. Staged reviewer/repair data in AgentRun telemetry is recovery evidence, not competing lifecycle authority.
+The existing Verification Control Plane collections remain the public source for canonical request/result/completion state. Normal AgentRun resources expose their `verification_context`, including the exact reviewed subject and `reviewer-selection-v1` provenance, allowing clients to correlate the selected Agent/revision, Team/revision where applicable, reviewer execution, repair attempt and exact Verification without client-private review state. Staged reviewer/repair data in AgentRun telemetry is recovery evidence, not competing lifecycle authority.
 
 ## Normal integration example
 
@@ -206,6 +231,7 @@ The following remain explicitly non-authoritative:
 - orchestrator-native review state;
 - provider session IDs;
 - AgentTeam membership by itself;
+- reviewer-selection provenance by itself;
 - `ReviewerExecutionDecision` and staged recovery copies;
 - repair binding metadata and `RepairOutput`;
 - the output observer/coordinator return objects.

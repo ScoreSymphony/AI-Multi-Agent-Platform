@@ -179,10 +179,15 @@ def _resolve_assignment(
     if assignment.team_id is None:
         assert assignment.agent_id is not None
         assert assignment.agent_revision is not None
-        agents.service.get_agent_revision(
+        reviewer = agents.service.get_agent_revision(
             assignment.agent_id,
             assignment.agent_revision,
         )
+        if not reviewer.profile.enabled:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                f"reviewer Agent is disabled: {reviewer.agent_id}@{reviewer.revision}",
+            )
         return ResolvedReviewerAssignment(
             agent_id=assignment.agent_id,
             agent_revision=assignment.agent_revision,
@@ -228,6 +233,15 @@ def _resolve_assignment(
         )
 
     member = matches[0]
+    reviewer = agents.service.get_agent_revision(
+        member.agent.agent_id,
+        member.agent.revision,
+    )
+    if not reviewer.profile.enabled:
+        raise ContractError(
+            ErrorCode.UNAVAILABLE,
+            f"reviewer Agent is disabled: {reviewer.agent_id}@{reviewer.revision}",
+        )
     return ResolvedReviewerAssignment(
         agent_id=member.agent.agent_id,
         agent_revision=member.agent.revision,
