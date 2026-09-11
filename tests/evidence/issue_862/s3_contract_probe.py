@@ -88,7 +88,7 @@ class SigV4S3Client:
     ) -> S3Response:
         query = query or []
         extra_headers = {key.lower(): value.strip() for key, value in (headers or {}).items()}
-        now = dt.datetime.now(dt.timezone.utc)
+        now = dt.datetime.now(dt.UTC)
         amz_date = now.strftime("%Y%m%dT%H%M%SZ")
         date_stamp = now.strftime("%Y%m%d")
         payload_hash = self._sha256_hex(payload)
@@ -221,7 +221,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         session_token=os.environ.get("AWS_SESSION_TOKEN"),
         timeout=args.timeout,
     )
-    run_id = args.run_id or dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_id = args.run_id or dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
     prefix = f"issue-862/{args.backend}/{run_id}/"
     key = f"{prefix}primary.bin"
     data = _payload(f"{args.backend}:{run_id}:primary", args.payload_bytes)
