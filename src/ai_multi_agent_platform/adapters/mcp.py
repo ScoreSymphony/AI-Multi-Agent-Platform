@@ -31,7 +31,8 @@ class MCPServerConfig:
 
     Exactly one transport target is configured: ``endpoint`` for Streamable HTTP or
     ``command`` for a local stdio subprocess. Environment values are transport input and
-    deliberately never copied into adapter metadata.
+    deliberately never copied into adapter metadata. ``protocol_revision`` is an optional
+    exact compatibility guard for deployments that make a revision-specific claim.
     """
 
     server_id: str
@@ -40,6 +41,7 @@ class MCPServerConfig:
     environment: dict[str, str] = field(default_factory=dict)
     cwd: str | None = None
     read_timeout_seconds: float | None = None
+    protocol_revision: str | None = None
     capability_id_overrides: dict[str, str] = field(default_factory=dict)
     priority: int = 0
 
@@ -58,6 +60,8 @@ class MCPServerConfig:
             raise ValueError("cwd must not be blank")
         if self.read_timeout_seconds is not None and self.read_timeout_seconds <= 0:
             raise ValueError("read_timeout_seconds must be greater than zero")
+        if self.protocol_revision is not None and not self.protocol_revision.strip():
+            raise ValueError("protocol_revision must not be blank")
         if any(not key.strip() for key in self.environment):
             raise ValueError("MCP environment keys must not be blank")
 
