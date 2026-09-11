@@ -15,6 +15,7 @@ from ai_multi_agent_platform.observability import TelemetryOutcome
 from .models import (
     CoordinationPhase,
     CoordinatorClaim,
+    ReconciliationDisposition,
     RetryState,
     StepCoordinationRecord,
     StepWait,
@@ -139,7 +140,7 @@ class CoordinationAttemptOutcomes:
                     next_record = replace(
                         next_record,
                         phase=CoordinationPhase.INCONSISTENT,
-                        reconciliation=current.reconciliation.__class__.INCONSISTENT,
+                        reconciliation=ReconciliationDisposition.INCONSISTENT,
                         reconciliation_detail="successful Run conflicts with canonical Step status",
                     )
             elif run.status in {RunStatus.FAILED, RunStatus.TIMED_OUT}:
