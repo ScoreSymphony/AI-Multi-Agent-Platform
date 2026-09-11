@@ -36,4 +36,4 @@ def test_output_bind_target_is_writable_without_dac_override(tmp_path: Path) -> 
 
     assert output_dir.is_dir()
     if os.name == "posix":
-        assert stat.S_IMODE(output_dir.stat().st_mode) == 0o777
+        assert stat.S_IMODE(output_dir.stat().st_mode) == 0o733
