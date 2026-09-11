@@ -128,11 +128,23 @@ jobs:
         run: |
           set -euo pipefail
           cp "$RUNNER_TEMP/pipelock-audit.yaml" "$RUNNER_TEMP/pipelock-receipts.yaml"
-          grep -q '^[[:space:]]*require_receipts:[[:space:]]*false$' \
-            "$RUNNER_TEMP/pipelock-receipts.yaml"
-          sed -i \
-            's/^[[:space:]]*require_receipts:[[:space:]]*false$/  require_receipts: true/' \
-            "$RUNNER_TEMP/pipelock-receipts.yaml"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          path = Path(os.environ["RUNNER_TEMP"]) / "pipelock-receipts.yaml"
+          text = path.read_text(encoding="utf-8")
+          updated, count = re.subn(
+              r"(?m)^([ \t]*)require_receipts:[ \t]*false[ \t]*$",
+              r"\1require_receipts: true",
+              text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f"expected exactly one require_receipts=false field, found {count}")
+          path.write_text(updated, encoding="utf-8")
+          PY
           grep -q '^[[:space:]]*require_receipts:[[:space:]]*true$' \
             "$RUNNER_TEMP/pipelock-receipts.yaml"
 
