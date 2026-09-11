@@ -93,7 +93,7 @@ The measured campaign must record, per run:
 - endpoint authentication / exposure assumptions;
 - start, stop, restart and cache state.
 
-Raw benchmark output must be retained. Summary tables without the raw evidence are insufficient for a final #860 decision.
+Raw benchmark output must be retained. Summary tables without the raw evidence are insufficient for a final #860 decision. All v1 metric keys remain present in each report; a genuinely unmeasured metric is recorded as `null`, never as a fabricated numeric zero. A decision-eligible SGLang-vLLM pair must contain non-null values for every metric listed in the campaign's `required_metrics`.
 
 ## Representative comparison matrix
 
@@ -119,7 +119,7 @@ SGLang and vLLM performance rows must use the same model revision and equivalent
 | multi-node / remote Worker | pending | pending | not required for local-path role |
 | operational upgrade burden | pending | pending | pending |
 
-The source-backed pre-measurement operational comparison is recorded in `docs/evaluations/SGLANG_VLLM_OPERATIONAL_COMPARISON.md`. It narrows the live test plan but does not substitute for measured installation, resource, latency or recovery evidence.
+The source-backed pre-measurement operational comparison is recorded in `docs/evaluations/SGLANG_BACKEND_OPERATIONAL_COMPARISON.md`. It narrows the live test plan but does not substitute for measured installation, resource, latency or recovery evidence.
 
 ## Required campaign
 
@@ -212,6 +212,6 @@ No final #860 classification is asserted yet. The only valid final outcomes are:
 - `experimental_only` — useful and functional, but compatibility, recovery, operational burden or hardware coverage is not strong enough for a normal recommendation;
 - `reject/defer` — evidence does not justify integration/maintenance now.
 
-A final outcome requires all mandatory SGLang contract and failure cases plus at least one comparable SGLang-vLLM performance run on the same Worker/model revision. Submitted reports for SGLang, vLLM or Ollama must use the exact campaign-pinned backend revision. Missing multi-node hardware may remain explicitly `not_measured` if the decision does not claim multi-node support. The lighter local-path evidence must be considered in the final policy classification even when exact model representation makes a direct performance comparison non-comparable.
+A final outcome requires all mandatory SGLang contract and failure cases plus at least one comparable SGLang-vLLM performance run on the same Worker/model revision with all campaign-required metrics actually measured. Submitted reports must name a backend declared by this campaign, and reports for SGLang, vLLM or Ollama must use the exact campaign-pinned backend revision. Missing multi-node hardware may remain explicitly `not_measured` if the decision does not claim multi-node support. The lighter local-path evidence must be considered in the final policy classification even when exact model representation makes a direct performance comparison non-comparable.
 
 Until that gate is met, #799 must treat SGLang as **evaluated candidate, not recommended backend**.
