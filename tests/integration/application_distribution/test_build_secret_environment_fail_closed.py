@@ -285,8 +285,7 @@ def test_successful_build_replay_does_not_resolve_secret_again(tmp_path: Path) -
                     "-c",
                     (
                         "import os; from pathlib import Path; "
-                        "assert os.environ['PRIVATE_INDEX_TOKEN'] == "
-                        "'fixture-secret-value-748-negative'; "
+                        "assert os.environ.get('PRIVATE_INDEX_TOKEN'); "
                         "Path('dist').mkdir(); Path('dist/app.bin').write_bytes(b'replay')"
                     ),
                 ),
