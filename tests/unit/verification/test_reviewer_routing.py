@@ -63,13 +63,16 @@ def _stack():
     return service, runtime, policy, request
 
 
-def _resolver(policy, selector: ReviewerDiscoverySelector) -> CapabilityRoleReviewerResolver:
+def _resolver(
+    policy: VerificationPolicy,
+    selector: ReviewerDiscoverySelector,
+) -> CapabilityRoleReviewerResolver:
     return CapabilityRoleReviewerResolver(
         {(policy.policy_id, policy.version, "review"): selector}
     )
 
 
-def test_scoped_role_resolution_pins_current_standalone_agent_revision() -> None:
+def test_scoped_role_resolution_pins_current_agent_revision() -> None:
     service, runtime, policy, request = _stack()
     reviewer_id = STANDARD_AGENT_IDS["reviewer"]
     current = service.get_agent_revision(reviewer_id)
@@ -91,7 +94,7 @@ def test_scoped_role_resolution_pins_current_standalone_agent_revision() -> None
     assert resolved.team_id is None
 
 
-def test_scoped_team_member_role_resolution_pins_exact_team_and_member_revision() -> None:
+def test_scoped_team_role_pins_team_and_member_revision() -> None:
     _, runtime, policy, request = _stack()
 
     resolved = _resolver(
@@ -108,7 +111,7 @@ def test_scoped_team_member_role_resolution_pins_exact_team_and_member_revision(
     assert resolved.agent_revision == 1
 
 
-def test_scoped_capability_resolution_never_expands_beyond_candidate_agents() -> None:
+def test_capability_resolution_stays_within_candidate_agents() -> None:
     _, runtime, policy, request = _stack()
 
     resolved = _resolver(
@@ -185,7 +188,7 @@ def test_disabled_scoped_agent_is_never_selected() -> None:
     assert caught.value.details["match_count"] == 0
 
 
-def test_missing_scoped_candidate_is_not_replaced_by_bundled_reviewer() -> None:
+def test_missing_candidate_is_not_replaced_by_bundled_reviewer() -> None:
     _, runtime, policy, request = _stack()
 
     resolver = _resolver(
