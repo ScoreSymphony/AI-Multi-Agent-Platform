@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 
 from ai_multi_agent_platform.adapters import HttpJsonResponse
@@ -190,11 +191,24 @@ async def _exercise_team_review(
             owner_ref=OwnerRef(type="user", id=admin.user_id),
             name="Custom Software Review Team",
         )
+        team = deployment.agents.update_team(
+            team.team_id,
+            replace(team.profile, description="Current custom reviewer Team revision"),
+        )
         team_id = team.team_id
         team_revision = team.revision
+        reviewer_route: dict[str, JsonValue] = {
+            "candidate_team_ids": [team_id],
+            "reviewer_role": "reviewer_tester",
+        }
     else:
         team_id = STANDARD_TEAM_IDS["software_development"]
         team_revision = 1
+        reviewer_route = {
+            "team_id": team_id,
+            "team_revision": team_revision,
+            "team_role": "reviewer_tester",
+        }
 
     created = await deployment.http.handle(
         HTTPRequest(
@@ -245,13 +259,7 @@ async def _exercise_team_review(
                 "automatic_reviewer": {
                     "enabled": True,
                     "subject_types": ["result"],
-                    "stages": {
-                        "agent-review": {
-                            "team_id": team_id,
-                            "team_revision": team_revision,
-                            "team_role": "reviewer_tester",
-                        }
-                    },
+                    "stages": {"agent-review": reviewer_route},
                 }
             },
         )
@@ -349,6 +357,21 @@ async def _exercise_team_review(
         "digest": request.subject.digest,
     }
 
+    if use_cloned_team:
+        automatic = policy.metadata["automatic_reviewer"]
+        assert isinstance(automatic, Mapping)
+        stages = automatic["stages"]
+        assert isinstance(stages, Mapping)
+        route = stages["agent-review"]
+        assert isinstance(route, Mapping)
+        assert route["candidate_team_ids"] == [team_id]
+        assert route["reviewer_role"] == "reviewer_tester"
+        # These persisted policy facts plus the exact Verification stage and AgentRun Team/revision
+        # are sufficient to explain the deterministic scoped discovery decision after the fact.
+        assert request.stage_id == "agent-review"
+        assert reviewer_run.team.team_id in route["candidate_team_ids"]
+        assert reviewer_run.team.revision == team_revision == 2
+
 
 def test_standard_software_development_team_runs_productive_reviewer_tester_flow(
     tmp_path: Path,
@@ -356,7 +379,7 @@ def test_standard_software_development_team_runs_productive_reviewer_tester_flow
     asyncio.run(_exercise_team_review(tmp_path, use_cloned_team=False))
 
 
-def test_cloned_software_development_team_runs_same_canonical_review_flow(
+def test_cloned_software_development_team_uses_scoped_role_discovery(
     tmp_path: Path,
 ) -> None:
     asyncio.run(_exercise_team_review(tmp_path, use_cloned_team=True))
