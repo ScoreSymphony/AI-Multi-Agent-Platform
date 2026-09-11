@@ -145,9 +145,7 @@ def test_staged_reviewer_decision_survives_full_single_node_deployment_rebuild(
             "model_call_refs": [],
             "tool_invocation_refs": [],
         }
-        first.agents.repository.update_agent_run(
-            replace(reviewer_run, telemetry=telemetry)
-        )
+        first.agents.repository.update_agent_run(replace(reviewer_run, telemetry=telemetry))
         assert first.verification.result_for(request.verification_id) is None
         assert provider.calls == []
 
@@ -156,8 +154,7 @@ def test_staged_reviewer_decision_survives_full_single_node_deployment_rebuild(
         matching_before = [
             record
             for record in restored_before
-            if record.verification_context.get("verification_id")
-            == request.verification_id
+            if record.verification_context.get("verification_id") == request.verification_id
         ]
         assert len(matching_before) == 1
         assert matching_before[0].status is AgentRunStatus.RUNNING
@@ -171,10 +168,7 @@ def test_staged_reviewer_decision_survives_full_single_node_deployment_rebuild(
             for record in startup.reviewer_recoveries
             if record.verification_id == request.verification_id
         )
-        assert (
-            recovered.disposition
-            is ReviewerRecoveryDisposition.STAGED_DECISION_REUSED
-        )
+        assert recovered.disposition is ReviewerRecoveryDisposition.STAGED_DECISION_REUSED
         assert startup.ready_for_service is True
         canonical = restarted.verification.result_for(request.verification_id)
         assert canonical is not None
@@ -182,8 +176,7 @@ def test_staged_reviewer_decision_survives_full_single_node_deployment_rebuild(
         matching_after = [
             record
             for record in restarted.agents.repository.list_agent_runs()
-            if record.verification_context.get("verification_id")
-            == request.verification_id
+            if record.verification_context.get("verification_id") == request.verification_id
         ]
         assert len(matching_after) == 1
         assert matching_after[0].agent_run_id == reviewer_run.agent_run_id
@@ -197,15 +190,11 @@ def test_staged_reviewer_decision_survives_full_single_node_deployment_rebuild(
             for record in repeated.reviewer_recoveries
             if record.verification_id == request.verification_id
         )
-        assert (
-            repeated_record.disposition
-            is ReviewerRecoveryDisposition.ALREADY_COMPLETED
-        )
+        assert repeated_record.disposition is ReviewerRecoveryDisposition.ALREADY_COMPLETED
         matching_repeated = [
             record
             for record in restarted_again.agents.repository.list_agent_runs()
-            if record.verification_context.get("verification_id")
-            == request.verification_id
+            if record.verification_context.get("verification_id") == request.verification_id
         ]
         assert len(matching_repeated) == 1
         assert matching_repeated[0].agent_run_id == reviewer_run.agent_run_id
