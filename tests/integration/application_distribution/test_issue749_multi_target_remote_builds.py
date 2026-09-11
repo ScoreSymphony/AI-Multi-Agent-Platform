@@ -318,9 +318,7 @@ def test_multi_target_release_routes_to_distinct_workers_and_keeps_unsupported_e
                 "windows.bin",
             }
 
-            records_by_run = {
-                record.job.execution.run_id: record for record in runtime.records()
-            }
+            records_by_run = {record.job.execution.run_id: record for record in runtime.records()}
             linux_run = states["linux-x64"].run_id
             windows_run = states["windows-x64"].run_id
             assert linux_run is not None
