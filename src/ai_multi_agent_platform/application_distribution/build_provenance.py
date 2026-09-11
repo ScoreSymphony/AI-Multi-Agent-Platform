@@ -6,7 +6,11 @@ import platform
 from dataclasses import replace
 
 from ai_multi_agent_platform import __version__
-from ai_multi_agent_platform.contracts import ExecutionStatus
+from ai_multi_agent_platform.contracts import (
+    ExecutionSnapshot,
+    ExecutionStatus,
+    OperationContext,
+)
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.data import DataAccessContext
 from ai_multi_agent_platform.execution import ExecutionRequest, ExecutionResult
@@ -59,21 +63,62 @@ class ApplicationBuildLifecycleBackend(_BaseApplicationBuildLifecycleBackend):
         if not isinstance(build, dict):
             return captured
 
-        runtime = captured.output.get("runtime_provenance")
-        if isinstance(runtime, dict):
-            provenance = sanitize_runtime_provenance(runtime)
-        else:
-            provenance = _measured_runtime_provenance(
-                executor_id=self._executor.descriptor.executor_id,  # noqa: SLF001
-                descriptor_metadata=self._executor.descriptor.metadata,  # noqa: SLF001
-            )
+        provenance = self._runtime_provenance(captured.output, build)
         if not provenance:
             return captured
         enriched_build = dict(build)
         enriched_build["runtime_provenance"] = provenance
         output = dict(captured.output)
+        output["runtime_provenance"] = provenance
         output["application_build"] = enriched_build
         return replace(captured, output=output)
+
+    async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
+        """Preserve measured provenance on the canonical lifecycle snapshot boundary.
+
+        The kernel persists terminal ``ExecutionSnapshot.output`` as canonical Run output. Keeping
+        the enrichment here as well as in ``_capture_output`` prevents an executor/lifecycle
+        composition from dropping safe measured provenance before that durable boundary.
+        """
+
+        snapshot = await super().get(run_id, context)
+        if snapshot.status is not ExecutionStatus.SUCCEEDED:
+            return snapshot
+        nested = snapshot.output.get("output")
+        if not isinstance(nested, dict):
+            return snapshot
+        build = nested.get("application_build")
+        if not isinstance(build, dict):
+            return snapshot
+
+        provenance = self._runtime_provenance(nested, build)
+        if not provenance:
+            return snapshot
+        enriched_build = dict(build)
+        enriched_build["runtime_provenance"] = provenance
+        enriched_nested = dict(nested)
+        enriched_nested["runtime_provenance"] = provenance
+        enriched_nested["application_build"] = enriched_build
+        output = dict(snapshot.output)
+        output["output"] = enriched_nested
+        return replace(snapshot, output=output)
+
+    def _runtime_provenance(
+        self,
+        output: dict[str, JsonValue],
+        build: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        runtime = build.get("runtime_provenance")
+        if not isinstance(runtime, dict):
+            runtime = output.get("runtime_provenance")
+        if isinstance(runtime, dict):
+            provenance = sanitize_runtime_provenance(runtime)
+            if provenance:
+                return provenance
+        return _measured_runtime_provenance(
+            executor_id=self._executor.descriptor.executor_id,  # noqa: SLF001
+            descriptor_metadata=self._executor.descriptor.metadata,  # noqa: SLF001
+        )
 
 
 def _measured_runtime_provenance(
