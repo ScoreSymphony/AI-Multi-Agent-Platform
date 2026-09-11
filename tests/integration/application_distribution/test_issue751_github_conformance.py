@@ -235,7 +235,11 @@ def _manifest(sha256: str) -> dict[str, JsonValue]:
     }
 
 
-def _create_invocation(fixture: _Fixture, *, visibility: str = "public") -> ConnectorActionInvocation:
+def _create_invocation(
+    fixture: _Fixture,
+    *,
+    visibility: str = "public",
+) -> ConnectorActionInvocation:
     return ConnectorActionInvocation(
         invocation_id="issue751-create-release",
         connection_id=fixture.connection.id,
@@ -377,7 +381,9 @@ def test_provider_failures_preserve_canonical_error_category_and_redact_fixture_
     asyncio.run(scenario())
 
 
-def test_application_asset_upload_failure_is_explicit_and_credential_safe(tmp_path: Path) -> None:
+def test_application_asset_upload_failure_is_explicit_and_credential_safe(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         transport = _ScenarioTransport()
         fixture = await _fixture(tmp_path, transport)
@@ -394,7 +400,9 @@ def test_application_asset_upload_failure_is_explicit_and_credential_safe(tmp_pa
     asyncio.run(scenario())
 
 
-def test_uncertain_release_create_retry_resolves_existing_release_without_duplicate(tmp_path: Path) -> None:
+def test_uncertain_release_create_retry_resolves_existing_release_without_duplicate(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         transport = _ScenarioTransport(uncertain_create_once=True)
         fixture = await _fixture(tmp_path, transport)
@@ -427,7 +435,10 @@ def test_private_and_public_access_semantics_fail_closed(tmp_path: Path) -> None
         assert _TOKEN not in json.dumps(private_result.output, sort_keys=True)
 
         private_public_transport = _ScenarioTransport(private=True)
-        private_public_fixture = await _fixture(tmp_path / "private-public", private_public_transport)
+        private_public_fixture = await _fixture(
+            tmp_path / "private-public",
+            private_public_transport,
+        )
         with pytest.raises(ContractError) as private_public:
             await private_public_fixture.provider.invoke_action(
                 _create_invocation(private_public_fixture, visibility="public")
@@ -435,7 +446,10 @@ def test_private_and_public_access_semantics_fail_closed(tmp_path: Path) -> None
         assert private_public.value.code is ErrorCode.CONFLICT
 
         public_private_transport = _ScenarioTransport(private=False)
-        public_private_fixture = await _fixture(tmp_path / "public-private", public_private_transport)
+        public_private_fixture = await _fixture(
+            tmp_path / "public-private",
+            public_private_transport,
+        )
         with pytest.raises(ContractError) as public_private:
             await public_private_fixture.provider.invoke_action(
                 _create_invocation(public_private_fixture, visibility="authenticated")
