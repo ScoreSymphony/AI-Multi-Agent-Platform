@@ -98,7 +98,13 @@ def normalize_report(
     reasons = list(degraded_reasons)
     complete = bool(process_ok)
     completeness = report.get("analysis_completeness")
-    if completeness is not None and str(completeness).lower() not in {"complete", "completed", "full", "1", "true"}:
+    if completeness is not None and str(completeness).lower() not in {
+        "complete",
+        "completed",
+        "full",
+        "1",
+        "true",
+    }:
         complete = False
         reasons.append(f"provider_analysis_completeness={completeness}")
     if not process_ok:
