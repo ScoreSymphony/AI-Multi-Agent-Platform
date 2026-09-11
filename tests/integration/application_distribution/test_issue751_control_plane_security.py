@@ -58,9 +58,15 @@ class _PublicationPolicy(FakeAuthorizationProvider):
     async def authorize(self, request):
         self.calls.append(request)
         if request.action == AuthorizationAction.APPROVE.value:
-            return AuthorizationDecision(AuthorizationOutcome.ALLOW, reason="issue751 approver")
+            return AuthorizationDecision(
+                AuthorizationOutcome.ALLOW,
+                reason="issue751 approver",
+            )
         if request.side_effect != "application_release_publish":
-            return AuthorizationDecision(AuthorizationOutcome.ALLOW, reason="issue751 build allowed")
+            return AuthorizationDecision(
+                AuthorizationOutcome.ALLOW,
+                reason="issue751 build allowed",
+            )
         if self.mode == "deny":
             return AuthorizationDecision(
                 AuthorizationOutcome.DENY,
@@ -73,7 +79,10 @@ class _PublicationPolicy(FakeAuthorizationProvider):
                 reason="issue751 publication review required",
                 policy_id="issue751-publish-policy",
             )
-        return AuthorizationDecision(AuthorizationOutcome.ALLOW, reason="issue751 publication allowed")
+        return AuthorizationDecision(
+            AuthorizationOutcome.ALLOW,
+            reason="issue751 publication allowed",
+        )
 
 
 @dataclass(slots=True)
@@ -337,7 +346,9 @@ def _create_payload(harness: _Harness) -> dict[str, JsonValue]:
     }
 
 
-def _publisher_configuration(repository_ref: str = _SAFE_REPOSITORY) -> dict[str, JsonValue]:
+def _publisher_configuration(
+    repository_ref: str = _SAFE_REPOSITORY,
+) -> dict[str, JsonValue]:
     return {
         "connection_id": _SAFE_CONNECTION,
         "repository_ref": repository_ref,
@@ -403,7 +414,8 @@ async def _create_and_build(
     return created, built
 
 
-def test_versioned_control_plane_full_release_flow_preserves_canonical_and_download_metadata() -> None:
+def test_versioned_control_plane_full_release_flow_preserves_canonical_and_download_metadata(
+) -> None:
     async def scenario() -> None:
         harness = _harness("allow")
         created, built = await _create_and_build(harness)
@@ -526,7 +538,9 @@ def test_actor_may_build_but_publication_policy_denies_publish() -> None:
         _created, built = await _create_and_build(harness)
         release_id = str(built["id"])
         assert built["status"] == ReleaseStatus.READY.value
-        assert any(call.side_effect == "application_build_execute" for call in harness.policy.calls)
+        assert any(
+            call.side_effect == "application_build_execute" for call in harness.policy.calls
+        )
 
         with pytest.raises(ContractError) as caught:
             await harness.control_plane.execute_command(
