@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -22,6 +22,11 @@ class MCPProtocolScenarioStatus(StrEnum):
     PASS = "pass"
     FAIL = "fail"
     UNSUPPORTED = "unsupported"
+
+
+class MCPProtocolEvidenceStatus(StrEnum):
+    PRESENT = "present"
+    MISSING = "missing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,18 +165,23 @@ class MCPProtocolEvidence:
 @dataclass(frozen=True, slots=True)
 class MCPCompatibilityEvidence:
     schema: str
-    protocol_revision: str
-    suite_version: str
-    suite_commit: str
-    adapter_revision: str
+    protocol_evidence_status: str
+    protocol_revision: str | None
+    suite_version: str | None
+    suite_commit: str | None
+    adapter_revision: str | None
     sdk_version: str | None
-    protocol_conformant: bool
+    protocol_conformant: bool | None
     platform_conformant: bool
     claimed: bool
 
     @property
     def compatible(self) -> bool:
-        return self.claimed and self.protocol_conformant and self.platform_conformant
+        return (
+            self.claimed
+            and self.protocol_conformant is True
+            and self.platform_conformant
+        )
 
     def to_json(self) -> str:
         payload = asdict(self)
@@ -189,6 +199,7 @@ def combine_mcp_compatibility(
     protocol.validate()
     return MCPCompatibilityEvidence(
         schema=MCP_COMPATIBILITY_EVIDENCE_SCHEMA,
+        protocol_evidence_status=MCPProtocolEvidenceStatus.PRESENT.value,
         protocol_revision=protocol.protocol_revision,
         suite_version=protocol.suite_version,
         suite_commit=protocol.suite_commit,
@@ -197,6 +208,23 @@ def combine_mcp_compatibility(
         protocol_conformant=protocol.protocol_conformant,
         platform_conformant=platform_conformant,
         claimed=protocol.claimed,
+    )
+
+
+def missing_mcp_protocol_evidence(*, platform_conformant: bool) -> MCPCompatibilityEvidence:
+    """Represent a #46 MCP platform result that has no official protocol proof attached."""
+
+    return MCPCompatibilityEvidence(
+        schema=MCP_COMPATIBILITY_EVIDENCE_SCHEMA,
+        protocol_evidence_status=MCPProtocolEvidenceStatus.MISSING.value,
+        protocol_revision=None,
+        suite_version=None,
+        suite_commit=None,
+        adapter_revision=None,
+        sdk_version=None,
+        protocol_conformant=None,
+        platform_conformant=platform_conformant,
+        claimed=False,
     )
 
 
