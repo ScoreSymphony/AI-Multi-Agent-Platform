@@ -4,18 +4,13 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import (
     AuthorizationProvider,
     EventProvider,
     ModelProvider,
     ProviderContract,
 )
-from ai_multi_agent_platform.contracts.types import (
-    AuthorizationDecision,
-    JsonValue,
-    OperationControl,
-)
+from ai_multi_agent_platform.contracts.types import AuthorizationDecision, JsonValue
 from ai_multi_agent_platform.domain import Project
 from ai_multi_agent_platform.kernel import PlatformKernel, RunState, TaskState
 from ai_multi_agent_platform.kernel.repository import EventRepository
@@ -36,6 +31,7 @@ from .models import (
     WorkspaceIdentity,
     paginate,
 )
+from .reference_event_service import ControlPlaneReferenceEventService
 from .request_validation import (
     optional_string,
     require_key,
@@ -52,6 +48,7 @@ from .resources import (
     task_resource,
     workspace_resource,
 )
+from .scope_service import ControlPlaneScopeService
 from .scope_store import ScopeStore
 from .task_run_service import ControlPlaneTaskRunService
 
@@ -77,11 +74,22 @@ class ControlPlane:
         self._live_events = live_events
         self._health = ControlPlaneHealth(health_providers)
         self._models = ControlPlaneModelRegistry(model_registry)
+        self._scope_resources = ControlPlaneScopeService(
+            scopes=self._scopes,
+            authorization=self._authorization,
+        )
         self._task_runs = ControlPlaneTaskRunService(
             kernel=kernel,
             events=events,
             scopes=self._scopes,
             authorization=self._authorization,
+        )
+        self._reference_events = ControlPlaneReferenceEventService(
+            kernel=kernel,
+            events=events,
+            authorization=self._authorization,
+            task_runs=self._task_runs,
+            live_events=live_events,
         )
 
     @property
@@ -96,116 +104,42 @@ class ControlPlane:
         context: RequestContext,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        owner_type, owner_id = resolve_owner(context.actor, payload)
-        await self._authorize(
-            context,
-            "project:create",
-            "projects",
-            owner_type=owner_type,
-            owner_id=owner_id,
-            request_payload_digest=ControlPlaneAuthorization.payload_digest(payload),
-        )
-        project = self._scopes.create_project(
-            key=require_key(context),
-            name=required_string(payload, "name"),
-            owner_type=owner_type,
-            owner_id=owner_id,
-            project_id=optional_string(payload, "project_id"),
-        )
-        return project_resource(project)
+        return await self._scope_resources.create_project(context, payload)
 
     async def list_projects(
         self,
         context: RequestContext,
         query: PageQuery,
     ) -> dict[str, JsonValue]:
-        await self._authorize(context, "project:list", "projects")
-        resources: list[dict[str, JsonValue]] = []
-        for project in self._scopes.list_projects():
-            if await self._allowed(
-                context,
-                "project:list",
-                project.id,
-                owner_type=project.owner_ref.type,
-                owner_id=project.owner_ref.id,
-                project_id=project.id,
-            ):
-                resources.append(project_resource(project))
-        return paginate(resources, query)
+        return await self._scope_resources.list_projects(context, query)
 
     async def get_project(
         self,
         context: RequestContext,
         project_id: str,
     ) -> dict[str, JsonValue]:
-        project = self._scopes.get_project(project_id)
-        await self._authorize(
-            context,
-            "project:read",
-            project_id,
-            owner_type=project.owner_ref.type,
-            owner_id=project.owner_ref.id,
-            project_id=project.id,
-        )
-        return project_resource(project)
+        return await self._scope_resources.get_project(context, project_id)
 
     async def create_workspace(
         self,
         context: RequestContext,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        project_id = required_string(payload, "project_id")
-        project = self._scopes.get_project(project_id)
-        await self._authorize(
-            context,
-            "workspace:create",
-            project_id,
-            owner_type=project.owner_ref.type,
-            owner_id=project.owner_ref.id,
-            project_id=project.id,
-            request_payload_digest=ControlPlaneAuthorization.payload_digest(payload),
-        )
-        workspace = self._scopes.create_workspace(
-            key=require_key(context),
-            project_id=project_id,
-            workspace_id=optional_string(payload, "workspace_id"),
-        )
-        return workspace_resource(workspace)
+        return await self._scope_resources.create_workspace(context, payload)
 
     async def list_workspaces(
         self,
         context: RequestContext,
         query: PageQuery,
     ) -> dict[str, JsonValue]:
-        await self._authorize(context, "workspace:list", "workspaces")
-        resources: list[dict[str, JsonValue]] = []
-        for workspace in self._scopes.list_workspaces():
-            if await self._allowed(
-                context,
-                "workspace:list",
-                workspace.id,
-                owner_type=workspace.owner_type,
-                owner_id=workspace.owner_id,
-                project_id=workspace.project_id,
-            ):
-                resources.append(workspace_resource(workspace))
-        return paginate(resources, query)
+        return await self._scope_resources.list_workspaces(context, query)
 
     async def get_workspace(
         self,
         context: RequestContext,
         workspace_id: str,
     ) -> dict[str, JsonValue]:
-        workspace = self._scopes.get_workspace(workspace_id)
-        await self._authorize(
-            context,
-            "workspace:read",
-            workspace_id,
-            owner_type=workspace.owner_type,
-            owner_id=workspace.owner_id,
-            project_id=workspace.project_id,
-        )
-        return workspace_resource(workspace)
+        return await self._scope_resources.get_workspace(context, workspace_id)
 
     async def create_task(
         self,
@@ -303,20 +237,7 @@ class ControlPlane:
         collection: ReferenceCollection,
         query: PageQuery,
     ) -> dict[str, JsonValue]:
-        await self._authorize(context, f"{collection}:list", collection)
-        resources: list[dict[str, JsonValue]] = []
-        for task_id in await self._task_ids():
-            task = await self._kernel.get_task(task_id)
-            for resource in references_for_task(task, collection):
-                resource_id = resource["id"]
-                if isinstance(resource_id, str) and await self._allowed_for_task(
-                    context,
-                    f"{collection}:list",
-                    resource_id,
-                    task,
-                ):
-                    resources.append(resource)
-        return paginate(deduplicate(resources), query)
+        return await self._reference_events.list_references(context, collection, query)
 
     async def get_reference(
         self,
@@ -324,19 +245,7 @@ class ControlPlane:
         collection: ReferenceCollection,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        for task_id in await self._task_ids():
-            task = await self._kernel.get_task(task_id)
-            for resource in references_for_task(task, collection):
-                if resource.get("id") != resource_id:
-                    continue
-                await self._authorize_for_task(
-                    context,
-                    f"{collection[:-1]}:read",
-                    resource_id,
-                    task,
-                )
-                return resource
-        raise ContractError(ErrorCode.NOT_FOUND, f"{collection[:-1]} not found: {resource_id}")
+        return await self._reference_events.get_reference(context, collection, resource_id)
 
     async def timeline(
         self,
@@ -344,10 +253,7 @@ class ControlPlane:
         task_id: str,
         query: PageQuery,
     ) -> dict[str, JsonValue]:
-        task = await self._kernel.get_task(task_id)
-        await self._authorize_for_task(context, "event:list", task_id, task)
-        events = [event_resource(event) for event in await self._events.read_events(task_id)]
-        return paginate(events, query)
+        return await self._reference_events.timeline(context, task_id, query)
 
     async def subscribe_task_events(
         self,
@@ -356,40 +262,11 @@ class ControlPlane:
         *,
         after_event_id: str | None = None,
     ) -> AsyncIterator[dict[str, JsonValue]]:
-        task = await self._kernel.get_task(task_id)
-        await self._authorize_for_task(context, "event:subscribe", task_id, task)
-
-        live_events = self._live_events
-        if live_events is not None:
-
-            async def live_iterator() -> AsyncIterator[dict[str, JsonValue]]:
-                async for event in live_events.subscribe(
-                    task_id,
-                    after_event_id=after_event_id,
-                    control=OperationControl(),
-                ):
-                    yield event_resource(event)
-
-            return live_iterator()
-
-        events = await self._events.read_events(task_id)
-        start_index = 0
-        if after_event_id is not None:
-            for index, event in enumerate(events):
-                if event.id == after_event_id:
-                    start_index = index + 1
-                    break
-            else:
-                raise ContractError(
-                    ErrorCode.NOT_FOUND,
-                    f"event cursor not found: {after_event_id}",
-                )
-
-        async def repository_iterator() -> AsyncIterator[dict[str, JsonValue]]:
-            for event in events[start_index:]:
-                yield event_resource(event)
-
-        return repository_iterator()
+        return await self._reference_events.subscribe_task_events(
+            context,
+            task_id,
+            after_event_id=after_event_id,
+        )
 
     async def list_model_providers(
         self,
