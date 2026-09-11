@@ -78,6 +78,15 @@ def test_status_document_declares_non_competing_ownership() -> None:
     assert "Historical README status snapshot — 2026-09-07" in status
 
 
+def test_status_does_not_leave_completed_collector_as_pending() -> None:
+    status = (ROOT / "docs" / "STATUS.md").read_text(encoding="utf-8")
+    assert "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/pull/782" in status
+    assert "19b5b882478ad3ff3947006ae97c9d6228cc93b0" in status
+    assert "The #728 staging branch is kept synchronized" not in status
+    assert "Further integration commits may still arrive before final #728 closure" not in status
+    assert "before anything reaches `main`" not in status
+
+
 def test_roadmap_points_to_status_without_claiming_live_authority() -> None:
     roadmap = (ROOT / "docs" / "IMPLEMENTATION_ROADMAP.md").read_text(encoding="utf-8")
     assert "[`STATUS.md`](STATUS.md)" in roadmap
