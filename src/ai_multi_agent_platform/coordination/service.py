@@ -24,6 +24,7 @@ from ai_multi_agent_platform.observability import (
     TelemetryOutcome,
 )
 
+from .attempt_outcomes import CoordinationAttemptOutcomes
 from .models import (
     ApprovalOutcome,
     CoordinationPhase,
@@ -144,6 +145,7 @@ class DurablePlanStepCoordinator:
         self._registration = CoordinationRegistration(repository=repository, kernel=kernel)
         self._progression = CoordinationProgression(repository=repository, kernel=kernel)
         self._waits = CoordinationWaits(repository=repository, kernel=kernel)
+        self._attempt_outcomes = CoordinationAttemptOutcomes(repository=repository, kernel=kernel)
 
     async def register_plan(
         self,
@@ -212,163 +214,19 @@ class DurablePlanStepCoordinator:
         """Consume a canonical Run outcome exactly once and progress its Step."""
 
         current_time = self._now(now)
-        run = await self.kernel.get_run(task_id, run_id)
-        if run.run.subject_type != "step":
-            raise ContractError(ErrorCode.INVALID_REQUEST, "coordinator accepts only Step Runs")
-        if run.status not in _TERMINAL_RUNS:
-            raise ContractError(ErrorCode.CONFLICT, f"run {run_id} is not terminal")
-        record = self.repository.get_step_record(run.run.subject_id)
-        if record.task_id != task_id:
-            raise ContractError(ErrorCode.CONFLICT, "Run/Step task scope mismatch")
-        key = observation_key or f"run:{run_id}:{run.status.value}"
-        if key in record.processed_keys:
-            return self.projection(record.plan_id)
-
-        claim = self._claim(record.step_id, current_time)
-        if claim is None:
-            return self.projection(record.plan_id)
-        try:
-            state = self.repository.get_plan(record.plan_id)
-            step = state.step(record.step_id)
-            current = self.repository.get_step_record(record.step_id)
-            if key in current.processed_keys:
-                return self.projection(record.plan_id)
-            next_step = step
-            next_record = replace(
-                current,
-                processed_keys=(*current.processed_keys, key),
-                latest_run_id=run_id,
-            )
-
-            if run.status is RunStatus.SUCCEEDED:
-                if step.status is StepStatus.RUNNING:
-                    next_step = step.transition_to(StepStatus.SUCCEEDED)
-                    retry_state = (
-                        RetryState.COMPLETED
-                        if current.retry_state is RetryState.ACTIVE
-                        else current.retry_state
-                    )
-                    next_record = replace(
-                        next_record,
-                        phase=CoordinationPhase.TERMINAL,
-                        retry_state=retry_state,
-                    )
-                elif step.status is StepStatus.WAITING and current.wait is not None:
-                    next_record = replace(next_record, phase=CoordinationPhase.WAITING)
-                elif step.status is not StepStatus.SUCCEEDED:
-                    next_record = replace(
-                        next_record,
-                        phase=CoordinationPhase.INCONSISTENT,
-                        reconciliation=ReconciliationDisposition.INCONSISTENT,
-                        reconciliation_detail="successful Run conflicts with canonical Step status",
-                    )
-            elif run.status in {RunStatus.FAILED, RunStatus.TIMED_OUT}:
-                category = failure_category or run.status.value
-                if step.status in {StepStatus.RUNNING, StepStatus.WAITING}:
-                    next_step = step.transition_to(StepStatus.FAILED)
-                next_attempt = max(current.current_attempt, run.attempt) + 1
-                category_retryable = category in current.retry_policy.retryable_categories
-                closed_wait = self._close_wait(
-                    current.wait,
-                    resolution=WaitResolution.CANCELLED,
-                    resolution_key=key,
-                    now=current_time,
-                )
-                if category_retryable and next_attempt <= current.retry_policy.max_attempts:
-                    next_record = replace(
-                        next_record,
-                        phase=CoordinationPhase.RETRY_SCHEDULED,
-                        current_attempt=max(current.current_attempt, run.attempt),
-                        retry_due_at=(
-                            current_time + current.retry_policy.delay_for_attempt(next_attempt)
-                        ),
-                        retry_state=RetryState.SCHEDULED,
-                        wait=closed_wait,
-                    )
-                    self._emit(
-                        "coordination.retry.scheduled",
-                        task_id,
-                        current.plan_id,
-                        current.step_id,
-                        run_id=run_id,
-                        attributes={"attempt": next_attempt, "category": category},
-                    )
-                elif category_retryable:
-                    next_record = replace(
-                        next_record,
-                        phase=CoordinationPhase.TERMINAL,
-                        current_attempt=max(current.current_attempt, run.attempt),
-                        retry_due_at=None,
-                        retry_state=RetryState.EXHAUSTED,
-                        wait=closed_wait,
-                    )
-                    self._emit(
-                        "coordination.retry.exhausted",
-                        task_id,
-                        current.plan_id,
-                        current.step_id,
-                        run_id=run_id,
-                        outcome=TelemetryOutcome.FAILED,
-                        attributes={"category": category},
-                    )
-                else:
-                    next_record = replace(
-                        next_record,
-                        phase=CoordinationPhase.TERMINAL,
-                        current_attempt=max(current.current_attempt, run.attempt),
-                        retry_due_at=None,
-                        retry_state=RetryState.NOT_RETRYABLE,
-                        wait=closed_wait,
-                    )
-                    self._emit(
-                        "coordination.retry.not_retryable",
-                        task_id,
-                        current.plan_id,
-                        current.step_id,
-                        run_id=run_id,
-                        outcome=TelemetryOutcome.FAILED,
-                        attributes={"category": category},
-                    )
-            else:
-                if step.status in {StepStatus.RUNNING, StepStatus.WAITING}:
-                    next_step = step.transition_to(StepStatus.CANCELLED)
-                retry_state = (
-                    RetryState.CANCELLED
-                    if current.retry_state in {RetryState.SCHEDULED, RetryState.ACTIVE}
-                    else current.retry_state
-                )
-                next_record = replace(
-                    next_record,
-                    phase=CoordinationPhase.TERMINAL,
-                    retry_due_at=None,
-                    retry_state=retry_state,
-                    wait=self._close_wait(
-                        current.wait,
-                        resolution=WaitResolution.CANCELLED,
-                        resolution_key=key,
-                        now=current_time,
-                    ),
-                )
-
-            self.repository.save_step(
-                step=next_step,
-                record=next_record,
-                expected_revision=current.revision,
-                claim=claim,
-                now=current_time,
-            )
-            self._emit(
-                "coordination.run.observed",
-                task_id,
-                current.plan_id,
-                current.step_id,
-                run_id=run_id,
-                outcome=self._run_outcome(run.status),
-            )
-        finally:
-            self.repository.release_claim(claim)
-        await self.advance(record.plan_id, now=current_time)
-        return self.projection(record.plan_id)
+        result = await self._attempt_outcomes.observe_run(
+            task_id=task_id,
+            run_id=run_id,
+            failure_category=failure_category,
+            observation_key=observation_key,
+            now=current_time,
+            claim=self._claim,
+            close_wait=self._close_wait,
+            emit=self._emit,
+        )
+        if result.changed:
+            await self.advance(result.plan_id, now=current_time)
+        return self.projection(result.plan_id)
 
     async def wait_step(
         self,
@@ -740,44 +598,13 @@ class DurablePlanStepCoordinator:
         record: StepCoordinationRecord,
         now: datetime,
     ) -> bool:
-        if step.status is not StepStatus.FAILED:
-            return False
-        claim = self._claim(step.id, now)
-        if claim is None:
-            return False
-        try:
-            current = self.repository.get_step_record(step.id)
-            current_step = self.repository.get_plan(step.plan_id).step(step.id)
-            if (
-                current.phase is not CoordinationPhase.RETRY_SCHEDULED
-                or current.retry_due_at is None
-                or current.retry_due_at > now
-            ):
-                return False
-            ready = current_step.transition_to(StepStatus.READY)
-            updated = replace(
-                current,
-                phase=CoordinationPhase.READY,
-                retry_due_at=None,
-                retry_state=RetryState.ACTIVE,
-            )
-            self.repository.save_step(
-                step=ready,
-                record=updated,
-                expected_revision=current.revision,
-                claim=claim,
-                now=now,
-            )
-            self._emit(
-                "coordination.retry.started",
-                current.task_id,
-                current.plan_id,
-                current.step_id,
-                attributes={"attempt": current.current_attempt + 1},
-            )
-            return True
-        finally:
-            self.repository.release_claim(claim)
+        return await self._attempt_outcomes.activate_retry(
+            step,
+            record,
+            now,
+            claim=self._claim,
+            emit=self._emit,
+        )
 
     async def _resolve_wait(
         self,
@@ -967,15 +794,6 @@ class DurablePlanStepCoordinator:
         if value.tzinfo is None:
             raise ValueError("coordinator timestamps must be timezone-aware")
         return value.astimezone(UTC)
-
-    @staticmethod
-    def _run_outcome(status: RunStatus) -> TelemetryOutcome:
-        return {
-            RunStatus.SUCCEEDED: TelemetryOutcome.SUCCEEDED,
-            RunStatus.FAILED: TelemetryOutcome.FAILED,
-            RunStatus.CANCELLED: TelemetryOutcome.CANCELLED,
-            RunStatus.TIMED_OUT: TelemetryOutcome.TIMED_OUT,
-        }.get(status, TelemetryOutcome.UNKNOWN)
 
     def _emit(
         self,
