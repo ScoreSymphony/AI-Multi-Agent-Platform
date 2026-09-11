@@ -11,16 +11,12 @@ from ai_multi_agent_platform.contracts import (
     ExecutionSnapshot,
     LifecycleBackend,
     OperationContext,
-    OperationControl,
     Orchestrator,
     PlanRequest,
     PlatformEvent,
-    RetryMode,
 )
 from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue
-from ai_multi_agent_platform.domain import Event as DomainEvent
 from ai_multi_agent_platform.domain import (
-    OwnerRef,
     Plan,
     Provenance,
     RunStatus,
@@ -33,6 +29,7 @@ from ai_multi_agent_platform.verification import (
     OutputChangeAwareCompletionAuthority,
 )
 
+from .commit_support import KernelCommitSupport
 from .lifecycle import KernelLifecycleReconciler
 from .models import RecoveryReport, RunState, TaskState
 from .queries import KernelQueries
@@ -81,11 +78,8 @@ class PlatformKernel:
         )
         self._event_sink = event_sink
         self._completion_authority = completion_authority
-        self._lifecycle_reconciler = KernelLifecycleReconciler(
-            self,
-            lifecycle=lifecycle,
-            completion_authority=completion_authority,
-        )
+        self._commit_support = KernelCommitSupport(self)
+        self._lifecycle_reconciler = KernelLifecycleReconciler(self)
         self._recovery = KernelRecovery(self)
         self._task_commands = KernelTaskCommands(self)
         self._run_commands = KernelRunCommands(self)
@@ -714,8 +708,7 @@ class PlatformKernel:
         key: str,
         operation: str,
     ) -> CommandRecord | None:
-        self._require_key(key)
-        return await self._existing_command(task_id, key, operation)
+        return await self._commit_support.task_command(task_id, key, operation)
 
     async def _existing_command(
         self,
@@ -723,10 +716,7 @@ class PlatformKernel:
         key: str,
         operation: str,
     ) -> CommandRecord | None:
-        record = await self._repository.find_command(scope, key)
-        if record is None:
-            return None
-        return self._require_same_command(record, operation, key)
+        return await self._commit_support.existing_command(scope, key, operation)
 
     @staticmethod
     def _require_same_command(
@@ -734,14 +724,7 @@ class PlatformKernel:
         operation: str,
         key: str,
     ) -> CommandRecord:
-        if record is None:
-            raise ContractError(ErrorCode.CONFLICT, f"idempotency race lost for {key}")
-        if record.operation != operation:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"idempotency key {key!r} already belongs to {record.operation}",
-            )
-        return record
+        return KernelCommitSupport.require_same_command(record, operation, key)
 
     async def _commit_task_command(
         self,
@@ -754,35 +737,15 @@ class PlatformKernel:
         actor_ref: str | None,
         source: str,
     ) -> CommandRecord:
-        self._require_key(key)
-        existing = await self._existing_command(task.task_id, key, operation)
-        if existing is not None:
-            return existing
-        events = self._build_events(
+        return await self._commit_support.commit_task_command(
             task=task,
-            causation_id=key,
-            actor_ref=actor_ref,
-            source=source,
-            event_specs=event_specs,
-        )
-        command = self._command(
-            scope=task.task_id,
             key=key,
             operation=operation,
-            stream_id=task.task_id,
+            event_specs=event_specs,
             result_id=result_id,
-            event=events[0],
+            actor_ref=actor_ref,
+            source=source,
         )
-        result = await self._repository.commit(
-            stream_id=task.task_id,
-            expected_revision=task.revision,
-            events=events,
-            command=command,
-        )
-        if not result.applied:
-            return self._require_same_command(result.command, operation, key)
-        await self._mirror(events)
-        return command
 
     async def _append_system_events(
         self,
@@ -793,19 +756,13 @@ class PlatformKernel:
         source: str,
         event_specs: tuple[EventSpec, ...],
     ) -> None:
-        events = self._build_events(
+        return await self._commit_support.append_system_events(
             task=task,
             causation_id=causation_id,
             actor_ref=actor_ref,
             source=source,
             event_specs=event_specs,
         )
-        await self._repository.commit(
-            stream_id=task.task_id,
-            expected_revision=task.revision,
-            events=events,
-        )
-        await self._mirror(events)
 
     def _build_events(
         self,
@@ -816,29 +773,12 @@ class PlatformKernel:
         source: str,
         event_specs: tuple[EventSpec, ...],
     ) -> tuple[PlatformEvent, ...]:
-        return tuple(
-            self._event(
-                stream_id=task.task_id,
-                event_type=event_type,
-                subject_type=subject_type,
-                subject_id=subject_id,
-                causation_id=causation_id,
-                owner_type=task.task.owner_ref.type,
-                owner_id=task.task.owner_ref.id,
-                project_id=task.task.project_id,
-                actor_ref=actor_ref or f"{task.task.owner_ref.type}:{task.task.owner_ref.id}",
-                source=source,
-                revision=task.revision + offset,
-                payload=payload,
-                adapter_metadata=adapter_metadata,
-            )
-            for offset, (
-                event_type,
-                subject_type,
-                subject_id,
-                payload,
-                adapter_metadata,
-            ) in enumerate(event_specs, start=1)
+        return self._commit_support.build_events(
+            task=task,
+            causation_id=causation_id,
+            actor_ref=actor_ref,
+            source=source,
+            event_specs=event_specs,
         )
 
     @staticmethod
@@ -858,36 +798,20 @@ class PlatformKernel:
         payload: dict[str, JsonValue],
         adapter_metadata: tuple[AdapterMetadata, ...] = (),
     ) -> PlatformEvent:
-        enriched = dict(payload)
-        enriched.update(
-            {
-                "actor_ref": actor_ref,
-                "source": source,
-                "canonical_payload_version": "1.0",
-                "stream_revision": revision,
-            }
-        )
-        if adapter_metadata:
-            namespaces = [item.namespace for item in adapter_metadata]
-            if len(namespaces) != len(set(namespaces)):
-                raise ContractError(
-                    ErrorCode.CONTRACT_VIOLATION,
-                    "adapter metadata namespaces must be unique",
-                )
-            enriched["adapter_metadata"] = {
-                item.namespace: dict(item.values) for item in adapter_metadata
-            }
-
-        return DomainEvent(
+        return KernelCommitSupport.event(
+            stream_id=stream_id,
             event_type=event_type,
             subject_type=subject_type,
             subject_id=subject_id,
-            correlation_id=stream_id,
-            owner_ref=OwnerRef(type=owner_type, id=owner_id),
-            project_id=project_id,
             causation_id=causation_id,
-            payload=enriched,
-            provenance=Provenance(source=source, actor_ref=actor_ref),
+            owner_type=owner_type,
+            owner_id=owner_id,
+            project_id=project_id,
+            actor_ref=actor_ref,
+            source=source,
+            revision=revision,
+            payload=payload,
+            adapter_metadata=adapter_metadata,
         )
 
     @staticmethod
@@ -900,39 +824,25 @@ class PlatformKernel:
         result_id: str,
         event: PlatformEvent,
     ) -> CommandRecord:
-        return CommandRecord(
+        return KernelCommitSupport.command(
             scope=scope,
-            idempotency_key=key,
+            key=key,
             operation=operation,
             stream_id=stream_id,
             result_id=result_id,
-            event_id=event.id,
+            event=event,
         )
 
     @staticmethod
     def _context(task: TaskState, causation_id: str) -> OperationContext:
-        return OperationContext(
-            correlation_id=task.task_id,
-            causation_id=causation_id,
-            owner_type=task.task.owner_ref.type,
-            owner_id=task.task.owner_ref.id,
-            project_id=task.task.project_id,
-            control=OperationControl(
-                idempotency_key=causation_id,
-                retry_mode=RetryMode.IDEMPOTENT,
-            ),
-        )
+        return KernelCommitSupport.context(task, causation_id)
 
     async def _mirror(self, events: tuple[PlatformEvent, ...]) -> None:
-        if self._event_sink is None:
-            return
-        for event in events:
-            await self._event_sink.publish(event)
+        return await self._commit_support.mirror(events)
 
     @staticmethod
     def _require_key(key: str) -> None:
-        if not key.strip():
-            raise ContractError(ErrorCode.INVALID_REQUEST, "idempotency key must not be blank")
+        return KernelCommitSupport.require_key(key)
 
 
 EventSpec = tuple[
