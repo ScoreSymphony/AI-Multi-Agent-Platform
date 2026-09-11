@@ -17,9 +17,7 @@ ISSUE_IMPORT = re.compile(r"(?:^|\.)issue_\d+(?:\.|:|$)")
 
 def test_production_modules_use_stable_structural_names() -> None:
     issue_numbered = {
-        path
-        for path in SOURCE_ROOT.rglob("*.py")
-        if ISSUE_FILENAME.fullmatch(path.name)
+        path for path in SOURCE_ROOT.rglob("*.py") if ISSUE_FILENAME.fullmatch(path.name)
     }
     assert issue_numbered == COMPATIBILITY_MODULES
 
@@ -47,11 +45,7 @@ def test_packaged_entrypoints_do_not_reference_issue_modules() -> None:
     with (ROOT / "pyproject.toml").open("rb") as handle:
         configuration = tomllib.load(handle)
     scripts = configuration["project"]["scripts"]
-    violations = {
-        name: target
-        for name, target in scripts.items()
-        if ISSUE_IMPORT.search(target)
-    }
+    violations = {name: target for name, target in scripts.items() if ISSUE_IMPORT.search(target)}
     assert not violations
     assert scripts["platform"] == "ai_multi_agent_platform.cli.app:main"
 
