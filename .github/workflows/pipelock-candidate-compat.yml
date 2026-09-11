@@ -7,7 +7,9 @@ on:
       - "src/ai_multi_agent_platform/adapters/pipelock.py"
       - "tests/test_issue_730_pipelock_evaluation.py"
       - "tests/test_issue_730_pipelock_transports.py"
+      - "tests/integration/pipelock/**"
       - "tests/fixtures/mcp_*server.py"
+      - "tests/fixtures/websocket_*server.py"
       - "docs/upstream/PIPELOCK_CORE_*.md"
       - "upstream/pipelock-core.yaml"
   workflow_dispatch:
@@ -125,6 +127,13 @@ jobs:
         run: |
           pytest -q tests/test_issue_730_pipelock_transports.py \
             --junitxml="$RUNNER_TEMP/pipelock-mcp-remote-junit.xml"
+
+      - name: Exercise adversarial WebSocket DLP and injection corpus
+        env:
+          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+        run: |
+          pytest -q tests/integration/pipelock/test_adversarial_security.py \
+            --junitxml="$RUNNER_TEMP/pipelock-adversarial-junit.xml"
 
       - name: Exercise audit-only HTTP fetch path
         working-directory: .candidate/pipelock
@@ -313,6 +322,7 @@ jobs:
             ${{ runner.temp }}/pipelock-candidate-sha256.txt
             ${{ runner.temp }}/pipelock-mcp-stdio-junit.xml
             ${{ runner.temp }}/pipelock-mcp-remote-junit.xml
+            ${{ runner.temp }}/pipelock-adversarial-junit.xml
             ${{ runner.temp }}/pipelock-fetch-latency-seconds.txt
             ${{ runner.temp }}/pipelock-forward-latency-seconds.txt
             ${{ runner.temp }}/pipelock-connect-latency-seconds.txt

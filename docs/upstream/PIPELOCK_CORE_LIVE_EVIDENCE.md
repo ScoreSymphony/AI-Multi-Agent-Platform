@@ -384,15 +384,119 @@ E5 does **not** prove WebSocket DLP/injection resistance, DNS-rebinding resistan
 coverage, complete containment, direct-socket bypass resistance, strict CONNECT receipt validity,
 representative performance or production suitability.
 
+## Evidence E6: adversarial WebSocket DLP and response-injection corpus
+
+**Status: verified on GitHub Actions run `34581525771`.**
+
+This run keeps the exact pinned upstream revision and tag-free Core build boundary while exercising a
+small deterministic adversarial corpus through Pipelock's generic `/ws?url=...` path. The test
+configuration allows loopback only so local fixtures can be reached; it retains blocking request-body
+DLP and blocking response-injection scanning for the WebSocket text-frame path.
+
+### Run-specific fingerprints and JUnit result
+
+- **Workflow run:** `34581525771`
+- **Workflow evidence artifact digest:**
+  `sha256:d57850671a3ac8a5be51989b7b8e47570bddda82549bbf26ff1ea13f1eee4c33`
+- **Run-specific candidate binary SHA-256:**
+  `83c439188e3d41d2b44a2b1409d34100a23249916782d1dfef4aeb8b8e9ada36`
+- **Generated audit configuration SHA-256:**
+  `da732fc3e9800a3223634ef5aad3b960bf13ca32a879be3eb4705055dcee31ad`
+- **Adversarial JUnit:** **4 tests, 0 errors, 0 failures, 0 skipped**;
+- total JUnit time: **1.143 s**.
+
+Per-test hosted-runner durations were:
+
+- plaintext synthetic AWS access-ID frame: **0.237 s**;
+- base64-encoded form of the same synthetic secret: **0.223 s**;
+- secret split across two separate WebSocket messages: **0.267 s**;
+- server-to-client prompt-injection response: **0.270 s**.
+
+These durations include process/socket fixture overhead and are not performance-overhead measurements.
+
+### Client-to-server secret blocking
+
+The first case sends a deterministic synthetic AWS-style access ID through the Pipelock WebSocket
+proxy. The upstream fixture records every frame it receives. The connection is terminated by Pipelock
+and the marker confirms that the secret-bearing frame never reached the upstream server.
+
+The second case base64-encodes the same synthetic secret before sending it. Pipelock again terminates
+the proxied connection before the encoded frame reaches the upstream fixture. This proves the tested
+normalization path for this concrete base64 credential shape; it does not prove every encoding or
+normalization variant.
+
+### Cross-message secret blocking
+
+The third case splits the synthetic credential across two separate WebSocket text messages. The first
+fragment is individually harmless and reaches the upstream fixture, which returns an acknowledgement.
+After the second fragment is sent, Pipelock's cross-message DLP path terminates the connection and the
+fixture marker confirms that the second fragment did not reach the upstream.
+
+This is evidence for the documented cross-message DLP behavior on the tested text-message sequence.
+It is not evidence for every low-level WebSocket fragmentation, binary-frame or compression edge
+case.
+
+### Server-to-client response injection
+
+The adversarial fixture receives a harmless trigger message and then emits a deterministic prompt-
+injection string matching the configured response-scanning corpus. Its marker proves the response was
+created by the upstream fixture, while the client observes connection termination rather than the
+injection payload. The tested server response therefore did not cross the Pipelock boundary to the
+client.
+
+### Receipt continuity and CONNECT observation
+
+The separate strict `/fetch` receipt verification in the same run remained valid:
+
+- receipt action ID: `01a08fae-7917-76eb-8424-6f09806543d9`;
+- matching receipt-segment SHA-256:
+  `e3f2a730d131dacdf9c17e88b16f90b84b25bc326bdb85fb0726be3a7cbb9872`;
+- receipts: **43**;
+- final sequence: **42**;
+- root hash: `0e1d4ddf809f5d336a1fed638c2edbb97d2d74592355fbeb56603b703ae82719`;
+- pinned signer public key:
+  `0596bfe4b052acafb2789c222d048e4ff9008b372de2257517667a048043cc7e`;
+- recorded interval: `2026-09-11T08:55:56Z` through `2026-09-11T08:56:11Z`.
+
+The verifier again reports `Containment: UNKNOWN` / `L-CONTAINMENT-UNPROVEN`.
+
+The best-effort CONNECT allow-receipt error also reproduced again in this run:
+
+`chain sealed: transcript root already emitted`
+
+The CONNECT tunnel itself completed, with **5625** bytes reported and a tunnel duration of
+**55.355249 ms**. This is now a repeat observation across three live evaluation runs. It strengthens
+the case for isolating strict CONNECT receipt behavior next, but still does not establish whether the
+root cause is the upstream implementation or the current multi-process evaluation harness.
+
+### What E6 proves and does not prove
+
+For the exact pinned build and controlled text-frame fixtures, E6 supports these claims:
+
+1. the tested plaintext synthetic credential is blocked before the upstream WebSocket server receives
+   it;
+2. the tested base64 representation of that credential is also blocked before the upstream receives
+   it;
+3. the tested credential split across two WebSocket messages is detected before the second fragment
+   reaches the upstream;
+4. the tested server-generated prompt-injection response is blocked before the client receives it.
+
+E6 does **not** establish complete DLP/injection coverage, low-level fragmented-frame resistance,
+binary-frame behavior, all encoding/normalization variants, MCP descriptor/tool-drift resistance,
+network containment, direct-socket bypass resistance, representative performance or production
+suitability.
+
 ## Remaining #730 evidence
 
 Still required before the issue can reach a final `adopt`, `optional_provider`, `reference_only` or
 `reject` decision:
 
-- adversarial generic `/ws` frame scanning for DLP, injection and encoded/fragmented payloads;
+- generic `/ws` low-level fragmentation/binary/compression edge cases beyond the now-covered clean,
+  plaintext-secret, base64-secret, cross-message-secret and text response-injection paths;
 - strict CONNECT receipt root-cause isolation and verification under `require_receipts: true`;
-- descriptor/tool drift and response-injection corpus;
-- secret/DLP, encoding and multi-stage exfiltration corpus;
+- MCP descriptor/tool drift, tool-description poisoning and MCP response-injection corpus;
+- broader secret/DLP encoding and multi-stage exfiltration corpus across HTTP/MCP surfaces beyond the
+  tested WebSocket cases;
 - broader loopback/private-range, DNS-rebinding and IPv6 corpus; one redirect-to-loopback and one
   `169.254.169.254` link-local metadata case are now covered;
 - direct-network bypass tests, including child-process direct sockets;

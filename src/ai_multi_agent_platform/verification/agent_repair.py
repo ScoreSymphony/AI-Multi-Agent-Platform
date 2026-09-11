@@ -1,8 +1,9 @@
-"""Productive Agent repair adapters for automatic Verification review (#711)."""
+"""Productive Agent repair adapters for automatic Verification review (#711, #759)."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 
 from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
@@ -100,11 +101,12 @@ class ProducerAgentRepairBindingProvider(VerificationRepairBindingProvider):
 
 
 class KernelAgentRepairExecutor:
-    """Finish the canonical Agent-bound repair Run and expose its real Result for re-review.
+    """Finish one canonical Agent-bound repair Run and expose its real output for re-review.
 
     ``VerificationRepairRuntime`` owns Plan/Step/Run creation. This executor only reconciles that
-    existing Run, requires successful canonical completion, attaches the Result emitted by the
-    Agent lifecycle to the same Run, and returns the reference consumed by fresh re-verification.
+    existing Run, requires successful canonical completion, attaches the output emitted by the
+    Agent lifecycle to the same Run, and returns the exact Result/Artifact reference consumed by
+    fresh re-verification. It never fabricates a Result for an Artifact repair.
     """
 
     def __init__(self, kernel: PlatformKernel) -> None:
@@ -167,29 +169,95 @@ class KernelAgentRepairExecutor:
                 },
             )
 
-        result_id = run.output.get("result_id")
-        if not isinstance(result_id, str) or not result_id.strip():
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "successful Agent repair Run did not expose a canonical result_id",
-                details={"run_id": execution.run_id},
+        subject_type, subject_id = _resolve_repair_output(
+            run.output,
+            requested_subject_type=request.subject.subject_type,
+            run_id=execution.run_id,
+        )
+        if subject_type == "result":
+            await self._kernel.attach_result(
+                idempotency_key=f"{key}:attach-result",
+                task_id=execution.task_id,
+                run_id=execution.run_id,
+                result_id=subject_id,
+                actor_ref=_SERVICE_ACTOR,
+                source=VERIFICATION_REPAIR_SOURCE,
+            )
+        else:
+            await self._kernel.attach_artifact(
+                idempotency_key=f"{key}:attach-artifact",
+                task_id=execution.task_id,
+                run_id=execution.run_id,
+                artifact_id=subject_id,
+                actor_ref=_SERVICE_ACTOR,
+                source=VERIFICATION_REPAIR_SOURCE,
             )
 
-        await self._kernel.attach_result(
-            idempotency_key=f"{key}:attach-result",
-            task_id=execution.task_id,
-            run_id=execution.run_id,
-            result_id=result_id,
-            actor_ref=_SERVICE_ACTOR,
-            source=VERIFICATION_REPAIR_SOURCE,
-        )
-
         return RepairOutput(
-            subject_type="result",
-            subject_id=result_id,
+            subject_type=subject_type,
+            subject_id=subject_id,
             correlation_id=request.correlation_id,
             causation_id=execution.run_id,
         )
+
+
+def _resolve_repair_output(
+    output: Mapping[str, JsonValue],
+    *,
+    requested_subject_type: str,
+    run_id: str,
+) -> tuple[str, str]:
+    """Resolve exactly one canonical output of the kind being repaired.
+
+    Reference Agent execution exposes its primary Result as ``result_id`` and capability-produced
+    Artifacts as ``artifact_refs``. Other lifecycle adapters may expose a singular ``artifact_id``.
+    A repair is only valid when the successful Run exposes one unambiguous output of the same
+    canonical kind as the subject under review.
+    """
+
+    if requested_subject_type == "result":
+        result_id = output.get("result_id")
+        if isinstance(result_id, str) and result_id.strip():
+            return "result", result_id
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "successful Agent repair Run did not expose a canonical result_id",
+            details={"run_id": run_id, "subject_type": requested_subject_type},
+        )
+
+    if requested_subject_type != "artifact":
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "automatic Agent repair does not support this canonical output kind",
+            details={"run_id": run_id, "subject_type": requested_subject_type},
+        )
+
+    artifact_id = output.get("artifact_id")
+    artifact_refs = output.get("artifact_refs")
+    candidates: list[str] = []
+    if isinstance(artifact_id, str) and artifact_id.strip():
+        candidates.append(artifact_id)
+    if isinstance(artifact_refs, Sequence) and not isinstance(artifact_refs, (str, bytes)):
+        candidates.extend(item for item in artifact_refs if isinstance(item, str) and item.strip())
+        if any(not isinstance(item, str) or not item.strip() for item in artifact_refs):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "successful Agent repair Run exposed malformed artifact_refs",
+                details={"run_id": run_id},
+            )
+
+    unique = tuple(dict.fromkeys(candidates))
+    if len(unique) != 1:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "successful Artifact repair Run must expose exactly one canonical Artifact",
+            details={
+                "run_id": run_id,
+                "artifact_count": len(unique),
+                "subject_type": requested_subject_type,
+            },
+        )
+    return "artifact", unique[0]
 
 
 def _repair_objective(
