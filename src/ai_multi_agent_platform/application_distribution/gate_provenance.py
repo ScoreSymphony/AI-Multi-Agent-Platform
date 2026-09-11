@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 
 from .evaluation_gate_orchestration import (
@@ -27,7 +28,7 @@ class ApplicationReleaseGateCoordinator(_EvaluationApplicationReleaseGateCoordin
 
 def _sanitize_gate_runtime_provenance(gate: GateEvidence) -> GateEvidence:
     runtime = gate.details.get("runtime_provenance")
-    if not isinstance(runtime, dict):
+    if not isinstance(runtime, Mapping):
         return gate
 
     details = dict(gate.details)
