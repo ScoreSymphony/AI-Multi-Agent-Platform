@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/swe-rex-evaluation.yml"
       - "scripts/benchmarks/issue861_swe_rex_live.py"
+      - "scripts/benchmarks/issue861_swe_rex_canonical.py"
       - "src/ai_multi_agent_platform/adapters/swe_rex.py"
       - "tests/test_swe_rex_executor.py"
       - "docs/upstream/SWE_REX_*.md"
@@ -42,12 +43,21 @@ jobs:
           python scripts/benchmarks/issue861_swe_rex_live.py
           --backend local
           --output "swe-rex-local-${{ runner.os }}.json"
+      - name: Run canonical Executor bridge evidence
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: >-
+          python scripts/benchmarks/issue861_swe_rex_canonical.py
+          --backend local
+          --output "swe-rex-canonical-local-${{ runner.os }}.json"
       - name: Upload local evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: "swe-rex-local-${{ runner.os }}"
-          path: "swe-rex-local-${{ runner.os }}.json"
+          path: |
+            swe-rex-local-${{ runner.os }}.json
+            swe-rex-canonical-local-${{ runner.os }}.json
           if-no-files-found: warn
 
   docker-runtime:
@@ -92,10 +102,19 @@ jobs:
           python scripts/benchmarks/issue861_swe_rex_live.py
           --backend "${{ matrix.backend }}"
           --output "swe-rex-${{ matrix.backend }}.json"
+      - name: Run canonical Executor bridge evidence
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: >-
+          python scripts/benchmarks/issue861_swe_rex_canonical.py
+          --backend "${{ matrix.backend }}"
+          --output "swe-rex-canonical-${{ matrix.backend }}.json"
       - name: Upload Docker evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: "swe-rex-${{ matrix.backend }}"
-          path: "swe-rex-${{ matrix.backend }}.json"
+          path: |
+            swe-rex-${{ matrix.backend }}.json
+            swe-rex-canonical-${{ matrix.backend }}.json
           if-no-files-found: warn
