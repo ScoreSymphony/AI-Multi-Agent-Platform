@@ -338,48 +338,61 @@ class ApplicationBuildLifecycleBackend(LifecycleBackend):
             self._cancellations[request.run_id] = cancellation
             self._finished[request.run_id] = finished
             outcome = MaterializationOutcome.FAILED
+            started_at = datetime.now(UTC).isoformat()
+            started = monotonic()
             try:
-                environment, secret_environment_keys = await self._build_environment(
-                    release,
-                    task_id=binding.task_id,
-                    run_id=request.run_id,
-                    timeout_seconds=timeout_seconds,
-                )
-                timeout_seconds = _lease_bound_timeout_seconds(
-                    timeout_seconds,
-                    self._secret_deadlines.pop(request.run_id, None),
-                )
-                result = await self._executor.execute(
-                    ExecutionRequest(
+                try:
+                    environment, secret_environment_keys = await self._build_environment(
+                        release,
+                        task_id=binding.task_id,
+                        run_id=request.run_id,
+                        timeout_seconds=timeout_seconds,
+                    )
+                    timeout_seconds = _lease_bound_timeout_seconds(
+                        timeout_seconds,
+                        self._secret_deadlines.pop(request.run_id, None),
+                    )
+                except ContractError as exc:
+                    result = _contract_failure(
                         task_id=binding.task_id,
                         run_id=request.run_id,
                         correlation_id=request.context.correlation_id,
-                        action=APPLICATION_BUILD_ACTION,
-                        workspace=materialization.execution_workspace,
-                        arguments={
-                            "command": list(release.build_specification.command),
-                            "source_path": release.build_specification.source_path,
-                            "output_path": target.target.output_path,
-                        },
-                        environment=environment,
-                        timeout_seconds=timeout_seconds,
-                        cancellation=cancellation,
-                        policy_context={
-                            "sensitive_environment_keys": list(secret_environment_keys),
-                        },
+                        started_at=started_at,
+                        started=started,
+                        error=exc,
                     )
-                )
-                if result.status is ExecutionStatus.SUCCEEDED:
-                    result = await self._capture_output(
-                        release,
-                        target,
-                        materialization.id,
-                        context,
-                        result,
+                else:
+                    result = await self._executor.execute(
+                        ExecutionRequest(
+                            task_id=binding.task_id,
+                            run_id=request.run_id,
+                            correlation_id=request.context.correlation_id,
+                            action=APPLICATION_BUILD_ACTION,
+                            workspace=materialization.execution_workspace,
+                            arguments={
+                                "command": list(release.build_specification.command),
+                                "source_path": release.build_specification.source_path,
+                                "output_path": target.target.output_path,
+                            },
+                            environment=environment,
+                            timeout_seconds=timeout_seconds,
+                            cancellation=cancellation,
+                            policy_context={
+                                "sensitive_environment_keys": list(secret_environment_keys),
+                            },
+                        )
                     )
-                    outcome = MaterializationOutcome.SUCCEEDED
-                elif result.status is ExecutionStatus.CANCELLED:
-                    outcome = MaterializationOutcome.CANCELLED
+                    if result.status is ExecutionStatus.SUCCEEDED:
+                        result = await self._capture_output(
+                            release,
+                            target,
+                            materialization.id,
+                            context,
+                            result,
+                        )
+                        outcome = MaterializationOutcome.SUCCEEDED
+                    elif result.status is ExecutionStatus.CANCELLED:
+                        outcome = MaterializationOutcome.CANCELLED
                 self._results[request.run_id] = result
             finally:
                 self._secret_deadlines.pop(request.run_id, None)
@@ -731,6 +744,40 @@ def _decode_output(value: bytes) -> str:
     if len(value) > _MAX_CAPTURED_OUTPUT:
         value = value[-_MAX_CAPTURED_OUTPUT:]
     return value.decode("utf-8", errors="replace")
+
+
+def _contract_failure(
+    *,
+    task_id: str,
+    run_id: str,
+    correlation_id: str,
+    started_at: str,
+    started: float,
+    error: ContractError,
+) -> ExecutionResult:
+    message = redact_text(error.message)
+    return ExecutionResult(
+        task_id=task_id,
+        run_id=run_id,
+        correlation_id=correlation_id,
+        status=ExecutionStatus.FAILED,
+        output={
+            "contract_error": {
+                "code": error.code.value,
+                "retryable": error.retryable,
+            }
+        },
+        stderr=message,
+        error=ExecutionError(
+            category=ExecutionErrorCategory.EXECUTION_FAILED,
+            message=message,
+            retryable=error.retryable,
+            details={"contract_error_code": error.code.value},
+        ),
+        started_at=started_at,
+        finished_at=datetime.now(UTC).isoformat(),
+        duration_seconds=max(0.0, monotonic() - started),
+    )
 
 
 def _cancelled(
