@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -10,9 +11,11 @@ from types import MappingProxyType
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id, validate_id
+from ai_multi_agent_platform.security import SecretReference, redact_sensitive
 from ai_multi_agent_platform.workspaces import validate_relative_path, validate_sha256
 
 APPLICATION_RELEASE_SCHEMA_VERSION = "1.0"
+_ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def utc_now() -> datetime:
@@ -37,6 +40,30 @@ def _command_tokens(values: tuple[str, ...]) -> tuple[str, ...]:
     if any(not value.strip() for value in values):
         raise ValueError("command must not contain blank values")
     return tuple(values)
+
+
+def _environment(values: Mapping[str, str], field_name: str) -> MappingProxyType[str, str]:
+    copied: dict[str, str] = {}
+    for name, value in values.items():
+        if not isinstance(name, str) or _ENVIRONMENT_NAME.fullmatch(name) is None:
+            raise ValueError(f"{field_name} contains an invalid environment variable name")
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name} values must be strings")
+        copied[name] = value
+    return MappingProxyType(dict(sorted(copied.items())))
+
+
+def _secret_environment(
+    values: Mapping[str, SecretReference],
+) -> MappingProxyType[str, SecretReference]:
+    copied: dict[str, SecretReference] = {}
+    for name, reference in values.items():
+        if not isinstance(name, str) or _ENVIRONMENT_NAME.fullmatch(name) is None:
+            raise ValueError("secret_environment contains an invalid environment variable name")
+        if not isinstance(reference, SecretReference):
+            raise ValueError("secret_environment values must be SecretReference objects")
+        copied[name] = reference
+    return MappingProxyType(dict(sorted(copied.items())))
 
 
 class ReleaseChannel(StrEnum):
@@ -120,6 +147,8 @@ class BuildSpecification:
     post_build_checks: tuple[str, ...] = ()
     required_capabilities: tuple[str, ...] = ()
     resource_hints: Mapping[str, JsonValue] = field(default_factory=dict)
+    environment: Mapping[str, str] = field(default_factory=dict)
+    secret_environment: Mapping[str, SecretReference] = field(default_factory=dict)
     secret_references: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -155,6 +184,15 @@ class BuildSpecification:
             "resource_hints",
             MappingProxyType(dict(self.resource_hints)),
         )
+        environment = _environment(self.environment, "environment")
+        if redact_sensitive(dict(environment)) != dict(environment):
+            raise ValueError("sensitive-looking environment variables must use secret_environment")
+        secret_environment = _secret_environment(self.secret_environment)
+        overlap = set(environment) & set(secret_environment)
+        if overlap:
+            raise ValueError("environment and secret_environment must not define the same variable")
+        object.__setattr__(self, "environment", environment)
+        object.__setattr__(self, "secret_environment", secret_environment)
 
 
 @dataclass(frozen=True, slots=True)
