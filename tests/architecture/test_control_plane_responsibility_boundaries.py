@@ -64,9 +64,7 @@ def _assert_no_facade_dependency(path: Path) -> None:
 
 
 def test_scope_store_implementation_lives_outside_control_plane_facade() -> None:
-    service_classes = {
-        node.name for node in _tree(SERVICE).body if isinstance(node, ast.ClassDef)
-    }
+    service_classes = {node.name for node in _tree(SERVICE).body if isinstance(node, ast.ClassDef)}
     assert "ScopeStore" not in service_classes
     scope_store = _class(SCOPE_STORE, "ScopeStore")
     for method_name in (
@@ -85,8 +83,7 @@ def test_scope_store_implementation_lives_outside_control_plane_facade() -> None
 def test_control_plane_imports_scope_store_from_focused_module() -> None:
     imports = [node for node in _tree(SERVICE).body if isinstance(node, ast.ImportFrom)]
     assert any(
-        node.module == "scope_store"
-        and any(alias.name == "ScopeStore" for alias in node.names)
+        node.module == "scope_store" and any(alias.name == "ScopeStore" for alias in node.names)
         for node in imports
     ), "ControlPlane must retain ScopeStore through the focused scope_store module"
 
