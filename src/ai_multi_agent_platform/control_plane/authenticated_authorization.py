@@ -35,14 +35,15 @@ class ControlPlane(_CurrentControlPlane):
         project_id: str | None = None,
         request_payload_digest: str | None = None,
     ) -> AuthorizationDecision | None:
-        if self._authorization is None:
+        provider = self._authorization.provider
+        if provider is None:
             return None
         effective_owner_type = owner_type if owner_type is not None else context.actor.owner_type
         effective_owner_id = owner_id if owner_id is not None else context.actor.owner_id
         actor_type = context.actor.actor_type
         if actor_type is None:
             actor_type = infer_actor_identity(context.actor.principal_ref).actor_type.value
-        return await self._authorization.authorize(
+        return await provider.authorize(
             AuthorizationRequest(
                 principal_ref=context.actor.principal_ref,
                 actor_type=actor_type,
