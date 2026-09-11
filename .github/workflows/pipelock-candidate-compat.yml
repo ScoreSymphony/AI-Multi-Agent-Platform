@@ -1,0 +1,247 @@
+name: Pipelock candidate compatibility
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/pipelock-candidate-compat.yml"
+      - "src/ai_multi_agent_platform/adapters/pipelock.py"
+      - "tests/test_issue_730_pipelock_evaluation.py"
+      - "docs/upstream/PIPELOCK_CORE_*.md"
+      - "upstream/pipelock-core.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-core-audit-pilot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out platform
+        uses: actions/checkout@v7
+
+      - name: Check out pinned Pipelock candidate
+        uses: actions/checkout@v7
+        with:
+          repository: luckyPipewrench/pipelock
+          ref: f7d1816f1a5ad63d501b0c48f36066f836f59022
+          path: .candidate/pipelock
+          persist-credentials: false
+
+      - name: Set up Go from pinned upstream module
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .candidate/pipelock/go.mod
+          cache-dependency-path: .candidate/pipelock/go.sum
+
+      - name: Set up Python for platform transport fixture
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install platform integration test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Verify reviewed license and build boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "Apache License" .candidate/pipelock/LICENSE
+          grep -q "Elastic License 2.0" .candidate/pipelock/enterprise/LICENSE
+          grep -q '^//go:build enterprise$' .candidate/pipelock/enterprise/edition.go
+          grep -q 'go build -tags enterprise' .candidate/pipelock/Dockerfile
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          makefile = Path(".candidate/pipelock/Makefile").read_text(encoding="utf-8")
+          build = makefile.split("\nbuild:\n", 1)[1].split("\n\n", 1)[0]
+          if "-tags enterprise" in build:
+              raise SystemExit("upstream default make build unexpectedly enables Enterprise tags")
+
+          goreleaser = Path(".candidate/pipelock/.goreleaser.yaml").read_text(encoding="utf-8")
+          release_build = re.search(
+              r"(?ms)^  - id: pipelock\n(?P<body>.*?)(?=^  - id:|^archives:)",
+              goreleaser,
+          )
+          if release_build is None or not re.search(
+              r"(?m)^    tags:\n      - enterprise$", release_build.group("body")
+          ):
+              raise SystemExit("expected pinned GoReleaser pipelock build to be Enterprise-tagged")
+          PY
+
+      - name: Build tag-free Core candidate
+        working-directory: .candidate/pipelock
+        run: make build
+
+      - name: Prove binary has no Enterprise build tag
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          go version -m ./pipelock | tee "$RUNNER_TEMP/pipelock-buildinfo.txt"
+          if grep -Eq 'tags=.*enterprise' "$RUNNER_TEMP/pipelock-buildinfo.txt"; then
+            echo "candidate binary contains Enterprise build tag" >&2
+            exit 1
+          fi
+
+      - name: Generate and validate audit-only pilot configuration
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pipelock-home"
+          HOME="$RUNNER_TEMP/pipelock-home" ./pipelock init \
+            --scan-home "$RUNNER_TEMP/pipelock-home" \
+            --output "$RUNNER_TEMP/pipelock-audit.yaml" \
+            --preset audit \
+            --skip-canary
+          grep -Eq '^mode:[[:space:]]*audit$' "$RUNNER_TEMP/pipelock-audit.yaml"
+          grep -Eq '^enforce:[[:space:]]*false$' "$RUNNER_TEMP/pipelock-audit.yaml"
+          grep -Eq '^flight_recorder:' "$RUNNER_TEMP/pipelock-audit.yaml"
+          grep -Eq '^[[:space:]]+redact:[[:space:]]*true$' "$RUNNER_TEMP/pipelock-audit.yaml"
+          sha256sum ./pipelock "$RUNNER_TEMP/pipelock-audit.yaml" \
+            > "$RUNNER_TEMP/pipelock-candidate-sha256.txt"
+
+      - name: Exercise platform MCP stdio through pinned Pipelock
+        env:
+          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-audit.yaml
+        run: |
+          pytest -q tests/test_issue_730_pipelock_evaluation.py \
+            -k pipelock_mcp_stdio_wraps_canonical_invocation_path \
+            --junitxml="$RUNNER_TEMP/pipelock-mcp-stdio-junit.xml"
+
+      - name: Exercise audit-only HTTP fetch path
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOME="$RUNNER_TEMP/pipelock-home" ./pipelock run \
+            --config "$RUNNER_TEMP/pipelock-audit.yaml" \
+            > "$RUNNER_TEMP/pipelock-audit.log" 2>&1 &
+          pipelock_pid=$!
+          trap 'kill "$pipelock_pid" 2>/dev/null || true' EXIT
+
+          success=0
+          for _ in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 20 \
+              --get --data-urlencode 'url=https://example.com/' \
+              --output "$RUNNER_TEMP/pipelock-fetch-output.txt" \
+              --write-out '%{time_total}\n' \
+              http://127.0.0.1:8888/fetch \
+              > "$RUNNER_TEMP/pipelock-fetch-latency-seconds.txt"; then
+              success=1
+              break
+            fi
+            sleep 1
+          done
+          test "$success" -eq 1
+          test -s "$RUNNER_TEMP/pipelock-fetch-output.txt"
+
+      - name: Verify signed allow receipt on controlled audit pilot
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/pipelock-audit.yaml" "$RUNNER_TEMP/pipelock-receipts.yaml"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          path = Path(os.environ["RUNNER_TEMP"]) / "pipelock-receipts.yaml"
+          text = path.read_text(encoding="utf-8")
+          updated, count = re.subn(
+              r"(?m)^([ \t]*)require_receipts:[ \t]*false[ \t]*$",
+              r"\1require_receipts: true",
+              text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f"expected exactly one require_receipts=false field, found {count}")
+          path.write_text(updated, encoding="utf-8")
+          PY
+          grep -q '^[[:space:]]*require_receipts:[[:space:]]*true$' \
+            "$RUNNER_TEMP/pipelock-receipts.yaml"
+
+          HOME="$RUNNER_TEMP/pipelock-home" ./pipelock signing pubkey \
+            --config "$RUNNER_TEMP/pipelock-receipts.yaml" \
+            --out "$RUNNER_TEMP/pipelock-signing.pub"
+          test -s "$RUNNER_TEMP/pipelock-signing.pub"
+
+          HOME="$RUNNER_TEMP/pipelock-home" ./pipelock run \
+            --config "$RUNNER_TEMP/pipelock-receipts.yaml" \
+            > "$RUNNER_TEMP/pipelock-receipts.log" 2>&1 &
+          pipelock_pid=$!
+          trap 'kill "$pipelock_pid" 2>/dev/null || true' EXIT
+
+          success=0
+          for _ in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 20 \
+              --dump-header "$RUNNER_TEMP/pipelock-receipt-headers.txt" \
+              --get --data-urlencode 'url=https://example.com/' \
+              --output "$RUNNER_TEMP/pipelock-receipt-fetch-output.txt" \
+              http://127.0.0.1:8888/fetch; then
+              success=1
+              break
+            fi
+            sleep 1
+          done
+          test "$success" -eq 1
+          grep -i '^X-Pipelock-Receipt:' "$RUNNER_TEMP/pipelock-receipt-headers.txt" \
+            | sed -E 's/^[^:]+:[[:space:]]*//; s/\r$//' \
+            > "$RUNNER_TEMP/pipelock-receipt-action-id.txt"
+          receipt_action_id="$(head -n 1 "$RUNNER_TEMP/pipelock-receipt-action-id.txt")"
+          test -n "$receipt_action_id"
+
+          kill "$pipelock_pid" 2>/dev/null || true
+          wait "$pipelock_pid" 2>/dev/null || true
+          trap - EXIT
+
+          find "$RUNNER_TEMP" -type f -name '*.jsonl' -print \
+            > "$RUNNER_TEMP/pipelock-evidence-files.txt"
+          test -s "$RUNNER_TEMP/pipelock-evidence-files.txt"
+
+          receipt_file=""
+          while IFS= read -r candidate; do
+            if grep -Fq "$receipt_action_id" "$candidate"; then
+              receipt_file="$candidate"
+              break
+            fi
+          done < <(
+            find "$RUNNER_TEMP/recorder" -maxdepth 1 \
+              -type f -name 'evidence-proxy-*.jsonl' -print | sort
+          )
+          if [ -z "$receipt_file" ]; then
+            echo "no proxy receipt file contains action id $receipt_action_id" >&2
+            exit 1
+          fi
+          sha256sum "$receipt_file" > "$RUNNER_TEMP/pipelock-receipt-sha256.txt"
+
+          ./pipelock verify-receipt \
+            --chain "$RUNNER_TEMP/recorder" \
+            --key "$RUNNER_TEMP/pipelock-signing.pub" \
+            | tee "$RUNNER_TEMP/pipelock-receipt-verification.txt"
+
+      - name: Upload non-secret candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pipelock-candidate-core-audit-evidence
+          path: |
+            ${{ runner.temp }}/pipelock-buildinfo.txt
+            ${{ runner.temp }}/pipelock-candidate-sha256.txt
+            ${{ runner.temp }}/pipelock-mcp-stdio-junit.xml
+            ${{ runner.temp }}/pipelock-fetch-latency-seconds.txt
+            ${{ runner.temp }}/pipelock-evidence-files.txt
+            ${{ runner.temp }}/pipelock-receipt-action-id.txt
+            ${{ runner.temp }}/pipelock-receipt-sha256.txt
+            ${{ runner.temp }}/pipelock-receipt-verification.txt
+            ${{ runner.temp }}/pipelock-signing.pub
+            ${{ runner.temp }}/pipelock-audit.log
+            ${{ runner.temp }}/pipelock-receipts.log
+          if-no-files-found: error
