@@ -128,7 +128,11 @@ class OnboardingComponentSetupService:
         profiles = tuple(
             sorted(
                 (
-                    *(profile for profile in self._state.profiles if profile.profile_id != profile_id),
+                    *(
+                        profile
+                        for profile in self._state.profiles
+                        if profile.profile_id != profile_id
+                    ),
                     candidate,
                 ),
                 key=lambda profile: profile.profile_id,
@@ -220,7 +224,11 @@ class OnboardingComponentSetupService:
                         "reasons": list(result.reasons),
                     },
                 )
-        if not profile.defaults and profile.mode is SetupMode.ADVANCED and not allow_recommended_sparse:
+        if (
+            not profile.defaults
+            and profile.mode is SetupMode.ADVANCED
+            and not allow_recommended_sparse
+        ):
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "advanced component setup requires at least one explicit component selection",
