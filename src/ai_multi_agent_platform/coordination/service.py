@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Literal, Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.domain import OwnerRef, Plan, RunStatus, Step
+from ai_multi_agent_platform.domain import OwnerRef, Plan, Step
 from ai_multi_agent_platform.kernel.models import RecoveryReport, RunState, TaskState
 from ai_multi_agent_platform.observability import (
     FailureComponent,
@@ -35,6 +34,7 @@ from .models import (
     WaitType,
 )
 from .progression import CoordinationProgression
+from .reconciliation import CoordinationReconciliation
 from .registration import CoordinationRegistration
 from .repository import CoordinatorRepository
 from .waits import CoordinationWaits
@@ -107,11 +107,6 @@ class CanonicalRunKernel(Protocol):
     async def recover_task(self, task_id: str) -> RecoveryReport: ...
 
 
-_TERMINAL_RUNS = frozenset(
-    {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED, RunStatus.TIMED_OUT}
-)
-
-
 class DurablePlanStepCoordinator:
     """Advance canonical task-bound Plans without becoming a second public lifecycle."""
 
@@ -139,6 +134,7 @@ class DurablePlanStepCoordinator:
         self._attempt_outcomes = CoordinationAttemptOutcomes(repository=repository, kernel=kernel)
         self._cancellation = CoordinationCancellation(repository=repository, kernel=kernel)
         self._aggregation = CoordinationAggregation(repository=repository, kernel=kernel)
+        self._reconciliation = CoordinationReconciliation(repository=repository, kernel=kernel)
 
     async def register_plan(
         self,
@@ -396,64 +392,16 @@ class DurablePlanStepCoordinator:
         """Reconcile canonical Run/Worker truth before resuming dispatch."""
 
         current_time = self._now(now)
-        state = self.repository.get_plan(plan_id)
-        await self.kernel.recover_task(state.plan.task_id)
-        for record in self.repository.list_step_records(plan_id):
-            if record.phase is not CoordinationPhase.ATTEMPT_ACTIVE:
-                continue
-            if record.latest_run_id is None:
-                await self._mark_inconsistent(
-                    record,
-                    "active Step has no canonical Run reference",
-                    ReconciliationDisposition.MISSING_CANONICAL_RUN,
-                    current_time,
-                )
-                continue
-            try:
-                run = await self.kernel.get_run(record.task_id, record.latest_run_id)
-            except ContractError as exc:
-                if exc.code is ErrorCode.NOT_FOUND:
-                    await self._mark_inconsistent(
-                        record,
-                        "referenced canonical Run is missing",
-                        ReconciliationDisposition.MISSING_CANONICAL_RUN,
-                        current_time,
-                    )
-                    continue
-                raise
-            if run.status in _TERMINAL_RUNS:
-                await self.observe_run(
-                    task_id=record.task_id,
-                    run_id=record.latest_run_id,
-                    observation_key=f"reconcile:{record.latest_run_id}:{run.status.value}",
-                    now=current_time,
-                )
-            elif run.status is RunStatus.QUEUED and not run.recovery_required:
-                await self.kernel.start_run(
-                    idempotency_key=self._start_key(record, run.attempt),
-                    task_id=record.task_id,
-                    run_id=run.run_id,
-                    source="platform-coordinator",
-                )
-                self._emit(
-                    "coordination.attempt.dispatched",
-                    record.task_id,
-                    plan_id,
-                    record.step_id,
-                    run_id=run.run_id,
-                    attributes={"attempt": run.attempt, "reconciled": True},
-                )
-                self._emit(
-                    "coordination.reconciliation.run_started",
-                    record.task_id,
-                    plan_id,
-                    record.step_id,
-                    run_id=run.run_id,
-                )
-        await self.process_due(now=current_time)
-        await self.advance(plan_id, now=current_time)
-        self._emit("coordination.reconciliation.completed", state.plan.task_id, plan_id, None)
-        return self.projection(plan_id)
+        result_plan_id = await self._reconciliation.reconcile_plan(
+            plan_id,
+            now=current_time,
+            observe_run=self.observe_run,
+            process_due=self.process_due,
+            advance=self.advance,
+            claim=self._claim,
+            emit=self._emit,
+        )
+        return self.projection(result_plan_id)
 
     async def reconcile_all(
         self,
@@ -572,36 +520,14 @@ class DurablePlanStepCoordinator:
         disposition: ReconciliationDisposition,
         now: datetime,
     ) -> None:
-        claim = self._claim(record.step_id, now)
-        if claim is None:
-            return
-        try:
-            current = self.repository.get_step_record(record.step_id)
-            step = self.repository.get_plan(record.plan_id).step(record.step_id)
-            updated = replace(
-                current,
-                phase=CoordinationPhase.INCONSISTENT,
-                reconciliation=disposition,
-                reconciliation_detail=detail,
-            )
-            self.repository.save_step(
-                step=step,
-                record=updated,
-                expected_revision=current.revision,
-                claim=claim,
-                now=now,
-            )
-            self._emit(
-                "coordination.reconciliation.inconsistent",
-                current.task_id,
-                current.plan_id,
-                current.step_id,
-                run_id=current.latest_run_id,
-                outcome=TelemetryOutcome.FAILED,
-                attributes={"disposition": disposition.value, "detail": detail},
-            )
-        finally:
-            self.repository.release_claim(claim)
+        await self._reconciliation.mark_inconsistent(
+            record,
+            detail,
+            disposition,
+            now,
+            claim=self._claim,
+            emit=self._emit,
+        )
 
     async def _aggregate_task(self, plan_id: str) -> None:
         await self._aggregation.aggregate_task(plan_id)
@@ -673,7 +599,7 @@ class DurablePlanStepCoordinator:
 
     @staticmethod
     def _start_key(record: StepCoordinationRecord, attempt: int) -> str:
-        return f"coord:{record.plan_id}:{record.step_id}:attempt:{attempt}:start"
+        return CoordinationReconciliation.start_key(record, attempt)
 
     @staticmethod
     def _now(now: datetime | None) -> datetime:
