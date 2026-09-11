@@ -77,8 +77,22 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "test_composite_failure_compensates_earlier_capability_assignment",
         "tests/test_issue_78_final_composition.py::"
         "test_standard_single_node_exposes_final_template_integrations",
+        "tests/integration/templates/test_revision_stability.py::"
+        "test_composite_reapply_keeps_original_revision_until_explicit_upgrade",
     ),
     "R": _pytest(
+        "tests/test_issue_79_control_plane_portability.py::"
+        "test_control_plane_binds_export_preview_and_import_without_client_owned_plan",
+        "tests/test_issue_79_cli_portability.py::"
+        "test_portability_cli_exports_and_previews_through_canonical_commands",
+        "tests/test_issue_79_cli_portability.py::"
+        "test_portability_cli_requires_confirmation_and_never_submits_import_plan",
+        "tests/test_issue_79_file_portability.py::"
+        "test_file_artifact_package_round_trip_remaps_provider_and_ids",
+        "tests/test_issue_79_file_portability.py::"
+        "test_file_snapshot_rejects_bytes_that_do_not_match_canonical_checksum",
+        "tests/test_issue_79_agent_portability.py::"
+        "test_preview_reports_existing_id_conflict_before_any_mutation",
         "tests/test_portability.py::test_portable_package_round_trip_preserves_manifest_and_integrity",
         "tests/test_portability.py::test_plaintext_secret_bearing_field_is_rejected",
         "tests/test_portability.py::test_backend_private_runtime_state_is_rejected_recursively",
@@ -107,9 +121,15 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
     ),
     "V": _pytest(
         "tests/test_issue_87_organization_domain.py::"
+        "test_personal_scope_does_not_require_an_organization",
+        "tests/test_issue_87_organization_domain.py::"
         "test_suspend_remove_and_role_changes_feed_scope_without_becoming_authorization",
         "tests/test_issue_87_organization_domain.py::"
         "test_resource_ownership_sharing_revoke_and_cross_org_isolation",
+        "tests/test_issue_87_cross_org_authorization.py::"
+        "test_cross_org_share_flag_is_not_a_substitute_for_authorization",
+        "tests/test_issue_87_historical_provenance.py::"
+        "test_historical_task_and_event_identity_survive_membership_removal",
     ),
     "X": _pytest(
         "tests/test_issue_89_control_plane_ha.py::"
