@@ -20,12 +20,12 @@ from ai_multi_agent_platform.workspaces import (
 from .registry import RegistryError
 from .workspace_materialization_store import WorkerWorkspaceMaterializationStore
 from .workspace_transport_codec import (
-    _ManifestEntry,
     _array,
     _decode_receipt,
     _decode_request,
     _encode_cleanup,
     _encode_receipt,
+    _ManifestEntry,
     _mapping,
     _required,
     _required_base64,
