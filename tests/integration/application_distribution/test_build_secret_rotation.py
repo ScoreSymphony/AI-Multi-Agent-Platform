@@ -12,11 +12,11 @@ from ai_multi_agent_platform.application_distribution import (
     ApplicationRelease,
     BuildSpecification,
     BuildTarget,
-    execution,
     InMemoryApplicationReleaseRepository,
     PackageType,
     ReleaseChannel,
     ReleaseVisibility,
+    execution,
 )
 from ai_multi_agent_platform.configuration import LocalSecretProvider
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
