@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qsl, urlsplit
 
+from ai_multi_agent_platform.cli.auth import run_cli
 from ai_multi_agent_platform.cli.client import RawResponse
 from ai_multi_agent_platform.cli.credentials import CredentialStore
-from ai_multi_agent_platform.cli.issue_214 import run_cli
 from ai_multi_agent_platform.cli.profiles import CLIProfile, ProfileStore
 from ai_multi_agent_platform.contracts import AuthorizationOutcome, OperationContext
 from ai_multi_agent_platform.control_plane import (
