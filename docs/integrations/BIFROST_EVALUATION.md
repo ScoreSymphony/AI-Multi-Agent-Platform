@@ -19,6 +19,7 @@ The reproducible live procedure is documented in `docs/integrations/BIFROST_LIVE
 | Reviewed commit | `c193745d2a713e9f58f021d43e138df5eb7e038a` |
 | Release date | 2026-09-09 |
 | Bundled core | `v1.8.6` |
+| Bundled framework | `v1.6.2` |
 | License | Apache-2.0 at the reviewed commit |
 | Provenance | `upstream/bifrost.yaml` |
 
@@ -52,6 +53,8 @@ Bifrost is therefore **not**:
 The existing `OpenAICompatibleModelProvider` is sufficient for the evaluation. A dedicated `BifrostModelProvider` should be added only if supported behavior later needs Bifrost-specific health, capability or observability metadata that cannot be represented safely through the generic endpoint path.
 
 Provider-native model identifiers remain adapter/deployment configuration. Canonical responses must continue returning the selected canonical model configuration ID; Bifrost aliases/provider names must not leak into `ModelResponse.model_ref`.
+
+The benchmark contracts and evidence model remain under `ai_multi_agent_platform.benchmarking` and depend only on canonical `ModelProvider` contracts. The executable OpenAI-compatible benchmark composition lives under `ai_multi_agent_platform.adapters.model_gateway_evaluation_cli`; this preserves the repository invariant that core modules do not import concrete adapters.
 
 ## Routing and fallback ownership
 
@@ -107,10 +110,13 @@ The reviewed `transports/v2.1.1` release bundles core `v1.8.6`, so it is newer t
 - IPv6 loopback/link-local/site-local;
 - IPv4-mapped IPv6;
 - 6to4 (`2002::/16`);
-- NAT64 (`64:ff9b::/96`);
+- NAT64 (`64:ff9b::/96` plus relevant local-use form);
+- Teredo (`2001:0000::/32`);
 - public-to-blocked redirects;
 - DNS rebinding / resolution-time changes;
 - encoded/alternative host representations where the enabled Bifrost feature accepts URLs.
+
+The reviewed core source includes regression coverage for the listed special address classes and re-validates resolution on each dial. That strengthens pin-level evidence but does not replace isolated deployment-level egress testing.
 
 A local gateway is still network-capable software. Local placement does not satisfy the platform #43 egress/SSRF boundary by itself.
 
@@ -125,7 +131,7 @@ Supported operation must preserve these platform rules:
 - gateway logs/telemetry must be configured consistently with platform redaction requirements;
 - plugins are separately trusted code and are not implicitly approved because Bifrost itself is approved.
 
-The #859 benchmark records timings, provider IDs, aggregate canonical errors, canonical-identity conformance, host/runtime metadata and explicit secret-free component/version/model evidence. It deliberately excludes prompts/responses, endpoint URLs, HTTP headers, credential values and raw exception messages.
+The #859 benchmark records timings, provider IDs, aggregate canonical errors, canonical-identity conformance, host/runtime metadata and explicit secret-free component/version/model evidence. It deliberately excludes prompts/responses, endpoint URLs, HTTP headers, credential values and raw exception messages. The workload prompt is persisted only as SHA-256 fingerprint plus length.
 
 ## Operations, persistence and clustering
 
@@ -141,22 +147,24 @@ For the platform:
 
 ## Reproducible performance harness
 
-The repository provides `ai_multi_agent_platform.benchmarking.model_gateway_evaluation`, `model_gateway_evidence` and a CLI module. The harness executes identical canonical requests through a direct endpoint and Bifrost, with an optional LiteLLM third target.
+The repository provides the provider-neutral `ai_multi_agent_platform.benchmarking.model_gateway_evaluation` and `model_gateway_evidence` modules plus the concrete OpenAI-compatible CLI at `ai_multi_agent_platform.adapters.model_gateway_evaluation_cli`. The harness executes identical canonical requests through a direct endpoint and Bifrost, with an optional LiteLLM third target.
 
 It records:
 
-- p50/p95/p99 end-to-end latency;
-- throughput and success/failure counts;
+- p50/p95/p99 end-to-end latency for successful operations;
+- successful-operation throughput plus attempted/success/failure counts;
 - canonical error categories;
 - canonical model-identity preservation;
 - platform commit/version;
 - host OS/CPU/RAM/Python metadata;
 - secret-free per-target component version/revision, native request-model identifier and common downstream deployment label.
 
+Failed requests do not contribute to successful-operation throughput or latency distributions. A target with no successful calls therefore has no fabricated latency delta.
+
 Example with the same downstream model exposed directly and through Bifrost:
 
 ```bash
-python -m ai_multi_agent_platform.benchmarking.model_gateway_evaluation_cli \
+python -m ai_multi_agent_platform.adapters.model_gateway_evaluation_cli \
   --canonical-model-id model-local-eval \
   --downstream-deployment-label same-vllm-local-instance \
   --direct-base-url http://127.0.0.1:8000/v1 \
@@ -176,7 +184,7 @@ The CLI defaults its Bifrost evidence metadata to the reviewed `transports/v2.1.
 Optional LiteLLM comparison:
 
 ```bash
-python -m ai_multi_agent_platform.benchmarking.model_gateway_evaluation_cli \
+python -m ai_multi_agent_platform.adapters.model_gateway_evaluation_cli \
   --canonical-model-id model-local-eval \
   --downstream-deployment-label same-vllm-local-instance \
   --direct-base-url http://127.0.0.1:8000/v1 \
@@ -198,9 +206,15 @@ If a gateway requires a credential, pass the **environment-variable name**, neve
 
 No universal latency budget is invented in #859. The evidence must record representative hardware, downstream runtime/model, gateway versions and workload; the adoption decision then compares measured overhead with operational benefit.
 
+## Hermetic pinned-container compatibility lane
+
+The repository CI contains a `bifrost-pinned-compat` job that runs the real `maximhq/bifrost:v2.1.1` image against a local OpenAI-compatible fixture without external model APIs or production credentials. It records the pulled image digest and exercises chat, streaming, structured output/tool-call pass-through, canonical model identity, controlled downstream unavailability and synthetic-secret diagnostics.
+
+This lane is **compatibility/fault evidence**, not representative performance evidence. The synthetic mock model makes its emitted latency/throughput artifact useful for regression/smoke comparison only; it cannot satisfy the required real direct-vs-gateway performance decision.
+
 ## Live conformance environment
 
-`tests/test_issue_859_bifrost_live_conformance.py` provides opt-in live streaming, structured-output and tool-calling gates. The live performance comparison in `tests/test_issue_859_bifrost_evaluation.py` is skipped unless direct and Bifrost endpoints are configured.
+`tests/test_issue_859_bifrost_live_conformance.py` provides opt-in live streaming, structured-output, tool-calling and controlled-upstream-fault gates. The live performance comparison in `tests/test_issue_859_bifrost_evaluation.py` is skipped unless direct and Bifrost endpoints are configured.
 
 Core environment variables include:
 
@@ -221,6 +235,7 @@ BIFROST_EVAL_CONCURRENCY
 BIFROST_EVAL_WARMUP
 BIFROST_EVAL_STRUCTURED_OUTPUT
 BIFROST_EVAL_TOOL_CALLING
+BIFROST_EVAL_UPSTREAM_CONTROL_URL
 ```
 
 The `*_API_KEY_ENV` values are names of environment variables containing credentials; they are not credential values themselves.
@@ -229,23 +244,24 @@ The `*_API_KEY_ENV` values are names of environment variables containing credent
 
 | Requirement | Evidence at this review | State |
 | --- | --- | --- |
-| Exact upstream revision/version | `transports/v2.1.1`, commit `c193745...`, core `v1.8.6` | complete |
+| Exact upstream revision/version | `transports/v2.1.1`, commit `c193745...`, core `v1.8.6`, framework `v1.6.2` | complete |
 | Apache-2.0 verification | license inspected at reviewed commit | complete |
 | Security advisory/patch posture | GHSA/CVE reviewed; pin is newer than fix; patch-policy ambiguity recorded | complete for desk review |
 | Canonical #10 architecture fit | generic OpenAI-compatible `ModelProvider`; platform router remains owner | complete |
+| Core-to-adapter dependency direction | benchmark core is provider-neutral; concrete evaluator composition is in adapter layer | complete |
 | Current routing/governance risk review | open upstream #3458/#2351 recorded with non-assumption rules | complete for desk review |
 | Bifrost absent without changing normal route | no package/core dependency; candidate is external endpoint only | complete architecturally |
 | Canonical ID leak regression | deterministic benchmark unit coverage | complete |
-| Synthetic-secret/error redaction | report excludes endpoint/secret/raw exception data; unit coverage | complete for harness |
+| Synthetic-secret/error redaction | report excludes prompt/endpoint/secret/raw exception data; unit coverage | complete for harness |
 | Reproducibility metadata | host/runtime plus component/version/model/deployment manifest | complete for harness |
-| OpenAI chat request/response | upstream surface verified; platform generic transport exists | **pending live evidence** |
-| Streaming conformance | opt-in live test committed | **pending live evidence** |
-| Structured output/tool calling | opt-in capability-gated tests committed | **pending live evidence** |
-| Direct vs Bifrost latency/throughput | reproducible evidence harness committed | **pending measured evidence** |
-| Direct vs LiteLLM vs Bifrost | optional three-target harness committed | **pending measured evidence** |
-| SSRF/egress regression | isolated test matrix/runbook defined from advisory/#43 | **pending isolated runtime evidence** |
+| OpenAI chat request/response | pinned-container CI lane committed | **first successful pinned run pending** |
+| Streaming conformance | pinned-container + opt-in live test committed | **first successful pinned run pending** |
+| Structured output/tool calling | pinned-container + capability-gated live tests committed | **first successful pinned run pending** |
+| Controlled upstream unavailable behavior | pinned-container fault gate committed | **first successful pinned run pending** |
+| Direct vs Bifrost latency/throughput | reproducible evidence harness committed | **representative measured evidence pending** |
+| Direct vs LiteLLM vs Bifrost | optional three-target harness committed | **representative measured evidence pending** |
+| SSRF/egress regression | source pin reviewed; isolated test matrix/runbook defined | **isolated runtime evidence pending** |
 | Gateway routing/fallback conformance | explicit-target baseline and negative-policy procedure defined | **pending live evidence** |
-| Upstream unavailable/failover behavior | canonical fault procedure defined | **pending live evidence** |
 | Restart and upgrade behavior | reproducible runbook defined | **pending live evidence** |
 | Clustering/persistence | reviewed as optional operational surface | not required for first support; deeper evidence deferred |
 
