@@ -453,8 +453,12 @@ def test_connect_require_receipts_uses_fresh_writer_and_verifies_chain(
     assert "CHAIN VALID" in verification.stdout
     record_property("strict_connect_chain_valid", "true")
     record_property("strict_connect_receipts", _verification_field(verification.stdout, "Receipts"))
-    record_property("strict_connect_final_seq", _verification_field(verification.stdout, "Final seq"))
-    record_property("strict_connect_root_hash", _verification_field(verification.stdout, "Root hash"))
+    record_property(
+        "strict_connect_final_seq", _verification_field(verification.stdout, "Final seq")
+    )
+    record_property(
+        "strict_connect_root_hash", _verification_field(verification.stdout, "Root hash")
+    )
     record_property("strict_connect_signer", _verification_field(verification.stdout, "Signer"))
     containment = _verification_field(verification.stdout, "Containment").split(" —", 1)[0]
     record_property("strict_connect_containment", containment)
