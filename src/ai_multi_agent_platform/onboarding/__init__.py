@@ -7,6 +7,13 @@ from .agent_lifecycle import (
     FIRST_RUN_WORKSPACE_ID_KEY,
     FirstRunAgentLifecycleBackend,
 )
+from .component_setup import (
+    COMPONENT_SETUP_RESOURCE_ID,
+    ONBOARDING_SAVE_COMPONENT_PROFILE_COMMAND,
+    ONBOARDING_SELECT_COMPONENT_PROFILE_COMMAND,
+    ComponentDiscoverySource,
+    OnboardingComponentSetupService,
+)
 from .components import (
     SETUP_PROFILE_SCHEMA_VERSION,
     CompatibilityEnvironment,
@@ -47,6 +54,7 @@ from .service import (
 )
 
 __all__ = [
+    "COMPONENT_SETUP_RESOURCE_ID",
     "FIRST_RUN_AGENT_EXECUTION_PROFILE",
     "FIRST_RUN_AGENT_ID_KEY",
     "FIRST_RUN_EXECUTION_PROFILE_KEY",
@@ -57,6 +65,8 @@ __all__ = [
     "ONBOARDING_CONFIGURE_MODEL_COMMAND",
     "ONBOARDING_PROVIDER_SCHEMA_VERSION",
     "ONBOARDING_RUN_FIRST_TASK_COMMAND",
+    "ONBOARDING_SAVE_COMPONENT_PROFILE_COMMAND",
+    "ONBOARDING_SELECT_COMPONENT_PROFILE_COMMAND",
     "SETUP_PROFILE_SCHEMA_VERSION",
     "CompatibilityEnvironment",
     "CompatibilityResult",
@@ -64,6 +74,7 @@ __all__ = [
     "ComponentAvailability",
     "ComponentCategory",
     "ComponentCompatibilityResolver",
+    "ComponentDiscoverySource",
     "ComponentLifecycle",
     "ComponentRequirement",
     "ComponentSelectionLayer",
@@ -75,6 +86,7 @@ __all__ = [
     "JsonSetupProfileStore",
     "ModelProviderSetupRecord",
     "OnboardingCommandRecord",
+    "OnboardingComponentSetupService",
     "OnboardingModelAdapter",
     "OnboardingModelEndpoint",
     "OnboardingResourceService",
