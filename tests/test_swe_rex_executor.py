@@ -213,6 +213,26 @@ def test_unsandboxed_local_backend_requires_explicit_opt_in(tmp_path: Path) -> N
     assert executor.descriptor.metadata["unsandboxed_local_opt_in"] is True
 
 
+def test_local_backend_guard_normalizes_case_and_whitespace(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "workspaces"
+    with pytest.raises(ValueError, match="LocalDeployment executes directly on the host"):
+        SwerexExecutor(
+            FakeSwerexClient(),
+            workspace_root,
+            capabilities=("echo",),
+            backend_kind=" LOCAL ",
+        )
+
+    executor = SwerexExecutor(
+        FakeSwerexClient(),
+        workspace_root,
+        capabilities=("echo",),
+        backend_kind=" LOCAL ",
+        allow_unsandboxed_local=True,
+    )
+    assert executor.descriptor.metadata["backend_kind"] == "local"
+
+
 def test_health_preserves_platform_ownership_and_upstream_pin(tmp_path: Path) -> None:
     executor, _ = _executor(tmp_path)
     descriptor = asyncio.run(executor.health())
@@ -306,6 +326,40 @@ def test_provider_cannot_report_artifact_outside_canonical_workspace(tmp_path: P
     assert "outside the execution workspace" in result.error.message
 
 
+def test_provider_cannot_claim_uncollected_artifact(tmp_path: Path) -> None:
+    class MissingArtifactClient(FakeSwerexClient):
+        async def execute(self, request: SwerexClientRequest) -> SwerexClientResult:
+            self.requests.append(request)
+            return SwerexClientResult(
+                status=SwerexExecutionStatus.SUCCEEDED,
+                deployment_id="deployment-missing-artifact",
+                artifacts=(SwerexArtifact(relative_path="missing.txt"),),
+            )
+
+    workspace = tmp_path / "workspaces" / "run-1"
+    workspace.mkdir(parents=True)
+    executor = SwerexExecutor(
+        MissingArtifactClient(),
+        tmp_path / "workspaces",
+        capabilities=("echo",),
+    )
+    result = asyncio.run(
+        executor.execute(
+            ExecutionRequest(
+                task_id="task-1",
+                run_id="run-1",
+                correlation_id="corr-1",
+                action="echo",
+                workspace="run-1",
+            )
+        )
+    )
+    assert result.status is ExecutionStatus.FAILED
+    assert result.error is not None
+    assert result.error.category is ExecutionErrorCategory.INTERNAL
+    assert "before canonical collection" in result.error.message
+
+
 def test_environment_projection_fails_closed_without_provider_dispatch(tmp_path: Path) -> None:
     executor, client = _executor(tmp_path)
     result = asyncio.run(
@@ -357,6 +411,7 @@ def test_untrusted_provider_metadata_is_filtered_before_canonical_evidence(tmp_p
                     "runtime_transport": "fake",
                     "image": "sha256:abc",
                     "secret": "do-not-persist",
+                    "backend_kind": "local",
                 },
             )
 
@@ -382,4 +437,5 @@ def test_untrusted_provider_metadata_is_filtered_before_canonical_evidence(tmp_p
     metadata = result.adapter_metadata["swe_rex"]
     assert metadata["runtime_transport"] == "fake"
     assert metadata["image"] == "sha256:abc"
+    assert metadata["backend_kind"] == "docker"
     assert "secret" not in metadata
