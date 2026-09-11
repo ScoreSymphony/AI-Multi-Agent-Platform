@@ -2,7 +2,7 @@
 """Safely remove completed GitHub Actions runs for deleted workflow files.
 
 The script is a dry-run by default. It compares the workflow path recorded on each
-Actions run with the workflow files that exist in the current checkout under
+Actions run with workflow files that exist on the repository default branch under
 ``.github/workflows``. Only completed runs whose workflow path no longer exists
 are eligible for deletion.
 
@@ -21,10 +21,8 @@ import subprocess
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
-from pathlib import Path
 
-WORKFLOW_DIR = Path(".github/workflows")
-WORKFLOW_SUFFIXES = {".yml", ".yaml"}
+WORKFLOW_DIR = ".github/workflows"
 
 
 @dataclass(frozen=True)
@@ -41,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Delete completed GitHub Actions runs for workflow files that no longer "
-            "exist in .github/workflows on the checked-out ref."
+            "exist in .github/workflows on the protected reference branch."
         )
     )
     parser.add_argument(
@@ -52,10 +50,11 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--root",
-        type=Path,
-        default=Path.cwd(),
-        help="Repository checkout root. Defaults to the current directory.",
+        "--ref",
+        help=(
+            "Reference whose .github/workflows directory is authoritative. "
+            "Defaults to the repository default branch."
+        ),
     )
     parser.add_argument(
         "--execute",
@@ -113,17 +112,43 @@ def resolve_repo(explicit_repo: str | None) -> str:
     return str(payload["nameWithOwner"])
 
 
-def active_workflow_paths(root: Path) -> set[str]:
-    workflow_dir = root / WORKFLOW_DIR
-    if not workflow_dir.is_dir():
-        raise SystemExit(f"Workflow directory not found: {workflow_dir}")
-    paths = {
-        path.relative_to(root).as_posix()
-        for path in workflow_dir.iterdir()
-        if path.is_file() and path.suffix.lower() in WORKFLOW_SUFFIXES
-    }
+def resolve_ref(repo: str, explicit_ref: str | None) -> str:
+    if explicit_ref:
+        return explicit_ref
+    result = gh(
+        "repo",
+        "view",
+        repo,
+        "--json",
+        "defaultBranchRef",
+        "--jq",
+        ".defaultBranchRef.name",
+    )
+    ref = result.stdout.strip()
+    if not ref:
+        raise SystemExit(f"Could not determine the default branch for {repo}")
+    return ref
+
+
+def active_workflow_paths(repo: str, ref: str) -> set[str]:
+    result = gh(
+        "api",
+        "--method",
+        "GET",
+        f"/repos/{repo}/contents/{WORKFLOW_DIR}",
+        "-f",
+        f"ref={ref}",
+        "--jq",
+        (
+            '.[] | select(.type == "file") | '
+            'select(.name | endswith(".yml") or endswith(".yaml")) | .path'
+        ),
+    )
+    paths = {line.strip() for line in result.stdout.splitlines() if line.strip()}
     if not paths:
-        raise SystemExit(f"No workflow files found under {workflow_dir}")
+        raise SystemExit(
+            f"No workflow files found under {WORKFLOW_DIR} at {repo}@{ref}"
+        )
     return paths
 
 
@@ -196,11 +221,16 @@ def print_plan(
     print(f"Orphaned workflow paths with completed runs: {len(grouped)}")
     print(f"Completed orphaned runs eligible for deletion: {total}")
     if skipped_non_completed:
-        print(f"Orphaned runs skipped because they are not completed: {skipped_non_completed}")
+        print(
+            "Orphaned runs skipped because they are not completed: "
+            f"{skipped_non_completed}"
+        )
     if max_delete is not None:
         print(f"Deletion budget for this invocation: {max_delete}")
     print()
-    for path, runs in sorted(grouped.items(), key=lambda item: (len(item[1]), item[0])):
+    for path, runs in sorted(
+        grouped.items(), key=lambda item: (len(item[1]), item[0])
+    ):
         newest = max(run.created_at for run in runs)
         oldest = min(run.created_at for run in runs)
         names = sorted({run.name for run in runs})
@@ -238,7 +268,9 @@ def execute_cleanup(
     max_delete: int | None,
 ) -> int:
     deleted = 0
-    for path, runs in sorted(grouped.items(), key=lambda item: (len(item[1]), item[0])):
+    for path, runs in sorted(
+        grouped.items(), key=lambda item: (len(item[1]), item[0])
+    ):
         if max_delete is not None:
             remaining = max_delete - deleted
             if remaining <= 0:
@@ -262,9 +294,9 @@ def main() -> int:
     if args.max_delete is not None and args.max_delete < 1:
         raise SystemExit("--max-delete must be greater than zero")
 
-    root = args.root.resolve()
     repo = resolve_repo(args.repo)
-    active_paths = active_workflow_paths(root)
+    ref = resolve_ref(repo, args.ref)
+    active_paths = active_workflow_paths(repo, ref)
     requested_paths = {canonical_workflow_path(path) for path in args.path}
     runs = fetch_workflow_runs(repo)
     grouped, skipped_non_completed = orphaned_completed_runs(
@@ -273,6 +305,7 @@ def main() -> int:
         requested_paths,
     )
 
+    print(f"Reference: {ref}")
     print_plan(repo, active_paths, grouped, skipped_non_completed, args.max_delete)
     if not grouped:
         print("Nothing to clean up.")
@@ -287,7 +320,9 @@ def main() -> int:
     print()
     print(f"Deleted {deleted} workflow runs.")
     if deleted < sum(len(runs) for runs in grouped.values()):
-        print("Some orphaned workflow histories remain; run the command again to continue.")
+        print(
+            "Some orphaned workflow histories remain; run the command again to continue."
+        )
     return 0
 
 
