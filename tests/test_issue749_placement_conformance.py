@@ -142,7 +142,9 @@ def test_application_targets_use_canonical_os_placement_and_deterministic_tie_br
     assert RejectionCode.OS_UNSUPPORTED in _reason_codes(windows_decision, second_linux)
 
 
-def test_application_placement_exposes_architecture_capability_resource_and_health_rejections() -> None:
+def test_application_placement_exposes_architecture_capability_resource_and_health_rejections() -> (
+    None
+):
     registry = DistributedRegistry()
     target = _target(
         "linux-x64",
@@ -200,12 +202,8 @@ def test_application_placement_exposes_architecture_capability_resource_and_heal
     decision = DeterministicScheduler(registry).evaluate(_job(specification, target))
 
     assert decision.selected_worker_id == eligible
-    assert RejectionCode.ARCHITECTURE_UNSUPPORTED in _reason_codes(
-        decision, wrong_architecture
-    )
-    assert RejectionCode.CAPABILITY_UNSUPPORTED in _reason_codes(
-        decision, missing_capability
-    )
+    assert RejectionCode.ARCHITECTURE_UNSUPPORTED in _reason_codes(decision, wrong_architecture)
+    assert RejectionCode.CAPABILITY_UNSUPPORTED in _reason_codes(decision, missing_capability)
     assert RejectionCode.CPU_INSUFFICIENT in _reason_codes(decision, insufficient_cpu)
     assert RejectionCode.WORKER_OFFLINE in _reason_codes(decision, offline)
     assert RejectionCode.WORKER_UNHEALTHY in _reason_codes(decision, unhealthy)
@@ -249,7 +247,9 @@ def test_application_placement_exposes_runtime_and_trust_policy_rejections() -> 
     assert RejectionCode.TRUST_INSUFFICIENT in _reason_codes(decision, insufficient_trust)
 
 
-def test_unsupported_application_target_has_no_selected_worker_and_keeps_rejection_evidence() -> None:
+def test_unsupported_application_target_has_no_selected_worker_and_keeps_rejection_evidence() -> (
+    None
+):
     registry = DistributedRegistry()
     _, linux_worker = _register_worker(
         registry,
@@ -271,6 +271,4 @@ def test_unsupported_application_target_has_no_selected_worker_and_keeps_rejecti
 
     assert decision.selected_worker_id is None
     assert RejectionCode.OS_UNSUPPORTED in _reason_codes(decision, linux_worker)
-    assert RejectionCode.ARCHITECTURE_UNSUPPORTED in _reason_codes(
-        decision, linux_worker
-    )
+    assert RejectionCode.ARCHITECTURE_UNSUPPORTED in _reason_codes(decision, linux_worker)
