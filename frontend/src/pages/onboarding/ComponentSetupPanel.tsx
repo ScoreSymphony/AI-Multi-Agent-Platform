@@ -61,10 +61,10 @@ export function ComponentSetupPanel({ onboarding, manifest, surface }: Component
   const manifestKnown = manifest !== undefined;
   const available = manifestKnown ? (manifest?.resources.includes("component-setup") ?? false) : true;
   const saveAvailable = manifestKnown
-    ? (manifest?.commands.includes("onboarding.save-component-profile") ?? false)
+    ? (manifest?.commands?.includes("onboarding.save-component-profile") ?? false)
     : true;
   const selectAvailable = manifestKnown
-    ? (manifest?.commands.includes("onboarding.select-component-profile") ?? false)
+    ? (manifest?.commands?.includes("onboarding.select-component-profile") ?? false)
     : true;
   const [status, setStatus] = useState<ComponentSetupStatus | null>(null);
   const [loading, setLoading] = useState(false);
