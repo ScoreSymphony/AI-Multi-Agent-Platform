@@ -214,12 +214,13 @@ class ControlPlane(_BaseControlPlane):
     ) -> None:
         """Authorize Terminal with its canonical project/workspace and #36 trust context."""
 
-        if self._authorization is None:
+        provider = self._authorization
+        if provider is None:
             return
         actor_type = context.actor.actor_type
         if actor_type is None:
             actor_type = infer_actor_identity(context.actor.principal_ref).actor_type.value
-        decision = await self._authorization.authorize(
+        decision = await provider.authorize(
             AuthorizationRequest(
                 principal_ref=context.actor.principal_ref,
                 actor_type=actor_type,
