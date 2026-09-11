@@ -193,8 +193,10 @@ jobs:
           done
           test "$success" -eq 1
           grep -i '^X-Pipelock-Receipt:' "$RUNNER_TEMP/pipelock-receipt-headers.txt" \
-            | sed 's/\r$//' \
+            | sed -E 's/^[^:]+:[[:space:]]*//; s/\r$//' \
             > "$RUNNER_TEMP/pipelock-receipt-action-id.txt"
+          receipt_action_id="$(head -n 1 "$RUNNER_TEMP/pipelock-receipt-action-id.txt")"
+          test -n "$receipt_action_id"
 
           kill "$pipelock_pid" 2>/dev/null || true
           wait "$pipelock_pid" 2>/dev/null || true
@@ -203,12 +205,25 @@ jobs:
           find "$RUNNER_TEMP" -type f -name '*.jsonl' -print \
             > "$RUNNER_TEMP/pipelock-evidence-files.txt"
           test -s "$RUNNER_TEMP/pipelock-evidence-files.txt"
-          receipt_file="$(head -n 1 "$RUNNER_TEMP/pipelock-evidence-files.txt")"
-          receipt_dir="$(dirname "$receipt_file")"
+
+          receipt_file=""
+          while IFS= read -r candidate; do
+            if grep -Fq "$receipt_action_id" "$candidate"; then
+              receipt_file="$candidate"
+              break
+            fi
+          done < <(
+            find "$RUNNER_TEMP/recorder" -maxdepth 1 \
+              -type f -name 'evidence-proxy-*.jsonl' -print | sort
+          )
+          if [ -z "$receipt_file" ]; then
+            echo "no proxy receipt file contains action id $receipt_action_id" >&2
+            exit 1
+          fi
           sha256sum "$receipt_file" > "$RUNNER_TEMP/pipelock-receipt-sha256.txt"
 
           ./pipelock verify-receipt \
-            --chain "$receipt_dir" \
+            "$receipt_file" \
             --key "$RUNNER_TEMP/pipelock-signing.pub" \
             | tee "$RUNNER_TEMP/pipelock-receipt-verification.txt"
 
