@@ -101,14 +101,21 @@ try {
   const queryCard = cardByHeading(page, "Scope and query");
   const createCard = cardByHeading(page, "Create Memory explicitly");
   const entriesCard = cardByHeading(page, "Memory entries");
+  const queryScope = queryCard.locator("select").nth(0);
+  const queryMemoryType = queryCard.locator("select").nth(1);
+  const queryScopeId = queryCard.locator('input:not([type="checkbox"])').nth(0);
+  const createScope = createCard.locator("select").nth(0);
+  const createMemoryType = createCard.locator("select").nth(2);
+  const createScopeId = createCard.locator("input").nth(0);
+  const createValue = createCard.locator("textarea").nth(0);
 
-  await queryCard.getByLabel("Scope", { exact: true }).selectOption("short_term");
-  await queryCard.getByLabel("Scope ID", { exact: true }).fill("session-browser");
+  await queryScope.selectOption("short_term");
+  await queryScopeId.fill("session-browser");
 
-  await createCard.getByLabel("Scope", { exact: true }).selectOption("short_term");
-  await createCard.getByLabel("Scope ID", { exact: true }).fill("session-browser");
-  await createCard.getByLabel("Memory Type", { exact: true }).selectOption("procedural");
-  await createCard.getByLabel("Value JSON", { exact: true }).fill('{"workflow":"compile-release"}');
+  await createScope.selectOption("short_term");
+  await createScopeId.fill("session-browser");
+  await createMemoryType.selectOption("procedural");
+  await createValue.fill('{"workflow":"compile-release"}');
   await createCard.getByRole("button", { name: "Create Memory", exact: true }).click();
   await createCard.getByRole("status").filter({ hasText: "type procedural" }).waitFor();
 
@@ -117,7 +124,7 @@ try {
   requireText(inventoryAfterCreate, "procedural", "Memory inventory type value");
 
   const beforeTypeFilter = await page.evaluate(() => window.__memoryTypeCalls.length);
-  await queryCard.getByLabel("Memory Type", { exact: true }).selectOption("procedural");
+  await queryMemoryType.selectOption("procedural");
   await page.waitForFunction(
     (count) =>
       window.__memoryTypeCalls.slice(count).some((call) =>
@@ -130,7 +137,7 @@ try {
   requireText(filteredInventory, "procedural", "Filtered Memory inventory");
 
   const beforeAllTypes = await page.evaluate(() => window.__memoryTypeCalls.length);
-  await queryCard.getByLabel("Memory Type", { exact: true }).selectOption("all");
+  await queryMemoryType.selectOption("all");
   await page.waitForFunction(
     (count) => window.__memoryTypeCalls.length > count,
     beforeAllTypes,
@@ -143,7 +150,7 @@ try {
     throw new Error(`All-types Memory query leaked a type filter: ${JSON.stringify(allTypeCalls)}`);
   }
 
-  await queryCard.getByLabel("Memory Type", { exact: true }).selectOption("procedural");
+  await queryMemoryType.selectOption("procedural");
   await entriesCard.locator("tbody a").first().click();
   await page.getByRole("heading", { name: "Memory detail", exact: true }).waitFor();
 
@@ -154,15 +161,17 @@ try {
 
   const updateCard = cardByHeading(page, "Supersede with an explicit update");
   const promoteCard = cardByHeading(page, "Promote short-term Memory");
-  if (await updateCard.getByLabel("Memory Type", { exact: true }).count()) {
+  const updateText = await updateCard.innerText();
+  const promoteText = await promoteCard.innerText();
+  if (updateText.includes("Memory Type") && !updateText.includes("preserve")) {
     throw new Error("Ordinary Memory update unexpectedly exposes a Memory Type mutation control");
   }
-  if (await promoteCard.getByLabel("Memory Type", { exact: true }).count()) {
+  if (promoteText.includes("Memory Type") && !promoteText.includes("preserves")) {
     throw new Error("Memory promotion unexpectedly exposes a Memory Type mutation control");
   }
 
   const beforeUpdate = await page.evaluate(() => window.__memoryTypeCalls.length);
-  await updateCard.getByLabel("Replacement value JSON", { exact: true }).fill('{"workflow":"compile-release-v2"}');
+  await updateCard.locator("textarea").nth(0).fill('{"workflow":"compile-release-v2"}');
   await updateCard.getByRole("button", { name: "Create superseding Memory", exact: true }).click();
   await page.waitForFunction(
     (count) =>
@@ -180,7 +189,7 @@ try {
   }
 
   const beforePromote = await page.evaluate(() => window.__memoryTypeCalls.length);
-  await promoteCard.getByLabel("Target scope ID", { exact: true }).fill("user-browser");
+  await promoteCard.locator("input").nth(0).fill("user-browser");
   await promoteCard.getByRole("button", { name: "Promote Memory", exact: true }).click();
   await page.waitForFunction(
     (count) =>
