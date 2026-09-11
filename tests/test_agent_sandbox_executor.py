@@ -358,3 +358,65 @@ def test_backend_unavailability_is_normalized_without_adapter_retry(tmp_path: Pa
     assert result.error.category is ExecutionErrorCategory.INTERNAL
     assert result.error.retryable is True
     assert len(client.requests) == 1
+
+
+def test_environment_projection_fails_closed_without_provider_dispatch(tmp_path: Path) -> None:
+    executor, client = _executor(tmp_path)
+    result = asyncio.run(
+        executor.execute(
+            ExecutionRequest(
+                task_id="task-1",
+                run_id="run-1",
+                correlation_id="corr-1",
+                action="echo",
+                workspace="run-1",
+                environment={"SYNTHETIC_SECRET": "issue-798-canary"},
+            )
+        )
+    )
+
+    assert result.status is ExecutionStatus.FAILED
+    assert result.error is not None
+    assert result.error.category is ExecutionErrorCategory.INVALID_REQUEST
+    assert "#34-safe" in result.error.message
+    assert client.requests == []
+
+
+def test_untrusted_provider_metadata_is_filtered_before_canonical_evidence(tmp_path: Path) -> None:
+    class MetadataClient(FakeAgentSandboxClient):
+        async def execute(self, request: AgentSandboxClientRequest) -> AgentSandboxClientResult:
+            self.requests.append(request)
+            return AgentSandboxClientResult(
+                status=AgentSandboxExecutionStatus.SUCCEEDED,
+                sandbox_id="sandbox-metadata",
+                metadata={
+                    "transport": "fake",
+                    "image_digest": "sha256:abc",
+                    "secret": "do-not-persist",
+                },
+            )
+
+    workspace = tmp_path / "workspaces" / "run-1"
+    workspace.mkdir(parents=True)
+    client = MetadataClient()
+    executor = AgentSandboxExecutor(
+        client,
+        tmp_path / "workspaces",
+        capabilities=("echo",),
+    )
+    result = asyncio.run(
+        executor.execute(
+            ExecutionRequest(
+                task_id="task-1",
+                run_id="run-1",
+                correlation_id="corr-1",
+                action="echo",
+                workspace="run-1",
+            )
+        )
+    )
+
+    metadata = result.adapter_metadata["agent_sandbox"]
+    assert metadata["transport"] == "fake"
+    assert metadata["image_digest"] == "sha256:abc"
+    assert "secret" not in metadata
