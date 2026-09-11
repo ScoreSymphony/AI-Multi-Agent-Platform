@@ -39,12 +39,12 @@ from ai_multi_agent_platform.workspaces import (
 
 from .registry import RegistryError
 from .workspace_transport_codec import (
-    _ManifestEntry,
     _array,
     _decode_cleanup,
     _decode_receipt,
     _encode_receipt,
     _encode_request,
+    _ManifestEntry,
     _mapping,
     _required,
     _required_base64,
