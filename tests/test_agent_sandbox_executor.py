@@ -162,6 +162,32 @@ def test_provider_ids_are_namespaced_and_canonical_ids_are_preserved(tmp_path: P
     assert result.adapter_metadata["agent_sandbox"]["session_id"] == "session-provider-1"
 
 
+def test_provider_request_refs_are_private_and_unique_per_execution(tmp_path: Path) -> None:
+    executor, client = _executor(tmp_path)
+    request = ExecutionRequest(
+        task_id="task-1",
+        run_id="run-1",
+        correlation_id="corr-1",
+        action="echo",
+        workspace="run-1",
+    )
+
+    async def scenario() -> tuple[ExecutionResult, ExecutionResult]:
+        first, second = await asyncio.gather(
+            executor.execute(request),
+            executor.execute(request),
+        )
+        return first, second
+
+    first, second = asyncio.run(scenario())
+    assert first.status is ExecutionStatus.SUCCEEDED
+    assert second.status is ExecutionStatus.SUCCEEDED
+    refs = [provider_request.request_ref for provider_request in client.requests]
+    assert len(refs) == 2
+    assert len(set(refs)) == 2
+    assert "run-1" not in refs
+
+
 def test_security_profile_defaults_to_no_internet_access(tmp_path: Path) -> None:
     executor, client = _executor(tmp_path)
     result = asyncio.run(
@@ -215,7 +241,7 @@ def test_health_is_translated_without_making_provider_canonical(tmp_path: Path) 
     assert descriptor.metadata["evaluated_revision"] == AGENT_SANDBOX_EVALUATED_REVISION
 
 
-def test_inflight_cancellation_is_forwarded_by_run_reference(tmp_path: Path) -> None:
+def test_inflight_cancellation_is_forwarded_once_by_private_request_ref(tmp_path: Path) -> None:
     executor, client = _executor(tmp_path)
     token = CancellationToken()
     request = ExecutionRequest(
@@ -236,10 +262,12 @@ def test_inflight_cancellation_is_forwarded_by_run_reference(tmp_path: Path) -> 
 
     result = asyncio.run(scenario())
     assert result.status is ExecutionStatus.CANCELLED
-    assert "run-1" in client.cancelled
+    assert len(client.requests) == 1
+    assert client.cancelled == [client.requests[0].request_ref]
+    assert client.cancelled[0] != "run-1"
 
 
-def test_timeout_is_forwarded_to_provider_cancellation(tmp_path: Path) -> None:
+def test_timeout_is_forwarded_once_by_private_request_ref(tmp_path: Path) -> None:
     executor, client = _executor(tmp_path)
     result = asyncio.run(
         executor.execute(
@@ -255,7 +283,9 @@ def test_timeout_is_forwarded_to_provider_cancellation(tmp_path: Path) -> None:
         )
     )
     assert result.status is ExecutionStatus.TIMED_OUT
-    assert "run-1" in client.cancelled
+    assert len(client.requests) == 1
+    assert client.cancelled == [client.requests[0].request_ref]
+    assert client.cancelled[0] != "run-1"
 
 
 def test_provider_cannot_report_artifact_outside_canonical_workspace(tmp_path: Path) -> None:
