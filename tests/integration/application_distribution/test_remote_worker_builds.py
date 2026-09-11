@@ -62,7 +62,7 @@ async def _finish_build(
     idempotency_key: str,
 ) -> ApplicationRelease:
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + 5.0
+    deadline = loop.time() + 30.0
     last_status: BuildTargetStatus | None = None
     while loop.time() < deadline:
         release = await service.request_build(
