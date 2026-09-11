@@ -3,7 +3,7 @@ purpose: "Official wire-level protocol conformance evidence for MCP adapter comp
 status: approved
 integration_categories:
   - protocol/specification integration
-  - library dependency
+  - development/test tooling
 canonical_upstream: "https://github.com/modelcontextprotocol/conformance"
 pinned_revision: "stable v0.1.16@21a9a2febd7100d7c17ac1021ee7f2ed9f66a1e0; prerelease 0.2.0-alpha.11@a983ba93c91e0bb31d0b6849eeb52f0ad1083107"
 verified_license: "MIT"
@@ -17,7 +17,7 @@ modification_summary: ""
 required_notices: []
 compatibility_constraints:
   - "Stable gating track certifies only the explicitly selected 2025-11-25 client/tool profile."
-  - "2026-07-28 is informational and unclaimed until stateless adapter semantics are implemented and proven."
+  - "2026-07-28 stateless behavior is implemented through an explicit MCPClient adapter but remains informational/unclaimed while the official conformance line is prerelease."
   - "STDIO platform integration evidence is separate from the official HTTP client-runner protocol evidence."
   - "No MCP server profile is claimed by the platform at this stage."
 security_constraints:
