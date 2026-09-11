@@ -33,6 +33,8 @@ from .distributed_control_plane import (
 from .durable_connectors import (
     SingleNodeDeployment,
     SingleNodeSmokeResult,
+)
+from .durable_connectors import (
     build_single_node_deployment as _build_single_node_deployment,
 )
 from .egress_bindings import EgressDeploymentBindings
