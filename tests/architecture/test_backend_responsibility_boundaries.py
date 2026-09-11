@@ -103,9 +103,38 @@ def test_kernel_run_commands_stay_behind_focused_run_command_component() -> None
         )
 
 
+def test_kernel_lifecycle_reconciliation_stays_behind_focused_component() -> None:
+    facade = _class(KERNEL_FACADE, "PlatformKernel")
+    for method_name in (
+        "_dispatch_started_run",
+        "_reconcile_started_run",
+        "_finish_cancel",
+        "_apply_snapshot_command",
+        "_apply_snapshot_system",
+        "_running_specs",
+        "_apply_terminal_command",
+        "_apply_terminal_system",
+        "_terminal_specs",
+        "_completion_task_spec",
+        "_mark_recovery_required",
+        "_clear_recovery_if_needed",
+    ):
+        method = _method(facade, method_name)
+        assert _delegated_attribute(method) == "_lifecycle_reconciler", (
+            f"PlatformKernel.{method_name} reabsorbed lifecycle reconciliation; keep backend "
+            "dispatch/snapshot/terminal mechanics behind KernelLifecycleReconciler"
+        )
+
+
 def test_extracted_kernel_components_do_not_depend_on_concrete_facade() -> None:
     violations: list[str] = []
-    for filename in ("queries.py", "recovery.py", "task_commands.py", "run_commands.py"):
+    for filename in (
+        "queries.py",
+        "recovery.py",
+        "task_commands.py",
+        "run_commands.py",
+        "lifecycle.py",
+    ):
         path = KERNEL_ROOT / filename
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
