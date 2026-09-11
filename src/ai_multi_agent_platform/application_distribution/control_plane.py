@@ -337,8 +337,7 @@ def _secret_environment(value: JsonValue | None) -> dict[str, SecretReference]:
     if not isinstance(value, dict):
         raise ValueError("secret_environment must be an object")
     return {
-        name: _secret_reference(raw, f"secret_environment.{name}")
-        for name, raw in value.items()
+        name: _secret_reference(raw, f"secret_environment.{name}") for name, raw in value.items()
     }
 
 
