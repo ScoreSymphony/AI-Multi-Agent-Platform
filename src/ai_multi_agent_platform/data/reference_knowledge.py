@@ -35,16 +35,14 @@ from .models import (
     new_knowledge_document_id,
     new_knowledge_index_id,
 )
-from .reference_support import (
-    SqliteReferenceStore as _SqliteMixin,
-    actor_ref as _actor_ref,
-    compat_context as _compat_context,
-    forbidden as _forbidden,
-    json_dict as _json_dict,
-    json_dump as _json_dump,
-    not_found as _not_found,
-    parse_time as _parse_time,
-)
+from .reference_support import SqliteReferenceStore as _SqliteMixin
+from .reference_support import actor_ref as _actor_ref
+from .reference_support import compat_context as _compat_context
+from .reference_support import forbidden as _forbidden
+from .reference_support import json_dict as _json_dict
+from .reference_support import json_dump as _json_dump
+from .reference_support import not_found as _not_found
+from .reference_support import parse_time as _parse_time
 
 
 class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
