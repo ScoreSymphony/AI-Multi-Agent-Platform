@@ -285,7 +285,7 @@ jobs:
             -m integration
       - name: Emit non-representative CI gateway smoke evidence
         run: |
-          python -m ai_multi_agent_platform.benchmarking.model_gateway_evaluation_cli \
+          python -m ai_multi_agent_platform.adapters.model_gateway_evaluation_cli \
             --canonical-model-id issue-859-ci-model \
             --downstream-deployment-label issue-859-ci-mock-openai \
             --direct-base-url http://127.0.0.1:18000/v1 \
