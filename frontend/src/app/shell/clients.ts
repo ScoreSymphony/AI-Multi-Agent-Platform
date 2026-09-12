@@ -26,7 +26,7 @@ export function useShellClients(baseUrl: string) {
   const transport = session.transport;
   const fetchImpl = session.fetch;
   const client = useMemo(() => new ControlPlaneClient({ transport }), [transport]);
-  const onboardingClient = useMemo(() => new OnboardingClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const onboardingClient = useMemo(() => new OnboardingClient({ transport }), [transport]);
   const collections = useMemo(() => new ControlPlaneCollectionClient({ transport }), [transport]);
   const approvalClient = useMemo(() => new ApprovalClient({ transport }), [transport]);
   const repositoryClient = useMemo(() => new RepositoryCollectionClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
@@ -41,10 +41,10 @@ export function useShellClients(baseUrl: string) {
   const memoryKnowledgeClient = useMemo(() => new MemoryKnowledgeClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const notificationClient = useMemo(() => new NotificationClient({ transport }), [transport]);
   const organizationClient = useMemo(() => new OrganizationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const pluginsClient = useMemo(() => new PluginsClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const pluginsClient = useMemo(() => new PluginsClient({ transport }), [transport]);
   const registryClient = useMemo(() => new RegistryClient({ transport }), [transport]);
   const templateClient = useMemo(() => new TemplateClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const verificationClient = useMemo(() => new VerificationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const verificationClient = useMemo(() => new VerificationClient({ transport }), [transport]);
 
   return {
     session,

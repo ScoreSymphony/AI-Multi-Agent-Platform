@@ -16,13 +16,9 @@ const legacyDomainTransportModules = new Set([
   "integrations.ts",
   "learning.ts",
   "memoryKnowledge.ts",
-  "onboarding.ts",
   "organizations.ts",
-  "plugins.ts",
   "repositories.ts",
-  "taskProjectReassignment.ts",
   "templates.ts",
-  "verification.ts",
 ]);
 
 const approvedLowLevelModules = new Set(["browserSession.ts", "transport.ts"]);
