@@ -95,4 +95,6 @@ def test_final_classification_is_complete_and_reference_host_work_is_handed_to_8
         "supported_optional": f"ComponentLifecycle.{ComponentLifecycle.SUPPORTED.name}",
     }
     assert gate["setup_profiles_must_not_persist_credentials"] is True
-    assert all(backend["classification_is_final"] is True for backend in manifest["backends"].values())
+    assert all(
+        backend["classification_is_final"] is True for backend in manifest["backends"].values()
+    )
