@@ -36,9 +36,7 @@ def test_surface_urls_quote_sandbox_name_and_file_path() -> None:
     assert urls["native_sandbox_get"] == (
         "http://127.0.0.1:10000/api/v1/sandbox/sandbox%20a%2Fwith%20slash"
     )
-    assert urls["native_logs_get"].endswith(
-        "/logs/sandbox/sandbox%20a%2Fwith%20slash?tailLines=1"
-    )
+    assert urls["native_logs_get"].endswith("/logs/sandbox/sandbox%20a%2Fwith%20slash?tailLines=1")
     assert urls["native_files_list"].endswith(
         "/sandbox/files/sandbox%20a%2Fwith%20slash?path=%2Fworkspace%2Fa+b"
     )
@@ -67,10 +65,7 @@ def test_matrix_passes_only_when_same_tenant_works_and_cross_tenant_is_blocked()
     assert matrix["all_same_tenant_access"] is True
     assert matrix["all_cross_tenant_blocked"] is True
     assert matrix["all_ownership_shapes_passed"] is True
-    assert all(
-        surface["ownership_shape_passed"] is True
-        for surface in matrix["surfaces"].values()
-    )
+    assert all(surface["ownership_shape_passed"] is True for surface in matrix["surfaces"].values())
 
 
 def test_matrix_rejects_allow_everything_as_cross_tenant_exposure() -> None:
