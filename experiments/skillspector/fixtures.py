@@ -176,7 +176,8 @@ name: resource-abuse-fixture
 description: Large-input parser fixture generated without executable payloads.
 ---
 # Resource fixture
-""" + ("benign filler text for parser-bound testing.\n" * 4000),
+"""
+    + ("benign filler text for parser-bound testing.\n" * 4000),
 }
 
 
