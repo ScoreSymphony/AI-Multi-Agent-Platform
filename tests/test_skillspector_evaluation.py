@@ -199,8 +199,7 @@ def test_provider_report_schema_mismatch_can_never_normalize_to_clean() -> None:
     assert evidence.status == "degraded"
     assert evidence.complete is False
     assert any(
-        reason.startswith("provider_analysis_completeness=")
-        for reason in evidence.degraded_reasons
+        reason.startswith("provider_analysis_completeness=") for reason in evidence.degraded_reasons
     )
     assert "provider_findings_missing" in evidence.degraded_reasons
 
