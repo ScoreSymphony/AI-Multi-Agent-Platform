@@ -22,6 +22,7 @@ from ai_multi_agent_platform.evaluation import (
     DeterministicAssertionEvaluator,
     EvaluationOutcome,
     EvaluationRunner,
+    EvaluationRunSummary,
     InMemoryEvaluationRepository,
     MetricThresholdEvaluator,
     canonical_coding_batch_quality_suite,
@@ -90,8 +91,14 @@ def _produce_and_accept(
     coordinator.accept_workstream(batch_id, workstream_id)
 
 
-def _validated_independent_batch() -> tuple[CodingBatchCoordinator, str, str]:
-    coordinator = CodingBatchCoordinator()
+def _validated_independent_batch() -> tuple[
+    CodingBatchCoordinator,
+    InMemoryCodingBatchStore,
+    str,
+    str,
+]:
+    store = InMemoryCodingBatchStore()
+    coordinator = CodingBatchCoordinator(store)
     task_id = new_id("task")
     plan_id = new_id("plan")
     batch = coordinator.create_batch(
@@ -152,7 +159,7 @@ def _validated_independent_batch() -> tuple[CodingBatchCoordinator, str, str]:
             ),
         ),
     )
-    return coordinator, batch.batch_id, candidate.integration_id
+    return coordinator, store, batch.batch_id, candidate.integration_id
 
 
 def _run_quality(
@@ -161,8 +168,8 @@ def _run_quality(
     integration_id: str,
     *,
     expect_repair: bool = False,
-):
-    async def scenario():
+) -> EvaluationRunSummary:
+    async def scenario() -> EvaluationRunSummary:
         runner = EvaluationRunner(
             repository=InMemoryEvaluationRepository(),
             executor=CodingBatchEvaluationCaseExecutor(coordinator),
@@ -184,7 +191,7 @@ def _run_quality(
 
 
 def test_validated_parallel_batch_passes_deterministic_issue_19_quality_suite() -> None:
-    coordinator, batch_id, integration_id = _validated_independent_batch()
+    coordinator, _store, batch_id, integration_id = _validated_independent_batch()
 
     summary = _run_quality(coordinator, batch_id, integration_id)
 
@@ -207,10 +214,9 @@ def test_validated_parallel_batch_passes_deterministic_issue_19_quality_suite() 
 
 
 def test_stale_target_is_reported_as_issue_19_regression_evidence() -> None:
-    coordinator, batch_id, integration_id = _validated_independent_batch()
+    coordinator, store, batch_id, integration_id = _validated_independent_batch()
     batch = coordinator.get(batch_id)
     candidate = batch.integration_candidate(integration_id)
-    store = coordinator._store  # noqa: SLF001 - test drives the canonical persisted projection
     repairs = CodingBatchRepairCoordinator(store)
     moved = repairs.reconcile_target_revision(
         batch_id,
