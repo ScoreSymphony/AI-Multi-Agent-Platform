@@ -46,7 +46,7 @@ def _timeout_payload() -> str:
 def _timeout_child_payload() -> str:
     return (
         "import subprocess,sys,time; "
-        "child_code=\"import pathlib,sys,time; time.sleep(0.25); "
+        'child_code="import pathlib,sys,time; time.sleep(0.25); '
         "pathlib.Path(sys.argv[1]).write_text('survived')\"; "
         "subprocess.Popen([sys.executable,'-c',child_code,sys.argv[1]], "
         "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True); "
@@ -113,9 +113,7 @@ async def _run_local() -> dict[str, Any]:
                     check=False,
                 )
             )
-            evidence["synthetic_env_persisted_after_command"] = (
-                SYNTHETIC_SECRET in followup.stdout
-            )
+            evidence["synthetic_env_persisted_after_command"] = SYNTHETIC_SECRET in followup.stdout
 
             provider_file = workspace / "provider.txt"
             await deployment.runtime.write_file(
@@ -241,9 +239,7 @@ async def _run_docker(*, backend: str) -> dict[str, Any]:
                 text=True,
             )
             evidence["published_port_bindings"] = [
-                line
-                for line in port_probe.stdout.splitlines()
-                if line.strip()
+                line for line in port_probe.stdout.splitlines() if line.strip()
             ]
             image_probe = subprocess.run(
                 ["docker", "image", "inspect", docker_image, "--format", "{{.Size}}"],
@@ -306,9 +302,7 @@ async def _run_docker(*, backend: str) -> dict[str, Any]:
                     check=False,
                 )
             )
-            evidence["synthetic_env_persisted_after_command"] = (
-                SYNTHETIC_SECRET in followup.stdout
-            )
+            evidence["synthetic_env_persisted_after_command"] = SYNTHETIC_SECRET in followup.stdout
 
             artifact_path = f"{remote_workspace}/out.txt"
             artifact_response = await deployment.runtime.execute(
@@ -336,9 +330,7 @@ async def _run_docker(*, backend: str) -> dict[str, Any]:
                 outside_provider_workspace_read = False
             else:
                 outside_provider_workspace_read = bool(outside_read.content)
-            evidence["outside_provider_workspace_read_succeeded"] = (
-                outside_provider_workspace_read
-            )
+            evidence["outside_provider_workspace_read_succeeded"] = outside_provider_workspace_read
 
             child_marker = f"{remote_workspace}/child-after-timeout.txt"
             try:
@@ -371,9 +363,7 @@ async def _run_docker(*, backend: str) -> dict[str, Any]:
                 child_survived = False
             else:
                 child_survived = child_read.content == "survived"
-            evidence["timeout_child_cleanup"]["child_survived_parent_timeout"] = (
-                child_survived
-            )
+            evidence["timeout_child_cleanup"]["child_survived_parent_timeout"] = child_survived
 
             egress = await deployment.runtime.execute(
                 Command(
