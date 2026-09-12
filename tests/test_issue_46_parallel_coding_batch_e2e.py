@@ -630,8 +630,7 @@ def test_conflicting_valid_workstreams_require_canonical_repair_and_fresh_combin
         if coding.get(batch.batch_id).workstream(workstream_id).state is WorkstreamState.BLOCKED:
             predecessor = "A"
             assert (
-                coding.get(batch.batch_id).workstream(predecessor).state
-                is WorkstreamState.ACCEPTED
+                coding.get(batch.batch_id).workstream(predecessor).state is WorkstreamState.ACCEPTED
             )
         coding.materialize_workstream(
             batch.batch_id,
