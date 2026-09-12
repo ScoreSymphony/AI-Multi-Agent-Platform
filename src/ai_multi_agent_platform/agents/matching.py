@@ -707,9 +707,7 @@ def _team_candidate(
         for member in policy_members
         if member.profile.capabilities.allowed
     ]
-    allowed = (
-        set.intersection(*restricted_allowlists) if restricted_allowlists else set()
-    )
+    allowed = set.intersection(*restricted_allowlists) if restricted_allowlists else set()
     denied: set[str] = set()
     constraints: list[CapabilityConstraint] = []
     policies: set[str] = set()
@@ -951,7 +949,6 @@ def _version_in_constraint(version: str, constraint: CapabilityConstraint) -> bo
         exact_version=constraint.exact_version,
         minimum_version=constraint.minimum_version,
         maximum_version=constraint.maximum_version,
-        required_features=constraint.required_features,
     )
     return _version_in_requirement(version, requirement)
 
