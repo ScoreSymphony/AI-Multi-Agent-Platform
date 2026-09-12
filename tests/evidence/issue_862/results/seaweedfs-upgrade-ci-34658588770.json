@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "backend": "seaweedfs",
+  "evidence_scope": "github_hosted_runner_in_place_upgrade",
+  "workflow_run_id": 34658588770,
+  "workflow_head_sha": "ab7c51b6ca9d7fc20c889bc184e992f8bd8d43e6",
+  "artifact_id": 10286902756,
+  "artifact_digest": "sha256:f18eb4a76dbc9c43aff0c888bfe8c582b5e5dc27ca80aa66744b5a3e2c9501e6",
+  "upgrade": {
+    "status": "pass",
+    "old_image": "chrislusf/seaweedfs:4.45",
+    "old_image_id": "sha256:1c4f296dc6e31587a7213175f7d338cfd5e11a7c84fdfbcd46193a0a48e008a5",
+    "old_repo_digest": "chrislusf/seaweedfs@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5",
+    "new_image": "chrislusf/seaweedfs:4.46",
+    "new_image_id": "sha256:51907b802784d01ddb60862dd02a451ee20ee5e151ef580326bba1c63894d30b",
+    "new_repo_digest": "chrislusf/seaweedfs@sha256:08d516132314207d10c8e37cbffc1f32b147d870169688734cc61c6231625b62",
+    "sentinel_bytes": 1048576,
+    "sha256_before": "5ffd0b6b3bf5b178f2e95652c55173d8bf3aa89402bc3d071e2e9b3aa92302e2",
+    "sha256_after": "5ffd0b6b3bf5b178f2e95652c55173d8bf3aa89402bc3d071e2e9b3aa92302e2",
+    "acknowledged_object_preserved": true
+  },
+  "rollback": {
+    "tested": false,
+    "support_claimed": false,
+    "note": "A successful 4.45 to 4.46 forward upgrade is not treated as downgrade or rollback evidence."
+  },
+  "credentials_emitted": false
+}
