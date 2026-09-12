@@ -106,6 +106,44 @@ def _batch_fingerprint(
     }
 
 
+def _topological_work_item_ids(items: tuple[CodingWorkItem, ...]) -> tuple[str, ...]:
+    """Return a stable dependency order and fail closed on dependency cycles."""
+
+    order = {item.work_item_id: index for index, item in enumerate(items)}
+    successors: dict[str, list[str]] = {item.work_item_id: [] for item in items}
+    indegree = {item.work_item_id: 0 for item in items}
+    for item in items:
+        indegree[item.work_item_id] = len(item.dependencies)
+        for dependency_id in item.dependencies:
+            successors[dependency_id].append(item.work_item_id)
+
+    ready = sorted(
+        (work_item_id for work_item_id, degree in indegree.items() if degree == 0),
+        key=order.__getitem__,
+    )
+    result: list[str] = []
+    while ready:
+        work_item_id = ready.pop(0)
+        result.append(work_item_id)
+        for successor_id in sorted(successors[work_item_id], key=order.__getitem__):
+            indegree[successor_id] -= 1
+            if indegree[successor_id] == 0:
+                ready.append(successor_id)
+                ready.sort(key=order.__getitem__)
+
+    if len(result) != len(items):
+        cyclic = tuple(
+            work_item_id
+            for work_item_id in order
+            if indegree[work_item_id] > 0
+        )
+        raise ValueError(
+            "coding batch dependencies must be acyclic; cycle involves: "
+            + ", ".join(cyclic)
+        )
+    return tuple(result)
+
+
 class CodingBatchCoordinator:
     """Compose canonical authorities into restart-safe parallel coding batch state."""
 
@@ -140,6 +178,7 @@ class CodingBatchCoordinator:
                 raise ValueError(
                     f"work item {item.work_item_id} depends on unknown items: {sorted(unknown)}"
                 )
+        _topological_work_item_ids(work_items)
 
         fingerprint = _batch_fingerprint(
             repository_id=repository_id,
@@ -312,8 +351,11 @@ class CodingBatchCoordinator:
             verification=evidence,
             failure_reason=None if evidence.passed else "verification failed",
         )
-        self._save_workstream(batch, updated)
-        return updated
+        batch = self._replace_workstream(batch, updated)
+        if state is WorkstreamState.FAILED:
+            batch = self._refresh_readiness(batch)
+        self._store.save(batch)
+        return batch.workstream(workstream_id)
 
     def accept_workstream(self, batch_id: str, workstream_id: str) -> CodingWorkstream:
         batch = self.get(batch_id)
@@ -334,15 +376,19 @@ class CodingBatchCoordinator:
         batch = self.get(batch_id)
         current = batch.workstream(workstream_id)
         updated = current.with_state(WorkstreamState.FAILED, failure_reason=reason)
-        self._save_workstream(batch, updated)
-        return updated
+        batch = self._replace_workstream(batch, updated)
+        batch = self._refresh_readiness(batch)
+        self._store.save(batch)
+        return batch.workstream(workstream_id)
 
     def cancel_workstream(self, batch_id: str, workstream_id: str, reason: str) -> CodingWorkstream:
         batch = self.get(batch_id)
         current = batch.workstream(workstream_id)
         updated = current.with_state(WorkstreamState.CANCELLED, failure_reason=reason)
-        self._save_workstream(batch, updated)
-        return updated
+        batch = self._replace_workstream(batch, updated)
+        batch = self._refresh_readiness(batch)
+        self._store.save(batch)
+        return batch.workstream(workstream_id)
 
     def build_integration_candidate(
         self,
@@ -361,8 +407,18 @@ class CodingBatchCoordinator:
             raise ValueError("integration candidate requires at least one accepted workstream")
         if len(selected) != len(set(selected)):
             raise ValueError("integration candidate workstream ids must be unique")
-        index = {workstream.id: position for position, workstream in enumerate(batch.workstreams)}
-        ordered = tuple(sorted(selected, key=index.__getitem__))
+        known_ids = {workstream.id for workstream in batch.workstreams}
+        unknown_ids = set(selected) - known_ids
+        if unknown_ids:
+            raise ValueError(
+                "integration candidate references unknown workstreams: "
+                + ", ".join(sorted(unknown_ids))
+            )
+        dependency_order = _topological_work_item_ids(
+            tuple(workstream.work_item for workstream in batch.workstreams)
+        )
+        selected_set = set(selected)
+        ordered = tuple(item_id for item_id in dependency_order if item_id in selected_set)
         workstreams = tuple(batch.workstream(item) for item in ordered)
         if any(item.state is not WorkstreamState.ACCEPTED for item in workstreams):
             raise ValueError("integration candidates may contain only accepted workstreams")
@@ -558,15 +614,22 @@ class CodingBatchCoordinator:
             for item in batch.workstreams
             if item.state in {WorkstreamState.FAILED, WorkstreamState.CANCELLED}
         }
+        terminal_serialization = accepted | terminal_bad
         updated: list[CodingWorkstream] = []
         for item in batch.workstreams:
             if item.state is not WorkstreamState.BLOCKED:
                 updated.append(item)
                 continue
-            if set(item.blocked_by) & terminal_bad:
+            hard_dependencies = set(item.work_item.dependencies)
+            serialization_blockers = set(item.blocked_by) - hard_dependencies
+            # Hard planner dependencies require accepted predecessor output. A failed/cancelled
+            # predecessor therefore keeps dependent work blocked for replanning/manual handling.
+            if hard_dependencies & terminal_bad:
                 updated.append(item)
                 continue
-            if set(item.blocked_by).issubset(accepted):
+            if hard_dependencies.issubset(accepted) and serialization_blockers.issubset(
+                terminal_serialization
+            ):
                 updated.append(item.with_state(WorkstreamState.READY, blocked_by=()))
             else:
                 updated.append(item)
