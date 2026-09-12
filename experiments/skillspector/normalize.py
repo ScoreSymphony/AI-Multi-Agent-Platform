@@ -7,10 +7,11 @@ output into a small, replaceable evidence envelope used by the #800 evaluation.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
-from typing import Any, Mapping
+from typing import Any
 
 
 @dataclass(frozen=True)
