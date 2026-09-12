@@ -25,8 +25,15 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _reject_non_finite_json_constant(value: str) -> Any:
+    raise ValueError(f"non-finite JSON numeric constant is not permitted: {value}")
+
+
 def _load_object(path: Path, *, label: str) -> Mapping[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(
+        path.read_text(encoding="utf-8"),
+        parse_constant=_reject_non_finite_json_constant,
+    )
     if not isinstance(payload, Mapping):
         raise ValueError(f"{label} must contain a JSON object")
     return cast(Mapping[str, Any], payload)
