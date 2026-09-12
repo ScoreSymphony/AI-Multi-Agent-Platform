@@ -1,4 +1,4 @@
-name: Temporary issue 903 mypy fix
+name: Temporary issue 903 matcher finalizer
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  fix:
+  finalize:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Apply targeted fixes
+      - name: Apply final matcher fixes
         shell: bash
         run: |
           python - <<'PY'
@@ -31,9 +31,17 @@ jobs:
               global text
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f"expected one match, found {count}: {old[:80]!r}")
+                  raise SystemExit(f"expected one match, found {count}: {old[:100]!r}")
               text = text.replace(old, new, 1)
 
+          replace_once(
+              "from collections.abc import Callable, Iterable",
+              "from collections.abc import Callable, Iterable, Mapping",
+          )
+          replace_once(
+              "from ai_multi_agent_platform.contracts.types import HealthStatus",
+              "from ai_multi_agent_platform.contracts.types import HealthStatus, JsonValue",
+          )
           replace_once(
               "from ai_multi_agent_platform.models import ModelLocation, ModelRegistry, RoutingRequirements",
               "from ai_multi_agent_platform.models import (\n"
@@ -44,8 +52,14 @@ jobs:
               ")",
           )
           replace_once(
-              "    CapabilityConstraint,\n)",
-              "    CapabilityConstraint,\n    UnavailableMemberPolicy,\n)",
+              "    AgentTeamRevision,\n"
+              "    AgentTeamRevisionRef,\n"
+              "    CapabilityConstraint,\n",
+              "    AgentTeamMember,\n"
+              "    AgentTeamRevision,\n"
+              "    AgentTeamRevisionRef,\n"
+              "    CapabilityConstraint,\n"
+              "    UnavailableMemberPolicy,\n",
           )
           replace_once(
               "        if requirements.exact_agent is not None:\n"
@@ -132,7 +146,7 @@ jobs:
                   zip(revision.profile.members, member_revisions, strict=True)
               )
               enabled = revision.profile.enabled
-              active_pairs: list[tuple[object, AgentRevision]] = []
+              active_pairs: list[tuple[AgentTeamMember, AgentRevision]] = []
               for member, member_revision in member_pairs:
                   if member_revision.profile.enabled:
                       active_pairs.append((member, member_revision))
@@ -203,12 +217,22 @@ jobs:
           text = text[:start] + team_block + text[end:]
 
           replace_once(
+              "def _matching_priority(metadata: object) -> int:\n"
+              "    if not hasattr(metadata, \"get\"):\n"
+              "        return 0\n"
               "    value = metadata.get(\"matching_priority\")  # type: ignore[union-attr]",
+              "def _matching_priority(metadata: Mapping[str, JsonValue]) -> int:\n"
               "    value = metadata.get(\"matching_priority\")",
           )
           replace_once(
-              "    return _capability_requirement_matches(requirement, pseudo)  # type: ignore[arg-type]",
-              "    return _capability_requirement_matches(requirement, pseudo)",
+              "        return any(\n"
+              "            any(_model_matches(config, requirement, self._models) for config in models)\n"
+              "            for requirement in merged\n"
+              "        )",
+              "        return all(\n"
+              "            any(_model_matches(config, requirement, self._models) for config in models)\n"
+              "            for requirement in merged\n"
+              "        )",
           )
           replace_once(
               "        min_context_window=max(\n"
@@ -220,16 +244,6 @@ jobs:
               "            second.min_context_window or 0,\n"
               "        )\n"
               "        or None,",
-          )
-          replace_once(
-              "        return any(\n"
-              "            any(_model_matches(config, requirement, self._models) for config in models)\n"
-              "            for requirement in merged\n"
-              "        )",
-              "        return all(\n"
-              "            any(_model_matches(config, requirement, self._models) for config in models)\n"
-              "            for requirement in merged\n"
-              "        )",
           )
 
           model_start = text.index("def _model_matches(\n")
@@ -281,17 +295,19 @@ jobs:
           text = text[:model_start] + model_block + text[model_end:]
           path.write_text(text)
           PY
-      - name: Verify and format
+      - name: Verify targeted changes
         run: |
           python -m pip install -e '.[dev]'
           ruff format src/ai_multi_agent_platform/agents/matching.py
           ruff check src/ai_multi_agent_platform/agents/matching.py
           mypy src/ai_multi_agent_platform/agents/matching.py
-      - name: Commit fixes
+          pytest -q tests/test_issue_903_agent_matching.py
+      - name: Commit source fix and remove temporary workflow
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/issue-903-mypy-fix.yml
           git add src/ai_multi_agent_platform/agents/matching.py
           git commit -m "fix(#903): tighten typed team matching semantics"
           git push origin HEAD:issue-903-agent-matching
