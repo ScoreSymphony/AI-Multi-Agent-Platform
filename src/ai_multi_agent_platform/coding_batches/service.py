@@ -205,8 +205,6 @@ class CodingBatchCoordinator:
                 OverlapKind.DEPENDENCY,
             }:
                 continue
-            # Ambiguous/conflicting peers are serialized deterministically instead of being
-            # declared independent merely to increase concurrency.
             left = decision.left_work_item_id
             right = decision.right_work_item_id
             if order[left] < order[right]:
@@ -352,7 +350,6 @@ class CodingBatchCoordinator:
         if current.state not in {WorkstreamState.RUNNING, WorkstreamState.PRODUCED}:
             raise ValueError("workstream result requires running/produced state")
         provenance = replace(current.provenance, output_revision=result.output_revision)
-        # Any changed output invalidates earlier review evidence by construction.
         updated = current.with_state(
             WorkstreamState.PRODUCED,
             provenance=provenance,
@@ -567,13 +564,13 @@ class CodingBatchCoordinator:
         self._save_candidate(batch, updated)
         return updated
 
-    def mark_merge_ready(
+    def _mark_merge_ready_after_authorization(
         self,
         batch_id: str,
         integration_id: str,
-        *,
-        authorization_granted: bool,
     ) -> IntegrationCandidate:
+        """Apply merge readiness only after the canonical #15 adapter has authorized it."""
+
         batch = self.get(batch_id)
         candidate = batch.integration_candidate(integration_id)
         if candidate.state is IntegrationState.MERGE_READY:
@@ -582,8 +579,6 @@ class CodingBatchCoordinator:
             raise ValueError(
                 "integration requires fresh combined validation before merge readiness"
             )
-        if not authorization_granted:
-            raise PermissionError("merge readiness is blocked by canonical authorization")
         updated = replace(candidate, state=IntegrationState.MERGE_READY, blocker_reasons=())
         self._save_candidate(batch, updated)
         return updated
@@ -670,8 +665,6 @@ class CodingBatchCoordinator:
                 continue
             hard_dependencies = set(item.work_item.dependencies)
             serialization_blockers = set(item.blocked_by) - hard_dependencies
-            # Hard planner dependencies require accepted predecessor output. A failed/cancelled
-            # predecessor therefore keeps dependent work blocked for replanning/manual handling.
             if hard_dependencies & terminal_bad:
                 updated.append(item)
                 continue
