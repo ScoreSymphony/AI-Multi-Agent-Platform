@@ -1,0 +1,181 @@
+name: Issue 862 RustFS multi-node evidence
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/issue-862-rustfs-multinode-evidence.yml"
+      - "tests/evidence/issue_862/s3_contract_probe.py"
+      - "tests/evidence/issue_862/s3_partial_failure_probe.py"
+      - "docs/research/issue-862-object-storage-evaluation.md"
+
+jobs:
+  rustfs-four-node-failure:
+    if: github.head_ref == 'issue-862-rustfs-garage-storage-evaluation'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Generate synthetic cluster credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          access_key="I862$(openssl rand -hex 10 | tr '[:lower:]' '[:upper:]')"
+          secret_key="$(openssl rand -hex 32)"
+          rpc_secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$access_key"
+          echo "::add-mask::$secret_key"
+          echo "::add-mask::$rpc_secret"
+          echo "AWS_ACCESS_KEY_ID=$access_key" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=$secret_key" >> "$GITHUB_ENV"
+          echo "ISSUE862_RPC_SECRET=$rpc_secret" >> "$GITHUB_ENV"
+          echo "ISSUE862_ENDPOINT=http://127.0.0.1:9000" >> "$GITHUB_ENV"
+          echo "ISSUE862_BUCKET=issue-862-multinode" >> "$GITHUB_ENV"
+          echo "ISSUE862_REGION=us-east-1" >> "$GITHUB_ENV"
+          mkdir -p evidence
+
+      - name: Start pinned four-node RustFS MNMD topology
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker network create issue862-rustfs-net
+          docker pull rustfs/rustfs:1.0.0-rc.6
+
+          for node in 1 2 3 4; do
+            docker volume create "issue862-rustfs-node${node}-data" >/dev/null
+            publish=()
+            if [ "$node" = "1" ]; then
+              publish=(-p 9000:9000)
+            fi
+            docker run -d \
+              --name "rustfs${node}" \
+              --network issue862-rustfs-net \
+              "${publish[@]}" \
+              -v "issue862-rustfs-node${node}-data:/data" \
+              -e RUSTFS_VOLUMES='http://rustfs{1...4}:9000/data' \
+              -e RUSTFS_ADDRESS=':9000' \
+              -e RUSTFS_CONSOLE_ENABLE=false \
+              -e RUSTFS_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+              -e RUSTFS_SECRET_KEY="$AWS_SECRET_ACCESS_KEY" \
+              -e RUSTFS_RPC_SECRET="$ISSUE862_RPC_SECRET" \
+              rustfs/rustfs:1.0.0-rc.6
+          done
+
+      - name: Wait for cluster readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 150); do
+            if curl -fsS "$ISSUE862_ENDPOINT/health/ready" >/dev/null; then
+              sleep 3
+              exit 0
+            fi
+            sleep 1
+          done
+          for node in 1 2 3 4; do
+            echo "===== rustfs${node} ====="
+            docker logs "rustfs${node}" || true
+          done
+          exit 1
+
+      - name: Create bucket and validate healthy cluster subset
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_contract_probe.py \
+            --backend rustfs \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "multinode-control-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --create-bucket \
+            > evidence/rustfs-multinode-control.json
+
+      - name: Seed acknowledged object before node failure
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_partial_failure_probe.py seed \
+            --backend rustfs \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "multinode-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > evidence/rustfs-multinode-before.json
+
+      - name: Stop one of four RustFS nodes
+        shell: bash
+        run: |
+          docker stop rustfs2
+          sleep 3
+
+      - name: Verify reads and writes while one node is unavailable
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_partial_failure_probe.py during-failure \
+            --backend rustfs \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "multinode-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > evidence/rustfs-multinode-degraded.json
+
+      - name: Restart failed RustFS node
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker start rustfs2
+          for _ in $(seq 1 120); do
+            if curl -fsS "$ISSUE862_ENDPOINT/health/ready" >/dev/null; then
+              sleep 5
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs rustfs2 || true
+          exit 1
+
+      - name: Verify cluster data after node recovery
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_partial_failure_probe.py recovered \
+            --backend rustfs \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "multinode-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > evidence/rustfs-multinode-recovered.json
+
+      - name: Record cluster resource observation
+        shell: bash
+        run: |
+          docker stats --no-stream \
+            --format '{{json .}}' \
+            rustfs1 rustfs2 rustfs3 rustfs4 \
+            > evidence/rustfs-multinode-docker-stats.json
+
+      - name: Upload multi-node evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-862-rustfs-multinode-evidence
+          path: evidence/rustfs-multinode-*
+          if-no-files-found: warn
+
+      - name: Show logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          for node in 1 2 3 4; do
+            echo "===== rustfs${node} ====="
+            docker logs "rustfs${node}" || true
+          done
+
+      - name: Cleanup cluster
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f rustfs1 rustfs2 rustfs3 rustfs4 2>/dev/null || true
+          docker network rm issue862-rustfs-net 2>/dev/null || true

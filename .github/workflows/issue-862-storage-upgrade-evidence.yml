@@ -1,0 +1,303 @@
+name: Issue 862 storage upgrade evidence
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/issue-862-storage-upgrade-evidence.yml"
+      - "tests/evidence/issue_862/s3_contract_probe.py"
+      - "tests/evidence/issue_862/s3_upgrade_probe.py"
+      - "docs/research/issue-862-object-storage-evaluation.md"
+
+jobs:
+  upgrade-restart:
+    if: github.head_ref == 'issue-862-rustfs-garage-storage-evaluation'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: rustfs
+            old_image: rustfs/rustfs:1.0.0-rc.5
+            new_image: rustfs/rustfs:1.0.0-rc.6
+            endpoint: http://127.0.0.1:9000
+            region: us-east-1
+          - backend: garage
+            old_image: dxflrs/garage:v2.2.0
+            new_image: dxflrs/garage:v2.3.0
+            endpoint: http://127.0.0.1:3900
+            region: garage
+          - backend: seaweedfs
+            old_image: chrislusf/seaweedfs:4.45
+            new_image: chrislusf/seaweedfs:4.46
+            endpoint: http://127.0.0.1:8333
+            region: us-east-1
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Generate synthetic runtime credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.backend }}" = "garage" ]; then
+            access_key="GK$(openssl rand -hex 12)"
+          else
+            access_key="I862$(openssl rand -hex 10)"
+          fi
+          secret_key="$(openssl rand -hex 32)"
+          echo "::add-mask::$access_key"
+          echo "::add-mask::$secret_key"
+          echo "AWS_ACCESS_KEY_ID=$access_key" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=$secret_key" >> "$GITHUB_ENV"
+          echo "ISSUE862_CONTAINER=issue862-upgrade-${{ matrix.backend }}" >> "$GITHUB_ENV"
+          echo "ISSUE862_BUCKET=issue-862-upgrade" >> "$GITHUB_ENV"
+          echo "ISSUE862_ENDPOINT=${{ matrix.endpoint }}" >> "$GITHUB_ENV"
+          echo "ISSUE862_REGION=${{ matrix.region }}" >> "$GITHUB_ENV"
+          mkdir -p evidence
+
+      - name: Prepare persistent storage and Garage config
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.backend }}" in
+            rustfs)
+              mkdir -p "$RUNNER_TEMP/issue862-upgrade-rustfs-data"
+              sudo chown -R 10001:10001 "$RUNNER_TEMP/issue862-upgrade-rustfs-data"
+              ;;
+            garage)
+              rpc_secret="$(openssl rand -hex 32)"
+              admin_token="$(openssl rand -hex 32)"
+              metrics_token="$(openssl rand -hex 32)"
+              cat > "$RUNNER_TEMP/issue862-upgrade-garage.toml" <<EOF
+          metadata_dir = "/var/lib/garage/meta"
+          data_dir = "/var/lib/garage/data"
+          db_engine = "sqlite"
+          replication_factor = 1
+          rpc_bind_addr = "[::]:3901"
+          rpc_public_addr = "127.0.0.1:3901"
+          rpc_secret = "$rpc_secret"
+
+          [s3_api]
+          s3_region = "garage"
+          api_bind_addr = "[::]:3900"
+          root_domain = ".s3.garage.localhost"
+
+          [admin]
+          api_bind_addr = "[::]:3903"
+          admin_token = "$admin_token"
+          metrics_token = "$metrics_token"
+          EOF
+              ;;
+          esac
+
+      - name: Pull exact upgrade endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "${{ matrix.old_image }}"
+          docker pull "${{ matrix.new_image }}"
+          {
+            echo "backend=${{ matrix.backend }}"
+            echo "old_image=${{ matrix.old_image }}"
+            echo "old_image_id=$(docker image inspect '${{ matrix.old_image }}' --format '{{.Id}}')"
+            echo "old_repo_digests=$(docker image inspect '${{ matrix.old_image }}' --format '{{json .RepoDigests}}')"
+            echo "new_image=${{ matrix.new_image }}"
+            echo "new_image_id=$(docker image inspect '${{ matrix.new_image }}' --format '{{.Id}}')"
+            echo "new_repo_digests=$(docker image inspect '${{ matrix.new_image }}' --format '{{json .RepoDigests}}')"
+          } > "evidence/${{ matrix.backend }}-upgrade-images.txt"
+
+      - name: Start old backend revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.backend }}" in
+            rustfs)
+              docker run -d \
+                --name "$ISSUE862_CONTAINER" \
+                -p 9000:9000 \
+                -e RUSTFS_VOLUMES=/data \
+                -e RUSTFS_ADDRESS=0.0.0.0:9000 \
+                -e RUSTFS_CONSOLE_ENABLE=false \
+                -e RUSTFS_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+                -e RUSTFS_SECRET_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -v "$RUNNER_TEMP/issue862-upgrade-rustfs-data:/data" \
+                "${{ matrix.old_image }}"
+              ;;
+            garage)
+              docker run -d \
+                --name "$ISSUE862_CONTAINER" \
+                -p 3900:3900 \
+                -v "$RUNNER_TEMP/issue862-upgrade-garage.toml:/etc/garage.toml:ro" \
+                -v issue862-upgrade-garage-meta:/var/lib/garage/meta \
+                -v issue862-upgrade-garage-data:/var/lib/garage/data \
+                "${{ matrix.old_image }}" \
+                /garage server
+              ;;
+            seaweedfs)
+              docker run -d \
+                --name "$ISSUE862_CONTAINER" \
+                -p 8333:8333 \
+                -v issue862-upgrade-seaweedfs-data:/data \
+                -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+                -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -e S3_BUCKET="$ISSUE862_BUCKET" \
+                "${{ matrix.old_image }}"
+              ;;
+          esac
+
+      - name: Wait for old backend readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          port="${ISSUE862_ENDPOINT##*:}"
+          for _ in $(seq 1 120); do
+            if python - "$port" <<'PY'
+          import socket
+          import sys
+
+          try:
+              with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+                  pass
+          except OSError:
+              raise SystemExit(1)
+          PY
+            then
+              sleep 2
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$ISSUE862_CONTAINER" || true
+          exit 1
+
+      - name: Initialize Garage v2.2.0 single-node state
+        if: matrix.backend == 'garage'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_addr="$(docker exec "$ISSUE862_CONTAINER" /garage node id -q)"
+          node_id="${node_addr%%@*}"
+          test -n "$node_id"
+          docker exec "$ISSUE862_CONTAINER" /garage layout assign -z dc1 -c 1G "$node_id" >/dev/null
+          docker exec "$ISSUE862_CONTAINER" /garage layout apply --version 1 >/dev/null
+          docker exec "$ISSUE862_CONTAINER" /garage bucket create "$ISSUE862_BUCKET" >/dev/null
+          docker exec "$ISSUE862_CONTAINER" /garage key import \
+            "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" -n issue862-upgrade --yes >/dev/null
+          docker exec "$ISSUE862_CONTAINER" /garage bucket allow \
+            --read --write --owner "$ISSUE862_BUCKET" --key "$AWS_ACCESS_KEY_ID" >/dev/null
+
+      - name: Write and verify sentinel on old revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          create_bucket=()
+          if [ "${{ matrix.backend }}" = "rustfs" ]; then
+            create_bucket=(--create-bucket)
+          fi
+          python tests/evidence/issue_862/s3_upgrade_probe.py write \
+            --backend "${{ matrix.backend }}" \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            "${create_bucket[@]}" \
+            > "evidence/${{ matrix.backend }}-upgrade-before.json"
+
+      - name: Replace old process with reviewed revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker rm -f "$ISSUE862_CONTAINER"
+          case "${{ matrix.backend }}" in
+            rustfs)
+              docker run -d \
+                --name "$ISSUE862_CONTAINER" \
+                -p 9000:9000 \
+                -e RUSTFS_VOLUMES=/data \
+                -e RUSTFS_ADDRESS=0.0.0.0:9000 \
+                -e RUSTFS_CONSOLE_ENABLE=false \
+                -e RUSTFS_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+                -e RUSTFS_SECRET_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -v "$RUNNER_TEMP/issue862-upgrade-rustfs-data:/data" \
+                "${{ matrix.new_image }}"
+              ;;
+            garage)
+              docker run -d \
+                --name "$ISSUE862_CONTAINER" \
+                -p 3900:3900 \
+                -v "$RUNNER_TEMP/issue862-upgrade-garage.toml:/etc/garage.toml:ro" \
+                -v issue862-upgrade-garage-meta:/var/lib/garage/meta \
+                -v issue862-upgrade-garage-data:/var/lib/garage/data \
+                "${{ matrix.new_image }}" \
+                /garage server
+              ;;
+            seaweedfs)
+              docker run -d \
+                --name "$ISSUE862_CONTAINER" \
+                -p 8333:8333 \
+                -v issue862-upgrade-seaweedfs-data:/data \
+                -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+                -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -e S3_BUCKET="$ISSUE862_BUCKET" \
+                "${{ matrix.new_image }}"
+              ;;
+          esac
+
+      - name: Wait for reviewed revision readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          port="${ISSUE862_ENDPOINT##*:}"
+          for _ in $(seq 1 120); do
+            if python - "$port" <<'PY'
+          import socket
+          import sys
+
+          try:
+              with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+                  pass
+          except OSError:
+              raise SystemExit(1)
+          PY
+            then
+              sleep 3
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$ISSUE862_CONTAINER" || true
+          exit 1
+
+      - name: Verify acknowledged object after upgrade
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_upgrade_probe.py verify \
+            --backend "${{ matrix.backend }}" \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --delete-after-verify \
+            > "evidence/${{ matrix.backend }}-upgrade-after.json"
+
+      - name: Upload upgrade evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-862-${{ matrix.backend }}-upgrade-evidence
+          path: evidence/${{ matrix.backend }}-upgrade-*
+          if-no-files-found: warn
+
+      - name: Show backend logs on failure
+        if: failure()
+        shell: bash
+        run: docker logs "$ISSUE862_CONTAINER" || true
+
+      - name: Stop backend
+        if: always()
+        shell: bash
+        run: docker rm -f "$ISSUE862_CONTAINER" 2>/dev/null || true

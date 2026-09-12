@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "backend": "rustfs",
+  "evidence_scope": "github_hosted_runner_clean_store_logical_blob_restore",
+  "workflow_run_id": 34696242538,
+  "workflow_head_sha": "9e821abc5537c00d9502a362b78981834cb0f2aa",
+  "artifact_id": 10298906529,
+  "artifact_digest": "sha256:1a728bbd71b9a1dbe3c3818c4ccb2b38fafaa930b8cbe54be7995c065f40d9cc",
+  "runtime": {
+    "image": "rustfs/rustfs:1.0.0-rc.6",
+    "image_id": "sha256:d196c45d9b351948b51b074e3775beb1bb862a1639bc37dbc7e0bdb7b282c1fd",
+    "repo_digest": "rustfs/rustfs@sha256:97171b3d72cd47dc81000f92ea84de25608bfc35a94c965501afaeb5d99f6035"
+  },
+  "backup": {
+    "status": "pass",
+    "objects_exported": 3,
+    "bytes_exported": 1445888,
+    "manifest_sha256": "bcd88f024754f279a5a90efeeb218194f4a30b01c6e1c2f4e42261942908c0e8",
+    "canonical_checksum": "sha256"
+  },
+  "destructive_recovery": {
+    "original_container_removed": true,
+    "all_original_backend_data_volumes_deleted": true,
+    "replacement_store_verified_empty_before_restore": true,
+    "objects_restored": 3,
+    "bytes_restored": 1445888,
+    "all_sha256_verified": true,
+    "status": "pass"
+  },
+  "restored_objects": [
+    {"bytes": 393216, "sha256": "bc02b8c4f39934f2466a9e67398482516b9b930165be7c72a7b2dd904707b9cc"},
+    {"bytes": 1048576, "sha256": "237951cef67dcafe9535887ebcb9c3a3232431419377c2403cb8dae7cb33801c"},
+    {"bytes": 4096, "sha256": "c26c26a2c5627b3b820938ec8d87501ad48306a706676f0e10ebd34dc44af025"}
+  ],
+  "platform_backup_integration_claimed": false,
+  "credentials_emitted": false
+}

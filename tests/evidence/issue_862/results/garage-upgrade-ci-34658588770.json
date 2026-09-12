@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "backend": "garage",
+  "evidence_scope": "github_hosted_runner_in_place_upgrade",
+  "workflow_run_id": 34658588770,
+  "workflow_head_sha": "ab7c51b6ca9d7fc20c889bc184e992f8bd8d43e6",
+  "artifact_id": 10286882670,
+  "artifact_digest": "sha256:3fd6da42f83134bfffd8a6abc984ee42f511e56c1d55643250d91a256accd594",
+  "upgrade": {
+    "status": "pass",
+    "old_image": "dxflrs/garage:v2.2.0",
+    "old_image_id": "sha256:e462e5d0bd6945bb8d36cdb323d61c0f84b32c5fa8e21dd0350a11b09a04aeaf",
+    "old_repo_digest": "dxflrs/garage@sha256:45a61ce3f7c9c24fc23d9ed2b09b27ed560ab87b34605d175d5c588f539c24e4",
+    "new_image": "dxflrs/garage:v2.3.0",
+    "new_image_id": "sha256:5eda3acb72a0b6c3432233d19b07dffabd9ee7eb93be90031bae75e4b81e6324",
+    "new_repo_digest": "dxflrs/garage@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690",
+    "sentinel_bytes": 1048576,
+    "sha256_before": "3bc499e6c745233b30cee5e918185c9d7057b7220726fd72ba1f7e2272f123df",
+    "sha256_after": "3bc499e6c745233b30cee5e918185c9d7057b7220726fd72ba1f7e2272f123df",
+    "acknowledged_object_preserved": true,
+    "release_note": "Garage v2.3.0 is a stable release and states there are no breaking changes when migrating from v2.2.0."
+  },
+  "rollback": {
+    "tested": false,
+    "support_claimed": false,
+    "note": "Forward compatibility does not imply that downgrading a v2.3.0 metadata/data set to v2.2.0 is supported."
+  },
+  "credentials_emitted": false
+}

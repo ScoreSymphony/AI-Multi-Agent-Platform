@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "backend": "rustfs",
+  "evidence_scope": "github_hosted_runner_in_place_upgrade",
+  "workflow_run_id": 34658588770,
+  "workflow_head_sha": "ab7c51b6ca9d7fc20c889bc184e992f8bd8d43e6",
+  "artifact_id": 10287017614,
+  "artifact_digest": "sha256:aa17035e37018f946941466682286a0b2bc3e4199c86aee5ce68b3c8dbf66e3e",
+  "upgrade": {
+    "status": "pass",
+    "old_image": "rustfs/rustfs:1.0.0-rc.5",
+    "old_image_id": "sha256:debc4e967ec160aefc73dea789ef08011b62151d7035742148ec98150eb845fb",
+    "old_repo_digest": "rustfs/rustfs@sha256:c36b3efea3d1e503f1a2581abd0e7611e0e5820dd30e1850a52384b3fc52bda4",
+    "new_image": "rustfs/rustfs:1.0.0-rc.6",
+    "new_image_id": "sha256:d196c45d9b351948b51b074e3775beb1bb862a1639bc37dbc7e0bdb7b282c1fd",
+    "new_repo_digest": "rustfs/rustfs@sha256:97171b3d72cd47dc81000f92ea84de25608bfc35a94c965501afaeb5d99f6035",
+    "sentinel_bytes": 1048576,
+    "sha256_before": "d26b68b000218b3142d15c46b53bca8303b1108ca013dae284413932e2e01852",
+    "sha256_after": "d26b68b000218b3142d15c46b53bca8303b1108ca013dae284413932e2e01852",
+    "acknowledged_object_preserved": true
+  },
+  "rollback": {
+    "tested": false,
+    "support_claimed": false,
+    "note": "A successful forward upgrade is not treated as downgrade or rollback evidence."
+  },
+  "credentials_emitted": false
+}

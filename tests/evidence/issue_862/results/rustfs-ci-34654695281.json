@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "backend": "rustfs",
+  "evidence_scope": "github_hosted_runner_single_node",
+  "workflow_run_id": 34654695281,
+  "workflow_head_sha": "f5873624f36542f0cdf464fe6b012aed3a64b7e7",
+  "artifact_id": 10285024167,
+  "artifact_digest": "sha256:503e9a10fabb05faee99f7c55b25d9293f5c5fce515a6aa32cb9cf72aec24b27",
+  "runtime": {
+    "image": "rustfs/rustfs:1.0.0-rc.6",
+    "image_id": "sha256:d196c45d9b351948b51b074e3775beb1bb862a1639bc37dbc7e0bdb7b282c1fd",
+    "repo_digest": "rustfs/rustfs@sha256:97171b3d72cd47dc81000f92ea84de25608bfc35a94c965501afaeb5d99f6035"
+  },
+  "contract": {
+    "PutObject": "pass",
+    "HeadObject": "pass",
+    "GetObject": "pass",
+    "RangeGetObject": "pass",
+    "ListObjectsV2": "pass",
+    "DeleteObject": "pass",
+    "concurrent_round_trip": "pass",
+    "concurrency": 8,
+    "primary_bytes": 1048576,
+    "primary_sha256": "9068d60dba4d9e4106563bd7692026832d104e8e79ed4ccaa673f8f699c01050",
+    "etag_observed": "\"9e7f35b7c21a2f98a1a159dbfb387c6d\"",
+    "etag_used_as_canonical_checksum": false
+  },
+  "restart": {
+    "status": "pass",
+    "bytes": 1048576,
+    "sha256_before": "3c94f7ce1ed272455d71da4b52f7ca89ebdd464e97a7c87b58ee93272bb949bc",
+    "sha256_after": "3c94f7ce1ed272455d71da4b52f7ca89ebdd464e97a7c87b58ee93272bb949bc"
+  },
+  "runner_resource_observation": {
+    "classification": "diagnostic_only_not_vps_evidence",
+    "cpu_percent_snapshot": "0.03%",
+    "memory_usage_snapshot": "119.3MiB",
+    "memory_percent_of_runner_snapshot": "0.75%",
+    "pids_snapshot": 26
+  },
+  "credentials_emitted": false,
+  "remaining_gates": [
+    "canonical FileProvider conformance on live backend",
+    "backup and verified restore",
+    "upgrade and rollback/downgrade statement",
+    "TLS/auth deployment evidence",
+    "multi-node partial-failure evidence",
+    "target VPS resource measurements",
+    "release-maturity review",
+    "setup-wizard reconciliation with issue 799"
+  ]
+}
