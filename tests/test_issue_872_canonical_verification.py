@@ -247,7 +247,9 @@ def _review(
 
 
 @pytest.mark.asyncio
-async def test_canonical_verification_reuses_request_and_binds_full_diff_to_output_revision() -> None:
+async def test_canonical_verification_reuses_request_and_binds_full_diff_to_output_revision() -> (
+    None
+):
     coordinator, batch_id, task_id, agent_run, repository, artifacts = _fixture()
     review, runtime, verification, policy = _review(
         coordinator,
