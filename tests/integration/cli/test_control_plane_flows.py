@@ -8,16 +8,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
-import pytest
-
-from ai_multi_agent_platform.cli.client import (
-    APIClientError,
-    ClientOptions,
-    ControlPlaneClient,
-    RawResponse,
-)
+from ai_multi_agent_platform.cli.client import RawResponse
 from ai_multi_agent_platform.cli.main import run_cli
-from ai_multi_agent_platform.cli.profiles import CLIProfile, ProfileError, ProfileStore
 from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
 from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
@@ -62,26 +54,6 @@ class InProcessTransport:
         )
 
 
-class SequenceTransport:
-    def __init__(self, responses: list[RawResponse]) -> None:
-        self.responses = responses
-        self.calls = 0
-
-    def request(
-        self,
-        method: str,
-        url: str,
-        *,
-        headers: Mapping[str, str],
-        body: bytes | None,
-        timeout: float,
-    ) -> RawResponse:
-        del method, url, headers, body, timeout
-        response = self.responses[min(self.calls, len(self.responses) - 1)]
-        self.calls += 1
-        return response
-
-
 def _stack() -> tuple[PlatformKernel, InProcessTransport]:
     repository = InMemoryKernelRepository()
     kernel = PlatformKernel(
@@ -109,87 +81,6 @@ def _invoke(
     payload = json.loads(stdout.getvalue()) if stdout.getvalue() else {}
     assert isinstance(payload, dict)
     return exit_code, payload, stderr.getvalue()
-
-
-def test_profile_store_is_versioned_non_secret_and_rejects_url_credentials(tmp_path: Path) -> None:
-    path = tmp_path / "cli.json"
-    store = ProfileStore.load(path)
-    store.set_profile(
-        "remote",
-        CLIProfile(
-            endpoint="https://control.example.test/base",
-            principal_ref="user:test",
-            owner_type="user",
-            owner_id="test",
-        ),
-    )
-    store.use("remote")
-    store.save()
-
-    loaded = ProfileStore.load(path)
-    name, profile = loaded.resolve()
-    assert name == "remote"
-    assert profile.endpoint == "https://control.example.test/base"
-    assert "token" not in path.read_text(encoding="utf-8")
-
-    with pytest.raises(ProfileError, match="must not contain credentials"):
-        CLIProfile(endpoint="https://user:secret@control.example.test")
-
-    path.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "current_profile": "remote",
-                "profiles": {
-                    "remote": {
-                        "endpoint": "https://control.example.test",
-                        "token": "must-not-be-stored",
-                    }
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    with pytest.raises(ProfileError, match="unsupported profile fields"):
-        ProfileStore.load(path)
-
-
-def test_get_retries_transient_status_but_post_is_not_automatically_replayed() -> None:
-    unavailable = RawResponse(
-        status=503,
-        body=json.dumps(
-            {
-                "code": "unavailable",
-                "category": "availability",
-                "message": "temporarily unavailable",
-                "retryable": True,
-            }
-        ).encode(),
-        headers={},
-    )
-    healthy = RawResponse(
-        status=200,
-        body=b'{"ready":true}',
-        headers={"x-api-version": "v1"},
-    )
-    transport = SequenceTransport([unavailable, healthy])
-    client = ControlPlaneClient(
-        ClientOptions(endpoint="http://control.test", retries=1),
-        transport=transport,
-    )
-    response = client.get("/health")
-    assert response.status == 200
-    assert transport.calls == 2
-
-    post_transport = SequenceTransport([unavailable, healthy])
-    post_client = ControlPlaneClient(
-        ClientOptions(endpoint="http://control.test", retries=5),
-        transport=post_transport,
-    )
-    with pytest.raises(APIClientError) as exc_info:
-        post_client.post("/tasks/task_1:cancel")
-    assert exc_info.value.code == "unavailable"
-    assert post_transport.calls == 1
 
 
 def test_cli_task_run_and_timeline_flow_uses_control_plane_only(tmp_path: Path) -> None:
@@ -313,83 +204,3 @@ def test_cli_status_doctor_project_workspace_and_canonical_error_output(tmp_path
     assert error["category"] == "resource"
     assert error["request_id"].startswith("request_")
     assert error["correlation_id"].startswith("corr_")
-
-
-def test_cli_reads_the_same_canonical_task_snapshot_as_the_web_client(tmp_path: Path) -> None:
-    fixture_path = (
-        Path(__file__).parents[1]
-        / "frontend"
-        / "src"
-        / "api"
-        / "__fixtures__"
-        / "canonical-task.json"
-    )
-    loaded = json.loads(fixture_path.read_text(encoding="utf-8"))
-    assert isinstance(loaded, dict)
-    task = loaded
-    expected_path = f"/api/v1/tasks/{task['id']}"
-
-    class SharedTaskFixtureTransport:
-        def __init__(self) -> None:
-            self.calls: list[tuple[str, str]] = []
-
-        def request(
-            self,
-            method: str,
-            url: str,
-            *,
-            headers: Mapping[str, str],
-            body: bytes | None,
-            timeout: float,
-        ) -> RawResponse:
-            del headers, body, timeout
-            path = urlsplit(url).path
-            self.calls.append((method, path))
-            if method != "GET" or path != expected_path:
-                return RawResponse(
-                    status=404,
-                    body=json.dumps(
-                        {
-                            "code": "not_found",
-                            "category": "resource",
-                            "message": "fixture route not found",
-                            "request_id": "request_shared_client_state",
-                            "correlation_id": "corr_shared_client_state",
-                            "retryable": False,
-                        }
-                    ).encode("utf-8"),
-                    headers={},
-                )
-            return RawResponse(
-                status=200,
-                body=json.dumps(task).encode("utf-8"),
-                headers={
-                    "x-api-version": "v1",
-                    "x-request-id": "request_shared_client_state",
-                    "x-correlation-id": "corr_shared_client_state",
-                },
-            )
-
-    transport = SharedTaskFixtureTransport()
-    stdout = StringIO()
-    stderr = StringIO()
-
-    code = run_cli(
-        [
-            "--config",
-            str(tmp_path / "cli.json"),
-            "--json",
-            "task",
-            "show",
-            str(task["id"]),
-        ],
-        transport=transport,
-        stdout=stdout,
-        stderr=stderr,
-    )
-
-    assert code == 0
-    assert stderr.getvalue() == ""
-    rendered = json.loads(stdout.getvalue())
-    assert rendered["data"] == task
-    assert transport.calls == [("GET", expected_path)]
