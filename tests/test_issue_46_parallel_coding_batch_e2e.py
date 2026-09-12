@@ -617,9 +617,7 @@ async def test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge(
         kernel.finish(run_id)
         await coordination.observe_run(task_id=plan.task_id, run_id=run_id)
 
-    after_workstreams = {
-        step.step_id: step for step in coordination.projection(plan.id).steps
-    }
+    after_workstreams = {step.step_id: step for step in coordination.projection(plan.id).steps}
     assert after_workstreams[integration_step.id].latest_run_id is not None
 
     candidate = coding.build_integration_candidate(
