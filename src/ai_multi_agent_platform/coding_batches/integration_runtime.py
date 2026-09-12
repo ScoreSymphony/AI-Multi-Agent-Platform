@@ -315,7 +315,9 @@ class CanonicalCodingIntegrationDispatcher:
         if candidate.state is IntegrationState.VALIDATING and candidate.integrated_revision:
             return candidate
         if candidate.state is not IntegrationState.INTEGRATING or candidate.execution is None:
-            raise ValueError("integration output reconciliation requires active execution provenance")
+            raise ValueError(
+                "integration output reconciliation requires active execution provenance"
+            )
 
         execution = candidate.execution
         agent_runs = self._agent_runs.list_agent_runs(execution.run_id)
@@ -324,7 +326,9 @@ class CanonicalCodingIntegrationDispatcher:
             raise ValueError("integration execution must resolve one exact canonical AgentRun")
         agent_run = exact[0]
         if agent_run.status is not AgentRunStatus.SUCCEEDED:
-            raise ValueError("integration AgentRun must succeed before repository output is accepted")
+            raise ValueError(
+                "integration AgentRun must succeed before repository output is accepted"
+            )
         if agent_revision_ref(agent_run) != execution.agent_revision:
             raise ValueError("integration Agent revision differs from bound execution provenance")
 
