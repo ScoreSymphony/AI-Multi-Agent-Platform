@@ -505,7 +505,15 @@ async def test_parallel_coding_batch_follows_384_fanout_fanin_and_reaches_author
         assert dispatched.workstream.provenance.agent_run_id == dispatched.agent_run.agent_run_id
 
     assert coding.get(batch.batch_id).workstream("C").state is WorkstreamState.BLOCKED
-    assert len({coding.get(batch.batch_id).workstream(item).provenance.workspace_id for item in ("A", "B")}) == 2
+    assert (
+        len(
+            {
+                coding.get(batch.batch_id).workstream(item).provenance.workspace_id
+                for item in ("A", "B")
+            }
+        )
+        == 2
+    )
 
     _accept(coding, batch.batch_id, "A", REV_A, "src/a.py")
     run_a = initial[step_a.id].latest_run_id
@@ -518,7 +526,9 @@ async def test_parallel_coding_batch_follows_384_fanout_fanin_and_reaches_author
     assert coding.get(batch.batch_id).workstream("C").state is WorkstreamState.READY
 
     slot_c = next(
-        slot for slot in dispatcher.dispatchable_workstreams(batch.batch_id) if slot.workstream_id == "C"
+        slot
+        for slot in dispatcher.dispatchable_workstreams(batch.batch_id)
+        if slot.workstream_id == "C"
     )
     agent_c = new_agent_id()
     data_context, repository_context = _contexts(
@@ -619,7 +629,10 @@ def test_conflicting_valid_workstreams_require_canonical_repair_and_fresh_combin
     ):
         if coding.get(batch.batch_id).workstream(workstream_id).state is WorkstreamState.BLOCKED:
             predecessor = "A"
-            assert coding.get(batch.batch_id).workstream(predecessor).state is WorkstreamState.ACCEPTED
+            assert (
+                coding.get(batch.batch_id).workstream(predecessor).state
+                is WorkstreamState.ACCEPTED
+            )
         coding.materialize_workstream(
             batch.batch_id,
             workstream_id,
