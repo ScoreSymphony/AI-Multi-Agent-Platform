@@ -1,10 +1,12 @@
-# Agent-Sandbox comparison baseline (#798)
+# Agent-Sandbox comparison baseline (#798 -> #829)
 
 Review date: 2026-09-11
 
 This comparison separates **verified source/design facts** from measurements that still require the
-same platform-owned live fixtures. It does not turn any third-party claim into a platform security
-guarantee.
+same platform-owned live fixtures. #798 defines the comparison baseline and source-level evidence;
+#829 owns the real reference-host execution and the final evidence-backed comparison. No
+third-party claim becomes a platform security guarantee merely because it appears in upstream
+documentation.
 
 ## Compared implementations
 
@@ -54,27 +56,27 @@ threat-model and live-fixture validation before we treat them as guarantees.
 
 | Area | Reference Executor | Agent-Sandbox | Containarium | Evidence state |
 |---|---|---|---|---|
-| Arbitrary untrusted shell/code | intentionally not the high-isolation path | advertised/supported by provider | advertised/supported by provider | live comparison pending |
-| Default network posture | no arbitrary provider workload network | upstream Internet access defaults to allowed | upstream describes per-tenant isolation and explicit egress policy | Agent-Sandbox default source-verified; Containarium requires live validation |
-| Kubernetes workload credential exposure | not applicable | default sandbox blueprint does not explicitly disable SA-token automount | upstream states agent box holds SSH key rather than kube-apiserver token | live validation pending |
+| Arbitrary untrusted shell/code | intentionally not the high-isolation path | advertised/supported by provider | advertised/supported by provider | #829 live comparison pending |
+| Default network posture | no arbitrary provider workload network | upstream Internet access defaults to allowed | upstream describes per-tenant isolation and explicit egress policy | Agent-Sandbox source-verified; live enforcement pending #829 |
+| Kubernetes workload credential exposure | not applicable | default sandbox blueprint does not explicitly disable SA-token automount | upstream states agent box holds SSH key rather than kube-apiserver token | #829 live validation pending |
 | Controller/admin blast radius | platform-local | reviewed controller Role has broad namespace-local lifecycle/exec permissions | backend-specific; not audited in #798 yet | partial |
-| Secret delivery | platform-owned | reviewed default EnvVar path is unsafe for secrets because values are serialized into ReplicaSet annotation data | not evaluated in #798 | Agent-Sandbox blocker source-verified |
-| Pod/container hardening | not applicable | default blueprint lacks explicit hardened `securityContext` | backend-specific | pending live/static dedicated review |
-| Runtime-class isolation | not applicable | blueprint can select `runtimeClassName` from metadata | Kubernetes backend exists; exact runtime isolation not evaluated here | pending |
-| Cross-tenant isolation | not applicable | advertised, not yet proven by our fixture | explicitly claimed by upstream, not yet proven by our fixture | pending |
+| Secret delivery | platform-owned | reviewed default EnvVar path is unsafe because values are serialized into ReplicaSet annotation data | not evaluated in #798 | Agent-Sandbox blocker source-verified |
+| Pod/container hardening | not applicable | default blueprint lacks explicit hardened `securityContext` | backend-specific | live profile evidence pending #829 |
+| Runtime-class isolation | not applicable | blueprint can select `runtimeClassName` from metadata | Kubernetes backend exists; exact runtime isolation not evaluated here | pending #829 |
+| Cross-tenant isolation | not applicable | advertised, not proven by our fixture | explicitly claimed by upstream, not proven by our fixture | pending #829 |
 | Image provenance | platform package/runtime controlled | default blueprint uses `IfNotPresent`; protected profile needs immutable policy | not evaluated here | partial |
 
 The important conclusion is not that one external provider is already "more secure". The current
 evidence only proves that their **default assumptions and operational models differ**. A final
 security ranking requires the same malicious-workload, credential, egress and cross-tenant tests on
-representative deployments.
+representative deployments under #829.
 
 ## Workspace and state model
 
 | Area | Reference Executor | Agent-Sandbox | Containarium |
 |---|---|---|---|
 | State intent | deterministic platform Workspace | sandbox container filesystem documented as ephemeral across Pod recreation | upstream intentionally describes persistent per-agent boxes |
-| Pause/resume | no provider concept | advertised; process/filesystem semantics require validation | start/stop/persistent box lifecycle exists at product level |
+| Pause/resume | no provider concept | advertised; process/filesystem semantics require #829 validation | start/stop/persistent box lifecycle exists at product level |
 | Snapshots | no provider concept | provider snapshot support advertised | backend-specific; not evaluated here |
 | Durable canonical Artifact | platform-owned | must be collected back into canonical store | would also need explicit adapter collection |
 | Risk of provider state becoming canonical | low | high if snapshot/session IDs leak into Run semantics | high if persistent box identity becomes Task/Run/Workspace identity |
@@ -86,11 +88,11 @@ must not let a provider box become the canonical Workspace or Agent identity by 
 
 ## Browser/computer-use
 
-Agent-Sandbox advertises browser/computer/desktop workloads. This is relevant to #74 but is not yet
-accepted evidence that it should own the platform Browser domain. The correct integration test is
-whether a sandboxed browser session can be reached through #74-compatible capability ownership,
-return downloads/screenshots through canonical Files/Artifacts and respect the same egress/secret
-policy.
+Agent-Sandbox advertises browser/computer/desktop workloads. This is relevant to #74 but is not
+accepted evidence that it should own the platform Browser domain. The correct live integration test
+under #829 is whether a sandboxed browser session can be reached through #74-compatible capability
+ownership, return downloads/screenshots through canonical Files/Artifacts and respect the same
+egress/secret policy.
 
 Containarium's reviewed README is primarily shell/file/SSH/MCP oriented. #798 does not infer a
 browser/computer-use capability that has not been separately verified.
@@ -104,13 +106,13 @@ browser/computer-use capability that has not been separately verified.
 | Cluster prerequisite | no | Kubernetes >=1.28 | optional depending on backend |
 | Persistent storage complexity | canonical platform storage | external/network storage needed for durable sandbox filesystem | persistent box storage is part of provider model |
 | Warm pools | no provider concept | advertised | not compared yet |
-| Representative VPS measurements | baseline already cheap by design | pending | pending |
+| Representative VPS measurements | baseline already cheap by design | #829 | #829 where applicable |
 
 No performance or density winner is declared from source documentation. Cold start, idle RAM,
 steady CPU, disk growth, cleanup and concurrency must be measured with the same host class and
-workload fixtures.
+workload fixtures under #829 before numerical ranking.
 
-## Current decision implications
+## #798 provisional implications
 
 ### Reference Executor
 
@@ -119,18 +121,19 @@ high-risk untrusted execution.
 
 ### Agent-Sandbox
 
-**Continue evaluation.** The adapter fit is good enough to keep testing, but the reviewed default
-upstream deployment is not acceptable unchanged for a protected profile because of the static
-security findings recorded in `AGENT_SANDBOX_SECURITY_REVIEW.md`.
+**Proceed to #829 live validation as an evaluation-only optional-provider candidate.** The adapter
+fit is good enough to justify real testing, but the reviewed default upstream deployment is not
+acceptable unchanged for a protected profile because of the static security findings recorded in
+`AGENT_SANDBOX_SECURITY_REVIEW.md`.
 
 ### Containarium
 
 Use as a serious comparison candidate rather than a placeholder. Its LXC option may reduce the need
 to make Kubernetes part of a high-isolation deployment and its persistent-box model may suit a
-different workload class. However, #798 has not yet built a canonical Containarium adapter or run
-the same malicious-workload/resource suite, so no superiority claim is justified.
+different workload class. However, #798 has not built a canonical Containarium adapter or run the
+same malicious-workload/resource suite, so no superiority claim is justified.
 
-## Live head-to-head matrix required before #798 closes
+## Live head-to-head matrix owned by #829
 
 Run the same fixture set against every profile that claims the capability:
 
@@ -149,5 +152,6 @@ Run the same fixture set against every profile that claims the capability:
 13. browser/download/evidence path where a provider claims browser support;
 14. persistent/resume semantics where a provider claims durable state.
 
-Until those results exist, the comparison must remain capability- and architecture-level rather
-than a security/performance ranking.
+Until those #829 results exist, the comparison remains capability- and architecture-level rather
+than a security/performance ranking. Their absence does not block completion of the #798 static
+comparison baseline.
