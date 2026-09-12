@@ -2,9 +2,12 @@
 
 The fixture answers the first A query for one configured hostname with a
 synthetic public address and subsequent A queries with a blocked loopback
-address. A small HTTP control surface exposes query counts and answers so the
-Bifrost integration lane can prove that every new dial revalidates DNS and
-that a rebound private answer is rejected before connection.
+address. All non-target DNS traffic is forwarded to an upstream resolver so
+putting Bifrost behind the controlled resolver does not break unrelated name
+resolution during startup. A small HTTP control surface exposes query counts,
+answers, and forwarding diagnostics so the Bifrost integration lane can prove
+that every new dial revalidates DNS and that a rebound private answer is
+rejected before connection.
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import json
+import socket
 import socketserver
 import struct
 import threading
@@ -21,12 +25,24 @@ from typing import ClassVar
 
 
 class _DNSState:
-    def __init__(self, *, hostname: str, first_ip: str, rebound_ip: str) -> None:
+    def __init__(
+        self,
+        *,
+        hostname: str,
+        first_ip: str,
+        rebound_ip: str,
+        upstream_host: str,
+        upstream_port: int,
+    ) -> None:
         self.hostname = hostname.rstrip(".").casefold()
         self.first_ip = first_ip
         self.rebound_ip = rebound_ip
+        self.upstream_host = upstream_host
+        self.upstream_port = upstream_port
         self._a_queries = 0
         self._aaaa_queries = 0
+        self._forwarded_queries = 0
+        self._forward_failures = 0
         self._answers: list[str] = []
         self._lock = threading.Lock()
 
@@ -41,10 +57,18 @@ class _DNSState:
         with self._lock:
             self._aaaa_queries += 1
 
+    def record_forward(self, *, success: bool) -> None:
+        with self._lock:
+            self._forwarded_queries += 1
+            if not success:
+                self._forward_failures += 1
+
     def reset(self) -> None:
         with self._lock:
             self._a_queries = 0
             self._aaaa_queries = 0
+            self._forwarded_queries = 0
+            self._forward_failures = 0
             self._answers.clear()
 
     def snapshot(self) -> dict[str, object]:
@@ -56,6 +80,8 @@ class _DNSState:
                 "a_queries": self._a_queries,
                 "aaaa_queries": self._aaaa_queries,
                 "a_answers": list(self._answers),
+                "forwarded_queries": self._forwarded_queries,
+                "forward_failures": self._forward_failures,
             }
 
 
@@ -83,27 +109,49 @@ def _decode_question(packet: bytes) -> tuple[str, int, int, int]:
     return ".".join(labels).casefold(), qtype, qclass, offset + 4
 
 
-def _dns_response(packet: bytes, state: _DNSState) -> bytes:
+def _target_dns_response(
+    packet: bytes,
+    state: _DNSState,
+) -> bytes | None:
+    """Return a controlled answer for the rebinding host, otherwise ``None``."""
+
     transaction_id = packet[:2]
     try:
         hostname, qtype, qclass, question_end = _decode_question(packet)
     except (UnicodeDecodeError, ValueError):
         return transaction_id + struct.pack("!HHHHH", 0x8181, 0, 0, 0, 0)
 
+    if hostname != state.hostname or qclass != 1:
+        return None
+
     question = packet[12:question_end]
-    is_target = hostname == state.hostname and qclass == 1
     answer = b""
     answer_count = 0
 
-    if is_target and qtype == 1:
+    if qtype == 1:
         ip = ipaddress.IPv4Address(state.answer_a()).packed
         answer = b"\xc0\x0c" + struct.pack("!HHIH", 1, 1, 0, len(ip)) + ip
         answer_count = 1
-    elif is_target and qtype == 28:
+    elif qtype == 28:
         state.record_aaaa()
 
     header = transaction_id + struct.pack("!HHHHH", 0x8180, 1, answer_count, 0, 0)
     return header + question + answer
+
+
+def _forward_dns_query(packet: bytes, state: _DNSState) -> bytes:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as upstream:
+            upstream.settimeout(2.0)
+            upstream.sendto(packet, (state.upstream_host, state.upstream_port))
+            response, _ = upstream.recvfrom(65535)
+    except OSError:
+        state.record_forward(success=False)
+        transaction_id = packet[:2]
+        return transaction_id + struct.pack("!HHHHH", 0x8182, 0, 0, 0, 0)
+
+    state.record_forward(success=True)
+    return response
 
 
 class _DNSHandler(socketserver.BaseRequestHandler):
@@ -111,11 +159,14 @@ class _DNSHandler(socketserver.BaseRequestHandler):
 
     def handle(self) -> None:
         packet, sock = self.request
-        sock.sendto(_dns_response(packet, self.state), self.client_address)
+        response = _target_dns_response(packet, self.state)
+        if response is None:
+            response = _forward_dns_query(packet, self.state)
+        sock.sendto(response, self.client_address)
 
 
 class _ControlHandler(BaseHTTPRequestHandler):
-    server_version = "Issue859RebindingDNS/1.0"
+    server_version = "Issue859RebindingDNS/1.1"
     state: ClassVar[_DNSState]
 
     def do_GET(self) -> None:  # noqa: N802
@@ -156,12 +207,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--hostname", default="issue859-rebind.test")
     parser.add_argument("--first-ip", default="203.0.113.10")
     parser.add_argument("--rebound-ip", default="127.0.0.1")
+    parser.add_argument(
+        "--upstream-dns-host",
+        default="127.0.0.11",
+        help="resolver used for DNS names other than the controlled rebinding host",
+    )
+    parser.add_argument("--upstream-dns-port", type=int, default=53)
     args = parser.parse_args(argv)
 
     state = _DNSState(
         hostname=args.hostname,
         first_ip=str(ipaddress.IPv4Address(args.first_ip)),
         rebound_ip=str(ipaddress.IPv4Address(args.rebound_ip)),
+        upstream_host=args.upstream_dns_host,
+        upstream_port=args.upstream_dns_port,
     )
     _DNSHandler.state = state
     _ControlHandler.state = state
