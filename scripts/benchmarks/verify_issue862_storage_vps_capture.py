@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Verify an issue #862 target-VPS evidence bundle before classification.
+"""Verify the #862 storage reference-host evidence bundle consumed by #829.
 
 The capture harness records image tags and repository digests. This verifier binds
 those measurements to the exact container artifacts already exercised by the
-authoritative CI campaign, validates the generated summaries, and checks the
+authoritative #862 CI campaign, validates the generated summaries, and checks the
 bundle checksums. A matching tag without the expected repository digest is not
-accepted as equivalent runtime evidence.
+accepted as equivalent reference-host evidence.
 """
 
 from __future__ import annotations
@@ -202,6 +202,7 @@ def verify_capture(capture_dir: Path, repo_root: Path) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "issue": 862,
+        "reference_host_followup_issue": 829,
         "status": "pass",
         "capture_dir": str(root),
         "platform_commit": summary["platform_commit"],
@@ -210,8 +211,8 @@ def verify_capture(capture_dir: Path, repo_root: Path) -> dict[str, Any]:
         "sha256_manifest_entries_verified": manifest_entries_verified,
         "archive_sha256": archive_sha256,
         "classification_gate": (
-            "runtime identity and evidence integrity verified; review measured VPS "
-            "suitability before final classification"
+            "runtime identity and evidence integrity verified for #829 reference-host "
+            "review; this evidence does not gate the final #862 classification"
         ),
     }
 
