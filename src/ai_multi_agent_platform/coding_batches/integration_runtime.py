@@ -32,7 +32,7 @@ from .models import (
     IntegrationExecutionProvenance,
     IntegrationState,
 )
-from .runtime import CodingAgentRuntime, AgentRunReader, agent_revision_ref
+from .runtime import AgentRunReader, CodingAgentRuntime, agent_revision_ref
 from .secured import CodingBatchCoordinator
 from .telemetry import CodingBatchTelemetry
 
@@ -47,6 +47,21 @@ class IntegrationRepositoryEvidenceReader(Protocol):
     """Read exact #82 Run provenance after integration execution completes."""
 
     def get(self, run_id: str, repository_id: str) -> RepositoryRunProvenance | None: ...
+
+
+class IntegrationMaterializer(Protocol):
+    """Narrow #37/#82 isolation boundary used by clean integration execution."""
+
+    async def ensure_materialized(
+        self,
+        batch: CodingBatch,
+        candidate: IntegrationCandidate,
+        *,
+        project_id: str,
+        owner_ref: OwnerRef,
+        data_context: DataAccessContext,
+        repository_context: RepositoryCallContext,
+    ) -> tuple[str, str, str]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,12 +101,104 @@ def deterministic_integration_branch_ref(batch_id: str, integration_id: str) -> 
     return f"coding/integration-{value.hex[:16]}"
 
 
+class CanonicalIntegrationMaterializer:
+    """Materialize a clean integration attempt through canonical #37/#82 authorities."""
+
+    def __init__(
+        self,
+        workspaces: WorkspaceProvider,
+        repositories: RepositoryService,
+    ) -> None:
+        self._workspaces = workspaces
+        self._repositories = repositories
+
+    async def ensure_materialized(
+        self,
+        batch: CodingBatch,
+        candidate: IntegrationCandidate,
+        *,
+        project_id: str,
+        owner_ref: OwnerRef,
+        data_context: DataAccessContext,
+        repository_context: RepositoryCallContext,
+    ) -> tuple[str, str, str]:
+        workspace_id = deterministic_integration_workspace_id(
+            batch.batch_id,
+            candidate.integration_id,
+        )
+        branch_ref = deterministic_integration_branch_ref(
+            batch.batch_id,
+            candidate.integration_id,
+        )
+        existing = {
+            workspace.id: workspace
+            for workspace in await self._workspaces.list_workspaces(project_id=project_id)
+        }
+        workspace = existing.get(workspace_id)
+        if workspace is None:
+            workspace = await self._workspaces.create_workspace(
+                project_id=project_id,
+                owner_ref=owner_ref,
+                workspace_type=WorkspaceType.ISOLATED_RUN,
+                context=data_context,
+                access_mode=WorkspaceAccessMode.READ_WRITE,
+                retention=WorkspaceRetention.EPHEMERAL,
+                source_refs=(
+                    WorkspaceSourceRef(
+                        kind=WorkspaceSourceKind.REPOSITORY,
+                        ref=batch.repository_id,
+                        revision=candidate.target_base_revision,
+                        metadata={
+                            "coding_batch_id": batch.batch_id,
+                            "integration_id": candidate.integration_id,
+                        },
+                    ),
+                ),
+                workspace_id=workspace_id,
+            )
+        source_matches = any(
+            source.kind is WorkspaceSourceKind.REPOSITORY
+            and source.ref == batch.repository_id
+            and source.revision == candidate.target_base_revision
+            for source in workspace.source_refs
+        )
+        if not source_matches:
+            raise ValueError("recovered integration Workspace has another repository/base revision")
+
+        if workspace.base_snapshot_id is not None:
+            snapshot = await self._workspaces.get_snapshot(workspace.base_snapshot_id)
+        else:
+            snapshot = await self._workspaces.create_snapshot(workspace.id)
+
+        branches = await self._repositories.branches(batch.repository_id, repository_context)
+        if branch_ref not in branches:
+            created = await self._repositories.create_branch(
+                batch.repository_id,
+                branch_ref,
+                repository_context,
+                start_revision=candidate.target_base_revision,
+                checkout=False,
+            )
+            if created.commit_sha != candidate.target_base_revision:
+                raise ValueError("#82 created integration branch from another target revision")
+        else:
+            commits = await self._repositories.commits(
+                batch.repository_id,
+                repository_context,
+                revision=branch_ref,
+                limit=1,
+            )
+            if not commits or commits[0].revision != candidate.target_base_revision:
+                raise ValueError("existing integration branch no longer points at expected base")
+        return workspace.id, snapshot.id, branch_ref
+
+
 class CanonicalCodingIntegrationDispatcher:
     """Run clean integration as ordinary canonical Agent work, never as a naked SHA mutation.
 
     The accepted workstream revisions are passed as immutable integration inputs. #384 owns the
-    active Step attempt, #33 owns the AgentRun, #37 owns the isolated Workspace/Snapshot and #82
-    owns repository refs plus the eventual output revision/provenance. #872 stores only the links.
+    active Step attempt, #33 owns the AgentRun, #37/#82 materialize the isolated integration view,
+    and #82 owns the eventual output revision/provenance. #872 stores only the returned links.
     """
 
     def __init__(
@@ -101,8 +208,7 @@ class CanonicalCodingIntegrationDispatcher:
         plan_coordination: IntegrationPlanCoordinationReader,
         agent_runtime: CodingAgentRuntime,
         agent_runs: AgentRunReader,
-        workspaces: WorkspaceProvider,
-        repositories: RepositoryService,
+        materializer: IntegrationMaterializer,
         repository_provenance: IntegrationRepositoryEvidenceReader,
         telemetry: CodingBatchTelemetry | None = None,
     ) -> None:
@@ -110,8 +216,7 @@ class CanonicalCodingIntegrationDispatcher:
         self._plan_coordination = plan_coordination
         self._agent_runtime = agent_runtime
         self._agent_runs = agent_runs
-        self._workspaces = workspaces
-        self._repositories = repositories
+        self._materializer = materializer
         self._repository_provenance = repository_provenance
         self._telemetry = telemetry
 
@@ -165,7 +270,7 @@ class CanonicalCodingIntegrationDispatcher:
                 candidate=candidate,
             )
 
-        workspace_id, snapshot_id, branch_ref = await self._ensure_materialized(
+        workspace_id, snapshot_id, branch_ref = await self._materializer.ensure_materialized(
             batch,
             candidate,
             project_id=project_id,
@@ -320,86 +425,6 @@ class CanonicalCodingIntegrationDispatcher:
         )
         return record
 
-    async def _ensure_materialized(
-        self,
-        batch: CodingBatch,
-        candidate: IntegrationCandidate,
-        *,
-        project_id: str,
-        owner_ref: OwnerRef,
-        data_context: DataAccessContext,
-        repository_context: RepositoryCallContext,
-    ) -> tuple[str, str, str]:
-        workspace_id = deterministic_integration_workspace_id(
-            batch.batch_id,
-            candidate.integration_id,
-        )
-        branch_ref = deterministic_integration_branch_ref(
-            batch.batch_id,
-            candidate.integration_id,
-        )
-        existing = {
-            workspace.id: workspace
-            for workspace in await self._workspaces.list_workspaces(project_id=project_id)
-        }
-        workspace = existing.get(workspace_id)
-        if workspace is None:
-            workspace = await self._workspaces.create_workspace(
-                project_id=project_id,
-                owner_ref=owner_ref,
-                workspace_type=WorkspaceType.ISOLATED_RUN,
-                context=data_context,
-                access_mode=WorkspaceAccessMode.READ_WRITE,
-                retention=WorkspaceRetention.EPHEMERAL,
-                source_refs=(
-                    WorkspaceSourceRef(
-                        kind=WorkspaceSourceKind.REPOSITORY,
-                        ref=batch.repository_id,
-                        revision=candidate.target_base_revision,
-                        metadata={
-                            "coding_batch_id": batch.batch_id,
-                            "integration_id": candidate.integration_id,
-                        },
-                    ),
-                ),
-                workspace_id=workspace_id,
-            )
-        source_matches = any(
-            source.kind is WorkspaceSourceKind.REPOSITORY
-            and source.ref == batch.repository_id
-            and source.revision == candidate.target_base_revision
-            for source in workspace.source_refs
-        )
-        if not source_matches:
-            raise ValueError("recovered integration Workspace has another repository/base revision")
-
-        if workspace.base_snapshot_id is not None:
-            snapshot = await self._workspaces.get_snapshot(workspace.base_snapshot_id)
-        else:
-            snapshot = await self._workspaces.create_snapshot(workspace.id)
-
-        branches = await self._repositories.branches(batch.repository_id, repository_context)
-        if branch_ref not in branches:
-            created = await self._repositories.create_branch(
-                batch.repository_id,
-                branch_ref,
-                repository_context,
-                start_revision=candidate.target_base_revision,
-                checkout=False,
-            )
-            if created.commit_sha != candidate.target_base_revision:
-                raise ValueError("#82 created integration branch from another target revision")
-        else:
-            commits = await self._repositories.commits(
-                batch.repository_id,
-                repository_context,
-                revision=branch_ref,
-                limit=1,
-            )
-            if not commits or commits[0].revision != candidate.target_base_revision:
-                raise ValueError("existing integration branch no longer points at expected base")
-        return workspace.id, snapshot.id, branch_ref
-
     @staticmethod
     def _verification_context(
         batch: CodingBatch,
@@ -472,8 +497,10 @@ class CanonicalCodingIntegrationDispatcher:
 
 __all__ = [
     "CanonicalCodingIntegrationDispatcher",
+    "CanonicalIntegrationMaterializer",
     "CodingIntegrationDispatch",
     "IntegrationDispatchSlot",
+    "IntegrationMaterializer",
     "IntegrationPlanCoordinationReader",
     "IntegrationRepositoryEvidenceReader",
     "deterministic_integration_branch_ref",
