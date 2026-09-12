@@ -42,6 +42,13 @@ CAMPAIGN = {
         "chat-completion-streaming",
         "stream-cancellation",
     ],
+    "performance_scenarios": [
+        {
+            "scenario_id": "fixed-corpus-concurrency-1",
+            "concurrency": 1,
+            "request_rate": None,
+        }
+    ],
     "failure_cases": [
         "endpoint-unavailable-before-dispatch",
         "process-restart-readiness-recovery",
@@ -169,6 +176,33 @@ def test_report_validator_accepts_schema_complete_measured_report() -> None:
     validate_inference_backend_evaluation_report(_report("sglang"))
 
 
+@pytest.mark.parametrize("metric", [float("nan"), float("inf"), float("-inf")])
+def test_report_validator_rejects_non_finite_metrics(metric: float) -> None:
+    report = _report("sglang")
+    report["metrics"]["ttft_p95_ms"] = metric
+
+    with pytest.raises(ValueError, match="non-finite numeric evidence"):
+        validate_inference_backend_evaluation_report(report)
+
+
+@pytest.mark.parametrize("status", ["pass", "fail"])
+def test_report_validator_requires_evidence_refs_for_measured_cases(status: str) -> None:
+    report = _report("sglang")
+    report["contract_results"][0]["status"] = status
+    report["contract_results"][0]["evidence_refs"] = []
+
+    with pytest.raises(ValueError, match="contract_results"):
+        validate_inference_backend_evaluation_report(report)
+
+
+def test_report_validator_allows_empty_evidence_refs_for_not_measured_case() -> None:
+    report = _report("sglang")
+    report["contract_results"][0]["status"] = "not_measured"
+    report["contract_results"][0]["evidence_refs"] = []
+
+    validate_inference_backend_evaluation_report(report)
+
+
 def test_readiness_requires_contract_failure_and_comparable_vllm_pair() -> None:
     readiness = assess_inference_backend_evaluation(
         campaign=CAMPAIGN,
@@ -240,19 +274,26 @@ def test_readiness_rejects_backend_not_declared_by_campaign() -> None:
         )
 
 
-def test_readiness_rejects_superficially_comparable_pair_with_different_workload() -> None:
-    sglang = _report("sglang")
+def test_readiness_rejects_report_with_undeclared_performance_scenario() -> None:
     vllm = _report("vllm")
-    vllm["workload"]["scenario_id"] = "different-request-corpus"
+    vllm["workload"]["scenario_id"] = "typo-or-undeclared-scenario"
 
-    readiness = assess_inference_backend_evaluation(
-        campaign=CAMPAIGN,
-        reports=[sglang, vllm],
-    )
+    with pytest.raises(ValueError, match="scenario_id .* is not declared by this campaign"):
+        assess_inference_backend_evaluation(
+            campaign=CAMPAIGN,
+            reports=[_report("sglang"), vllm],
+        )
 
-    assert readiness.ready_for_decision is False
-    assert readiness.comparable_sglang_vllm_pairs == 0
-    assert "no comparable decision-eligible sglang-vLLM performance pair" in readiness.blockers
+
+def test_readiness_rejects_report_with_mismatched_declared_scenario_parameters() -> None:
+    vllm = _report("vllm")
+    vllm["workload"]["concurrency"] = 4
+
+    with pytest.raises(ValueError, match="does not match campaign concurrency/request_rate"):
+        assess_inference_backend_evaluation(
+            campaign=CAMPAIGN,
+            reports=[_report("sglang"), vllm],
+        )
 
 
 def test_readiness_rejects_pair_with_different_driver_environment() -> None:
@@ -338,6 +379,30 @@ def test_cli_writes_machine_readable_ready_result(tmp_path: Path) -> None:
     assert exit_code == 0
     assert result["ready_for_decision"] is True
     assert result["comparable_sglang_vllm_pairs"] == 1
+
+
+def test_cli_rejects_non_finite_json_constants(tmp_path: Path) -> None:
+    campaign_path = tmp_path / "campaign.json"
+    report_path = tmp_path / "sglang.json"
+    output_path = tmp_path / "readiness.json"
+    _write_json(campaign_path, CAMPAIGN)
+    report = _report("sglang")
+    report["metrics"]["ttft_p95_ms"] = float("nan")
+    _write_json(report_path, report)
+
+    exit_code = cli_main(
+        [
+            "--campaign",
+            str(campaign_path),
+            "--report",
+            str(report_path),
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert exit_code == 2
+    assert not output_path.exists()
 
 
 def test_cli_require_ready_returns_three_for_incomplete_evidence(tmp_path: Path) -> None:
