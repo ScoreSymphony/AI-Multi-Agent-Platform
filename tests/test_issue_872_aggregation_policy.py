@@ -137,3 +137,22 @@ def test_dependency_closed_rejects_manual_selection_without_accepted_predecessor
         workstream_ids=("a", "b"),
     )
     assert candidate.ordered_workstream_ids == ("a", "b")
+
+
+def test_manual_selection_keeps_explicit_accepted_subset() -> None:
+    coordinator, batch_id = _batch(
+        BatchAggregationPolicy.MANUAL_SELECTION,
+        _item("a"),
+        _item("b"),
+    )
+    _accept(coordinator, batch_id, "a", "1" * 40)
+    _accept(coordinator, batch_id, "b", "2" * 40)
+
+    candidate = coordinator.build_integration_candidate(
+        batch_id,
+        current_target_revision=BASE,
+        workstream_ids=("b",),
+    )
+
+    assert candidate.ordered_workstream_ids == ("b",)
+    assert candidate.ordered_revisions == ("2" * 40,)
