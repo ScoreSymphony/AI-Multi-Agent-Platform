@@ -3,8 +3,10 @@
 from .authorization import AuthorizedCodingBatchIntegration, CodingBatchAuthorizationContext
 from .integration_runtime import (
     CanonicalCodingIntegrationDispatcher,
+    CanonicalIntegrationMaterializer,
     CodingIntegrationDispatch,
     IntegrationDispatchSlot,
+    IntegrationMaterializer,
     deterministic_integration_branch_ref,
     deterministic_integration_workspace_id,
 )
@@ -58,6 +60,7 @@ __all__ = [
     "CanonicalCodingVerificationCoordinator",
     "CanonicalCodingWorkstreamDispatcher",
     "CanonicalCombinedValidationCoordinator",
+    "CanonicalIntegrationMaterializer",
     "CanonicalRepairVerificationCoordinator",
     "CanonicalRepositoryOutputVerifier",
     "CanonicalWorkstreamMaterializer",
@@ -81,6 +84,7 @@ __all__ = [
     "IntegrationConflict",
     "IntegrationDispatchSlot",
     "IntegrationExecutionProvenance",
+    "IntegrationMaterializer",
     "IntegrationRepairAttempt",
     "IntegrationState",
     "OverlapDecision",
