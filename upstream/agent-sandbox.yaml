@@ -1,0 +1,45 @@
+name: "Agent-Sandbox"
+purpose: "Optional high-isolation Executor/Sandbox candidate for untrusted agent workloads behind platform-owned execution and Worker boundaries."
+status: candidate
+integration_categories:
+  - "external self-hosted service"
+  - "executor adapter"
+  - "sandbox runtime"
+canonical_upstream: "https://github.com/agent-sandbox/agent-sandbox"
+pinned_revision: "d1b7ac007debcb1ba8de91c76afb49bee90d096a"
+verified_license: "Apache-2.0 at the reviewed revision."
+license_verification_date: "2026-09-11"
+last_review_date: "2026-09-12"
+platform_adapter_or_boundary: "Optional AgentSandboxExecutor behind canonical #7 Executor and #14 Worker/Node boundaries; Task/Run/Workspace/File/Artifact/Browser identities remain platform-owned."
+local_source_path: "src/ai_multi_agent_platform/adapters/agent_sandbox.py"
+source_origin_path: "No Agent-Sandbox source is copied; the platform proof-of-concept contains only adapter-owned contracts and test doubles."
+modified_locally: false
+modification_summary: "Platform-owned adapter proof-of-concept only; no upstream source modifications."
+required_notices:
+  - "Retain upstream Apache-2.0 notices for any future redistributed source or artifact as applicable."
+compatibility_constraints:
+  - "Kubernetes remains optional and is not a baseline platform dependency."
+  - "Reviewed upstream documentation requires Kubernetes 1.28 or newer."
+  - "Provider-native sandbox/session/template/snapshot identifiers remain namespaced adapter metadata."
+  - "Browser/computer-use support must integrate through canonical #74 capability ownership rather than a parallel privileged API."
+  - "Snapshot/pause/resume must not become canonical Run identity or recovery authority."
+security_constraints:
+  - "Reviewed upstream networking documentation states that sandboxes have full Internet access by default; a platform integration must project explicit canonical egress policy and fail closed for protected workloads."
+  - "The evaluation adapter therefore defaults provider Internet access to false until a canonical policy projection is supplied."
+  - "Authorization #15, secret handling #34, Workspace #37 and security policy #43 remain authoritative."
+  - "Do not assume Kubernetes alone provides a strong isolation boundary; runtime class, pod security, service-account, filesystem and network controls require live validation."
+  - "Provider credentials and service-account tokens must not become canonical execution state."
+  - "Do not project platform secrets through the reviewed upstream EnvVars path: Sandbox EnvVars are serialized into ReplicaSet sandbox-data annotation material at the pinned revision."
+  - "Do not treat provider authentication as tenant object authorization; every relevant ID-addressed operation requires ownership evidence or a stronger isolation topology."
+deployment_constraints:
+  - "Agent-Sandbox remains optional and baseline/local platform operation must not depend on it."
+  - "A real evaluation requires a representative Kubernetes test environment rather than only the adapter test double."
+  - "The current proof-of-concept does not install Kubernetes, Agent-Sandbox or E2B dependencies."
+resource_constraints:
+  - "Cold-start, warm-pool allocation, idle overhead, browser workload cost, concurrency density and snapshot growth are unmeasured until the live evaluation fixture runs."
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Pin every evaluated revision; re-check license, Kubernetes requirements, isolation/runtime controls, networking defaults, credential behavior, persistence/snapshot semantics and API compatibility, then rerun adapter, security and resource evidence before promotion."
+exit_replacement_strategy: "Disable/remove the optional adapter and external runtime. Canonical Task/Run/Workspace/File/Artifact identities and the reference Executor require no migration because Agent-Sandbox owns none of them."
+adr: ""
+notes: "Candidate only. Issue #798 must end with adopt, optional_provider_only, or reject/defer after live isolation, egress, credential, lifecycle and resource evidence. Evaluation: docs/upstream/AGENT_SANDBOX_EVALUATION.md; threat model: docs/upstream/AGENT_SANDBOX_THREAT_MODEL.md; live campaign: docs/upstream/AGENT_SANDBOX_LIVE_EVIDENCE.md"

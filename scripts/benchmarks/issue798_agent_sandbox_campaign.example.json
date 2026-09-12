@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "environment": {
+    "capture_date": null,
+    "host_class": null,
+    "vcpu": null,
+    "memory_gib": null,
+    "disk_gib": null,
+    "linux_distribution": null,
+    "kernel": null,
+    "kubernetes_distribution": null,
+    "kubernetes_version": null,
+    "container_runtime": null,
+    "runtime_class": null,
+    "agent_sandbox_revision": null,
+    "agent_sandbox_image_digest": null,
+    "sandbox_image_digest": null,
+    "platform_commit": null,
+    "cni": null,
+    "profile_kind": null,
+    "profile_revision": null
+  },
+  "scenarios": {
+    "benign_shell_artifact_roundtrip": {"status": "not_run", "evidence": []},
+    "cpu_runaway": {"status": "not_run", "evidence": []},
+    "memory_runaway_oom": {"status": "not_run", "evidence": []},
+    "timeout_cancel_cleanup": {"status": "not_run", "evidence": []},
+    "workspace_escape": {"status": "not_run", "evidence": []},
+    "egress_bypass_matrix": {"status": "not_run", "evidence": []},
+    "internal_service_isolation": {"status": "not_run", "evidence": []},
+    "scoped_credential_delivery": {"status": "not_run", "evidence": []},
+    "provider_object_ownership_all_operations": {"status": "not_run", "evidence": []},
+    "browser_artifact_roundtrip": {"status": "not_run", "evidence": []},
+    "pause_resume_process_state": {"status": "not_run", "evidence": []},
+    "snapshot_restore_compatibility": {"status": "not_run", "evidence": []},
+    "crash_restart_cleanup": {"status": "not_run", "evidence": []},
+    "cold_warm_start_repetitions": {"status": "not_run", "evidence": []},
+    "idle_resource_footprint": {"status": "not_run", "evidence": []},
+    "concurrent_density": {"status": "not_run", "evidence": []},
+    "multi_sandbox_concurrency_cleanup": {"status": "not_run", "evidence": []},
+    "malicious_repository_fixture": {"status": "not_run", "evidence": []}
+  }
+}
