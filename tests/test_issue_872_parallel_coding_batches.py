@@ -101,8 +101,7 @@ def test_three_proven_independent_items_are_parallel_ready() -> None:
 
     assert tuple(item.id for item in ready) == ("a", "b", "c")
     assert all(
-        decision.kind is OverlapKind.INDEPENDENT
-        for decision in coordinator.get(batch_id).overlaps
+        decision.kind is OverlapKind.INDEPENDENT for decision in coordinator.get(batch_id).overlaps
     )
 
 
@@ -230,9 +229,7 @@ def test_individual_passes_require_fresh_combined_validation_and_authorization()
             subject_revision="3" * 40,
             verification_id="verification-combined-1",
             tests_passed=True,
-            required_checks=(
-                RequiredCheck("test", "2" * 40, CheckState.PASS),
-            ),
+            required_checks=(RequiredCheck("test", "2" * 40, CheckState.PASS),),
         ),
     )
     assert blocked.state is IntegrationState.BLOCKED
