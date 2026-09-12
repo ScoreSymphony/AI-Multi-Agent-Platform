@@ -42,8 +42,9 @@ def test_runtime_digest_reference_is_complete_and_blocks_tag_only_equivalence() 
     assert set(reference["backends"]) == {"rustfs", "garage", "seaweedfs"}
     assert reference["policy"] == {
         "vps_capture_must_record_repo_digest": True,
-        "digest_mismatch_blocks_final_classification": True,
+        "digest_mismatch_blocks_reference_host_claim": True,
         "tag_match_without_digest_match_is_insufficient": True,
+        "reference_host_followup_issue": 829,
     }
 
     for backend in reference["backends"].values():
