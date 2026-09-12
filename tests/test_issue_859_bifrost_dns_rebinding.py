@@ -57,9 +57,7 @@ def test_live_bifrost_revalidates_dns_on_new_dial_and_blocks_rebound_loopback() 
         file_url=rebinding_url,
     )
     assert 400 <= second_status < 600, second_body[:500]
-    assert "blocked connection to non-public address" in second_body.casefold(), (
-        second_body[:500]
-    )
+    assert "blocked connection to non-public address" in second_body.casefold(), second_body[:500]
 
     second_dns = _get_json(f"{dns_control_url.rstrip('/')}/stats")
     assert second_dns.get("a_queries") == 2, second_dns
