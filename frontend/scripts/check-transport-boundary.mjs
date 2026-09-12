@@ -9,9 +9,7 @@ const apiDirectory = fileURLToPath(new URL("../src/api/", import.meta.url));
 const legacyDomainTransportModules = new Set([
   "conversationResponses.ts",
   "conversations.ts",
-  "learning.ts",
   "memoryKnowledge.ts",
-  "organizations.ts",
   "repositories.ts",
   "templates.ts",
 ]);
