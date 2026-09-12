@@ -180,9 +180,10 @@ class _Handler(BaseHTTPRequestHandler):
                 },
             },
         )
-        body = "".join(
-            f"data: {json.dumps(chunk, separators=(',', ':'))}\n\n" for chunk in chunks
-        ) + "data: [DONE]\n\n"
+        body = (
+            "".join(f"data: {json.dumps(chunk, separators=(',', ':'))}\n\n" for chunk in chunks)
+            + "data: [DONE]\n\n"
+        )
         encoded = body.encode("utf-8")
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/event-stream")
