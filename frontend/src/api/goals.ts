@@ -1,5 +1,6 @@
-import { ControlPlaneError } from "./client";
-import type { APIErrorBody, JsonValue, ListQuery, Page } from "./types";
+import { ApiTransport } from "./transport";
+import type { ApiRequestOptions, ApiTransportOptions } from "./transport";
+import type { JsonValue, ListQuery, Page } from "./types";
 
 export type GoalStatus =
   | "draft"
@@ -186,18 +187,17 @@ export interface ReviewGoalInput {
   next_review_at?: string;
 }
 
-export interface GoalClientOptions {
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
+export interface GoalClientOptions extends ApiTransportOptions {
+  transport?: ApiTransport;
 }
 
 export class GoalClient {
   readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly transport: ApiTransport;
 
   constructor(options: GoalClientOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? "").replace(/\/$/, "");
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.transport = options.transport ?? new ApiTransport(options);
+    this.baseUrl = this.transport.baseUrl;
   }
 
   list(query: ListQuery = {}): Promise<Page<CanonicalGoal>> {
@@ -259,29 +259,8 @@ export class GoalClient {
     });
   }
 
-  private async request<T>(
-    path: string,
-    options: { method?: string; body?: unknown; idempotencyKey?: string } = {},
-  ): Promise<T> {
-    const headers = new Headers({
-      Accept: "application/json",
-      "X-Correlation-ID": crypto.randomUUID(),
-    });
-    if (options.body !== undefined) headers.set("Content-Type", "application/json");
-    if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
-
-    const response = await this.fetchImpl(`${this.baseUrl}/api/v1${path}`, {
-      method: options.method ?? "GET",
-      headers,
-      credentials: "include",
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
-    const text = await response.text();
-    const payload: unknown = text ? safeJson(text) : null;
-    if (!response.ok) {
-      throw new ControlPlaneError(response.status, normalizeError(response, payload));
-    }
-    return payload as T;
+  private request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+    return this.transport.request<T>(path, options);
   }
 }
 
@@ -298,38 +277,4 @@ function toQuery(query: ListQuery): string {
   if (query.fields?.length) params.set("fields", query.fields.join(","));
   const text = params.toString();
   return text ? `?${text}` : "";
-}
-
-function safeJson(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeError(response: Response, payload: unknown): APIErrorBody {
-  if (isErrorBody(payload)) return payload;
-  const requestId = response.headers.get("x-request-id") ?? "unknown";
-  return {
-    code: "invalid_response",
-    category: "contract",
-    message: `Control Plane returned HTTP ${response.status} without a canonical error envelope`,
-    request_id: requestId,
-    correlation_id: response.headers.get("x-correlation-id") ?? requestId,
-    retryable: false,
-  };
-}
-
-function isErrorBody(value: unknown): value is APIErrorBody {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Partial<APIErrorBody>;
-  return (
-    typeof candidate.code === "string"
-    && typeof candidate.category === "string"
-    && typeof candidate.message === "string"
-    && typeof candidate.request_id === "string"
-    && typeof candidate.correlation_id === "string"
-    && typeof candidate.retryable === "boolean"
-  );
 }

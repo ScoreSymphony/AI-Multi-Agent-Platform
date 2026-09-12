@@ -84,7 +84,7 @@ A health transport failure marks the Forge executor unhealthy rather than breaki
 
 ## Contract coverage
 
-`tests/test_forge_executor.py` subclasses the reusable `ExecutorContractSuite` and covers:
+`tests/contract/execution/test_forge_executor.py` subclasses the reusable `ExecutorContractSuite` and covers:
 
 - success and canonical identity preservation;
 - controlled failure/error mapping;
