@@ -7,6 +7,7 @@ from ai_multi_agent_platform.coding_batches import (
     CodingBatchCoordinator,
     CodingWorkItem,
     CombinedValidationEvidence,
+    IntegrationExecutionProvenance,
     RequiredCheck,
     SqliteCodingBatchStore,
     VerificationEvidence,
@@ -82,12 +83,34 @@ def test_sqlite_store_recovers_workstream_and_integration_state_across_restart(
         batch.batch_id,
         current_target_revision=BASE,
     )
-    restarted.record_integrated_revision(
+    execution = IntegrationExecutionProvenance(
+        task_id="task-integration",
+        plan_id="plan-integration",
+        plan_revision=2,
+        step_id="step-integration",
+        run_id="run-integration",
+        agent_revision="integration-agent@3",
+        agent_run_id="agent-run-integration",
+        workspace_id="workspace-integration",
+        snapshot_id="snapshot-integration",
+        branch_ref="coding/integration-durable",
+    )
+    restarted.bind_integration_execution(
+        batch.batch_id,
+        candidate.integration_id,
+        execution,
+    )
+
+    mid_restart = _coordinator(path)
+    integrating = mid_restart.get(batch.batch_id).integration_candidate(candidate.integration_id)
+    assert integrating.execution == execution
+
+    mid_restart.record_integrated_revision(
         batch.batch_id,
         candidate.integration_id,
         integrated_revision=INTEGRATED,
     )
-    restarted.record_combined_validation(
+    mid_restart.record_combined_validation(
         batch.batch_id,
         candidate.integration_id,
         CombinedValidationEvidence(
@@ -109,6 +132,7 @@ def test_sqlite_store_recovers_workstream_and_integration_state_across_restart(
     recovered = _coordinator(path)
     recovered_batch = recovered.get(batch.batch_id)
     recovered_candidate = recovered_batch.integration_candidate(candidate.integration_id)
+    assert recovered_candidate.execution == execution
     assert recovered_candidate.integrated_revision == INTEGRATED
     assert recovered_candidate.validation is not None
     assert recovered_candidate.validation.verification_id == "verification-combined"
