@@ -45,7 +45,7 @@ The transport bridge stores this context in backend-neutral trace baggage while 
 
 ## Foundation acceptance
 
-Covered by `tests/test_observability.py` and follow-up regression suites:
+Covered by the canonical unit/integration observability suites and follow-up regression suites:
 
 - [x] One reference Task/Run/Executor flow is traceable by canonical IDs.
 - [x] Structured logs contain Task/Run/correlation context.
@@ -101,30 +101,33 @@ The Control Plane can bind a backend-neutral `TimelineReader` and merge derived 
 
 ## Required test evidence
 
-- `tests/test_observability.py`
-  - Task/Run trace propagation;
-  - Executor child/timing;
-  - failure classification;
-  - redaction;
-  - exporter-disabled path;
+- `tests/integration/observability/test_executor_trace_flow.py`
+  - Task/Run/Executor trace propagation and canonical identifiers;
+  - Executor timing/outcome metrics;
+  - execution failure classification without backend exception leakage.
+- `tests/unit/observability/test_observability_foundation.py`
+  - default-deny recursive redaction;
+  - exporter-disabled/no-op path;
   - health semantics;
-  - model/tool child telemetry;
-  - async correlation;
-  - transport-neutral carrier round-trip.
+  - model/tool child telemetry without content capture;
+  - transport-neutral carrier round-trip;
+  - async event correlation.
 - `tests/unit/observability/test_retry_and_trace_links.py`
   - retry metric;
   - async span links;
   - span-link redaction.
 - `tests/unit/observability/test_authorization_telemetry.py`
   - allow/deny and provider-failure authorization telemetry.
-- `tests/test_issue_16_completion.py`
+- `tests/unit/observability/test_model_capability_accounting.py`
   - model usage;
   - capability approval/policy outcomes;
+  - accounting handoff.
+- `tests/integration/observability/test_trace_transport_control_plane.py`
+  - canonical Agent/Model/Tool/Worker trace composition;
   - remote transport propagation;
   - Control Plane timeline;
-  - health aggregation;
-  - accounting handoff.
-- `tests/test_issue_16_final_e2e.py`
+  - health aggregation.
+- `tests/e2e/observability/test_canonical_observability_flow.py`
   - one continuous `Task -> Run -> Agent -> Model/Tool -> Worker dispatch -> transport -> remote Worker/Node` trace;
   - complete cross-boundary canonical context preservation;
   - accounting measurement handoff in the same local flow;
