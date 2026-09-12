@@ -1,28 +1,42 @@
 # Agent-Sandbox evaluation (#798)
 
-Status: **in progress / candidate only**  
+Status: **static/source evaluation complete enough for handoff; live validation owned by #829**  
 Reviewed upstream: `agent-sandbox/agent-sandbox`  
 Pinned revision: `d1b7ac007debcb1ba8de91c76afb49bee90d096a`  
 Review date: 2026-09-11  
 License at reviewed revision: Apache-2.0
 
-This document records evidence for issue #798. It intentionally separates source-level facts,
+This document records evidence produced by issue #798. It intentionally separates source-level facts,
 platform adapter evidence, and live Kubernetes evidence. A feature advertised by upstream is not
-considered proven for this platform until the corresponding scenario has been exercised.
+considered proven for this platform until the corresponding live scenario has been exercised.
+
+## Ownership split
+
+Issue #798 owns:
+
+- exact upstream provenance;
+- source/architecture/security review;
+- canonical adapter fit and deterministic tests;
+- comparison methodology;
+- live-campaign schema, harnesses, probes and evidence gate;
+- the provisional recommendation that determines whether live validation is justified.
+
+Issue #829 owns every conclusion that requires a real Kubernetes/VPS/reference host, including the
+execution and retention of the live campaign and the final evidence-backed Agent-Sandbox outcome:
+`adopt`, `optional_provider_only`, or `reject/defer`.
+
+Missing live evidence therefore remains fail-closed in the campaign tooling but no longer blocks the
+static/source Definition of Done for #798.
 
 ## Decision state
 
-No adoption decision is made by this initial slice.
+The #798 static evaluation supports continuing Agent-Sandbox as a **candidate/evaluation-only
+optional provider for live validation under #829**.
 
-Allowed final outcomes for #798 are:
-
-- `adopt`;
-- `optional_provider_only`;
-- `reject/defer`.
-
-Until the live isolation, egress, credential, persistence and resource tests are complete,
-Agent-Sandbox remains **candidate/evaluation-only**. It is not a baseline dependency and is not a
-supported production isolation claim.
+No production-support or runtime-isolation claim is made here. The reviewed default upstream
+installation/profile is not accepted unchanged as a protected production profile. The final
+`adopt` / `optional_provider_only` / `reject/defer` classification is selected under #829 after the
+live campaign passes through the #798 evidence and decision framework.
 
 ## Canonical architecture boundary
 
@@ -67,7 +81,7 @@ and snapshot identifiers remain namespaced adapter metadata.
 adapter boundary. It deliberately does not import the E2B SDK, Kubernetes client or Agent-Sandbox
 runtime.
 
-The proof-of-concept currently demonstrates:
+The proof-of-concept demonstrates:
 
 - canonical `ExecutionRequest` -> adapter-private request translation;
 - canonical Task/Run/Step/correlation identity preservation;
@@ -106,7 +120,7 @@ At the pinned revision, upstream source/documentation establishes the following:
   restore fails and that process replay cannot recover runtime-generated files from an ephemeral
   filesystem.
 
-These are source-level facts, not yet proof that the effective deployment boundary meets #43.
+These are source-level facts, not proof that the effective deployment boundary meets #43.
 
 ## Initial security findings
 
@@ -116,7 +130,7 @@ The upstream default of full Internet access is too permissive for a high-isolat
 with untrusted/model-generated code. The proof-of-concept therefore defaults
 `allow_internet_access=False`.
 
-That default alone is **not** sufficient for a production claim. Live validation still must prove:
+That default alone is **not** sufficient for a production claim. #829 must prove live:
 
 - deny-all behavior for IPv4 and IPv6;
 - DNS behavior;
@@ -126,14 +140,14 @@ That default alone is **not** sufficient for a production claim. Live validation
 - behavior when network enforcement is unavailable;
 - whether an alternate direct path can bypass the configured boundary.
 
-Canonical policy must be decided by #15/#43 and the platform egress boundary. Provider-native
-network rules are enforcement configuration, not policy authority.
+Canonical policy remains owned by #15/#43 and the platform egress boundary. Provider-native network
+rules are enforcement configuration, not policy authority.
 
 ### Kubernetes is not itself an isolation proof
 
-A Kubernetes deployment can provide resource and namespace boundaries, but #798 must inspect and
-exercise the actual effective security context before claiming strong isolation. The live review
-must record at least:
+A Kubernetes deployment can provide resource and namespace boundaries, but source review alone does
+not establish strong isolation. #829 must record and exercise the actual effective profile,
+including:
 
 - container runtime/runtime class;
 - privilege and Linux capabilities;
@@ -156,48 +170,47 @@ Because the documented container filesystem is ephemeral, any future production 
 make the durability boundary explicit. A provider snapshot/process replay identifier must never
 become the canonical Workspace or Run identity.
 
-### Credentials remain an unresolved high-risk area
+### Credentials remain a live-validation area
 
-The initial adapter contains no secret-delivery implementation. A live integration must prove that:
+The adapter contains no secret-delivery implementation. The reviewed upstream `EnvVars` path is not
+accepted for platform secrets because sandbox state is serialized into the `sandbox-data`
+ReplicaSet annotation. The adapter therefore fails closed on direct environment projection.
 
-- only the exact scoped secret material authorized for the execution is delivered;
-- Kubernetes/service-account credentials are not unnecessarily exposed to workload code;
-- credentials are not serialized into canonical request/result/evidence;
-- termination/revocation removes effective access;
-- browser credentials follow the same scoped policy;
-- a synthetic secret exfiltration attempt is either blocked by effective egress policy or recorded
-  as an explicit unsupported protected profile.
+Any secret-bearing supported profile must be proven under #829 using a different #34-compatible
+scoped delivery mechanism with evidence for intended access, absence from metadata/evidence,
+redaction, egress/exfiltration behavior, revocation and cleanup.
 
-## Required live evaluation matrix
+## #829 live evaluation matrix
+
+The following matrix is the handoff contract. `partial` means #798 has platform/source evidence but
+the effective provider/runtime behavior remains unproven until #829 executes it.
 
 | Scenario | Source review | Adapter fixture | Live Kubernetes | Status |
 |---|---:|---:|---:|---|
-| Canonical identity/result mapping | yes | yes | not yet | partial |
-| Benign shell task + Artifact | advertised | simulated | not yet | partial |
-| Runaway CPU | no | no | not yet | pending |
-| Runaway memory | no | no | not yet | pending |
-| Timeout | API seam | yes | not yet | partial |
-| Cancellation/process cleanup | API seam | yes | not yet | partial |
-| Workspace traversal/write escape | design | yes | not yet | partial |
-| Read unrelated host/platform data | no | no | not yet | pending |
-| Internet deny | documented control | request projection | not yet | partial |
-| Scoped egress allow | documented control | request projection | not yet | partial |
-| Private/cluster/metadata endpoint isolation | unknown | no | not yet | pending |
-| Scoped credential use/exfiltration | unknown | no | not yet | pending |
-| Browser download -> canonical Artifact | advertised | no | not yet | pending |
-| Pause/resume | advertised/documented | no | not yet | pending |
-| Snapshot restore | advertised/documented | no | not yet | pending |
-| Crash/restart cleanup | unknown | no | not yet | pending |
-| Cross-sandbox isolation | advertised | no | not yet | pending |
-| Concurrent density | unknown | no | not yet | pending |
-| Malicious repository fixture | no | no | not yet | pending |
+| Canonical identity/result mapping | yes | yes | #829 | partial |
+| Benign shell task + Artifact | advertised | simulated | #829 | partial |
+| Runaway CPU | no | no | #829 | pending |
+| Runaway memory | no | no | #829 | pending |
+| Timeout | API seam | yes | #829 | partial |
+| Cancellation/process cleanup | API seam | yes | #829 | partial |
+| Workspace traversal/write escape | design | yes | #829 | partial |
+| Read unrelated host/platform data | no | no | #829 | pending |
+| Internet deny | documented control | request projection | #829 | partial |
+| Scoped egress allow | documented control | request projection | #829 | partial |
+| Private/cluster/metadata endpoint isolation | unknown | no | #829 | pending |
+| Scoped credential use/exfiltration | unsafe default path identified | fail-closed | #829 | pending |
+| Browser download -> canonical Artifact | advertised | ownership resolved through #74 | #829 | pending |
+| Pause/resume | advertised/documented | metadata model defined | #829 | pending |
+| Snapshot restore | advertised/documented | metadata model defined | #829 | pending |
+| Crash/restart cleanup | unknown | no | #829 | pending |
+| Cross-sandbox isolation | advertised | no | #829 | pending |
+| Concurrent density | unknown | no | #829 | pending |
+| Malicious repository fixture | no | no | #829 | pending |
 
-`partial` means the platform seam has evidence but the effective provider/runtime behavior has not
-been proven.
+## Resource and operational measurements delegated to #829
 
-## Resource and operational measurements still required
-
-The final evaluation must retain reproducible measurements for a representative deployment:
+The final production/support classification requires reproducible measurements for a representative
+deployment, including:
 
 - cluster/node CPU and RAM baseline;
 - Agent-Sandbox control-plane CPU/RAM;
@@ -218,36 +231,32 @@ measurements.
 
 ## Comparison baseline
 
-The final decision compares three execution profiles. Unknown cells remain unknown rather than
+The final #829 decision compares three execution profiles. Unknown cells remain unknown rather than
 being filled from marketing material.
 
 | Area | Reference Executor | Containarium | Agent-Sandbox |
 |---|---|---|---|
-| Platform contract | canonical reference | to verify from its own evidence | PoC maps to canonical Executor |
-| Arbitrary shell/code | intentionally no | unknown here | advertised; live test pending |
-| Browser/computer use | no | unknown here | advertised; #74 mapping pending |
-| Workspace persistence | platform-local | unknown here | provider FS documented ephemeral; external persistence required |
-| Snapshot/pause-resume | no | unknown here | advertised/documented; semantics pending live test |
-| Network egress | no arbitrary workload network | unknown here | default Internet allow; controls documented; enforcement pending |
-| Credential isolation | no arbitrary secret-bearing sandbox path | unknown here | pending live test |
-| Resource limits | deterministic test executor | unknown here | template/Kubernetes controls advertised; live enforcement pending |
-| Kubernetes required | no | unknown here | yes, >= 1.28 per reviewed docs |
+| Platform contract | canonical reference | pinned comparison evidence required | PoC maps to canonical Executor |
+| Arbitrary shell/code | intentionally no | live comparison where applicable | advertised; #829 live test pending |
+| Browser/computer use | no | unknown here | advertised; #74 runtime evidence pending #829 |
+| Workspace persistence | platform-local | comparison evidence required | provider FS documented ephemeral; external persistence required |
+| Snapshot/pause-resume | no provider concept | comparison evidence required | advertised/documented; #829 semantics pending |
+| Network egress | no arbitrary workload network | comparison evidence required | default Internet allow; controls documented; enforcement pending #829 |
+| Credential isolation | no arbitrary secret-bearing sandbox path | comparison evidence required | unsafe default EnvVar path identified; safe live path pending #829 |
+| Resource limits | deterministic test executor | comparison evidence required | template/Kubernetes controls advertised; live enforcement pending #829 |
+| Kubernetes required | no | backend-dependent | yes, >= 1.28 per reviewed docs |
 | Baseline dependency | yes | no | no |
-| Operational complexity | low | unknown here | materially higher by design; quantify in live trial |
+| Operational complexity | low | to measure where applicable | materially higher by design; quantify under #829 |
 
-Containarium values must be populated from its own pinned implementation/evaluation evidence rather
-than guessed during the Agent-Sandbox review.
+## Production recommendation gate owned by #829
 
-## Acceptance gate before a production recommendation
-
-A final `adopt` or `optional_provider_only` result requires all of the following to have retained
-evidence:
+A final `adopt` or `optional_provider_only` result requires retained live evidence for:
 
 1. exact upstream revision/license/provenance;
 2. effective Pod/runtime/RBAC/service-account/filesystem isolation review;
 3. cross-sandbox and host/platform data isolation tests;
 4. deny + allow egress tests including internal/private/metadata destinations;
-5. scoped synthetic credential delivery/exfiltration test;
+5. scoped synthetic credential delivery/exfiltration test through a safe delivery mechanism;
 6. real shell lifecycle, timeout, cancellation and cleanup;
 7. Workspace upload/download + canonical Artifact round trip;
 8. #74-compatible browser evidence if browser capability is claimed;
@@ -260,10 +269,12 @@ evidence:
 If a protected execution profile can bypass the effective isolation/egress boundary, that profile
 must be marked unsupported rather than hidden behind a successful API smoke test.
 
-## Current recommendation
+## #798 provisional recommendation
 
-**Pending.** The source review shows enough capability overlap to justify continuing the
-experimental adapter and live evaluation, but there is not yet enough evidence to recommend
-production adoption. The most important unresolved gates are the effective Kubernetes isolation
-boundary, network enforcement/bypass resistance, credential exposure, durable Workspace mapping
-and representative VPS resource cost.
+**Proceed to real validation under #829 as an evaluation-only optional provider candidate.** The
+source review and adapter fit are sufficient to justify that handoff, but they are not sufficient to
+claim production isolation, provider-native shared multi-tenancy, safe secret-bearing workloads or
+acceptable representative VPS cost.
+
+The reviewed default upstream deployment/profile must not be adopted unchanged as a production
+high-isolation profile. The final evidence-backed classification is intentionally deferred to #829.
