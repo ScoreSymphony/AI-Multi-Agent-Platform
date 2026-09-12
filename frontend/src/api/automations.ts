@@ -1,5 +1,6 @@
-import { ControlPlaneError } from "./client";
-import type { APIErrorBody, JsonValue } from "./types";
+import { ApiTransport } from "./transport";
+import type { ApiTransportOptions } from "./transport";
+import type { JsonValue } from "./types";
 
 export type AutomationState = "enabled" | "paused" | "disabled" | "invalid";
 export type AutomationTriggerType =
@@ -139,18 +140,17 @@ export interface UpdateAutomationInput {
   overlap_policy?: AutomationOverlapPolicy;
 }
 
-export interface AutomationClientOptions {
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
+export interface AutomationClientOptions extends ApiTransportOptions {
+  transport?: ApiTransport;
 }
 
 export class AutomationClient {
   readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly transport: ApiTransport;
 
   constructor(options: AutomationClientOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? "").replace(/\/$/, "");
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.transport = options.transport ?? new ApiTransport(options);
+    this.baseUrl = this.transport.baseUrl;
   }
 
   create(input: CreateAutomationInput): Promise<CanonicalAutomation> {
@@ -190,65 +190,11 @@ export class AutomationClient {
     return this.command<CanonicalAutomationDelivery>("automation.retry-delivery", deliveryId);
   }
 
-  private async command<T>(
-    command: string,
-    resourceRef: string,
-    payload: object = {},
-  ): Promise<T> {
-    const headers = new Headers({
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "X-Correlation-ID": crypto.randomUUID(),
-      "Idempotency-Key": crypto.randomUUID(),
+  private command<T>(command: string, resourceRef: string, payload: object = {}): Promise<T> {
+    return this.transport.request<T>(`/commands/${encodeURIComponent(command)}`, {
+      method: "POST",
+      idempotencyKey: crypto.randomUUID(),
+      body: { resource_ref: resourceRef, ...payload },
     });
-    const response = await this.fetchImpl(
-      `${this.baseUrl}/api/v1/commands/${encodeURIComponent(command)}`,
-      {
-        method: "POST",
-        headers,
-        credentials: "include",
-        body: JSON.stringify({ resource_ref: resourceRef, ...payload }),
-      },
-    );
-    const text = await response.text();
-    const body: unknown = text ? safeJson(text) : null;
-    if (!response.ok) {
-      throw new ControlPlaneError(response.status, normalizeError(response, body));
-    }
-    return body as T;
   }
-}
-
-function safeJson(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeError(response: Response, payload: unknown): APIErrorBody {
-  if (isErrorBody(payload)) return payload;
-  const requestId = response.headers.get("x-request-id") ?? "unknown";
-  return {
-    code: "invalid_response",
-    category: "contract",
-    message: `Control Plane returned HTTP ${response.status} without a canonical error envelope`,
-    request_id: requestId,
-    correlation_id: response.headers.get("x-correlation-id") ?? requestId,
-    retryable: false,
-  };
-}
-
-function isErrorBody(value: unknown): value is APIErrorBody {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Partial<APIErrorBody>;
-  return (
-    typeof candidate.code === "string"
-    && typeof candidate.category === "string"
-    && typeof candidate.message === "string"
-    && typeof candidate.request_id === "string"
-    && typeof candidate.correlation_id === "string"
-    && typeof candidate.retryable === "boolean"
-  );
 }
