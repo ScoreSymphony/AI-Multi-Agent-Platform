@@ -58,12 +58,36 @@ class CanonicalWorkstreamMaterializer:
     ) -> CodingWorkstream:
         batch = self._coordinator.get(batch_id)
         workstream = batch.workstream(workstream_id)
-        if workstream.state is WorkstreamState.MATERIALIZED:
+        workspace_id = deterministic_workspace_id(batch.batch_id, workstream_id)
+        branch_ref = deterministic_branch_ref(batch.batch_id, workstream_id)
+
+        # A restart may replay materialization after execution has already advanced the branch.
+        # Reconcile the canonical evidence first instead of incorrectly requiring the provider
+        # branch to still point at the original base revision.
+        if workstream.provenance.workspace_id is not None:
+            expected = (
+                workspace_id,
+                workstream.provenance.snapshot_id,
+                agent_revision,
+                agent_run_id,
+                branch_ref,
+            )
+            recorded = (
+                workstream.provenance.workspace_id,
+                workstream.provenance.snapshot_id,
+                workstream.provenance.agent_revision,
+                workstream.provenance.agent_run_id,
+                workstream.provenance.branch_ref,
+            )
+            if recorded != expected:
+                raise ValueError(
+                    "materialization retry conflicts with recorded canonical provenance"
+                )
             return workstream
+
         if workstream.state is not WorkstreamState.READY:
             raise ValueError("only ready coding workstreams may be materialized")
 
-        workspace_id = deterministic_workspace_id(batch.batch_id, workstream_id)
         existing = {
             workspace.id: workspace
             for workspace in await self._workspaces.list_workspaces(project_id=project_id)
@@ -101,7 +125,6 @@ class CanonicalWorkstreamMaterializer:
         else:
             snapshot = await self._workspaces.create_snapshot(workspace.id)
 
-        branch_ref = deterministic_branch_ref(batch.batch_id, workstream_id)
         branches = await self._repositories.branches(batch.repository_id, repository_context)
         if branch_ref not in branches:
             created = await self._repositories.create_branch(
