@@ -64,6 +64,16 @@ jobs:
                   raise SystemExit(f"controlled issue #859 fixture did not become healthy: {url}")
           PY
 
+      - name: Add controlled address aliases for SSRF probes
+        shell: bash
+        run: |
+          sudo ip addr add 10.254.0.1/32 dev lo || true
+          sudo ip addr add 172.31.255.254/32 dev lo || true
+          sudo ip addr add 192.168.255.254/32 dev lo || true
+          sudo ip addr add 169.254.169.254/32 dev lo || true
+          sudo ip addr add 100.64.0.1/32 dev lo || true
+          sudo ip addr add 203.0.113.10/32 dev lo || true
+
       - name: Create shared file-only Bifrost configuration
         shell: bash
         run: |
@@ -245,11 +255,12 @@ jobs:
               raise SystemExit("Bifrost v2.1.1 did not recover after upgrade")
           PY
 
-      - name: Run controlled loopback SSRF connection gate
+      - name: Run controlled SSRF address and redirect gates
         env:
           BIFROST_EVAL_BIFROST_BASE_URL: http://127.0.0.1:8080/v1
           BIFROST_EVAL_BIFROST_NATIVE_OPENAI_MODEL: openai/fixture-model
-          BIFROST_EVAL_SSRF_BLOCKED_URLS_JSON: '["http://127.0.0.1:18001/ssrf-sentinel.txt"]'
+          BIFROST_EVAL_SSRF_BLOCKED_URLS_JSON: '["http://127.0.0.1:18001/ssrf-sentinel.txt","http://10.254.0.1:18001/ssrf-sentinel.txt","http://172.31.255.254:18001/ssrf-sentinel.txt","http://192.168.255.254:18001/ssrf-sentinel.txt","http://169.254.169.254:18001/ssrf-sentinel.txt","http://100.64.0.1:18001/ssrf-sentinel.txt","http://[::1]:18001/ssrf-sentinel.txt","http://[::ffff:127.0.0.1]:18001/ssrf-sentinel.txt","http://[fe80::1]:18001/ssrf-sentinel.txt","http://[fd00::1]:18001/ssrf-sentinel.txt","http://[fec0::1]:18001/ssrf-sentinel.txt","http://[2002:7f00:1::1]:18001/ssrf-sentinel.txt","http://[64:ff9b::7f00:1]:18001/ssrf-sentinel.txt","http://[64:ff9b:1:7f00:0:100::]:18001/ssrf-sentinel.txt","http://[2001:0::1]:18001/ssrf-sentinel.txt"]'
+          BIFROST_EVAL_SSRF_REDIRECT_URL: http://203.0.113.10:18001/redirect-to-loopback
           BIFROST_EVAL_SSRF_SENTINEL_CONTROL_URL: http://127.0.0.1:18001/control
         run: pytest -q tests/test_issue_859_bifrost_ssrf.py -m integration
 
@@ -262,22 +273,43 @@ jobs:
           import urllib.request
 
           with urllib.request.urlopen(
-              "http://127.0.0.1:18001/control/hits", timeout=3
+              "http://127.0.0.1:18001/control/stats", timeout=3
           ) as response:
               sentinel = json.load(response)
-          hits = sentinel.get("hits")
-          if hits != 0:
-              raise SystemExit(f"controlled SSRF sentinel observed {hits} connection(s)")
+          paths = sentinel.get("paths", {})
+          if paths.get("/redirect-to-loopback") != 1:
+              raise SystemExit("controlled redirect source was not reached exactly once")
+          if paths.get("/ssrf-sentinel.txt", 0) != 0:
+              raise SystemExit("a blocked SSRF target reached the controlled sentinel")
           evidence = {
               "bifrost_version": "v2.1.1",
-              "target_class": "ipv4_loopback",
-              "controlled_target": "http://127.0.0.1:18001/ssrf-sentinel.txt",
               "server_side_fetch_path": "OpenAI chat file_url -> ResolveChatFileURLs -> FetchAndEncodeURL",
-              "sentinel_hits": hits,
+              "guard_error_contract": "blocked connection to non-public address",
               "blocked_before_connection": True,
-              "representative_of_full_ssrf_matrix": False,
+              "controlled_redirect_source_hits": paths.get("/redirect-to-loopback"),
+              "controlled_blocked_target_hits": paths.get("/ssrf-sentinel.txt", 0),
+              "target_classes": [
+                  "ipv4_loopback",
+                  "rfc1918_10_8",
+                  "rfc1918_172_16_12",
+                  "rfc1918_192_168_16",
+                  "ipv4_link_local_metadata",
+                  "cgnat",
+                  "ipv6_loopback",
+                  "ipv4_mapped_ipv6_loopback",
+                  "ipv6_link_local",
+                  "ipv6_unique_local",
+                  "ipv6_site_local",
+                  "6to4_embedded_loopback",
+                  "nat64_well_known_embedded_loopback",
+                  "nat64_local_use_embedded_loopback",
+                  "teredo",
+                  "public_source_redirect_to_loopback",
+              ],
+              "dns_rebinding_runtime_case": "pending",
+              "encoded_host_representation_runtime_case": "pending_if_supported",
           }
-          pathlib.Path("artifacts/issue-859-ssrf-loopback.json").write_text(
+          pathlib.Path("artifacts/issue-859-ssrf-runtime-matrix.json").write_text(
               json.dumps(evidence, indent=2, sort_keys=True) + "\n",
               encoding="utf-8",
           )
