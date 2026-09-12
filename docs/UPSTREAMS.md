@@ -157,6 +157,32 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Provenance:** `upstream/hermes-agent.yaml`.
 - **Adoption/mapping review:** `docs/upstream/HERMES_AGENT_ADOPTION.md`, `docs/upstream/HERMES_AGENT_V0_21_1_VALIDATION.md` and `docs/integrations/HERMES_ADAPTER.md`.
 
+### NVIDIA SkillSpector
+
+- **Purpose:** optional static pre-install security evidence for third-party Skill review.
+- **Status:** integrated through #868 as an optional advisory provider.
+- **Integration category/categories:** optional adapter; security review tooling; pre-install evidence provider.
+- **Canonical upstream repository:** `https://github.com/NVIDIA/SkillSpector`.
+- **Pinned version/tag/commit or deployed revision:** `2.11.2` / `69dcdfb74487d361ba4c811d088cfdea2ff3a9dc`.
+- **Verified license:** Apache-2.0.
+- **License verification date:** 2026-09-12.
+- **Last review date:** 2026-09-12.
+- **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.skillspector.SkillSpectorSecurityEvidenceProvider` implements the platform-owned `SecurityEvidenceProvider`; `SecurityEvidence` remains platform-owned and scanner-native recommendations never become canonical trust or Approval state.
+- **Local source path:** `src/ai_multi_agent_platform/adapters/skillspector.py` plus the platform-owned production package under `providers/skillspector/`; no upstream source is vendored in the repository.
+- **Source origin/path:** CI checks out the exact reviewed upstream revision for verification/build input; the production image copies the pinned upstream package source into the isolated image without modifying it.
+- **Modified locally:** no upstream source is modified; adapter, lock files, policy/config and container recipe are platform-owned.
+- **Required notices / attribution:** preserve the upstream Apache-2.0 license/notice obligations for any redistributed upstream source or image containing it. Verified license identity is recorded in `providers/skillspector/provider-lock.json`.
+- **Known compatibility constraints:** only SkillSpector `2.11.2` at the pinned revision and mode `static_no_llm_network_none` are approved. LLM-assisted/provider-backed scanning is outside #868 and requires a separate evaluation/security decision.
+- **Security/deployment/resource constraints:** container-only scan; `--network=none`; `--no-llm`; read-only candidate/root; dropped capabilities; `no-new-privileges`; bounded CPU/RAM/PID/tmpfs; credential-free environment allowlist; local digest-bound staged candidates only. Timeout/crash/malformed or partial output/raw-report retention failure fails closed to degraded evidence. Docker or Podman is required only when this optional provider is enabled.
+- **Required for baseline:** no.
+- **Recurring paid service required:** no.
+- **Update/review method:** explicit pin-update PR; reverify version/revision/license and dependency/container drift, rebuild the locked production image, rerun the #800 deterministic 15-fixture × 3 corpus plus #868 negative-path tests, review limitations, update provenance/adoption records and require full repository CI plus the SkillSpector evaluation workflow to pass.
+- **Exit/replacement strategy:** disable/unregister and remove the optional adapter/image package while retaining immutable historical `SecurityEvidence`; another provider can implement the platform-owned evidence seam without canonical Skill/Approval/Task/Run migration.
+- **ADR:** none required while SkillSpector remains a subordinate optional evidence provider and cannot own canonical trust or Approval state.
+- **Provenance:** `upstream/skillspector.yaml`, `providers/skillspector/provider-lock.json`.
+- **Adoption review:** `docs/upstream/SKILLSPECTOR_ADOPTION.md`.
+- **Security/operations review:** `docs/security/SKILLSPECTOR_SECURITY_EVIDENCE.md`.
+
 ### ScoreSymphony AI-Agent-VPS Forge subsystem
 
 - **Purpose:** optional execution-only runtime reusing the mature Forge executor/CLI-adapter layer, plus source/reference material for workspace, idempotency, recovery and event behavior harvested for issue #9.
