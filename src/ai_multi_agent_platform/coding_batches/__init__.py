@@ -11,9 +11,11 @@ from .models import (
     CombinedValidationEvidence,
     IntegrationCandidate,
     IntegrationConflict,
+    IntegrationRepairAttempt,
     IntegrationState,
     OverlapDecision,
     OverlapKind,
+    RepairAttemptState,
     RequiredCheck,
     VerificationEvidence,
     WorkstreamProvenance,
@@ -22,6 +24,7 @@ from .models import (
 )
 from .overlap import ConservativeOverlapClassifier
 from .projection import coding_batch_resource
+from .repair import DEFAULT_MAX_REPAIR_ATTEMPTS, CodingBatchRepairCoordinator
 from .service import (
     CodingBatchCoordinator,
     CodingBatchStore,
@@ -38,17 +41,21 @@ __all__ = [
     "CodingBatch",
     "CodingBatchAuthorizationContext",
     "CodingBatchCoordinator",
+    "CodingBatchRepairCoordinator",
     "CodingBatchStore",
     "CodingWorkItem",
     "CodingWorkstream",
     "CombinedValidationEvidence",
     "ConservativeOverlapClassifier",
+    "DEFAULT_MAX_REPAIR_ATTEMPTS",
     "InMemoryCodingBatchStore",
     "IntegrationCandidate",
     "IntegrationConflict",
+    "IntegrationRepairAttempt",
     "IntegrationState",
     "OverlapDecision",
     "OverlapKind",
+    "RepairAttemptState",
     "RequiredCheck",
     "SqliteCodingBatchStore",
     "VerificationEvidence",
