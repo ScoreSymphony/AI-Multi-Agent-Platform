@@ -39,6 +39,7 @@ from .service import (
     deterministic_branch_ref,
 )
 from .sqlite_store import SqliteCodingBatchStore
+from .telemetry import CodingBatchTelemetry
 
 __all__ = [
     "AuthorizedCodingBatchIntegration",
@@ -52,6 +53,7 @@ __all__ = [
     "CodingBatchCoordinator",
     "CodingBatchRepairCoordinator",
     "CodingBatchStore",
+    "CodingBatchTelemetry",
     "CodingDispatchSlot",
     "CodingWorkItem",
     "CodingWorkstream",
