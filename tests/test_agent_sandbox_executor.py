@@ -59,11 +59,7 @@ class FakeAgentSandboxClient:
             )
         if request.action == "sleep":
             seconds_value = request.arguments.get("seconds", 0.0)
-            seconds = (
-                float(seconds_value)
-                if isinstance(seconds_value, (int, float))
-                else 0.0
-            )
+            seconds = float(seconds_value) if isinstance(seconds_value, (int, float)) else 0.0
             await asyncio.sleep(seconds)
             return AgentSandboxClientResult(
                 status=AgentSandboxExecutionStatus.SUCCEEDED,
