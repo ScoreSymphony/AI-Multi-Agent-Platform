@@ -190,22 +190,45 @@ def _team_candidate(
     members = tuple(
         agents[agent_id] for agent_id in candidate.member_agent_ids if agent_id in agents
     )
-    roles = tuple(dict.fromkeys(member.role for member in members))
-    allowed = set(candidate.shared_capability_ids)
+    active_members = tuple(member for member in members if member.enabled)
+    required_ids = set(candidate.required_member_agent_ids)
+    if candidate.skip_optional_unavailable and required_ids:
+        policy_members = tuple(
+            member for member in active_members if member.agent_id in required_ids
+        )
+    else:
+        # FAIL requires every active member to remain executable. For an all-optional
+        # SKIP_OPTIONAL Team, use all active members conservatively rather than inventing an
+        # existential aggregate that AgentMatchCandidate cannot represent safely.
+        policy_members = active_members
+
+    roles = tuple(dict.fromkeys(member.role for member in active_members))
+    restricted_allowlists = [
+        set(member.allowed_capability_ids)
+        for member in policy_members
+        if member.allowed_capability_ids
+    ]
+    allowed = set.intersection(*restricted_allowlists) if restricted_allowlists else set()
     denied: set[str] = set()
     constraints: list[CapabilityConstraint] = []
-    member_refs: list[AgentRevisionRef] = []
-    enabled = candidate.enabled
-    for member in members:
-        enabled = enabled and member.enabled
-        allowed.update(member.allowed_capability_ids)
-        allowed.update(member.required_capability_ids)
+    member_refs = tuple(
+        AgentRevisionRef(member.agent_id, member.revision) for member in active_members
+    )
+    enabled = candidate.enabled and bool(active_members)
+    for member in policy_members:
         denied.update(member.denied_capability_ids)
         constraints.extend(
             CapabilityConstraint(capability_id=capability_id, required=True)
             for capability_id in member.required_capability_ids
         )
-        member_refs.append(AgentRevisionRef(member.agent_id, member.revision))
+
+    shared = set(candidate.shared_capability_ids)
+    for member in policy_members:
+        if shared.intersection(member.denied_capability_ids):
+            enabled = False
+        if member.allowed_capability_ids and not shared.issubset(member.allowed_capability_ids):
+            enabled = False
+
     return AgentMatchCandidate(
         ref=AgentTeamRevisionRef(candidate.team_id, candidate.revision),
         kind=AgentCandidateKind.TEAM,
@@ -218,14 +241,12 @@ def _team_candidate(
         allowed_capability_ids=tuple(sorted(allowed)),
         denied_capability_ids=tuple(sorted(denied)),
         capability_constraints=tuple(constraints),
-        capabilities_unrestricted=(
-            bool(members) and all(not member.allowed_capability_ids for member in members)
-        ),
-        model_requirements=tuple(member.model_requirements for member in members),
+        capabilities_unrestricted=bool(policy_members) and not restricted_allowlists,
+        model_requirements=tuple(member.model_requirements for member in policy_members),
         allows_task_model_override=(
-            bool(members) and all(member.allow_task_model_override for member in members)
+            bool(policy_members) and all(member.allow_task_model_override for member in policy_members)
         ),
-        member_refs=tuple(member_refs),
+        member_refs=member_refs,
     )
 
 
