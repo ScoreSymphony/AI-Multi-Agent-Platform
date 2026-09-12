@@ -51,9 +51,7 @@ class AuthorizedCodingBatchIntegration:
         context: CodingBatchAuthorizationContext,
     ) -> ProposedAction:
         if candidate.state is not IntegrationState.VALIDATED or candidate.validation is None:
-            raise ValueError(
-                "integration requires fresh combined validation before authorization"
-            )
+            raise ValueError("integration requires fresh combined validation before authorization")
         if candidate.integrated_revision is None:
             raise ValueError("validated integration candidate is missing integrated revision")
         return ProposedAction(
