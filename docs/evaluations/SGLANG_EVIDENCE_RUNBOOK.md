@@ -1,6 +1,9 @@
-# SGLang evidence runbook for issue #860
+# SGLang evidence runbook
 
-This runbook turns the #860 evaluation plan into a reproducible Worker-side evidence procedure. It does not classify SGLang by itself and it must not be used to synthesize measurements that were not observed on real hardware.
+Repository contract owner: **#860**  
+Real reference-host execution owner: **#829**
+
+This runbook turns the #860 evaluation contract into a reproducible Worker-side evidence procedure. The repository-side design and validation machinery belong to #860; all execution that requires a real compatible GPU/reference host belongs to #829. The runbook must not be used to synthesize measurements that were not observed on real hardware.
 
 ## Pinned upstream and comparators
 
@@ -22,22 +25,22 @@ A report for another pinned-backend commit is not evidence for this campaign eve
 
 ## Evidence ownership
 
-All platform-facing evidence remains owned by the existing platform contracts:
+Existing platform contracts remain authoritative:
 
 - #10 owns canonical model/provider identity and routing;
 - #14 owns Worker/Node identity and placement;
 - #16 owns platform telemetry;
 - #19 owns evaluation/regression semantics;
 - #34 owns secrets/configuration;
-- #799 may consume the final classification for first-run recommendations.
+- #860 owns this SGLang campaign contract, provenance, schema, comparability and readiness tooling;
+- #829 owns real-host execution, retained live evidence and the final evidence-backed SGLang classification;
+- #799 may consume that final classification for first-run recommendations, but must not make SGLang canonical.
 
 Backend-specific endpoint names, model names, launch flags and process metadata are adapter/deployment evidence only. They never become canonical `ModelConfiguration.config_id` values.
 
 ## Required artifacts per measured run
 
-Every measured backend run must produce one JSON report conforming to
-`src/ai_multi_agent_platform/benchmarking/schemas/inference-backend-evaluation-report.v1.schema.json`
-and retain the raw evidence referenced by that report.
+Every measured backend run under #829 must produce one JSON report conforming to `src/ai_multi_agent_platform/benchmarking/schemas/inference-backend-evaluation-report.v1.schema.json` and retain the raw evidence referenced by that report.
 
 At minimum retain:
 
@@ -80,9 +83,9 @@ A decision-eligible SGLang-vLLM pair must use the same:
 
 If any of these differ, set `comparability.comparable` to `false` and explain the difference in `comparability.reasons`. Do not normalize non-equivalent runs into a headline performance claim. The platform-side readiness gate independently rechecks these dimensions rather than trusting the flag alone.
 
-Ollama is the fixed lighter local-path comparator for this campaign. A direct SGLang-vLLM performance claim does not require Ollama to share an identical GPU-serving topology, but an Ollama run must still retain its exact model/revision/quantization and environment. If the same representative model representation cannot be made sufficiently equivalent, record the Ollama run as non-comparable and state why rather than manufacturing normalized numbers.
+Ollama is the fixed lighter local-path comparator for this campaign. If the same representative model representation cannot be made sufficiently equivalent, record the Ollama run as non-comparable and state why rather than manufacturing normalized numbers.
 
-## Worker-side execution sequence
+## Worker-side execution sequence (#829)
 
 For each backend and scenario:
 
@@ -100,10 +103,9 @@ For each backend and scenario:
 12. write and schema-validate the report;
 13. mark `decision_eligible=true` only when the report is a real measured run suitable for a final comparison.
 
-## Failure campaign
+## Failure campaign (#829)
 
-The SGLang campaign must cover the IDs from
-`config/inference-backend-evaluation.sglang-v0.5.19.json`, including:
+The live campaign must cover the IDs from `config/inference-backend-evaluation.sglang-v0.5.19.json`, including:
 
 - endpoint unavailable before dispatch;
 - server termination during streaming;
@@ -111,12 +113,12 @@ The SGLang campaign must cover the IDs from
 - model-load failure;
 - bounded OOM/resource exhaustion;
 - process restart/readiness recovery;
-- remote Worker loss;
+- remote Worker loss where a remote placement is exercised;
 - repeated start/stop resource recovery.
 
 A provider-native health endpoint is not sufficient recovery evidence. Recovery must become visible through platform-owned health/routing state.
 
-## Placement campaign
+## Placement campaign (#829)
 
 Record explicit evidence for:
 
@@ -131,7 +133,7 @@ Unavailable hardware is `not_measured`, not `pass`.
 
 `ai_multi_agent_platform.benchmarking.inference_backend_evaluation` validates measured reports and computes decision readiness. The installed CLI entry point is `platform-inference-backend-evaluation`.
 
-Example after measured reports have been collected:
+Example after #829 has collected measured reports:
 
 ```bash
 platform-inference-backend-evaluation \
@@ -139,7 +141,7 @@ platform-inference-backend-evaluation \
   --report evidence/sglang-single-gpu.json \
   --report evidence/vllm-single-gpu.json \
   --report evidence/ollama-local-path.json \
-  --output evidence/issue-860-readiness.json \
+  --output evidence/issue-829-sglang-readiness.json \
   --require-ready
 ```
 
@@ -158,12 +160,10 @@ The gate requires:
 - all campaign-required performance metrics to be actually measured rather than `null` on the decision-eligible SGLang-vLLM pair;
 - at least one decision-eligible SGLang-vLLM performance pair whose comparison dimensions actually match.
 
-Latest-result selection uses absolute ISO-8601 timestamps rather than string ordering, so evidence from Workers with different timezone offsets is ordered correctly.
+Latest-result selection uses absolute ISO-8601 timestamps rather than string ordering, so evidence from Workers with different timezone offsets is ordered correctly. Placement coverage is reported separately so missing hardware remains visible rather than being silently converted into success.
 
-Placement coverage is reported separately so missing hardware remains visible rather than being silently converted into success.
+Passing the readiness gate means #829 has enough core live evidence to make the SGLang-vLLM policy choice. It does **not** automatically choose among `supported_optional`, `experimental_only`, and `reject/defer`; #829 records the final classification after considering measured resource/performance/operational results, lighter local-path evidence and support burden.
 
-Passing the readiness gate means the repository has enough core evidence to make the SGLang-vLLM policy choice. It does **not** automatically choose among `supported_optional`, `experimental_only`, and `reject/defer`; that final classification must also reflect the measured resource/performance/operational results, the lighter local-path evidence and the support burden.
+## Current status
 
-## Current blocker
-
-As of 2026-09-12 the repository-side preparation is reproducible, but #860 still lacks live compatible-GPU Worker measurements. Those measurements must not be fabricated from upstream benchmark claims. In addition, #799 remains open and therefore cannot consume a final recommendation yet.
+As of 2026-09-12, #860's repository-side evaluation contract, provenance, validation/readiness tooling and runbook are complete. Live compatible-GPU/reference-host execution is intentionally **not a blocker for #860**; it is tracked by #829. Until #829 records the final classification, #799 must treat SGLang as an evaluated candidate rather than a recommended backend.
