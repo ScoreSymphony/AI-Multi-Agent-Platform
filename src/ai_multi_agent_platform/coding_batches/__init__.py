@@ -25,6 +25,12 @@ from .models import (
 from .overlap import ConservativeOverlapClassifier
 from .projection import coding_batch_resource
 from .repair import DEFAULT_MAX_REPAIR_ATTEMPTS, CodingBatchRepairCoordinator
+from .repository_verification import (
+    CanonicalCombinedValidationCoordinator,
+    CanonicalRepairVerificationCoordinator,
+    CanonicalRepositoryOutputVerifier,
+    RepositoryRunEvidenceReader,
+)
 from .review import CanonicalCodingVerificationCoordinator
 from .runtime import (
     CanonicalCodingWorkstreamDispatcher,
@@ -42,6 +48,9 @@ __all__ = [
     "BatchAggregationPolicy",
     "CanonicalCodingVerificationCoordinator",
     "CanonicalCodingWorkstreamDispatcher",
+    "CanonicalCombinedValidationCoordinator",
+    "CanonicalRepairVerificationCoordinator",
+    "CanonicalRepositoryOutputVerifier",
     "CanonicalWorkstreamMaterializer",
     "CheckState",
     "CodingBatch",
@@ -65,6 +74,7 @@ __all__ = [
     "OverlapDecision",
     "OverlapKind",
     "RepairAttemptState",
+    "RepositoryRunEvidenceReader",
     "RequiredCheck",
     "SqliteCodingBatchStore",
     "VerificationEvidence",
