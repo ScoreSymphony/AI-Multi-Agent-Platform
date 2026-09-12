@@ -1,11 +1,12 @@
-import { ControlPlaneError } from "./client";
 import {
   ConversationResponseClient,
   type ConversationResponseCommittedEvent,
   type ConversationResponseHandlers,
 } from "./conversationResponses";
-import type { APIErrorBody, CanonicalTask, JsonValue, Page } from "./types";
 import type { LiveConnectionState } from "./live";
+import { ApiTransport } from "./transport";
+import type { ApiTransportOptions } from "./transport";
+import type { APIErrorBody, CanonicalTask, JsonValue, Page } from "./types";
 
 export type ConversationStatus = "open" | "archived" | "tombstoned";
 export type ConversationMessageStatus = "active" | "edited" | "tombstoned";
@@ -166,9 +167,8 @@ export interface ConversationTaskEvent {
   attention?: ConversationAttentionSignal;
 }
 
-export interface ConversationClientOptions {
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
+export interface ConversationClientOptions extends ApiTransportOptions {
+  transport?: ApiTransport;
 }
 
 export interface ConversationEventStreamOptions {
@@ -182,21 +182,21 @@ export interface ConversationEventStreamOptions {
 
 export class ConversationClient {
   readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly transport: ApiTransport;
 
   constructor(options: ConversationClientOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? "").replace(/\/$/, "");
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.transport = options.transport ?? new ApiTransport(options);
+    this.baseUrl = this.transport.baseUrl;
   }
 
   list(includeArchived = true): Promise<Page<CanonicalConversation>> {
     const params = new URLSearchParams({ limit: "100", sort: "updated_at", direction: "desc" });
     if (includeArchived) params.set("filter[include_archived]", "true");
-    return this.request<Page<CanonicalConversation>>(`/conversations?${params.toString()}`);
+    return this.transport.request<Page<CanonicalConversation>>(`/conversations?${params.toString()}`);
   }
 
   get(conversationId: string): Promise<CanonicalConversation> {
-    return this.request<CanonicalConversation>(
+    return this.transport.request<CanonicalConversation>(
       `/conversations/${encodeURIComponent(conversationId)}`,
     );
   }
@@ -207,7 +207,7 @@ export class ConversationClient {
 
   listMessages(conversationId: string): Promise<Page<CanonicalConversationMessage>> {
     const params = new URLSearchParams({ limit: "200", sort: "created_at", direction: "asc" });
-    return this.request<Page<CanonicalConversationMessage>>(
+    return this.transport.request<Page<CanonicalConversationMessage>>(
       `/conversations/${encodeURIComponent(conversationId)}/messages?${params.toString()}`,
     );
   }
@@ -227,11 +227,11 @@ export class ConversationClient {
     handlers: ConversationResponseHandlers = {},
     idempotencyKey = crypto.randomUUID(),
   ): Promise<ConversationResponseCommittedEvent> {
-    const responseClient = new ConversationResponseClient({
-      baseUrl: this.baseUrl,
-      fetchImpl: this.fetchImpl,
-    });
-    return responseClient.stream(messageId, handlers, idempotencyKey);
+    return new ConversationResponseClient({ transport: this.transport }).stream(
+      messageId,
+      handlers,
+      idempotencyKey,
+    );
   }
 
   archive(conversationId: string): Promise<CanonicalConversation> {
@@ -254,7 +254,7 @@ export class ConversationClient {
   }
 
   export(conversationId: string): Promise<Record<string, JsonValue>> {
-    return this.request<Record<string, JsonValue>>(
+    return this.transport.request<Record<string, JsonValue>>(
       `/conversations/${encodeURIComponent(conversationId)}/export`,
     );
   }
@@ -287,36 +287,11 @@ export class ConversationClient {
     path: string,
     options: { method?: string; body?: unknown } = {},
   ): Promise<T> {
-    return this.request<T>(path, {
+    return this.transport.request<T>(path, {
       method: options.method ?? "POST",
       body: options.body,
       idempotencyKey: crypto.randomUUID(),
     });
-  }
-
-  private async request<T>(
-    path: string,
-    options: { method?: string; body?: unknown; idempotencyKey?: string } = {},
-  ): Promise<T> {
-    const headers = new Headers({
-      Accept: "application/json",
-      "X-Correlation-ID": crypto.randomUUID(),
-    });
-    if (options.body !== undefined) headers.set("Content-Type", "application/json");
-    if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
-
-    const response = await this.fetchImpl(`${this.baseUrl}/api/v1${path}`, {
-      method: options.method ?? "GET",
-      headers,
-      credentials: "include",
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
-    const text = await response.text();
-    const payload: unknown = text ? safeJson(text) : null;
-    if (!response.ok) {
-      throw new ControlPlaneError(response.status, normalizeError(response, payload));
-    }
-    return payload as T;
   }
 }
 
@@ -373,45 +348,11 @@ export function buildConversationStreamUrl(
   afterEventId?: string,
   pageOrigin = typeof window === "undefined" ? "http://localhost" : window.location.origin,
 ): URL {
-  const base = (baseUrl ?? "").replace(/\/$/, "");
+  const transport = new ApiTransport({ baseUrl });
   const url = new URL(
-    `${base}/api/v1/conversations/${encodeURIComponent(conversationId)}/events/stream`,
+    transport.url(`/conversations/${encodeURIComponent(conversationId)}/events/stream`),
     pageOrigin,
   );
   if (afterEventId) url.searchParams.set("after_event_id", afterEventId);
   return url;
-}
-
-function safeJson(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeError(response: Response, payload: unknown): APIErrorBody {
-  if (isErrorBody(payload)) return payload;
-  const requestId = response.headers.get("x-request-id") ?? "unknown";
-  return {
-    code: "invalid_response",
-    category: "contract",
-    message: `Control Plane returned HTTP ${response.status} without a canonical error envelope`,
-    request_id: requestId,
-    correlation_id: response.headers.get("x-correlation-id") ?? requestId,
-    retryable: false,
-  };
-}
-
-function isErrorBody(value: unknown): value is APIErrorBody {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Partial<APIErrorBody>;
-  return (
-    typeof candidate.code === "string"
-    && typeof candidate.category === "string"
-    && typeof candidate.message === "string"
-    && typeof candidate.request_id === "string"
-    && typeof candidate.correlation_id === "string"
-    && typeof candidate.retryable === "boolean"
-  );
 }
