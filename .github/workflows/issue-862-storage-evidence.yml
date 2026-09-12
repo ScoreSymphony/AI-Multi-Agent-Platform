@@ -339,8 +339,9 @@ jobs:
               test -n "$snapshot"
               test -f "$snapshot"
               test -f /meta/db.sqlite
-              cp /meta/db.sqlite /meta/db.sqlite.pre-issue862-restore
-              cat "$snapshot" > /meta/db.sqlite
+              mv /meta/db.sqlite /meta/db.sqlite.pre-issue862-restore
+              rm -f /meta/db.sqlite-wal /meta/db.sqlite-shm /meta/db.sqlite-journal
+              cp "$snapshot" /meta/db.sqlite
             '
           docker start "$ISSUE862_CONTAINER"
           for _ in $(seq 1 90); do
@@ -355,12 +356,24 @@ jobs:
           PY
             then
               sleep 2
-              exit 0
+              break
             fi
             sleep 1
           done
-          docker logs "$ISSUE862_CONTAINER" || true
-          exit 1
+          if ! python - <<'PY'
+          import socket
+
+          try:
+              with socket.create_connection(("127.0.0.1", 3900), timeout=1):
+                  pass
+          except OSError:
+              raise SystemExit(1)
+          PY
+          then
+            docker logs "$ISSUE862_CONTAINER" || true
+            exit 1
+          fi
+          docker exec "$ISSUE862_CONTAINER" /garage repair -a --yes tables
 
       - name: Verify Garage state after metadata restore
         if: matrix.backend == 'garage'
