@@ -8,6 +8,7 @@ import {
 } from "../../api/onboarding";
 import type { APImanifest, CanonicalModel } from "../../api/types";
 import { Card, ErrorState, LoadingState } from "../../components/States";
+import { ComponentSetupPanel } from "./ComponentSetupPanel";
 import { FirstResult, Guidance, Metric, OnboardingStateSummary } from "./presentation";
 import {
   buildConfigureModelInput,
@@ -151,6 +152,8 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
       {actionError ? <ErrorState error={actionError} /> : null}
       {loadError ? <ErrorState error={loadError} onRetry={() => void load()} /> : null}
       {notice ? <div className="state" role="status"><strong>{notice}</strong></div> : null}
+
+      <ComponentSetupPanel onboarding={onboarding} manifest={manifest} surface="onboarding" />
 
       <Card title="Current first-run state">
         <div className="detail-header"><OnboardingStateSummary status={status} /><button className="secondary" disabled={loading} onClick={() => void load()}>{loading ? "Refreshing…" : "Refresh status"}</button></div>
