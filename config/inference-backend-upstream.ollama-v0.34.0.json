@@ -1,0 +1,16 @@
+{
+  "backend": "ollama",
+  "upstream": "https://github.com/ollama/ollama",
+  "release": "v0.34.0",
+  "release_created_at": "2026-09-09T21:51:50Z",
+  "release_published_at": "2026-09-05T23:49:00Z",
+  "release_commit_sha": "d8ab4b4f0ca24b51d3a46b3bf4f462e58ce66b1f",
+  "license": "MIT",
+  "license_blob_sha": "8e3dc978a7ca8c53f56bbedc5b558116140fc02e",
+  "verified_at": "2026-09-12",
+  "verification_sources": [
+    "https://api.github.com/repos/ollama/ollama/releases/tags/v0.34.0",
+    "https://api.github.com/repos/ollama/ollama/git/ref/tags/v0.34.0",
+    "https://github.com/ollama/ollama/blob/v0.34.0/LICENSE"
+  ]
+}

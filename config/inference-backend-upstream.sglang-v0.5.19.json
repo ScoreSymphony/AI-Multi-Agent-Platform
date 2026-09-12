@@ -1,0 +1,17 @@
+{
+  "backend": "sglang",
+  "upstream": "https://github.com/sgl-project/sglang",
+  "release": "v0.5.19",
+  "release_published_at": "2026-09-05T02:27:42Z",
+  "annotated_tag_sha": "59f20bffdde59a35cc628372d85d20a979f6271b",
+  "release_commit_sha": "0bcd822377da7b5718e674eaf9c870d349424dd1",
+  "license": "Apache-2.0",
+  "license_blob_sha": "9c422689c8f5c317c7c65153b1209349ec57007e",
+  "verified_at": "2026-09-12",
+  "verification_sources": [
+    "https://api.github.com/repos/sgl-project/sglang/releases/tags/v0.5.19",
+    "https://api.github.com/repos/sgl-project/sglang/git/ref/tags/v0.5.19",
+    "https://api.github.com/repos/sgl-project/sglang/git/tags/59f20bffdde59a35cc628372d85d20a979f6271b",
+    "https://github.com/sgl-project/sglang/blob/v0.5.19/LICENSE"
+  ]
+}
