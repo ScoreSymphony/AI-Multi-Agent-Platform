@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -98,7 +100,11 @@ def _install_fake_runtime(
     monkeypatch.setattr(skillspector, "_run", fake_run)
 
 
-def _provider(tmp_path: Path, *, enabled: bool = True) -> skillspector.SkillSpectorSecurityEvidenceProvider:
+def _provider(
+    tmp_path: Path,
+    *,
+    enabled: bool = True,
+) -> skillspector.SkillSpectorSecurityEvidenceProvider:
     return skillspector.SkillSpectorSecurityEvidenceProvider(
         skillspector.SkillSpectorConfig(enabled=enabled, runtime="docker"),
         FilesystemRawSecurityReportStore(tmp_path / "raw-reports"),
@@ -276,7 +282,12 @@ def test_offline_supply_chain_partial_result_is_degraded_not_clean(
     [
         (None, None, 2, "scanner_exit_code=2"),
         (None, b"{not-json", 0, "provider_report_missing_or_malformed"),
-        ({"execution_successful": True, "issues": []}, None, 0, "provider_analysis_completeness_missing"),
+        (
+            {"execution_successful": True, "issues": []},
+            None,
+            0,
+            "provider_analysis_completeness_missing",
+        ),
     ],
 )
 def test_failure_and_malformed_states_fail_closed(
@@ -397,7 +408,7 @@ def test_json_repository_preserves_immutable_historical_evidence(tmp_path: Path)
         dependency_set_digest=skillspector.PINNED_DEPENDENCY_SET_SHA256,
         scan_mode=skillspector.SCAN_MODE,
         policy_config_revision=skillspector.POLICY_CONFIG_REVISION,
-        observed_at=skillspector.datetime(2026, 9, 12, tzinfo=skillspector.UTC),
+        observed_at=datetime(2026, 9, 12, tzinfo=UTC),
         candidate_id="skill_external-example",
         candidate_revision=1,
         candidate_digest="a" * 64,
@@ -412,13 +423,11 @@ def test_json_repository_preserves_immutable_historical_evidence(tmp_path: Path)
     reloaded = JsonSecurityEvidenceRepository(path)
     assert reloaded.get(evidence.evidence_id) == evidence
 
-    changed = SecurityEvidence(
-        **{
-            **evidence.__dict__,
-            "status": SecurityEvidenceStatus.DEGRADED,
-            "complete": False,
-            "degraded_reasons": ("changed",),
-        }
+    changed = replace(
+        evidence,
+        status=SecurityEvidenceStatus.DEGRADED,
+        complete=False,
+        degraded_reasons=("changed",),
     )
     with pytest.raises(ContractError, match="immutable"):
         reloaded.add(changed)
@@ -434,7 +443,7 @@ def test_review_projection_surfaces_degradation_provenance_and_limitations() -> 
         dependency_set_digest=skillspector.PINNED_DEPENDENCY_SET_SHA256,
         scan_mode=skillspector.SCAN_MODE,
         policy_config_revision=skillspector.POLICY_CONFIG_REVISION,
-        observed_at=skillspector.datetime(2026, 9, 12, tzinfo=skillspector.UTC),
+        observed_at=datetime(2026, 9, 12, tzinfo=UTC),
         candidate_id="skill_external-example",
         candidate_revision=1,
         candidate_digest="a" * 64,
