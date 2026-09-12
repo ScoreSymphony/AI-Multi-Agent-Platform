@@ -88,7 +88,7 @@ Streaming does not change registry ownership or canonical identity rules:
 
 ## Regression coverage
 
-`tests/test_issue_10_model_streaming.py` covers:
+`tests/integration/models/test_model_streaming.py` covers:
 
 - native OpenAI-compatible text chunks and terminal response;
 - canonical model ID and correlation metadata on stream events;
@@ -97,7 +97,7 @@ Streaming does not change registry ownership or canonical identity rules:
 - provider replacement while preserving canonical model identity;
 - canonical timeout mapping during native streaming.
 
-`tests/test_issue_10_provider_contract_completion.py` additionally covers:
+`tests/contract/models/test_provider_streaming_contract.py` additionally covers:
 
 - native stream preservation through the public observability wrapper;
 - stream usage/timing observability without falling back to `generate`;
