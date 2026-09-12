@@ -111,11 +111,11 @@ The Control Plane can bind a backend-neutral `TimelineReader` and merge derived 
   - model/tool child telemetry;
   - async correlation;
   - transport-neutral carrier round-trip.
-- `tests/test_issue_16_followup.py`
+- `tests/unit/observability/test_retry_and_trace_links.py`
   - retry metric;
   - async span links;
   - span-link redaction.
-- `tests/test_issue_16_authorization_telemetry.py`
+- `tests/unit/observability/test_authorization_telemetry.py`
   - allow/deny and provider-failure authorization telemetry.
 - `tests/test_issue_16_completion.py`
   - model usage;
