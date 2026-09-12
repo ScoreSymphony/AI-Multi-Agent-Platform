@@ -451,9 +451,7 @@ class AgentSandboxExecutor(Executor):
             stderr=_PROVIDER_FAILURE_MESSAGE if redact_provider_failure else backend.stderr,
             artifacts=tuple(artifacts),
             started_at=(
-                started_at
-                if redact_provider_failure
-                else (backend.started_at or started_at)
+                started_at if redact_provider_failure else (backend.started_at or started_at)
             ),
             finished_at=(
                 datetime.now(UTC).isoformat()
