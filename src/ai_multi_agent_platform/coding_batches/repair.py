@@ -149,11 +149,13 @@ class CodingBatchRepairCoordinator:
         output_revision = _required(output_revision, "output_revision")
         batch = self._get_batch(batch_id)
         candidate = batch.integration_candidate(integration_id)
+        if candidate.repair_attempts:
+            latest = candidate.repair_attempts[-1]
+            if latest.repair_id == repair_id and latest.state is RepairAttemptState.VERIFIED:
+                if latest.output_revision == output_revision and latest.verification == verification:
+                    return candidate
+                raise ValueError("repair result retry conflicts with recorded verified output")
         repair = self._active_repair(candidate, repair_id)
-        if repair.state is RepairAttemptState.VERIFIED:
-            if repair.output_revision == output_revision and repair.verification == verification:
-                return candidate
-            raise ValueError("repair result retry conflicts with recorded verified output")
         if repair.state is not RepairAttemptState.BOUND:
             raise ValueError("only a bound repair Step may record repaired output")
         if verification.subject_revision != output_revision:
@@ -195,9 +197,13 @@ class CodingBatchRepairCoordinator:
         reason = _required(reason, "reason")
         batch = self._get_batch(batch_id)
         candidate = batch.integration_candidate(integration_id)
+        if candidate.repair_attempts:
+            latest = candidate.repair_attempts[-1]
+            if latest.repair_id == repair_id and latest.state is RepairAttemptState.FAILED:
+                if latest.failure_reason == reason:
+                    return candidate
+                raise ValueError("repair failure retry conflicts with recorded reason")
         repair = self._active_repair(candidate, repair_id)
-        if repair.state is RepairAttemptState.FAILED and repair.failure_reason == reason:
-            return candidate
         if repair.state is not RepairAttemptState.BOUND:
             raise ValueError("only a bound repair Step may fail")
         failed = replace(repair, state=RepairAttemptState.FAILED, failure_reason=reason)
