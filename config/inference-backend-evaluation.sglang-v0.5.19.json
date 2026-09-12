@@ -1,0 +1,164 @@
+{
+  "schema_version": "1.0",
+  "campaign_id": "issue-860-sglang-v0.5.19",
+  "issue": 860,
+  "status": "in_progress",
+  "evaluated_at": "2026-09-12",
+  "candidate": {
+    "backend": "sglang",
+    "upstream": "https://github.com/sgl-project/sglang",
+    "release": "v0.5.19",
+    "release_commit": "0bcd822377da7b5718e674eaf9c870d349424dd1",
+    "license": "Apache-2.0",
+    "integration_boundary": "ModelProvider",
+    "mandatory_dependency": false
+  },
+  "decision": {
+    "outcome": null,
+    "allowed_outcomes": [
+      "supported_optional",
+      "experimental_only",
+      "reject/defer"
+    ],
+    "requires_live_measurements": true
+  },
+  "comparison_backends": [
+    {
+      "backend": "sglang",
+      "role": "candidate",
+      "protocol": "openai-compatible",
+      "release": "v0.5.19",
+      "release_commit": "0bcd822377da7b5718e674eaf9c870d349424dd1"
+    },
+    {
+      "backend": "vllm",
+      "role": "gpu-serving-comparator",
+      "protocol": "openai-compatible",
+      "release": "v0.29.0",
+      "release_commit": "98dff2a81d747d1dba01a47f939f48c3526d4206"
+    },
+    {
+      "backend": "ollama",
+      "role": "local-path-comparator",
+      "protocol": "openai-compatible-where-supported",
+      "release": "v0.34.0",
+      "release_commit": "d8ab4b4f0ca24b51d3a46b3bf4f462e58ce66b1f"
+    }
+  ],
+  "comparability": {
+    "same_worker": true,
+    "same_model_revision": true,
+    "same_quantization_or_dtype": true,
+    "same_request_corpus": true,
+    "same_input_output_length_policy": true,
+    "non_equivalent_runs_must_be_marked_incomparable": true
+  },
+  "contract_cases": [
+    "model-discovery-health",
+    "chat-completion-non-streaming",
+    "chat-completion-streaming",
+    "stream-cancellation",
+    "structured-json-output",
+    "tool-call-round-trip",
+    "timeout-normalization",
+    "backend-unavailable-normalization",
+    "malformed-response-normalization",
+    "canonical-model-id-stability",
+    "candidate-absent-baseline-routing"
+  ],
+  "performance_scenarios": [
+    {
+      "scenario_id": "single-request",
+      "concurrency": 1,
+      "request_rate": null
+    },
+    {
+      "scenario_id": "concurrency-4",
+      "concurrency": 4,
+      "request_rate": null
+    },
+    {
+      "scenario_id": "concurrency-16",
+      "concurrency": 16,
+      "request_rate": null
+    },
+    {
+      "scenario_id": "concurrency-32",
+      "concurrency": 32,
+      "request_rate": null
+    }
+  ],
+  "required_metrics": [
+    "cold_load_seconds",
+    "ready_to_first_request_seconds",
+    "request_throughput_per_second",
+    "input_token_throughput_per_second",
+    "output_token_throughput_per_second",
+    "total_token_throughput_per_second",
+    "end_to_end_latency_p50_ms",
+    "end_to_end_latency_p95_ms",
+    "end_to_end_latency_p99_ms",
+    "ttft_p50_ms",
+    "ttft_p95_ms",
+    "ttft_p99_ms",
+    "itl_or_tpot_p50_ms",
+    "itl_or_tpot_p95_ms",
+    "itl_or_tpot_p99_ms",
+    "peak_vram_bytes",
+    "steady_vram_bytes",
+    "peak_host_ram_bytes",
+    "steady_host_ram_bytes",
+    "error_count"
+  ],
+  "failure_cases": [
+    "endpoint-unavailable-before-dispatch",
+    "server-termination-during-stream",
+    "canonical-cancellation",
+    "model-load-failure",
+    "bounded-oom-or-resource-exhaustion",
+    "process-restart-readiness-recovery",
+    "remote-worker-loss",
+    "repeated-start-stop-resource-recovery"
+  ],
+  "placement_cases": [
+    "single-gpu-worker",
+    "multi-gpu-single-worker",
+    "remote-gpu-worker",
+    "multi-node-when-environment-valid"
+  ],
+  "required_environment_fields": [
+    "platform_commit",
+    "backend_revision",
+    "backend_image_or_package",
+    "model_id",
+    "model_revision",
+    "quantization_or_dtype",
+    "launch_command",
+    "os_kernel",
+    "python_version",
+    "accelerator_runtime",
+    "driver_version",
+    "gpu_model",
+    "gpu_count",
+    "gpu_vram_bytes",
+    "cpu_model",
+    "host_ram_bytes",
+    "worker_ids",
+    "network_topology",
+    "warmup_policy",
+    "request_count",
+    "input_length_policy",
+    "output_length_policy",
+    "request_rate",
+    "concurrency",
+    "authentication_exposure",
+    "cache_state"
+  ],
+  "raw_evidence": {
+    "retain_backend_benchmark_jsonl": true,
+    "retain_platform_telemetry": true,
+    "retain_launch_logs": true,
+    "retain_failure_logs": true,
+    "summary_only_is_sufficient": false
+  }
+}

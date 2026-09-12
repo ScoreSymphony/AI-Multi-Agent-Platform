@@ -1,0 +1,15 @@
+{
+  "backend": "vllm",
+  "upstream": "https://github.com/vllm-project/vllm",
+  "release": "v0.29.0",
+  "release_published_at": "2026-09-09T08:54:49Z",
+  "release_commit_sha": "98dff2a81d747d1dba01a47f939f48c3526d4206",
+  "license": "Apache-2.0",
+  "license_blob_sha": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+  "verified_at": "2026-09-12",
+  "verification_sources": [
+    "https://api.github.com/repos/vllm-project/vllm/releases/tags/v0.29.0",
+    "https://api.github.com/repos/vllm-project/vllm/git/ref/tags/v0.29.0",
+    "https://github.com/vllm-project/vllm/blob/v0.29.0/LICENSE"
+  ]
+}
