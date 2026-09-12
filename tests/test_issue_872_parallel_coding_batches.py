@@ -235,7 +235,7 @@ def test_individual_passes_require_fresh_combined_validation_and_authorization()
     assert "stale revision" in blocked.blocker_reasons[0]
 
 
-def test_combined_pass_becomes_merge_ready_only_after_authorization() -> None:
+def test_combined_pass_still_cannot_bypass_canonical_authorization() -> None:
     coordinator, batch_id = _coordinator(_item("a", "src/alpha/a.py"))
     _accept(coordinator, batch_id, "a", "1" * 40, "src/alpha/a.py")
     candidate = coordinator.build_integration_candidate(
@@ -259,19 +259,12 @@ def test_combined_pass_becomes_merge_ready_only_after_authorization() -> None:
     )
     assert validated.state is IntegrationState.VALIDATED
 
-    with pytest.raises(PermissionError, match="canonical authorization"):
-        coordinator.mark_merge_ready(
-            batch_id,
-            candidate.integration_id,
-            authorization_granted=False,
-        )
-
-    ready = coordinator.mark_merge_ready(
-        batch_id,
-        candidate.integration_id,
-        authorization_granted=True,
+    with pytest.raises(PermissionError, match="AuthorizedCodingBatchIntegration"):
+        coordinator.mark_merge_ready(batch_id, candidate.integration_id)
+    assert (
+        coordinator.get(batch_id).integration_candidate(candidate.integration_id).state
+        is IntegrationState.VALIDATED
     )
-    assert ready.state is IntegrationState.MERGE_READY
 
 
 def test_stale_target_revision_blocks_candidate_and_invalidates_old_assumptions() -> None:
