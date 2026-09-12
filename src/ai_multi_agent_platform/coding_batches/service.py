@@ -100,6 +100,7 @@ def _batch_fingerprint(
                 "dependencies": item.dependencies,
                 "affected_paths": item.affected_paths,
                 "semantic_scopes": item.semantic_scopes,
+                "metadata": dict(sorted(item.metadata.items())),
             }
             for item in items
         ],
@@ -249,6 +250,31 @@ class CodingBatchCoordinator:
         if batch is None:
             raise KeyError(batch_id)
         return batch
+
+    def bind_plan_revision(
+        self,
+        batch_id: str,
+        workstream_id: str,
+        *,
+        plan_revision: int,
+    ) -> CodingWorkstream:
+        if plan_revision < 1:
+            raise ValueError("plan_revision must be positive")
+        batch = self.get(batch_id)
+        current = batch.workstream(workstream_id)
+        recorded = current.provenance.plan_revision
+        if recorded == plan_revision:
+            return current
+        if recorded is not None:
+            raise ValueError("workstream already records a different canonical Plan revision")
+        if current.state is not WorkstreamState.READY:
+            raise ValueError("canonical Plan revision must be bound before materialization")
+        updated = current.with_state(
+            current.state,
+            provenance=replace(current.provenance, plan_revision=plan_revision),
+        )
+        self._save_workstream(batch, updated)
+        return updated
 
     def ready_workstreams(self, batch_id: str) -> tuple[CodingWorkstream, ...]:
         batch = self.get(batch_id)
