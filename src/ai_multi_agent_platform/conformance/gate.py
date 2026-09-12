@@ -530,11 +530,7 @@ def _execute_scenario(
         owner=scenario.owner,
         criterion=scenario.criterion,
         required=scenario.required,
-        status=(
-            ConformanceStatus.PASSED
-            if execution.exit_code == 0
-            else ConformanceStatus.FAILED
-        ),
+        status=(ConformanceStatus.PASSED if execution.exit_code == 0 else ConformanceStatus.FAILED),
         started_at=started_at,
         finished_at=finished_at,
         duration_seconds=execution.duration_seconds,
