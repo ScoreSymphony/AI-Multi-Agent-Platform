@@ -4,7 +4,6 @@ import asyncio
 from pathlib import Path
 
 import pytest
-
 from executor_contract_suite import ExecutorContractSuite
 
 from ai_multi_agent_platform.adapters.swe_rex import (
