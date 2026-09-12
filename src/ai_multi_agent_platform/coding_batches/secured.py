@@ -1,6 +1,8 @@
-"""Public coding-batch coordinator with the #15 merge-readiness seam sealed."""
+"""Public coding-batch coordinator with sensitive integration seams sealed."""
 
 from __future__ import annotations
+
+from dataclasses import replace
 
 from .models import (
     BatchAggregationPolicy,
@@ -9,6 +11,8 @@ from .models import (
     CodingWorkstream,
     CombinedValidationEvidence,
     IntegrationCandidate,
+    IntegrationExecutionProvenance,
+    IntegrationState,
     VerificationEvidence,
     WorkstreamResult,
     WorkstreamState,
@@ -21,9 +25,9 @@ from .service import CodingBatchStore
 class CodingBatchCoordinator:
     """Supported #872 coordinator surface over the internal deterministic state machine.
 
-    The internal state machine is deliberately not exported as the package coordinator. In
-    particular, callers cannot assert authorization with a boolean: productive merge readiness must
-    cross :class:`AuthorizedCodingBatchIntegration`, which invokes canonical #15 first.
+    Productive merge readiness must cross canonical #15, and a clean combined revision must first
+    be bound to canonical #384/#33/#37 execution provenance. Callers therefore cannot advance a
+    ready integration candidate by merely presenting a Git SHA.
     """
 
     def __init__(
@@ -148,6 +152,33 @@ class CodingBatchCoordinator:
             workstream_ids=selected,
         )
 
+    def bind_integration_execution(
+        self,
+        batch_id: str,
+        integration_id: str,
+        execution: IntegrationExecutionProvenance,
+    ) -> IntegrationCandidate:
+        """Bind a clean candidate to the exact canonical integration execution attempt."""
+
+        batch = self.get(batch_id)
+        candidate = batch.integration_candidate(integration_id)
+        if candidate.state is IntegrationState.INTEGRATING:
+            if candidate.execution == execution:
+                return candidate
+            raise ValueError("integration retry conflicts with canonical execution provenance")
+        if candidate.state is not IntegrationState.READY:
+            raise ValueError("only a ready integration candidate can start integration execution")
+        updated = replace(
+            candidate,
+            state=IntegrationState.INTEGRATING,
+            execution=execution,
+            integrated_revision=None,
+            validation=None,
+            blocker_reasons=(),
+        )
+        self._state._save_candidate(batch, updated)
+        return updated
+
     def record_integrated_revision(
         self,
         batch_id: str,
@@ -155,11 +186,27 @@ class CodingBatchCoordinator:
         *,
         integrated_revision: str,
     ) -> IntegrationCandidate:
-        return self._state.record_integrated_revision(
-            batch_id,
-            integration_id,
+        """Record #82 output only after canonical integration execution has been bound."""
+
+        batch = self.get(batch_id)
+        candidate = batch.integration_candidate(integration_id)
+        if (
+            candidate.integrated_revision == integrated_revision
+            and candidate.state is IntegrationState.VALIDATING
+        ):
+            return candidate
+        if candidate.state is not IntegrationState.INTEGRATING or candidate.execution is None:
+            raise ValueError(
+                "integrated revision requires canonical integration execution provenance"
+            )
+        updated = replace(
+            candidate,
+            state=IntegrationState.VALIDATING,
             integrated_revision=integrated_revision,
+            validation=None,
         )
+        self._state._save_candidate(batch, updated)
+        return updated
 
     def record_combined_validation(
         self,
