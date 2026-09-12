@@ -8,12 +8,8 @@ from typing import Any
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-REFERENCE_PATH = (
-    REPO_ROOT / "tests" / "evidence" / "issue_862" / "runtime_image_digests.json"
-)
-VERIFIER_PATH = (
-    REPO_ROOT / "scripts" / "benchmarks" / "verify_issue862_storage_vps_capture.py"
-)
+REFERENCE_PATH = REPO_ROOT / "tests" / "evidence" / "issue_862" / "runtime_image_digests.json"
+VERIFIER_PATH = REPO_ROOT / "scripts" / "benchmarks" / "verify_issue862_storage_vps_capture.py"
 
 
 def _reference() -> dict[str, Any]:
