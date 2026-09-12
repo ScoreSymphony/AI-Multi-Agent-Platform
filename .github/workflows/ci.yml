@@ -199,7 +199,7 @@ jobs:
                   }
                 ],
                 "network_config": {
-                  "base_url": "http://host.docker.internal:18000",
+                  "base_url": "http://127.0.0.1:18000",
                   "default_request_timeout_in_seconds": 5,
                   "max_retries": 0
                 },
@@ -232,10 +232,9 @@ jobs:
             > "$GITHUB_WORKSPACE/artifacts/issue-859-bifrost-image-digest.txt"
           docker run --rm -d \
             --name issue859-bifrost \
-            --add-host=host.docker.internal:host-gateway \
-            -p 18080:8080 \
+            --network host \
             -v "$GITHUB_WORKSPACE/.issue859-bifrost-data:/app/data" \
-            -e BIFROST_HOST=0.0.0.0 \
+            -e APP_HOST=0.0.0.0 \
             -e BIFROST_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef \
             -e ISSUE859_PROVIDER_KEY=ci-fixture-provider-key \
             maximhq/bifrost:v2.1.1
@@ -251,7 +250,7 @@ jobs:
           }).encode("utf-8")
           for _ in range(120):
               request = urllib.request.Request(
-                  "http://127.0.0.1:18080/v1/chat/completions",
+                  "http://127.0.0.1:8080/v1/chat/completions",
                   data=payload,
                   headers={"Content-Type": "application/json"},
                   method="POST",
@@ -270,7 +269,7 @@ jobs:
         env:
           BIFROST_EVAL_DIRECT_BASE_URL: http://127.0.0.1:18000/v1
           BIFROST_EVAL_DIRECT_MODEL: fixture-model
-          BIFROST_EVAL_BIFROST_BASE_URL: http://127.0.0.1:18080/v1
+          BIFROST_EVAL_BIFROST_BASE_URL: http://127.0.0.1:8080/v1
           BIFROST_EVAL_BIFROST_MODEL: issue859-local/fixture-model
           BIFROST_EVAL_OPERATION_COUNT: "6"
           BIFROST_EVAL_CONCURRENCY: "2"
@@ -291,7 +290,7 @@ jobs:
             --direct-base-url http://127.0.0.1:18000/v1 \
             --direct-model fixture-model \
             --direct-runtime-version issue859-mock-openai-v1 \
-            --bifrost-base-url http://127.0.0.1:18080/v1 \
+            --bifrost-base-url http://127.0.0.1:8080/v1 \
             --bifrost-model issue859-local/fixture-model \
             --operation-count 10 \
             --concurrency 2 \
