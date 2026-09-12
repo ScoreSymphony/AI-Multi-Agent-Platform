@@ -122,9 +122,7 @@ def test_agent_capability_maximum_version_is_exclusive_like_runtime() -> None:
     result = AgentResolver(repository).resolve(
         AgentMatchingRequirements(
             exact_agent=revision,
-            required_capabilities=(
-                AgentCapabilityRequirement("tool.search", exact_version="2.0"),
-            ),
+            required_capabilities=(AgentCapabilityRequirement("tool.search", exact_version="2.0"),),
             candidate_kinds=(AgentCandidateKind.AGENT,),
         )
     )
