@@ -1,4 +1,5 @@
 """Optional NVIDIA SkillSpector static pre-install evidence provider."""
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,7 @@ PROVIDER_ID = "nvidia/skillspector"
 PINNED_VERSION = "2.11.2"
 PINNED_REVISION = "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc"
 EVALUATED_IMAGE_ID = "sha256:55abb78a1f1af1f430722920b96d4e24bed03e9e9811e1cf5330b859d2387fc1"
-PINNED_IMAGE_ID = EVALUATED_IMAGE_ID  # #800 provenance; production records observed OCI ID.
+PINNED_IMAGE_ID = EVALUATED_IMAGE_ID
 PINNED_DEPENDENCY_SET_SHA256 = "d6716d890040ac73494a8422ea51ef11229e71e0c0d9b538a95316a3a644fc61"
 PINNED_DOCKERFILE_SHA256 = "124041bd2c81880747197f221c8d9a13b7378ac5ad98a17b4ab6a15ad22eb9aa"
 PINNED_LICENSE_SHA256 = "9f8785b47596b2993a17a3fa8d747ae63126a2c5e80a9e77195a907273d71839"
@@ -111,15 +112,17 @@ class SkillSpectorSecurityEvidenceProvider:
         try:
             source = _validate_candidate(candidate.snapshot_path, candidate.candidate_digest)
         except (OSError, ValueError) as exc:
-            return self._degraded(candidate, observed_at, f"candidate_validation_failed:{type(exc).__name__}")
-
+            return self._degraded(
+                candidate,
+                observed_at,
+                f"candidate_validation_failed:{type(exc).__name__}",
+            )
         runtime = self._resolve_runtime()
         if runtime is None:
             return self._degraded(candidate, observed_at, "container_runtime_unavailable")
         inspection, reason = self._inspect_image(runtime)
         if inspection is None:
             return self._degraded(candidate, observed_at, reason or "provider_image_invalid")
-
         with tempfile.TemporaryDirectory(prefix="skillspector-868-") as temp:
             output = Path(temp) / "output"
             _prepare_output_directory(output)
@@ -129,8 +132,12 @@ class SkillSpectorSecurityEvidenceProvider:
             except subprocess.TimeoutExpired:
                 return self._degraded(candidate, observed_at, "scanner_timeout", inspection.image_id)
             except OSError:
-                return self._degraded(candidate, observed_at, "scanner_process_start_failed", inspection.image_id)
-
+                return self._degraded(
+                    candidate,
+                    observed_at,
+                    "scanner_process_start_failed",
+                    inspection.image_id,
+                )
             report_path = output / "report.json"
             raw_bytes: bytes | None = None
             report: Mapping[str, object] | None = None
@@ -142,23 +149,21 @@ class SkillSpectorSecurityEvidenceProvider:
                         report = decoded
                 except (OSError, UnicodeDecodeError, json.JSONDecodeError):
                     report = None
-
             reasons: list[str] = []
             try:
                 if _validate_candidate(source, candidate.candidate_digest) != source:
                     reasons.append("candidate_snapshot_changed_during_scan")
             except (OSError, ValueError):
                 reasons.append("candidate_snapshot_changed_during_scan")
-
             raw_digest: str | None = None
             raw_ref: str | None = None
             if raw_bytes is not None:
                 try:
                     artifact = self.raw_report_store.put(raw_bytes)
-                    raw_digest, raw_ref = artifact.digest, artifact.artifact_ref
-                except OSError:
+                except Exception:
                     reasons.append("raw_report_retention_failed")
-
+                else:
+                    raw_digest, raw_ref = artifact.digest, artifact.artifact_ref
             return self._normalize(
                 candidate,
                 inspection.image_id,
@@ -193,12 +198,16 @@ class SkillSpectorSecurityEvidenceProvider:
             return None, "provider_image_metadata_malformed"
         image_id = payload.get("Id")
         config = payload.get("Config")
-        if not isinstance(image_id, str) or not image_id.startswith("sha256:") or not isinstance(config, Mapping):
+        if (
+            not isinstance(image_id, str)
+            or not image_id.startswith("sha256:")
+            or not isinstance(config, Mapping)
+        ):
             return None, "provider_image_metadata_malformed"
         raw_labels = config.get("Labels")
         if not isinstance(raw_labels, Mapping):
             return None, "provider_image_labels_missing"
-        labels = {str(k): str(v) for k, v in raw_labels.items()}
+        labels = {str(key): str(value) for key, value in raw_labels.items()}
         expected = {
             LABEL_REVISION: self.config.provider_revision,
             LABEL_DEPENDENCIES: self.config.dependency_set_digest,
@@ -242,11 +251,15 @@ class SkillSpectorSecurityEvidenceProvider:
             if values is None:
                 complete = False
                 reasons.append("provider_findings_missing")
-            elif not all(isinstance(v, Mapping) for v in values):
+            elif not all(isinstance(value, Mapping) for value in values):
                 complete = False
                 reasons.append("provider_findings_invalid")
             else:
-                findings = tuple(_normalize_finding(v) for v in values if isinstance(v, Mapping))
+                findings = tuple(
+                    _normalize_finding(value)
+                    for value in values
+                    if isinstance(value, Mapping)
+                )
             completeness = report.get("analysis_completeness")
             if not isinstance(completeness, Mapping):
                 complete = False
@@ -260,10 +273,18 @@ class SkillSpectorSecurityEvidenceProvider:
                     complete = False
                     reasons.append("provider_analysis_execution_failed")
                 value = completeness.get("status")
-                if isinstance(value, str) and value.lower() not in {"complete", "completed", "full"}:
+                if isinstance(value, str) and value.lower() not in {
+                    "complete",
+                    "completed",
+                    "full",
+                }:
                     complete = False
                     reasons.append(f"provider_analysis_status={value.lower()}")
-            for source_key, target_key in (("risk_assessment", "risk_assessment"), ("metadata", "metadata"), ("skill", "skill")):
+            for source_key, target_key in (
+                ("risk_assessment", "risk_assessment"),
+                ("metadata", "metadata"),
+                ("skill", "skill"),
+            ):
                 value = report.get(source_key)
                 if isinstance(value, Mapping):
                     metadata[target_key] = _json_mapping(value)
@@ -272,24 +293,52 @@ class SkillSpectorSecurityEvidenceProvider:
                 baseline = _json_mapping(value)
             value = report.get("suppressed")
             if isinstance(value, list):
-                suppressions = tuple(_json_mapping(v) for v in value if isinstance(v, Mapping))
+                suppressions = tuple(
+                    _json_mapping(item) for item in value if isinstance(item, Mapping)
+                )
         if raw_digest is None:
             complete = False
             reasons.append("raw_report_not_retained")
-        status = SecurityEvidenceStatus.DEGRADED if not complete else (SecurityEvidenceStatus.FINDINGS if findings else SecurityEvidenceStatus.CLEAN)
+        status = (
+            SecurityEvidenceStatus.DEGRADED
+            if not complete
+            else SecurityEvidenceStatus.FINDINGS
+            if findings
+            else SecurityEvidenceStatus.CLEAN
+        )
         return SecurityEvidence(
-            evidence_id=new_security_evidence_id(), provider=PROVIDER_ID,
-            provider_version=self.config.provider_version, provider_revision=self.config.provider_revision,
-            provider_build_identity=image_id, dependency_set_digest=self.config.dependency_set_digest,
-            scan_mode=self.config.scan_mode, policy_config_revision=self.config.policy_config_revision,
-            observed_at=_report_time(report, observed_at), candidate_id=candidate.candidate_id,
-            candidate_revision=candidate.candidate_revision, candidate_digest=candidate.candidate_digest,
-            status=status, complete=complete, findings=findings, degraded_reasons=tuple(dict.fromkeys(reasons)),
-            suppression_metadata=suppressions, baseline_metadata=baseline,
-            network_usage={"container_network": "none", "osv_network_access": "blocked", "external_llm_network_access": "disabled"},
-            provider_usage={"llm_assisted": False, "external_provider": None, "hosted_service_required": False},
-            provider_metadata=metadata, known_provider_limitations=KNOWN_LIMITATIONS,
-            raw_report_digest=raw_digest, raw_report_artifact_ref=raw_ref,
+            evidence_id=new_security_evidence_id(),
+            provider=PROVIDER_ID,
+            provider_version=self.config.provider_version,
+            provider_revision=self.config.provider_revision,
+            provider_build_identity=image_id,
+            dependency_set_digest=self.config.dependency_set_digest,
+            scan_mode=self.config.scan_mode,
+            policy_config_revision=self.config.policy_config_revision,
+            observed_at=_report_time(report, observed_at),
+            candidate_id=candidate.candidate_id,
+            candidate_revision=candidate.candidate_revision,
+            candidate_digest=candidate.candidate_digest,
+            status=status,
+            complete=complete,
+            findings=findings,
+            degraded_reasons=tuple(dict.fromkeys(reasons)),
+            suppression_metadata=suppressions,
+            baseline_metadata=baseline,
+            network_usage={
+                "container_network": "none",
+                "osv_network_access": "blocked",
+                "external_llm_network_access": "disabled",
+            },
+            provider_usage={
+                "llm_assisted": False,
+                "external_provider": None,
+                "hosted_service_required": False,
+            },
+            provider_metadata=metadata,
+            known_provider_limitations=KNOWN_LIMITATIONS,
+            raw_report_digest=raw_digest,
+            raw_report_artifact_ref=raw_ref,
         )
 
     def _build_metadata(self, returncode: int) -> dict[str, JsonValue]:
@@ -304,26 +353,80 @@ class SkillSpectorSecurityEvidenceProvider:
             "evaluation_artifact_sha256": EVALUATION_ARTIFACT_SHA256,
         }
 
-    def _degraded(self, candidate: StagedSkillCandidate, observed_at: datetime, reason: str, image_id: str = "unavailable") -> SecurityEvidence:
+    def _degraded(
+        self,
+        candidate: StagedSkillCandidate,
+        observed_at: datetime,
+        reason: str,
+        image_id: str = "unavailable",
+    ) -> SecurityEvidence:
         return SecurityEvidence(
-            evidence_id=new_security_evidence_id(), provider=PROVIDER_ID,
-            provider_version=self.config.provider_version, provider_revision=self.config.provider_revision,
-            provider_build_identity=image_id, dependency_set_digest=self.config.dependency_set_digest,
-            scan_mode=self.config.scan_mode, policy_config_revision=self.config.policy_config_revision,
-            observed_at=observed_at, candidate_id=candidate.candidate_id, candidate_revision=candidate.candidate_revision,
-            candidate_digest=candidate.candidate_digest, status=SecurityEvidenceStatus.DEGRADED, complete=False,
-            degraded_reasons=(reason,), network_usage={"container_network": "none", "osv_network_access": "blocked", "external_llm_network_access": "disabled"},
-            provider_usage={"llm_assisted": False, "external_provider": None, "hosted_service_required": False},
-            provider_metadata=self._build_metadata(-1), known_provider_limitations=KNOWN_LIMITATIONS,
+            evidence_id=new_security_evidence_id(),
+            provider=PROVIDER_ID,
+            provider_version=self.config.provider_version,
+            provider_revision=self.config.provider_revision,
+            provider_build_identity=image_id,
+            dependency_set_digest=self.config.dependency_set_digest,
+            scan_mode=self.config.scan_mode,
+            policy_config_revision=self.config.policy_config_revision,
+            observed_at=observed_at,
+            candidate_id=candidate.candidate_id,
+            candidate_revision=candidate.candidate_revision,
+            candidate_digest=candidate.candidate_digest,
+            status=SecurityEvidenceStatus.DEGRADED,
+            complete=False,
+            degraded_reasons=(reason,),
+            network_usage={
+                "container_network": "none",
+                "osv_network_access": "blocked",
+                "external_llm_network_access": "disabled",
+            },
+            provider_usage={
+                "llm_assisted": False,
+                "external_provider": None,
+                "hosted_service_required": False,
+            },
+            provider_metadata=self._build_metadata(-1),
+            known_provider_limitations=KNOWN_LIMITATIONS,
         )
 
 
-def build_container_command(runtime: str, config: SkillSpectorConfig, input_dir: Path, output_dir: Path) -> list[str]:
-    return [runtime, "run", "--rm", "--network=none", "--read-only", "--cap-drop=ALL",
-        "--security-opt=no-new-privileges", f"--pids-limit={config.pids_limit}", f"--memory={config.memory_limit}",
-        f"--cpus={config.cpu_limit}", "--tmpfs", f"/tmp:rw,noexec,nosuid,size={config.tmpfs_size}", "-e", "HOME=/tmp",
-        "-v", f"{input_dir}:/scan:ro", "-v", f"{output_dir}:/out:rw", "--entrypoint", "skillspector", config.image_ref,
-        "scan", "/scan", "--no-llm", "--format", "json", "--output", "/out/report.json"]
+def build_container_command(
+    runtime: str,
+    config: SkillSpectorConfig,
+    input_dir: Path,
+    output_dir: Path,
+) -> list[str]:
+    return [
+        runtime,
+        "run",
+        "--rm",
+        "--network=none",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        f"--pids-limit={config.pids_limit}",
+        f"--memory={config.memory_limit}",
+        f"--cpus={config.cpu_limit}",
+        "--tmpfs",
+        f"/tmp:rw,noexec,nosuid,size={config.tmpfs_size}",
+        "-e",
+        "HOME=/tmp",
+        "-v",
+        f"{input_dir}:/scan:ro",
+        "-v",
+        f"{output_dir}:/out:rw",
+        "--entrypoint",
+        "skillspector",
+        config.image_ref,
+        "scan",
+        "/scan",
+        "--no-llm",
+        "--format",
+        "json",
+        "--output",
+        "/out/report.json",
+    ]
 
 
 def sanitized_environment() -> dict[str, str]:
@@ -332,7 +435,7 @@ def sanitized_environment() -> dict[str, str]:
 
 def digest_tree(root: Path) -> str:
     digest = sha256()
-    for path in sorted(v for v in root.rglob("*") if v.is_file()):
+    for path in sorted(value for value in root.rglob("*") if value.is_file()):
         digest.update(path.relative_to(root).as_posix().encode())
         digest.update(b"\0")
         digest.update(path.read_bytes())
@@ -362,7 +465,14 @@ def _prepare_output_directory(path: Path) -> None:
 
 
 def _run(command: Sequence[str], *, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(list(command), check=False, capture_output=True, text=True, timeout=timeout_seconds, env=sanitized_environment())
+    result = subprocess.run(
+        list(command),
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+        env=sanitized_environment(),
+    )
     if len(result.stdout.encode()) > MAX_CAPTURE_BYTES:
         result.stdout = result.stdout.encode()[:MAX_CAPTURE_BYTES].decode(errors="replace")
     if len(result.stderr.encode()) > MAX_CAPTURE_BYTES:
@@ -380,20 +490,45 @@ def _finding_values(report: Mapping[str, object]) -> list[object] | None:
 
 def _normalize_finding(item: Mapping[object, object]) -> SecurityFinding:
     raw_location = item.get("location")
-    location: Mapping[object, object] = raw_location if isinstance(raw_location, Mapping) else {}
+    location: Mapping[object, object] = (
+        raw_location if isinstance(raw_location, Mapping) else {}
+    )
     line = _opt_int(location.get("start_line") or location.get("line"))
     if line is None:
-        line = _opt_int(item.get("start_line") or item.get("line") or item.get("line_number"))
+        line = _opt_int(
+            item.get("start_line") or item.get("line") or item.get("line_number")
+        )
     extras: dict[str, JsonValue] = {}
     for key in ("pattern", "remediation", "intent", "match_fingerprint", "tags", "evidence"):
         if key in item:
             extras[key] = _json_value(item[key])
     severity = _first(item, "severity", "risk_level", "level")
     return SecurityFinding(
-        _opt_str(_first(item, "id", "rule_id")), _opt_str(_first(item, "finding_id", "provider_finding_id")),
-        _opt_str(_first(item, "category", "type", "kind")), str(severity).lower() if severity is not None else None,
-        _opt_float(item.get("confidence")), _opt_str(_first(item, "title", "summary", "message", "finding", "description", "explanation")),
-        _opt_str(location.get("file") or location.get("path") or item.get("file") or item.get("path")), line, extras)
+        rule_id=_opt_str(_first(item, "id", "rule_id")),
+        occurrence_id=_opt_str(_first(item, "finding_id", "provider_finding_id")),
+        category=_opt_str(_first(item, "category", "type", "kind")),
+        severity=str(severity).lower() if severity is not None else None,
+        confidence=_opt_float(item.get("confidence")),
+        summary=_opt_str(
+            _first(
+                item,
+                "title",
+                "summary",
+                "message",
+                "finding",
+                "description",
+                "explanation",
+            )
+        ),
+        path=_opt_str(
+            location.get("file")
+            or location.get("path")
+            or item.get("file")
+            or item.get("path")
+        ),
+        line=line,
+        metadata=extras,
+    )
 
 
 def _report_time(report: Mapping[str, object] | None, fallback: datetime) -> datetime:
@@ -402,25 +537,31 @@ def _report_time(report: Mapping[str, object] | None, fallback: datetime) -> dat
         if isinstance(raw_skill, Mapping):
             value = raw_skill.get("scanned_at")
             if isinstance(value, str):
-                try: return datetime.fromisoformat(value.replace("Z", "+00:00"))
-                except ValueError: pass
+                try:
+                    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+                except ValueError:
+                    pass
     return fallback
 
 
 def _json_mapping(value: Mapping[object, object]) -> dict[str, JsonValue]:
-    return {str(k): _json_value(v) for k, v in value.items()}
+    return {str(key): _json_value(item) for key, item in value.items()}
 
 
 def _json_value(value: object) -> JsonValue:
-    if value is None or isinstance(value, str | int | float | bool): return value
-    if isinstance(value, list | tuple): return [_json_value(v) for v in value]
-    if isinstance(value, Mapping): return {str(k): _json_value(v) for k, v in value.items()}
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, list | tuple):
+        return [_json_value(item) for item in value]
+    if isinstance(value, Mapping):
+        return {str(key): _json_value(item) for key, item in value.items()}
     return str(value)
 
 
 def _first(mapping: Mapping[object, object], *keys: str) -> object | None:
     for key in keys:
-        if key in mapping: return mapping[key]
+        if key in mapping:
+            return mapping[key]
     return None
 
 
@@ -429,19 +570,28 @@ def _opt_str(value: object) -> str | None:
 
 
 def _opt_int(value: object) -> int | None:
-    if isinstance(value, bool): return None
-    if isinstance(value, int): return value
-    if isinstance(value, float): return int(value)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
     if isinstance(value, str):
-        try: return int(value)
-        except ValueError: return None
+        try:
+            return int(value)
+        except ValueError:
+            return None
     return None
 
 
 def _opt_float(value: object) -> float | None:
-    if isinstance(value, bool): return None
-    if isinstance(value, int | float): return float(value)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
     if isinstance(value, str):
-        try: return float(value)
-        except ValueError: return None
+        try:
+            return float(value)
+        except ValueError:
+            return None
     return None
