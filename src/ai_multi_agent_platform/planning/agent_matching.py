@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ai_multi_agent_platform.agents import (
     AgentCandidateKind,
     AgentCapabilityRequirement,
@@ -19,7 +21,13 @@ from ai_multi_agent_platform.capabilities import CapabilitySpec
 from ai_multi_agent_platform.contracts import HealthStatus
 from ai_multi_agent_platform.domain import OwnerRef
 
-from .models import PlanningAgentCandidate, PlanningRequest, PlanningStepDraft, PlanningTeamCandidate
+from .models import (
+    AgentAssignment,
+    PlanningAgentCandidate,
+    PlanningRequest,
+    PlanningStepDraft,
+    PlanningTeamCandidate,
+)
 
 _PLANNING_OWNER = OwnerRef(type="service", id="planning-inventory")
 
@@ -72,6 +80,51 @@ def match_planning_step(
     )
     matcher = AgentMatcher(capability_specs=_capability_specs(request))
     return matcher.match(matching, _planning_candidates(request, agent_only=agent_only))
+
+
+def resolve_planning_steps(
+    steps: tuple[PlanningStepDraft, ...],
+    request: PlanningRequest,
+) -> tuple[PlanningStepDraft, ...]:
+    """Resolve role-only #439 assignments to exact Agent revisions when unambiguous.
+
+    The current reference execution boundary executes one Agent per canonical Step, so this
+    adapter intentionally asks the shared matcher for Agents only. Team matching remains
+    available through the core resolver without pretending the single-Agent execution seam can
+    execute a Team. Ambiguous/no-match assignments remain role-based and are rejected by the
+    proposal validator with structured diagnostics.
+    """
+
+    resolved: list[PlanningStepDraft] = []
+    for step in steps:
+        assignment = step.assignment
+        if assignment is None or assignment.role_requirement is None:
+            resolved.append(step)
+            continue
+        result = match_planning_step(step, request, agent_only=True)
+        if result is None or not isinstance(result.selected, AgentRevisionRef):
+            resolved.append(step)
+            continue
+        rationale = assignment.rationale
+        selected_outcome = result.selected_outcome
+        matching_rationale = (
+            "canonical #903 Agent matcher selected exact eligible revision"
+            if selected_outcome is None
+            else "; ".join(selected_outcome.rationale)
+        )
+        if rationale:
+            matching_rationale = f"{rationale}; {matching_rationale}"
+        resolved.append(
+            replace(
+                step,
+                assignment=AgentAssignment(
+                    agent_id=result.selected.agent_id,
+                    agent_revision=result.selected.revision,
+                    rationale=matching_rationale,
+                ),
+            )
+        )
+    return tuple(resolved)
 
 
 def _capability_specs(request: PlanningRequest) -> tuple[CapabilitySpec, ...]:
@@ -161,4 +214,4 @@ def _team_candidate(
     )
 
 
-__all__ = ["match_planning_step"]
+__all__ = ["match_planning_step", "resolve_planning_steps"]
