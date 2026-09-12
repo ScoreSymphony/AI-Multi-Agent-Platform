@@ -43,13 +43,17 @@ class CanonicalConsumerRequirementEvaluator:
         # resolver validates the pinned revision against its real scope instead of treating the
         # absence of Task scope in the legacy requirement tuple as a cross-scope mismatch.
         if isinstance(consumer, AgentRevisionRef):
-            revision = self.agents.get_agent_revision(consumer.agent_id, consumer.revision)
+            agent_revision = self.agents.get_agent_revision(consumer.agent_id, consumer.revision)
+            project_id = agent_revision.project_id
+            workspace_id = agent_revision.workspace_id
         else:
-            revision = self.agents.get_team_revision(consumer.team_id, consumer.revision)
+            team_revision = self.agents.get_team_revision(consumer.team_id, consumer.revision)
+            project_id = team_revision.project_id
+            workspace_id = team_revision.workspace_id
         parsed = replace(
             parsed,
-            project_id=revision.project_id,
-            workspace_id=revision.workspace_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
         )
 
         result = self._resolver.resolve(parsed)
