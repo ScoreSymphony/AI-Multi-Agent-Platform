@@ -167,9 +167,7 @@ def main(argv: list[str] | None = None) -> int:
     _ControlHandler.state = state
 
     dns_server = socketserver.ThreadingUDPServer((args.dns_host, args.dns_port), _DNSHandler)
-    control_server = ThreadingHTTPServer(
-        (args.control_host, args.control_port), _ControlHandler
-    )
+    control_server = ThreadingHTTPServer((args.control_host, args.control_port), _ControlHandler)
     control_thread = threading.Thread(target=control_server.serve_forever, daemon=True)
     control_thread.start()
     try:
