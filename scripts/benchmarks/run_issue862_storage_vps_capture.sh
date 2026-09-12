@@ -49,6 +49,16 @@ for command in docker git python3 sha256sum tar curl openssl du; do
   fi
 done
 
+if [[ ! -x /usr/bin/time ]]; then
+  echo "missing required executable: /usr/bin/time" >&2
+  exit 2
+fi
+
+if ! docker info >/dev/null 2>&1; then
+  echo "Docker daemon is unavailable or the current user cannot access it" >&2
+  exit 2
+fi
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 PLATFORM_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 OUTPUT_DIR="${1:-$REPO_ROOT/artifacts/issue862-storage-vps}"
@@ -344,6 +354,8 @@ manifest = {
 )
 PY
 
+python3 "$REPO_ROOT/scripts/benchmarks/summarize_issue862_storage_vps_capture.py" "$OUTPUT_DIR"
+
 (
   cd "$OUTPUT_DIR"
   find . -maxdepth 1 -type f ! -name 'SHA256SUMS' ! -name '*.tar.gz*' -print0 \
@@ -359,5 +371,6 @@ PY
 )
 
 echo "#862 ordinary-VPS evidence written to: $OUTPUT_DIR"
+echo "summary: $OUTPUT_DIR/storage-vps-summary.md"
 echo "bundle: $OUTPUT_DIR/issue862-storage-vps-evidence.tar.gz"
 echo "bundle SHA-256: $(cat "$OUTPUT_DIR/issue862-storage-vps-evidence.tar.gz.sha256")"
