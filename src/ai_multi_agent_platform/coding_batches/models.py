@@ -64,9 +64,12 @@ class OverlapKind(StrEnum):
     """Conservative relationship between two coding work items."""
 
     INDEPENDENT = "independent"
+    SHARED_SOURCE_SAFE = "shared_source_safe"
     DEPENDENCY = "dependency"
+    LIKELY_TEXTUAL_OVERLAP = "likely_textual_overlap"
     TEXTUAL_CONFLICT = "textual_conflict"
     SEMANTIC_OVERLAP = "semantic_overlap"
+    EXPLICIT_CONFLICT = "explicit_conflict"
     UNKNOWN = "unknown"
 
 
@@ -140,7 +143,10 @@ class OverlapDecision:
 
     @property
     def blocks_parallel_start(self) -> bool:
-        return self.kind is not OverlapKind.INDEPENDENT
+        return self.kind not in {
+            OverlapKind.INDEPENDENT,
+            OverlapKind.SHARED_SOURCE_SAFE,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,8 +319,8 @@ class IntegrationConflict:
         object.__setattr__(self, "rationale", _required(self.rationale, "rationale"))
         if len(self.workstream_ids) < 2:
             raise ValueError("integration conflict must reference at least two workstreams")
-        if self.kind is OverlapKind.INDEPENDENT:
-            raise ValueError("independent workstreams are not an integration conflict")
+        if self.kind in {OverlapKind.INDEPENDENT, OverlapKind.SHARED_SOURCE_SAFE}:
+            raise ValueError("parallel-safe workstreams are not an integration conflict")
 
 
 @dataclass(frozen=True, slots=True)
