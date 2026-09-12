@@ -204,7 +204,7 @@ export class RegistryClient {
     );
   }
 
-  private command<T>(
+  private async command<T>(
     command: RegistryCommand,
     itemId: string,
     commandPayload: Record<string, JsonValue>,
