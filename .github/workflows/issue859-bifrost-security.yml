@@ -1,0 +1,448 @@
+name: Bifrost evaluation security
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/issue859-bifrost-security.yml"
+      - "scripts/ci/issue859_mock_openai.py"
+      - "scripts/ci/issue859_ssrf_sentinel.py"
+      - "tests/test_issue_859_bifrost_ssrf.py"
+      - "upstream/bifrost.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  bifrost-security-lifecycle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install platform test environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+
+      - name: Start controlled upstream and SSRF sentinel
+        shell: bash
+        run: |
+          python scripts/ci/issue859_mock_openai.py --port 18000 \
+            > "$GITHUB_WORKSPACE/.issue859-security-mock.log" 2>&1 &
+          echo $! > "$GITHUB_WORKSPACE/.issue859-security-mock.pid"
+          python scripts/ci/issue859_ssrf_sentinel.py --port 18001 \
+            > "$GITHUB_WORKSPACE/.issue859-ssrf-sentinel.log" 2>&1 &
+          echo $! > "$GITHUB_WORKSPACE/.issue859-ssrf-sentinel.pid"
+          python - <<'PY'
+          import json
+          import time
+          import urllib.request
+
+          urls = (
+              "http://127.0.0.1:18000/healthz",
+              "http://127.0.0.1:18001/healthz",
+          )
+          for url in urls:
+              for _ in range(40):
+                  try:
+                      with urllib.request.urlopen(url, timeout=1) as response:
+                          payload = json.load(response)
+                      if payload.get("healthy") is True:
+                          break
+                  except Exception:
+                      time.sleep(0.25)
+              else:
+                  raise SystemExit(f"controlled issue #859 fixture did not become healthy: {url}")
+          PY
+
+      - name: Add controlled address aliases for SSRF probes
+        shell: bash
+        run: |
+          sudo ip addr add 10.254.0.1/32 dev lo || true
+          sudo ip addr add 172.31.255.254/32 dev lo || true
+          sudo ip addr add 192.168.255.254/32 dev lo || true
+          sudo ip addr add 169.254.169.254/32 dev lo || true
+          sudo ip addr add 100.64.0.1/32 dev lo || true
+          sudo ip addr add 203.0.113.10/32 dev lo || true
+
+      - name: Create shared file-only Bifrost configuration
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.issue859-bifrost-data"
+          chmod 777 "$GITHUB_WORKSPACE/.issue859-bifrost-data"
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          cat > "$GITHUB_WORKSPACE/.issue859-bifrost-data/config.json" <<'JSON'
+          {
+            "encryption_key": "env.BIFROST_ENCRYPTION_KEY",
+            "client": {
+              "drop_excess_requests": false,
+              "enable_logging": false
+            },
+            "providers": {
+              "issue859-local": {
+                "keys": [
+                  {
+                    "name": "issue859-fixture-key",
+                    "value": "env.ISSUE859_PROVIDER_KEY",
+                    "models": ["fixture-model"],
+                    "weight": 1.0
+                  }
+                ],
+                "network_config": {
+                  "base_url": "http://127.0.0.1:18000",
+                  "default_request_timeout_in_seconds": 5,
+                  "max_retries": 0
+                },
+                "custom_provider_config": {
+                  "base_provider_type": "openai",
+                  "allowed_requests": {
+                    "list_models": true,
+                    "chat_completion": true,
+                    "chat_completion_stream": true
+                  },
+                  "request_path_overrides": {
+                    "chat_completion": "/v1/chat/completions",
+                    "chat_completion_stream": "/v1/chat/completions"
+                  }
+                }
+              },
+              "openai": {
+                "keys": [
+                  {
+                    "name": "issue859-native-openai-key",
+                    "value": "env.ISSUE859_NATIVE_OPENAI_KEY",
+                    "models": ["fixture-model"],
+                    "weight": 1.0
+                  }
+                ],
+                "network_config": {
+                  "base_url": "http://127.0.0.1:18000/v1",
+                  "default_request_timeout_in_seconds": 5,
+                  "max_retries": 0
+                }
+              }
+            },
+            "config_store": {
+              "enabled": false
+            }
+          }
+          JSON
+
+      - name: Pull previous and reviewed Bifrost releases
+        shell: bash
+        run: |
+          docker pull maximhq/bifrost:v2.1.0
+          docker pull maximhq/bifrost:v2.1.1
+          docker image inspect \
+            --format '{{index .RepoDigests 0}}' \
+            maximhq/bifrost:v2.1.0 \
+            > "$GITHUB_WORKSPACE/artifacts/issue-859-bifrost-v2.1.0-image-digest.txt"
+          docker image inspect \
+            --format '{{index .RepoDigests 0}}' \
+            maximhq/bifrost:v2.1.1 \
+            > "$GITHUB_WORKSPACE/artifacts/issue-859-bifrost-v2.1.1-image-digest.txt"
+
+      - name: Start previous release on shared configuration
+        shell: bash
+        run: |
+          docker run --rm -d \
+            --name issue859-bifrost \
+            --network host \
+            -v "$GITHUB_WORKSPACE/.issue859-bifrost-data:/app/data" \
+            -e APP_HOST=0.0.0.0 \
+            -e BIFROST_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef \
+            -e ISSUE859_PROVIDER_KEY=ci-fixture-provider-key \
+            -e ISSUE859_NATIVE_OPENAI_KEY=ci-fixture-native-openai-key \
+            maximhq/bifrost:v2.1.0
+          python - <<'PY'
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+
+          payload = json.dumps({
+              "model": "issue859-local/fixture-model",
+              "messages": [{"role": "user", "content": "ready"}],
+          }).encode("utf-8")
+          for _ in range(120):
+              request = urllib.request.Request(
+                  "http://127.0.0.1:8080/v1/chat/completions",
+                  data=payload,
+                  headers={"Content-Type": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=2) as response:
+                      body = json.load(response)
+                  if response.status == 200 and body.get("choices"):
+                      break
+              except (OSError, urllib.error.HTTPError):
+                  time.sleep(0.5)
+          else:
+              raise SystemExit("Bifrost v2.1.0 did not become ready")
+          PY
+
+      - name: Stop previous gateway and prove direct path stays available
+        shell: bash
+        run: |
+          docker stop issue859-bifrost
+          python - <<'PY'
+          import json
+          import urllib.request
+
+          payload = json.dumps({
+              "model": "fixture-model",
+              "messages": [{"role": "user", "content": "ready"}],
+          }).encode("utf-8")
+          request = urllib.request.Request(
+              "http://127.0.0.1:18000/v1/chat/completions",
+              data=payload,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=3) as response:
+              body = json.load(response)
+          assert response.status == 200
+          assert body.get("choices")
+          PY
+
+      - name: Upgrade shared configuration to reviewed v2.1.1
+        shell: bash
+        run: |
+          docker run --rm -d \
+            --name issue859-bifrost \
+            --network host \
+            -v "$GITHUB_WORKSPACE/.issue859-bifrost-data:/app/data" \
+            -e APP_HOST=0.0.0.0 \
+            -e BIFROST_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef \
+            -e ISSUE859_PROVIDER_KEY=ci-fixture-provider-key \
+            -e ISSUE859_NATIVE_OPENAI_KEY=ci-fixture-native-openai-key \
+            maximhq/bifrost:v2.1.1
+          python - <<'PY'
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+
+          payload = json.dumps({
+              "model": "issue859-local/fixture-model",
+              "messages": [{"role": "user", "content": "ready"}],
+          }).encode("utf-8")
+          for _ in range(120):
+              request = urllib.request.Request(
+                  "http://127.0.0.1:8080/v1/chat/completions",
+                  data=payload,
+                  headers={"Content-Type": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=2) as response:
+                      body = json.load(response)
+                  if response.status == 200 and body.get("choices"):
+                      break
+              except (OSError, urllib.error.HTTPError):
+                  time.sleep(0.5)
+          else:
+              raise SystemExit("Bifrost v2.1.1 did not recover after upgrade")
+          PY
+
+      - name: Run controlled SSRF address and redirect gates
+        env:
+          BIFROST_EVAL_BIFROST_BASE_URL: http://127.0.0.1:8080/v1
+          BIFROST_EVAL_BIFROST_NATIVE_OPENAI_MODEL: openai/fixture-model
+          BIFROST_EVAL_SSRF_BLOCKED_URLS_JSON: '["http://127.0.0.1:18001/ssrf-sentinel.txt","http://10.254.0.1:18001/ssrf-sentinel.txt","http://172.31.255.254:18001/ssrf-sentinel.txt","http://192.168.255.254:18001/ssrf-sentinel.txt","http://169.254.169.254:18001/ssrf-sentinel.txt","http://100.64.0.1:18001/ssrf-sentinel.txt","http://[::1]:18001/ssrf-sentinel.txt","http://[::ffff:127.0.0.1]:18001/ssrf-sentinel.txt","http://[fe80::1]:18001/ssrf-sentinel.txt","http://[fd00::1]:18001/ssrf-sentinel.txt","http://[fec0::1]:18001/ssrf-sentinel.txt","http://[2002:7f00:1::1]:18001/ssrf-sentinel.txt","http://[64:ff9b::7f00:1]:18001/ssrf-sentinel.txt","http://[64:ff9b:1:7f00:0:100::]:18001/ssrf-sentinel.txt","http://[2001:0::1]:18001/ssrf-sentinel.txt"]'
+          BIFROST_EVAL_SSRF_REDIRECT_URL: http://203.0.113.10:18001/redirect-to-loopback
+          BIFROST_EVAL_SSRF_SENTINEL_CONTROL_URL: http://127.0.0.1:18001/control
+        run: pytest -q tests/test_issue_859_bifrost_ssrf.py -m integration
+
+      - name: Record controlled SSRF evidence
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+          import urllib.request
+
+          with urllib.request.urlopen(
+              "http://127.0.0.1:18001/control/stats", timeout=3
+          ) as response:
+              sentinel = json.load(response)
+          paths = sentinel.get("paths", {})
+          if paths.get("/redirect-to-loopback") != 1:
+              raise SystemExit("controlled redirect source was not reached exactly once")
+          if paths.get("/ssrf-sentinel.txt", 0) != 0:
+              raise SystemExit("a blocked SSRF target reached the controlled sentinel")
+          evidence = {
+              "bifrost_version": "v2.1.1",
+              "server_side_fetch_path": "OpenAI chat file_url -> ResolveChatFileURLs -> FetchAndEncodeURL",
+              "guard_error_contract": "blocked connection to non-public address",
+              "blocked_before_connection": True,
+              "controlled_redirect_source_hits": paths.get("/redirect-to-loopback"),
+              "controlled_blocked_target_hits": paths.get("/ssrf-sentinel.txt", 0),
+              "target_classes": [
+                  "ipv4_loopback",
+                  "rfc1918_10_8",
+                  "rfc1918_172_16_12",
+                  "rfc1918_192_168_16",
+                  "ipv4_link_local_metadata",
+                  "cgnat",
+                  "ipv6_loopback",
+                  "ipv4_mapped_ipv6_loopback",
+                  "ipv6_link_local",
+                  "ipv6_unique_local",
+                  "ipv6_site_local",
+                  "6to4_embedded_loopback",
+                  "nat64_well_known_embedded_loopback",
+                  "nat64_local_use_embedded_loopback",
+                  "teredo",
+                  "public_source_redirect_to_loopback",
+              ],
+              "dns_rebinding_runtime_case": "pending",
+              "encoded_host_representation_runtime_case": "pending_if_supported",
+          }
+          pathlib.Path("artifacts/issue-859-ssrf-runtime-matrix.json").write_text(
+              json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Restart reviewed release and prove recovery
+        shell: bash
+        run: |
+          docker stop issue859-bifrost
+          python - <<'PY'
+          import json
+          import urllib.request
+
+          payload = json.dumps({
+              "model": "fixture-model",
+              "messages": [{"role": "user", "content": "ready"}],
+          }).encode("utf-8")
+          request = urllib.request.Request(
+              "http://127.0.0.1:18000/v1/chat/completions",
+              data=payload,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=3) as response:
+              body = json.load(response)
+          assert response.status == 200
+          assert body.get("choices")
+          PY
+          docker run --rm -d \
+            --name issue859-bifrost \
+            --network host \
+            -v "$GITHUB_WORKSPACE/.issue859-bifrost-data:/app/data" \
+            -e APP_HOST=0.0.0.0 \
+            -e BIFROST_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef \
+            -e ISSUE859_PROVIDER_KEY=ci-fixture-provider-key \
+            -e ISSUE859_NATIVE_OPENAI_KEY=ci-fixture-native-openai-key \
+            maximhq/bifrost:v2.1.1
+          python - <<'PY'
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+
+          payload = json.dumps({
+              "model": "issue859-local/fixture-model",
+              "messages": [{"role": "user", "content": "ready"}],
+          }).encode("utf-8")
+          for _ in range(120):
+              request = urllib.request.Request(
+                  "http://127.0.0.1:8080/v1/chat/completions",
+                  data=payload,
+                  headers={"Content-Type": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=2) as response:
+                      body = json.load(response)
+                  if response.status == 200 and body.get("choices"):
+                      break
+              except (OSError, urllib.error.HTTPError):
+                  time.sleep(0.5)
+          else:
+              raise SystemExit("Bifrost v2.1.1 did not recover after restart")
+          PY
+
+      - name: Record upgrade and restart evidence
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+
+          previous_digest = pathlib.Path(
+              "artifacts/issue-859-bifrost-v2.1.0-image-digest.txt"
+          ).read_text(encoding="utf-8").strip()
+          reviewed_digest = pathlib.Path(
+              "artifacts/issue-859-bifrost-v2.1.1-image-digest.txt"
+          ).read_text(encoding="utf-8").strip()
+          evidence = {
+              "previous_version": "v2.1.0",
+              "previous_image_digest": previous_digest,
+              "reviewed_version": "v2.1.1",
+              "reviewed_image_digest": reviewed_digest,
+              "same_file_configuration_and_data_root": True,
+              "direct_path_available_while_gateway_stopped": True,
+              "upgrade_recovered": True,
+              "restart_recovered": True,
+              "canonical_state_migration_required": False,
+              "profile": "hermetic_file_only_ci",
+          }
+          pathlib.Path("artifacts/issue-859-bifrost-lifecycle.json").write_text(
+              json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Verify synthetic provider credentials are absent from gateway logs
+        shell: bash
+        run: |
+          docker logs issue859-bifrost > "$RUNNER_TEMP/issue859-bifrost-security.log" 2>&1
+          if grep -Fq "ci-fixture-provider-key" "$RUNNER_TEMP/issue859-bifrost-security.log"; then
+            echo "Bifrost logs exposed the synthetic custom-provider credential" >&2
+            exit 1
+          fi
+          if grep -Fq "ci-fixture-native-openai-key" "$RUNNER_TEMP/issue859-bifrost-security.log"; then
+            echo "Bifrost logs exposed the synthetic native OpenAI credential" >&2
+            exit 1
+          fi
+
+      - name: Upload Bifrost security and lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-859-bifrost-security-lifecycle
+          path: artifacts/issue-859-*
+          if-no-files-found: warn
+
+      - name: Show diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          docker logs issue859-bifrost 2>/dev/null || true
+          cat "$GITHUB_WORKSPACE/.issue859-security-mock.log" 2>/dev/null || true
+          cat "$GITHUB_WORKSPACE/.issue859-ssrf-sentinel.log" 2>/dev/null || true
+
+      - name: Stop controlled services
+        if: always()
+        shell: bash
+        run: |
+          docker stop issue859-bifrost 2>/dev/null || true
+          if [ -f "$GITHUB_WORKSPACE/.issue859-security-mock.pid" ]; then
+            kill "$(cat "$GITHUB_WORKSPACE/.issue859-security-mock.pid")" 2>/dev/null || true
+          fi
+          if [ -f "$GITHUB_WORKSPACE/.issue859-ssrf-sentinel.pid" ]; then
+            kill "$(cat "$GITHUB_WORKSPACE/.issue859-ssrf-sentinel.pid")" 2>/dev/null || true
+          fi
