@@ -1,0 +1,239 @@
+name: Temporary issue 903 review fixer v2
+
+on:
+  push:
+    branches:
+      - issue-903-agent-matching
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: issue-903-agent-matching
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Apply review fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:120]!r}")
+              path.write_text(text.replace(old, new, 1))
+
+          matching = Path("src/ai_multi_agent_platform/agents/matching.py")
+          replace_once(
+              matching,
+              '    MODEL_REQUIREMENT_INCOMPATIBLE = "model_requirement_incompatible"\n',
+              '    MODEL_REQUIREMENT_INCOMPATIBLE = "model_requirement_incompatible"\n'
+              '    MODEL_OVERRIDE_FORBIDDEN = "model_override_forbidden"\n',
+          )
+          replace_once(
+              matching,
+              '    model_requirements: RoutingRequirements = field(default_factory=RoutingRequirements)\n'
+              '    project_id: str | None = None\n',
+              '    model_requirements: RoutingRequirements = field(default_factory=RoutingRequirements)\n'
+              '    model_requirements_are_task_override: bool = False\n'
+              '    project_id: str | None = None\n',
+          )
+          replace_once(
+              matching,
+              '    allowed_capability_ids: tuple[str, ...] = ()\n'
+              '    denied_capability_ids: tuple[str, ...] = ()\n'
+              '    capability_constraints: tuple[CapabilityConstraint, ...] = ()\n'
+              '    policy_refs: tuple[str, ...] = ()\n'
+              '    model_requirements: tuple[RoutingRequirements, ...] = ()\n',
+              '    allowed_capability_ids: tuple[str, ...] = ()\n'
+              '    denied_capability_ids: tuple[str, ...] = ()\n'
+              '    capability_constraints: tuple[CapabilityConstraint, ...] = ()\n'
+              '    capabilities_unrestricted: bool = False\n'
+              '    policy_refs: tuple[str, ...] = ()\n'
+              '    model_requirements: tuple[RoutingRequirements, ...] = ()\n'
+              '    allows_task_model_override: bool = True\n',
+          )
+          replace_once(
+              matching,
+              '        if not self._model_feasible(candidate, requirements.model_requirements):\n'
+              '            rejections.append(\n'
+              '                AgentMatchRejection(\n'
+              '                    AgentMatchReason.MODEL_REQUIREMENT_INCOMPATIBLE,\n'
+              '                    "candidate and work model requirements have no compatible canonical model",\n'
+              '                )\n'
+              '            )\n',
+              '        if (\n'
+              '            requirements.model_requirements_are_task_override\n'
+              '            and requirements.model_requirements != RoutingRequirements()\n'
+              '            and not candidate.allows_task_model_override\n'
+              '        ):\n'
+              '            rejections.append(\n'
+              '                AgentMatchRejection(\n'
+              '                    AgentMatchReason.MODEL_OVERRIDE_FORBIDDEN,\n'
+              '                    "candidate Agent policy forbids task-level model overrides",\n'
+              '                )\n'
+              '            )\n'
+              '        elif not self._model_feasible(candidate, requirements.model_requirements):\n'
+              '            rejections.append(\n'
+              '                AgentMatchRejection(\n'
+              '                    AgentMatchReason.MODEL_REQUIREMENT_INCOMPATIBLE,\n'
+              '                    "candidate and work model requirements have no compatible canonical model",\n'
+              '                )\n'
+              '            )\n',
+          )
+          replace_once(
+              matching,
+              '        if capability_id not in declared:\n'
+              '            return AgentMatchRejection(\n',
+              '        if capability_id not in declared and not candidate.capabilities_unrestricted:\n'
+              '            return AgentMatchRejection(\n',
+          )
+          replace_once(
+              matching,
+              '        allowed_capability_ids=profile.capabilities.allowed,\n'
+              '        denied_capability_ids=profile.capabilities.denied,\n'
+              '        capability_constraints=profile.capabilities.constraints,\n'
+              '        policy_refs=tuple(dict.fromkeys(policies)),\n'
+              '        model_requirements=(profile.model.requirements,),\n',
+              '        allowed_capability_ids=tuple(\n'
+              '            dict.fromkeys((*profile.capabilities.allowed, *profile.capabilities.required_ids))\n'
+              '        ),\n'
+              '        denied_capability_ids=profile.capabilities.denied,\n'
+              '        capability_constraints=profile.capabilities.constraints,\n'
+              '        capabilities_unrestricted=not profile.capabilities.allowed,\n'
+              '        policy_refs=tuple(dict.fromkeys(policies)),\n'
+              '        model_requirements=(profile.model.requirements,),\n'
+              '        allows_task_model_override=profile.model.allow_task_override,\n',
+          )
+          replace_once(
+              matching,
+              '        capability_constraints=tuple(constraints[key] for key in sorted(constraints)),\n'
+              '        policy_refs=tuple(sorted(policies)),\n'
+              '        model_requirements=tuple(member.profile.model.requirements for member in model_members),\n',
+              '        capability_constraints=tuple(constraints[key] for key in sorted(constraints)),\n'
+              '        capabilities_unrestricted=(\n'
+              '            bool(model_members)\n'
+              '            and all(not member.profile.capabilities.allowed for member in model_members)\n'
+              '        ),\n'
+              '        policy_refs=tuple(sorted(policies)),\n'
+              '        model_requirements=tuple(member.profile.model.requirements for member in model_members),\n'
+              '        allows_task_model_override=(\n'
+              '            bool(model_members)\n'
+              '            and all(member.profile.model.allow_task_override for member in model_members)\n'
+              '        ),\n',
+          )
+
+          planning_models = Path("src/ai_multi_agent_platform/planning/models.py")
+          replace_once(
+              planning_models,
+              '    required_capability_ids: tuple[str, ...] = ()\n'
+              '    model_requirements: RoutingRequirements = field(default_factory=RoutingRequirements)\n',
+              '    required_capability_ids: tuple[str, ...] = ()\n'
+              '    model_requirements: RoutingRequirements = field(default_factory=RoutingRequirements)\n'
+              '    allow_task_model_override: bool = False\n',
+          )
+
+          inventory = Path("src/ai_multi_agent_platform/planning/inventory.py")
+          replace_once(
+              inventory,
+              '                        required_capability_ids=agent_profile.capabilities.required_ids,\n'
+              '                        model_requirements=agent_profile.model.requirements,\n',
+              '                        required_capability_ids=agent_profile.capabilities.required_ids,\n'
+              '                        model_requirements=agent_profile.model.requirements,\n'
+              '                        allow_task_model_override=agent_profile.model.allow_task_override,\n',
+          )
+
+          planning = Path("src/ai_multi_agent_platform/planning/agent_matching.py")
+          replace_once(
+              planning,
+              '        model_requirements=step.model_requirements,\n'
+              '        workspace_id=step.workspace_id or request.workspace_id,\n',
+              '        model_requirements=step.model_requirements,\n'
+              '        model_requirements_are_task_override=True,\n'
+              '        workspace_id=step.workspace_id or request.workspace_id,\n',
+          )
+          replace_once(
+              planning,
+              '        project_id=candidate.project_id,\n'
+              '        workspace_id=candidate.workspace_id,\n'
+              '        allowed_capability_ids=allowed,\n'
+              '        denied_capability_ids=candidate.denied_capability_ids,\n'
+              '        capability_constraints=constraints,\n'
+              '        model_requirements=(candidate.model_requirements,),\n',
+              '        # PlanningInventoryBuilder already filters by the Task project. PlanningRequest\n'
+              '        # intentionally carries no project ID, so do not reject that trusted projection\n'
+              '        # merely because the shared matcher cannot reconstruct the Task project here.\n'
+              '        project_id=None,\n'
+              '        workspace_id=candidate.workspace_id,\n'
+              '        allowed_capability_ids=allowed,\n'
+              '        denied_capability_ids=candidate.denied_capability_ids,\n'
+              '        capability_constraints=constraints,\n'
+              '        capabilities_unrestricted=not candidate.allowed_capability_ids,\n'
+              '        model_requirements=(candidate.model_requirements,),\n'
+              '        allows_task_model_override=candidate.allow_task_model_override,\n',
+          )
+          replace_once(
+              planning,
+              '        project_id=candidate.project_id,\n'
+              '        workspace_id=candidate.workspace_id,\n'
+              '        allowed_capability_ids=tuple(sorted(allowed)),\n'
+              '        denied_capability_ids=tuple(sorted(denied)),\n'
+              '        capability_constraints=tuple(constraints),\n'
+              '        model_requirements=tuple(member.model_requirements for member in members),\n',
+              '        # Team scope was already filtered by PlanningInventoryBuilder as well.\n'
+              '        project_id=None,\n'
+              '        workspace_id=candidate.workspace_id,\n'
+              '        allowed_capability_ids=tuple(sorted(allowed)),\n'
+              '        denied_capability_ids=tuple(sorted(denied)),\n'
+              '        capability_constraints=tuple(constraints),\n'
+              '        capabilities_unrestricted=(\n'
+              '            bool(members) and all(not member.allowed_capability_ids for member in members)\n'
+              '        ),\n'
+              '        model_requirements=tuple(member.model_requirements for member in members),\n'
+              '        allows_task_model_override=(\n'
+              '            bool(members) and all(member.allow_task_model_override for member in members)\n'
+              '        ),\n',
+          )
+          PY
+      - name: Verify review fixes
+        run: |
+          python -m pip install -e '.[dev]'
+          ruff format \
+            src/ai_multi_agent_platform/agents/matching.py \
+            src/ai_multi_agent_platform/planning/agent_matching.py \
+            src/ai_multi_agent_platform/planning/inventory.py \
+            src/ai_multi_agent_platform/planning/models.py
+          ruff check \
+            src/ai_multi_agent_platform/agents/matching.py \
+            src/ai_multi_agent_platform/planning/agent_matching.py \
+            src/ai_multi_agent_platform/planning/inventory.py \
+            src/ai_multi_agent_platform/planning/models.py \
+            tests/test_issue_903_agent_matching.py \
+            tests/test_issue_903_team_matching.py
+          mypy \
+            src/ai_multi_agent_platform/agents/matching.py \
+            src/ai_multi_agent_platform/planning/agent_matching.py \
+            src/ai_multi_agent_platform/planning/inventory.py \
+            src/ai_multi_agent_platform/planning/models.py
+          pytest -q tests/test_issue_903_agent_matching.py tests/test_issue_903_team_matching.py
+      - name: Commit fixes and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/issue-903-review-fix-v2.yml
+          git add \
+            src/ai_multi_agent_platform/agents/matching.py \
+            src/ai_multi_agent_platform/planning/agent_matching.py \
+            src/ai_multi_agent_platform/planning/inventory.py \
+            src/ai_multi_agent_platform/planning/models.py
+          git commit -m "fix(#903): align matching with runtime policies"
+          git push origin HEAD:issue-903-agent-matching
