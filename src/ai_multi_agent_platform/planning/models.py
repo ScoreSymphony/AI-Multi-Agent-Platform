@@ -94,6 +94,7 @@ class PlanningAgentCandidate:
     denied_capability_ids: tuple[str, ...] = ()
     required_capability_ids: tuple[str, ...] = ()
     model_requirements: RoutingRequirements = field(default_factory=RoutingRequirements)
+    allow_task_model_override: bool = False
 
     def __post_init__(self) -> None:
         validate_id(self.agent_id, "agent")

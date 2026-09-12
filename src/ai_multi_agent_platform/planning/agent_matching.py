@@ -65,6 +65,7 @@ def match_planning_step(
         required_roles=(assignment.role_requirement,) if assignment.role_requirement else (),
         required_capabilities=required_capabilities,
         model_requirements=step.model_requirements,
+        model_requirements_are_task_override=True,
         workspace_id=step.workspace_id or request.workspace_id,
         exact_agent=(
             AgentRevisionRef(assignment.agent_id, assignment.agent_revision)
@@ -168,12 +169,17 @@ def _agent_candidate(candidate: PlanningAgentCandidate) -> AgentMatchCandidate:
         roles=(candidate.role,),
         enabled=candidate.enabled,
         owner_ref=_PLANNING_OWNER,
-        project_id=candidate.project_id,
+        # PlanningInventoryBuilder already filters by the Task project. PlanningRequest
+        # intentionally carries no project ID, so do not reject that trusted projection
+        # merely because the shared matcher cannot reconstruct the Task project here.
+        project_id=None,
         workspace_id=candidate.workspace_id,
         allowed_capability_ids=allowed,
         denied_capability_ids=candidate.denied_capability_ids,
         capability_constraints=constraints,
+        capabilities_unrestricted=not candidate.allowed_capability_ids,
         model_requirements=(candidate.model_requirements,),
+        allows_task_model_override=candidate.allow_task_model_override,
     )
 
 
@@ -206,12 +212,19 @@ def _team_candidate(
         roles=roles,
         enabled=enabled,
         owner_ref=_PLANNING_OWNER,
-        project_id=candidate.project_id,
+        # Team scope was already filtered by PlanningInventoryBuilder as well.
+        project_id=None,
         workspace_id=candidate.workspace_id,
         allowed_capability_ids=tuple(sorted(allowed)),
         denied_capability_ids=tuple(sorted(denied)),
         capability_constraints=tuple(constraints),
+        capabilities_unrestricted=(
+            bool(members) and all(not member.allowed_capability_ids for member in members)
+        ),
         model_requirements=tuple(member.model_requirements for member in members),
+        allows_task_model_override=(
+            bool(members) and all(member.allow_task_model_override for member in members)
+        ),
         member_refs=tuple(member_refs),
     )
 

@@ -57,6 +57,7 @@ class AgentMatchReason(StrEnum):
     DENIED_CAPABILITY = "denied_capability"
     CAPABILITY_VERSION_INCOMPATIBLE = "capability_version_incompatible"
     MODEL_REQUIREMENT_INCOMPATIBLE = "model_requirement_incompatible"
+    MODEL_OVERRIDE_FORBIDDEN = "model_override_forbidden"
     POLICY_DENIED = "policy_denied"
     INDEPENDENCE_VIOLATION = "independence_violation"
     PIN_MISMATCH = "pin_mismatch"
@@ -105,6 +106,7 @@ class AgentMatchingRequirements:
     forbidden_capability_ids: tuple[str, ...] = ()
     required_policy_refs: tuple[str, ...] = ()
     model_requirements: RoutingRequirements = field(default_factory=RoutingRequirements)
+    model_requirements_are_task_override: bool = False
     project_id: str | None = None
     workspace_id: str | None = None
     organization_id: str | None = None
@@ -158,8 +160,10 @@ class AgentMatchCandidate:
     allowed_capability_ids: tuple[str, ...] = ()
     denied_capability_ids: tuple[str, ...] = ()
     capability_constraints: tuple[CapabilityConstraint, ...] = ()
+    capabilities_unrestricted: bool = False
     policy_refs: tuple[str, ...] = ()
     model_requirements: tuple[RoutingRequirements, ...] = ()
+    allows_task_model_override: bool = True
     member_refs: tuple[AgentRevisionRef, ...] = ()
     matching_priority: int = 0
 
@@ -373,7 +377,18 @@ class AgentMatcher:
                 )
             )
 
-        if not self._model_feasible(candidate, requirements.model_requirements):
+        if (
+            requirements.model_requirements_are_task_override
+            and requirements.model_requirements != RoutingRequirements()
+            and not candidate.allows_task_model_override
+        ):
+            rejections.append(
+                AgentMatchRejection(
+                    AgentMatchReason.MODEL_OVERRIDE_FORBIDDEN,
+                    "candidate Agent policy forbids task-level model overrides",
+                )
+            )
+        elif not self._model_feasible(candidate, requirements.model_requirements):
             rejections.append(
                 AgentMatchRejection(
                     AgentMatchReason.MODEL_REQUIREMENT_INCOMPATIBLE,
@@ -444,7 +459,7 @@ class AgentMatcher:
                 f"required capability {capability_id} is explicitly denied",
             )
         declared = _declared_capability_ids(candidate)
-        if capability_id not in declared:
+        if capability_id not in declared and not candidate.capabilities_unrestricted:
             return AgentMatchRejection(
                 AgentMatchReason.MISSING_CAPABILITY,
                 f"required capability {capability_id} is not assigned to candidate",
@@ -606,11 +621,15 @@ def _agent_candidate(revision: AgentRevision) -> AgentMatchCandidate:
         owner_ref=revision.owner_ref,
         project_id=revision.project_id,
         workspace_id=revision.workspace_id,
-        allowed_capability_ids=profile.capabilities.allowed,
+        allowed_capability_ids=tuple(
+            dict.fromkeys((*profile.capabilities.allowed, *profile.capabilities.required_ids))
+        ),
         denied_capability_ids=profile.capabilities.denied,
         capability_constraints=profile.capabilities.constraints,
+        capabilities_unrestricted=not profile.capabilities.allowed,
         policy_refs=tuple(dict.fromkeys(policies)),
         model_requirements=(profile.model.requirements,),
+        allows_task_model_override=profile.model.allow_task_override,
         matching_priority=priority,
     )
 
@@ -679,8 +698,16 @@ def _team_candidate(
         allowed_capability_ids=tuple(sorted(allowed)),
         denied_capability_ids=tuple(sorted(denied)),
         capability_constraints=tuple(constraints[key] for key in sorted(constraints)),
+        capabilities_unrestricted=(
+            bool(model_members)
+            and all(not member.profile.capabilities.allowed for member in model_members)
+        ),
         policy_refs=tuple(sorted(policies)),
         model_requirements=tuple(member.profile.model.requirements for member in model_members),
+        allows_task_model_override=(
+            bool(model_members)
+            and all(member.profile.model.allow_task_override for member in model_members)
+        ),
         member_refs=tuple(
             AgentRevisionRef(member.agent_id, member.revision) for _, member in active_pairs
         ),

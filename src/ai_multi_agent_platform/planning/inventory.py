@@ -68,6 +68,7 @@ class PlanningInventoryBuilder:
                         denied_capability_ids=agent_profile.capabilities.denied,
                         required_capability_ids=agent_profile.capabilities.required_ids,
                         model_requirements=agent_profile.model.requirements,
+                        allow_task_model_override=agent_profile.model.allow_task_override,
                     )
                 )
             for team_definition in self.agents.list_teams():
