@@ -14,6 +14,7 @@ from ai_multi_agent_platform.agents import (
 )
 from ai_multi_agent_platform.coding_batches import (
     AuthorizedCodingBatchIntegration,
+    CanonicalCodingIntegrationDispatcher,
     CheckState,
     CodingBatchAuthorizationContext,
     CodingBatchCoordinator,
@@ -45,7 +46,10 @@ from ai_multi_agent_platform.domain import (
     new_id,
 )
 from ai_multi_agent_platform.kernel.models import RecoveryReport, RunState, TaskState
-from ai_multi_agent_platform.repositories import RepositoryCallContext
+from ai_multi_agent_platform.repositories import (
+    RepositoryCallContext,
+    RepositoryRunProvenance,
+)
 from ai_multi_agent_platform.security import (
     ActorIdentity,
     ActorType,
@@ -66,7 +70,7 @@ ACTOR_REF = "human:issue-872-e2e"
 
 
 class _Kernel:
-    """Small canonical Run backend for exercising the real #384 coordinator."""
+    """Small canonical Run backend used by the real #384 coordinator."""
 
     def __init__(self, plan: Plan, steps: tuple[Step, ...]) -> None:
         self.task = TaskState(
@@ -224,7 +228,7 @@ class _Kernel:
         assert task_id == self.task.task_id
         return RecoveryReport(task_id=task_id, entries=())
 
-    def finish(self, run_id: str, status: RunStatus) -> None:
+    def finish(self, run_id: str, status: RunStatus = RunStatus.SUCCEEDED) -> None:
         current = self.runs[run_id]
         self.runs[run_id] = replace(
             current,
@@ -241,6 +245,14 @@ class _AgentRuns:
         if run_id is None:
             return tuple(self.records)
         return tuple(record for record in self.records if record.run_id == run_id)
+
+    def succeed(self, agent_run_id: str) -> AgentRunRecord:
+        for index, record in enumerate(self.records):
+            if record.agent_run_id == agent_run_id:
+                updated = replace(record, status=AgentRunStatus.SUCCEEDED)
+                self.records[index] = updated
+                return updated
+        raise KeyError(agent_run_id)
 
 
 class _AgentRuntime:
@@ -282,7 +294,7 @@ class _AgentRuntime:
         return record
 
 
-class _Materializer:
+class _WorkstreamMaterializer:
     def __init__(self, coordinator: CodingBatchCoordinator) -> None:
         self.coordinator = coordinator
 
@@ -310,6 +322,42 @@ class _Materializer:
             agent_revision=agent_revision,
             agent_run_id=agent_run_id,
         )
+
+
+class _IntegrationMaterializer:
+    def __init__(self) -> None:
+        self.materialized: dict[tuple[str, str], tuple[str, str, str]] = {}
+
+    async def ensure_materialized(
+        self,
+        batch,
+        candidate,
+        *,
+        project_id: str,
+        owner_ref: OwnerRef,
+        data_context: DataAccessContext,
+        repository_context: RepositoryCallContext,
+    ) -> tuple[str, str, str]:
+        del project_id, owner_ref, data_context, repository_context
+        key = (batch.batch_id, candidate.integration_id)
+        if key not in self.materialized:
+            self.materialized[key] = (
+                new_id("workspace"),
+                new_id("snapshot"),
+                f"coding/integration-{candidate.integration_id[-12:]}",
+            )
+        return self.materialized[key]
+
+
+class _RepositoryProvenance:
+    def __init__(self) -> None:
+        self.records: list[RepositoryRunProvenance] = []
+
+    def get(self, run_id: str, repository_id: str) -> RepositoryRunProvenance | None:
+        for record in self.records:
+            if record.run_id == run_id and record.repository_id == repository_id:
+                return record
+        return None
 
 
 def _operation(owner: OwnerRef, project_id: str) -> OperationContext:
@@ -394,6 +442,7 @@ def _authorization_gate() -> AuthorizationGate:
 async def test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge() -> None:
     owner = OwnerRef(type="user", id="issue-872-e2e")
     project_id = new_id("project")
+    repository_id = new_id("external_resource")
     plan = Plan(
         task_id=new_id("task"),
         owner_ref=owner,
@@ -419,23 +468,32 @@ async def test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge(
         project_id=project_id,
         depends_on=(step_a.id,),
     )
-    kernel = _Kernel(plan, (step_a, step_b, step_c))
+    integration_step = Step(
+        plan_id=plan.id,
+        title="Integrate accepted coding workstreams",
+        owner_ref=owner,
+        project_id=project_id,
+        depends_on=(step_a.id, step_b.id, step_c.id),
+    )
+    steps = (step_a, step_b, step_c, integration_step)
+    kernel = _Kernel(plan, steps)
     coordination = DurablePlanStepCoordinator(
         repository=InMemoryCoordinatorRepository(),
         kernel=kernel,
         coordinator_id="issue-872-e2e",
     )
-    projection = await coordination.register_plan(plan, (step_a, step_b, step_c))
+    projection = await coordination.register_plan(plan, steps)
     initial = {step.step_id: step for step in projection.steps}
     assert initial[step_a.id].latest_run_id is not None
     assert initial[step_b.id].latest_run_id is not None
     assert initial[step_c.id].latest_run_id is None
+    assert initial[integration_step.id].latest_run_id is None
 
     store = InMemoryCodingBatchStore()
     coding = CodingBatchCoordinator(store)
     batch = coding.create_batch(
         request_key="issue-872-e2e-three-workstreams",
-        repository_id="repo-platform",
+        repository_id=repository_id,
         target_ref="main",
         base_revision=BASE,
         work_items=(
@@ -473,34 +531,33 @@ async def test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge(
         plan_coordination=coordination,
         agent_runtime=runtime,
         agent_runs=runs,
-        materializer=_Materializer(coding),
+        materializer=_WorkstreamMaterializer(coding),
     )
 
     initial_slots = dispatcher.dispatchable_workstreams(batch.batch_id)
     assert {slot.workstream_id for slot in initial_slots} == {"A", "B"}
-    agent_a = new_agent_id()
-    agent_b = new_agent_id()
-    for workstream_id, agent_id in (("A", agent_a), ("B", agent_b)):
+    agent_ids = {"A": new_agent_id(), "B": new_agent_id()}
+    dispatched = {}
+    for workstream_id in ("A", "B"):
         slot = next(item for item in initial_slots if item.workstream_id == workstream_id)
         data_context, repository_context = _contexts(
             owner,
             project_id,
             plan.task_id,
             slot.run_id,
-            agent_id,
+            agent_ids[workstream_id],
         )
-        dispatched = await dispatcher.ensure_dispatched(
+        result = await dispatcher.ensure_dispatched(
             batch.batch_id,
             workstream_id,
-            agent_id=agent_id,
+            agent_id=agent_ids[workstream_id],
             project_id=project_id,
             owner_ref=owner,
             data_context=data_context,
             repository_context=repository_context,
         )
-        assert dispatched.workstream.state is WorkstreamState.RUNNING
-        assert dispatched.workstream.provenance.workspace_id is not None
-        assert dispatched.workstream.provenance.agent_run_id == dispatched.agent_run.agent_run_id
+        dispatched[workstream_id] = result
+        assert result.workstream.state is WorkstreamState.RUNNING
 
     assert coding.get(batch.batch_id).workstream("C").state is WorkstreamState.BLOCKED
     assert (
@@ -514,14 +571,16 @@ async def test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge(
     )
 
     _accept(coding, batch.batch_id, "A", REV_A, "src/a.py")
+    runs.succeed(dispatched["A"].agent_run.agent_run_id)
     run_a = initial[step_a.id].latest_run_id
     assert run_a is not None
-    kernel.finish(run_a, RunStatus.SUCCEEDED)
+    kernel.finish(run_a)
     await coordination.observe_run(task_id=plan.task_id, run_id=run_a)
 
     after_a = {step.step_id: step for step in coordination.projection(plan.id).steps}
     assert after_a[step_c.id].latest_run_id is not None
     assert coding.get(batch.batch_id).workstream("C").state is WorkstreamState.READY
+    assert after_a[integration_step.id].latest_run_id is None
 
     slot_c = next(
         slot
@@ -536,7 +595,7 @@ async def test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge(
         slot_c.run_id,
         agent_c,
     )
-    await dispatcher.ensure_dispatched(
+    dispatched_c = await dispatcher.ensure_dispatched(
         batch.batch_id,
         "C",
         agent_id=agent_c,
@@ -548,6 +607,21 @@ async def test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge(
 
     _accept(coding, batch.batch_id, "B", REV_B, "frontend/b.ts")
     _accept(coding, batch.batch_id, "C", REV_C, "docs/c.md")
+    runs.succeed(dispatched["B"].agent_run.agent_run_id)
+    runs.succeed(dispatched_c.agent_run.agent_run_id)
+
+    for step_id in (step_b.id, step_c.id):
+        current = {step.step_id: step for step in coordination.projection(plan.id).steps}
+        run_id = current[step_id].latest_run_id
+        assert run_id is not None
+        kernel.finish(run_id)
+        await coordination.observe_run(task_id=plan.task_id, run_id=run_id)
+
+    after_workstreams = {
+        step.step_id: step for step in coordination.projection(plan.id).steps
+    }
+    assert after_workstreams[integration_step.id].latest_run_id is not None
+
     candidate = coding.build_integration_candidate(
         batch.batch_id,
         current_target_revision=BASE,
@@ -555,11 +629,75 @@ async def test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge(
     assert candidate.ordered_workstream_ids == ("A", "B", "C")
     assert candidate.state is IntegrationState.READY
 
-    coding.record_integrated_revision(
+    repository_provenance = _RepositoryProvenance()
+    integration_dispatcher = CanonicalCodingIntegrationDispatcher(
+        coding,
+        plan_coordination=coordination,
+        agent_runtime=runtime,
+        agent_runs=runs,
+        materializer=_IntegrationMaterializer(),
+        repository_provenance=repository_provenance,
+    )
+    integration_agent = new_agent_id()
+    integration_run_id = after_workstreams[integration_step.id].latest_run_id
+    assert integration_run_id is not None
+    data_context, repository_context = _contexts(
+        owner,
+        project_id,
+        plan.task_id,
+        integration_run_id,
+        integration_agent,
+    )
+    integration_dispatch = await integration_dispatcher.ensure_dispatched(
         batch.batch_id,
         candidate.integration_id,
-        integrated_revision=INTEGRATED,
+        plan_id=plan.id,
+        step_id=integration_step.id,
+        agent_id=integration_agent,
+        project_id=project_id,
+        owner_ref=owner,
+        data_context=data_context,
+        repository_context=repository_context,
     )
+    assert integration_dispatch.candidate.state is IntegrationState.INTEGRATING
+    assert integration_dispatch.candidate.execution is not None
+    assert integration_dispatch.candidate.execution.run_id == integration_run_id
+    assert integration_dispatch.candidate.execution.workspace_id.startswith("workspace_")
+
+    replay = await integration_dispatcher.ensure_dispatched(
+        batch.batch_id,
+        candidate.integration_id,
+        plan_id=plan.id,
+        step_id=integration_step.id,
+        agent_id=integration_agent,
+        project_id=project_id,
+        owner_ref=owner,
+        data_context=data_context,
+        repository_context=repository_context,
+    )
+    assert replay.agent_run.agent_run_id == integration_dispatch.agent_run.agent_run_id
+    assert replay.candidate.execution == integration_dispatch.candidate.execution
+
+    succeeded_integration_agent = runs.succeed(integration_dispatch.agent_run.agent_run_id)
+    repository_provenance.records.append(
+        RepositoryRunProvenance(
+            run_id=integration_run_id,
+            repository_id=repository_id,
+            input_revision=BASE,
+            output_revision=INTEGRATED,
+            actor_ref="integration-runtime",
+            agent_id=succeeded_integration_agent.agent.agent_id,
+            task_id=plan.task_id,
+            diff_artifact_ids=(new_id("artifact"),),
+        )
+    )
+    integrated = integration_dispatcher.reconcile_repository_output(
+        batch.batch_id,
+        candidate.integration_id,
+    )
+    assert integrated.state is IntegrationState.VALIDATING
+    assert integrated.integrated_revision == INTEGRATED
+
     validated = coding.record_combined_validation(
         batch.batch_id,
         candidate.integration_id,
@@ -626,10 +764,7 @@ def test_conflicting_valid_workstreams_require_canonical_repair_and_fresh_combin
         ("B", REV_B, "src/b.py"),
     ):
         if coding.get(batch.batch_id).workstream(workstream_id).state is WorkstreamState.BLOCKED:
-            predecessor = "A"
-            assert (
-                coding.get(batch.batch_id).workstream(predecessor).state is WorkstreamState.ACCEPTED
-            )
+            assert coding.get(batch.batch_id).workstream("A").state is WorkstreamState.ACCEPTED
         coding.materialize_workstream(
             batch.batch_id,
             workstream_id,
