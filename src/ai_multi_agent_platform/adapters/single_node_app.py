@@ -34,6 +34,12 @@ from ai_multi_agent_platform.distribution import (
     reconcile_registry_plugins,
     register_distribution_control_plane,
 )
+from ai_multi_agent_platform.onboarding import (
+    JsonSetupProfileStore,
+    OnboardingComponentSetupService,
+    SingleNodeComponentDiscoverySource,
+    register_component_setup_control_plane,
+)
 from ai_multi_agent_platform.plugins import (
     CapabilityRegistryBinder,
     ExtensionType,
@@ -87,6 +93,14 @@ def build_default_single_node_deployment(
         enable_distributed_execution=enable_distributed_execution,
         application_release_gate_policy=release_gate_policy,
     )
+    component_setup = OnboardingComponentSetupService(
+        SingleNodeComponentDiscoverySource(
+            deployment.models,
+            distributed_runtime=deployment.distributed_runtime,
+        ),
+        JsonSetupProfileStore(deployment.config.database_dir / "component-setup-profiles.json"),
+    )
+    register_component_setup_control_plane(deployment.control_plane, component_setup)
     asyncio.run(
         deployment.capabilities.register_provider(
             RepositoryCapabilityProvider(
