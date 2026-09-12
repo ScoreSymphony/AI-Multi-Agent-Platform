@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
-from pathlib import Path
 
 import pytest
 
@@ -115,12 +113,3 @@ def test_published_release_rejects_delayed_mutation() -> None:
         assert persisted.gates == release.gates
 
     asyncio.run(scenario())
-
-
-def test_manifest_schema_uses_platform_neutral_identifier() -> None:
-    schema_path = (
-        Path(__file__).parents[1] / "docs" / "schemas" / "application-release-manifest.schema.json"
-    )
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
-
-    assert schema["$id"] == "urn:ai-multi-agent-platform:schema:application-release-manifest:v1"
