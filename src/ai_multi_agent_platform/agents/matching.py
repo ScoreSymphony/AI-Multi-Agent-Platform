@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol, TypeAlias
+from typing import Protocol
 
 from ai_multi_agent_platform.capabilities import CapabilityRegistry, CapabilitySpec
 from ai_multi_agent_platform.contracts.types import HealthStatus
@@ -27,7 +27,7 @@ from .models import (
 )
 from .repository import AgentRepository
 
-AgentParticipantRef: TypeAlias = AgentRevisionRef | AgentTeamRevisionRef
+type AgentParticipantRef = AgentRevisionRef | AgentTeamRevisionRef
 
 
 class AgentCandidateKind(StrEnum):
@@ -237,7 +237,7 @@ class AgentMatcher:
         *,
         model_registry: ModelRegistry | None = None,
         policy: AgentMatchingPolicy | None = None,
-    ) -> "AgentMatcher":
+    ) -> AgentMatcher:
         return cls(
             capability_specs=registry.inventory_capabilities(include_unavailable=False),
             model_registry=model_registry,

@@ -8,9 +8,9 @@ from ai_multi_agent_platform.agents import (
     AgentCandidateKind,
     AgentCapabilityRequirement,
     AgentMatchCandidate,
-    AgentMatchResult,
     AgentMatcher,
     AgentMatchingRequirements,
+    AgentMatchResult,
 )
 from ai_multi_agent_platform.agents.models import (
     AgentRevisionRef,
