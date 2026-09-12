@@ -27,6 +27,7 @@ def _item(
     *,
     dependencies: tuple[str, ...] = (),
     scopes: tuple[str, ...] = (),
+    metadata: dict[str, str] | None = None,
 ) -> CodingWorkItem:
     return CodingWorkItem(
         work_item_id=name,
@@ -36,6 +37,7 @@ def _item(
         dependencies=dependencies,
         affected_paths=() if path is None else (path,),
         semantic_scopes=scopes,
+        metadata=metadata or {},
     )
 
 
@@ -104,12 +106,25 @@ def test_three_proven_independent_items_are_parallel_ready() -> None:
     )
 
 
+def test_shared_source_is_parallel_only_with_explicitly_disjoint_semantic_scopes() -> None:
+    coordinator, batch_id = _coordinator(
+        _item("a", "src/alpha/a.py", scopes=("module:alpha",)),
+        _item("b", "src/beta/b.py", scopes=("module:beta",)),
+    )
+
+    batch = coordinator.get(batch_id)
+    assert batch.overlaps[0].kind is OverlapKind.SHARED_SOURCE_SAFE
+    assert batch.overlaps[0].blocks_parallel_start is False
+    assert tuple(item.id for item in coordinator.ready_workstreams(batch_id)) == ("a", "b")
+
+
 def test_dependency_serializes_until_exact_predecessor_is_accepted() -> None:
     coordinator, batch_id = _coordinator(
         _item("a", "src/alpha/a.py"),
         _item("b", "src/beta/b.py", dependencies=("a",)),
     )
     batch = coordinator.get(batch_id)
+    assert batch.overlaps[0].kind is OverlapKind.DEPENDENCY
     assert batch.workstream("a").state is WorkstreamState.READY
     assert batch.workstream("b").state is WorkstreamState.BLOCKED
 
@@ -127,9 +142,47 @@ def test_same_file_and_unknown_overlap_are_not_started_in_parallel() -> None:
     batch = coordinator.get(batch_id)
 
     decisions = {(d.left_work_item_id, d.right_work_item_id): d.kind for d in batch.overlaps}
-    assert decisions[("a", "b")] is OverlapKind.TEXTUAL_CONFLICT
+    assert decisions[("a", "b")] is OverlapKind.LIKELY_TEXTUAL_OVERLAP
     assert decisions[("a", "c")] is OverlapKind.UNKNOWN
     assert tuple(item.id for item in coordinator.ready_workstreams(batch_id)) == ("a",)
+
+
+def test_explicit_serialization_group_is_a_first_class_conflict() -> None:
+    coordinator, batch_id = _coordinator(
+        _item(
+            "a",
+            "src/alpha/a.py",
+            metadata={"serialization_group": "public-api"},
+        ),
+        _item(
+            "b",
+            "frontend/beta/b.ts",
+            metadata={"serialization_group": "public-api"},
+        ),
+    )
+
+    batch = coordinator.get(batch_id)
+    assert batch.overlaps[0].kind is OverlapKind.EXPLICIT_CONFLICT
+    assert tuple(item.id for item in coordinator.ready_workstreams(batch_id)) == ("a",)
+    _accept(coordinator, batch_id, "a", "1" * 40, "src/alpha/a.py")
+    assert coordinator.get(batch_id).workstream("b").state is WorkstreamState.READY
+
+
+def test_actual_same_changed_path_is_promoted_to_textual_conflict() -> None:
+    coordinator, batch_id = _coordinator(
+        _item("a", "src/shared.py"),
+        _item("b", "src/shared.py"),
+    )
+    _accept(coordinator, batch_id, "a", "1" * 40, "src/shared.py")
+    _accept(coordinator, batch_id, "b", "2" * 40, "src/shared.py")
+
+    candidate = coordinator.build_integration_candidate(
+        batch_id,
+        current_target_revision=BASE,
+    )
+
+    assert candidate.state is IntegrationState.BLOCKED
+    assert candidate.conflicts[0].kind is OverlapKind.TEXTUAL_CONFLICT
 
 
 def test_repeated_request_and_materialization_are_idempotent() -> None:
