@@ -94,6 +94,7 @@ class PlanningAgentCandidate:
     denied_capability_ids: tuple[str, ...] = ()
     required_capability_ids: tuple[str, ...] = ()
     model_requirements: RoutingRequirements = field(default_factory=RoutingRequirements)
+    allow_task_model_override: bool = False
 
     def __post_init__(self) -> None:
         validate_id(self.agent_id, "agent")
@@ -113,6 +114,8 @@ class PlanningTeamCandidate:
     project_id: str | None = None
     workspace_id: str | None = None
     shared_capability_ids: tuple[str, ...] = ()
+    required_member_agent_ids: tuple[str, ...] = ()
+    skip_optional_unavailable: bool = False
     max_parallel_agents: int | None = None
     max_steps: int | None = None
 
@@ -122,6 +125,10 @@ class PlanningTeamCandidate:
             raise ValueError("team candidate revision must be >= 1")
         for agent_id in self.member_agent_ids:
             validate_id(agent_id, "agent")
+        for agent_id in self.required_member_agent_ids:
+            validate_id(agent_id, "agent")
+        if not set(self.required_member_agent_ids).issubset(self.member_agent_ids):
+            raise ValueError("required Team members must be included in member_agent_ids")
         _validate_optional_id(self.project_id, "project")
         _validate_optional_id(self.workspace_id, "workspace")
         if self.max_parallel_agents is not None and self.max_parallel_agents < 1:
