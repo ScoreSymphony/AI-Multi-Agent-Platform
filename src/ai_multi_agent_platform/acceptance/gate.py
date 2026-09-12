@@ -200,7 +200,10 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             "memory-provider-restart",
             "#13/#251 data lifecycle",
             "user-owned Memory persists through provider reconstruction",
-            _pytest("tests/test_data_reference.py::test_memory_persists_across_provider_restart"),
+            _pytest(
+                "tests/integration/data/test_reference_providers.py::"
+                "test_memory_persists_across_provider_restart"
+            ),
         ),
         AcceptanceCheck(
             "verification-restart",
