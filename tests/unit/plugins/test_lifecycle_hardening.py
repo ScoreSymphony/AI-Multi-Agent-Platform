@@ -84,7 +84,7 @@ def _extension(extension_id: str) -> PluginExtensionSpec:
         extension_id=extension_id,
         extension_type=ExtensionType.CAPABILITY_PROVIDER,
         interface_version="1.0",
-        entrypoint="tests.test_issue_20_lifecycle_hardening:_Runtime",
+        entrypoint="tests.unit.plugins.test_lifecycle_hardening:_Runtime",
     )
 
 
