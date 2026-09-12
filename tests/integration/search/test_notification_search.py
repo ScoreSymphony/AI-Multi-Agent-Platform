@@ -1,3 +1,5 @@
+"""Notification search integration behavior migrated from issue #75 coverage."""
+
 from __future__ import annotations
 
 import asyncio
