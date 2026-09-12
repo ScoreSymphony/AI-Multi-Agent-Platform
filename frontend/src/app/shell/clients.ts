@@ -24,13 +24,12 @@ import { VerificationClient } from "../../api/verification";
 export function useShellClients(baseUrl: string) {
   const session = useMemo(() => new BrowserSessionClient({ baseUrl }), [baseUrl]);
   const transport = session.transport;
-  const fetchImpl = session.fetch;
   const client = useMemo(() => new ControlPlaneClient({ transport }), [transport]);
   const onboardingClient = useMemo(() => new OnboardingClient({ transport }), [transport]);
   const collections = useMemo(() => new ControlPlaneCollectionClient({ transport }), [transport]);
   const approvalClient = useMemo(() => new ApprovalClient({ transport }), [transport]);
   const repositoryClient = useMemo(() => new RepositoryCollectionClient({ transport }), [transport]);
-  const conversationClient = useMemo(() => new ConversationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const conversationClient = useMemo(() => new ConversationClient({ transport }), [transport]);
   const automationClient = useMemo(() => new AutomationClient({ transport }), [transport]);
   const goalClient = useMemo(() => new GoalClient({ transport }), [transport]);
   const computeClient = useMemo(() => new ComputeClient({ transport }), [transport]);
