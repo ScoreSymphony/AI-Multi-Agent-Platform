@@ -36,32 +36,58 @@ jobs:
           echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
 
+      - name: Create isolated rebinding network
+        shell: bash
+        run: |
+          docker network create \
+            --driver bridge \
+            --subnet 203.0.113.0/24 \
+            issue859-rebinding-net
+          docker pull python:3.12-slim
+          docker pull maximhq/bifrost:v2.1.1
+
       - name: Start controlled upstream, sentinel and rebinding DNS
         shell: bash
         run: |
-          python scripts/ci/issue859_mock_openai.py --port 18000 \
-            > "$GITHUB_WORKSPACE/.issue859-rebinding-mock.log" 2>&1 &
-          echo $! > "$GITHUB_WORKSPACE/.issue859-rebinding-mock.pid"
-          python scripts/ci/issue859_ssrf_sentinel.py --port 18001 \
-            > "$GITHUB_WORKSPACE/.issue859-rebinding-sentinel.log" 2>&1 &
-          echo $! > "$GITHUB_WORKSPACE/.issue859-rebinding-sentinel.pid"
-          sudo -E "$VIRTUAL_ENV/bin/python" scripts/ci/issue859_rebinding_dns.py \
-            --dns-host 127.0.0.1 \
-            --dns-port 53 \
-            --control-host 127.0.0.1 \
-            --control-port 18002 \
-            --hostname issue859-rebind.test \
-            --first-ip 203.0.113.10 \
-            --rebound-ip 127.0.0.1 \
-            > "$GITHUB_WORKSPACE/.issue859-rebinding-dns.log" 2>&1 &
-          echo $! > "$GITHUB_WORKSPACE/.issue859-rebinding-dns.pid"
+          docker run -d \
+            --name issue859-rebinding-mock \
+            --network issue859-rebinding-net \
+            --ip 203.0.113.20 \
+            -v "$GITHUB_WORKSPACE/scripts/ci/issue859_mock_openai.py:/fixture.py:ro" \
+            python:3.12-slim \
+            python /fixture.py --host 0.0.0.0 --port 18000
+
+          docker run -d \
+            --name issue859-rebinding-sentinel \
+            --network issue859-rebinding-net \
+            --ip 203.0.113.10 \
+            -p 127.0.0.1:18001:18001 \
+            -v "$GITHUB_WORKSPACE/scripts/ci/issue859_ssrf_sentinel.py:/fixture.py:ro" \
+            python:3.12-slim \
+            python /fixture.py --host 0.0.0.0 --port 18001
+
+          docker run -d \
+            --name issue859-rebinding-dns \
+            --network issue859-rebinding-net \
+            --ip 203.0.113.53 \
+            -p 127.0.0.1:18002:18002 \
+            -v "$GITHUB_WORKSPACE/scripts/ci/issue859_rebinding_dns.py:/fixture.py:ro" \
+            python:3.12-slim \
+            python /fixture.py \
+              --dns-host 0.0.0.0 \
+              --dns-port 53 \
+              --control-host 0.0.0.0 \
+              --control-port 18002 \
+              --hostname issue859-rebind.test \
+              --first-ip 203.0.113.10 \
+              --rebound-ip 127.0.0.1
+
           python - <<'PY'
           import json
           import time
           import urllib.request
 
           urls = (
-              "http://127.0.0.1:18000/healthz",
               "http://127.0.0.1:18001/healthz",
               "http://127.0.0.1:18002/healthz",
           )
@@ -77,10 +103,6 @@ jobs:
               else:
                   raise SystemExit(f"controlled issue #859 fixture did not become healthy: {url}")
           PY
-
-      - name: Bind synthetic public address to loopback
-        shell: bash
-        run: sudo ip addr add 203.0.113.10/32 dev lo
 
       - name: Create pinned Bifrost configuration
         shell: bash
@@ -105,7 +127,7 @@ jobs:
                   }
                 ],
                 "network_config": {
-                  "base_url": "http://127.0.0.1:18000",
+                  "base_url": "http://203.0.113.20:18000",
                   "default_request_timeout_in_seconds": 5,
                   "max_retries": 0
                 },
@@ -132,7 +154,7 @@ jobs:
                   }
                 ],
                 "network_config": {
-                  "base_url": "http://127.0.0.1:18000/v1",
+                  "base_url": "http://203.0.113.20:18000/v1",
                   "default_request_timeout_in_seconds": 5,
                   "max_retries": 0
                 }
@@ -147,11 +169,12 @@ jobs:
       - name: Start reviewed Bifrost with controlled DNS
         shell: bash
         run: |
-          docker pull maximhq/bifrost:v2.1.1
-          docker run --rm -d \
+          docker run -d \
             --name issue859-bifrost-rebinding \
-            --network host \
-            --dns 127.0.0.1 \
+            --network issue859-rebinding-net \
+            --ip 203.0.113.30 \
+            --dns 203.0.113.53 \
+            -p 127.0.0.1:18080:8080 \
             -v "$GITHUB_WORKSPACE/.issue859-bifrost-rebinding:/app/data" \
             -e APP_HOST=0.0.0.0 \
             -e BIFROST_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef \
@@ -170,7 +193,7 @@ jobs:
           }).encode("utf-8")
           for _ in range(120):
               request = urllib.request.Request(
-                  "http://127.0.0.1:8080/v1/chat/completions",
+                  "http://127.0.0.1:18080/v1/chat/completions",
                   data=payload,
                   headers={"Content-Type": "application/json"},
                   method="POST",
@@ -188,7 +211,7 @@ jobs:
 
       - name: Run DNS rebinding runtime gate
         env:
-          BIFROST_EVAL_BIFROST_BASE_URL: http://127.0.0.1:8080/v1
+          BIFROST_EVAL_BIFROST_BASE_URL: http://127.0.0.1:18080/v1
           BIFROST_EVAL_BIFROST_NATIVE_OPENAI_MODEL: openai/fixture-model
           BIFROST_EVAL_SSRF_REBINDING_URL: http://issue859-rebind.test:18001/ssrf-sentinel.txt
           BIFROST_EVAL_REBINDING_DNS_CONTROL_URL: http://127.0.0.1:18002
@@ -216,6 +239,7 @@ jobs:
           sentinel = get("http://127.0.0.1:18001/control/stats")
           evidence = {
               "bifrost_version": "v2.1.1",
+              "network": "isolated Docker bridge 203.0.113.0/24",
               "hostname": "issue859-rebind.test",
               "first_dns_answer": "203.0.113.10",
               "rebound_dns_answer": "127.0.0.1",
@@ -245,28 +269,25 @@ jobs:
         shell: bash
         run: |
           echo "--- rebinding DNS ---"
-          cat "$GITHUB_WORKSPACE/.issue859-rebinding-dns.log" || true
+          docker logs issue859-rebinding-dns || true
           echo "--- sentinel ---"
-          cat "$GITHUB_WORKSPACE/.issue859-rebinding-sentinel.log" || true
+          docker logs issue859-rebinding-sentinel || true
           echo "--- upstream mock ---"
-          cat "$GITHUB_WORKSPACE/.issue859-rebinding-mock.log" || true
+          docker logs issue859-rebinding-mock || true
           echo "--- Bifrost ---"
           docker logs issue859-bifrost-rebinding || true
-          echo "--- container resolv.conf ---"
+          echo "--- Bifrost resolv.conf ---"
           docker exec issue859-bifrost-rebinding cat /etc/resolv.conf || true
+          echo "--- network ---"
+          docker network inspect issue859-rebinding-net || true
 
       - name: Cleanup
         if: always()
         shell: bash
         run: |
-          docker rm -f issue859-bifrost-rebinding || true
-          sudo ip addr del 203.0.113.10/32 dev lo || true
-          if test -f "$GITHUB_WORKSPACE/.issue859-rebinding-dns.pid"; then
-            sudo kill "$(cat "$GITHUB_WORKSPACE/.issue859-rebinding-dns.pid")" || true
-          fi
-          if test -f "$GITHUB_WORKSPACE/.issue859-rebinding-sentinel.pid"; then
-            kill "$(cat "$GITHUB_WORKSPACE/.issue859-rebinding-sentinel.pid")" || true
-          fi
-          if test -f "$GITHUB_WORKSPACE/.issue859-rebinding-mock.pid"; then
-            kill "$(cat "$GITHUB_WORKSPACE/.issue859-rebinding-mock.pid")" || true
-          fi
+          docker rm -f \
+            issue859-bifrost-rebinding \
+            issue859-rebinding-dns \
+            issue859-rebinding-sentinel \
+            issue859-rebinding-mock || true
+          docker network rm issue859-rebinding-net || true
