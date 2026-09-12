@@ -92,9 +92,7 @@ def _probe_matrix(
         b_to_a = requester(urls_a[surface], token_b)
         all_results = (a_to_a, b_to_b, a_to_b, b_to_a)
         transport_complete = all(item.get("transport_error") is None for item in all_results)
-        same_tenant_access = (
-            a_to_a.get("authorized") is True and b_to_b.get("authorized") is True
-        )
+        same_tenant_access = a_to_a.get("authorized") is True and b_to_b.get("authorized") is True
         cross_tenant_blocked = (
             a_to_b.get("authorized") is False and b_to_a.get("authorized") is False
         )
@@ -111,12 +109,8 @@ def _probe_matrix(
 
     return {
         "surfaces": surfaces,
-        "all_transport_complete": all(
-            value["transport_complete"] for value in surfaces.values()
-        ),
-        "all_same_tenant_access": all(
-            value["same_tenant_access"] for value in surfaces.values()
-        ),
+        "all_transport_complete": all(value["transport_complete"] for value in surfaces.values()),
+        "all_same_tenant_access": all(value["same_tenant_access"] for value in surfaces.values()),
         "all_cross_tenant_blocked": all(
             value["cross_tenant_blocked"] for value in surfaces.values()
         ),
