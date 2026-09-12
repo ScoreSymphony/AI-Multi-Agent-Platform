@@ -1,5 +1,6 @@
 """Parallel coding-batch composition for issue #872."""
 
+from .authorization import AuthorizedCodingBatchIntegration, CodingBatchAuthorizationContext
 from .materialization import CanonicalWorkstreamMaterializer, deterministic_workspace_id
 from .models import (
     BatchAggregationPolicy,
@@ -27,7 +28,6 @@ from .service import (
     InMemoryCodingBatchStore,
     deterministic_branch_ref,
 )
-from .authorization import AuthorizedCodingBatchIntegration, CodingBatchAuthorizationContext
 
 __all__ = [
     "AuthorizedCodingBatchIntegration",
