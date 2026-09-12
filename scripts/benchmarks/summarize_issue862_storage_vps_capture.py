@@ -169,8 +169,14 @@ def build_summary(root: Path) -> dict[str, Any]:
         "interpretation_guardrails": [
             "container CPU/memory describe the resident object-store service only",
             "local filesystem process RSS is not directly equivalent to resident daemon memory",
-            "post-cleanup data-root bytes are operational residual footprint, not storage amplification",
-            "classification decisions must retain raw evidence and must not infer missing measurements",
+            (
+                "post-cleanup data-root bytes are operational residual footprint, "
+                "not storage amplification"
+            ),
+            (
+                "classification decisions must retain raw evidence and must not infer "
+                "missing measurements"
+            ),
         ],
     }
 
@@ -187,11 +193,15 @@ def render_markdown(summary: dict[str, Any]) -> str:
     lines = [
         "# Issue #862 VPS storage summary",
         "",
-        "| Backend | Peak active RAM | Median active RAM | Peak CPU sample | Residual data-root | Concurrent round-trip |",
+        (
+            "| Backend | Peak active RAM | Median active RAM | Peak CPU sample | "
+            "Residual data-root | Concurrent round-trip |"
+        ),
         "|---|---:|---:|---:|---:|---:|",
         (
             "| local filesystem | "
-            f"{_format_mib(local['process_resources']['maximum_resident_set_bytes'])} | n/a | n/a | "
+            f"{_format_mib(local['process_resources']['maximum_resident_set_bytes'])} | "
+            "n/a | n/a | "
             f"{_format_mib(local['post_cleanup_root_bytes'])} | "
             f"{float(local['timings_seconds']['concurrent_round_trip_seconds']):.4f}s |"
         ),
@@ -210,8 +220,9 @@ def render_markdown(summary: dict[str, Any]) -> str:
         [
             "",
             "The table is a compact view of the raw capture, not a replacement for it. "
-            "Local filesystem process RSS and container daemon memory are different resource shapes, "
-            "and residual data-root size is not a storage-amplification measurement.",
+            "Local filesystem process RSS and container daemon memory are different "
+            "resource shapes, and residual data-root size is not a storage-amplification "
+            "measurement.",
             "",
         ]
     )
