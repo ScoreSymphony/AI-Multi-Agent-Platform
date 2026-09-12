@@ -236,7 +236,8 @@ class CanonicalCodingWorkstreamDispatcher:
         }
         if canonical_selected_dependencies != expected_dependencies:
             raise ValueError(
-                "coding work-item dependencies diverge from selected canonical #384 Step dependencies"
+                "coding work-item dependencies diverge from selected canonical "
+                "#384 Step dependencies"
             )
         if (
             step.phase is not CoordinationPhase.ATTEMPT_ACTIVE
