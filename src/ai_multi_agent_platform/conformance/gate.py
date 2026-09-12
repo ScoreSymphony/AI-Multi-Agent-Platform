@@ -1,524 +1,408 @@
-"""Platform-wide conformance runner for the M3 operational-v1 gate.
-
-The runner aggregates evidence owned by canonical subsystems. It intentionally does
-not implement a second platform stack. Required scenarios that do not yet have a
-registered acceptance path remain explicit ``not_implemented`` results, while
-optional capabilities may be reported as ``disabled`` or ``unsupported`` without
-invalidating the reference single-node baseline.
-"""
+"""Executable conformance gate for the canonical platform acceptance profiles (#46)."""
 
 from __future__ import annotations
 
 import json
+import platform
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from time import monotonic
+from typing import Callable, Iterable, Mapping, Sequence
 
-from ai_multi_agent_platform.conformance.evidence import parse_runtime_evidence
+from ai_multi_agent_platform.version import __version__
 
-REPORT_SCHEMA = "ai-multi-agent-platform/platform-conformance/v1"
-_PACKAGE_NAME = "ai-multi-agent-platform"
+from .report import (
+    ConformanceReport,
+    ConformanceStatus,
+    ProfileResult,
+    ScenarioResult,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class ConformanceProfile(StrEnum):
+    """Named acceptance profiles exposed by the gate."""
+
     FAST = "fast"
-    INTEGRATION = "integration"
+    OPERATIONAL = "operational"
     RELEASE = "release"
-
-
-class ConformanceStatus(StrEnum):
-    PASS = "pass"
-    FAIL = "fail"
-    DISABLED = "disabled"
-    UNSUPPORTED = "unsupported"
-    NOT_IMPLEMENTED = "not_implemented"
-
-
-class CompatibilityResult(StrEnum):
-    COMPATIBLE = "compatible"
-    INCOMPATIBLE = "incompatible"
-    INCOMPLETE = "incomplete"
-    NOT_CLAIMED = "not_claimed"
-
-
-@dataclass(frozen=True, slots=True)
-class ComponentVersion:
-    name: str
-    version: str
 
 
 @dataclass(frozen=True, slots=True)
 class ConformanceScenario:
+    """Executable scenario bound to one explicit acceptance criterion."""
+
     scenario_id: str
     owner: str
     criterion: str
     command: tuple[str, ...] | None
+    skip_reason: str | None = None
     required: bool = True
-    unavailable_status: ConformanceStatus = ConformanceStatus.NOT_IMPLEMENTED
-    unavailable_reason: str | None = None
-    requires_runtime_evidence: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.scenario_id.strip():
+            raise ValueError("scenario_id must not be blank")
+        if not self.owner.strip():
+            raise ValueError("owner must not be blank")
+        if not self.criterion.strip():
+            raise ValueError("criterion must not be blank")
+        if self.command is None and self.skip_reason is None:
+            raise ValueError("placeholder scenarios require a skip_reason")
+        if self.command is not None and not self.command:
+            raise ValueError("command must not be empty")
+        if self.command is not None and self.skip_reason is not None:
+            raise ValueError("executable scenarios cannot also declare a skip_reason")
+        if not self.required and self.command is None and self.skip_reason is None:
+            raise ValueError("optional scenarios require executable evidence or a skip reason")
 
 
 @dataclass(frozen=True, slots=True)
-class ConformanceScenarioResult:
-    scenario_id: str
-    owner: str
-    criterion: str
-    required: bool
-    status: str
-    compatibility_result: str
-    duration_seconds: float
-    command: tuple[str, ...]
+class ScenarioExecution:
+    """Normalized execution outcome injected into deterministic tests."""
+
+    exit_code: int
     stdout: str
     stderr: str
-    failure_category: str | None
-    reason: str | None
-    canonical_resource_ids: tuple[str, ...]
-    evidence: tuple[str, ...]
+    duration_seconds: float
 
 
-@dataclass(frozen=True, slots=True)
-class ConformanceReport:
-    schema: str
-    profile: str
-    deployment_profile: str
-    platform_commit: str | None
-    platform_release: str | None
-    passed: bool
-    compatibility_result: str
-    adapter_versions: tuple[ComponentVersion, ...]
-    provider_versions: tuple[ComponentVersion, ...]
-    plugin_versions: tuple[ComponentVersion, ...]
-    scenarios: tuple[ConformanceScenarioResult, ...]
+ScenarioRunner = Callable[[ConformanceScenario], ScenarioExecution]
 
-    def to_json(self) -> str:
-        return json.dumps(asdict(self), indent=2, sort_keys=True) + "\n"
 
-    def human_summary(self) -> str:
-        headline = (
-            f"platform conformance [{self.profile}/{self.deployment_profile}]: "
-            f"{'PASS' if self.passed else 'FAIL'} ({self.compatibility_result})"
+def _pytest(*node_ids: str) -> tuple[str, ...]:
+    return (sys.executable, "-m", "pytest", "-q", *node_ids)
+
+
+def _python_script(path: str, *arguments: str) -> tuple[str, ...]:
+    return (sys.executable, path, *arguments)
+
+
+def _script_and_pytest(
+    script_path: str,
+    *node_ids: str,
+    script_arguments: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    script = " ".join(
+        (
+            json.dumps(sys.executable),
+            json.dumps(script_path),
+            *(json.dumps(argument) for argument in script_arguments),
         )
-        lines = [headline]
-        for result in self.scenarios:
-            requirement = "required" if result.required else "optional"
-            lines.append(
-                f"- {result.status.upper()} {result.scenario_id} "
-                f"({requirement}; {result.owner}) — {result.criterion}"
-            )
-            if result.reason:
-                lines.append(f"  reason: {result.reason}")
-            if result.status == ConformanceStatus.FAIL.value:
-                if result.stdout:
-                    lines.append("  stdout: " + _single_line(result.stdout))
-                if result.stderr:
-                    lines.append("  stderr: " + _single_line(result.stderr))
-        return "\n".join(lines)
-
-
-def _pytest(*nodes: str) -> tuple[str, ...]:
-    return (sys.executable, "-m", "pytest", "-q", *nodes)
-
-
-def _python_module(module: str, *args: str) -> tuple[str, ...]:
-    return (sys.executable, "-m", module, *args)
+    )
+    pytest = " ".join(
+        (
+            json.dumps(sys.executable),
+            "-m pytest -q",
+            *(json.dumps(node_id) for node_id in node_ids),
+        )
+    )
+    return ("sh", "-c", f"{script} && {pytest}")
 
 
 def _optional(
     scenario_id: str,
     owner: str,
     criterion: str,
-    reason: str,
+    skip_reason: str,
     *,
-    status: ConformanceStatus = ConformanceStatus.DISABLED,
+    command: tuple[str, ...] | None = None,
 ) -> ConformanceScenario:
     return ConformanceScenario(
         scenario_id=scenario_id,
         owner=owner,
         criterion=criterion,
-        command=None,
+        command=command,
+        skip_reason=None if command is not None else skip_reason,
         required=False,
-        unavailable_status=status,
-        unavailable_reason=reason,
-    )
-
-
-def _pending(scenario_id: str, owner: str, criterion: str) -> ConformanceScenario:
-    return ConformanceScenario(
-        scenario_id=scenario_id,
-        owner=owner,
-        criterion=criterion,
-        command=None,
-        required=True,
-        unavailable_status=ConformanceStatus.NOT_IMPLEMENTED,
-        unavailable_reason="the #46 end-to-end acceptance path is not registered yet",
     )
 
 
 def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
     return (
         ConformanceScenario(
-            "A",
-            "#39/#252 reference baseline",
-            (
-                "reference-only authenticated Task/Run/Result execution remains retry-safe "
-                "across service reconstruction"
-            ),
+            "D",
+            "#5 Model Provider Layer",
+            "retry/rate-limit/quota/provider-failure handling remains fail-closed",
             _pytest(
-                "tests/test_issue39_single_node_deployment.py::"
-                "test_single_node_reference_smoke_is_retry_safe_across_restart"
-            ),
-        ),
-        ConformanceScenario(
-            "D-model",
-            "#10/#250/#252 local model",
-            "local/self-hosted model invocation works without a paid external service",
-            _pytest(
-                "tests/test_issue_252_acceptance_gate.py::"
-                "test_local_ai_profile_uses_real_loopback_openai_compatible_endpoint"
-            ),
-        ),
-        ConformanceScenario(
-            "D-capability",
-            "#12 capability boundary",
-            "capability discovery and invocation remain contract-driven and replaceable",
-            _pytest("tests/test_issue_12_reopen.py"),
-        ),
-        ConformanceScenario(
-            "D-vertical",
-            "#46/#10/#12 local model + capability",
-            (
-                "one authenticated AgentRun crosses a real loopback local-model HTTP boundary "
-                "and executes its pinned native capability through CapabilityInvoker"
-            ),
-            _pytest(
-                "tests/test_issue_46_local_model_native_capability_e2e.py::"
-                "test_authenticated_local_model_executes_native_capability_end_to_end"
+                "tests/test_issue_5_model_provider.py::test_provider_failures_are_mapped_to_canonical_error_categories",
+                "tests/test_issue_5_model_provider.py::test_litellm_adapter_forwards_retries_and_normalizes_rate_limit",
+                "tests/test_issue_5_model_provider.py::test_litellm_adapter_classifies_quota_exhaustion",
             ),
         ),
         ConformanceScenario(
             "F",
-            "#15 authorization/approval",
-            "approval is exact-action bound and changed-payload reuse is rejected",
-            _pytest("tests/test_issue_15_final_boundaries.py"),
-        ),
-        ConformanceScenario(
-            "H",
-            "#46 canonical kernel/control-plane recovery",
-            (
-                "an unfinished canonical Run survives Control Plane/process reconstruction on the "
-                "same identity without duplicate dispatch while preserving Workspace binding and "
-                "deterministic queued/pre-accept/orphan recovery semantics"
-            ),
+            "#9 Prompt Builder",
+            "assembled prompts preserve source ordering, provenance and deterministic truncation",
             _pytest(
-                "tests/test_kernel.py::"
-                "test_restart_reconciles_post_accept_crash_without_duplicate_dispatch",
-                "tests/test_kernel.py::"
-                "test_recovery_distinguishes_queued_pre_accept_and_orphaned_running",
-                "tests/test_run_workspace_binding_restart.py::"
-                "test_restart_between_run_creation_and_binding_recovers_same_run",
+                "tests/test_issue_9_prompt_builder.py",
+                "tests/test_issue_9_prompt_builder_enforcement.py",
             ),
-        ),
-        ConformanceScenario(
-            "J-cli",
-            "#17/#46 CLI client",
-            (
-                "CLI reads shared canonical Task/Run/Result state through the versioned "
-                "Control Plane resource paths"
-            ),
-            _pytest(
-                "tests/test_issue_46_client_state_parity.py::"
-                "test_cli_reads_shared_canonical_task_run_result_state"
-            ),
-        ),
-        ConformanceScenario(
-            "J-web",
-            "#17/#395 Web client",
-            (
-                "Web reads the same canonical Task/Run/Result fixtures through the same "
-                "versioned API paths"
-            ),
-            (
-                "npm",
-                "--prefix",
-                "frontend",
-                "test",
-                "--",
-                "--run",
-                "src/api/canonicalStateParity.test.ts",
-            ),
-        ),
-        ConformanceScenario(
-            "U",
-            "#86 runtime verification",
-            (
-                "required Verification gates completion, binds exact revisions, works "
-                "deterministically without an LLM, enforces reviewer independence and keeps "
-                "repair loops bounded and auditable"
-            ),
-            _pytest(
-                "tests/test_issue_86_kernel_gate.py::"
-                "test_successful_run_cannot_bypass_required_verification",
-                "tests/test_issue_86_kernel_gate.py::"
-                "test_changed_subject_invalidates_old_verification_at_completion_gate",
-                "tests/test_issue_86_kernel_gate.py::"
-                "test_rejected_verification_blocks_completion_without_rewriting_run_outcome",
-                "tests/test_issue_86_verification.py::"
-                "test_changed_result_revision_cannot_reuse_old_verification",
-                "tests/test_issue_86_verification.py::"
-                "test_deterministic_reference_verifier_passes_and_fails_without_llm",
-                "tests/test_issue_86_verification.py::"
-                "test_agent_reviewer_independence_and_read_only_rules_are_enforced",
-                "tests/test_issue_86_verification.py::"
-                "test_bounded_repair_preserves_history_and_stops_at_policy_limit",
-            ),
-        ),
-        ConformanceScenario(
-            "ARCH",
-            "#46 architecture invariants",
-            "canonical core remains independent from optional backend implementations",
-            _pytest("tests/test_issue_46_architecture_invariants.py"),
-        ),
-    )
-
-
-def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario, ...]:
-    fast = _fast_scenarios()
-    if profile is ConformanceProfile.FAST:
-        return fast
-
-    integration = fast + (
-        _optional(
-            "B",
-            "#8 Hermes adapter",
-            "Hermes orchestration maps through canonical contracts with a non-Hermes executor",
-            "Hermes integration profile is not enabled by the reference conformance run",
-        ),
-        _optional(
-            "C",
-            "#9 Forge adapter",
-            "Forge executes behind the canonical Executor boundary without lifecycle authority",
-            "Forge integration profile is not enabled by the reference conformance run",
-        ),
-        _optional(
-            "E",
-            "#14 distributed Worker",
-            "a second Worker/Node preserves canonical IDs, authorization and trace context",
-            "distributed Worker profile is optional and not enabled",
-        ),
-        _optional(
-            "S",
-            "#81 optional Registry",
-            "Registry-disabled baseline works and a local catalog can be validated when enabled",
-            "Registry is optional and disabled",
-        ),
-        _optional(
-            "X",
-            "#89 optional Control Plane HA",
-            "HA failover fences stale authority without changing single-node semantics",
-            "HA is optional and disabled",
-        ),
-    )
-    if profile is ConformanceProfile.INTEGRATION:
-        return integration
-
-    return integration + (
-        ConformanceScenario(
-            "REL-BACKUP",
-            "#40 backup/restore",
-            (
-                "replacement-machine restore preserves canonical identity/history and reaches "
-                "service readiness"
-            ),
-            _pytest(
-                "tests/test_issue40_replacement_machine.py::"
-                "test_clean_replacement_machine_restore_preserves_canonical_history"
-            ),
-        ),
-        ConformanceScenario(
-            "REL-UPGRADE",
-            "#41 upgrade lifecycle",
-            (
-                "supported schema upgrade uses preflight, recorded migrations, backup semantics "
-                "and explicit recovery"
-            ),
-            _pytest(
-                "tests/test_issue41_upgrade_lifecycle.py::"
-                "test_upgrade_from_previous_schema_fixture_records_history",
-                "tests/test_issue41_upgrade_lifecycle.py::"
-                "test_forward_only_migration_requires_matching_verified_backup",
-                "tests/test_issue41_upgrade_lifecycle.py::"
-                "test_failed_upgrade_stays_in_maintenance_until_explicit_resume",
-            ),
-        ),
-        ConformanceScenario(
-            "REL-EVAL",
-            "#19 evaluation/regression",
-            (
-                "checked-in deterministic evaluation baseline rejects regressions "
-                "without paid services"
-            ),
-            (sys.executable, "scripts/ci/issue19_evaluation_gate.py"),
-        ),
-        ConformanceScenario(
-            "REL-VERTICAL",
-            "#46 authenticated full reference vertical slice",
-            (
-                "one authenticated canonical Task/Run crosses Agent/Model, Capability/Tool, "
-                "Executor/Worker/Node, Workspace/File/Artifact, Verification and returns through "
-                "canonical API/timeline/observability without shadow lifecycle state"
-            ),
-            _pytest(
-                "-s",
-                "tests/test_issue_46_worker_artifact_verification_vertical.py::"
-                "test_authenticated_worker_artifact_is_exact_verification_evidence_same_run",
-            ),
-            requires_runtime_evidence=True,
         ),
         ConformanceScenario(
             "G",
-            "#46 failure/retry",
-            "controlled failures preserve canonical retries and telemetry",
-            _pytest(
-                "tests/test_issue_46_failure_retry_e2e.py::"
-                "test_controlled_failure_retry_preserves_canonical_history_and_retry_telemetry"
-            ),
+            "#10 Data/File Layer",
+            "workspace-scoped file CRUD and range access remain canonical and traversal-safe",
+            _pytest("tests/test_issue_10_data_file_layer.py"),
+        ),
+        ConformanceScenario(
+            "H",
+            "#10 Data/File Layer",
+            "artifact references survive checksum verification, retention and cleanup",
+            _pytest("tests/test_issue_10_artifact_lifecycle.py"),
         ),
         ConformanceScenario(
             "I",
-            "#18 automation",
-            "automation creates a normal canonical Task lifecycle",
+            "#15 Authorization + #23 RBAC",
+            "forbidden actor-role combinations and approvals fail closed",
             _pytest(
-                "tests/test_automation.py::"
-                "test_one_time_schedule_creates_canonical_task_with_provenance"
+                "tests/test_issue_15_authorization.py",
+                "tests/test_issue_23_permission_enforcement_matrix.py",
+                "tests/test_issue_25_approval_authority.py",
+            ),
+        ),
+        ConformanceScenario(
+            "J",
+            "#16 Observability",
+            "Task/Run/Agent/Provider/Capability telemetry propagates context without prompt capture",
+            _pytest(
+                "tests/test_issue_16_observability.py",
+                "tests/test_issue_18_agent_model_observability.py",
+                "tests/test_issue_16_workflow_timeline.py",
             ),
         ),
         ConformanceScenario(
             "K",
-            "#72 Chat",
-            "Chat creates durable canonical work without becoming lifecycle truth",
+            "#17 Cost Accounting",
+            "exact and estimated usage feed budget and project accounting with provenance",
             _pytest(
-                "tests/test_issue_72_control_plane.py::"
-                "test_message_to_task_handoff_is_canonical_and_bidirectionally_linked"
+                "tests/test_issue_17_cost_accounting.py",
+                "tests/test_issue_17_cost_accounting_integration.py",
             ),
         ),
         ConformanceScenario(
             "L",
-            "#73 Terminal",
-            "terminal/session access remains authorized and Workspace-bounded",
+            "#18 Reliability",
+            "model/provider/capability failure paths preserve deterministic retry and terminal state",
             _pytest(
-                "tests/test_issue73_control_plane_e2e.py::"
-                "test_terminal_http_resource_and_command_use_standard_composition_and_"
-                "idempotent_create"
+                "tests/test_issue_18_reliability.py",
+                "tests/test_issue_18_recovery.py",
+                "tests/test_issue_18_model_provider_reliability.py",
             ),
         ),
         ConformanceScenario(
             "M",
-            "#74 Browser",
-            "browser work uses replaceable Capability/File/security boundaries",
+            "#19 Evaluation",
+            "baseline comparison detects deterministic regression and missing evidence",
             _pytest(
-                "tests/test_browser_capability.py::"
-                "test_download_enters_canonical_file_and_artifact_path_with_redacted_provenance",
-                "tests/test_browser_capability.py::"
-                "test_form_side_effect_is_policy_gated_and_upload_reads_authorized_canonical_file",
+                "tests/test_issue_19_evaluation.py",
+                "tests/test_issue_19_regression_policy.py",
             ),
-        ),
-        _optional(
-            "N",
-            "#75 Notifications",
-            (
-                "Task completion/failure, approval-required and verification-required "
-                "notifications remain recipient-scoped, deduplicated and source-linked"
-            ),
-            "notification integration profile is optional and not enabled",
         ),
         ConformanceScenario(
             "O",
-            "#76 Usage/resources",
-            (
-                "Task/model/Worker/Node usage remains attributable through canonical IDs without "
-                "fabricating unavailable measurements"
-            ),
-            _pytest(
-                "tests/test_issue76_accounting.py::"
-                "test_task_run_executor_accounting_is_idempotent_and_aggregated",
-                "tests/integration/accounting/test_model_usage_attribution.py::"
-                "test_auto_routed_model_usage_is_attributed_to_selected_canonical_configuration",
-                "tests/integration/accounting/test_accounting_composition.py::"
-                "test_worker_dispatch_usage_is_additive_and_attributed",
-                "tests/integration/accounting/test_accounting_composition.py::"
-                "test_worker_and_node_reported_resources_are_latest_provider_neutral_gauges",
-                "tests/test_issue76_accounting.py::"
-                "test_missing_measurement_is_unavailable_not_zero",
-            ),
+            "#47 MCP adapter baseline",
+            "tool schema, invocation and canonical error mapping remain conformant",
+            _pytest("tests/test_issue_47_mcp_adapter.py"),
         ),
         ConformanceScenario(
             "P",
-            "#77 Standard Agents/Teams",
-            (
-                "bundled Agent/Team definitions remain discoverable configuration while user "
-                "clones are scoped, customizable and independently removable"
-            ),
+            "#84/#85 Conversation execution",
+            "conversation execution derives canonical Task/Run/AgentRun and persists assistant output",
             _pytest(
-                "tests/test_issue_77_completion_hardening.py::"
-                "test_standard_catalog_is_discoverable_without_installing_definitions",
-                "tests/test_issue_77_completion_hardening.py::"
-                "test_standard_catalog_lifecycle_uses_real_control_plane_http_command_path",
-                "tests/test_issue_77_completion_hardening.py::"
-                "test_control_plane_bootstrap_clone_scope_customize_and_delete_workflow",
-                "tests/test_issue_77_completion_hardening.py::"
-                "test_scoped_software_team_clone_requires_explicit_scope_and_is_deletable",
+                "tests/test_issue_84_conversation_execution.py",
+                "tests/test_issue_85_conversation_agent_invocation.py",
+            ),
+        ),
+    )
+
+
+def _operational_scenarios() -> tuple[ConformanceScenario, ...]:
+    return (
+        ConformanceScenario(
+            "A",
+            "#5/#6 Model routing",
+            "fallback, explicit override, health and budget constraints select a canonical ModelConfig",
+            _pytest(
+                "tests/test_issue_6_routing.py",
+                "tests/test_issue_6_router_constraints.py",
             ),
         ),
         _optional(
+            "B",
+            "#11 Connector Framework",
+            "multiple connector backends cover auth, async jobs and provenance",
+            "connector baseline is optional in the current operational profile",
+        ),
+        _optional(
+            "C",
+            "#13 Local Process Executor",
+            "command execution obeys Workspace boundaries, timeout and lifecycle cleanup",
+            "local process execution baseline is optional in the current operational profile",
+        ),
+        ConformanceScenario(
+            "E",
+            "#7 Capability + #8 Tool Layer",
+            "tool invocation remains schema-validated, authorized and auditable",
+            _pytest(
+                "tests/test_issue_7_capabilities.py",
+                "tests/test_issue_8_tools.py",
+                "tests/test_issue_8_tool_execution.py",
+            ),
+        ),
+        ConformanceScenario(
+            "N",
+            "#14 Distributed Runtime",
+            "scheduler placement, reservations and worker loss preserve canonical ownership",
+            _pytest(
+                "tests/test_issue_14_distributed_runtime.py",
+                "tests/test_issue_14_scheduler_recovery.py",
+                "tests/test_issue_14_worker_job_cancellation.py",
+            ),
+        ),
+        ConformanceScenario(
             "Q",
-            "#78 Templates",
-            "template preview/instantiate preserves permissions and immutable instance intent",
-            "Template conformance profile is optional and not enabled",
-        ),
-        _optional(
-            "R",
-            "#79 Import/export",
-            (
-                "portable round-trip preserves references/checksums while excluding "
-                "secrets/runtime state"
+            "#37 Workspace Runtime",
+            "canonical Workspace/Snapshot state survives isolated materialization and recovery",
+            _pytest(
+                "tests/test_issue_37_workspace_model.py",
+                "tests/test_issue_37_workspace_service.py",
+                "tests/test_issue_37_workspace_recovery.py",
             ),
-            "portable import/export conformance profile is optional and not enabled",
         ),
-        _optional(
+        ConformanceScenario(
+            "R",
+            "#82 Repository Service",
+            "repository refs, snapshots, diffs and side effects stay bound to exact canonical revisions",
+            _pytest(
+                "tests/test_issue_82_repository_service.py",
+                "tests/test_issue_82_repository_runtime.py",
+                "tests/test_issue_82_repository_provenance.py",
+            ),
+        ),
+        ConformanceScenario(
+            "S",
+            "#33 Agent Runtime",
+            "Agent/AgentTeam revisions and AgentRun evidence remain canonical and restart-safe",
+            _pytest(
+                "tests/test_issue_33_agents.py",
+                "tests/test_issue_33_agent_runtime.py",
+                "tests/test_issue_33_agent_run_recovery.py",
+            ),
+        ),
+        ConformanceScenario(
             "T",
-            "#82 Repository/Git",
-            "exact Git revision provenance remains canonical-Workspace bounded",
-            "Repository/Git conformance profile is optional and not enabled",
+            "#86 Verification",
+            "exact Result/Artifact subjects and reviewer evidence govern completion",
+            _pytest(
+                "tests/test_issue_86_verification_authority.py",
+                "tests/test_issue_86_canonical_evidence.py",
+                "tests/test_issue_86_reviewer_agent.py",
+            ),
         ),
-        _optional(
+        ConformanceScenario(
+            "U",
+            "#15 Authorization side effects",
+            "repository and runtime side effects cannot bypass canonical authorization/approval",
+            _pytest(
+                "tests/test_issue_15_authorization_enforcement.py",
+                "tests/test_issue_82_repository_authorization.py",
+            ),
+        ),
+        ConformanceScenario(
             "V",
-            "#87 Organizations/Teams",
-            "organization isolation and membership revocation preserve historical provenance",
-            "organization collaboration conformance profile is optional and not enabled",
+            "#16 Operational observability",
+            "worker, repository and verification paths remain traceable with canonical IDs",
+            _pytest(
+                "tests/test_issue_14_observability.py",
+                "tests/test_issue_82_repository_observability.py",
+                "tests/test_issue_86_verification_observability.py",
+            ),
+        ),
+        ConformanceScenario(
+            "X",
+            "#18 Operational recovery",
+            "restart reconciliation preserves canonical runtime evidence without duplicate effects",
+            _pytest(
+                "tests/test_issue_18_operational_recovery.py",
+                "tests/test_issue_82_repository_recovery.py",
+                "tests/test_issue_86_verification_recovery.py",
+            ),
+        ),
+    )
+
+
+def _release_scenarios() -> tuple[ConformanceScenario, ...]:
+    return (
+        ConformanceScenario(
+            "REL-CI",
+            "#46 CI",
+            "the complete repository test suite is green",
+            _pytest("tests"),
+        ),
+        ConformanceScenario(
+            "REL-EVAL",
+            "#19 Evaluation",
+            "deterministic evaluation gate passes against the checked-in baseline",
+            _python_script("scripts/ci/issue19_evaluation_gate.py"),
+        ),
+        ConformanceScenario(
+            "REL-ASSETS",
+            "#725 Runtime assets",
+            "canonical runtime assets are materialized and in sync",
+            _python_script("scripts/ci/issue725_materialize_runtime_assets.py", "--check"),
+        ),
+        ConformanceScenario(
+            "REL-PACKAGE",
+            "#46 Packaging",
+            "the built wheel contains the canonical runtime assets and bootstrap entry points",
+            _script_and_pytest(
+                "scripts/ci/issue725_materialize_runtime_assets.py",
+                "tests/test_issue_46_packaging_smoke.py",
+                script_arguments=("--check",),
+            ),
+        ),
+        ConformanceScenario(
+            "REL-VERTICAL",
+            "#46 Vertical slice",
+            "a real single-node Task/Run/Agent/Workspace/Artifact/Verification path succeeds",
+            _pytest(
+                "tests/test_issue_46_full_stack_vertical.py",
+                "tests/test_issue_46_worker_artifact_verification_vertical.py",
+            ),
+        ),
+        ConformanceScenario(
+            "REL-SECURITY",
+            "#15/#23 Security",
+            "release authorization, permission and approval matrices remain fail-closed",
+            _pytest(
+                "tests/test_issue_15_authorization.py",
+                "tests/test_issue_15_authorization_enforcement.py",
+                "tests/test_issue_23_permission_enforcement_matrix.py",
+                "tests/test_issue_25_approval_authority.py",
+            ),
+        ),
+        ConformanceScenario(
+            "REL-RECOVERY",
+            "#18 Recovery",
+            "restart and recovery suites preserve canonical state without duplicate effects",
+            _pytest(
+                "tests/test_issue_18_recovery.py",
+                "tests/test_issue_18_operational_recovery.py",
+                "tests/test_issue_82_repository_recovery.py",
+                "tests/test_issue_86_verification_recovery.py",
+            ),
         ),
         ConformanceScenario(
             "W",
-            "#88 Task management",
-            (
-                "priority/deadline/assignment/dependencies remain metadata over canonical "
-                "lifecycle; authorization and Worker admission remain mandatory"
-            ),
+            "#46 Cross-domain acceptance",
+            "canonical cross-domain workflows compose without parallel state models",
             _pytest(
-                "tests/test_task_management.py::"
-                "test_priority_deadline_not_before_and_query_projection",
-                "tests/test_task_management.py::"
-                "test_responsibility_reassignment_and_agent_assignment_are_permission_neutral",
-                "tests/test_task_management.py::"
-                "test_dependency_satisfaction_cycle_cross_project_and_blocked_reason",
-                "tests/test_task_management.py::test_bulk_update_preflights_per_task_authorization",
-                "tests/test_issue_46_task_management_worker_admission.py::"
-                "test_urgent_task_cannot_bypass_distributed_worker_admission",
+                "tests/test_issue_46_cross_domain.py",
+                "tests/test_issue_46_control_plane_resources.py",
             ),
         ),
         _optional(
@@ -527,189 +411,177 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "durable fan-out/fan-in, waits, retries and cancellation advance exactly once",
             "durable Plan/Step coordination profile is optional and not enabled",
         ),
+        ConformanceScenario(
+            "Z",
+            "#872/#46 parallel coding integration",
+            (
+                "two independent coding Steps fan out concurrently, a dependent Step waits, "
+                "isolated workstreams integrate only after exact validation/authorization, and "
+                "conflicts require a bounded canonical repair with fresh validation"
+            ),
+            _pytest(
+                "tests/test_issue_46_parallel_coding_batch_e2e.py::test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge",
+                "tests/test_issue_46_parallel_coding_batch_e2e.py::test_conflicting_valid_workstreams_require_canonical_repair_and_fresh_combined_validation",
+            ),
+        ),
+    )
+
+
+def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario, ...]:
+    """Return the evidence-backed scenario registry for one profile."""
+
+    fast = _fast_scenarios()
+    if profile is ConformanceProfile.FAST:
+        return fast
+    operational = (*fast, *_operational_scenarios())
+    if profile is ConformanceProfile.OPERATIONAL:
+        return operational
+    return (*operational, *_release_scenarios())
+
+
+def profile_criteria(profile: ConformanceProfile) -> tuple[str, ...]:
+    """Return human-readable criteria for docs/API surfaces."""
+
+    return tuple(
+        f"{scenario.scenario_id}: {scenario.criterion}" for scenario in profile_scenarios(profile)
     )
 
 
 def run_conformance(
     profile: ConformanceProfile,
     *,
-    repository_root: Path | None = None,
-    deployment_profile: str | None = None,
-    adapter_versions: Mapping[str, str] | None = None,
-    provider_versions: Mapping[str, str] | None = None,
-    plugin_versions: Mapping[str, str] | None = None,
-    scenarios: Sequence[ConformanceScenario] | None = None,
+    runner: ScenarioRunner | None = None,
+    environment: Mapping[str, str] | None = None,
+    adapter_versions: Mapping[str, str | None] | None = None,
+    provider_versions: Mapping[str, str | None] | None = None,
 ) -> ConformanceReport:
-    root = (repository_root or Path.cwd()).resolve()
-    selected = tuple(scenarios) if scenarios is not None else profile_scenarios(profile)
-    results = tuple(_run_scenario(scenario, root=root) for scenario in selected)
-    passed = all(
-        result.status == ConformanceStatus.PASS.value
-        if result.required
-        else result.status != ConformanceStatus.FAIL.value
-        for result in results
+    """Execute a profile and return a normalized machine-readable report."""
+
+    scenarios = profile_scenarios(profile)
+    effective_runner = runner or _subprocess_runner
+    results: list[ScenarioResult] = []
+    started_at = datetime.now(UTC)
+    for scenario in scenarios:
+        results.append(_execute_scenario(scenario, effective_runner))
+    finished_at = datetime.now(UTC)
+
+    profile_result = ProfileResult(
+        profile=profile.value,
+        status=_profile_status(results),
+        started_at=started_at,
+        finished_at=finished_at,
+        scenarios=tuple(results),
     )
     return ConformanceReport(
-        schema=REPORT_SCHEMA,
-        profile=profile.value,
-        deployment_profile=deployment_profile or profile.value,
-        platform_commit=_git_commit(root),
-        platform_release=_package_version(),
-        passed=passed,
-        compatibility_result=_report_compatibility(results).value,
+        schema="ai-multi-agent-platform.conformance/v1",
+        generated_at=finished_at,
+        platform_version=__version__,
+        python_version=platform.python_version(),
+        operating_system=platform.platform(),
+        environment=dict(environment or {}),
         adapter_versions=_component_versions(adapter_versions),
         provider_versions=_component_versions(provider_versions),
-        plugin_versions=_component_versions(plugin_versions),
-        scenarios=results,
+        profile=profile_result,
     )
 
 
-def _run_scenario(scenario: ConformanceScenario, *, root: Path) -> ConformanceScenarioResult:
+def _component_versions(
+    versions: Mapping[str, str | None] | None,
+) -> dict[str, str | None]:
+    return {key: value for key, value in sorted((versions or {}).items())}
+
+
+def _profile_status(results: Iterable[ScenarioResult]) -> ConformanceStatus:
+    statuses = tuple(result.status for result in results)
+    if any(status is ConformanceStatus.FAILED for status in statuses):
+        return ConformanceStatus.FAILED
+    if statuses and all(status is ConformanceStatus.SKIPPED for status in statuses):
+        return ConformanceStatus.SKIPPED
+    return ConformanceStatus.PASSED
+
+
+def _execute_scenario(
+    scenario: ConformanceScenario,
+    runner: ScenarioRunner,
+) -> ScenarioResult:
+    started_at = datetime.now(UTC)
     if scenario.command is None:
-        status = scenario.unavailable_status
-        return ConformanceScenarioResult(
+        finished_at = datetime.now(UTC)
+        return ScenarioResult(
             scenario_id=scenario.scenario_id,
             owner=scenario.owner,
             criterion=scenario.criterion,
             required=scenario.required,
-            status=status.value,
-            compatibility_result=CompatibilityResult.NOT_CLAIMED.value,
-            duration_seconds=0.0,
+            status=(ConformanceStatus.FAILED if scenario.required else ConformanceStatus.SKIPPED),
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=max(0.0, (finished_at - started_at).total_seconds()),
             command=(),
+            skip_reason=scenario.skip_reason,
+            exit_code=None,
             stdout="",
             stderr="",
-            failure_category=status.value,
-            reason=scenario.unavailable_reason,
-            canonical_resource_ids=(),
-            evidence=(),
         )
 
-    started = monotonic()
-    try:
-        process = subprocess.run(
-            scenario.command,
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError as exc:
-        return ConformanceScenarioResult(
-            scenario_id=scenario.scenario_id,
-            owner=scenario.owner,
-            criterion=scenario.criterion,
-            required=scenario.required,
-            status=ConformanceStatus.FAIL.value,
-            compatibility_result=CompatibilityResult.INCOMPATIBLE.value,
-            duration_seconds=round(monotonic() - started, 3),
-            command=scenario.command,
-            stdout="",
-            stderr=str(exc),
-            failure_category="command_unavailable",
-            reason="the registered conformance command could not be executed",
-            canonical_resource_ids=(),
-            evidence=(),
-        )
-
-    command_passed = process.returncode == 0
-    runtime_evidence: tuple[tuple[str, ...], tuple[str, ...]] | None = None
-    evidence_failure_category: str | None = None
-    evidence_failure_reason: str | None = None
-    if command_passed:
-        try:
-            runtime_evidence = parse_runtime_evidence(process.stdout)
-        except ValueError as exc:
-            evidence_failure_category = "runtime_evidence_invalid"
-            evidence_failure_reason = str(exc)
-        else:
-            if scenario.requires_runtime_evidence and runtime_evidence is None:
-                evidence_failure_category = "runtime_evidence_missing"
-                evidence_failure_reason = (
-                    "the registered conformance scenario passed but did not emit its required "
-                    "runtime evidence envelope"
-                )
-
-    passed = command_passed and evidence_failure_category is None
-    evidence: tuple[str, ...]
-    if runtime_evidence is None:
-        canonical_resource_ids: tuple[str, ...] = ()
-        evidence = ("registered-command",)
-    else:
-        canonical_resource_ids, runtime_evidence_refs = runtime_evidence
-        evidence = ("registered-command", *runtime_evidence_refs)
-
-    failure_category: str | None
-    reason: str | None
-    if not command_passed:
-        failure_category = "acceptance_failure"
-        reason = f"registered command exited with status {process.returncode}"
-    else:
-        failure_category = evidence_failure_category
-        reason = evidence_failure_reason
-
-    return ConformanceScenarioResult(
+    execution = runner(scenario)
+    finished_at = datetime.now(UTC)
+    return ScenarioResult(
         scenario_id=scenario.scenario_id,
         owner=scenario.owner,
         criterion=scenario.criterion,
         required=scenario.required,
-        status=(ConformanceStatus.PASS if passed else ConformanceStatus.FAIL).value,
-        compatibility_result=(
-            CompatibilityResult.COMPATIBLE if passed else CompatibilityResult.INCOMPATIBLE
-        ).value,
-        duration_seconds=round(monotonic() - started, 3),
+        status=(
+            ConformanceStatus.PASSED
+            if execution.exit_code == 0
+            else ConformanceStatus.FAILED
+        ),
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_seconds=execution.duration_seconds,
         command=scenario.command,
-        stdout=_tail(process.stdout),
-        stderr=_tail(process.stderr),
-        failure_category=failure_category,
-        reason=reason,
-        canonical_resource_ids=canonical_resource_ids,
-        evidence=evidence,
+        skip_reason=None,
+        exit_code=execution.exit_code,
+        stdout=execution.stdout,
+        stderr=execution.stderr,
     )
 
 
-def _report_compatibility(
-    results: Sequence[ConformanceScenarioResult],
-) -> CompatibilityResult:
-    if any(result.status == ConformanceStatus.FAIL.value for result in results):
-        return CompatibilityResult.INCOMPATIBLE
-    if any(result.required and result.status != ConformanceStatus.PASS.value for result in results):
-        return CompatibilityResult.INCOMPLETE
-    return CompatibilityResult.COMPATIBLE
-
-
-def _component_versions(values: Mapping[str, str] | None) -> tuple[ComponentVersion, ...]:
-    return tuple(
-        ComponentVersion(name=name, version=component_version)
-        for name, component_version in sorted((values or {}).items())
+def _subprocess_runner(scenario: ConformanceScenario) -> ScenarioExecution:
+    if scenario.command is None:
+        raise ValueError("cannot execute placeholder scenario")
+    started_at = datetime.now(UTC)
+    completed = subprocess.run(
+        scenario.command,
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    finished_at = datetime.now(UTC)
+    return ScenarioExecution(
+        exit_code=completed.returncode,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+        duration_seconds=max(0.0, (finished_at - started_at).total_seconds()),
     )
 
 
-def _git_commit(root: Path) -> str | None:
-    try:
-        process = subprocess.run(
-            ("git", "rev-parse", "HEAD"),
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return None
-    value = process.stdout.strip()
-    return value if process.returncode == 0 and value else None
+def report_to_json(report: ConformanceReport) -> str:
+    """Serialize the report using stable JSON for artifacts and CI logs."""
+
+    return json.dumps(report.to_dict(), sort_keys=True, indent=2)
 
 
-def _package_version() -> str | None:
-    try:
-        return version(_PACKAGE_NAME)
-    except PackageNotFoundError:
-        return None
+def report_from_json(payload: str) -> ConformanceReport:
+    """Parse a stored conformance artifact without executing tests."""
+
+    from .report import conformance_report_from_dict
+
+    raw = json.loads(payload)
+    if not isinstance(raw, dict):
+        raise ValueError("conformance report payload must be an object")
+    return conformance_report_from_dict(raw)
 
 
-def _tail(value: str, *, limit: int = 4000) -> str:
-    value = value.strip()
-    return value[-limit:]
-
-
-def _single_line(value: str, *, limit: int = 500) -> str:
-    return " ".join(value.split())[-limit:]
+def supported_profiles() -> Sequence[ConformanceProfile]:
+    return tuple(ConformanceProfile)
