@@ -57,7 +57,9 @@ Accepted workstreams still do not imply an accepted integration. An explicit `In
 - unresolved semantic/unknown overlap;
 - a target branch revision different from the recorded batch base.
 
-A successful combined revision then requires fresh combined tests/Verification and required checks bound to that exact revision. Passing checks for an older SHA are rejected. #15 authorization is required before the candidate can become merge-ready.
+A successful combined revision then requires fresh combined tests/Verification and required checks bound to that exact revision. Passing checks for an older SHA are rejected.
+
+`AuthorizedCodingBatchIntegration` composes the #15 `AuthorizationGate` before merge readiness. The `ProposedAction` digest binds the authorization/Approval decision to the exact batch, repository target, integration candidate, ordered workstream revisions, integrated revision and combined Verification identity. A policy requiring Approval therefore cannot be satisfied by an Approval for a different integration revision. Actual push/PR/merge side effects remain separately enforced by #82 through the same canonical #15 boundary.
 
 The invariant is intentional:
 
@@ -67,11 +69,13 @@ The invariant is intentional:
 
 Batch creation is idempotent by caller-supplied request key plus a deterministic input fingerprint. Per-workstream branch names are deterministic from batch/work-item identity. Replaying the same materialization facts returns the existing state; conflicting Workspace/Snapshot/AgentRun facts fail closed.
 
-The in-memory store is the reference implementation. Production persistence should implement `CodingBatchStore` over the existing platform persistence boundary so process restart can reload the same state rather than allocate new Workspaces, branches or integration attempts.
+`CodingBatchStore` remains the persistence boundary. `InMemoryCodingBatchStore` is useful for tests and ephemeral reference composition, while `SqliteCodingBatchStore` provides a local/self-hosted restart-durable implementation without a paid service dependency. The SQLite store persists only #872 composition/provenance state; canonical Task, Plan, Step, Workspace, Repository, AgentRun, Verification and Approval resources remain owned by their existing subsystems and are referenced by identity rather than duplicated.
+
+Restart tests reconstruct a fresh `CodingBatchCoordinator` from the SQLite database after produced work, then continue Verification/integration, restart again and recover combined validation/check evidence without allocating a second logical batch.
 
 ## Current implementation slice
 
-The first #872 slice contains:
+The current #872 slice contains:
 
 - canonical batch/workstream/integration read state;
 - conservative dependency/overlap classification;
@@ -81,8 +85,21 @@ The first #872 slice contains:
 - explicit integration candidate/conflict state;
 - stale-target blocking;
 - combined validation and stale-check rejection;
-- merge-readiness authorization gate;
+- exact-action #15 authorization composition before merge readiness;
+- restart-durable SQLite composition persistence plus in-memory reference storage;
 - Control Plane-safe read projection;
-- focused issue tests for the safety invariants above.
+- dependency-cycle rejection and dependency-topological integration ordering;
+- hard-dependency versus serialization-only failure semantics;
+- focused #872 safety/regression tests.
 
-Follow-up wiring must invoke the existing #37/#82/#33/#86/#15 authorities for the actual side effects and persist the composition state durably; no new authority should be introduced to accomplish that wiring.
+## Remaining acceptance work
+
+The issue is not complete yet. Remaining work includes:
+
+- explicit bounded Integration/Repair Step composition through #439/#384 rather than a replacement workflow authority;
+- controlled stale-base replay/rebase and mandatory fresh revalidation;
+- sealing/removing the low-level boolean merge-readiness seam now that the production composition path has exact #15 action binding;
+- fuller productive composition with #33 AgentRun, #86 Verification and #16 observability boundaries;
+- the required #19 evaluation fixtures and #46 multi-workstream/conflict E2E conformance scenarios.
+
+Those follow-up paths must continue to invoke the existing #37/#82/#33/#86/#15 authorities for actual side effects; no new authority should be introduced to accomplish the wiring.
