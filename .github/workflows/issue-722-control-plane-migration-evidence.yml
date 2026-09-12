@@ -1,0 +1,82 @@
+name: Issue 722 control-plane migration evidence
+
+on:
+  pull_request:
+    paths:
+      - "tests/**"
+      - "src/ai_multi_agent_platform/conformance/optional_profiles.py"
+      - ".github/workflows/issue-722-control-plane-migration-evidence.yml"
+
+jobs:
+  collection-and-cohort:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout baseline main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          path: before
+      - name: Checkout pull request head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: after
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Collect baseline
+        shell: bash
+        run: |
+          python -m venv .venv-before
+          source .venv-before/bin/activate
+          cd before
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          pytest --collect-only -q | tee ../before-collection.txt
+      - name: Collect migrated suite
+        shell: bash
+        run: |
+          python -m venv .venv-after
+          source .venv-after/bin/activate
+          cd after
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          pytest --collect-only -q | tee ../after-collection.txt
+      - name: Assert collection count is unchanged
+        shell: bash
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+
+          def count(path: str) -> int:
+              text = pathlib.Path(path).read_text(encoding="utf-8")
+              match = re.search(r"(\d+) tests? collected", text)
+              if match is None:
+                  raise SystemExit(f"could not parse collection count from {path}")
+              return int(match.group(1))
+
+          before = count("before-collection.txt")
+          after = count("after-collection.txt")
+          print(f"baseline_collection={before}")
+          print(f"migrated_collection={after}")
+          if before != after:
+              raise SystemExit(f"collection count changed: {before} -> {after}")
+          PY
+      - name: Run migrated control-plane cohort
+        shell: bash
+        run: |
+          source .venv-after/bin/activate
+          cd after
+          pytest -q \
+            tests/unit/search \
+            tests/contract/search \
+            tests/integration/search \
+            tests/unit/notifications \
+            tests/integration/notifications \
+            tests/unit/control_plane \
+            tests/contract/control_plane \
+            tests/integration/control_plane \
+            tests/integration/events \
+            tests/regression/control_plane
