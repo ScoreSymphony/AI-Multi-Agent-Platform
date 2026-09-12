@@ -47,8 +47,7 @@ class Kubectl:
         result = CommandResult(completed.returncode, completed.stdout, completed.stderr)
         if check and result.returncode != 0:
             raise RuntimeError(
-                f"kubectl command failed ({result.returncode}): "
-                f"{' '.join(args)}\n{result.stderr}"
+                f"kubectl command failed ({result.returncode}): {' '.join(args)}\n{result.stderr}"
             )
         return result
 
@@ -120,11 +119,7 @@ def _evaluate_pod(pod: dict[str, Any]) -> dict[str, Any]:
     container = _first_container(pod)
     pod_security = spec.get("securityContext") or {}
     container_security = container.get("securityContext") or {}
-    seccomp = (
-        container_security.get("seccompProfile")
-        or pod_security.get("seccompProfile")
-        or {}
-    )
+    seccomp = container_security.get("seccompProfile") or pod_security.get("seccompProfile") or {}
     capabilities = container_security.get("capabilities") or {}
     dropped = capabilities.get("drop") or []
     status = _container_status(pod)
@@ -141,9 +136,7 @@ def _evaluate_pod(pod: dict[str, Any]) -> dict[str, Any]:
         ),
         "run_as_non_root": container_security.get("runAsNonRoot") is True
         or pod_security.get("runAsNonRoot") is True,
-        "read_only_root_filesystem": (
-            container_security.get("readOnlyRootFilesystem") is True
-        ),
+        "read_only_root_filesystem": (container_security.get("readOnlyRootFilesystem") is True),
         "seccomp_profile": seccomp.get("type"),
         "drops_all_capabilities": "ALL" in dropped,
         "runtime_class_name": spec.get("runtimeClassName"),
