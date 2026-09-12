@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import threading
+from collections import Counter
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
@@ -18,25 +19,29 @@ from typing import ClassVar
 
 class _SentinelState:
     def __init__(self) -> None:
-        self._hits = 0
+        self._paths: Counter[str] = Counter()
         self._lock = threading.Lock()
 
-    def record_hit(self) -> int:
+    def record_hit(self, path: str) -> int:
         with self._lock:
-            self._hits += 1
-            return self._hits
+            self._paths[path] += 1
+            return self._paths[path]
 
     def reset(self) -> None:
         with self._lock:
-            self._hits = 0
+            self._paths.clear()
 
     def hits(self) -> int:
         with self._lock:
-            return self._hits
+            return sum(self._paths.values())
+
+    def stats(self) -> dict[str, int]:
+        with self._lock:
+            return dict(self._paths)
 
 
 class _Handler(BaseHTTPRequestHandler):
-    server_version = "Issue859SSRFSentinel/1.0"
+    server_version = "Issue859SSRFSentinel/1.1"
     protocol_version = "HTTP/1.1"
     state: ClassVar[_SentinelState] = _SentinelState()
 
@@ -47,9 +52,25 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/control/hits":
             self._json(HTTPStatus.OK, {"hits": self.state.hits()})
             return
+        if self.path == "/control/stats":
+            self._json(
+                HTTPStatus.OK,
+                {"hits": self.state.hits(), "paths": self.state.stats()},
+            )
+            return
         if self.path == "/ssrf-sentinel.txt":
-            self.state.record_hit()
+            self.state.record_hit(self.path)
             self._text(HTTPStatus.OK, "issue-859-controlled-ssrf-sentinel\n")
+            return
+        if self.path == "/redirect-to-loopback":
+            self.state.record_hit(self.path)
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header(
+                "Location",
+                "http://127.0.0.1:18001/ssrf-sentinel.txt",
+            )
+            self.send_header("Content-Length", "0")
+            self.end_headers()
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
