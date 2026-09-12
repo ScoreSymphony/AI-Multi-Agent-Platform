@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ai_multi_agent_platform.onboarding.components import ComponentLifecycle
+
 EVIDENCE = Path(__file__).parent / "evidence" / "issue_862" / "storage_backends.json"
 ALLOWED_CLASSIFICATIONS = {"supported_optional", "experimental_only", "reject/defer"}
 EXPECTED_BACKENDS = {"rustfs", "garage", "seaweedfs"}
@@ -87,8 +89,8 @@ def test_final_classification_is_gated_on_vps_evidence_after_issue_799_landed() 
     assert gate["issue_799_currently_blocks_final_wizard_integration"] is False
     assert gate["setup_wizard_mapping_reconciled_with_main"] is True
     assert gate["setup_wizard_lifecycle_mapping"] == {
-        "experimental_only": "ComponentLifecycle.EXPERIMENTAL",
-        "supported_optional": "ComponentLifecycle.SUPPORTED",
+        "experimental_only": f"ComponentLifecycle.{ComponentLifecycle.EXPERIMENTAL.name}",
+        "supported_optional": f"ComponentLifecycle.{ComponentLifecycle.SUPPORTED.name}",
     }
     assert gate["setup_profiles_must_not_persist_credentials"] is True
     assert all(
