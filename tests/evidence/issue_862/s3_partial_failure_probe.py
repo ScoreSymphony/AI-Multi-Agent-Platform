@@ -118,7 +118,7 @@ def main() -> int:
     }
     try:
         result = operations[args.phase](args)
-    except (S3ProbeError, ValueError) as exc:
+    except (OSError, S3ProbeError, ValueError) as exc:
         print(
             json.dumps(
                 {
