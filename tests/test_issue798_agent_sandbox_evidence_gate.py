@@ -85,9 +85,7 @@ def _evidence(*, unsafe: bool = False, complete: bool = True) -> dict[str, objec
             "seccomp_profile": "RuntimeDefault",
             "runtime_class_name": "gvisor",
             "image": (
-                "example.invalid/sandbox:latest"
-                if unsafe
-                else "example.invalid/sandbox@sha256:abc"
+                "example.invalid/sandbox:latest" if unsafe else "example.invalid/sandbox@sha256:abc"
             ),
             "resources": {
                 "requests": {"cpu": "100m", "memory": "128Mi"},
@@ -128,11 +126,7 @@ def _campaign(
         "scenarios": {
             scenario: {
                 "status": scenario_status,
-                "evidence": (
-                    []
-                    if scenario_status == "not_run"
-                    else [f"evidence/{scenario}.json"]
-                ),
+                "evidence": ([] if scenario_status == "not_run" else [f"evidence/{scenario}.json"]),
             }
             for scenario, scenario_status in statuses.items()
         },
@@ -329,9 +323,7 @@ def test_gate_allows_unsupported_result_for_decision_but_not_adoption(tmp_path: 
     assert report is not None
     assert report["decision_ready"] is True
     assert report["adoption_eligible_from_this_gate"] is False
-    assert report["blockers"]["unsupported_scenarios"] == [
-        "snapshot_restore_compatibility"
-    ]
+    assert report["blockers"]["unsupported_scenarios"] == ["snapshot_restore_compatibility"]
 
 
 def test_gate_rejects_terminal_scenario_without_evidence_reference(tmp_path: Path) -> None:
