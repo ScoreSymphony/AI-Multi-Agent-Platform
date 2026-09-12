@@ -16,9 +16,11 @@ from .models import (
     CombinedValidationEvidence,
     IntegrationCandidate,
     IntegrationConflict,
+    IntegrationRepairAttempt,
     IntegrationState,
     OverlapDecision,
     OverlapKind,
+    RepairAttemptState,
     RequiredCheck,
     VerificationEvidence,
     WorkstreamProvenance,
@@ -183,15 +185,44 @@ def _workstream_json(workstream: CodingWorkstream) -> dict[str, object]:
             "diff_digest": result.diff_digest,
             "artifact_ids": list(result.artifact_ids),
         },
-        "verification": None
-        if verification is None
-        else {
-            "verification_id": verification.verification_id,
-            "subject_revision": verification.subject_revision,
-            "passed": verification.passed,
-            "check_refs": list(verification.check_refs),
-        },
+        "verification": None if verification is None else _verification_json(verification),
         "failure_reason": workstream.failure_reason,
+    }
+
+
+def _conflict_json(conflict: IntegrationConflict) -> dict[str, object]:
+    return {
+        "kind": conflict.kind.value,
+        "workstream_ids": list(conflict.workstream_ids),
+        "rationale": conflict.rationale,
+    }
+
+
+def _verification_json(verification: VerificationEvidence) -> dict[str, object]:
+    return {
+        "verification_id": verification.verification_id,
+        "subject_revision": verification.subject_revision,
+        "passed": verification.passed,
+        "check_refs": list(verification.check_refs),
+    }
+
+
+def _repair_attempt_json(repair: IntegrationRepairAttempt) -> dict[str, object]:
+    return {
+        "repair_id": repair.repair_id,
+        "attempt": repair.attempt,
+        "task_id": repair.task_id,
+        "plan_id": repair.plan_id,
+        "step_id": repair.step_id,
+        "target_revision": repair.target_revision,
+        "source_blocker_reasons": list(repair.source_blocker_reasons),
+        "source_conflicts": [_conflict_json(item) for item in repair.source_conflicts],
+        "state": repair.state.value,
+        "output_revision": repair.output_revision,
+        "verification": None
+        if repair.verification is None
+        else _verification_json(repair.verification),
+        "failure_reason": repair.failure_reason,
     }
 
 
@@ -203,14 +234,7 @@ def _integration_candidate_json(candidate: IntegrationCandidate) -> dict[str, ob
         "ordered_workstream_ids": list(candidate.ordered_workstream_ids),
         "ordered_revisions": list(candidate.ordered_revisions),
         "state": candidate.state.value,
-        "conflicts": [
-            {
-                "kind": conflict.kind.value,
-                "workstream_ids": list(conflict.workstream_ids),
-                "rationale": conflict.rationale,
-            }
-            for conflict in candidate.conflicts
-        ],
+        "conflicts": [_conflict_json(conflict) for conflict in candidate.conflicts],
         "integrated_revision": candidate.integrated_revision,
         "validation": None
         if validation is None
@@ -231,6 +255,7 @@ def _integration_candidate_json(candidate: IntegrationCandidate) -> dict[str, ob
         },
         "stale_base": candidate.stale_base,
         "blocker_reasons": list(candidate.blocker_reasons),
+        "repair_attempts": [_repair_attempt_json(item) for item in candidate.repair_attempts],
         "change_request_ref": candidate.change_request_ref,
     }
 
@@ -321,6 +346,34 @@ def _decode_verification(raw_value: object) -> VerificationEvidence:
     )
 
 
+def _decode_conflict(raw_value: object) -> IntegrationConflict:
+    raw = cast(dict[str, Any], raw_value)
+    return IntegrationConflict(
+        kind=OverlapKind(raw["kind"]),
+        workstream_ids=tuple(raw["workstream_ids"]),
+        rationale=raw["rationale"],
+    )
+
+
+def _decode_repair_attempt(raw_value: object) -> IntegrationRepairAttempt:
+    raw = cast(dict[str, Any], raw_value)
+    verification_raw = raw.get("verification")
+    return IntegrationRepairAttempt(
+        repair_id=raw["repair_id"],
+        attempt=raw["attempt"],
+        task_id=raw["task_id"],
+        plan_id=raw["plan_id"],
+        step_id=raw["step_id"],
+        target_revision=raw["target_revision"],
+        source_blocker_reasons=tuple(raw["source_blocker_reasons"]),
+        source_conflicts=tuple(_decode_conflict(item) for item in raw["source_conflicts"]),
+        state=RepairAttemptState(raw["state"]),
+        output_revision=raw["output_revision"],
+        verification=None if verification_raw is None else _decode_verification(verification_raw),
+        failure_reason=raw["failure_reason"],
+    )
+
+
 def _decode_integration_candidate(raw_value: object) -> IntegrationCandidate:
     raw = cast(dict[str, Any], raw_value)
     validation_raw = raw["validation"]
@@ -330,18 +383,14 @@ def _decode_integration_candidate(raw_value: object) -> IntegrationCandidate:
         ordered_workstream_ids=tuple(raw["ordered_workstream_ids"]),
         ordered_revisions=tuple(raw["ordered_revisions"]),
         state=IntegrationState(raw["state"]),
-        conflicts=tuple(
-            IntegrationConflict(
-                kind=OverlapKind(item["kind"]),
-                workstream_ids=tuple(item["workstream_ids"]),
-                rationale=item["rationale"],
-            )
-            for item in raw["conflicts"]
-        ),
+        conflicts=tuple(_decode_conflict(item) for item in raw["conflicts"]),
         integrated_revision=raw["integrated_revision"],
         validation=None if validation_raw is None else _decode_combined_validation(validation_raw),
         stale_base=raw["stale_base"],
         blocker_reasons=tuple(raw["blocker_reasons"]),
+        repair_attempts=tuple(
+            _decode_repair_attempt(item) for item in raw.get("repair_attempts", [])
+        ),
         change_request_ref=raw["change_request_ref"],
     )
 
