@@ -176,9 +176,20 @@ class CanonicalCodingWorkstreamDispatcher:
                 raise ValueError(
                     "coding workstream is not admitted by batch safety/concurrency gates"
                 )
-        elif workstream.state not in {WorkstreamState.MATERIALIZED, WorkstreamState.RUNNING}:
+            workstream = self._coordinator.bind_plan_revision(
+                batch_id,
+                workstream_id,
+                plan_revision=slot.plan_revision,
+            )
+        elif workstream.state in {WorkstreamState.MATERIALIZED, WorkstreamState.RUNNING}:
+            if workstream.provenance.plan_revision != slot.plan_revision:
+                raise ValueError(
+                    "materialized coding workstream Plan revision differs from canonical #384"
+                )
+        else:
             raise ValueError("coding workstream is not eligible for dispatch/reconciliation")
 
+        batch = self._coordinator.get(batch_id)
         context = self._verification_context(batch, workstream, slot)
         run = await self._ensure_agent_run(
             slot,
@@ -233,6 +244,11 @@ class CanonicalCodingWorkstreamDispatcher:
             raise ValueError("#384 projection plan identity does not match coding workstream")
         if projection.task_id != workstream.work_item.task_id:
             raise ValueError("#384 projection task identity does not match coding workstream")
+        if (
+            workstream.provenance.plan_revision is not None
+            and workstream.provenance.plan_revision != projection.plan_revision
+        ):
+            raise ValueError("coding workstream is stale for the canonical #384 Plan revision")
 
         selected_by_step = {item.work_item.step_id: item.id for item in batch.workstreams}
         expected_dependencies = set(workstream.work_item.dependencies)
