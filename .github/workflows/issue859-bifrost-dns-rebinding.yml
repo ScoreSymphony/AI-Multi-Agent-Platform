@@ -64,7 +64,10 @@ jobs:
             -p 127.0.0.1:18001:18001 \
             -v "$GITHUB_WORKSPACE/scripts/ci/issue859_ssrf_sentinel.py:/fixture.py:ro" \
             python:3.12-slim \
-            python /fixture.py --host 0.0.0.0 --port 18001
+            python /fixture.py \
+              --host 0.0.0.0 \
+              --port 18001 \
+              --rebinding-location http://issue859-rebind.test:18003/ssrf-sentinel.txt
 
           docker run -d \
             --name issue859-rebinding-dns \
@@ -213,7 +216,7 @@ jobs:
         env:
           BIFROST_EVAL_BIFROST_BASE_URL: http://127.0.0.1:18080/v1
           BIFROST_EVAL_BIFROST_NATIVE_OPENAI_MODEL: openai/fixture-model
-          BIFROST_EVAL_SSRF_REBINDING_URL: http://issue859-rebind.test:18001/ssrf-sentinel.txt
+          BIFROST_EVAL_SSRF_REBINDING_URL: http://issue859-rebind.test:18001/redirect-to-rebound-host
           BIFROST_EVAL_REBINDING_DNS_CONTROL_URL: http://127.0.0.1:18002
           BIFROST_EVAL_SSRF_SENTINEL_CONTROL_URL: http://127.0.0.1:18001/control
         run: pytest -q tests/test_issue_859_bifrost_dns_rebinding.py -m integration
@@ -241,13 +244,15 @@ jobs:
               "bifrost_version": "v2.1.1",
               "network": "isolated Docker bridge 203.0.113.0/24",
               "hostname": "issue859-rebind.test",
+              "entry_url": "http://issue859-rebind.test:18001/redirect-to-rebound-host",
+              "redirect_url": "http://issue859-rebind.test:18003/ssrf-sentinel.txt",
               "first_dns_answer": "203.0.113.10",
               "rebound_dns_answer": "127.0.0.1",
               "dns": dns,
               "sentinel": sentinel,
               "expected_contract": (
-                  "first public resolution is dialed directly; next dial re-resolves "
-                  "and blocks rebound loopback before connection"
+                  "public first dial reaches controlled redirect; redirect forces a new dial; "
+                  "new dial re-resolves and blocks rebound loopback before connection"
               ),
           }
           pathlib.Path("artifacts/issue-859-dns-rebinding-runtime.json").write_text(
