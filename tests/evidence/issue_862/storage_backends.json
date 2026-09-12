@@ -131,8 +131,11 @@
     "runtime_evidence_complete_in_ci": true,
     "final_classification_requires_target_vps_measurement": true,
     "setup_wizard_recommendation_requires_issue": 799,
-    "issue_799_currently_blocks_final_wizard_integration": true,
-    "issue_799_draft_mapping": {
+    "issue_799_state": "closed",
+    "issue_799_merge_commit": "68915cbb26dab6c04dd7cdef57d833e3ff4bf1e5",
+    "issue_799_currently_blocks_final_wizard_integration": false,
+    "setup_wizard_mapping_reconciled_with_main": true,
+    "setup_wizard_lifecycle_mapping": {
       "experimental_only": "ComponentLifecycle.EXPERIMENTAL",
       "supported_optional": "ComponentLifecycle.SUPPORTED"
     },
