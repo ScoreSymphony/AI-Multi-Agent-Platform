@@ -102,7 +102,7 @@ export class ApprovalClient {
     );
   }
 
-  private decide(
+  private async decide(
     command: typeof APPROVAL_DECISION_COMMANDS[number],
     approvalId: string,
     requestedActionDigest: string,

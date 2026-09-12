@@ -205,7 +205,7 @@ export class ComputeClient {
     );
   }
 
-  private command<T>(command: string, resourceRef: string, idempotencyKey: string): Promise<T> {
+  private async command<T>(command: string, resourceRef: string, idempotencyKey: string): Promise<T> {
     if (!idempotencyKey.trim()) throw new Error("compute idempotency key is required");
     return this.transport.request<T>(`/commands/${encodeURIComponent(command)}`, {
       method: "POST",
