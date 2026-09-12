@@ -1,5 +1,6 @@
-import { ControlPlaneError } from "./client";
-import type { APIErrorBody, JsonValue } from "./types";
+import { ApiTransport } from "./transport";
+import type { ApiTransportOptions } from "./transport";
+import type { JsonValue } from "./types";
 
 export interface AuthenticatedActor {
   actor_id: string;
@@ -176,6 +177,9 @@ export interface BrowserSessionClientOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
   storage?: BrowserStorageLike | null;
+  timeoutMs?: ApiTransportOptions["timeoutMs"];
+  maxReadRetries?: ApiTransportOptions["maxReadRetries"];
+  retryDelayMs?: ApiTransportOptions["retryDelayMs"];
 }
 
 const CSRF_STORAGE_KEY = "ai-agent-platform.csrf-token";
@@ -183,6 +187,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export class BrowserSessionClient {
   readonly baseUrl: string;
+  readonly transport: ApiTransport;
   private readonly fetchImpl: typeof fetch;
   private readonly storage: BrowserStorageLike | null;
   private csrfToken: string | null;
@@ -192,8 +197,20 @@ export class BrowserSessionClient {
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
     this.storage = options.storage === undefined ? browserCsrfStorage() : options.storage;
     this.csrfToken = this.storage?.getItem(CSRF_STORAGE_KEY) ?? null;
+    this.transport = new ApiTransport({
+      baseUrl: this.baseUrl,
+      fetchImpl: this.fetchImpl,
+      csrf: { getToken: () => this.currentCsrfToken() },
+      timeoutMs: options.timeoutMs,
+      maxReadRetries: options.maxReadRetries,
+      retryDelayMs: options.retryDelayMs,
+    });
   }
 
+  /**
+   * Backward-compatible low-level fetch boundary for clients not yet migrated to
+   * ApiTransport. New domain clients should receive `transport` instead.
+   */
   readonly fetch: typeof fetch = async (input, init = {}) => {
     const headers = new Headers(init.headers);
     const method = (init.method ?? "GET").toUpperCase();
@@ -275,28 +292,11 @@ export class BrowserSessionClient {
     this.storage?.setItem(CSRF_STORAGE_KEY, token);
   }
 
-  private async request<T>(
+  private request<T>(
     path: string,
     options: { method?: string; body?: unknown } = {},
   ): Promise<T> {
-    const headers = new Headers({
-      Accept: "application/json",
-      "X-Correlation-ID": crypto.randomUUID(),
-    });
-    if (options.body !== undefined) headers.set("Content-Type", "application/json");
-
-    const response = await this.fetch(`${this.baseUrl}/api/v1${path}`, {
-      method: options.method ?? "GET",
-      headers,
-      credentials: "include",
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
-    const text = await response.text();
-    const payload: unknown = text ? safeJson(text) : null;
-    if (!response.ok) {
-      throw new ControlPlaneError(response.status, normalizeError(response, payload));
-    }
-    return payload as T;
+    return this.transport.request<T>(path, options);
   }
 }
 
@@ -307,38 +307,4 @@ function browserCsrfStorage(): BrowserStorageLike | null {
   } catch {
     return null;
   }
-}
-
-function safeJson(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeError(response: Response, payload: unknown): APIErrorBody {
-  if (isErrorBody(payload)) return payload;
-  const requestId = response.headers.get("x-request-id") ?? "unknown";
-  return {
-    code: "invalid_response",
-    category: "contract",
-    message: `Control Plane returned HTTP ${response.status} without a canonical error envelope`,
-    request_id: requestId,
-    correlation_id: response.headers.get("x-correlation-id") ?? requestId,
-    retryable: false,
-  };
-}
-
-function isErrorBody(value: unknown): value is APIErrorBody {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Partial<APIErrorBody>;
-  return (
-    typeof candidate.code === "string"
-    && typeof candidate.category === "string"
-    && typeof candidate.message === "string"
-    && typeof candidate.request_id === "string"
-    && typeof candidate.correlation_id === "string"
-    && typeof candidate.retryable === "boolean"
-  );
 }
