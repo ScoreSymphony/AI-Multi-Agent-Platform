@@ -295,9 +295,16 @@ async def _run(backend: str) -> dict[str, Any]:
                 python_command = sys.executable
                 provider_id = "local-runtime"
             else:
-                from swerex.runtime.abstract import UploadRequest
+                from swerex.runtime.abstract import Command, UploadRequest
 
                 provider_workspace = "/tmp/issue861-canonical"
+                await deployment.runtime.execute(
+                    Command(
+                        command=["mkdir", "-p", provider_workspace],
+                        cwd="/",
+                        check=True,
+                    )
+                )
                 await deployment.runtime.upload(
                     UploadRequest(
                         source_path=str(workspace),
