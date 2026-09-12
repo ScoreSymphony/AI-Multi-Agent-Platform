@@ -7,13 +7,9 @@ const apiDirectory = fileURLToPath(new URL("../src/api/", import.meta.url));
 // delegates generic HTTP concerns to ApiTransport. New modules must never be
 // added merely to bypass the boundary.
 const legacyDomainTransportModules = new Set([
-  "automations.ts",
   "configuration.ts",
   "conversationResponses.ts",
   "conversations.ts",
-  "evaluations.ts",
-  "governance.ts",
-  "integrations.ts",
   "learning.ts",
   "memoryKnowledge.ts",
   "organizations.ts",
