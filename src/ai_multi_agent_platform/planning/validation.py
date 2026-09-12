@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from ai_multi_agent_platform.agents import AgentMatchStatus
 from ai_multi_agent_platform.models import ModelLocation, RoutingRequirements
 
+from .agent_matching import match_planning_step
 from .models import (
     PlanningAgentCandidate,
     PlanningCapabilityCandidate,
@@ -112,8 +114,20 @@ class PlanningProposalValidator:
                         )
             elif step.assignment.role_requirement is not None:
                 role = step.assignment.role_requirement
-                if not any(item.enabled and item.role == role for item in request.inventory.agents):
-                    errors.append(f"Step {step.key} has no enabled Agent for role {role!r}")
+                match = match_planning_step(step, request, agent_only=True)
+                if match is None or match.status is AgentMatchStatus.NO_MATCH:
+                    errors.append(
+                        f"Step {step.key} has no eligible canonical Agent for role {role!r}"
+                    )
+                elif match.status is AgentMatchStatus.AMBIGUOUS:
+                    refs = [
+                        f"{item.agent_id}@{item.revision}"
+                        for item in match.ambiguous
+                        if hasattr(item, "agent_id")
+                    ]
+                    errors.append(
+                        f"Step {step.key} Agent match for role {role!r} is ambiguous: {refs!r}"
+                    )
 
             if self.contains_provider_private_metadata(step.metadata):
                 errors.append(
@@ -357,6 +371,3 @@ class PlanningProposalValidator:
             if current is None or (not current.available and candidate.available):
                 result[candidate.capability_id] = candidate
         return result
-
-
-__all__ = ["PlanningProposalValidator"]
