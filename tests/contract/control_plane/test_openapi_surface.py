@@ -1,3 +1,3 @@
-from control_plane_api_cases import test_openapi_documents_current_scope_without_speculative_future_domains
-
-__all__ = ["test_openapi_documents_current_scope_without_speculative_future_domains"]
+from control_plane_api_cases import (
+    test_openapi_documents_current_scope_without_speculative_future_domains as test_openapi_documents_current_scope_without_speculative_future_domains,
+)
