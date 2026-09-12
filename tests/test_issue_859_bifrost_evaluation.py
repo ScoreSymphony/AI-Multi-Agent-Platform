@@ -22,7 +22,15 @@ from ai_multi_agent_platform.contracts import (
     ModelProvider,
     ModelRequest,
     ModelResponse,
+    OperationContext,
     ProviderDescriptor,
+)
+from ai_multi_agent_platform.models import (
+    ModelCapabilities,
+    ModelConfiguration,
+    ModelLocation,
+    ModelRegistry,
+    ModelRuntime,
 )
 
 
@@ -154,6 +162,44 @@ def test_gateway_benchmark_records_canonical_error_category_without_secret_messa
     assert report.comparison_to_direct["bifrost"].p99_latency_delta_ms is None
     assert "synthetic-secret" not in rendered
     assert "must-not-leak" not in rendered
+
+
+def test_bifrost_can_be_absent_without_changing_platform_model_runtime_path() -> None:
+    registry = ModelRegistry()
+    registry.register_provider(_FixtureProvider("issue-859-direct-only"))
+    registry.register_model(
+        ModelConfiguration(
+            config_id="issue-859-direct-model",
+            display_name="Issue 859 direct-only model",
+            provider_id="issue-859-direct-only",
+            capabilities=ModelCapabilities(context_window=8_192),
+            location=ModelLocation.LOCAL,
+            health=HealthStatus.HEALTHY,
+            priority=100,
+        )
+    )
+
+    response = asyncio.run(
+        ModelRuntime(registry).generate(
+            ModelRequest(
+                request_id="issue-859-no-bifrost",
+                messages=("Reply with the single word: ready",),
+                context=OperationContext(correlation_id="issue-859:no-bifrost"),
+                requirements={"model_config_id": "issue-859-direct-model"},
+            )
+        )
+    )
+
+    assert response.text == "ready"
+    assert response.model_ref == "issue-859-direct-model"
+    runtime_metadata = [
+        metadata
+        for metadata in response.adapter_metadata
+        if metadata.namespace == "platform-model-runtime"
+    ]
+    assert len(runtime_metadata) == 1
+    assert runtime_metadata[0].values["provider_id"] == "issue-859-direct-only"
+    assert runtime_metadata[0].values["model_config_id"] == "issue-859-direct-model"
 
 
 def test_bifrost_provenance_keeps_gateway_candidate_optional_and_pinned() -> None:
