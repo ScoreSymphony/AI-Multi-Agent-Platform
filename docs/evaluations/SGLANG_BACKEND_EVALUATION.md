@@ -1,10 +1,40 @@
 # SGLang optional inference-backend evaluation
 
-Status: **in progress**  
-Issue: **#860**  
+Repository evaluation status: **complete for #860**  
+Live campaign status: **in progress under #829**  
+Evaluation contract issue: **#860**  
+Reference-host execution issue: **#829**  
 Evaluation date: **2026-09-12**
 
-This document records evidence for deciding whether SGLang should be supported as an optional self-hosted inference backend. It is deliberately not an adoption document. Until the measured campaign below is complete, SGLang must not be recommended by first-run discovery and must not become a mandatory dependency.
+This document records the repository-side evidence contract for deciding whether SGLang should eventually be supported as an optional self-hosted inference backend. It is deliberately not an adoption document. #860 owns the reproducible evaluation framework and source-backed pre-measurement analysis; #829 owns all execution that requires real compatible GPU/reference-host hardware and the final evidence-backed classification.
+
+Until #829 completes the measured campaign, SGLang must not be recommended by first-run discovery and must not become a mandatory dependency.
+
+## Ownership split
+
+### #860 owns
+
+- exact source/revision/license provenance for SGLang and comparison backends;
+- the platform integration boundary and proof that SGLang remains optional;
+- machine-readable campaign/report schemas and validation logic;
+- fail-closed campaign membership and backend-revision enforcement;
+- explicit comparability rules for later SGLang/vLLM measurements;
+- source-backed operational comparison and deployment assumptions;
+- evidence/runbook definitions for contract, performance, failure and placement campaigns;
+- proof that SGLang absence does not change canonical `ModelConfiguration` identities or baseline routing.
+
+### #829 owns
+
+- live SGLang model startup and representative model smoke/correctness tests;
+- live OpenAI-compatible behavior verification;
+- same-host SGLang/vLLM latency, throughput, VRAM/RAM, batching and concurrency measurements;
+- Ollama/local-path measurement where sufficiently comparable, otherwise explicit non-comparability evidence;
+- live model-load failure, OOM/resource exhaustion, restart/readiness recovery, cancellation and server-loss testing;
+- multi-GPU, remote Worker and multi-node evidence where actual topology permits;
+- empirical installation/configuration/upgrade/support burden;
+- the final classification: `supported_optional`, `experimental_only`, or `reject/defer`.
+
+The machine-readable campaign intentionally remains `in_progress` with `decision.outcome = null` after #860 closes because its live execution lifecycle continues in #829.
 
 ## Architecture boundary
 
@@ -27,11 +57,11 @@ This evaluation must not:
 - bypass `ModelRegistry` / `ModelRouter`;
 - teach Task, Agent or orchestration code about SGLang-native objects;
 - make the reference/non-SGLang path depend on SGLang availability;
-- duplicate the #19 evaluation lifecycle or the #799 discovery/setup ownership.
+- duplicate #19 evaluation lifecycle, #829 real-host evidence ownership or #799 discovery/setup ownership.
 
 ## Pinned upstream evidence
 
-The measured campaign is frozen to exact backend revisions so later upstream releases cannot silently change the comparison basis.
+The live campaign is frozen to exact backend revisions so later upstream releases cannot silently change the comparison basis.
 
 | Backend | Role | Release | Commit | License |
 | --- | --- | --- | --- | --- |
@@ -60,40 +90,28 @@ The exact release commits are the reproducibility anchors. Moving `main`/`stable
 
 ## Verified upstream capabilities
 
-The following claims are supported by upstream source/documentation and may be used to design the measured campaign. They are **not** substitutes for platform integration measurements.
+The following claims are supported by upstream source/documentation and may be used to design #829's measured campaign. They are **not** substitutes for platform integration measurements.
 
-| Capability | Upstream evidence | Platform status |
+| Capability | Upstream evidence | Live status |
 | --- | --- | --- |
-| OpenAI-compatible `chat/completions` and `completions` | official OpenAI API tutorial | contract test pending |
-| Streaming | documented OpenAI-compatible and benchmark paths | measured TTFT/stream semantics pending |
-| Structured output | JSON Schema, regex and EBNF constraints; XGrammar default | canonical structured-output test pending |
-| Tool calling | explicit tool parsers and `tool_choice` modes | representative model/parser test pending |
-| Concurrency / batching benchmark | `bench_serving` supports request rate and max concurrency | comparative measurements pending |
-| TTFT / ITL / TPOT / throughput | emitted by upstream `bench_serving` | comparative measurements pending |
-| Prometheus metrics | `--enable-metrics`, `/metrics` | #16 integration mapping pending |
-| Multi-GPU | tensor parallel `--tp`; data parallel `--dp` | Worker-profile run pending |
-| Multi-node | `--nnodes`, `--node-rank`, `--dist-init-addr` documented | remote Worker run pending |
-| Request/crash replay | observability docs provide request and crash dump/replay | recovery suitability test pending |
+| OpenAI-compatible `chat/completions` and `completions` | official OpenAI API tutorial | #829 contract run pending |
+| Streaming | documented OpenAI-compatible and benchmark paths | #829 measured TTFT/stream semantics pending |
+| Structured output | JSON Schema, regex and EBNF constraints; XGrammar default | #829 canonical test pending |
+| Tool calling | explicit tool parsers and `tool_choice` modes | #829 representative model/parser test pending |
+| Concurrency / batching benchmark | `bench_serving` supports request rate and max concurrency | #829 comparative measurements pending |
+| TTFT / ITL / TPOT / throughput | emitted by upstream `bench_serving` | #829 comparative measurements pending |
+| Prometheus metrics | `--enable-metrics`, `/metrics` | #829/#16 live mapping pending |
+| Multi-GPU | tensor parallel `--tp`; data parallel `--dp` | #829 Worker-profile run pending |
+| Multi-node | `--nnodes`, `--node-rank`, `--dist-init-addr` documented | #829 remote Worker run pending |
+| Request/crash replay | observability docs provide request and crash dump/replay | #829 recovery suitability test pending |
 
-## Deployment assumptions to verify
+## Deployment assumptions
 
 The SGLang candidate profile is **GPU-first Linux self-hosting**. No assumption is made that SGLang is appropriate for CPU-only, low-RAM VPS or every local workstation profile. vLLM is the fixed GPU-serving comparator; Ollama is the fixed lighter local-path comparator for this campaign.
 
-The measured campaign must record, per run:
+Every #829 run must record the environment and workload fields declared by `config/inference-backend-evaluation.sglang-v0.5.19.json`, including the immutable platform/backend/model revisions, quantization/dtype, launch configuration, Worker and hardware identity, accelerator/runtime/driver, topology, cache state and workload parameters.
 
-- platform commit;
-- exact backend revision and image/package identity;
-- exact model and model revision;
-- quantization / dtype;
-- launch command and relevant backend flags;
-- OS/kernel, Python, CUDA/ROCm and driver versions;
-- GPU model/count/VRAM and CPU/RAM;
-- Worker/node identity and network topology for distributed runs;
-- warmup policy, request count, input/output lengths, request rate and concurrency;
-- endpoint authentication / exposure assumptions;
-- start, stop, restart and cache state.
-
-Raw benchmark output must be retained. Summary tables without the raw evidence are insufficient for a final #860 decision. All v1 metric keys remain present in each report; a genuinely unmeasured metric is recorded as `null`, never as a fabricated numeric zero. A decision-eligible SGLang-vLLM pair must contain non-null values for every metric listed in the campaign's `required_metrics`.
+Raw benchmark output must be retained. Summary tables without raw evidence are insufficient. All v1 metric keys remain present in each report; a genuinely unmeasured metric is recorded as `null`, never as a fabricated numeric zero. A decision-eligible SGLang-vLLM pair must contain non-null values for every metric listed in the campaign's `required_metrics`.
 
 ## Representative comparison matrix
 
@@ -101,117 +119,98 @@ SGLang and vLLM performance rows must use the same model revision and equivalent
 
 | Dimension | SGLang | vLLM | Ollama local path |
 | --- | --- | --- | --- |
-| OpenAI contract | pending | pending | pending where supported |
-| cold model load | pending | pending | pending |
-| warm restart | pending | pending | pending |
-| streaming TTFT | pending | pending | pending where comparable |
-| steady-state TPOT / ITL | pending | pending | pending where comparable |
-| request throughput | pending | pending | pending where comparable |
-| concurrency 1 / 4 / 16 / 32 | pending | pending | pending where comparable |
-| VRAM peak / steady | pending | pending | pending |
-| host RAM peak / steady | pending | pending | pending |
-| structured JSON | pending | pending | pending where supported |
-| tool calling | pending | pending | pending where supported |
-| cancellation | pending | pending | pending |
-| backend unavailable | pending | pending | pending |
-| OOM behavior / recovery | pending | pending | pending |
-| multi-GPU | pending | pending | not required for local-path role |
-| multi-node / remote Worker | pending | pending | not required for local-path role |
-| operational upgrade burden | pending | pending | pending |
+| OpenAI contract | #829 pending | #829 pending | #829 pending where supported |
+| cold model load | #829 pending | #829 pending | #829 pending |
+| warm restart | #829 pending | #829 pending | #829 pending |
+| streaming TTFT | #829 pending | #829 pending | #829 pending where comparable |
+| steady-state TPOT / ITL | #829 pending | #829 pending | #829 pending where comparable |
+| request throughput | #829 pending | #829 pending | #829 pending where comparable |
+| concurrency 1 / 4 / 16 / 32 | #829 pending | #829 pending | #829 pending where comparable |
+| VRAM peak / steady | #829 pending | #829 pending | #829 pending |
+| host RAM peak / steady | #829 pending | #829 pending | #829 pending |
+| structured JSON | #829 pending | #829 pending | #829 pending where supported |
+| tool calling | #829 pending | #829 pending | #829 pending where supported |
+| cancellation | #829 pending | #829 pending | #829 pending |
+| backend unavailable | #829 pending | #829 pending | #829 pending |
+| OOM behavior / recovery | #829 pending | #829 pending | #829 pending |
+| multi-GPU | #829 pending | #829 pending | not required for local-path role |
+| multi-node / remote Worker | #829 pending | #829 pending | not required for local-path role |
+| operational upgrade burden | #829 pending | #829 pending | #829 pending |
 
-The source-backed pre-measurement operational comparison is recorded in `docs/evaluations/SGLANG_BACKEND_OPERATIONAL_COMPARISON.md`. It narrows the live test plan but does not substitute for measured installation, resource, latency or recovery evidence.
+The source-backed pre-measurement operational comparison is recorded in `docs/evaluations/SGLANG_BACKEND_OPERATIONAL_COMPARISON.md`. It satisfies #860's documentation-side comparison; it does not substitute for #829's measured installation, resource, latency or recovery evidence.
 
-## Required campaign
+## Repository-side campaign contract (#860)
 
-The machine-readable campaign definition lives in
-`config/inference-backend-evaluation.sglang-v0.5.19.json`.
+The machine-readable campaign definition lives in `config/inference-backend-evaluation.sglang-v0.5.19.json` and defines:
 
-### 1. Contract coverage
+- canonical contract cases, including non-streaming/streaming, cancellation, structured JSON, tools, error normalization, model-ID stability and candidate-absent baseline routing;
+- performance scenarios at concurrency 1, 4, 16 and 32;
+- required latency, throughput, VRAM/RAM and error metrics;
+- failure/recovery cases;
+- placement cases;
+- exact environment metadata;
+- raw-evidence retention requirements.
 
-Run the same canonical model requests through the platform `ModelRuntime -> ModelProvider` path for each backend where the backend claims the relevant operation. Required SGLang cases:
+The versioned report schema lives at `src/ai_multi_agent_platform/benchmarking/schemas/inference-backend-evaluation-report.v1.schema.json`.
 
-1. model discovery/health;
-2. non-streaming chat completion;
-3. streaming chat completion and cancellation;
-4. structured JSON output validated locally against the requested schema;
-5. tool declaration + tool call round trip for a model/parser combination explicitly supported by the backend;
-6. timeout, unavailable endpoint and malformed response normalization;
-7. backend removal/unavailability without changing canonical `ModelConfiguration.config_id`;
-8. SGLang absent from the host: reference routing and non-SGLang providers behave unchanged.
+`ai_multi_agent_platform.benchmarking.inference_backend_evaluation` and `platform-inference-backend-evaluation` provide the fail-closed evidence gate. The gate rejects:
 
-The OpenAI-compatible wire surface is an adapter detail. Passing raw `/v1/chat/completions` requests is necessary interoperability evidence but is not sufficient platform contract evidence.
+- reports for a different campaign;
+- undeclared backends;
+- revision drift from the pinned SGLang/vLLM/Ollama commits;
+- incomparable performance evidence;
+- decision-eligible pairs with missing required metrics;
+- missing/latest-failing mandatory SGLang contract or failure coverage.
 
-### 2. Performance measurements
+Comparability is independently rechecked across platform commit, model/revision, dtype/quantization, Worker set, OS/runtime/driver, GPU/CPU/RAM, topology, cache state and workload dimensions rather than trusting a report flag alone.
 
-Use an identical request corpus and fixed model revision for the decision-eligible SGLang-vLLM comparison. At minimum retain:
+## Real-host campaign (#829)
 
-- cold load time;
-- ready-to-first-request time;
-- request throughput (req/s);
-- input/output/total token throughput when token counts are available;
-- end-to-end p50/p95/p99;
-- TTFT p50/p95/p99;
-- ITL or TPOT p50/p95/p99;
-- failure/error count;
-- peak and steady VRAM;
-- peak and steady host RAM;
-- CPU utilization where available.
+#829 executes the runbook in `docs/evaluations/SGLANG_EVIDENCE_RUNBOOK.md`. It must retain real evidence for:
 
-SGLang's `python -m sglang.bench_serving` may be used as one raw measurement source because it exposes TTFT, ITL, TPOT, throughput, concurrency control and JSONL output. The final platform evidence should also retain platform-side telemetry from #16 so a backend's own benchmark is not the sole source of truth.
+1. representative live model readiness and platform contract behavior;
+2. same-host SGLang/vLLM performance under the exact comparison contract;
+3. Ollama/local-path evidence or explicit non-comparability;
+4. OOM, cancellation, process/server loss, restart/readiness and resource recovery;
+5. single-GPU plus any actually supported multi-GPU/remote/multi-node placements;
+6. actual installation/configuration/upgrade/support burden.
 
-### 3. Failure and recovery
-
-Exercise explicitly:
-
-- endpoint unavailable before dispatch;
-- server termination during an in-flight streaming request;
-- cancellation from the canonical operation control path;
-- load failure for an invalid/incompatible model;
-- intentional OOM or resource exhaustion on a bounded test Worker where safe;
-- process restart and readiness recovery;
-- Worker loss during a remote/multi-node run;
-- repeated start/stop to detect leaked GPU memory or stale readiness.
-
-Recovery must be observed through platform-owned health/routing state. A provider-native health endpoint is evidence input, not canonical lifecycle state.
-
-### 4. Multi-GPU and remote Worker
-
-At least one compatible model must run on:
-
-- one GPU;
-- multiple GPUs on one Worker when hardware permits;
-- a remote GPU Worker controlled by the platform;
-- multiple nodes only if the available hardware/network makes the upstream topology valid.
-
-A missing suitable multi-node environment is reported as `not_measured`, not as a pass.
+Unavailable topology is recorded as `not_measured`, not converted into a pass.
 
 ## Evidence status on 2026-09-12
 
-| Evidence | Status | Reason |
+| Evidence | Owner | Status |
 | --- | --- | --- |
-| SGLang source/release/license pinned | complete | `v0.5.19`, exact commit, Apache-2.0 |
-| vLLM comparator pinned | complete | `v0.29.0`, exact commit, Apache-2.0 |
-| Ollama local comparator pinned | complete | `v0.34.0`, exact commit, MIT |
-| documented API/capability research | complete | official upstream sources captured separately from measured claims |
-| source-backed operational surface | complete | comparison document records install/distribution/topology facts without performance claims |
-| architecture boundary | complete | remains behind #10 `ModelProvider`; #19/#799 ownership preserved |
-| reproducible campaign/report contracts | complete | machine-readable campaign, report schema, revision validation and readiness CLI checked in |
-| live SGLang model smoke | not measured | requires compatible GPU Worker/runtime |
-| SGLang vs vLLM performance | not measured | requires same model/hardware campaign |
-| Ollama local-path measurement | not measured | requires same workload and explicit comparability record |
-| VRAM/RAM evidence | not measured | requires live Worker telemetry |
-| failure/recovery campaign | not measured | requires live backend process/Worker |
-| multi-GPU/remote Worker | not measured | requires compatible hardware/topology |
-| #799 first-run recommendation | blocked | #799 is still under implementation; recommendation must consume completed #860 evidence |
+| SGLang source/release/license pin | #860 | complete |
+| vLLM comparator pin | #860 | complete |
+| Ollama local comparator pin | #860 | complete |
+| source-backed capability research | #860 | complete |
+| source-backed operational comparison | #860 | complete |
+| architecture/provider boundary | #860 | complete |
+| reproducible campaign/report contracts | #860 | complete |
+| revision/comparability/readiness validator + CLI | #860 | complete |
+| candidate-absence routing regression guard | #860 | complete |
+| live SGLang model smoke | #829 | pending real host |
+| SGLang vs vLLM performance | #829 | pending real host |
+| Ollama local-path measurement/non-comparability | #829 | pending real host |
+| VRAM/RAM and latency/throughput evidence | #829 | pending real host |
+| failure/recovery campaign | #829 | pending real host |
+| multi-GPU/remote Worker evidence | #829 | pending compatible topology |
+| final SGLang classification | #829 | pending live evidence |
+| #799 first-run recommendation | #799 | waits for #829 classification |
 
-## Decision gate
+## Final classification gate (#829)
 
-No final #860 classification is asserted yet. The only valid final outcomes are:
+The only valid final outcomes remain:
 
 - `supported_optional` — contract coverage passes and the measured operational/performance profile justifies a maintained optional backend;
 - `experimental_only` — useful and functional, but compatibility, recovery, operational burden or hardware coverage is not strong enough for a normal recommendation;
 - `reject/defer` — evidence does not justify integration/maintenance now.
 
-A final outcome requires all mandatory SGLang contract and failure cases plus at least one comparable SGLang-vLLM performance run on the same Worker/model revision with all campaign-required metrics actually measured. Submitted reports must name a backend declared by this campaign, and reports for SGLang, vLLM or Ollama must use the exact campaign-pinned backend revision. Missing multi-node hardware may remain explicitly `not_measured` if the decision does not claim multi-node support. The lighter local-path evidence must be considered in the final policy classification even when exact model representation makes a direct performance comparison non-comparable.
+A final outcome requires all mandatory SGLang contract and failure cases plus at least one comparable SGLang-vLLM performance run on the same Worker/model revision with all campaign-required metrics actually measured. Missing multi-node hardware may remain explicitly `not_measured` if the decision does not claim multi-node support. The lighter local-path evidence must be considered even when exact model representation makes a direct performance comparison non-comparable.
 
-Until that gate is met, #799 must treat SGLang as **evaluated candidate, not recommended backend**.
+Until #829 records that classification, #799 must treat SGLang as **evaluated candidate, not recommended backend**.
+
+## #860 completion statement
+
+#860 is complete when this repository-side contract, provenance, documentation, validator/CLI and regression coverage are merged. Real GPU/reference-host execution and the final backend policy outcome are intentionally outside #860's Definition of Done and are tracked by #829.
