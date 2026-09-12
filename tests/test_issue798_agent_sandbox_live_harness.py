@@ -55,9 +55,7 @@ def _write_fake_kubectl(
                     "lastTransitionTime": "2026-09-12T10:00:03Z",
                 }
             ],
-            "containerStatuses": [
-                {"imageID": "containerd://example.invalid/sandbox@sha256:abc"}
-            ],
+            "containerStatuses": [{"imageID": "containerd://example.invalid/sandbox@sha256:abc"}],
         },
     }
     annotations = {"sandbox-data": "ordinary-evaluation-metadata"}
