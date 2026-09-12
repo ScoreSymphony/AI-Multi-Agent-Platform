@@ -1,127 +1,136 @@
-"""Deterministic, conservative overlap classification for coding workstreams."""
+"""Conservative dependency and overlap classification for coding work items."""
 
 from __future__ import annotations
 
-from itertools import combinations
-from pathlib import PurePosixPath
-
 from .models import CodingWorkItem, OverlapDecision, OverlapKind
 
-_GLOBAL_FILES = frozenset(
-    {
-        "pyproject.toml",
-        "package.json",
-        "package-lock.json",
-        "pnpm-lock.yaml",
-        "yarn.lock",
-        "uv.lock",
-        "poetry.lock",
-        "docker-compose.yml",
-        "compose.yaml",
-    }
+_GLOBAL_PATHS = {
+    "pyproject.toml",
+    "package.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "docker-compose.yml",
+    "compose.yml",
+}
+_GLOBAL_PREFIXES = (
+    ".github/",
+    "migrations/",
+    "schema/",
+    "schemas/",
 )
-_GLOBAL_PREFIXES = (".github/", "migrations/", "alembic/", "schemas/")
 
 
-def _path(value: str) -> str:
-    normalized = str(PurePosixPath(value.replace("\\", "/")))
-    if normalized.startswith("../") or normalized == ".." or normalized.startswith("/"):
-        raise ValueError("affected paths must be repository-relative")
-    return normalized
+def _ownership_roots(paths: tuple[str, ...]) -> set[str]:
+    roots: set[str] = set()
+    for path in paths:
+        normalized = path.strip("/")
+        if not normalized:
+            continue
+        roots.add(normalized.split("/", 1)[0])
+    return roots
 
 
-def _ownership_root(path: str) -> tuple[str, ...]:
-    parts = PurePosixPath(path).parts
-    if not parts:
-        return ()
-    if parts[0] in {"src", "tests", "frontend"} and len(parts) > 1:
-        return parts[:2]
-    return parts[:1]
+def _touches_global_contract(paths: tuple[str, ...]) -> bool:
+    return any(path in _GLOBAL_PATHS or path.startswith(_GLOBAL_PREFIXES) for path in paths)
 
 
-def _touches_global_contract(paths: set[str]) -> bool:
-    return any(path in _GLOBAL_FILES or path.startswith(_GLOBAL_PREFIXES) for path in paths)
+def _serialization_group(item: CodingWorkItem) -> str | None:
+    value = item.metadata.get("serialization_group")
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
 
 
 class ConservativeOverlapClassifier:
-    """Classify only evidence-backed independence as parallel-safe.
-
-    Optional #502 code intelligence can enrich ``semantic_scopes`` before this classifier is
-    invoked.  Without it, exact changed-path hints plus coarse ownership roots provide the local
-    deterministic baseline; ambiguous same-domain changes remain ``UNKNOWN``.
-    """
+    """Prove parallel safety where possible and fail closed when evidence is incomplete."""
 
     def classify(self, left: CodingWorkItem, right: CodingWorkItem) -> OverlapDecision:
-        if right.work_item_id in left.dependencies or left.work_item_id in right.dependencies:
+        pair = (left.work_item_id, right.work_item_id)
+        if left.work_item_id in right.dependencies or right.work_item_id in left.dependencies:
             return OverlapDecision(
-                left.work_item_id,
-                right.work_item_id,
-                OverlapKind.DEPENDENCY,
-                "canonical work-item dependency requires ordered execution",
+                *pair,
+                kind=OverlapKind.DEPENDENCY,
+                rationale="canonical work-item dependency requires predecessor completion",
             )
 
-        left_paths = {_path(path) for path in left.affected_paths}
-        right_paths = {_path(path) for path in right.affected_paths}
-        shared_paths = left_paths & right_paths
+        left_serial = _serialization_group(left)
+        right_serial = _serialization_group(right)
+        if left_serial is not None and left_serial == right_serial:
+            return OverlapDecision(
+                *pair,
+                kind=OverlapKind.EXPLICIT_CONFLICT,
+                rationale=(
+                    "work items share explicit serialization group "
+                    f"{left_serial!r} and must not run concurrently"
+                ),
+            )
+
+        shared_paths = set(left.affected_paths) & set(right.affected_paths)
         if shared_paths:
             return OverlapDecision(
-                left.work_item_id,
-                right.work_item_id,
-                OverlapKind.TEXTUAL_CONFLICT,
-                "declared affected paths overlap: " + ", ".join(sorted(shared_paths)),
+                *pair,
+                kind=OverlapKind.LIKELY_TEXTUAL_OVERLAP,
+                rationale="declared affected paths overlap: " + ", ".join(sorted(shared_paths)),
             )
 
-        left_scopes = set(left.semantic_scopes)
-        right_scopes = set(right.semantic_scopes)
-        shared_scopes = left_scopes & right_scopes
+        shared_scopes = set(left.semantic_scopes) & set(right.semantic_scopes)
         if shared_scopes:
             return OverlapDecision(
-                left.work_item_id,
-                right.work_item_id,
-                OverlapKind.SEMANTIC_OVERLAP,
-                "semantic ownership/impact scopes overlap: " + ", ".join(sorted(shared_scopes)),
+                *pair,
+                kind=OverlapKind.SEMANTIC_OVERLAP,
+                rationale="semantic ownership overlaps: " + ", ".join(sorted(shared_scopes)),
             )
 
-        if _touches_global_contract(left_paths) and _touches_global_contract(right_paths):
+        if _touches_global_contract(left.affected_paths) and _touches_global_contract(
+            right.affected_paths
+        ):
             return OverlapDecision(
-                left.work_item_id,
-                right.work_item_id,
-                OverlapKind.SEMANTIC_OVERLAP,
-                "both work items modify global configuration, schema, migration or CI surfaces",
+                *pair,
+                kind=OverlapKind.EXPLICIT_CONFLICT,
+                rationale="both work items modify global configuration/schema surfaces",
             )
 
-        if not left_paths or not right_paths:
+        if not left.affected_paths or not right.affected_paths:
             return OverlapDecision(
-                left.work_item_id,
-                right.work_item_id,
-                OverlapKind.UNKNOWN,
-                "insufficient affected-path evidence; independence is not proven",
+                *pair,
+                kind=OverlapKind.UNKNOWN,
+                rationale="affected-path evidence is incomplete; parallel safety is unproven",
             )
 
-        if left_scopes and right_scopes:
+        left_roots = _ownership_roots(left.affected_paths)
+        right_roots = _ownership_roots(right.affected_paths)
+        disjoint_roots = bool(left_roots and right_roots and left_roots.isdisjoint(right_roots))
+        scopes_prove_separation = bool(
+            left.semantic_scopes
+            and right.semantic_scopes
+            and set(left.semantic_scopes).isdisjoint(right.semantic_scopes)
+        )
+        if disjoint_roots:
             return OverlapDecision(
-                left.work_item_id,
-                right.work_item_id,
-                OverlapKind.INDEPENDENT,
-                "affected paths and semantic scopes are disjoint",
+                *pair,
+                kind=OverlapKind.INDEPENDENT,
+                rationale="work items have disjoint repository ownership roots",
             )
-
-        left_roots = {_ownership_root(path) for path in left_paths}
-        right_roots = {_ownership_root(path) for path in right_paths}
-        if left_roots.isdisjoint(right_roots):
+        if scopes_prove_separation:
             return OverlapDecision(
-                left.work_item_id,
-                right.work_item_id,
-                OverlapKind.INDEPENDENT,
-                "deterministic repository ownership roots are disjoint",
+                *pair,
+                kind=OverlapKind.SHARED_SOURCE_SAFE,
+                rationale=(
+                    "work items share a repository ownership root but have disjoint paths and "
+                    "explicitly disjoint semantic scopes"
+                ),
             )
-
         return OverlapDecision(
-            left.work_item_id,
-            right.work_item_id,
-            OverlapKind.UNKNOWN,
-            "paths are distinct but remain inside a shared ownership root",
+            *pair,
+            kind=OverlapKind.UNKNOWN,
+            rationale="repository ownership is potentially shared and safety is not proven",
         )
 
     def classify_all(self, items: tuple[CodingWorkItem, ...]) -> tuple[OverlapDecision, ...]:
-        return tuple(self.classify(left, right) for left, right in combinations(items, 2))
+        decisions: list[OverlapDecision] = []
+        for index, left in enumerate(items):
+            for right in items[index + 1 :]:
+                decisions.append(self.classify(left, right))
+        return tuple(decisions)
