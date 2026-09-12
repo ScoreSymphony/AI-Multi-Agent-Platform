@@ -9,9 +9,6 @@ const apiDirectory = fileURLToPath(new URL("../src/api/", import.meta.url));
 const legacyDomainTransportModules = new Set([
   "conversationResponses.ts",
   "conversations.ts",
-  "memoryKnowledge.ts",
-  "repositories.ts",
-  "templates.ts",
 ]);
 
 const approvedLowLevelModules = new Set(["browserSession.ts", "transport.ts"]);
