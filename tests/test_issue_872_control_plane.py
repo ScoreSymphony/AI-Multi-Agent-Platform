@@ -7,14 +7,14 @@ from ai_multi_agent_platform.coding_batches import (
     VerificationEvidence,
     WorkstreamResult,
 )
-from ai_multi_agent_platform.coding_batches.control_plane import (
+from ai_multi_agent_platform.coding_batches.sqlite_catalog import SqliteCodingBatchCatalog
+from ai_multi_agent_platform.coding_batches.sqlite_store import SqliteCodingBatchStore
+from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
+from ai_multi_agent_platform.control_plane.coding_batch_contract import (
     CODING_BATCH_COLLECTION,
     coding_batch_command_handlers,
     coding_batch_resource_services,
 )
-from ai_multi_agent_platform.coding_batches.sqlite_catalog import SqliteCodingBatchCatalog
-from ai_multi_agent_platform.coding_batches.sqlite_store import SqliteCodingBatchStore
-from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
 
