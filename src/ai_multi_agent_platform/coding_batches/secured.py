@@ -11,6 +11,7 @@ from .models import (
     IntegrationCandidate,
     VerificationEvidence,
     WorkstreamResult,
+    WorkstreamState,
 )
 from .overlap import ConservativeOverlapClassifier
 from .service import CodingBatchCoordinator as _StateCoordinator
@@ -130,10 +131,21 @@ class CodingBatchCoordinator:
         current_target_revision: str,
         workstream_ids: tuple[str, ...] | None = None,
     ) -> IntegrationCandidate:
+        batch = self.get(batch_id)
+        selected = (
+            tuple(
+                workstream.id
+                for workstream in batch.workstreams
+                if workstream.state is WorkstreamState.ACCEPTED
+            )
+            if workstream_ids is None
+            else workstream_ids
+        )
+        self._enforce_aggregation_policy(batch, selected)
         return self._state.build_integration_candidate(
             batch_id,
             current_target_revision=current_target_revision,
-            workstream_ids=workstream_ids,
+            workstream_ids=selected,
         )
 
     def record_integrated_revision(
@@ -188,3 +200,37 @@ class CodingBatchCoordinator:
             integration_id,
             change_request_ref=change_request_ref,
         )
+
+    @staticmethod
+    def _enforce_aggregation_policy(batch: CodingBatch, selected: tuple[str, ...]) -> None:
+        selected_set = set(selected)
+        if batch.aggregation_policy is BatchAggregationPolicy.ALL_REQUIRED:
+            required = {workstream.id for workstream in batch.workstreams}
+            if selected_set != required:
+                missing = tuple(
+                    workstream.id
+                    for workstream in batch.workstreams
+                    if workstream.id not in selected_set
+                )
+                raise ValueError(
+                    "all_required aggregation cannot integrate a partial batch; missing: "
+                    + ", ".join(missing)
+                )
+            return
+
+        if batch.aggregation_policy is BatchAggregationPolicy.DEPENDENCY_CLOSED:
+            by_id = {workstream.id: workstream for workstream in batch.workstreams}
+            for workstream_id in selected:
+                workstream = by_id.get(workstream_id)
+                if workstream is None:
+                    continue
+                missing_dependencies = tuple(
+                    dependency_id
+                    for dependency_id in workstream.work_item.dependencies
+                    if dependency_id not in selected_set
+                )
+                if missing_dependencies:
+                    raise ValueError(
+                        "dependency_closed aggregation requires selected dependencies for "
+                        f"{workstream_id}: " + ", ".join(missing_dependencies)
+                    )
