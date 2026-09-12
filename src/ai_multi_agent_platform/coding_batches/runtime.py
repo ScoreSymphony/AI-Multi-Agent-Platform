@@ -128,7 +128,9 @@ class CanonicalCodingWorkstreamDispatcher:
         """Intersect #872 safety readiness with already-active canonical #384 Step attempts."""
 
         batch = self._coordinator.get(batch_id)
-        locally_ready = {workstream.id for workstream in self._coordinator.ready_workstreams(batch_id)}
+        locally_ready = {
+            workstream.id for workstream in self._coordinator.ready_workstreams(batch_id)
+        }
         slots: list[CodingDispatchSlot] = []
         for workstream in batch.workstreams:
             if workstream.id not in locally_ready:
@@ -167,7 +169,9 @@ class CanonicalCodingWorkstreamDispatcher:
         if workstream.state is WorkstreamState.READY:
             ready_ids = {item.id for item in self._coordinator.ready_workstreams(batch_id)}
             if workstream_id not in ready_ids:
-                raise ValueError("coding workstream is not admitted by batch safety/concurrency gates")
+                raise ValueError(
+                    "coding workstream is not admitted by batch safety/concurrency gates"
+                )
         elif workstream.state not in {WorkstreamState.MATERIALIZED, WorkstreamState.RUNNING}:
             raise ValueError("coding workstream is not eligible for dispatch/reconciliation")
 
@@ -189,9 +193,11 @@ class CanonicalCodingWorkstreamDispatcher:
                 raise ValueError("workstream is already bound to a different canonical AgentRun")
             recorded_revision = workstream.provenance.agent_revision
             if recorded_revision != agent_revision_ref(run):
-                raise ValueError("workstream Agent revision provenance conflicts with canonical #33")
+                raise ValueError(
+                    "workstream Agent revision provenance conflicts with canonical #33"
+                )
 
-        materialized = await self._materializer.ensure_materialized(
+        await self._materializer.ensure_materialized(
             batch_id,
             workstream_id,
             project_id=project_id,
