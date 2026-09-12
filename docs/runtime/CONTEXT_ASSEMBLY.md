@@ -136,21 +136,11 @@ The #19 evaluation framework remains the canonical evaluation owner. Context ass
 
 ## Required regression evidence
 
-`tests/test_issue_590_context_bundles.py` is the focused #590 regression/acceptance suite. It proves:
+The original #590 Context Bundle coverage is now classified by responsibility while retaining #590 provenance in module docstrings and Git history:
 
-- deterministic digest assembly and idempotent storage;
-- changed source revision -> changed bundle digest;
-- mandatory-before-optional ordering;
-- explicit truncation and fail-closed mandatory budget exhaustion;
-- unauthorized source exclusion and mandatory authorization blocking;
-- cross-Project isolation;
-- stale/unavailable source handling;
-- duplicate suppression;
-- Skill Bundle, Research Evidence and Repository source provenance;
-- renderer replacement without canonical identity drift;
-- bundle and Run-binding restart persistence;
-- absence of secret values from canonical serialization;
-- rejection of untrusted retrieved content as instruction authority.
+- `tests/unit/context/test_resolution_policy.py` proves deterministic digest assembly and idempotent in-memory storage, source-revision identity changes, mandatory ordering, explicit budgeting/truncation, authorization and Project-scope filtering, stale/unavailable handling, duplicate suppression, secret-reference serialization, and rejection of untrusted retrieved content as instruction authority;
+- `tests/integration/context/test_adapter_rendering.py` proves Skill/Research/Repository adapter provenance and renderer replacement without canonical identity drift;
+- `tests/integration/context/test_persistence_recovery.py` proves durable Context Bundle and Run-binding recovery across restart.
 
 `tests/test_issue_590_secret_reference_metadata.py` proves the reference-only secret metadata boundary. `tests/test_issue_590_agent_run_integration.py` proves that an actual `ContextBoundAgentRuntime` AgentRun carries and persists the exact canonical Bundle ID/digest. `tests/test_issue_590_evaluation_integration.py` runs the context scenarios through the canonical #19 evaluation framework.
 

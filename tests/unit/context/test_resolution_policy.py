@@ -1,10 +1,11 @@
+"""Context resolver/policy coverage originally introduced for GitHub issue #590."""
+
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import json
 from dataclasses import replace
-from datetime import UTC, datetime
 
 import pytest
 
@@ -21,17 +22,11 @@ from ai_multi_agent_platform.context import (
     ContextPolicy,
     ContextResolutionError,
     ContextResolver,
-    ContextRunBinding,
     ContextSourceRef,
     ContextSourceType,
     ContextTransformationKind,
     ContextTrust,
     InMemoryContextBundleRepository,
-    JsonContextBundleRepository,
-    JsonContextRunBindingRepository,
-    ReferenceContextRenderer,
-    StaticContextSourceAdapter,
-    assert_render_preserves_bundle,
 )
 from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.domain import new_id
@@ -291,138 +286,6 @@ def test_duplicate_sources_are_suppressed_with_auditable_omission() -> None:
     assert len(bundle.omissions) == 1
     assert bundle.omissions[0].reason is ContextOmissionReason.DUPLICATE
     assert bundle.omissions[0].content_digest == first.content_digest
-
-
-def test_skill_research_and_repository_adapters_preserve_exact_provenance() -> None:
-    project_id = new_id("project")
-    skill = _inline_candidate(
-        ContextSourceType.SKILL,
-        "skill:review",
-        "skill instructions",
-        revision="skill-r7",
-        locator="skills/review.md",
-        project_id=project_id,
-    )
-    research = _inline_candidate(
-        ContextSourceType.RESEARCH_EVIDENCE,
-        "evidence:claim-42",
-        "evidence excerpt",
-        revision="evidence-r3",
-        locator="claim:42/evidence:2",
-        project_id=project_id,
-    )
-    repository = _inline_candidate(
-        ContextSourceType.REPOSITORY,
-        "repo:source-slice",
-        "def canonical_context(): ...",
-        revision="git:abc123",
-        locator="src/context.py#L10-L20",
-        project_id=project_id,
-    )
-    request = _request(
-        (),
-        project_id=project_id,
-        skill_bundle_id="skill-bundle:issue-590",
-        skill_bundle_digest="sha256:skill-bundle-digest",
-    )
-    service = ContextAssemblyService(
-        ContextResolver(FakeAuthorizationProvider()),
-        InMemoryContextBundleRepository(),
-    )
-
-    bundle = asyncio.run(
-        service.assemble(
-            request,
-            adapters=(
-                StaticContextSourceAdapter("repository", (repository,)),
-                StaticContextSourceAdapter("skill", (skill,)),
-                StaticContextSourceAdapter("research", (research,)),
-            ),
-        )
-    )
-
-    assert bundle.skill_bundle_id == "skill-bundle:issue-590"
-    assert bundle.skill_bundle_digest == "sha256:skill-bundle-digest"
-    by_type = {entry.source.source_type: entry for entry in bundle.entries}
-    assert by_type[ContextSourceType.SKILL].source.revision == "skill-r7"
-    assert by_type[ContextSourceType.SKILL].source.locator == "skills/review.md"
-    assert by_type[ContextSourceType.RESEARCH_EVIDENCE].source.revision == "evidence-r3"
-    assert by_type[ContextSourceType.RESEARCH_EVIDENCE].source.locator == "claim:42/evidence:2"
-    assert by_type[ContextSourceType.REPOSITORY].source.revision == "git:abc123"
-    assert by_type[ContextSourceType.REPOSITORY].source.locator == "src/context.py#L10-L20"
-
-
-def test_renderer_replacement_preserves_canonical_bundle_identity() -> None:
-    class AlternateRenderer(ReferenceContextRenderer):
-        renderer_id = "alternate-context-renderer/v1"
-
-    bundle = _resolve(
-        _request(
-            (
-                _inline_candidate(
-                    ContextSourceType.TASK,
-                    "task-render",
-                    "render me identically",
-                    mandatory=True,
-                ),
-            )
-        )
-    )
-
-    first = asyncio.run(ReferenceContextRenderer().render(bundle))
-    second = asyncio.run(AlternateRenderer().render(bundle))
-
-    assert_render_preserves_bundle(bundle, first)
-    assert_render_preserves_bundle(bundle, second)
-    assert first.renderer_id != second.renderer_id
-    assert first.context_bundle_id == second.context_bundle_id == bundle.context_bundle_id
-    assert first.context_bundle_digest == second.context_bundle_digest == bundle.digest
-    assert [part.content_digest for part in first.parts] == [
-        part.content_digest for part in second.parts
-    ]
-
-
-def test_bundle_and_run_binding_survive_restart_and_reassembly(tmp_path) -> None:
-    candidate = _inline_candidate(ContextSourceType.TASK, "restart-task", "restart-safe context")
-    request = _request((candidate,))
-    bundle_path = tmp_path / "context-bundles.json"
-    binding_path = tmp_path / "context-run-bindings.json"
-
-    first_repository = JsonContextBundleRepository(bundle_path)
-    first_service = ContextAssemblyService(
-        ContextResolver(FakeAuthorizationProvider()),
-        first_repository,
-    )
-    first = asyncio.run(first_service.assemble(request))
-
-    restarted_repository = JsonContextBundleRepository(bundle_path)
-    restarted_service = ContextAssemblyService(
-        ContextResolver(FakeAuthorizationProvider()),
-        restarted_repository,
-    )
-    restored = asyncio.run(restarted_service.assemble(request))
-
-    assert restored.context_bundle_id == first.context_bundle_id
-    assert restored.digest == first.digest
-
-    binding = ContextRunBinding(
-        agent_run_id=new_id("agent_run"),
-        run_id=first.run_id,
-        task_id=first.task_id,
-        agent_id=first.agent_id,
-        agent_revision=first.agent_revision,
-        context_bundle_id=first.context_bundle_id,
-        context_bundle_digest=first.digest,
-        resolver_version=first.resolver_version,
-        policy_version=first.policy_version,
-        orchestrator_adapter_id="reference-context-orchestrator",
-        created_at=datetime.now(UTC),
-    )
-    JsonContextRunBindingRepository(binding_path).put(binding)
-
-    restarted_bindings = JsonContextRunBindingRepository(binding_path)
-    assert restarted_bindings.get(binding.agent_run_id) == binding
-    assert restarted_bindings.list_for_run(first.run_id) == (binding,)
 
 
 def test_secret_values_are_absent_from_canonical_serialization() -> None:
