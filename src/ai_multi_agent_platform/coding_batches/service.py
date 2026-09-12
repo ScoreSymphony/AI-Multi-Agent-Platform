@@ -198,7 +198,11 @@ class CodingBatchCoordinator:
             item.work_item_id: set(item.dependencies) for item in work_items
         }
         for decision in overlaps:
-            if decision.kind is OverlapKind.INDEPENDENT or decision.kind is OverlapKind.DEPENDENCY:
+            if decision.kind in {
+                OverlapKind.INDEPENDENT,
+                OverlapKind.SHARED_SOURCE_SAFE,
+                OverlapKind.DEPENDENCY,
+            }:
                 continue
             # Ambiguous/conflicting peers are serialized deterministically instead of being
             # declared independent merely to increase concurrency.
@@ -611,7 +615,9 @@ class CodingBatchCoordinator:
                     None,
                 )
                 if decision is not None and decision.kind in {
+                    OverlapKind.LIKELY_TEXTUAL_OVERLAP,
                     OverlapKind.SEMANTIC_OVERLAP,
+                    OverlapKind.EXPLICIT_CONFLICT,
                     OverlapKind.UNKNOWN,
                 }:
                     conflicts.append(
