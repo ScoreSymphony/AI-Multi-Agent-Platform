@@ -1,6 +1,7 @@
-import { ControlPlaneError } from "./client";
 import { ControlPlaneCollectionClient } from "./collections";
-import type { APIErrorBody, JsonValue, ListQuery, Page } from "./types";
+import { ApiTransport } from "./transport";
+import type { ApiTransportOptions } from "./transport";
+import type { JsonValue, ListQuery, Page } from "./types";
 
 export type LearningCandidateStatus =
   | "proposed"
@@ -141,9 +142,8 @@ export interface LearningCommandOptions {
   correlationId?: string;
 }
 
-export interface LearningClientOptions {
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
+export interface LearningClientOptions extends ApiTransportOptions {
+  transport?: ApiTransport;
 }
 
 const CANDIDATE_COLLECTION = "learning-candidates";
@@ -152,13 +152,13 @@ const POST_PROMOTION_COLLECTION = "learning-post-promotion-evaluations";
 
 export class LearningClient {
   readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly transport: ApiTransport;
   private readonly collections: ControlPlaneCollectionClient;
 
   constructor(options: LearningClientOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? "").replace(/\/$/, "");
-    this.fetchImpl = options.fetchImpl ?? fetch;
-    this.collections = new ControlPlaneCollectionClient(options);
+    this.transport = options.transport ?? new ApiTransport(options);
+    this.baseUrl = this.transport.baseUrl;
+    this.collections = new ControlPlaneCollectionClient({ transport: this.transport });
   }
 
   listCandidates(query: ListQuery = {}): Promise<Page<CanonicalLearningCandidate>> {
@@ -304,7 +304,7 @@ export class LearningClient {
     );
   }
 
-  private async command<T>(
+  private command<T>(
     command: string,
     resourceRef: string,
     payload: Record<string, JsonValue>,
@@ -318,64 +318,16 @@ export class LearningClient {
       options.idempotencyKey ?? crypto.randomUUID(),
       "Learning command idempotency key",
     );
-    const response = await this.fetchImpl(
-      `${this.baseUrl}/api/v1/commands/${encodeURIComponent(command)}`,
-      {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "X-Correlation-ID": correlationId,
-          "Idempotency-Key": idempotencyKey,
-        },
-        credentials: "include",
-        body: JSON.stringify({ resource_ref: resourceRef, ...payload }),
-      },
-    );
-    const text = await response.text();
-    const parsed: unknown = text ? safeJson(text) : null;
-    if (!response.ok) {
-      throw new ControlPlaneError(response.status, normalizeError(response, parsed));
-    }
-    return parsed as T;
+    return this.transport.request<T>(`/commands/${encodeURIComponent(command)}`, {
+      method: "POST",
+      headers: { "X-Correlation-ID": correlationId },
+      idempotencyKey,
+      body: { resource_ref: resourceRef, ...payload },
+    });
   }
 }
 
 function requireNonBlank(value: string, label: string): string {
   if (!value.trim()) throw new Error(`${label} is required`);
   return value;
-}
-
-function safeJson(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeError(response: Response, payload: unknown): APIErrorBody {
-  if (isErrorBody(payload)) return payload;
-  const requestId = response.headers.get("x-request-id") ?? "unknown";
-  return {
-    code: "invalid_response",
-    category: "contract",
-    message: `Control Plane returned HTTP ${response.status} without a canonical error envelope`,
-    request_id: requestId,
-    correlation_id: response.headers.get("x-correlation-id") ?? requestId,
-    retryable: false,
-  };
-}
-
-function isErrorBody(value: unknown): value is APIErrorBody {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Partial<APIErrorBody>;
-  return (
-    typeof candidate.code === "string"
-    && typeof candidate.category === "string"
-    && typeof candidate.message === "string"
-    && typeof candidate.request_id === "string"
-    && typeof candidate.correlation_id === "string"
-    && typeof candidate.retryable === "boolean"
-  );
 }
