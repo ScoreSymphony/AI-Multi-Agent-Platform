@@ -20,6 +20,11 @@ from .control_plane_runtime import (
     SkillRuntimeCommands,
 )
 from .runtime import SkillExecutionCoordinator
+from .security_evidence import SecurityEvidenceService
+from .security_evidence_control_plane import (
+    SKILL_SECURITY_EVIDENCE_COLLECTION,
+    SkillSecurityEvidenceResourceService,
+)
 from .service import SkillService
 
 SKILL_COMMANDS = (
@@ -42,6 +47,7 @@ def register_skill_control_plane(
     coordinator: SkillExecutionCoordinator | None = None,
     agents: AgentService | None = None,
     execution_environment_resolver: SkillExecutionEnvironmentResolver | None = None,
+    security_evidence: SecurityEvidenceService | None = None,
 ) -> None:
     lifecycle = SkillLifecycleCommands(service)
     control_plane.register_resource_service(SKILL_COLLECTION, SkillResourceService(service))
@@ -53,6 +59,11 @@ def register_skill_control_plane(
         SKILL_BINDING_COLLECTION,
         SkillBindingResourceService(service),
     )
+    if security_evidence is not None:
+        control_plane.register_resource_service(
+            SKILL_SECURITY_EVIDENCE_COLLECTION,
+            SkillSecurityEvidenceResourceService(security_evidence),
+        )
     for command, handler in (
         ("skill.create", lifecycle.create),
         ("skill.update", lifecycle.update),
@@ -80,6 +91,7 @@ __all__ = [
     "SKILL_BUNDLE_COLLECTION",
     "SKILL_COLLECTION",
     "SKILL_COMMANDS",
+    "SKILL_SECURITY_EVIDENCE_COLLECTION",
     "SkillExecutionEnvironment",
     "SkillExecutionEnvironmentResolver",
     "register_skill_control_plane",
