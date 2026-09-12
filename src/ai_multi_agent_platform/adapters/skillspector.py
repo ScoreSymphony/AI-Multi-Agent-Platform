@@ -231,6 +231,9 @@ class SkillSpectorSecurityEvidenceProvider:
             if finding_values is None:
                 complete = False
                 reasons.append("provider_findings_missing")
+            elif not all(isinstance(item, Mapping) for item in finding_values):
+                complete = False
+                reasons.append("provider_findings_invalid")
             else:
                 findings = tuple(_normalize_finding(item) for item in finding_values)
 
@@ -493,10 +496,7 @@ def _normalize_finding(value: object) -> SecurityFinding:
             _first(item, "title", "summary", "message", "finding", "description", "explanation")
         ),
         path=_optional_str(
-            location.get("file")
-            or location.get("path")
-            or item.get("file")
-            or item.get("path")
+            location.get("file") or location.get("path") or item.get("file") or item.get("path")
         ),
         line=line,
         metadata=provider_metadata,
