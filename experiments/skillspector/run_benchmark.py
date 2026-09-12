@@ -10,11 +10,12 @@ import argparse
 import json
 import tempfile
 from collections import Counter
+from collections.abc import Mapping
 from hashlib import sha256
 from pathlib import Path
 from statistics import mean, median
 from time import perf_counter
-from typing import Any, Mapping
+from typing import Any
 
 from experiments.skillspector.fixtures import write_fixture_corpus
 from experiments.skillspector.normalize import normalize_report
