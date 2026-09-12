@@ -74,10 +74,17 @@ class IntegrationState(StrEnum):
     DRAFT = "draft"
     BLOCKED = "blocked"
     READY = "ready"
+    REPAIRING = "repairing"
     VALIDATING = "validating"
     VALIDATED = "validated"
     MERGE_READY = "merge_ready"
     MERGED = "merged"
+
+
+class RepairAttemptState(StrEnum):
+    BOUND = "bound"
+    VERIFIED = "verified"
+    FAILED = "failed"
 
 
 class CheckState(StrEnum):
@@ -311,6 +318,47 @@ class IntegrationConflict:
 
 
 @dataclass(frozen=True, slots=True)
+class IntegrationRepairAttempt:
+    """#872 binding to one externally created canonical #439/#384 repair Step."""
+
+    repair_id: str
+    attempt: int
+    task_id: str
+    plan_id: str
+    step_id: str
+    target_revision: str
+    source_blocker_reasons: tuple[str, ...]
+    source_conflicts: tuple[IntegrationConflict, ...] = ()
+    state: RepairAttemptState = RepairAttemptState.BOUND
+    output_revision: str | None = None
+    verification: VerificationEvidence | None = None
+    failure_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        for field_name in ("repair_id", "task_id", "plan_id", "step_id", "target_revision"):
+            object.__setattr__(self, field_name, _required(getattr(self, field_name), field_name))
+        if self.attempt < 1:
+            raise ValueError("repair attempt must be positive")
+        object.__setattr__(
+            self,
+            "source_blocker_reasons",
+            _unique(self.source_blocker_reasons, "source_blocker_reason"),
+        )
+        object.__setattr__(self, "source_conflicts", tuple(self.source_conflicts))
+        for field_name in ("output_revision", "failure_reason"):
+            value = getattr(self, field_name)
+            if value is not None:
+                object.__setattr__(self, field_name, _required(value, field_name))
+        if self.verification is not None and self.output_revision is None:
+            raise ValueError("repair Verification requires an output revision")
+        if (
+            self.verification is not None
+            and self.verification.subject_revision != self.output_revision
+        ):
+            raise ValueError("repair Verification subject must match repair output revision")
+
+
+@dataclass(frozen=True, slots=True)
 class IntegrationCandidate:
     integration_id: str
     target_base_revision: str
@@ -322,6 +370,7 @@ class IntegrationCandidate:
     validation: CombinedValidationEvidence | None = None
     stale_base: bool = False
     blocker_reasons: tuple[str, ...] = ()
+    repair_attempts: tuple[IntegrationRepairAttempt, ...] = ()
     change_request_ref: str | None = None
 
     def __post_init__(self) -> None:
@@ -337,11 +386,25 @@ class IntegrationCandidate:
         object.__setattr__(self, "ordered_revisions", _unique(self.ordered_revisions, "revision"))
         if len(self.ordered_workstream_ids) != len(self.ordered_revisions):
             raise ValueError("integration workstreams/revisions must have equal length")
+        object.__setattr__(self, "conflicts", tuple(self.conflicts))
         object.__setattr__(self, "blocker_reasons", _unique(self.blocker_reasons, "blocker_reason"))
+        object.__setattr__(self, "repair_attempts", tuple(self.repair_attempts))
+        repair_ids = tuple(item.repair_id for item in self.repair_attempts)
+        if len(repair_ids) != len(set(repair_ids)):
+            raise ValueError("repair attempt ids must be unique")
+        repair_steps = tuple(item.step_id for item in self.repair_attempts)
+        if len(repair_steps) != len(set(repair_steps)):
+            raise ValueError("canonical repair Step ids must not be reused")
         for field_name in ("integrated_revision", "change_request_ref"):
             value = getattr(self, field_name)
             if value is not None:
                 object.__setattr__(self, field_name, _required(value, field_name))
+
+    def repair_attempt(self, repair_id: str) -> IntegrationRepairAttempt:
+        for repair in self.repair_attempts:
+            if repair.repair_id == repair_id:
+                return repair
+        raise KeyError(repair_id)
 
 
 @dataclass(frozen=True, slots=True)
