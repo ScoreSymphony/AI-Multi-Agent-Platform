@@ -153,6 +153,15 @@ def restore_backup(args: argparse.Namespace) -> dict[str, Any]:
     if args.create_bucket:
         client.create_bucket(args.bucket)
 
+    first_entry = entries[0]
+    if not isinstance(first_entry, dict) or not isinstance(first_entry.get("key"), str):
+        raise S3ProbeError("backup manifest first entry key is invalid")
+    first_key = first_entry["key"]
+    prefix = first_key.rsplit("disaster-recovery/", 1)[0] + "disaster-recovery/"
+    pre_restore_keys = client.list_objects(args.bucket, prefix=prefix)
+    if pre_restore_keys:
+        raise S3ProbeError("replacement store is not empty before restore")
+
     restored_keys: list[str] = []
     for raw_entry in entries:
         if not isinstance(raw_entry, dict):
@@ -182,7 +191,6 @@ def restore_backup(args: argparse.Namespace) -> dict[str, Any]:
             raise S3ProbeError(f"restored object SHA-256 mismatch: {key}")
         restored_keys.append(key)
 
-    prefix = restored_keys[0].rsplit("disaster-recovery/", 1)[0] + "disaster-recovery/"
     listed = set(client.list_objects(args.bucket, prefix=prefix))
     if not set(restored_keys).issubset(listed):
         raise S3ProbeError("restored object set is incomplete in ListObjectsV2")
@@ -193,6 +201,7 @@ def restore_backup(args: argparse.Namespace) -> dict[str, Any]:
         "backend": args.backend,
         "phase": "clean_store_restore",
         "status": "pass",
+        "replacement_store_verified_empty_before_restore": True,
         "objects_restored": len(restored_keys),
         "bytes_restored": sum(int(entry["bytes"]) for entry in entries if isinstance(entry, dict)),
         "all_sha256_verified": True,
