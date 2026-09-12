@@ -163,6 +163,7 @@ class AgentMatchCandidate:
     capabilities_unrestricted: bool = False
     policy_refs: tuple[str, ...] = ()
     model_requirements: tuple[RoutingRequirements, ...] = ()
+    model_requirements_valid: bool = True
     allows_task_model_override: bool = True
     member_refs: tuple[AgentRevisionRef, ...] = ()
     matching_priority: int = 0
@@ -377,7 +378,14 @@ class AgentMatcher:
                 )
             )
 
-        if (
+        if not candidate.model_requirements_valid:
+            rejections.append(
+                AgentMatchRejection(
+                    AgentMatchReason.MODEL_REQUIREMENT_INCOMPATIBLE,
+                    "candidate model routing policy cannot be resolved canonically",
+                )
+            )
+        elif (
             requirements.model_requirements_are_task_override
             and requirements.model_requirements != RoutingRequirements()
             and not candidate.allows_task_model_override
@@ -388,7 +396,11 @@ class AgentMatcher:
                     "candidate Agent policy forbids task-level model overrides",
                 )
             )
-        elif not self._model_feasible(candidate, requirements.model_requirements):
+        elif not self._model_feasible(
+            candidate,
+            requirements.model_requirements,
+            work_is_task_override=requirements.model_requirements_are_task_override,
+        ):
             rejections.append(
                 AgentMatchRejection(
                     AgentMatchReason.MODEL_REQUIREMENT_INCOMPATIBLE,
@@ -465,18 +477,13 @@ class AgentMatcher:
                 f"required capability {capability_id} is not assigned to candidate",
             )
 
-        candidate_constraint = next(
-            (
-                item
-                for item in candidate.capability_constraints
-                if item.capability_id == capability_id
-            ),
-            None,
+        candidate_constraints = tuple(
+            item for item in candidate.capability_constraints if item.capability_id == capability_id
         )
         if not self._capabilities:
-            if candidate_constraint is not None and not _constraints_can_overlap(
+            if candidate_constraints and not _constraints_can_jointly_overlap(
                 requirement,
-                candidate_constraint,
+                candidate_constraints,
             ):
                 return AgentMatchRejection(
                     AgentMatchReason.CAPABILITY_VERSION_INCOMPATIBLE,
@@ -500,9 +507,9 @@ class AgentMatcher:
             spec
             for spec in canonical_specs
             if _capability_requirement_matches(requirement, spec)
-            and (
-                candidate_constraint is None
-                or _capability_constraint_matches(candidate_constraint, spec)
+            and all(
+                _capability_constraint_matches(candidate_constraint, spec)
+                for candidate_constraint in candidate_constraints
             )
         ]
         if not compatible:
@@ -516,11 +523,20 @@ class AgentMatcher:
         self,
         candidate: AgentMatchCandidate,
         work: RoutingRequirements,
+        *,
+        work_is_task_override: bool,
     ) -> bool:
         candidate_requirements = candidate.model_requirements or (RoutingRequirements(),)
         merged = tuple(
             value
-            for value in (_merge_model_requirements(item, work) for item in candidate_requirements)
+            for value in (
+                _merge_model_requirements(
+                    item,
+                    work,
+                    overlay_replaces_explicit=work_is_task_override,
+                )
+                for item in candidate_requirements
+            )
             if value is not None
         )
         if not merged:
@@ -545,8 +561,10 @@ class AgentResolver:
         capability_registry: CapabilityRegistry | None = None,
         model_registry: ModelRegistry | None = None,
         policy: AgentMatchingPolicy | None = None,
+        routing_profiles: Mapping[str, RoutingRequirements] | None = None,
     ) -> None:
         self.repository = repository
+        self.routing_profiles = dict(routing_profiles or {})
         if matcher is not None and any(
             value is not None for value in (capability_registry, model_registry, policy)
         ):
@@ -574,13 +592,13 @@ class AgentResolver:
                 requirements.exact_agent.agent_id,
                 requirements.exact_agent.revision,
             )
-            return (_agent_candidate(agent_revision),)
+            return (_agent_candidate(agent_revision, self.routing_profiles),)
         if requirements.exact_team is not None:
             team_revision = self.repository.get_team_revision(
                 requirements.exact_team.team_id,
                 requirements.exact_team.revision,
             )
-            return (_team_candidate(team_revision, self.repository),)
+            return (_team_candidate(team_revision, self.repository, self.routing_profiles),)
 
         candidates: list[AgentMatchCandidate] = []
         if AgentCandidateKind.AGENT in requirements.candidate_kinds:
@@ -590,7 +608,8 @@ class AgentResolver:
                         self.repository.get_agent_revision(
                             agent_definition.agent_id,
                             agent_definition.current_revision,
-                        )
+                        ),
+                        self.routing_profiles,
                     )
                 )
         if AgentCandidateKind.TEAM in requirements.candidate_kinds:
@@ -602,17 +621,26 @@ class AgentResolver:
                             team_definition.current_revision,
                         ),
                         self.repository,
+                        self.routing_profiles,
                     )
                 )
         return tuple(candidates)
 
 
-def _agent_candidate(revision: AgentRevision) -> AgentMatchCandidate:
+def _agent_candidate(
+    revision: AgentRevision,
+    routing_profiles: Mapping[str, RoutingRequirements] | None = None,
+) -> AgentMatchCandidate:
     profile = revision.profile
     policies = list(profile.policy_hooks.verification_policy_refs)
     if profile.policy_hooks.authorization_profile_ref is not None:
         policies.append(profile.policy_hooks.authorization_profile_ref)
     priority = _matching_priority(profile.metadata)
+    model_requirements, model_requirements_valid = _effective_model_requirements(
+        profile.model.requirements,
+        profile.model.routing_profile_ref,
+        routing_profiles or {},
+    )
     return AgentMatchCandidate(
         ref=AgentRevisionRef(revision.agent_id, revision.revision),
         kind=AgentCandidateKind.AGENT,
@@ -628,7 +656,8 @@ def _agent_candidate(revision: AgentRevision) -> AgentMatchCandidate:
         capability_constraints=profile.capabilities.constraints,
         capabilities_unrestricted=not profile.capabilities.allowed,
         policy_refs=tuple(dict.fromkeys(policies)),
-        model_requirements=(profile.model.requirements,),
+        model_requirements=(model_requirements,),
+        model_requirements_valid=model_requirements_valid,
         allows_task_model_override=profile.model.allow_task_override,
         matching_priority=priority,
     )
@@ -637,6 +666,7 @@ def _agent_candidate(revision: AgentRevision) -> AgentMatchCandidate:
 def _team_candidate(
     revision: AgentTeamRevision,
     repository: AgentRepository,
+    routing_profiles: Mapping[str, RoutingRequirements] | None = None,
 ) -> AgentMatchCandidate:
     member_revisions = tuple(
         repository.get_agent_revision(member.agent.agent_id, member.agent.revision)
@@ -660,7 +690,7 @@ def _team_candidate(
     required_members = tuple(
         member_revision for member, member_revision in active_pairs if member.required
     )
-    model_members = (
+    policy_members = (
         tuple(member_revision for _, member_revision in active_pairs)
         if revision.profile.unavailable_member_policy is UnavailableMemberPolicy.FAIL
         else required_members
@@ -671,21 +701,42 @@ def _team_candidate(
             + [member_revision.profile.role for _, member_revision in active_pairs]
         )
     )
-    allowed = set(revision.profile.shared_capability_ids)
+
+    restricted_allowlists = [
+        set(member.profile.capabilities.allowed)
+        for member in policy_members
+        if member.profile.capabilities.allowed
+    ]
+    allowed = (
+        set.intersection(*restricted_allowlists) if restricted_allowlists else set()
+    )
     denied: set[str] = set()
-    constraints: dict[str, CapabilityConstraint] = {}
+    constraints: list[CapabilityConstraint] = []
     policies: set[str] = set()
+    model_requirements: list[RoutingRequirements] = []
+    model_requirements_valid = True
     if revision.profile.coordination_policy_ref is not None:
         policies.add(revision.profile.coordination_policy_ref)
-    for _, member_revision in active_pairs:
-        allowed.update(member_revision.profile.capabilities.allowed)
-        allowed.update(member_revision.profile.capabilities.required_ids)
+    for member_revision in policy_members:
         denied.update(member_revision.profile.capabilities.denied)
-        for constraint in member_revision.profile.capabilities.constraints:
-            constraints.setdefault(constraint.capability_id, constraint)
+        constraints.extend(member_revision.profile.capabilities.constraints)
+        effective_model, valid_model = _effective_model_requirements(
+            member_revision.profile.model.requirements,
+            member_revision.profile.model.routing_profile_ref,
+            routing_profiles or {},
+        )
+        model_requirements.append(effective_model)
+        model_requirements_valid = model_requirements_valid and valid_model
         policies.update(member_revision.profile.policy_hooks.verification_policy_refs)
         if member_revision.profile.policy_hooks.authorization_profile_ref is not None:
             policies.add(member_revision.profile.policy_hooks.authorization_profile_ref)
+
+    if policy_members and not _members_allow_capabilities(
+        policy_members,
+        revision.profile.shared_capability_ids,
+    ):
+        enabled = False
+
     priority = _matching_priority(revision.profile.metadata)
     return AgentMatchCandidate(
         ref=AgentTeamRevisionRef(revision.team_id, revision.revision),
@@ -697,22 +748,54 @@ def _team_candidate(
         workspace_id=revision.workspace_id,
         allowed_capability_ids=tuple(sorted(allowed)),
         denied_capability_ids=tuple(sorted(denied)),
-        capability_constraints=tuple(constraints[key] for key in sorted(constraints)),
-        capabilities_unrestricted=(
-            bool(model_members)
-            and all(not member.profile.capabilities.allowed for member in model_members)
-        ),
+        capability_constraints=tuple(constraints),
+        capabilities_unrestricted=bool(policy_members) and not restricted_allowlists,
         policy_refs=tuple(sorted(policies)),
-        model_requirements=tuple(member.profile.model.requirements for member in model_members),
+        model_requirements=tuple(model_requirements),
+        model_requirements_valid=model_requirements_valid,
         allows_task_model_override=(
-            bool(model_members)
-            and all(member.profile.model.allow_task_override for member in model_members)
+            bool(policy_members)
+            and all(member.profile.model.allow_task_override for member in policy_members)
         ),
         member_refs=tuple(
             AgentRevisionRef(member.agent_id, member.revision) for _, member in active_pairs
         ),
         matching_priority=priority,
     )
+
+
+def _members_allow_capabilities(
+    members: tuple[AgentRevision, ...],
+    capability_ids: tuple[str, ...],
+) -> bool:
+    requested = set(capability_ids)
+    for member in members:
+        policy = member.profile.capabilities
+        if requested.intersection(policy.denied):
+            return False
+        if policy.allowed and not requested.issubset(policy.allowed):
+            return False
+    return True
+
+
+def _effective_model_requirements(
+    inline: RoutingRequirements,
+    routing_profile_ref: str | None,
+    routing_profiles: Mapping[str, RoutingRequirements],
+) -> tuple[RoutingRequirements, bool]:
+    if routing_profile_ref is None:
+        return inline, True
+    profile_requirements = routing_profiles.get(routing_profile_ref)
+    if profile_requirements is None:
+        return inline, False
+    merged = _merge_model_requirements(
+        profile_requirements,
+        inline,
+        overlay_replaces_explicit=True,
+    )
+    if merged is None:
+        return inline, False
+    return merged, True
 
 
 def _matching_priority(metadata: Mapping[str, JsonValue]) -> int:
@@ -793,7 +876,6 @@ def _capability_constraint_matches(
         exact_version=constraint.exact_version,
         minimum_version=constraint.minimum_version,
         maximum_version=constraint.maximum_version,
-        include_maximum=True,
         required_features=constraint.required_features,
     )
     return _capability_requirement_matches(requirement, spec)
@@ -803,45 +885,73 @@ def _constraints_can_overlap(
     requirement: AgentCapabilityRequirement,
     constraint: CapabilityConstraint,
 ) -> bool:
-    if requirement.exact_version is not None:
-        if constraint.exact_version is not None:
-            return requirement.exact_version == constraint.exact_version
-        return _version_in_constraint(requirement.exact_version, constraint)
-    if constraint.exact_version is not None:
-        return _version_in_requirement(constraint.exact_version, requirement)
-    request_min = _numeric_version_key(requirement.minimum_version)
-    request_max = _numeric_version_key(requirement.maximum_version)
-    candidate_min = _numeric_version_key(constraint.minimum_version)
-    candidate_max = _numeric_version_key(constraint.maximum_version)
-    if any(
-        raw is not None and parsed is None
-        for raw, parsed in (
-            (requirement.minimum_version, request_min),
-            (requirement.maximum_version, request_max),
-            (constraint.minimum_version, candidate_min),
-            (constraint.maximum_version, candidate_max),
+    return _constraints_can_jointly_overlap(requirement, (constraint,))
+
+
+def _constraints_can_jointly_overlap(
+    requirement: AgentCapabilityRequirement,
+    constraints: tuple[CapabilityConstraint, ...],
+) -> bool:
+    exact_versions = [
+        value
+        for value in (
+            requirement.exact_version,
+            *(constraint.exact_version for constraint in constraints),
         )
-    ):
+        if value is not None
+    ]
+    if exact_versions:
+        if len(set(exact_versions)) != 1:
+            return False
+        version = exact_versions[0]
+        if not _version_in_requirement(version, requirement):
+            return False
+        return all(_version_in_constraint(version, constraint) for constraint in constraints)
+
+    lower_bounds: list[tuple[tuple[int, int, int], bool]] = []
+    upper_bounds: list[tuple[tuple[int, int, int], bool]] = []
+    if requirement.minimum_version is not None:
+        parsed = _numeric_version_key(requirement.minimum_version)
+        if parsed is None:
+            return False
+        lower_bounds.append((parsed, requirement.include_minimum))
+    if requirement.maximum_version is not None:
+        parsed = _numeric_version_key(requirement.maximum_version)
+        if parsed is None:
+            return False
+        upper_bounds.append((parsed, requirement.include_maximum))
+    for constraint in constraints:
+        if constraint.minimum_version is not None:
+            parsed = _numeric_version_key(constraint.minimum_version)
+            if parsed is None:
+                return False
+            lower_bounds.append((parsed, True))
+        if constraint.maximum_version is not None:
+            parsed = _numeric_version_key(constraint.maximum_version)
+            if parsed is None:
+                return False
+            upper_bounds.append((parsed, False))
+
+    if not lower_bounds or not upper_bounds:
+        return True
+    lower_value = max(value for value, _ in lower_bounds)
+    upper_value = min(value for value, _ in upper_bounds)
+    if lower_value < upper_value:
+        return True
+    if lower_value > upper_value:
         return False
-    lower = (
-        max(value for value in (request_min, candidate_min) if value is not None)
-        if any(value is not None for value in (request_min, candidate_min))
-        else None
-    )
-    upper = (
-        min(value for value in (request_max, candidate_max) if value is not None)
-        if any(value is not None for value in (request_max, candidate_max))
-        else None
-    )
-    return lower is None or upper is None or lower <= upper
+    lower_inclusive = all(inclusive for value, inclusive in lower_bounds if value == lower_value)
+    upper_inclusive = all(inclusive for value, inclusive in upper_bounds if value == upper_value)
+    return lower_inclusive and upper_inclusive
 
 
 def _version_in_constraint(version: str, constraint: CapabilityConstraint) -> bool:
     requirement = AgentCapabilityRequirement(
         capability_id=constraint.capability_id,
+        exact_version=constraint.exact_version,
         minimum_version=constraint.minimum_version,
         maximum_version=constraint.maximum_version,
-        include_maximum=True,
+        required_features=constraint.required_features,
     )
     return _version_in_requirement(version, requirement)
 
@@ -869,30 +979,39 @@ def _numeric_version_key(value: str | None) -> tuple[int, int, int] | None:
 
 
 def _merge_model_requirements(
-    first: RoutingRequirements,
-    second: RoutingRequirements,
+    base: RoutingRequirements,
+    overlay: RoutingRequirements,
+    *,
+    overlay_replaces_explicit: bool = False,
 ) -> RoutingRequirements | None:
-    explicit = first.explicit_model_id or second.explicit_model_id
     if (
-        first.explicit_model_id is not None
-        and second.explicit_model_id is not None
-        and first.explicit_model_id != second.explicit_model_id
+        not overlay_replaces_explicit
+        and base.explicit_model_id is not None
+        and overlay.explicit_model_id is not None
+        and base.explicit_model_id != overlay.explicit_model_id
     ):
         return None
-    local_only = first.local_only or second.local_only
-    self_hosted_only = (first.self_hosted_only or second.self_hosted_only) and not local_only
+    explicit = (
+        overlay.explicit_model_id or base.explicit_model_id
+        if overlay_replaces_explicit
+        else base.explicit_model_id or overlay.explicit_model_id
+    )
+    local_only = base.local_only or overlay.local_only
+    self_hosted_only = base.self_hosted_only or overlay.self_hosted_only
+    if local_only and self_hosted_only:
+        return None
     return RoutingRequirements(
         explicit_model_id=explicit,
         min_context_window=max(
-            first.min_context_window or 0,
-            second.min_context_window or 0,
+            base.min_context_window or 0,
+            overlay.min_context_window or 0,
         )
         or None,
-        tool_calling=first.tool_calling or second.tool_calling,
-        structured_output=first.structured_output or second.structured_output,
-        streaming=first.streaming or second.streaming,
-        modalities=tuple(dict.fromkeys((*first.modalities, *second.modalities))),
-        reasoning=tuple(dict.fromkeys((*first.reasoning, *second.reasoning))),
+        tool_calling=base.tool_calling or overlay.tool_calling,
+        structured_output=base.structured_output or overlay.structured_output,
+        streaming=base.streaming or overlay.streaming,
+        modalities=tuple(dict.fromkeys((*base.modalities, *overlay.modalities))),
+        reasoning=tuple(dict.fromkeys((*base.reasoning, *overlay.reasoning))),
         local_only=local_only,
         self_hosted_only=self_hosted_only,
     )
