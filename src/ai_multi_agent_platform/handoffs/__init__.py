@@ -12,6 +12,7 @@ from .control_plane import (
     register_handoff_control_plane,
 )
 from .coordination import CoordinatedHandoffService
+from .matching import CanonicalConsumerRequirementEvaluator
 from .models import (
     HANDOFF_SCHEMA_VERSION,
     AgentHandoff,
@@ -35,7 +36,6 @@ from .models import (
     participant_key,
 )
 from .production import (
-    CanonicalConsumerRequirementEvaluator,
     CanonicalHandoffReferenceGateway,
     DurableConsumedHandoffContextAdapter,
     HandoffConsumerExecution,
