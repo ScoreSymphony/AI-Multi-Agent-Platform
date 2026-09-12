@@ -8,10 +8,10 @@ control history, Workspace identity or Verification result model.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Mapping
 
 
 def _required(value: str, field_name: str) -> str:
@@ -225,7 +225,7 @@ class CodingWorkstream:
     def id(self) -> str:
         return self.work_item.work_item_id
 
-    def with_state(self, state: WorkstreamState, **changes: object) -> "CodingWorkstream":
+    def with_state(self, state: WorkstreamState, **changes: object) -> CodingWorkstream:
         return replace(self, state=state, **changes)
 
 
