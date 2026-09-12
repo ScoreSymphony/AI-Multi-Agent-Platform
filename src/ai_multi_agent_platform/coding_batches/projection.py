@@ -87,6 +87,39 @@ def coding_batch_resource(batch: CodingBatch) -> dict[str, Any]:
                     }
                     for conflict in candidate.conflicts
                 ],
+                "repair_attempts": [
+                    {
+                        "id": repair.repair_id,
+                        "attempt": repair.attempt,
+                        "state": repair.state.value,
+                        "task_id": repair.task_id,
+                        "plan_id": repair.plan_id,
+                        "step_id": repair.step_id,
+                        "target_revision": repair.target_revision,
+                        "source_blocker_reasons": list(repair.source_blocker_reasons),
+                        "source_conflicts": [
+                            {
+                                "kind": conflict.kind.value,
+                                "workstream_ids": list(conflict.workstream_ids),
+                                "rationale": conflict.rationale,
+                            }
+                            for conflict in repair.source_conflicts
+                        ],
+                        "output_revision": repair.output_revision,
+                        "verification": (
+                            {
+                                "id": repair.verification.verification_id,
+                                "subject_revision": repair.verification.subject_revision,
+                                "passed": repair.verification.passed,
+                                "check_refs": list(repair.verification.check_refs),
+                            }
+                            if repair.verification is not None
+                            else None
+                        ),
+                        "failure_reason": repair.failure_reason,
+                    }
+                    for repair in candidate.repair_attempts
+                ],
                 "combined_validation": (
                     {
                         "subject_revision": candidate.validation.subject_revision,
