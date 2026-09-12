@@ -32,12 +32,8 @@ from .runtime import (
     CodingWorkstreamDispatch,
     agent_revision_ref,
 )
-from .service import (
-    CodingBatchCoordinator,
-    CodingBatchStore,
-    InMemoryCodingBatchStore,
-    deterministic_branch_ref,
-)
+from .secured import CodingBatchCoordinator
+from .service import CodingBatchStore, InMemoryCodingBatchStore, deterministic_branch_ref
 from .sqlite_store import SqliteCodingBatchStore
 from .telemetry import CodingBatchTelemetry
 
