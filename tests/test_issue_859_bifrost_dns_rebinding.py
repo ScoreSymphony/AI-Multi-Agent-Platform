@@ -9,7 +9,7 @@ import pytest
 
 
 @pytest.mark.integration
-def test_live_bifrost_revalidates_dns_on_new_dial_and_blocks_rebound_loopback() -> None:
+def test_live_bifrost_revalidates_dns_on_redirect_dial_and_blocks_rebound_loopback() -> None:
     bifrost_base_url = os.getenv("BIFROST_EVAL_BIFROST_BASE_URL")
     native_openai_model = os.getenv("BIFROST_EVAL_BIFROST_NATIVE_OPENAI_MODEL")
     rebinding_url = os.getenv("BIFROST_EVAL_SSRF_REBINDING_URL")
@@ -35,38 +35,23 @@ def test_live_bifrost_revalidates_dns_on_new_dial_and_blocks_rebound_loopback() 
     _post_empty(f"{dns_control_url.rstrip('/')}/reset")
     _post_empty(f"{sentinel_control_url.rstrip('/')}/reset")
 
-    first_status, first_body = _bifrost_file_url_request(
+    status, body = _bifrost_file_url_request(
         base_url=bifrost_base_url,
         native_model=native_openai_model,
         file_url=rebinding_url,
     )
-    assert first_status == 200, first_body[:500]
+    assert 400 <= status < 600, body[:500]
+    assert "blocked connection to non-public address" in body.casefold(), body[:500]
 
-    first_dns = _get_json(f"{dns_control_url.rstrip('/')}/stats")
-    assert first_dns.get("a_queries") == 1, first_dns
-    assert first_dns.get("a_answers") == ["203.0.113.10"], first_dns
+    dns = _get_json(f"{dns_control_url.rstrip('/')}/stats")
+    assert dns.get("a_queries") == 2, dns
+    assert dns.get("a_answers") == ["203.0.113.10", "127.0.0.1"], dns
 
-    sentinel_after_first = _get_json(f"{sentinel_control_url.rstrip('/')}/stats")
-    first_paths = sentinel_after_first.get("paths")
-    assert isinstance(first_paths, dict)
-    assert first_paths.get("/ssrf-sentinel.txt") == 1, sentinel_after_first
-
-    second_status, second_body = _bifrost_file_url_request(
-        base_url=bifrost_base_url,
-        native_model=native_openai_model,
-        file_url=rebinding_url,
-    )
-    assert 400 <= second_status < 600, second_body[:500]
-    assert "blocked connection to non-public address" in second_body.casefold(), second_body[:500]
-
-    second_dns = _get_json(f"{dns_control_url.rstrip('/')}/stats")
-    assert second_dns.get("a_queries") == 2, second_dns
-    assert second_dns.get("a_answers") == ["203.0.113.10", "127.0.0.1"], second_dns
-
-    sentinel_after_second = _get_json(f"{sentinel_control_url.rstrip('/')}/stats")
-    second_paths = sentinel_after_second.get("paths")
-    assert isinstance(second_paths, dict)
-    assert second_paths.get("/ssrf-sentinel.txt") == 1, sentinel_after_second
+    sentinel = _get_json(f"{sentinel_control_url.rstrip('/')}/stats")
+    paths = sentinel.get("paths")
+    assert isinstance(paths, dict)
+    assert paths.get("/redirect-to-rebound-host") == 1, sentinel
+    assert paths.get("/ssrf-sentinel.txt", 0) == 0, sentinel
 
 
 def _bifrost_file_url_request(
