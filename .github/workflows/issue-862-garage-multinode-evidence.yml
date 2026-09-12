@@ -1,0 +1,255 @@
+name: Issue 862 Garage multi-node evidence
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/issue-862-garage-multinode-evidence.yml"
+      - "tests/evidence/issue_862/s3_contract_probe.py"
+      - "tests/evidence/issue_862/s3_partial_failure_probe.py"
+      - "docs/research/issue-862-object-storage-evaluation.md"
+
+jobs:
+  garage-three-node-failure:
+    if: github.head_ref == 'issue-862-rustfs-garage-storage-evaluation'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Generate synthetic cluster credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          access_key="GK$(openssl rand -hex 12)"
+          secret_key="$(openssl rand -hex 32)"
+          rpc_secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$access_key"
+          echo "::add-mask::$secret_key"
+          echo "::add-mask::$rpc_secret"
+          echo "AWS_ACCESS_KEY_ID=$access_key" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=$secret_key" >> "$GITHUB_ENV"
+          echo "ISSUE862_RPC_SECRET=$rpc_secret" >> "$GITHUB_ENV"
+          echo "ISSUE862_ENDPOINT=http://127.0.0.1:3900" >> "$GITHUB_ENV"
+          echo "ISSUE862_BUCKET=issue-862-multinode" >> "$GITHUB_ENV"
+          echo "ISSUE862_REGION=garage" >> "$GITHUB_ENV"
+          mkdir -p evidence
+
+      - name: Start pinned three-node Garage cluster
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker network create issue862-garage-net
+          docker pull dxflrs/garage:v2.3.0
+
+          for node in 1 2 3; do
+            admin_token="$(openssl rand -hex 32)"
+            metrics_token="$(openssl rand -hex 32)"
+            echo "::add-mask::$admin_token"
+            echo "::add-mask::$metrics_token"
+            cat > "$RUNNER_TEMP/issue862-garage-node${node}.toml" <<EOF
+          metadata_dir = "/var/lib/garage/meta"
+          data_dir = "/var/lib/garage/data"
+          db_engine = "sqlite"
+          replication_factor = 3
+          rpc_bind_addr = "[::]:3901"
+          rpc_public_addr = "garage${node}:3901"
+          rpc_secret = "$ISSUE862_RPC_SECRET"
+
+          [s3_api]
+          s3_region = "garage"
+          api_bind_addr = "[::]:3900"
+          root_domain = ".s3.garage.localhost"
+
+          [admin]
+          api_bind_addr = "[::]:3903"
+          admin_token = "$admin_token"
+          metrics_token = "$metrics_token"
+          EOF
+
+            publish=()
+            if [ "$node" = "1" ]; then
+              publish=(-p 3900:3900)
+            fi
+            docker run -d \
+              --name "garage${node}" \
+              --network issue862-garage-net \
+              "${publish[@]}" \
+              -v "$RUNNER_TEMP/issue862-garage-node${node}.toml:/etc/garage.toml:ro" \
+              -v "issue862-garage-node${node}-meta:/var/lib/garage/meta" \
+              -v "issue862-garage-node${node}-data:/var/lib/garage/data" \
+              dxflrs/garage:v2.3.0 \
+              /garage server
+          done
+
+      - name: Wait for all Garage nodes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for node in 1 2 3; do
+            ready=false
+            for _ in $(seq 1 90); do
+              if docker exec "garage${node}" /garage node id -q >/dev/null 2>&1; then
+                ready=true
+                break
+              fi
+              sleep 1
+            done
+            if [ "$ready" != true ]; then
+              docker logs "garage${node}" || true
+              exit 1
+            fi
+          done
+
+      - name: Connect nodes and apply three-zone layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          node1_addr="$(docker exec garage1 /garage node id -q)"
+          docker exec garage2 /garage node connect "$node1_addr" >/dev/null
+          docker exec garage3 /garage node connect "$node1_addr" >/dev/null
+          sleep 3
+
+          node1_id="${node1_addr%%@*}"
+          node2_addr="$(docker exec garage2 /garage node id -q)"
+          node3_addr="$(docker exec garage3 /garage node id -q)"
+          node2_id="${node2_addr%%@*}"
+          node3_id="${node3_addr%%@*}"
+
+          docker exec garage1 /garage layout assign -z dc1 -c 1G "$node1_id" >/dev/null
+          docker exec garage1 /garage layout assign -z dc2 -c 1G "$node2_id" >/dev/null
+          docker exec garage1 /garage layout assign -z dc3 -c 1G "$node3_id" >/dev/null
+          docker exec garage1 /garage layout apply --version 1 >/dev/null
+          echo "ISSUE862_FAILED_NODE_PREFIX=${node2_id:0:16}" >> "$GITHUB_ENV"
+          docker exec garage1 /garage status > evidence/garage-multinode-status-initial.txt
+
+      - name: Configure test bucket and synthetic access key
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec garage1 /garage bucket create "$ISSUE862_BUCKET" >/dev/null
+          docker exec garage1 /garage key import \
+            "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" -n issue862-multinode --yes >/dev/null
+          docker exec garage1 /garage bucket allow \
+            --read --write --owner "$ISSUE862_BUCKET" --key "$AWS_ACCESS_KEY_ID" >/dev/null
+
+      - name: Seed acknowledged object before node failure
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_partial_failure_probe.py seed \
+            --backend garage \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "multinode-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > evidence/garage-multinode-before.json
+
+      - name: Stop one node and wait until Garage marks it failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker stop garage2
+          detected=false
+          for _ in $(seq 1 120); do
+            status="$(docker exec garage1 /garage status)"
+            printf '%s\n' "$status" > evidence/garage-multinode-status-degraded.txt
+            if printf '%s\n' "$status" | awk -v node="$ISSUE862_FAILED_NODE_PREFIX" '
+              /==== FAILED NODES ====/ { in_failed = 1; next }
+              in_failed && index($0, node) { found = 1 }
+              END { exit(found ? 0 : 1) }
+            '; then
+              detected=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$detected" != true ]; then
+            echo "Garage did not classify the stopped storage node as failed within 120 seconds" >&2
+            cat evidence/garage-multinode-status-degraded.txt >&2
+            exit 1
+          fi
+
+      - name: Verify reads and writes while one node is unavailable
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_partial_failure_probe.py during-failure \
+            --backend garage \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "multinode-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > evidence/garage-multinode-degraded.json
+
+      - name: Restart failed node and wait for cluster recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker start garage2
+          recovered=false
+          for _ in $(seq 1 120); do
+            if docker exec garage2 /garage node id -q >/dev/null 2>&1; then
+              status="$(docker exec garage1 /garage status)"
+              printf '%s\n' "$status" > evidence/garage-multinode-status-recovered.txt
+              if ! printf '%s\n' "$status" | awk -v node="$ISSUE862_FAILED_NODE_PREFIX" '
+                /==== FAILED NODES ====/ { in_failed = 1; next }
+                in_failed && index($0, node) { found = 1 }
+                END { exit(found ? 0 : 1) }
+              '; then
+                recovered=true
+                break
+              fi
+            fi
+            sleep 1
+          done
+          if [ "$recovered" != true ]; then
+            echo "Garage did not return the restarted storage node to healthy status within 120 seconds" >&2
+            docker logs garage2 || true
+            cat evidence/garage-multinode-status-recovered.txt >&2 || true
+            exit 1
+          fi
+
+      - name: Verify cluster data after node recovery
+        shell: bash
+        run: |
+          python tests/evidence/issue_862/s3_partial_failure_probe.py recovered \
+            --backend garage \
+            --endpoint "$ISSUE862_ENDPOINT" \
+            --bucket "$ISSUE862_BUCKET" \
+            --region "$ISSUE862_REGION" \
+            --run-id "multinode-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            > evidence/garage-multinode-recovered.json
+
+      - name: Record cluster resource observation
+        shell: bash
+        run: |
+          docker stats --no-stream \
+            --format '{{json .}}' \
+            garage1 garage2 garage3 \
+            > evidence/garage-multinode-docker-stats.json
+
+      - name: Upload multi-node evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-862-garage-multinode-evidence
+          path: evidence/garage-multinode-*
+          if-no-files-found: warn
+
+      - name: Show logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          for node in 1 2 3; do
+            echo "===== garage${node} ====="
+            docker logs "garage${node}" || true
+          done
+
+      - name: Cleanup cluster
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f garage1 garage2 garage3 2>/dev/null || true
+          docker network rm issue862-garage-net 2>/dev/null || true

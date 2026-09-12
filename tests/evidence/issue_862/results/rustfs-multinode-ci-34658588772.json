@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "backend": "rustfs",
+  "evidence_scope": "github_hosted_runner_four_node_mnmd_partial_failure",
+  "workflow_run_id": 34658588772,
+  "workflow_head_sha": "ab7c51b6ca9d7fc20c889bc184e992f8bd8d43e6",
+  "artifact_id": 10286722621,
+  "artifact_digest": "sha256:2b96c967ecd46e020c982add8d84f0ef3c034e3e35a38ffa13abdf53dc3d28b2",
+  "runtime": {
+    "image": "rustfs/rustfs:1.0.0-rc.6",
+    "topology": "four-node MNMD",
+    "single_node_failure_exercised": true
+  },
+  "control": {
+    "PutObject": "pass",
+    "HeadObject": "pass",
+    "GetObject": "pass",
+    "RangeGetObject": "pass",
+    "ListObjectsV2": "pass",
+    "DeleteObject": "pass",
+    "concurrent_round_trip": "pass",
+    "concurrency": 8,
+    "primary_bytes": 1048576,
+    "primary_sha256": "fbdec5f4965ee69d07763afdffaac38377d8b1e079ab11384d62f0b9d400a2cc",
+    "etag_observed": "\"58af150108bfc930edd3a87247e56290\"",
+    "etag_used_as_canonical_checksum": false
+  },
+  "partial_failure": {
+    "status": "pass",
+    "pre_failure_sentinel_bytes": 1048576,
+    "pre_failure_sentinel_sha256": "76ffa8672107455243e109a344ad95fd1b89334aa9dfd7ac533cc57ed3308c5d",
+    "pre_failure_object_sha256_verified_while_one_node_down": true,
+    "write_during_failure_sha256_verified": true,
+    "verified_objects_after_node_recovery": 2,
+    "deleted_after_verification": true
+  },
+  "runner_resource_observation": {
+    "classification": "diagnostic_only_not_vps_evidence",
+    "nodes": [
+      {"container": "rustfs1", "memory_usage_snapshot": "173.1MiB", "cpu_percent_snapshot": "0.61%"},
+      {"container": "rustfs2", "memory_usage_snapshot": "66.99MiB", "cpu_percent_snapshot": "0.32%"},
+      {"container": "rustfs3", "memory_usage_snapshot": "99.68MiB", "cpu_percent_snapshot": "0.94%"},
+      {"container": "rustfs4", "memory_usage_snapshot": "135.5MiB", "cpu_percent_snapshot": "0.53%"}
+    ]
+  },
+  "credentials_emitted": false
+}

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "backend": "seaweedfs",
+  "evidence_scope": "github_hosted_runner_single_node",
+  "workflow_run_id": 34654695281,
+  "workflow_head_sha": "f5873624f36542f0cdf464fe6b012aed3a64b7e7",
+  "artifact_id": 10284539225,
+  "artifact_digest": "sha256:5166efbea3710c874bb4141bde9970f978118e4e225ad3f546431f69867c60a5",
+  "runtime": {
+    "image": "chrislusf/seaweedfs:4.46",
+    "image_id": "sha256:51907b802784d01ddb60862dd02a451ee20ee5e151ef580326bba1c63894d30b",
+    "repo_digest": "chrislusf/seaweedfs@sha256:08d516132314207d10c8e37cbffc1f32b147d870169688734cc61c6231625b62"
+  },
+  "contract": {
+    "PutObject": "pass",
+    "HeadObject": "pass",
+    "GetObject": "pass",
+    "RangeGetObject": "pass",
+    "ListObjectsV2": "pass",
+    "DeleteObject": "pass",
+    "concurrent_round_trip": "pass",
+    "concurrency": 8,
+    "primary_bytes": 1048576,
+    "primary_sha256": "be91b9e3c6bce3e8c3f8c67efcb4fe47b6d93f955cc98cd9de19e922be5e5e5d",
+    "etag_observed": "\"a6bdc78b39082dee0da869c56e4ad934\"",
+    "etag_used_as_canonical_checksum": false
+  },
+  "restart": {
+    "status": "pass",
+    "bytes": 1048576,
+    "sha256_before": "da61ea71ca4c706ea437b4751836b6c286badf69ae2dfcd84fe247edd1f536f4",
+    "sha256_after": "da61ea71ca4c706ea437b4751836b6c286badf69ae2dfcd84fe247edd1f536f4"
+  },
+  "runner_resource_observation": {
+    "classification": "diagnostic_only_not_vps_evidence",
+    "cpu_percent_snapshot": "0.58%",
+    "memory_usage_snapshot": "137MiB",
+    "memory_percent_of_runner_snapshot": "0.86%",
+    "pids_snapshot": 10
+  },
+  "credentials_emitted": false,
+  "remaining_gates": [
+    "canonical FileProvider conformance on live backend",
+    "same backup/restore and resource campaign used for candidates"
+  ]
+}

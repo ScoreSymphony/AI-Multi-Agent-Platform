@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "backend": "garage",
+  "evidence_scope": "github_hosted_runner_clean_store_logical_blob_restore",
+  "workflow_run_id": 34696242538,
+  "workflow_head_sha": "9e821abc5537c00d9502a362b78981834cb0f2aa",
+  "artifact_id": 10297579733,
+  "artifact_digest": "sha256:3f348906964d3ed6eb9b48ff3db45442d6f52a656a98b74ca6643845d204493b",
+  "runtime": {
+    "image": "dxflrs/garage:v2.3.0",
+    "image_id": "sha256:5eda3acb72a0b6c3432233d19b07dffabd9ee7eb93be90031bae75e4b81e6324",
+    "repo_digest": "dxflrs/garage@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690"
+  },
+  "backup": {
+    "status": "pass",
+    "objects_exported": 3,
+    "bytes_exported": 1445888,
+    "manifest_sha256": "0d33ad5356d8d2f862b6f71e12e1adcaf3ec455778531cd33ef465a02f75e707",
+    "canonical_checksum": "sha256"
+  },
+  "destructive_recovery": {
+    "original_container_removed": true,
+    "all_original_backend_data_volumes_deleted": true,
+    "replacement_store_verified_empty_before_restore": true,
+    "objects_restored": 3,
+    "bytes_restored": 1445888,
+    "all_sha256_verified": true,
+    "status": "pass"
+  },
+  "restored_objects": [
+    {"bytes": 393216, "sha256": "a35e66015b5aedfd133f058a515705bcc4d61e15013548199b49e3b0783d54b1"},
+    {"bytes": 1048576, "sha256": "97ff8a5f80b438699b1ac502e787ce1ada8cc10dd95bc3c220d2c19d7bef18a0"},
+    {"bytes": 4096, "sha256": "9d9c9302b2b23c5efb25f7067fcc3f7e46df491e5009e3ccd139ffaf111fcb73"}
+  ],
+  "platform_backup_integration_claimed": false,
+  "credentials_emitted": false
+}
