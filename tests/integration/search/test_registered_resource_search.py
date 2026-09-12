@@ -1,4 +1,9 @@
-from search_registered_resource_cases import (
-    test_registered_resource_private_fields_cannot_enter_search_index as test_registered_resource_private_fields_cannot_enter_search_index,
-    test_registered_resources_are_searchable_with_canonical_collection_authorization as test_registered_resources_are_searchable_with_canonical_collection_authorization,
+import search_registered_resource_cases as cases
+
+
+test_registered_resource_private_fields_cannot_enter_search_index = (
+    cases.test_registered_resource_private_fields_cannot_enter_search_index
+)
+test_registered_resources_are_searchable_with_canonical_collection_authorization = (
+    cases.test_registered_resources_are_searchable_with_canonical_collection_authorization
 )

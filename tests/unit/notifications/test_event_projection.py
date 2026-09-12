@@ -1,3 +1,6 @@
-from notification_control_plane_cases import (
-    test_event_provider_projects_task_event_and_replay_aggregates_safely as test_event_provider_projects_task_event_and_replay_aggregates_safely,
+import notification_control_plane_cases as cases
+
+
+test_event_provider_projects_task_event_and_replay_aggregates_safely = (
+    cases.test_event_provider_projects_task_event_and_replay_aggregates_safely
 )

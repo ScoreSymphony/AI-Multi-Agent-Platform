@@ -1,3 +1,6 @@
-from control_plane_api_cases import (
-    test_live_task_update_stream_uses_canonical_event_payloads as test_live_task_update_stream_uses_canonical_event_payloads,
+import control_plane_api_cases as cases
+
+
+test_live_task_update_stream_uses_canonical_event_payloads = (
+    cases.test_live_task_update_stream_uses_canonical_event_payloads
 )

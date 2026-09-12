@@ -1,3 +1,6 @@
-from control_plane_api_cases import (
-    test_timeline_query_preserves_correlation_and_can_filter_run_events as test_timeline_query_preserves_correlation_and_can_filter_run_events,
+import control_plane_api_cases as cases
+
+
+test_timeline_query_preserves_correlation_and_can_filter_run_events = (
+    cases.test_timeline_query_preserves_correlation_and_can_filter_run_events
 )
