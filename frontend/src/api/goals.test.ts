@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { GoalClient } from "./goals";
+import { ApiTransport } from "./transport";
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -9,14 +10,15 @@ function jsonResponse(body: unknown): Response {
 }
 
 describe("GoalClient", () => {
-  it("reads the canonical goals collection", async () => {
+  it("reads the canonical goals collection through the shared transport", async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("/api/v1/goals?limit=25&sort=id&direction=asc");
       expect(init?.method).toBe("GET");
       expect(init?.credentials).toBe("include");
       return jsonResponse({ items: [], total: 0, next_cursor: null });
     });
-    const client = new GoalClient({ fetchImpl });
+    const transport = new ApiTransport({ fetchImpl });
+    const client = new GoalClient({ transport });
 
     await client.list({ limit: 25, sort: "id", direction: "asc" });
     expect(fetchImpl).toHaveBeenCalledOnce();
