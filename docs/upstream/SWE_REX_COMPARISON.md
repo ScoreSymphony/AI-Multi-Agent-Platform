@@ -4,11 +4,11 @@ Final #861 classification: **`experimental_only`**. This comparison stays conser
 
 | Area | Reference Executor | Forge | Containarium | Agent-Sandbox (#798) | SWE-ReX (#861) |
 | --- | --- | --- | --- | --- | --- |
-| Canonical Executor fit | Native baseline | Existing optional adapter | Candidate/alternative | Evaluation open | PoC + live Local bridge; corrected Docker bridge fixture |
+| Canonical Executor fit | Native baseline | Existing optional adapter | Candidate/alternative | Evaluation open | PoC + live Local and Docker bridges |
 | Baseline dependency | Yes | Optional | Optional | Optional | Optional; no SWE-ReX runtime dependency in platform package |
 | Local host execution | Approved baseline actions | Backend-specific | Backend-specific | Not primary model | Linux functional; explicitly unsandboxed |
 | Native Windows local | Platform-owned path | Backend-specific | Unknown | Not primary model | **Unavailable at evaluated revision** (`pexpect.spawn` import failure) |
-| Docker/container path | No generic sandbox claim | Backend-specific | Primary comparison area | Kubernetes-native | Pinned Docker raw execution passes; security properties remain backend/deployment-specific |
+| Docker/container path | No generic sandbox claim | Backend-specific | Primary comparison area | Kubernetes-native | Pinned Docker raw execution and canonical bridge pass; security properties remain backend/deployment-specific |
 | Remote abstraction | Canonical Worker path | Sidecar/transport | Backend-specific | Provider/cluster API | `swerex-remote` works in loopback; HTTP/external protection required |
 | Workspace ownership | Platform | Platform | Must remain platform | Must remain platform | Platform; Local/Docker/Remote provider paths can access outside selected Workspace |
 | Artifact ownership | Platform | Platform | Must remain platform | Must remain platform | Platform; adapter accepts only collected in-Workspace files |

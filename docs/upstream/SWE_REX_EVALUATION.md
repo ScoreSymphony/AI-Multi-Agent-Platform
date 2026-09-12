@@ -74,7 +74,7 @@ The exact pinned server image passes raw execution and Artifact round-trip evide
 - does not persist the synthetic command environment canary into the next exercised command;
 - starts/stops quickly in the fixture (~0.78s / ~0.22s) with a ~177 MB test image.
 
-A prior canonical Docker bridge run failed one `echo` step because the evaluation fixture uploaded an empty local Workspace to a provider directory that did not yet exist. Artifact collection, failure/timeout mapping and canonical guards still behaved as expected. The branch now explicitly creates the provider Workspace before upload; the corrected current-head bridge is a merge-validation check, not a reason to reinterpret the earlier raw evidence.
+The corrected canonical Docker bridge subsequently passed end-to-end in workflow run `34696440396`: health, canonical ID preservation, echo success, Artifact collection, controlled failure, timeout mapping, fail-closed environment handling and Workspace-traversal rejection all passed. The earlier bridge failure was an evaluation-fixture bug caused by uploading an empty host Workspace to a provider directory that did not yet exist; explicitly creating the provider Workspace before upload fixed the fixture.
 
 Classification: **experimental runtime backend, not a sandbox/security profile**.
 

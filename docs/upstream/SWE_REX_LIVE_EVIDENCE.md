@@ -67,7 +67,7 @@ Interpretation:
 - parent timeout does not establish process-tree cleanup;
 - the default published control port requires an external exposure policy before production use.
 
-The same run exercised the canonical Docker bridge. Artifact collection, controlled failure, timeout mapping, canonical guards and canonical IDs behaved as expected, but the `echo` command failed because the evaluation fixture uploaded an empty host Workspace to a provider path that did not yet exist. This was a fixture defect, not a provider isolation result. The branch now explicitly creates `/tmp/issue861-canonical` before upload; that corrected bridge remains subject to the final current-head CI/live run before merge readiness.
+The corrected canonical Docker bridge passed end-to-end in workflow run `34696440396`: runtime health, canonical ID preservation, echo success, Artifact collection/content verification, controlled failure mapping, timeout mapping, the fail-closed environment guard and Workspace-traversal rejection all passed. The earlier bridge failure was a fixture defect caused by uploading an empty host Workspace to a provider path that did not yet exist; explicit provider Workspace creation fixed the fixture.
 
 ## Deny-egress Docker attempts
 
@@ -109,10 +109,10 @@ Host-side SWE-ReX pinning is not sufficient to establish Docker server provenanc
 
 | Scenario | Evidence | #861 result |
 | --- | --- | --- |
-| Canonical IDs/provider-ID namespacing | Contract suite + live Local bridge | pass |
-| Canonical Workspace traversal guard | Contract suite + live bridge | pass at platform boundary |
+| Canonical IDs/provider-ID namespacing | Contract suite + live Local/Docker bridges | pass |
+| Canonical Workspace traversal guard | Contract suite + live Local/Docker bridges | pass at platform boundary |
 | Provider filesystem containment | Local/Remote/Docker outside reads | **not provided by SWE-ReX abstraction** |
-| Artifact collection | Contract suite + Local bridge; Docker raw round-trip | pass; Docker corrected bridge requires final current-head run |
+| Artifact collection | Contract suite + live Local/Docker bridges + Docker raw round-trip | pass |
 | Timeout mapping | Contract suite + Local/Docker evidence | pass for signaling |
 | In-flight cancellation / process-tree cleanup | adapter seam works; Local blocks in `subprocess.run`; Docker child survives timeout | **not a uniform provider guarantee** |
 | Direct secret/environment projection | adapter rejects; raw canary is visible if directly supplied | fail-closed platform policy retained |
@@ -123,7 +123,7 @@ Host-side SWE-ReX pinning is not sufficient to establish Docker server provenanc
 | Remote auth | loopback correct/wrong key | pass |
 | Remote transport | loopback | HTTP; external protection required |
 | Remote concurrency | 4 concurrent commands | pass |
-| Reference Executor independent of SWE-ReX | dependency-free adapter + normal platform CI path | design satisfied; final current-head CI is merge gate |
+| Reference Executor independent of SWE-ReX | dependency-free adapter + normal platform CI path | design satisfied; final current-head CI remains merge gate |
 
 ## Decision
 
