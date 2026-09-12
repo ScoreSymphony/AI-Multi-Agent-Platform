@@ -212,6 +212,21 @@
           "items": {"type": "string", "minLength": 1}
         }
       },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {"enum": ["pass", "fail"]}
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "evidence_refs": {"minItems": 1}
+            }
+          }
+        }
+      ],
       "additionalProperties": false
     },
     "evidenceFile": {
