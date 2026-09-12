@@ -1,6 +1,6 @@
 # Issue #862 — RustFS / Garage object-storage evaluation
 
-Status: **runtime evaluation complete; final classification still gated by real target-VPS measurements and final #799 reconciliation**. The CI-backed campaigns now pass the canonical S3/FileProvider contract, concurrency/integrity, authentication rejection, restart persistence, forward upgrades, TLS, clean-store disaster recovery and the candidate-specific multi-node failure scenarios. Garage's documented native SQLite metadata snapshot/restore path also passes. GitHub-hosted runner resource observations remain diagnostics only and do not satisfy the VPS acceptance criterion.
+Status: **CI-backed runtime evaluation complete and #799 reconciled; final classification is gated by the real target-VPS measurement and final repository checks**. The CI-backed campaigns pass the canonical S3/FileProvider contract, concurrency/integrity, authentication rejection, restart persistence, forward upgrades, TLS, clean-store disaster recovery and the candidate-specific multi-node failure scenarios. Garage's documented native SQLite metadata snapshot/restore path also passes. GitHub-hosted runner resource observations remain diagnostics only and do not satisfy the VPS acceptance criterion.
 
 ## Architectural boundary
 
@@ -51,7 +51,7 @@ Garage's documented TLS deployment path places a reverse proxy in front of the S
 
 ### SeaweedFS baseline
 
-SeaweedFS 4.46 remains the comparison baseline. Its mini mode exposes the S3 gateway while the wider architecture separates master, volume, filer and S3 roles. The pinned 4.46 implementation exposes native HTTPS for S3, and the certificate-verified TLS campaign now passes. The baseline also passes the same clean-store logical blob recovery exercise used for the candidates.
+SeaweedFS 4.46 remains the comparison baseline. Its mini mode exposes the S3 gateway while the wider architecture separates master, volume, filer and S3 roles. The pinned 4.46 implementation exposes native HTTPS for S3, and the certificate-verified TLS campaign passes. The baseline also passes the same clean-store logical blob recovery exercise used for the candidates.
 
 ## Authoritative runtime evidence
 
@@ -106,7 +106,7 @@ The earlier timeout before Garage completed failure detection is retained as a h
 
 ## Security / credentials / TLS
 
-Synthetic CI credentials are generated at runtime, masked in Actions output and excluded from evidence JSON. Setup/profile state continues to contain component/configuration references only; credentials remain behind #34.
+Synthetic CI credentials are generated at runtime, masked in Actions output and excluded from evidence JSON. Setup/profile state contains component/configuration references only; credentials remain behind #34.
 
 All three backends reject invalid credentials and pass certificate-verified HTTPS S3 workloads:
 
@@ -129,7 +129,7 @@ An S3-backed deployment therefore has two coordinated recovery authorities:
 
 ### Garage native metadata snapshot
 
-Garage's native metadata recovery campaign now passes. It creates `garage meta snapshot --all`, mutates state after the snapshot, stops Garage, replaces the active SQLite metadata database with the selected native snapshot according to the documented recovery procedure, restarts Garage, performs full table repair, then verifies the restored pre-snapshot state.
+Garage's native metadata recovery campaign passes. It creates `garage meta snapshot --all`, mutates state after the snapshot, stops Garage, replaces the active SQLite metadata database with the selected native snapshot according to the documented recovery procedure, restarts Garage, performs full table repair, then verifies the restored pre-snapshot state.
 
 This is metadata recovery, not full blob-store-loss recovery.
 
@@ -151,22 +151,24 @@ This proves the storage-layer recovery mechanism only; it deliberately does not 
 
 The repository contains `scripts/benchmarks/run_issue862_storage_vps_capture.sh`. It compares the same larger workload across local filesystem, RustFS `1.0.0-rc.6`, Garage `v2.3.0` and SeaweedFS `4.46`, capturing host identity, image digests, idle/active container stats, disk usage, workload output and a SHA-256 evidence manifest.
 
-The script explicitly refuses to label a GitHub-hosted Actions execution as ordinary VPS evidence. This is intentional: #862 requires a real target-VPS measurement, and runner diagnostics cannot substitute for it.
+The capture now invokes `scripts/benchmarks/summarize_issue862_storage_vps_capture.py`, which produces deterministic JSON and Markdown summaries for active/idle resource observations and timing data while preserving the raw evidence. Its guardrails explicitly distinguish local-process RSS from resident container memory and residual data-root size from storage amplification.
 
-**This is now the only missing technical acceptance measurement.**
+The capture explicitly refuses to label a GitHub-hosted Actions execution as ordinary VPS evidence. This is intentional: #862 requires a real target-VPS measurement, and runner diagnostics cannot substitute for it.
 
-## #799 setup-wizard mapping
+**This is the only missing technical acceptance measurement.**
 
-#799 / PR #858 defines the provider-neutral storage discovery/profile shape, including component lifecycle classification, reversible profiles and exclusion of experimental components from automatic defaults.
+## #799 setup-wizard reconciliation
 
-The intended mapping is:
+#799 is complete and PR #858 is merged into `main` at `68915cbb26dab6c04dd7cdef57d833e3ff4bf1e5`. The #862 branch contains that main revision through merge commit `bb1131f096d439bba357fdc132bc02af72c21d83`, so the storage evaluation now runs against the canonical provider-neutral setup/profile contract instead of a draft copy.
+
+The canonical lifecycle mapping is:
 
 - #862 `experimental_only` → `ComponentLifecycle.EXPERIMENTAL`;
 - #862 `supported_optional` → `ComponentLifecycle.SUPPORTED`.
 
-This does not make any object-store product canonical. Local filesystem remains the no-object-store baseline, while an S3 adapter remains the product-neutral seam. Credentials are not written into setup profiles.
+`tests/test_issue_862_storage_evidence.py` imports the canonical `ComponentLifecycle` enum and verifies the evidence mapping against it. This keeps the #862 classification vocabulary coupled to the merged #799 contract without creating a parallel taxonomy.
 
-PR #858 is still open, so #862 records the mapping but does not import or hard-code the draft implementation as a stable dependency.
+This does not make any object-store product canonical. Local filesystem remains the no-object-store baseline, an S3 adapter remains the product-neutral seam, and #799's profile persistence continues to exclude secret material.
 
 ## Current decision table
 
@@ -179,11 +181,10 @@ PR #858 is still open, so #862 records the mapping but does not import or hard-c
 
 ## Remaining gates
 
-All reproducible CI-backed runtime gates required by #862 are now complete. The remaining gates are deliberately external to ordinary GitHub-hosted CI:
+All reproducible CI-backed runtime gates required by #862 are complete, and the #799 dependency is now canonical on the branch. The remaining gates are:
 
-1. execute the prepared local-filesystem/RustFS/Garage/SeaweedFS resource campaign on the actual target VPS environment and record the resulting evidence manifest;
-2. keep RustFS at `experimental_only` unless that VPS/maturity review supports a stronger classification and the upstream release line has matured sufficiently;
-3. reconcile the final classification with #799 once PR #858 is canonical, without duplicating its provider/profile persistence or secret handling;
-4. require the normal repository CI/required checks to be green on the final documentation/evidence head before merge.
+1. execute the prepared local-filesystem/RustFS/Garage/SeaweedFS resource campaign on the actual target VPS environment and retain its manifest, raw measurements and generated summary;
+2. finalize the classifications from that VPS evidence. RustFS should remain `experimental_only` unless both the measured operational result and future release maturity justify promotion; finalizing it as `experimental_only` does not require waiting for a stable RustFS release;
+3. require the normal repository CI and all required checks to be green on the final head before merge.
 
-Until those gates close, PR #863 remains draft and no classification is marked final.
+Until the VPS gate and final required checks close, PR #863 remains draft and no classification is marked final.
