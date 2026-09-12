@@ -33,6 +33,11 @@ from ai_multi_agent_platform.skills.security_evidence_control_plane import (
 )
 
 OBSERVED_IMAGE_ID = "sha256:" + "1" * 64
+SKILL_ID = "skill_00000000-0000-0000-0000-000000000001"
+SECOND_SKILL_ID = "skill_00000000-0000-0000-0000-000000000002"
+REMOTE_SKILL_ID = "skill_00000000-0000-0000-0000-000000000003"
+FIRST_EVIDENCE_ID = "security_evidence_00000000-0000-0000-0000-000000000001"
+SECOND_EVIDENCE_ID = "security_evidence_00000000-0000-0000-0000-000000000002"
 
 
 def _candidate(tmp_path: Path, revision: int = 3) -> StagedSkillCandidate:
@@ -40,7 +45,7 @@ def _candidate(tmp_path: Path, revision: int = 3) -> StagedSkillCandidate:
     root.mkdir()
     (root / "SKILL.md").write_text("# Example\nUse local files only.\n", encoding="utf-8")
     return StagedSkillCandidate(
-        "skill_external-example",
+        SKILL_ID,
         revision,
         skillspector.digest_tree(root),
         root,
@@ -84,9 +89,7 @@ def _image_payload(
             "Config": {
                 "Labels": {
                     skillspector.LABEL_REVISION: revision,
-                    skillspector.LABEL_DEPENDENCIES: (
-                        skillspector.PINNED_DEPENDENCY_SET_SHA256
-                    ),
+                    skillspector.LABEL_DEPENDENCIES: (skillspector.PINNED_DEPENDENCY_SET_SHA256),
                     skillspector.LABEL_MODE: skillspector.SCAN_MODE,
                     skillspector.LABEL_POLICY: skillspector.POLICY_CONFIG_REVISION,
                 }
@@ -164,7 +167,7 @@ def _provider(
 def _evidence(
     *,
     evidence_id: str | None = None,
-    candidate_id: str = "skill_external-example",
+    candidate_id: str = SKILL_ID,
     revision: int = 1,
     status: SecurityEvidenceStatus = SecurityEvidenceStatus.DEGRADED,
 ) -> SecurityEvidence:
@@ -457,7 +460,7 @@ def test_non_local_or_symlink_candidate_is_rejected_before_runtime(
     assert evidence.degraded_reasons == ("candidate_validation_failed:ValueError",)
 
     remote = StagedSkillCandidate(
-        "skill_external-url",
+        REMOTE_SKILL_ID,
         1,
         "a" * 64,
         Path("https:/example.invalid/repo.git"),
@@ -566,19 +569,19 @@ class _ScopeAccess:
 
 
 def test_control_plane_security_evidence_is_filtered_by_canonical_skill_owner() -> None:
-    first = _evidence(evidence_id="security_evidence_first", candidate_id="skill_first")
-    second = _evidence(evidence_id="security_evidence_second", candidate_id="skill_second")
+    first = _evidence(evidence_id=FIRST_EVIDENCE_ID, candidate_id=SKILL_ID)
+    second = _evidence(evidence_id=SECOND_EVIDENCE_ID, candidate_id=SECOND_SKILL_ID)
     repository = InMemorySecurityEvidenceRepository()
     repository.add(first)
     repository.add(second)
     evidence_service = SecurityEvidenceService(repository)
     revisions = {
-        ("skill_first", 1): SimpleNamespace(
+        (SKILL_ID, 1): SimpleNamespace(
             owner_ref=OwnerRef(type="user", id="owner-a"),
             project_id="project_alpha",
             workspace_id="workspace_alpha",
         ),
-        ("skill_second", 1): SimpleNamespace(
+        (SECOND_SKILL_ID, 1): SimpleNamespace(
             owner_ref=OwnerRef(type="user", id="owner-b"),
             project_id="project_beta",
             workspace_id="workspace_beta",
