@@ -8,22 +8,29 @@ never implies permission to execute a candidate.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
 
 from ai_multi_agent_platform.capabilities import CapabilityRegistry, CapabilitySpec
-from ai_multi_agent_platform.contracts.types import HealthStatus
+from ai_multi_agent_platform.contracts.types import HealthStatus, JsonValue
 from ai_multi_agent_platform.domain import OwnerRef
-from ai_multi_agent_platform.models import ModelLocation, ModelRegistry, RoutingRequirements
+from ai_multi_agent_platform.models import (
+    ModelConfiguration,
+    ModelLocation,
+    ModelRegistry,
+    RoutingRequirements,
+)
 
 from .models import (
     AgentRevision,
     AgentRevisionRef,
+    AgentTeamMember,
     AgentTeamRevision,
     AgentTeamRevisionRef,
     CapabilityConstraint,
+    UnavailableMemberPolicy,
 )
 from .repository import AgentRepository
 
@@ -506,7 +513,7 @@ class AgentMatcher:
         if self._models is None:
             return True
         models = self._models.list_models(enabled=True)
-        return any(
+        return all(
             any(_model_matches(config, requirement, self._models) for config in models)
             for requirement in merged
         )
@@ -548,36 +555,36 @@ class AgentResolver:
         requirements: AgentMatchingRequirements,
     ) -> tuple[AgentMatchCandidate, ...]:
         if requirements.exact_agent is not None:
-            revision = self.repository.get_agent_revision(
+            agent_revision = self.repository.get_agent_revision(
                 requirements.exact_agent.agent_id,
                 requirements.exact_agent.revision,
             )
-            return (_agent_candidate(revision),)
+            return (_agent_candidate(agent_revision),)
         if requirements.exact_team is not None:
-            revision = self.repository.get_team_revision(
+            team_revision = self.repository.get_team_revision(
                 requirements.exact_team.team_id,
                 requirements.exact_team.revision,
             )
-            return (_team_candidate(revision, self.repository),)
+            return (_team_candidate(team_revision, self.repository),)
 
         candidates: list[AgentMatchCandidate] = []
         if AgentCandidateKind.AGENT in requirements.candidate_kinds:
-            for definition in self.repository.list_agents():
+            for agent_definition in self.repository.list_agents():
                 candidates.append(
                     _agent_candidate(
                         self.repository.get_agent_revision(
-                            definition.agent_id,
-                            definition.current_revision,
+                            agent_definition.agent_id,
+                            agent_definition.current_revision,
                         )
                     )
                 )
         if AgentCandidateKind.TEAM in requirements.candidate_kinds:
-            for definition in self.repository.list_teams():
+            for team_definition in self.repository.list_teams():
                 candidates.append(
                     _team_candidate(
                         self.repository.get_team_revision(
-                            definition.team_id,
-                            definition.current_revision,
+                            team_definition.team_id,
+                            team_definition.current_revision,
                         ),
                         self.repository,
                     )
@@ -616,38 +623,50 @@ def _team_candidate(
         repository.get_agent_revision(member.agent.agent_id, member.agent.revision)
         for member in revision.profile.members
     )
+    member_pairs = tuple(zip(revision.profile.members, member_revisions, strict=True))
+    enabled = revision.profile.enabled
+    active_pairs: list[tuple[AgentTeamMember, AgentRevision]] = []
+    for member, member_revision in member_pairs:
+        if member_revision.profile.enabled:
+            active_pairs.append((member, member_revision))
+            continue
+        if (
+            member.required
+            or revision.profile.unavailable_member_policy is UnavailableMemberPolicy.FAIL
+        ):
+            enabled = False
+    if not active_pairs:
+        enabled = False
+
     required_members = tuple(
-        member_revision
-        for member, member_revision in zip(
-            revision.profile.members,
-            member_revisions,
-            strict=True,
-        )
-        if member.required
+        member_revision for member, member_revision in active_pairs if member.required
+    )
+    model_members = (
+        tuple(member_revision for _, member_revision in active_pairs)
+        if revision.profile.unavailable_member_policy is UnavailableMemberPolicy.FAIL
+        else required_members
     )
     roles = tuple(
         dict.fromkeys(
-            [member.role for member in revision.profile.members]
-            + [member.profile.role for member in member_revisions]
+            [member.role for member, _ in active_pairs]
+            + [member_revision.profile.role for _, member_revision in active_pairs]
         )
     )
     allowed = set(revision.profile.shared_capability_ids)
     denied: set[str] = set()
     constraints: dict[str, CapabilityConstraint] = {}
     policies: set[str] = set()
-    enabled = revision.profile.enabled
     if revision.profile.coordination_policy_ref is not None:
         policies.add(revision.profile.coordination_policy_ref)
-    for member in member_revisions:
-        enabled = enabled and member.profile.enabled
-        allowed.update(member.profile.capabilities.allowed)
-        allowed.update(member.profile.capabilities.required_ids)
-        denied.update(member.profile.capabilities.denied)
-        for constraint in member.profile.capabilities.constraints:
+    for _, member_revision in active_pairs:
+        allowed.update(member_revision.profile.capabilities.allowed)
+        allowed.update(member_revision.profile.capabilities.required_ids)
+        denied.update(member_revision.profile.capabilities.denied)
+        for constraint in member_revision.profile.capabilities.constraints:
             constraints.setdefault(constraint.capability_id, constraint)
-        policies.update(member.profile.policy_hooks.verification_policy_refs)
-        if member.profile.policy_hooks.authorization_profile_ref is not None:
-            policies.add(member.profile.policy_hooks.authorization_profile_ref)
+        policies.update(member_revision.profile.policy_hooks.verification_policy_refs)
+        if member_revision.profile.policy_hooks.authorization_profile_ref is not None:
+            policies.add(member_revision.profile.policy_hooks.authorization_profile_ref)
     priority = _matching_priority(revision.profile.metadata)
     return AgentMatchCandidate(
         ref=AgentTeamRevisionRef(revision.team_id, revision.revision),
@@ -661,18 +680,16 @@ def _team_candidate(
         denied_capability_ids=tuple(sorted(denied)),
         capability_constraints=tuple(constraints[key] for key in sorted(constraints)),
         policy_refs=tuple(sorted(policies)),
-        model_requirements=tuple(member.profile.model.requirements for member in required_members),
+        model_requirements=tuple(member.profile.model.requirements for member in model_members),
         member_refs=tuple(
-            AgentRevisionRef(member.agent_id, member.revision) for member in member_revisions
+            AgentRevisionRef(member.agent_id, member.revision) for _, member in active_pairs
         ),
         matching_priority=priority,
     )
 
 
-def _matching_priority(metadata: object) -> int:
-    if not hasattr(metadata, "get"):
-        return 0
-    value = metadata.get("matching_priority")  # type: ignore[union-attr]
+def _matching_priority(metadata: Mapping[str, JsonValue]) -> int:
+    value = metadata.get("matching_priority")
     if isinstance(value, bool) or not isinstance(value, int):
         return 0
     return value
@@ -840,7 +857,8 @@ def _merge_model_requirements(
     return RoutingRequirements(
         explicit_model_id=explicit,
         min_context_window=max(
-            value for value in (first.min_context_window, second.min_context_window, 0)
+            first.min_context_window or 0,
+            second.min_context_window or 0,
         )
         or None,
         tool_calling=first.tool_calling or second.tool_calling,
@@ -854,23 +872,20 @@ def _merge_model_requirements(
 
 
 def _model_matches(
-    config: object,
+    config: ModelConfiguration,
     requirements: RoutingRequirements,
     registry: ModelRegistry,
 ) -> bool:
-    if not hasattr(config, "config_id"):
+    if not config.enabled:
         return False
-    model = config
-    if not model.enabled:  # type: ignore[union-attr]
-        return False
-    if registry.effective_health(model) is HealthStatus.UNAVAILABLE:  # type: ignore[arg-type]
+    if registry.effective_health(config) is HealthStatus.UNAVAILABLE:
         return False
     if requirements.explicit_model_id is not None and (
-        model.config_id != requirements.explicit_model_id  # type: ignore[union-attr]
-        and requirements.explicit_model_id not in model.aliases  # type: ignore[union-attr]
+        config.config_id != requirements.explicit_model_id
+        and requirements.explicit_model_id not in config.aliases
     ):
         return False
-    location = model.location  # type: ignore[union-attr]
+    location = config.location
     if requirements.local_only and location is not ModelLocation.LOCAL:
         return False
     if requirements.self_hosted_only and location not in {
@@ -878,7 +893,7 @@ def _model_matches(
         ModelLocation.SELF_HOSTED,
     }:
         return False
-    capabilities = model.capabilities  # type: ignore[union-attr]
+    capabilities = config.capabilities
     if requirements.min_context_window is not None and (
         capabilities.context_window is None
         or capabilities.context_window < requirements.min_context_window
