@@ -9,7 +9,7 @@ on:
       - "scripts/benchmarks/issue861_swe_rex_canonical.py"
       - "scripts/benchmarks/issue861_swe_rex_remote.py"
       - "src/ai_multi_agent_platform/adapters/swe_rex.py"
-      - "tests/test_swe_rex_executor.py"
+      - "tests/contract/execution/test_swe_rex_executor.py"
       - "docs/upstream/SWE_REX_*.md"
       - "upstream/swe-rex.yaml"
 
