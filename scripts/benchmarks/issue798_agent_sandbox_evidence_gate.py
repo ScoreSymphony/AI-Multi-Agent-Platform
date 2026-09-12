@@ -66,9 +66,7 @@ REQUIRED_ENVIRONMENT_FIELDS: tuple[str, ...] = (
 )
 
 _NUMERIC_ENVIRONMENT_FIELDS = frozenset({"vcpu", "memory_gib", "disk_gib"})
-_DIGEST_ENVIRONMENT_FIELDS = frozenset(
-    {"agent_sandbox_image_digest", "sandbox_image_digest"}
-)
+_DIGEST_ENVIRONMENT_FIELDS = frozenset({"agent_sandbox_image_digest", "sandbox_image_digest"})
 
 Status: TypeAlias = Literal["pass", "fail", "not_run"]
 
@@ -260,9 +258,7 @@ def _hard_gates(evidence: dict[str, Any]) -> dict[str, GateResult]:
             pod.get("drops_all_capabilities"), expected=True, label="Linux capability drop ALL"
         ),
         "seccomp_profile": seccomp_gate,
-        "runtime_class_name": _nonempty_gate(
-            pod.get("runtime_class_name"), label="runtime class"
-        ),
+        "runtime_class_name": _nonempty_gate(pod.get("runtime_class_name"), label="runtime class"),
         "digest_pinned_image": _image_gate(pod.get("image")),
         "cpu_memory_bounds": _resource_gate(pod.get("resources")),
         "service_account_token_unreadable": _bool_gate(
@@ -272,9 +268,7 @@ def _hard_gates(evidence: dict[str, Any]) -> dict[str, GateResult]:
             expected=False,
             label="mounted ServiceAccount token readability",
         ),
-        "ambient_host_paths_unreadable": _ambient_paths_gate(
-            probes.get("ambient_host_paths")
-        ),
+        "ambient_host_paths_unreadable": _ambient_paths_gate(probes.get("ambient_host_paths")),
         "internet_blocked": _network_gate(probes.get("internet"), label="Internet egress"),
         "metadata_blocked": _network_gate(
             probes.get("metadata"), label="link-local metadata endpoint"
@@ -416,9 +410,7 @@ def evaluate(evidence: dict[str, Any], campaign: dict[str, Any]) -> dict[str, An
     campaign_complete = not scenario_pending
     environment_complete = not missing_environment and not environment_mismatches
     decision_ready = campaign_complete and environment_complete and not hard_missing
-    protected_profile_gate = (
-        "fail" if hard_failed else "incomplete" if hard_missing else "pass"
-    )
+    protected_profile_gate = "fail" if hard_failed else "incomplete" if hard_missing else "pass"
 
     return {
         "schema_version": 1,
@@ -428,10 +420,7 @@ def evaluate(evidence: dict[str, Any], campaign: dict[str, Any]) -> dict[str, An
         "protected_profile_gate": protected_profile_gate,
         "decision_ready": decision_ready,
         "adoption_eligible_from_this_gate": (
-            decision_ready
-            and not hard_failed
-            and not scenario_failed
-            and not scenario_unsupported
+            decision_ready and not hard_failed and not scenario_failed and not scenario_unsupported
         ),
         "hard_gates": {name: result.as_dict() for name, result in hard.items()},
         "environment": {
