@@ -391,9 +391,7 @@ def _authorization_gate() -> AuthorizationGate:
 
 
 @pytest.mark.asyncio
-async def test_parallel_coding_batch_follows_384_fanout_fanin_and_reaches_authorized_merge_ready() -> (
-    None
-):
+async def test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge() -> None:
     owner = OwnerRef(type="user", id="issue-872-e2e")
     project_id = new_id("project")
     plan = Plan(
