@@ -106,7 +106,10 @@ class CanonicalWorkstreamMaterializer:
                         kind=WorkspaceSourceKind.REPOSITORY,
                         ref=batch.repository_id,
                         revision=batch.base_revision,
-                        metadata={"coding_batch_id": batch.batch_id, "workstream_id": workstream_id},
+                        metadata={
+                            "coding_batch_id": batch.batch_id,
+                            "workstream_id": workstream_id,
+                        },
                     ),
                 ),
                 workspace_id=workspace_id,
@@ -118,7 +121,9 @@ class CanonicalWorkstreamMaterializer:
             for source in workspace.source_refs
         )
         if not source_matches:
-            raise ValueError("recovered Workspace does not match the coding workstream base revision")
+            raise ValueError(
+                "recovered Workspace does not match the coding workstream base revision"
+            )
 
         if workspace.base_snapshot_id is not None:
             snapshot = await self._workspaces.get_snapshot(workspace.base_snapshot_id)
@@ -135,7 +140,9 @@ class CanonicalWorkstreamMaterializer:
                 checkout=False,
             )
             if created.commit_sha != batch.base_revision:
-                raise ValueError("repository authority created workstream branch from another revision")
+                raise ValueError(
+                    "repository authority created workstream branch from another revision"
+                )
         else:
             commits = await self._repositories.commits(
                 batch.repository_id,
