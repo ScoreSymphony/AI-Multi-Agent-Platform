@@ -1,6 +1,7 @@
-import { ControlPlaneError } from "./client";
 import { ControlPlaneCollectionClient } from "./collections";
-import type { APIErrorBody, JsonValue, ListQuery, Page } from "./types";
+import { ApiTransport } from "./transport";
+import type { ApiTransportOptions } from "./transport";
+import type { JsonValue, ListQuery, Page } from "./types";
 
 export interface EvaluationCaseProjection {
   case_id: string;
@@ -231,9 +232,8 @@ export interface CompareEvaluationOptions {
   performance_sensitive?: boolean;
 }
 
-export interface EvaluationClientOptions {
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
+export interface EvaluationClientOptions extends ApiTransportOptions {
+  transport?: ApiTransport;
 }
 
 const SUITES = "evaluation-suites";
@@ -241,13 +241,13 @@ const RUNS = "evaluation-runs";
 
 export class EvaluationClient {
   readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly transport: ApiTransport;
   private readonly collections: ControlPlaneCollectionClient;
 
   constructor(options: EvaluationClientOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? "").replace(/\/$/, "");
-    this.fetchImpl = options.fetchImpl ?? fetch;
-    this.collections = new ControlPlaneCollectionClient(options);
+    this.transport = options.transport ?? new ApiTransport(options);
+    this.baseUrl = this.transport.baseUrl;
+    this.collections = new ControlPlaneCollectionClient({ transport: this.transport });
   }
 
   listSuites(query: ListQuery = {}): Promise<Page<CanonicalEvaluationSuite>> {
@@ -348,7 +348,7 @@ export class EvaluationClient {
     );
   }
 
-  private async command<T>(
+  private command<T>(
     command: string,
     resourceRef: string,
     payload: Record<string, JsonValue>,
@@ -356,27 +356,11 @@ export class EvaluationClient {
   ): Promise<T> {
     if (!resourceRef.trim()) throw new Error("evaluation resource reference is required");
     if (!idempotencyKey.trim()) throw new Error("evaluation idempotency key is required");
-    const headers = new Headers({
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "X-Correlation-ID": crypto.randomUUID(),
-      "Idempotency-Key": idempotencyKey,
+    return this.transport.request<T>(`/commands/${encodeURIComponent(command)}`, {
+      method: "POST",
+      body: { resource_ref: resourceRef, ...payload },
+      idempotencyKey,
     });
-    const response = await this.fetchImpl(
-      `${this.baseUrl}/api/v1/commands/${encodeURIComponent(command)}`,
-      {
-        method: "POST",
-        headers,
-        credentials: "include",
-        body: JSON.stringify({ resource_ref: resourceRef, ...payload }),
-      },
-    );
-    const text = await response.text();
-    const body: unknown = text ? safeJson(text) : null;
-    if (!response.ok) {
-      throw new ControlPlaneError(response.status, normalizeError(response, body));
-    }
-    return body as T;
   }
 }
 
@@ -402,38 +386,4 @@ function evaluationSnapshotPayload(input: RunEvaluationInput): JsonValue {
 function optionalNonBlank(value: string | null | undefined): string | null {
   if (value === undefined || value === null) return null;
   return value.trim() ? value : null;
-}
-
-function safeJson(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeError(response: Response, payload: unknown): APIErrorBody {
-  if (isErrorBody(payload)) return payload;
-  const requestId = response.headers.get("x-request-id") ?? "unknown";
-  return {
-    code: "invalid_response",
-    category: "contract",
-    message: `Control Plane returned HTTP ${response.status} without a canonical error envelope`,
-    request_id: requestId,
-    correlation_id: response.headers.get("x-correlation-id") ?? requestId,
-    retryable: false,
-  };
-}
-
-function isErrorBody(value: unknown): value is APIErrorBody {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Partial<APIErrorBody>;
-  return (
-    typeof candidate.code === "string"
-    && typeof candidate.category === "string"
-    && typeof candidate.message === "string"
-    && typeof candidate.request_id === "string"
-    && typeof candidate.correlation_id === "string"
-    && typeof candidate.retryable === "boolean"
-  );
 }

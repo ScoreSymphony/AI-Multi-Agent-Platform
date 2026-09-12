@@ -31,12 +31,12 @@ export function useShellClients(baseUrl: string) {
   const approvalClient = useMemo(() => new ApprovalClient({ transport }), [transport]);
   const repositoryClient = useMemo(() => new RepositoryCollectionClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const conversationClient = useMemo(() => new ConversationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const automationClient = useMemo(() => new AutomationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const automationClient = useMemo(() => new AutomationClient({ transport }), [transport]);
   const goalClient = useMemo(() => new GoalClient({ transport }), [transport]);
   const computeClient = useMemo(() => new ComputeClient({ transport }), [transport]);
-  const evaluationClient = useMemo(() => new EvaluationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const governanceClient = useMemo(() => new GovernanceClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const integrationsClient = useMemo(() => new IntegrationsClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const evaluationClient = useMemo(() => new EvaluationClient({ transport }), [transport]);
+  const governanceClient = useMemo(() => new GovernanceClient({ transport }), [transport]);
+  const integrationsClient = useMemo(() => new IntegrationsClient({ transport }), [transport]);
   const learningClient = useMemo(() => new LearningClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const memoryKnowledgeClient = useMemo(() => new MemoryKnowledgeClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const notificationClient = useMemo(() => new NotificationClient({ transport }), [transport]);
