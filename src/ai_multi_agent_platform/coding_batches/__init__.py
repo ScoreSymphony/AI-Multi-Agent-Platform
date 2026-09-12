@@ -1,5 +1,6 @@
 """Parallel coding-batch composition for issue #872."""
 
+from .materialization import CanonicalWorkstreamMaterializer, deterministic_workspace_id
 from .models import (
     BatchAggregationPolicy,
     CheckState,
@@ -19,6 +20,7 @@ from .models import (
     WorkstreamState,
 )
 from .overlap import ConservativeOverlapClassifier
+from .projection import coding_batch_resource
 from .service import (
     CodingBatchCoordinator,
     CodingBatchStore,
@@ -28,6 +30,7 @@ from .service import (
 
 __all__ = [
     "BatchAggregationPolicy",
+    "CanonicalWorkstreamMaterializer",
     "CheckState",
     "CodingBatch",
     "CodingBatchCoordinator",
@@ -47,5 +50,7 @@ __all__ = [
     "WorkstreamProvenance",
     "WorkstreamResult",
     "WorkstreamState",
+    "coding_batch_resource",
     "deterministic_branch_ref",
+    "deterministic_workspace_id",
 ]
