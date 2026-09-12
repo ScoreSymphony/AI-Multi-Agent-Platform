@@ -31,6 +31,7 @@ def _free_port() -> int:
 
 async def _wait_until_alive(deployment: Any, process: subprocess.Popen[str]) -> float:
     started = monotonic()
+    last_error: Exception | None = None
     for _ in range(100):
         if process.poll() is not None:
             stderr = process.stderr.read() if process.stderr is not None else ""
@@ -40,10 +41,13 @@ async def _wait_until_alive(deployment: Any, process: subprocess.Popen[str]) -> 
         try:
             if bool(await deployment.is_alive()):
                 return monotonic() - started
-        except Exception:
-            pass
+        except Exception as exc:
+            last_error = exc
         await asyncio.sleep(0.1)
-    raise TimeoutError("SWE-ReX loopback server did not become healthy")
+    timeout = TimeoutError("SWE-ReX loopback server did not become healthy")
+    if last_error is not None:
+        raise timeout from last_error
+    raise timeout
 
 
 async def _run() -> dict[str, Any]:
