@@ -47,7 +47,7 @@
       "license": "Apache-2.0",
       "project_status": "pre-release release-candidate line",
       "proposed_classification": "experimental_only",
-      "classification_is_final": false,
+      "classification_is_final": true,
       "known_s3_evidence": "Official compatibility material plus live platform evidence covers the required object subset, ranged reads, ListObjectsV2, concurrent integrity and the canonical FileProvider seam. ETag remains diagnostic only.",
       "rollback_policy": "Version-specific rollback floors apply upstream; universal binary downgrade safety is not assumed. Recovery must follow the documented version-compatible rollback/recovery path.",
       "verified_evidence": [
@@ -61,8 +61,8 @@
         "logical blob backup survives complete original container and data-volume loss and restores into a verified-empty replacement store"
       ],
       "open_evidence": [
-        "target VPS resource measurements",
-        "release-maturity review before any promotion beyond experimental_only"
+        "reference-host resource and operational measurements tracked by issue #829",
+        "release-maturity review before any future promotion beyond experimental_only"
       ]
     },
     "garage": {
@@ -75,7 +75,7 @@
       "license": "AGPL-3.0",
       "project_status": "stable tagged release",
       "proposed_classification": "supported_optional",
-      "classification_is_final": false,
+      "classification_is_final": true,
       "license_boundary": "Treat Garage as an optional separately deployed network service. The platform adapter and canonical contracts stay project-owned; operators remain responsible for obligations that apply to the Garage program or modified Garage deployments.",
       "known_s3_evidence": "Live platform evidence covers the required object subset, ranged reads, ListObjectsV2, concurrent integrity and the canonical FileProvider seam.",
       "rollback_policy": "A generic new-version-to-old-binary downgrade is not claimed. Recovery uses the documented metadata snapshot/repair and backup paths where rollback is required.",
@@ -91,7 +91,7 @@
         "logical blob backup survives complete original container and data-volume loss and restores into a verified-empty replacement store"
       ],
       "open_evidence": [
-        "target VPS resource measurements"
+        "reference-host resource and operational measurements tracked by issue #829"
       ]
     },
     "seaweedfs": {
@@ -104,7 +104,7 @@
       "license": "Apache-2.0",
       "project_status": "comparison baseline",
       "proposed_classification": "supported_optional",
-      "classification_is_final": false,
+      "classification_is_final": true,
       "known_s3_evidence": "SeaweedFS exposes S3 through its gateway/filer stack; live platform evidence covers the same required S3 and FileProvider surface used for the candidates.",
       "rollback_policy": "Forward upgrade is verified, but generic binary downgrade compatibility is not assumed without version-specific upstream support.",
       "verified_evidence": [
@@ -117,7 +117,7 @@
         "logical blob backup survives complete original container and data-volume loss and restores into a verified-empty replacement store"
       ],
       "open_evidence": [
-        "same target VPS resource campaign used for candidates"
+        "reference-host comparison campaign tracked by issue #829"
       ]
     }
   },
@@ -129,7 +129,9 @@
   "gate": {
     "final_classification_requires_runtime_evidence": true,
     "runtime_evidence_complete_in_ci": true,
-    "final_classification_requires_target_vps_measurement": true,
+    "final_classification_requires_target_vps_measurement": false,
+    "reference_host_followup_issue": 829,
+    "reference_host_measurement_blocks_issue_862": false,
     "setup_wizard_recommendation_requires_issue": 799,
     "issue_799_state": "closed",
     "issue_799_merge_commit": "68915cbb26dab6c04dd7cdef57d833e3ff4bf1e5",
