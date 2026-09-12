@@ -84,7 +84,10 @@ def test_all_required_rejects_partial_accepted_subset() -> None:
     )
     _accept(coordinator, batch_id, "a", "1" * 40)
 
-    with pytest.raises(ValueError, match="all_required aggregation cannot integrate a partial batch"):
+    with pytest.raises(
+        ValueError,
+        match="all_required aggregation cannot integrate a partial batch",
+    ):
         coordinator.build_integration_candidate(
             batch_id,
             current_target_revision=BASE,
@@ -118,7 +121,10 @@ def test_dependency_closed_rejects_manual_selection_without_accepted_predecessor
     _accept(coordinator, batch_id, "a", "1" * 40)
     _accept(coordinator, batch_id, "b", "2" * 40)
 
-    with pytest.raises(ValueError, match="dependency_closed aggregation requires selected dependencies"):
+    with pytest.raises(
+        ValueError,
+        match="dependency_closed aggregation requires selected dependencies",
+    ):
         coordinator.build_integration_candidate(
             batch_id,
             current_target_revision=BASE,
