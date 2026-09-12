@@ -154,6 +154,26 @@ def _forward_dns_query(packet: bytes, state: _DNSState) -> bytes:
     return response
 
 
+def _specific_dns_bind_host(requested_host: str, peer_ip: str) -> str:
+    """Avoid wildcard port 53 when forwarding to Docker's loopback DNS stub.
+
+    Docker exposes its embedded resolver at 127.0.0.11 inside containers. A
+    UDP server bound to 0.0.0.0:53 can also receive packets sent to that
+    loopback address, creating a forwarding loop. When wildcard binding was
+    requested, infer the concrete interface address used to reach the
+    controlled public peer and bind DNS only to that address.
+    """
+
+    if requested_host not in {"0.0.0.0", ""}:
+        return requested_host
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        probe.connect((peer_ip, 9))
+        bind_host = str(probe.getsockname()[0])
+    if ipaddress.ip_address(bind_host).is_loopback:
+        raise RuntimeError("could not infer a non-loopback DNS bind address")
+    return bind_host
+
+
 class _DNSHandler(socketserver.BaseRequestHandler):
     state: ClassVar[_DNSState]
 
@@ -166,7 +186,7 @@ class _DNSHandler(socketserver.BaseRequestHandler):
 
 
 class _ControlHandler(BaseHTTPRequestHandler):
-    server_version = "Issue859RebindingDNS/1.1"
+    server_version = "Issue859RebindingDNS/1.2"
     state: ClassVar[_DNSState]
 
     def do_GET(self) -> None:  # noqa: N802
@@ -215,9 +235,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--upstream-dns-port", type=int, default=53)
     args = parser.parse_args(argv)
 
+    first_ip = str(ipaddress.IPv4Address(args.first_ip))
+    dns_bind_host = _specific_dns_bind_host(args.dns_host, first_ip)
     state = _DNSState(
         hostname=args.hostname,
-        first_ip=str(ipaddress.IPv4Address(args.first_ip)),
+        first_ip=first_ip,
         rebound_ip=str(ipaddress.IPv4Address(args.rebound_ip)),
         upstream_host=args.upstream_dns_host,
         upstream_port=args.upstream_dns_port,
@@ -225,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     _DNSHandler.state = state
     _ControlHandler.state = state
 
-    dns_server = socketserver.ThreadingUDPServer((args.dns_host, args.dns_port), _DNSHandler)
+    dns_server = socketserver.ThreadingUDPServer((dns_bind_host, args.dns_port), _DNSHandler)
     control_server = ThreadingHTTPServer((args.control_host, args.control_port), _ControlHandler)
     control_thread = threading.Thread(target=control_server.serve_forever, daemon=True)
     control_thread.start()
