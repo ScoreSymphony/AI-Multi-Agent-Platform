@@ -33,16 +33,16 @@ The hardened implementation is provider-neutral, orchestrator-neutral and execut
 
 | Required test | Result | Concrete coverage |
 |---|---|---|
-| deterministic pass/fail | PASS | `tests/test_evaluation_foundation.py` plus hardened `behavior.*` assertion coverage |
+| deterministic pass/fail | PASS | `tests/unit/evaluation/test_foundation.py` plus hardened `behavior.*` assertion coverage |
 | baseline comparison | PASS | foundation regression tests and restart-safe SQLite history tests |
 | threshold regression | PASS | score-drop, metric-threshold and checked-in CI regression coverage |
 | critical-case regression | PASS | critical/security tag policy tests and deliberate CI regression coverage |
 | configuration snapshot integrity | PASS | duplicate identity checks plus hardened required-kind/runtime-enrichment tests |
-| isolated workspace repetition | PASS | `tests/test_evaluation_workspace_isolation.py` |
+| isolated workspace repetition | PASS | `tests/integration/evaluation/test_workspace_isolation.py` |
 | model/provider version difference | PASS | foundation snapshot/model/provider tests plus Agent evidence projection |
 | evaluator failure handling | PASS | safe sync/async evaluator error containment tests |
 | optional model-evaluator metadata | PASS | model-judge descriptor/runtime tests |
-| local/reference CI suite | PASS | `tests/test_evaluation_ci_gate.py` and the mandatory deterministic CI gate |
+| local/reference CI suite | PASS | `tests/contract/evaluation/test_ci_assets.py` and `tests/integration/evaluation/test_reference_ci_gate.py` plus the mandatory deterministic CI gate |
 
 ## Product-composition hardening delivered by PR #338 and PR #367
 
@@ -109,7 +109,7 @@ Fixture references are represented as explicit `evaluation_fixture` dependencies
 
 ## End-to-end product verification
 
-`tests/test_issue_19_single_node_evaluation.py` exercises the actual authenticated single-node Control Plane rather than an isolated service fixture. It verifies that Evaluation resources are discoverable, runs the built-in deterministic reference suite through `evaluation.run`, reads the produced run/results and reconstructs the deployment to prove the Evaluation history survives restart through SQLite.
+`tests/e2e/evaluation/test_single_node_evaluation.py` exercises the actual authenticated single-node Control Plane rather than an isolated service fixture. It verifies that Evaluation resources are discoverable, runs the built-in deterministic reference suite through `evaluation.run`, reads the produced run/results and reconstructs the deployment to prove the Evaluation history survives restart through SQLite.
 
 Additional hardened tests cover:
 
