@@ -152,7 +152,7 @@ The #19 evaluation framework remains the canonical evaluation owner. Context ass
 - absence of secret values from canonical serialization;
 - rejection of untrusted retrieved content as instruction authority.
 
-`tests/unit/context/test_secret_reference_metadata.py` proves the reference-only secret metadata boundary. `tests/test_issue_590_agent_run_integration.py` proves that an actual `ContextBoundAgentRuntime` AgentRun carries and persists the exact canonical Bundle ID/digest. `tests/test_issue_590_evaluation_integration.py` runs the context scenarios through the canonical #19 evaluation framework.
+`tests/unit/context/test_secret_reference_metadata.py` proves the reference-only secret metadata boundary. `tests/integration/context/test_agent_run_binding.py` proves that an actual `ContextBoundAgentRuntime` AgentRun carries and persists the exact canonical Bundle ID/digest. `tests/integration/context/test_context_evaluation.py` runs the context scenarios through the canonical #19 evaluation framework.
 
 The operational completion coverage additionally uses `tests/test_issue_650_single_node_context_e2e.py` for the public AgentRun / restart path and `tests/test_issue_680_context_completion.py` for Verification projection, explicit user-intent ownership, real single-node source-adapter composition and historical Bundle stability across a changed Task revision.
 
