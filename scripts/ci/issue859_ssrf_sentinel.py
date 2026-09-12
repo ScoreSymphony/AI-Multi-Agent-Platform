@@ -44,9 +44,7 @@ class _Handler(BaseHTTPRequestHandler):
     server_version = "Issue859SSRFSentinel/1.2"
     protocol_version = "HTTP/1.1"
     state: ClassVar[_SentinelState] = _SentinelState()
-    rebinding_location: ClassVar[str] = (
-        "http://issue859-rebind.test:18003/ssrf-sentinel.txt"
-    )
+    rebinding_location: ClassVar[str] = "http://issue859-rebind.test:18003/ssrf-sentinel.txt"
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/healthz":
