@@ -12,7 +12,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit --pretty false",
-    "test": "vitest run",
+    "test": "node scripts/check-transport-boundary.mjs && vitest run",
+    "check:transport": "node scripts/check-transport-boundary.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
