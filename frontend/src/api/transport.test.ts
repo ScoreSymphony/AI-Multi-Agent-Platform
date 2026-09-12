@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiTransport, ControlPlaneError } from "./transport";
+import { ApiTransport } from "./transport";
 
 function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -47,11 +47,11 @@ describe("ApiTransport", () => {
     await expect(transport.request("/auth/me")).rejects.toMatchObject({
       status: 401,
       body: { code: "unauthenticated", request_id: "request_401" },
-    } satisfies Partial<ControlPlaneError>);
+    });
     await expect(transport.request("/protected")).rejects.toMatchObject({
       status: 403,
       body: { code: "forbidden", request_id: "request_403" },
-    } satisfies Partial<ControlPlaneError>);
+    });
   });
 
   it("normalizes malformed error responses and extracts request diagnostics", async () => {
@@ -79,7 +79,7 @@ describe("ApiTransport", () => {
         request_id: "request_header",
         correlation_id: "correlation_header",
       },
-    } satisfies Partial<ControlPlaneError>);
+    });
   });
 
   it("adds auth, content negotiation and stable correlation/idempotency headers", async () => {
@@ -159,7 +159,7 @@ describe("ApiTransport", () => {
     await expect(transport.request("/slow")).rejects.toMatchObject({
       status: 0,
       body: { code: "request_timeout", category: "transport", retryable: true },
-    } satisfies Partial<ControlPlaneError>);
+    });
   });
 
   it("honors caller cancellation without retrying", async () => {
@@ -175,7 +175,7 @@ describe("ApiTransport", () => {
     await expect(transport.request("/cancelled", { signal: controller.signal })).rejects.toMatchObject({
       status: 0,
       body: { code: "request_aborted", retryable: false },
-    } satisfies Partial<ControlPlaneError>);
+    });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
