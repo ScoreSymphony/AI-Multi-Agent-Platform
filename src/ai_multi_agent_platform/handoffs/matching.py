@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ai_multi_agent_platform.agents import (
     AgentCandidateKind,
     AgentCapabilityRequirement,
@@ -36,6 +38,20 @@ class CanonicalConsumerRequirementEvaluator:
         parsed = self._parse(requirements, consumer)
         if parsed is None:
             return False
+
+        # #651 already knows the exact consumer. Carry its canonical scope into #903 so the
+        # resolver validates the pinned revision against its real scope instead of treating the
+        # absence of Task scope in the legacy requirement tuple as a cross-scope mismatch.
+        if isinstance(consumer, AgentRevisionRef):
+            revision = self.agents.get_agent_revision(consumer.agent_id, consumer.revision)
+        else:
+            revision = self.agents.get_team_revision(consumer.team_id, consumer.revision)
+        parsed = replace(
+            parsed,
+            project_id=revision.project_id,
+            workspace_id=revision.workspace_id,
+        )
+
         result = self._resolver.resolve(parsed)
         return result.selected == consumer
 
