@@ -244,7 +244,8 @@ def _team_candidate(
         capabilities_unrestricted=bool(policy_members) and not restricted_allowlists,
         model_requirements=tuple(member.model_requirements for member in policy_members),
         allows_task_model_override=(
-            bool(policy_members) and all(member.allow_task_model_override for member in policy_members)
+            bool(policy_members)
+            and all(member.allow_task_model_override for member in policy_members)
         ),
         member_refs=member_refs,
     )
