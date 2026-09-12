@@ -44,13 +44,64 @@ def test_live_bifrost_blocks_configured_ssrf_targets_before_connection() -> None
             f"Bifrost unexpectedly accepted SSRF probe target {blocked_url!r} "
             f"with HTTP status {status}"
         )
-        assert _is_fetch_path_rejection(body), (
+        assert _is_ssrf_guard_rejection(body), (
             "Bifrost rejected the probe, but the response does not prove that the "
-            f"server-side URL fetch path evaluated target {blocked_url!r}: {body[:500]!r}"
+            f"dial-time SSRF guard blocked target {blocked_url!r}: {body[:500]!r}"
         )
         assert _sentinel_hits(sentinel_control_url) == 0, (
             f"Bifrost connected to controlled blocked target {blocked_url!r}"
         )
+
+
+@pytest.mark.integration
+def test_live_bifrost_revalidates_redirect_target_before_connection() -> None:
+    bifrost_base_url = os.getenv("BIFROST_EVAL_BIFROST_BASE_URL")
+    native_openai_model = os.getenv("BIFROST_EVAL_BIFROST_NATIVE_OPENAI_MODEL")
+    redirect_url = os.getenv("BIFROST_EVAL_SSRF_REDIRECT_URL")
+    sentinel_control_url = os.getenv("BIFROST_EVAL_SSRF_SENTINEL_CONTROL_URL")
+    if not all(
+        (
+            bifrost_base_url,
+            native_openai_model,
+            redirect_url,
+            sentinel_control_url,
+        )
+    ):
+        pytest.skip("live #859 redirect SSRF environment is not configured")
+
+    assert bifrost_base_url is not None
+    assert native_openai_model is not None
+    assert redirect_url is not None
+    assert sentinel_control_url is not None
+
+    _reset_sentinel(sentinel_control_url)
+    status, body = _bifrost_file_url_request(
+        base_url=bifrost_base_url,
+        native_model=native_openai_model,
+        blocked_url=redirect_url,
+        api_key_env=os.getenv("BIFROST_EVAL_BIFROST_API_KEY_ENV"),
+    )
+    assert 400 <= status < 600
+    assert _is_ssrf_guard_rejection(body), body[:500]
+
+    stats = _sentinel_stats(sentinel_control_url)
+    paths = stats.get("paths")
+    assert isinstance(paths, dict)
+    assert paths.get("/redirect-to-loopback") == 1, (
+        "the controlled public-alias redirect source was not reached exactly once"
+    )
+    assert paths.get("/ssrf-sentinel.txt", 0) == 0, (
+        "Bifrost followed the redirect into the blocked loopback target"
+    )
+    assert stats.get("hits") == 1
+
+
+def test_ssrf_guard_classifier_does_not_accept_generic_request_failures() -> None:
+    assert _is_ssrf_guard_rejection(
+        'failed to fetch document: blocked connection to non-public address 127.0.0.1'
+    )
+    assert not _is_ssrf_guard_rejection("invalid request body")
+    assert not _is_ssrf_guard_rejection("dial tcp: network is unreachable")
 
 
 def _blocked_urls(raw: str) -> list[str]:
@@ -65,19 +116,9 @@ def _blocked_urls(raw: str) -> list[str]:
     return urls
 
 
-def _is_fetch_path_rejection(body: str) -> bool:
+def _is_ssrf_guard_rejection(body: str) -> bool:
     normalized = body.casefold()
-    return any(
-        marker in normalized
-        for marker in (
-            "failed to fetch document",
-            "failed to fetch from",
-            "non-public",
-            "loopback",
-            "private address",
-            "ssrf",
-        )
-    )
+    return "blocked connection to non-public address" in normalized
 
 
 def _bifrost_file_url_request(
@@ -142,3 +183,10 @@ def _sentinel_hits(base_url: str) -> int:
     hits = payload.get("hits")
     assert isinstance(hits, int)
     return hits
+
+
+def _sentinel_stats(base_url: str) -> dict[str, object]:
+    with urlrequest.urlopen(f"{base_url.rstrip('/')}/stats", timeout=5.0) as response:
+        payload = json.load(response)
+    assert isinstance(payload, dict)
+    return payload
