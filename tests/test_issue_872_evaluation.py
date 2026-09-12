@@ -9,6 +9,7 @@ from ai_multi_agent_platform.coding_batches import (
     CodingWorkItem,
     CombinedValidationEvidence,
     InMemoryCodingBatchStore,
+    IntegrationExecutionProvenance,
     IntegrationState,
     RequiredCheck,
     VerificationEvidence,
@@ -140,6 +141,22 @@ def _validated_independent_batch() -> tuple[
     candidate = coordinator.build_integration_candidate(
         batch.batch_id,
         current_target_revision=BASE,
+    )
+    coordinator.bind_integration_execution(
+        batch.batch_id,
+        candidate.integration_id,
+        IntegrationExecutionProvenance(
+            task_id=task_id,
+            plan_id=plan_id,
+            plan_revision=1,
+            step_id=new_id("step"),
+            run_id=new_id("run"),
+            agent_revision="integration-agent@1",
+            agent_run_id="agent-run-integration-evaluation",
+            workspace_id=new_id("workspace"),
+            snapshot_id=new_id("snapshot"),
+            branch_ref="coding/integration-evaluation",
+        ),
     )
     coordinator.record_integrated_revision(
         batch.batch_id,
