@@ -1,7 +1,7 @@
 """Canonical read/state models for conflict-aware parallel coding batches.
 
 Issue #872 is an orchestration layer over existing planning, workspace, repository,
-Agent runtime, verification and authorization authorities.  The models here deliberately
+Agent runtime, verification and authorization authorities. The models here deliberately
 store only composition/provenance state; they do not create a second scheduler, source-
 control history, Workspace identity or Verification result model.
 """
@@ -43,6 +43,7 @@ class BatchAggregationPolicy(StrEnum):
     ALL_REQUIRED = "all_required"
     BEST_EFFORT = "best_effort"
     DEPENDENCY_CLOSED = "dependency_closed"
+    MANUAL_SELECTION = "manual_selection"
 
 
 class WorkstreamState(StrEnum):
@@ -77,6 +78,7 @@ class IntegrationState(StrEnum):
     DRAFT = "draft"
     BLOCKED = "blocked"
     READY = "ready"
+    INTEGRATING = "integrating"
     REPAIRING = "repairing"
     VALIDATING = "validating"
     VALIDATED = "validated"
@@ -153,7 +155,7 @@ class OverlapDecision:
 class WorkstreamProvenance:
     """Exact canonical chain plus provider-local branch metadata.
 
-    ``branch_ref`` is intentionally non-canonical metadata.  Workspace/Snapshot and
+    ``branch_ref`` is intentionally non-canonical metadata. Workspace/Snapshot and
     repository/base revision remain the durable identities used for recovery.
     """
 
@@ -327,6 +329,38 @@ class IntegrationConflict:
 
 
 @dataclass(frozen=True, slots=True)
+class IntegrationExecutionProvenance:
+    """Canonical #384/#33/#37 execution binding for a clean integration attempt."""
+
+    task_id: str
+    plan_id: str
+    plan_revision: int
+    step_id: str
+    run_id: str
+    agent_revision: str
+    agent_run_id: str
+    workspace_id: str
+    snapshot_id: str
+    branch_ref: str
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "task_id",
+            "plan_id",
+            "step_id",
+            "run_id",
+            "agent_revision",
+            "agent_run_id",
+            "workspace_id",
+            "snapshot_id",
+            "branch_ref",
+        ):
+            object.__setattr__(self, field_name, _required(getattr(self, field_name), field_name))
+        if self.plan_revision < 1:
+            raise ValueError("integration plan_revision must be positive")
+
+
+@dataclass(frozen=True, slots=True)
 class IntegrationRepairAttempt:
     """#872 binding to one externally created canonical #439/#384 repair Step."""
 
@@ -375,6 +409,7 @@ class IntegrationCandidate:
     ordered_revisions: tuple[str, ...]
     state: IntegrationState = IntegrationState.DRAFT
     conflicts: tuple[IntegrationConflict, ...] = ()
+    execution: IntegrationExecutionProvenance | None = None
     integrated_revision: str | None = None
     validation: CombinedValidationEvidence | None = None
     stale_base: bool = False
@@ -408,6 +443,8 @@ class IntegrationCandidate:
             value = getattr(self, field_name)
             if value is not None:
                 object.__setattr__(self, field_name, _required(value, field_name))
+        if self.state is IntegrationState.INTEGRATING and self.execution is None:
+            raise ValueError("integrating candidate requires canonical execution provenance")
 
     def repair_attempt(self, repair_id: str) -> IntegrationRepairAttempt:
         for repair in self.repair_attempts:
