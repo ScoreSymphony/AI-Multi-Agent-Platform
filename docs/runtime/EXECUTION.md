@@ -58,6 +58,6 @@ No Forge type or Forge runtime is involved.
 
 ## Reusable contract-test coverage
 
-`tests/executor_contract_suite.py` defines `ExecutorContractSuite`, a reusable backend-neutral pytest contract suite. A concrete executor test class supplies only an executor instance and isolated workspace. `tests/test_reference_executor.py` applies the suite to `ReferenceExecutor`; a future Forge executor can subclass the same suite rather than copying the assertions.
+`tests/contract/execution/executor_contract_suite.py` defines `ExecutorContractSuite`, a reusable backend-neutral pytest contract suite. A concrete executor test class supplies only an executor instance and isolated workspace. `tests/contract/execution/test_reference_executor.py` applies the suite to `ReferenceExecutor`; a future Forge executor can subclass the same suite rather than copying the assertions.
 
 The reusable suite covers success and canonical identity preservation, controlled non-zero failure and error mapping, timeout, cancellation, unsupported capability, missing workspace, traversal isolation and artifact/write-boundary evidence. Reference-specific tests additionally cover health/capability metadata and configuration-driven selection.

@@ -23,25 +23,26 @@ import { VerificationClient } from "../../api/verification";
 
 export function useShellClients(baseUrl: string) {
   const session = useMemo(() => new BrowserSessionClient({ baseUrl }), [baseUrl]);
+  const transport = session.transport;
   const fetchImpl = session.fetch;
-  const client = useMemo(() => new ControlPlaneClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const client = useMemo(() => new ControlPlaneClient({ transport }), [transport]);
   const onboardingClient = useMemo(() => new OnboardingClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const collections = useMemo(() => new ControlPlaneCollectionClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const approvalClient = useMemo(() => new ApprovalClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const collections = useMemo(() => new ControlPlaneCollectionClient({ transport }), [transport]);
+  const approvalClient = useMemo(() => new ApprovalClient({ transport }), [transport]);
   const repositoryClient = useMemo(() => new RepositoryCollectionClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const conversationClient = useMemo(() => new ConversationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const automationClient = useMemo(() => new AutomationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const goalClient = useMemo(() => new GoalClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const computeClient = useMemo(() => new ComputeClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const goalClient = useMemo(() => new GoalClient({ transport }), [transport]);
+  const computeClient = useMemo(() => new ComputeClient({ transport }), [transport]);
   const evaluationClient = useMemo(() => new EvaluationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const governanceClient = useMemo(() => new GovernanceClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const integrationsClient = useMemo(() => new IntegrationsClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const learningClient = useMemo(() => new LearningClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const memoryKnowledgeClient = useMemo(() => new MemoryKnowledgeClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const notificationClient = useMemo(() => new NotificationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const notificationClient = useMemo(() => new NotificationClient({ transport }), [transport]);
   const organizationClient = useMemo(() => new OrganizationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const pluginsClient = useMemo(() => new PluginsClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const registryClient = useMemo(() => new RegistryClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const registryClient = useMemo(() => new RegistryClient({ transport }), [transport]);
   const templateClient = useMemo(() => new TemplateClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const verificationClient = useMemo(() => new VerificationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
 
