@@ -11,6 +11,8 @@ import pytest
 # entry point and under `python -m pytest`.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# These imports must remain after the repository root is added to sys.path.
+# isort: off
 from experiments.skillspector.fixtures import FIXTURES, write_fixture_corpus  # noqa: E402
 from experiments.skillspector.normalize import normalize_report  # noqa: E402
 from experiments.skillspector.runner import (  # noqa: E402
@@ -20,6 +22,7 @@ from experiments.skillspector.runner import (  # noqa: E402
     sanitized_environment,
     scan_result_is_usable,
 )
+# isort: on
 
 
 VERSION = "2.11.2"
