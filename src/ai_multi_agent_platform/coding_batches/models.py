@@ -114,8 +114,12 @@ class OverlapDecision:
     rationale: str
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "left_work_item_id", _required(self.left_work_item_id, "left_work_item_id"))
-        object.__setattr__(self, "right_work_item_id", _required(self.right_work_item_id, "right_work_item_id"))
+        object.__setattr__(
+            self, "left_work_item_id", _required(self.left_work_item_id, "left_work_item_id")
+        )
+        object.__setattr__(
+            self, "right_work_item_id", _required(self.right_work_item_id, "right_work_item_id")
+        )
         object.__setattr__(self, "rationale", _required(self.rationale, "rationale"))
         if self.left_work_item_id == self.right_work_item_id:
             raise ValueError("overlap decision requires two distinct work items")
@@ -169,7 +173,9 @@ class WorkstreamResult:
     artifact_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "output_revision", _required(self.output_revision, "output_revision"))
+        object.__setattr__(
+            self, "output_revision", _required(self.output_revision, "output_revision")
+        )
         object.__setattr__(self, "changed_paths", _unique(self.changed_paths, "changed_path"))
         object.__setattr__(self, "diff_digest", _required(self.diff_digest, "diff_digest"))
         object.__setattr__(self, "artifact_ids", _unique(self.artifact_ids, "artifact_id"))
@@ -183,8 +189,12 @@ class VerificationEvidence:
     check_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "verification_id", _required(self.verification_id, "verification_id"))
-        object.__setattr__(self, "subject_revision", _required(self.subject_revision, "subject_revision"))
+        object.__setattr__(
+            self, "verification_id", _required(self.verification_id, "verification_id")
+        )
+        object.__setattr__(
+            self, "subject_revision", _required(self.subject_revision, "subject_revision")
+        )
         object.__setattr__(self, "check_refs", _unique(self.check_refs, "check_ref"))
 
 
@@ -207,7 +217,9 @@ class CodingWorkstream:
         if self.provenance.step_id != self.work_item.step_id:
             raise ValueError("workstream step provenance mismatch")
         if self.failure_reason is not None:
-            object.__setattr__(self, "failure_reason", _required(self.failure_reason, "failure_reason"))
+            object.__setattr__(
+                self, "failure_reason", _required(self.failure_reason, "failure_reason")
+            )
 
     @property
     def id(self) -> str:
@@ -240,13 +252,19 @@ class CombinedValidationEvidence:
     evaluation_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "subject_revision", _required(self.subject_revision, "subject_revision"))
-        object.__setattr__(self, "verification_id", _required(self.verification_id, "verification_id"))
+        object.__setattr__(
+            self, "subject_revision", _required(self.subject_revision, "subject_revision")
+        )
+        object.__setattr__(
+            self, "verification_id", _required(self.verification_id, "verification_id")
+        )
         object.__setattr__(self, "evaluation_refs", _unique(self.evaluation_refs, "evaluation_ref"))
 
     @property
     def passes(self) -> bool:
-        return self.tests_passed and all(check.state is CheckState.PASS for check in self.required_checks)
+        return self.tests_passed and all(
+            check.state is CheckState.PASS for check in self.required_checks
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,8 +298,14 @@ class IntegrationCandidate:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "integration_id", _required(self.integration_id, "integration_id"))
-        object.__setattr__(self, "target_base_revision", _required(self.target_base_revision, "target_base_revision"))
-        object.__setattr__(self, "ordered_workstream_ids", _unique(self.ordered_workstream_ids, "workstream_id"))
+        object.__setattr__(
+            self,
+            "target_base_revision",
+            _required(self.target_base_revision, "target_base_revision"),
+        )
+        object.__setattr__(
+            self, "ordered_workstream_ids", _unique(self.ordered_workstream_ids, "workstream_id")
+        )
         object.__setattr__(self, "ordered_revisions", _unique(self.ordered_revisions, "revision"))
         if len(self.ordered_workstream_ids) != len(self.ordered_revisions):
             raise ValueError("integration workstreams/revisions must have equal length")
@@ -306,7 +330,13 @@ class CodingBatch:
     integration_candidates: tuple[IntegrationCandidate, ...] = ()
 
     def __post_init__(self) -> None:
-        for field_name in ("batch_id", "request_key", "repository_id", "target_ref", "base_revision"):
+        for field_name in (
+            "batch_id",
+            "request_key",
+            "repository_id",
+            "target_ref",
+            "base_revision",
+        ):
             object.__setattr__(self, field_name, _required(getattr(self, field_name), field_name))
         if self.concurrency_limit < 1:
             raise ValueError("concurrency_limit must be positive")
