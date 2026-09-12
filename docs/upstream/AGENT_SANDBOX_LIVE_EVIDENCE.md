@@ -1,11 +1,15 @@
-# Agent-Sandbox live evidence campaign (#798)
+# Agent-Sandbox live evidence campaign (#798 handoff to #829)
 
-Status: **capture harness ready; representative Kubernetes/VPS run still required**  
+Status: **capture/evidence contract ready; representative Kubernetes/VPS execution owned by #829**  
 Pinned upstream revision: `d1b7ac007debcb1ba8de91c76afb49bee90d096a`
 
-This document defines how live evidence for #798 is captured. It deliberately keeps the live
-campaign outside baseline installation and CI: Agent-Sandbox remains optional, and GitHub-hosted
-runner measurements must not be presented as representative VPS performance evidence.
+This document defines the live-evidence contract produced by #798 and consumed by #829. It keeps
+live execution outside baseline installation and CI: Agent-Sandbox remains optional, and
+GitHub-hosted runner measurements must not be presented as representative VPS performance evidence.
+
+Missing live results remain deliberately fail-closed in the tooling. They block the Agent-Sandbox
+live-validation block in #829 and any production-support claim, but they do not block completion of
+the static/source #798 scope once this handoff contract and its tests are complete.
 
 ## Harness
 
@@ -57,8 +61,8 @@ python scripts/benchmarks/issue798_agent_sandbox_live.py \
 are never written to the JSON report. The first ownership probe is deliberately read-only: it
 performs same-token and cross-token `GET /sandboxes/{sandboxID}` requests. A protected shared
 provider must allow `A -> A` and `B -> B` while rejecting `A -> B` and `B -> A`. Merely rejecting
-all four requests is **not** evidence of working tenant isolation. Later lifecycle fixtures still
-need to repeat the ownership check for connect/router, snapshot, pause/resume and delete operations.
+all four requests is **not** evidence of working tenant isolation. #829 must repeat the ownership
+check for every read/write/lifecycle/router/snapshot surface used by a supported profile.
 
 ## Evidence captured automatically
 
@@ -99,11 +103,11 @@ scripts/benchmarks/issue798_agent_sandbox_evidence_gate.py
 scripts/benchmarks/issue798_agent_sandbox_campaign.example.json
 ```
 
-Copy the example campaign manifest to the retained evidence directory. Fill its `environment`
-object from the actual representative run; do not copy placeholder values from another host or
-campaign. Change a scenario from `not_run` only after its live fixture has actually been executed.
-`pass`, `fail` and `unsupported` are terminal evaluation states and require at least one evidence
-reference; a missing scenario is normalized back to `not_run`.
+Under #829, copy the example campaign manifest to the retained evidence directory. Fill its
+`environment` object from the actual representative run; do not copy placeholder values from
+another host or campaign. Change a scenario from `not_run` only after its live fixture has actually
+been executed. `pass`, `fail` and `unsupported` are terminal evaluation states and require at least
+one evidence reference; a missing scenario is normalized back to `not_run`.
 
 After the raw capture and lifecycle campaign, run:
 
@@ -115,11 +119,11 @@ python scripts/benchmarks/issue798_agent_sandbox_evidence_gate.py \
 ```
 
 The gate verifies the raw-evidence schema and pinned provider identity, derives protected-profile
-hard gates from the Pod/network/credential/authorization evidence, checks that every required
-lifecycle, isolation, browser, snapshot and representative-VPS scenario has a terminal result, and
-requires the representative host/runtime metadata listed below. It also cross-checks the declared
-runtime class and sandbox image against the raw Pod evidence so metadata from a different run cannot
-silently satisfy readiness.
+hard gates from Pod/network/credential/authorization evidence, checks that every required lifecycle,
+isolation, browser, snapshot and representative-VPS scenario has a terminal result, and requires the
+representative host/runtime metadata listed below. It also cross-checks the declared runtime class
+and sandbox image against raw Pod evidence so metadata from a different run cannot silently satisfy
+readiness.
 
 The provider-authorization hard gate is intentionally two-sided: both legitimate same-token GETs
 must succeed **and** both known-ID cross-token GETs must be rejected. Transport errors or missing
@@ -128,15 +132,10 @@ than being credited with tenant isolation.
 
 Its fields have deliberately narrow meanings:
 
-- `protected_profile_gate=pass` means only that all machine-checkable hard gates captured by the
-  current raw harness passed;
-- `decision_ready=true` means the required campaign, representative-environment metadata and hard-
-  gate capture are complete and mutually consistent enough to choose one of `adopt`,
-  `optional_provider_only` or `reject/defer`; failures may still be present;
-- `adoption_eligible_from_this_gate=true` is stricter and requires no hard-gate failures, failed
-  scenarios, unsupported required scenarios, missing environment metadata, environment/raw-evidence
-  mismatches or missing hard-gate evidence;
-- none of those fields performs the final architecture/security recommendation for #798.
+- `protected_profile_gate=pass` means only that all machine-checkable hard gates captured by the current raw harness passed;
+- `decision_ready=true` means the required campaign, representative-environment metadata and hard-gate capture are complete and mutually consistent enough for #829 to choose one of `adopt`, `optional_provider_only` or `reject/defer`; failures may still be present;
+- `adoption_eligible_from_this_gate=true` is stricter and requires no hard-gate failures, failed scenarios, unsupported required scenarios, missing environment metadata, environment/raw-evidence mismatches or missing hard-gate evidence;
+- none of those fields performs the final architecture/security recommendation; #829 applies `AGENT_SANDBOX_DECISION_RULE.md`.
 
 This separation is intentional: a complete campaign that exposes a vulnerability must become
 **decision-ready for rejection**, not be mislabeled as incomplete, while missing live work must
@@ -170,9 +169,9 @@ unapproved destinations. A failed network connection alone is not proof of compl
 Likewise, a blocked cross-token `GET` is necessary but does not by itself prove ownership checks on
 mutating provider endpoints.
 
-## Remaining live cases not fully automated by the first harness
+## Remaining live cases owned by #829
 
-The following still require additional provider/API lifecycle fixtures around the raw capture:
+The following require provider/API lifecycle fixtures around the raw capture:
 
 1. create sandbox through the Agent-Sandbox provider API;
 2. benign shell task -> canonical Artifact round trip through `AgentSandboxExecutor`;
@@ -180,30 +179,27 @@ The following still require additional provider/API lifecycle fixtures around th
 4. memory runaway/OOM behavior and canonical error mapping;
 5. timeout/cancel followed by orphan-process and sandbox cleanup verification;
 6. attempted read/write outside the canonical Workspace materialization;
-7. DNS, redirects, IPv6 and alternate-port/protocol egress bypass cases;
-8. internal Kubernetes service/control-plane reachability;
-9. synthetic scoped credential delivery, use, revocation and exfiltration attempt;
-10. cross-token ownership for connect/router, snapshot, pause/resume and delete operations;
-11. browser/download/screenshot path through the canonical #74 boundary;
-12. pause/resume process-state behavior;
-13. snapshot restore, stale snapshot and incompatible-image behavior;
-14. sandbox crash/restart and retained-state cleanup;
-15. repeated cold starts and warm-pool allocation latency;
-16. idle CPU/RAM/disk measurement;
-17. concurrent sandbox density on the representative VPS class;
-18. malicious/untrusted repository execution fixture.
-
-The campaign manifest additionally retains an explicit `multi_sandbox_concurrency_cleanup`
-scenario because the issue acceptance criteria require concurrent-sandbox failure cleanup rather
-than only density measurement. The provider-create step is evidenced as part of the benign
-round-trip/lifecycle evidence set rather than treated as proof of isolation on its own.
+7. attempted read of unrelated host/platform data;
+8. DNS, redirects, IPv6 and alternate-port/protocol egress bypass cases;
+9. internal Kubernetes service/control-plane reachability;
+10. synthetic scoped credential delivery, use, revocation and exfiltration attempt;
+11. cross-token ownership for native/provider/E2B file/log/terminal/router/lifecycle/snapshot/delete operations;
+12. browser/download/screenshot path through the canonical #74 boundary;
+13. pause/resume process-state behavior;
+14. snapshot restore, stale snapshot and incompatible-image behavior;
+15. sandbox crash/restart and retained-state cleanup;
+16. repeated cold starts and warm-pool allocation latency;
+17. idle CPU/RAM/disk and disk/snapshot growth measurement;
+18. concurrent sandbox density and multi-sandbox failure cleanup on the representative VPS class;
+19. malicious/untrusted repository execution fixture;
+20. same-class reference Executor and Containarium comparison where applicable.
 
 These cases must use the same pinned upstream revision and record any platform-owned hardened
 blueprint/profile revision used for the run.
 
 ## Required environment metadata for a representative result
 
-Every retained VPS campaign must identify at least:
+Every retained #829 Agent-Sandbox campaign must identify at least:
 
 - capture date;
 - host/VPS class and vCPU/RAM/disk;
@@ -226,15 +222,17 @@ The campaign template represents these as `capture_date`, `host_class`, `vcpu`, 
 Measurements missing this context may be useful diagnostics but are not sufficient comparison
 evidence and cannot make the machine-readable gate `decision_ready`.
 
-## Decision rule
+## Decision ownership
 
-#798 must not conclude `adopt` or `optional_provider_only` merely because the API works. The final
-recommendation requires both:
+#798 may conclude its static/source evaluation once the adapter, reviews, deterministic tests and
+this reproducible evidence contract are complete and CI is green.
 
-1. canonical adapter correctness; and
-2. effective runtime evidence showing that the selected protected profile materially improves
-   isolation without unacceptable credential, egress, lifecycle or VPS-operability regressions.
+#829 must not conclude `adopt` or `optional_provider_only` merely because the API works. Its final
+Agent-Sandbox recommendation requires both:
+
+1. canonical adapter correctness established by #798; and
+2. retained effective runtime evidence showing that the selected protected profile materially improves isolation without unacceptable credential, egress, lifecycle or VPS-operability regressions.
 
 If complete mediation cannot be shown for a claimed protected profile, that profile is explicitly
-unsupported. Agent-Sandbox can still remain a lower-trust/experimental provider if the evidence
-supports that narrower scope.
+unsupported. Agent-Sandbox can still remain a narrower optional/experimental provider only if the
+retained evidence supports that scope.
