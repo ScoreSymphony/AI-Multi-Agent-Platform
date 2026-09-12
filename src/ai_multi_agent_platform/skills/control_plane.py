@@ -24,6 +24,7 @@ from .security_evidence import SecurityEvidenceService
 from .security_evidence_control_plane import (
     SKILL_SECURITY_EVIDENCE_COLLECTION,
     SkillSecurityEvidenceResourceService,
+    SkillSecurityEvidenceScopeAccess,
 )
 from .service import SkillService
 
@@ -62,7 +63,11 @@ def register_skill_control_plane(
     if security_evidence is not None:
         control_plane.register_resource_service(
             SKILL_SECURITY_EVIDENCE_COLLECTION,
-            SkillSecurityEvidenceResourceService(security_evidence),
+            SkillSecurityEvidenceResourceService(
+                security_evidence,
+                service,
+                SkillSecurityEvidenceScopeAccess(control_plane),
+            ),
         )
     for command, handler in (
         ("skill.create", lifecycle.create),
