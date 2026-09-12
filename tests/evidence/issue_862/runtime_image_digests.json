@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "evidence_source": {
+    "workflow_run_id": 34697375096,
+    "workflow_head_sha": "6313a04afd9577915244c6079359f5f54a067f69",
+    "captured_at_utc_date": "2026-09-12"
+  },
+  "backends": {
+    "rustfs": {
+      "image": "rustfs/rustfs:1.0.0-rc.6",
+      "image_id_on_ci_runner": "sha256:d196c45d9b351948b51b074e3775beb1bb862a1639bc37dbc7e0bdb7b282c1fd",
+      "repo_digest": "rustfs/rustfs@sha256:97171b3d72cd47dc81000f92ea84de25608bfc35a94c965501afaeb5d99f6035"
+    },
+    "garage": {
+      "image": "dxflrs/garage:v2.3.0",
+      "image_id_on_ci_runner": "sha256:5eda3acb72a0b6c3432233d19b07dffabd9ee7eb93be90031bae75e4b81e6324",
+      "repo_digest": "dxflrs/garage@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690"
+    },
+    "seaweedfs": {
+      "image": "chrislusf/seaweedfs:4.46",
+      "image_id_on_ci_runner": "sha256:51907b802784d01ddb60862dd02a451ee20ee5e151ef580326bba1c63894d30b",
+      "repo_digest": "chrislusf/seaweedfs@sha256:08d516132314207d10c8e37cbffc1f32b147d870169688734cc61c6231625b62"
+    }
+  },
+  "policy": {
+    "vps_capture_must_record_repo_digest": true,
+    "digest_mismatch_blocks_final_classification": true,
+    "tag_match_without_digest_match_is_insufficient": true
+  }
+}
