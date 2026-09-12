@@ -174,11 +174,7 @@ class CodingBatchCoordinator:
     ) -> IntegrationCandidate:
         """Internal state transition used only after the #15 adapter has enforced its action."""
 
-        return self._state.mark_merge_ready(
-            batch_id,
-            integration_id,
-            authorization_granted=True,
-        )
+        return self._state._mark_merge_ready_after_authorization(batch_id, integration_id)
 
     def attach_change_request(
         self,
