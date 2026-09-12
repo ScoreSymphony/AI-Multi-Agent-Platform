@@ -136,7 +136,7 @@ The #19 evaluation framework remains the canonical evaluation owner. Context ass
 
 ## Required regression evidence
 
-`tests/test_issue_590_context_bundles.py` is the focused #590 regression/acceptance suite. It proves:
+`tests/integration/context/test_context_bundles.py` is the focused #590 regression/acceptance suite. It proves:
 
 - deterministic digest assembly and idempotent storage;
 - changed source revision -> changed bundle digest;
