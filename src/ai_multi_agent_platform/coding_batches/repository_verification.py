@@ -179,9 +179,7 @@ class CanonicalRepositoryOutputVerifier:
             raise ValueError("repository output requires a passing canonical #86 Verification")
         covered_artifacts = {request.subject.subject_id, *result.evidence_artifact_ids}
         if covered_artifacts != set(repository.diff_artifact_ids):
-            raise ValueError(
-                "canonical Verification must cover the complete #82 diff-artifact set"
-            )
+            raise ValueError("canonical Verification must cover the complete #82 diff-artifact set")
         assert repository.output_revision is not None
         return VerificationEvidence(
             verification_id=request.verification_id,
