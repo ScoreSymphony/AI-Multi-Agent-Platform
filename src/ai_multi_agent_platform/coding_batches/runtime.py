@@ -20,6 +20,7 @@ from ai_multi_agent_platform.repositories import RepositoryCallContext
 
 from .models import CodingBatch, CodingWorkstream, WorkstreamState
 from .service import CodingBatchCoordinator
+from .telemetry import CodingBatchTelemetry
 
 
 class PlanCoordinationReader(Protocol):
@@ -117,12 +118,14 @@ class CanonicalCodingWorkstreamDispatcher:
         agent_runtime: CodingAgentRuntime,
         agent_runs: AgentRunReader,
         materializer: WorkstreamMaterializer,
+        telemetry: CodingBatchTelemetry | None = None,
     ) -> None:
         self._coordinator = coordinator
         self._plan_coordination = plan_coordination
         self._agent_runtime = agent_runtime
         self._agent_runs = agent_runs
         self._materializer = materializer
+        self._telemetry = telemetry
 
     def dispatchable_workstreams(self, batch_id: str) -> tuple[CodingDispatchSlot, ...]:
         """Intersect #872 safety readiness with already-active canonical #384 Step attempts."""
@@ -162,6 +165,7 @@ class CanonicalCodingWorkstreamDispatcher:
 
         batch = self._coordinator.get(batch_id)
         workstream = batch.workstream(workstream_id)
+        was_running = workstream.state is WorkstreamState.RUNNING
         slot = self._active_slot(batch, workstream)
         if slot is None:
             raise ValueError("coding workstream has no active canonical #384 Step attempt")
@@ -208,6 +212,15 @@ class CanonicalCodingWorkstreamDispatcher:
             agent_run_id=run.agent_run_id,
         )
         running = self._coordinator.start_workstream(batch_id, workstream_id)
+        if self._telemetry is not None and not was_running:
+            self._telemetry.workstream_dispatched(
+                self._coordinator.get(batch_id),
+                running,
+                run_id=slot.run_id,
+                agent_id=run.agent.agent_id,
+                plan_revision=slot.plan_revision,
+                attempt=slot.attempt,
+            )
         return CodingWorkstreamDispatch(slot=slot, agent_run=run, workstream=running)
 
     def _active_slot(
