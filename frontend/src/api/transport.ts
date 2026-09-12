@@ -60,7 +60,9 @@ export class ControlPlaneError extends Error {
  *
  * Domain clients own paths and typed domain models. This layer owns generic
  * HTTP construction, browser auth/CSRF behavior, JSON/error normalization,
- * timeout/cancellation and bounded retry semantics.
+ * timeout/cancellation and bounded retry semantics. Streaming domain clients
+ * use `requestRaw` so successful response bodies remain unconsumed while the
+ * same transport policy still applies.
  */
 export class ApiTransport {
   readonly baseUrl: string;
@@ -90,7 +92,17 @@ export class ApiTransport {
     );
   }
 
+  url(path: string): string {
+    return `${this.baseUrl}${this.apiPrefix}${normalizePath(path)}`;
+  }
+
   async request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+    const response = await this.requestRaw(path, options);
+    const text = await response.text();
+    return (text ? safeJson(text) : null) as T;
+  }
+
+  async requestRaw(path: string, options: ApiRequestOptions = {}): Promise<Response> {
     const method = (options.method ?? "GET").toUpperCase();
     const headers = new Headers(options.headers);
     if (!headers.has("Accept")) headers.set("Accept", "application/json");
@@ -128,7 +140,7 @@ export class ApiTransport {
       attempt += 1;
       try {
         const response = await this.fetchAttempt(
-          `${this.baseUrl}${this.apiPrefix}${normalizePath(path)}`,
+          this.url(path),
           {
             method,
             headers,
@@ -140,19 +152,20 @@ export class ApiTransport {
           correlationId,
         );
 
-        const text = await response.text();
-        const payload = text ? safeJson(text) : null;
-        if (response.ok) return payload as T;
+        if (response.ok) return response;
 
-        const error = new ControlPlaneError(
-          response.status,
-          normalizeError(response, payload, correlationId),
-        );
         if (attempt < maxAttempts && shouldRetryResponse(response.status)) {
+          await response.body?.cancel().catch(() => undefined);
           await this.retryDelay(attempt, options.signal);
           continue;
         }
-        throw error;
+
+        const text = await response.text();
+        const payload = text ? safeJson(text) : null;
+        throw new ControlPlaneError(
+          response.status,
+          normalizeError(response, payload, correlationId),
+        );
       } catch (error) {
         const normalized = normalizeThrownError(error, correlationId);
         if (
