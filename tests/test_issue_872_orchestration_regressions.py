@@ -10,7 +10,6 @@ from ai_multi_agent_platform.coding_batches import (
     WorkstreamState,
 )
 
-
 BASE = "a" * 40
 
 
