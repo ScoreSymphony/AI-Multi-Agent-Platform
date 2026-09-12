@@ -152,7 +152,10 @@ class CodingBatchRepairCoordinator:
         if candidate.repair_attempts:
             latest = candidate.repair_attempts[-1]
             if latest.repair_id == repair_id and latest.state is RepairAttemptState.VERIFIED:
-                if latest.output_revision == output_revision and latest.verification == verification:
+                if (
+                    latest.output_revision == output_revision
+                    and latest.verification == verification
+                ):
                     return candidate
                 raise ValueError("repair result retry conflicts with recorded verified output")
         repair = self._active_repair(candidate, repair_id)
@@ -230,7 +233,9 @@ class CodingBatchRepairCoordinator:
         batch = self._get_batch(batch_id)
         candidate = batch.integration_candidate(integration_id)
         if candidate.state is IntegrationState.MERGED:
-            raise ValueError("merged integration candidate cannot be reconciled against a new target")
+            raise ValueError(
+                "merged integration candidate cannot be reconciled against a new target"
+            )
         if current_target_revision == candidate.target_base_revision:
             return candidate
 
