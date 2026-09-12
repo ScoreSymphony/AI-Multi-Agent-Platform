@@ -25,6 +25,12 @@ from .models import (
 from .overlap import ConservativeOverlapClassifier
 from .projection import coding_batch_resource
 from .repair import DEFAULT_MAX_REPAIR_ATTEMPTS, CodingBatchRepairCoordinator
+from .runtime import (
+    CanonicalCodingWorkstreamDispatcher,
+    CodingDispatchSlot,
+    CodingWorkstreamDispatch,
+    agent_revision_ref,
+)
 from .service import (
     CodingBatchCoordinator,
     CodingBatchStore,
@@ -36,6 +42,7 @@ from .sqlite_store import SqliteCodingBatchStore
 __all__ = [
     "AuthorizedCodingBatchIntegration",
     "BatchAggregationPolicy",
+    "CanonicalCodingWorkstreamDispatcher",
     "CanonicalWorkstreamMaterializer",
     "CheckState",
     "CodingBatch",
@@ -43,8 +50,10 @@ __all__ = [
     "CodingBatchCoordinator",
     "CodingBatchRepairCoordinator",
     "CodingBatchStore",
+    "CodingDispatchSlot",
     "CodingWorkItem",
     "CodingWorkstream",
+    "CodingWorkstreamDispatch",
     "CombinedValidationEvidence",
     "ConservativeOverlapClassifier",
     "DEFAULT_MAX_REPAIR_ATTEMPTS",
@@ -62,6 +71,7 @@ __all__ = [
     "WorkstreamProvenance",
     "WorkstreamResult",
     "WorkstreamState",
+    "agent_revision_ref",
     "coding_batch_resource",
     "deterministic_branch_ref",
     "deterministic_workspace_id",
