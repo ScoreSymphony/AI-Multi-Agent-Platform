@@ -100,13 +100,9 @@ class PlanningInventoryBuilder:
                         ):
                             team_enabled = False
                         continue
-                    if (
-                        not member_revision.profile.enabled
-                        and (
-                            member.required
-                            or team_profile.unavailable_member_policy
-                            is UnavailableMemberPolicy.FAIL
-                        )
+                    if not member_revision.profile.enabled and (
+                        member.required
+                        or team_profile.unavailable_member_policy is UnavailableMemberPolicy.FAIL
                     ):
                         team_enabled = False
                 team_candidates.append(
