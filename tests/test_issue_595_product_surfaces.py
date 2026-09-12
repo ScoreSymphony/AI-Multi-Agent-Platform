@@ -7,7 +7,7 @@ def test_public_shell_mounts_governed_learning_routes() -> None:
     clients = Path("frontend/src/app/shell/clients.ts").read_text(encoding="utf-8")
     routes = Path("frontend/src/app/shell/routes.tsx").read_text(encoding="utf-8")
 
-    assert "new LearningClient({ baseUrl, fetchImpl })" in clients
+    assert "new LearningClient({ transport })" in clients
     assert 'matchPath("/learning/:learningCandidateId", path)' in routes
     assert 'path === "/learning"' in routes
     assert "<LearningPage client={learningClient} />" in routes

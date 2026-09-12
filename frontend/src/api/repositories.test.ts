@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { ControlPlaneCollectionClient } from "./collections";
 import { RepositoryCollectionClient } from "./repositories";
 
 function jsonResponse(body: unknown): Response {
@@ -30,9 +29,7 @@ describe("RepositoryCollectionClient", () => {
       expect(init?.credentials).toBe("include");
       return jsonResponse({ items: [repository], next_cursor: null, total: 1, limit: 20 });
     });
-    const client = new RepositoryCollectionClient(
-      new ControlPlaneCollectionClient({ fetchImpl }),
-    );
+    const client = new RepositoryCollectionClient({ fetchImpl });
 
     const page = await client.list({
       limit: 20,
@@ -48,9 +45,7 @@ describe("RepositoryCollectionClient", () => {
       expect(String(input)).toBe("/api/v1/repositories/external_resource%2Ffixture");
       return jsonResponse({ id: "external_resource/fixture" });
     });
-    const client = new RepositoryCollectionClient(
-      new ControlPlaneCollectionClient({ fetchImpl }),
-    );
+    const client = new RepositoryCollectionClient({ fetchImpl });
 
     await client.get("external_resource/fixture");
   });

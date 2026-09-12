@@ -38,8 +38,8 @@ export function CanonicalConfigurationDetailPage({
     [client.baseUrl, session],
   );
   const configuration = useMemo(
-    () => new ConfigurationClient({ baseUrl: client.baseUrl, fetchImpl: session.fetch }),
-    [client.baseUrl, session],
+    () => new ConfigurationClient({ transport: session.transport }),
+    [session],
   );
 
   if (collection === "model-routing-profiles") {

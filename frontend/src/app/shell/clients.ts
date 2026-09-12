@@ -24,26 +24,25 @@ import { VerificationClient } from "../../api/verification";
 export function useShellClients(baseUrl: string) {
   const session = useMemo(() => new BrowserSessionClient({ baseUrl }), [baseUrl]);
   const transport = session.transport;
-  const fetchImpl = session.fetch;
   const client = useMemo(() => new ControlPlaneClient({ transport }), [transport]);
   const onboardingClient = useMemo(() => new OnboardingClient({ transport }), [transport]);
   const collections = useMemo(() => new ControlPlaneCollectionClient({ transport }), [transport]);
   const approvalClient = useMemo(() => new ApprovalClient({ transport }), [transport]);
-  const repositoryClient = useMemo(() => new RepositoryCollectionClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const conversationClient = useMemo(() => new ConversationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const repositoryClient = useMemo(() => new RepositoryCollectionClient({ transport }), [transport]);
+  const conversationClient = useMemo(() => new ConversationClient({ transport }), [transport]);
   const automationClient = useMemo(() => new AutomationClient({ transport }), [transport]);
   const goalClient = useMemo(() => new GoalClient({ transport }), [transport]);
   const computeClient = useMemo(() => new ComputeClient({ transport }), [transport]);
   const evaluationClient = useMemo(() => new EvaluationClient({ transport }), [transport]);
   const governanceClient = useMemo(() => new GovernanceClient({ transport }), [transport]);
   const integrationsClient = useMemo(() => new IntegrationsClient({ transport }), [transport]);
-  const learningClient = useMemo(() => new LearningClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
-  const memoryKnowledgeClient = useMemo(() => new MemoryKnowledgeClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const learningClient = useMemo(() => new LearningClient({ transport }), [transport]);
+  const memoryKnowledgeClient = useMemo(() => new MemoryKnowledgeClient({ transport }), [transport]);
   const notificationClient = useMemo(() => new NotificationClient({ transport }), [transport]);
-  const organizationClient = useMemo(() => new OrganizationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const organizationClient = useMemo(() => new OrganizationClient({ transport }), [transport]);
   const pluginsClient = useMemo(() => new PluginsClient({ transport }), [transport]);
   const registryClient = useMemo(() => new RegistryClient({ transport }), [transport]);
-  const templateClient = useMemo(() => new TemplateClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const templateClient = useMemo(() => new TemplateClient({ transport }), [transport]);
   const verificationClient = useMemo(() => new VerificationClient({ transport }), [transport]);
 
   return {
