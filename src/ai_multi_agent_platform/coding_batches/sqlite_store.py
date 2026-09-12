@@ -296,9 +296,7 @@ def _decode_workstream(raw_value: object) -> CodingWorkstream:
         state=WorkstreamState(raw["state"]),
         blocked_by=tuple(raw["blocked_by"]),
         result=None if result_raw is None else _decode_result(result_raw),
-        verification=None
-        if verification_raw is None
-        else _decode_verification(verification_raw),
+        verification=None if verification_raw is None else _decode_verification(verification_raw),
         failure_reason=raw["failure_reason"],
     )
 
@@ -341,9 +339,7 @@ def _decode_integration_candidate(raw_value: object) -> IntegrationCandidate:
             for item in raw["conflicts"]
         ),
         integrated_revision=raw["integrated_revision"],
-        validation=None
-        if validation_raw is None
-        else _decode_combined_validation(validation_raw),
+        validation=None if validation_raw is None else _decode_combined_validation(validation_raw),
         stale_base=raw["stale_base"],
         blocker_reasons=tuple(raw["blocker_reasons"]),
         change_request_ref=raw["change_request_ref"],
