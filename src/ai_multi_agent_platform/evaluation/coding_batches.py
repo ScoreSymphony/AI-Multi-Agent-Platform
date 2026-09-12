@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from ai_multi_agent_platform.coding_batches import (
     CodingBatchCoordinator,
-    IntegrationState,
     RepairAttemptState,
     WorkstreamState,
 )
