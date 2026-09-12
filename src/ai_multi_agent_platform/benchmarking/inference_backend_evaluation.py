@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -62,6 +63,7 @@ def _report_schema() -> Mapping[str, object]:
 def validate_inference_backend_evaluation_report(report: Mapping[str, Any]) -> None:
     """Validate one measured report against the packaged v1 evidence schema."""
 
+    _reject_non_finite_numbers(report)
     validator = Draft202012Validator(_report_schema(), format_checker=FormatChecker())
     errors = sorted(
         validator.iter_errors(dict(report)),
@@ -93,6 +95,7 @@ def assess_inference_backend_evaluation(
         candidate_backend=candidate_backend,
         candidate_revision=candidate_revision,
     )
+    performance_scenarios = _campaign_performance_scenarios(campaign)
     required_contract_cases = _require_string_set(campaign, "contract_cases")
     required_failure_cases = _require_string_set(campaign, "failure_cases")
     required_placement_cases = _require_string_set(campaign, "placement_cases")
@@ -116,6 +119,7 @@ def assess_inference_backend_evaluation(
                 f"{backend} report backend_revision {backend_revision!r} "
                 f"does not match pinned revision {pinned_revision!r}"
             )
+        _validate_report_scenario(report, performance_scenarios=performance_scenarios)
         normalized_reports.append(report)
 
     candidate_reports = tuple(
@@ -230,6 +234,51 @@ def _pinned_backend_revisions(
     return pinned
 
 
+def _campaign_performance_scenarios(
+    campaign: Mapping[str, Any],
+) -> dict[str, tuple[int, int | float | None]]:
+    entries = _require_sequence(campaign.get("performance_scenarios"), "performance_scenarios")
+    scenarios: dict[str, tuple[int, int | float | None]] = {}
+    for item in entries:
+        entry = _require_mapping(item, "performance_scenarios")
+        scenario_id = _require_str(entry, "scenario_id")
+        concurrency = entry.get("concurrency")
+        if isinstance(concurrency, bool) or not isinstance(concurrency, int) or concurrency < 1:
+            raise ValueError("performance_scenarios concurrency must be an integer >= 1")
+        request_rate = entry.get("request_rate")
+        if request_rate is not None:
+            if isinstance(request_rate, bool) or not isinstance(request_rate, (int, float)):
+                raise ValueError("performance_scenarios request_rate must be null or a number")
+            if not math.isfinite(float(request_rate)) or request_rate <= 0:
+                raise ValueError("performance_scenarios request_rate must be finite and > 0")
+        if scenario_id in scenarios:
+            raise ValueError(f"duplicate performance scenario {scenario_id!r}")
+        scenarios[scenario_id] = (concurrency, request_rate)
+    if not scenarios:
+        raise ValueError("performance_scenarios must not be empty")
+    return scenarios
+
+
+def _validate_report_scenario(
+    report: Mapping[str, Any],
+    *,
+    performance_scenarios: Mapping[str, tuple[int, int | float | None]],
+) -> None:
+    workload = _require_mapping(report.get("workload"), "workload")
+    scenario_id = _require_str(workload, "scenario_id")
+    declared = performance_scenarios.get(scenario_id)
+    if declared is None:
+        raise ValueError(
+            f"report workload scenario_id {scenario_id!r} is not declared by this campaign"
+        )
+    actual = (cast(int, workload.get("concurrency")), workload.get("request_rate"))
+    if actual != declared:
+        raise ValueError(
+            f"report workload for scenario {scenario_id!r} does not match campaign "
+            f"concurrency/request_rate {declared!r}"
+        )
+
+
 def _latest_case_statuses(
     reports: Sequence[Mapping[str, Any]],
     field: str,
@@ -335,6 +384,18 @@ def _comparison_key(report: Mapping[str, Any]) -> tuple[Any, ...]:
         workload["request_rate"],
         workload["concurrency"],
     )
+
+
+def _reject_non_finite_numbers(value: object, *, path: str = "<root>") -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"non-finite numeric evidence is not permitted at {path}")
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            _reject_non_finite_numbers(item, path=f"{path}.{key}")
+        return
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        for index, item in enumerate(value):
+            _reject_non_finite_numbers(item, path=f"{path}[{index}]")
 
 
 def _require_mapping(value: object, field: str) -> Mapping[str, Any]:
