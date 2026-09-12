@@ -13,8 +13,8 @@ export function useConfigurationSession(core: ControlPlaneClient) {
   return useMemo(() => {
     const session = new BrowserSessionClient({ baseUrl: core.baseUrl });
     return {
-      configuration: new ConfigurationClient({ baseUrl: core.baseUrl, fetchImpl: session.fetch }),
-      collections: new ControlPlaneCollectionClient({ baseUrl: core.baseUrl, fetchImpl: session.fetch }),
+      configuration: new ConfigurationClient({ transport: session.transport }),
+      collections: new ControlPlaneCollectionClient({ transport: session.transport }),
     };
   }, [core]);
 }

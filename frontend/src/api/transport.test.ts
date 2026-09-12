@@ -109,6 +109,40 @@ describe("ApiTransport", () => {
     expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://platform.test/api/v1/tasks");
   });
 
+  it("keeps successful raw streaming bodies unconsumed behind canonical request policy", async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode("event: ready\ndata: {}\n\n"));
+        controller.close();
+      },
+    });
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      expect(init?.method).toBe("POST");
+      expect(init?.credentials).toBe("include");
+      expect(headers.get("accept")).toBe("text/event-stream");
+      expect(headers.get("idempotency-key")).toBe("stream_1");
+      expect(headers.get("x-csrf-token")).toBe("csrf_stream");
+      expect(headers.get("x-correlation-id")).toBeTruthy();
+      return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+    });
+    const transport = new ApiTransport({
+      fetchImpl,
+      csrf: { getToken: () => "csrf_stream" },
+    });
+
+    const response = await transport.requestRaw("/stream", {
+      method: "POST",
+      headers: { Accept: "text/event-stream" },
+      idempotencyKey: "stream_1",
+    });
+
+    expect(response.bodyUsed).toBe(false);
+    await expect(response.text()).resolves.toContain("event: ready");
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
   it("injects the current CSRF token for cookie mutations and observes rotation", async () => {
     let csrfToken = "csrf_initial";
     const seen: Array<string | null> = [];
