@@ -11,6 +11,13 @@ from .automation_api import (
     DELIVERY_COLLECTION,
 )
 from .automation_runtime_composition import AUTOMATION_STATE_ENV
+from .coding_batch_contract import (
+    CODING_BATCH_COLLECTION,
+    CODING_BATCH_COMMANDS,
+    CodingBatchResourceService,
+    coding_batch_command_handlers,
+    coding_batch_resource_services,
+)
 from .conversation_api import (
     CONVERSATION_COLLECTION,
     CONVERSATION_COLLECTIONS,
@@ -120,11 +127,14 @@ __all__ = [
     "AUTOMATION_STATE_ENV",
     "ActorContext",
     "AuthenticatedControlPlaneHTTP",
+    "CODING_BATCH_COLLECTION",
+    "CODING_BATCH_COMMANDS",
     "CONVERSATION_COLLECTION",
     "CONVERSATION_COLLECTIONS",
     "CONVERSATION_COMMANDS",
     "CONVERSATION_MESSAGE_COLLECTION",
     "CURRENT_COLLECTIONS",
+    "CodingBatchResourceService",
     "CommandHandler",
     "ControlPlane",
     "ControlPlaneASGI",
@@ -177,6 +187,8 @@ __all__ = [
     "TEAM_COLLECTION",
     "WorkspaceIdentity",
     "build_openapi",
+    "coding_batch_command_handlers",
+    "coding_batch_resource_services",
     "evaluation_command_handlers",
     "evaluation_resource_services",
     "organization_command_handlers",
