@@ -96,6 +96,13 @@ class PlanningProposalValidator:
                         errors.append(
                             f"Step {step.key} references disabled Agent {assignment_agent.agent_id}"
                         )
+                    else:
+                        match = match_planning_step(step, request, agent_only=True)
+                        if match is None or match.status is not AgentMatchStatus.SELECTED:
+                            errors.append(
+                                f"Step {step.key} exact Agent assignment is not eligible under "
+                                "the canonical Agent matcher"
+                            )
             elif step.assignment.team_id is not None:
                 revision = step.assignment.team_revision
                 if revision is None:
@@ -112,6 +119,13 @@ class PlanningProposalValidator:
                             f"Step {step.key} references disabled/incompatible Agent Team "
                             f"{assignment_team.team_id}"
                         )
+                    else:
+                        match = match_planning_step(step, request)
+                        if match is None or match.status is not AgentMatchStatus.SELECTED:
+                            errors.append(
+                                f"Step {step.key} exact Agent Team assignment is not eligible "
+                                "under the canonical Agent matcher"
+                            )
             elif step.assignment.role_requirement is not None:
                 role = step.assignment.role_requirement
                 match = match_planning_step(step, request, agent_only=True)
