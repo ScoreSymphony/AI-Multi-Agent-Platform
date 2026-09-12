@@ -77,6 +77,22 @@ def coding_batch_resource(batch: CodingBatch) -> dict[str, Any]:
                 "target_base_revision": candidate.target_base_revision,
                 "ordered_workstream_ids": list(candidate.ordered_workstream_ids),
                 "ordered_revisions": list(candidate.ordered_revisions),
+                "execution": (
+                    {
+                        "task_id": candidate.execution.task_id,
+                        "plan_id": candidate.execution.plan_id,
+                        "plan_revision": candidate.execution.plan_revision,
+                        "step_id": candidate.execution.step_id,
+                        "run_id": candidate.execution.run_id,
+                        "agent_revision": candidate.execution.agent_revision,
+                        "agent_run_id": candidate.execution.agent_run_id,
+                        "workspace_id": candidate.execution.workspace_id,
+                        "snapshot_id": candidate.execution.snapshot_id,
+                        "branch_ref": candidate.execution.branch_ref,
+                    }
+                    if candidate.execution is not None
+                    else None
+                ),
                 "integrated_revision": candidate.integrated_revision,
                 "stale_base": candidate.stale_base,
                 "blocker_reasons": list(candidate.blocker_reasons),
