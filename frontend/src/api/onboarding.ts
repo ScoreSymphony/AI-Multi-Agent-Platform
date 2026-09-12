@@ -38,6 +38,91 @@ export interface OnboardingStatus {
   guidance: JsonValue[];
 }
 
+export type ComponentCategory =
+  | "orchestrator"
+  | "model_provider"
+  | "executor"
+  | "memory_knowledge"
+  | "tools_mcp"
+  | "storage"
+  | "compute";
+
+export type ComponentLifecycle = "recommended" | "supported" | "experimental" | "deprecated";
+export type ComponentAvailability = "available" | "unavailable" | "installation_required";
+export type ComponentCompatibilityState =
+  | "compatible"
+  | "compatible_with_constraints"
+  | "experimental"
+  | "unavailable"
+  | "incompatible"
+  | "installation_required"
+  | "insufficient_hardware"
+  | "security_blocker";
+export type ComponentSetupMode = "auto" | "local" | "multi_node" | "advanced";
+
+export interface ComponentRequirement {
+  kind: "hardware" | "runtime" | "capability";
+  capability: string;
+  required: boolean;
+  detail: string | null;
+}
+
+export interface ComponentCompatibility {
+  component_id: string;
+  category: ComponentCategory;
+  state: ComponentCompatibilityState;
+  reasons: string[];
+  missing_requirements: string[];
+}
+
+export interface DiscoveredComponent {
+  component_id: string;
+  category: ComponentCategory;
+  display_name: string;
+  availability: ComponentAvailability;
+  lifecycle: ComponentLifecycle;
+  version: string | null;
+  capabilities: string[];
+  requirements: ComponentRequirement[];
+  recommended_modes: ComponentSetupMode[];
+  priority: number;
+  source_ref: string | null;
+  metadata: Record<string, JsonValue>;
+  compatibility: ComponentCompatibility;
+}
+
+export interface ComponentSetupProfile {
+  profile_id: string;
+  mode: ComponentSetupMode;
+  revision: number;
+  defaults: Partial<Record<ComponentCategory, string>>;
+}
+
+export interface ComponentSetupStatus {
+  id: "component-setup";
+  type: "component_setup";
+  components: DiscoveredComponent[];
+  profiles: ComponentSetupProfile[];
+  active_profile_id: string | null;
+  available_setup_modes: ComponentSetupMode[];
+}
+
+export interface SaveComponentProfileInput {
+  profile_id: string;
+  mode: ComponentSetupMode;
+  defaults?: Partial<Record<ComponentCategory, string>>;
+  activate?: boolean;
+}
+
+export interface ComponentSetupProfileResult {
+  id: string;
+  type: "component_setup_profile";
+  mode: ComponentSetupMode;
+  revision: number;
+  defaults: Partial<Record<ComponentCategory, string>>;
+  active: boolean;
+}
+
 export interface SecretReferenceInput {
   provider: string;
   secret_id: string;
@@ -123,7 +208,7 @@ export interface OnboardingClientOptions {
   fetchImpl?: typeof fetch;
 }
 
-/** Browser-only projection of the canonical #250/#77 Control Plane onboarding commands. */
+/** Browser-only projection of canonical first-run and component-setup Control Plane APIs. */
 export class OnboardingClient {
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -135,6 +220,27 @@ export class OnboardingClient {
 
   status(): Promise<OnboardingStatus> {
     return this.request<OnboardingStatus>("/onboarding/first-run");
+  }
+
+  componentSetup(): Promise<ComponentSetupStatus> {
+    return this.request<ComponentSetupStatus>("/component-setup/component-setup");
+  }
+
+  saveComponentProfile(input: SaveComponentProfileInput): Promise<ComponentSetupProfileResult> {
+    return this.command<ComponentSetupProfileResult>("/commands/onboarding.save-component-profile", {
+      resource_ref: "component-setup",
+      ...input,
+    });
+  }
+
+  selectComponentProfile(profileId: string): Promise<ComponentSetupProfileResult> {
+    return this.command<ComponentSetupProfileResult>(
+      "/commands/onboarding.select-component-profile",
+      {
+        resource_ref: "component-setup",
+        profile_id: profileId,
+      },
+    );
   }
 
   configureModel(input: ConfigureOnboardingModelInput): Promise<ConfigureOnboardingModelResult> {
