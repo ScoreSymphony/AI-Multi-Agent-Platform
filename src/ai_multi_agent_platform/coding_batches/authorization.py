@@ -16,7 +16,7 @@ from ai_multi_agent_platform.security import (
 )
 
 from .models import CodingBatch, IntegrationCandidate, IntegrationState
-from .service import CodingBatchCoordinator
+from .secured import CodingBatchCoordinator
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,8 +92,7 @@ class AuthorizedCodingBatchIntegration:
             approval_id=context.approval_id,
             risk=RiskClassification.HIGH,
         )
-        return self._coordinator.mark_merge_ready(
+        return self._coordinator._mark_merge_ready_after_authorization(
             batch_id,
             integration_id,
-            authorization_granted=True,
         )
