@@ -1,14 +1,13 @@
-# SGLang, vLLM and Ollama operational comparison for issue #860
+# SGLang, vLLM and Ollama operational comparison
 
-Status: **source-backed pre-measurement comparison**  
-Issue: **#860**  
+Status: **source-backed pre-measurement comparison complete for #860**  
+Repository evaluation issue: **#860**  
+Live reference-host evidence issue: **#829**  
 Observed: **2026-09-12**
 
-This document records the operational facts that can be established before the live GPU campaign. It is deliberately separate from measured performance and recovery evidence. No throughput, latency, memory, startup, reload or reliability conclusion may be inferred from this document.
+This document records the operational facts that can be established before the live GPU campaign. It is deliberately separate from measured performance and recovery evidence. No throughput, latency, memory, startup, reload or reliability conclusion may be inferred from this document. All such empirical evidence is owned by #829.
 
 ## Pinned comparison revisions
-
-The campaign is frozen to one candidate, one GPU-serving comparator and one lighter local-path comparator:
 
 | Backend | Role | Release | Commit | License |
 | --- | --- | --- | --- | --- |
@@ -22,21 +21,21 @@ Machine-readable provenance is stored in:
 - `config/inference-backend-upstream.vllm-v0.29.0.json`;
 - `config/inference-backend-upstream.ollama-v0.34.0.json`.
 
-Measured reports using another pinned backend revision are not evidence for this campaign. A newer release requires either a new campaign or an explicit campaign revision rather than silently replacing a comparator. llama.cpp remains a valid future/local-path candidate, but it is not mixed with Ollama under one ambiguous report identity in this campaign.
+Measured reports using another pinned backend revision are not evidence for this campaign. A newer release requires a new or explicitly revised campaign rather than silently replacing a comparator. llama.cpp remains a valid future/local-path candidate, but it is not mixed with Ollama under one ambiguous report identity in this campaign.
 
 ## Source-backed operational surface
 
-| Dimension | SGLang | vLLM | Ollama | What #860 may conclude now |
+| Dimension | SGLang | vLLM | Ollama | Repository-side conclusion |
 | --- | --- | --- | --- | --- |
 | License | Apache-2.0 at pinned tag | Apache-2.0 at pinned tag | MIT at pinned tag | no license blocker identified for evaluation |
-| Installation surface | upstream documentation exposes pip/uv, source and Docker installation paths | upstream installation docs and the `v0.29.0` GitHub release expose packaged installation paths, including platform-specific release wheels | `v0.34.0` publishes install scripts plus Linux/macOS platform archives, including ROCm-specific Linux assets | all three have self-hosted distribution paths; actual maintenance effort is still unmeasured |
-| Project target profile | #860 evaluates SGLang primarily as a GPU-serving backend on Linux Workers | pinned GPU-serving comparator | pinned lighter local-path comparator | a GPU-serving result must not be generalized to every local/CPU/VPS profile |
-| Hardware breadth visible in current upstream/release evidence | current SGLang docs describe NVIDIA as the common path and separate AMD/CPU/TPU/XPU/other platform guides | current vLLM installation docs list NVIDIA CUDA, AMD ROCm, Intel XPU, Apple Silicon and multiple CPU architectures | pinned release assets include Linux AMD64/ARM64 and macOS packages, with dedicated ROCm/JetPack variants among the Linux assets | packaging/capability breadth is discovery evidence, not model-level compatibility proof |
-| Single-node multi-GPU | SGLang documents tensor/data parallel serving controls | vLLM documents tensor/pipeline/data/expert parallel controls | not a required distributed-serving comparator for #860 | live Worker evidence is still required for SGLang and vLLM |
-| Multi-node serving | SGLang documents `--nnodes`, `--node-rank` and `--dist-init-addr` | vLLM documents multi-node serving, including node/rank controls and Ray/multiprocessing deployment paths | outside the purpose of the lighter local-path comparator | topology exists upstream for the GPU-serving pair; platform-owned remote Worker behavior remains unverified |
-| OpenAI-compatible serving | documented by SGLang and covered by the #860 contract plan | vLLM provides an OpenAI-compatible serving path used as the GPU comparator | campaign uses the OpenAI-compatible path only where the pinned Ollama surface supports the requested operation | wire compatibility alone is insufficient; canonical `ModelProvider` behavior must be measured |
-| Release packaging observed on GitHub | SGLang `v0.5.19` release has no attached GitHub release assets; upstream docs point to package/Docker distribution channels | vLLM `v0.29.0` publishes platform-specific wheel assets, including CPU/CUDA/XPU variants | Ollama `v0.34.0` publishes installers and packaged platform archives | distribution mechanics differ; actual install/upgrade burden on target Workers must be recorded during the campaign |
-| Operational failure/recovery | native health/observability features are evidence inputs only | native server/distributed controls are evidence inputs only | local server lifecycle is evidence input only | no backend receives a reliability advantage until #860 observes canonical health/routing recovery |
+| Installation surface | pip/uv, source and Docker paths documented | packaged installation paths and platform-specific wheels documented | install scripts plus Linux/macOS platform archives published | all three have self-hosted distribution paths; actual maintenance effort belongs to #829 |
+| Target profile | evaluated primarily as GPU-serving backend on Linux Workers | fixed GPU-serving comparator | fixed lighter local-path comparator | GPU-serving results must not be generalized to every CPU/VPS profile |
+| Hardware breadth in upstream evidence | current docs describe NVIDIA as common path plus separate AMD/CPU/TPU/XPU/other guides | current docs list NVIDIA CUDA, AMD ROCm, Intel XPU, Apple Silicon and CPU platforms | pinned release assets include Linux AMD64/ARM64, macOS and ROCm/JetPack variants | discovery evidence only, not model-level compatibility proof |
+| Single-node multi-GPU | tensor/data parallel controls documented | tensor/pipeline/data/expert parallel controls documented | not required for local-path role | real Worker behavior belongs to #829 |
+| Multi-node serving | `--nnodes`, `--node-rank`, `--dist-init-addr` documented | multi-node serving and node/rank deployment paths documented | outside lighter local-path purpose | topology exists upstream; platform-owned behavior remains empirical under #829 |
+| OpenAI-compatible serving | documented | documented | used where pinned surface supports the requested operation | wire compatibility alone is insufficient; live `ModelProvider` behavior belongs to #829 |
+| Release packaging | `v0.5.19` has no attached GitHub release assets; docs point to package/Docker channels | `v0.29.0` publishes platform-specific wheel assets | `v0.34.0` publishes installers and packaged archives | distribution mechanics differ; actual install/upgrade burden belongs to #829 |
+| Failure/recovery | native health/observability features are evidence inputs only | native server/distributed controls are evidence inputs only | local server lifecycle is evidence input only | no reliability advantage is claimed without #829 live evidence |
 
 ## Evidence sources
 
@@ -57,11 +56,11 @@ Operational capability discovery observed on 2026-09-12:
 - vLLM serving CLI: <https://docs.vllm.ai/en/stable/cli/serve/>
 - vLLM multi-node example: <https://docs.vllm.ai/en/stable/examples/ray_serving/multi-node-serving/>
 
-The documentation links above are discovery evidence observed at the evaluation date. Where they point to moving `main`/`stable` documentation, they do not replace the exact release commits as reproducibility anchors.
+Moving `main`/`stable` documentation is capability-discovery evidence only. Exact release commits remain the reproducibility anchors.
 
-## What remains genuinely empirical
+## Empirical work delegated to #829
 
-The following cannot be closed from upstream documentation and remains live evidence:
+The following cannot be closed from upstream documentation and is explicitly owned by #829:
 
 - representative model correctness through the platform-owned `ModelProvider` path;
 - cold load and ready-to-first-request time;
@@ -73,8 +72,9 @@ The following cannot be closed from upstream documentation and remains live evid
 - restart/readiness/resource recovery;
 - repeated start/stop leak checks;
 - remote Worker loss and recovery;
-- multi-GPU behavior on the available target hardware;
+- multi-GPU behavior on available target hardware;
 - actual installation, configuration and upgrade burden on the target Worker;
-- whether the same representative model revision/quantization is sufficiently equivalent across SGLang, vLLM and Ollama to permit a measured local-path comparison.
+- whether the same representative model revision/quantization is sufficiently equivalent across SGLang, vLLM and Ollama to permit a measured local-path comparison;
+- the final `supported_optional`, `experimental_only`, or `reject/defer` classification.
 
-Therefore this source-backed comparison narrows the live test plan and satisfies only the documentation side of the operational comparison. It does not satisfy the final #860 outcome gate by itself.
+This source-backed comparison therefore **does satisfy #860's documentation-side operational-comparison requirement**. It narrows #829's live test plan but does not substitute for real reference-host measurements or the final backend policy decision.
