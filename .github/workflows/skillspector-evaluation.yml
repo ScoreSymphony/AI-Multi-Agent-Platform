@@ -70,12 +70,14 @@ jobs:
           echo "image_id=$image_id" | tee "$RUNNER_TEMP/skillspector-image.txt"
           docker image inspect skillspector-production:2.11.2 --format '{{json .Config.Labels}}' \
             | tee -a "$RUNNER_TEMP/skillspector-image.txt"
-          test "$(docker image inspect skillspector-production:2.11.2 --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}')" = \
+          test "$(docker image inspect skillspector-production:2.11.2 --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = \
             "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc"
-          test "$(docker image inspect skillspector-production:2.11.2 --format '{{index .Config.Labels \"io.scoresymphony.skillspector.dependency-set-sha256\"}}')" = \
+          test "$(docker image inspect skillspector-production:2.11.2 --format '{{index .Config.Labels "io.scoresymphony.skillspector.dependency-set-sha256"}}')" = \
             "d6716d890040ac73494a8422ea51ef11229e71e0c0d9b538a95316a3a644fc61"
-          test "$(docker image inspect skillspector-production:2.11.2 --format '{{index .Config.Labels \"io.scoresymphony.skillspector.scan-mode\"}}')" = \
+          test "$(docker image inspect skillspector-production:2.11.2 --format '{{index .Config.Labels "io.scoresymphony.skillspector.scan-mode"}}')" = \
             "static_no_llm_network_none"
+          test "$(docker image inspect skillspector-production:2.11.2 --format '{{index .Config.Labels "io.scoresymphony.skillspector.policy-config-revision"}}')" = \
+            "skillspector-static-v1"
           docker run --rm --entrypoint /app/.venv/bin/pip skillspector-production:2.11.2 freeze \
             | LC_ALL=C sort \
             | tee "$RUNNER_TEMP/skillspector-pip-freeze.txt"
