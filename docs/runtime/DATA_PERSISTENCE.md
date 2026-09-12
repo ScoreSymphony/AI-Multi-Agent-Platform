@@ -32,6 +32,10 @@ Issue #5 established coarse platform-wide provider seams. The `ai_multi_agent_pl
 
 `DataProviderSet` is the dependency-injection hook for a future Control Plane. The Control Plane depends on provider contracts, never `LocalFileProvider`, `LocalMemoryProvider` or `LocalKnowledgeProvider` directly.
 
+### Physical single-node topology
+
+These logical/provider boundaries do not prescribe one physical database layout. ADR 0012 records the v1 decision to retain domain-separated SQLite files for the supported single-node reference profile; `PERSISTENCE_TOPOLOGY.md` contains the authoritative-topology audit, cross-store analysis and re-evaluation criteria. A future shared SQLite or Postgres implementation must preserve the contracts and canonical IDs defined here rather than making physical co-location a new ownership boundary.
+
 ## Six-scope memory model
 
 | Scope | Scope ID | Baseline persistence | Default lifetime | Access/isolation hook | Promotion / provenance |
