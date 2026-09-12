@@ -11,6 +11,7 @@ from ai_multi_agent_platform.coding_batches import (
     CodingBatchRepairCoordinator,
     CodingWorkItem,
     InMemoryCodingBatchStore,
+    IntegrationExecutionProvenance,
     IntegrationState,
     RequiredCheck,
     VerificationEvidence,
@@ -207,6 +208,22 @@ async def test_combined_validation_requires_complete_canonical_82_86_evidence() 
         store,
         task_id=task_id,
         repository_id=repository_id,
+    )
+    coordinator.bind_integration_execution(
+        batch_id,
+        integration_id,
+        IntegrationExecutionProvenance(
+            task_id=task_id,
+            plan_id=new_id("plan"),
+            plan_revision=1,
+            step_id=new_id("step"),
+            run_id=run_id,
+            agent_revision="integration-agent@1",
+            agent_run_id="agent-run-integration",
+            workspace_id=new_id("workspace"),
+            snapshot_id=new_id("snapshot"),
+            branch_ref="coding/integration-verification",
+        ),
     )
     coordinator.record_integrated_revision(
         batch_id,
