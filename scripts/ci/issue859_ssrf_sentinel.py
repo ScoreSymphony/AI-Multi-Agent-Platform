@@ -41,9 +41,12 @@ class _SentinelState:
 
 
 class _Handler(BaseHTTPRequestHandler):
-    server_version = "Issue859SSRFSentinel/1.1"
+    server_version = "Issue859SSRFSentinel/1.2"
     protocol_version = "HTTP/1.1"
     state: ClassVar[_SentinelState] = _SentinelState()
+    rebinding_location: ClassVar[str] = (
+        "http://issue859-rebind.test:18003/ssrf-sentinel.txt"
+    )
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/healthz":
@@ -64,13 +67,11 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/redirect-to-loopback":
             self.state.record_hit(self.path)
-            self.send_response(HTTPStatus.FOUND)
-            self.send_header(
-                "Location",
-                "http://127.0.0.1:18001/ssrf-sentinel.txt",
-            )
-            self.send_header("Content-Length", "0")
-            self.end_headers()
+            self._redirect("http://127.0.0.1:18001/ssrf-sentinel.txt")
+            return
+        if self.path == "/redirect-to-rebound-host":
+            self.state.record_hit(self.path)
+            self._redirect(self.rebinding_location)
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -83,6 +84,12 @@ class _Handler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args: object) -> None:
         return
+
+    def _redirect(self, location: str) -> None:
+        self.send_response(HTTPStatus.FOUND)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _json(self, status: HTTPStatus, payload: object) -> None:
         encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -107,8 +114,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the issue #859 controlled SSRF sentinel")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=18001)
+    parser.add_argument(
+        "--rebinding-location",
+        default="http://issue859-rebind.test:18003/ssrf-sentinel.txt",
+    )
     args = parser.parse_args(argv)
 
+    _Handler.rebinding_location = args.rebinding_location
     server = ThreadingHTTPServer((args.host, args.port), _Handler)
     try:
         server.serve_forever()
