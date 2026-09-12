@@ -57,13 +57,29 @@ def test_s3_surface_is_minimal_and_does_not_assume_etag_checksum_semantics() -> 
     assert "ETag as SHA-256" in surface["explicitly_not_assumed"]
 
 
-def test_final_classification_is_gated_on_runtime_evidence_and_setup_wizard() -> None:
+def test_external_object_store_backup_is_not_claimed_by_single_node_backup_v1() -> None:
+    manifest = _manifest()
+    backup_boundary = manifest["backup_boundary"]
+
+    assert backup_boundary["platform_issue_40_single_node_backup_currently_copies_external_s3_content"] is False
+    assert set(backup_boundary["current_single_node_scope"]) == {
+        "db",
+        "files",
+        "workspaces",
+        "configuration-metadata",
+    }
+    assert "object-store" in backup_boundary["required_for_object_store_deployments"]
+
+
+def test_final_classification_is_gated_on_runtime_vps_evidence_and_setup_wizard() -> None:
     manifest = _manifest()
     gate = manifest["gate"]
 
     assert gate["final_classification_requires_runtime_evidence"] is True
+    assert gate["final_classification_requires_target_vps_measurement"] is True
     assert gate["setup_wizard_recommendation_requires_issue"] == 799
     assert gate["issue_799_currently_blocks_final_wizard_integration"] is True
+    assert gate["setup_profiles_must_not_persist_credentials"] is True
     assert all(
         backend["classification_is_final"] is False for backend in manifest["backends"].values()
     )
