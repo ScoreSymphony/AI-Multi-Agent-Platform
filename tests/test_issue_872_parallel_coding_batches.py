@@ -13,10 +13,9 @@ from ai_multi_agent_platform.coding_batches import (
     VerificationEvidence,
     WorkstreamResult,
     WorkstreamState,
+    coding_batch_resource,
     deterministic_branch_ref,
 )
-from ai_multi_agent_platform.coding_batches.projection import coding_batch_resource
-
 
 BASE = "a" * 40
 TARGET_2 = "b" * 40
