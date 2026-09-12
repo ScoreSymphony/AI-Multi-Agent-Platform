@@ -17,7 +17,10 @@ from ai_multi_agent_platform.capabilities import CapabilitySpec
 from ai_multi_agent_platform.contracts import HealthStatus, OperationContext
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.models import RoutingRequirements
-from ai_multi_agent_platform.planning.agent_matching import match_planning_step, resolve_planning_steps
+from ai_multi_agent_platform.planning.agent_matching import (
+    match_planning_step,
+    resolve_planning_steps,
+)
 from ai_multi_agent_platform.planning.models import (
     AgentAssignment,
     PlanningAgentCandidate,
