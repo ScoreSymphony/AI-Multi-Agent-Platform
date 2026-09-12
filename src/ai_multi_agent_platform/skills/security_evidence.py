@@ -401,16 +401,18 @@ def security_evidence_to_json(evidence: SecurityEvidence) -> dict[str, JsonValue
                 "summary": finding.summary,
                 "path": finding.path,
                 "line": finding.line,
-                "metadata": dict(finding.metadata),
+                "metadata": _mapping(finding.metadata),
             }
             for finding in evidence.findings
         ],
         "degraded_reasons": list(evidence.degraded_reasons),
-        "suppression_metadata": [dict(value) for value in evidence.suppression_metadata],
-        "baseline_metadata": dict(evidence.baseline_metadata),
-        "network_usage": dict(evidence.network_usage),
-        "provider_usage": dict(evidence.provider_usage),
-        "provider_metadata": dict(evidence.provider_metadata),
+        "suppression_metadata": [
+            _mapping(value) for value in evidence.suppression_metadata
+        ],
+        "baseline_metadata": _mapping(evidence.baseline_metadata),
+        "network_usage": _mapping(evidence.network_usage),
+        "provider_usage": _mapping(evidence.provider_usage),
+        "provider_metadata": _mapping(evidence.provider_metadata),
         "known_provider_limitations": list(evidence.known_provider_limitations),
         "raw_report_digest": evidence.raw_report_digest,
         "raw_report_artifact_ref": evidence.raw_report_artifact_ref,
