@@ -14,6 +14,7 @@ from ai_multi_agent_platform.coding_batches import (
     VerificationEvidence,
     WorkstreamResult,
 )
+from ai_multi_agent_platform.coding_batches.service import CodingBatchCoordinator as StateCoordinator
 from ai_multi_agent_platform.contracts import ContractError, OperationContext
 from ai_multi_agent_platform.security import (
     ActorIdentity,
@@ -111,6 +112,10 @@ def _gate(*, approval_required: bool) -> AuthorizationGate:
         resource_types=frozenset({ResourceType.GENERIC}),
     )
     return AuthorizationGate(LocalAuthorizationProvider((policy,)))
+
+
+def test_internal_state_machine_has_no_caller_asserted_authorization_seam() -> None:
+    assert not hasattr(StateCoordinator, "mark_merge_ready")
 
 
 @pytest.mark.asyncio
