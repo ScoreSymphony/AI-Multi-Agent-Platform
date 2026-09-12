@@ -16,6 +16,7 @@ from .models import (
     CombinedValidationEvidence,
     IntegrationCandidate,
     IntegrationConflict,
+    IntegrationExecutionProvenance,
     IntegrationRepairAttempt,
     IntegrationState,
     OverlapDecision,
@@ -208,6 +209,21 @@ def _verification_json(verification: VerificationEvidence) -> dict[str, object]:
     }
 
 
+def _execution_json(execution: IntegrationExecutionProvenance) -> dict[str, object]:
+    return {
+        "task_id": execution.task_id,
+        "plan_id": execution.plan_id,
+        "plan_revision": execution.plan_revision,
+        "step_id": execution.step_id,
+        "run_id": execution.run_id,
+        "agent_revision": execution.agent_revision,
+        "agent_run_id": execution.agent_run_id,
+        "workspace_id": execution.workspace_id,
+        "snapshot_id": execution.snapshot_id,
+        "branch_ref": execution.branch_ref,
+    }
+
+
 def _repair_attempt_json(repair: IntegrationRepairAttempt) -> dict[str, object]:
     return {
         "repair_id": repair.repair_id,
@@ -236,6 +252,7 @@ def _integration_candidate_json(candidate: IntegrationCandidate) -> dict[str, ob
         "ordered_revisions": list(candidate.ordered_revisions),
         "state": candidate.state.value,
         "conflicts": [_conflict_json(conflict) for conflict in candidate.conflicts],
+        "execution": None if candidate.execution is None else _execution_json(candidate.execution),
         "integrated_revision": candidate.integrated_revision,
         "validation": None
         if validation is None
@@ -357,6 +374,22 @@ def _decode_conflict(raw_value: object) -> IntegrationConflict:
     )
 
 
+def _decode_execution(raw_value: object) -> IntegrationExecutionProvenance:
+    raw = cast(dict[str, Any], raw_value)
+    return IntegrationExecutionProvenance(
+        task_id=raw["task_id"],
+        plan_id=raw["plan_id"],
+        plan_revision=raw["plan_revision"],
+        step_id=raw["step_id"],
+        run_id=raw["run_id"],
+        agent_revision=raw["agent_revision"],
+        agent_run_id=raw["agent_run_id"],
+        workspace_id=raw["workspace_id"],
+        snapshot_id=raw["snapshot_id"],
+        branch_ref=raw["branch_ref"],
+    )
+
+
 def _decode_repair_attempt(raw_value: object) -> IntegrationRepairAttempt:
     raw = cast(dict[str, Any], raw_value)
     verification_raw = raw.get("verification")
@@ -379,6 +412,7 @@ def _decode_repair_attempt(raw_value: object) -> IntegrationRepairAttempt:
 def _decode_integration_candidate(raw_value: object) -> IntegrationCandidate:
     raw = cast(dict[str, Any], raw_value)
     validation_raw = raw["validation"]
+    execution_raw = raw.get("execution")
     return IntegrationCandidate(
         integration_id=raw["integration_id"],
         target_base_revision=raw["target_base_revision"],
@@ -386,6 +420,7 @@ def _decode_integration_candidate(raw_value: object) -> IntegrationCandidate:
         ordered_revisions=tuple(raw["ordered_revisions"]),
         state=IntegrationState(raw["state"]),
         conflicts=tuple(_decode_conflict(item) for item in raw["conflicts"]),
+        execution=None if execution_raw is None else _decode_execution(execution_raw),
         integrated_revision=raw["integrated_revision"],
         validation=None if validation_raw is None else _decode_combined_validation(validation_raw),
         stale_base=raw["stale_base"],
