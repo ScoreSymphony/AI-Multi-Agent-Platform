@@ -14,7 +14,6 @@ from ai_multi_agent_platform.verification import (
 )
 
 from .models import (
-    CheckState,
     CodingBatch,
     CombinedValidationEvidence,
     IntegrationCandidate,
