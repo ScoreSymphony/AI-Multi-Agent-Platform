@@ -42,7 +42,7 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
   exit 2
 fi
 
-for command in docker git python3 sha256sum tar curl openssl du; do
+for command in docker git python3 sha256sum tar curl openssl du find sort xargs id chown; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "missing required command: $command" >&2
     exit 2
@@ -64,6 +64,11 @@ PLATFORM_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 OUTPUT_DIR="${1:-$REPO_ROOT/artifacts/issue862-storage-vps}"
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
+if [[ -n "$(find "$OUTPUT_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+  echo "refusing to mix #862 evidence into non-empty output directory: $OUTPUT_DIR" >&2
+  echo "choose an empty directory or remove the previous capture before retrying" >&2
+  exit 2
+fi
 
 WORK_DIR="$(mktemp -d -t issue862-storage-vps-XXXXXX)"
 CONTAINER=""
@@ -205,12 +210,19 @@ export AWS_SECRET_ACCESS_KEY="$(openssl rand -hex 32)"
 RUSTFS_IMAGE="rustfs/rustfs:1.0.0-rc.6"
 RUSTFS_DATA="$WORK_DIR/rustfs-data"
 mkdir -p "$RUSTFS_DATA"
-sudo chown -R 10001:10001 "$RUSTFS_DATA"
+if [[ "$(id -u)" -eq 0 ]]; then
+  chown -R 10001:10001 "$RUSTFS_DATA"
+elif command -v sudo >/dev/null 2>&1; then
+  sudo chown -R 10001:10001 "$RUSTFS_DATA"
+else
+  echo "RustFS data preparation requires root or sudo for chown to uid 10001" >&2
+  exit 2
+fi
 docker pull "$RUSTFS_IMAGE" >/dev/null
 CONTAINER="issue862-vps-rustfs"
 docker run -d \
   --name "$CONTAINER" \
-  -p 9000:9000 \
+  -p 127.0.0.1:9000:9000 \
   -e RUSTFS_VOLUMES=/data \
   -e RUSTFS_ADDRESS=0.0.0.0:9000 \
   -e RUSTFS_CONSOLE_ENABLE=false \
@@ -256,7 +268,7 @@ docker pull "$GARAGE_IMAGE" >/dev/null
 CONTAINER="issue862-vps-garage"
 docker run -d \
   --name "$CONTAINER" \
-  -p 3900:3900 \
+  -p 127.0.0.1:3900:3900 \
   -v "$WORK_DIR/garage.toml:/etc/garage.toml:ro" \
   -v "$GARAGE_ROOT/meta:/var/lib/garage/meta" \
   -v "$GARAGE_ROOT/data:/var/lib/garage/data" \
@@ -280,7 +292,7 @@ docker pull "$SEAWEED_IMAGE" >/dev/null
 CONTAINER="issue862-vps-seaweedfs"
 docker run -d \
   --name "$CONTAINER" \
-  -p 8333:8333 \
+  -p 127.0.0.1:8333:8333 \
   -v "$SEAWEED_DATA:/data" \
   -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
   -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
