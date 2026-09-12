@@ -54,6 +54,8 @@ Platform controls therefore remain mandatory:
 
 The PoC enforces those result-side/platform guards, but provider success never proves path authorization.
 
+The corrected canonical Docker bridge also passed end-to-end, confirming that these platform-owned guards remain intact when using the pinned Docker backend.
+
 ## 3. Remote auth is useful but transport security is external
 
 The reviewed server uses `X-API-Key`. Live loopback evidence accepts the correct key and rejects the wrong key. The transport remains HTTP in the exercised profile; TLS/private-network protection is external.
