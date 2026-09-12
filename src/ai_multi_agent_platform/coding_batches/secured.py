@@ -145,6 +145,7 @@ class CodingBatchCoordinator:
             if workstream_ids is None
             else workstream_ids
         )
+        self._validate_selected_workstreams(batch, selected)
         self._enforce_aggregation_policy(batch, selected)
         return self._state.build_integration_candidate(
             batch_id,
@@ -247,6 +248,18 @@ class CodingBatchCoordinator:
             integration_id,
             change_request_ref=change_request_ref,
         )
+
+    @staticmethod
+    def _validate_selected_workstreams(batch: CodingBatch, selected: tuple[str, ...]) -> None:
+        if len(selected) != len(set(selected)):
+            raise ValueError("integration candidate workstream ids must be unique")
+        known_ids = {workstream.id for workstream in batch.workstreams}
+        unknown_ids = set(selected) - known_ids
+        if unknown_ids:
+            raise ValueError(
+                "integration candidate references unknown workstreams: "
+                + ", ".join(sorted(unknown_ids))
+            )
 
     @staticmethod
     def _enforce_aggregation_policy(batch: CodingBatch, selected: tuple[str, ...]) -> None:
