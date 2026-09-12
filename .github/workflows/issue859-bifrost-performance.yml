@@ -1,0 +1,375 @@
+name: Bifrost evaluation performance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/issue859-bifrost-performance.yml"
+      - "src/ai_multi_agent_platform/adapters/model_gateway_evaluation_cli.py"
+      - "src/ai_multi_agent_platform/benchmarking/model_gateway_evaluation.py"
+      - "src/ai_multi_agent_platform/benchmarking/model_gateway_evidence.py"
+      - "upstream/bifrost.yaml"
+      - "pyproject.toml"
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      LLAMA_VERSION: b10903
+      LLAMA_ARCHIVE_SHA256: 5366d9db6a3d22a8dfde0b5105d9f002438d309971594ffcb65b180d7cc3f592
+      MODEL_FILE: SmolLM2-135M-Instruct-IQ3_M.gguf
+      MODEL_SHA256: e8a0e942fe93529b7601a7620c8aa1bdc1bede40ff668ed9d6339686384392d7
+      LITELLM_VERSION: 1.99.0
+      BIFROST_VERSION: v2.1.1
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install platform and pinned LiteLLM
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,litellm]"
+          python - <<'PY'
+          from importlib.metadata import version
+          assert version("litellm") == "1.99.0", version("litellm")
+          PY
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+
+      - name: Download pinned llama.cpp CPU runtime
+        shell: bash
+        run: |
+          mkdir -p .issue859-llama
+          curl --fail --location --retry 3 \
+            "https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_VERSION}/llama-${LLAMA_VERSION}-bin-ubuntu-x64.tar.gz" \
+            --output .issue859-llama.tar.gz
+          echo "${LLAMA_ARCHIVE_SHA256}  .issue859-llama.tar.gz" | sha256sum --check --strict
+          tar -xzf .issue859-llama.tar.gz -C .issue859-llama
+          LLAMA_SERVER="$(find .issue859-llama -type f -name llama-server -print -quit)"
+          test -n "$LLAMA_SERVER"
+          chmod +x "$LLAMA_SERVER"
+          echo "LLAMA_SERVER=$GITHUB_WORKSPACE/$LLAMA_SERVER" >> "$GITHUB_ENV"
+
+      - name: Download pinned real local model
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 \
+            "https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/${MODEL_FILE}?download=true" \
+            --output "$GITHUB_WORKSPACE/$MODEL_FILE"
+          echo "${MODEL_SHA256}  $MODEL_FILE" | sha256sum --check --strict
+
+      - name: Start real local llama.cpp inference backend
+        shell: bash
+        run: |
+          "$LLAMA_SERVER" \
+            --model "$GITHUB_WORKSPACE/$MODEL_FILE" \
+            --host 127.0.0.1 \
+            --port 18020 \
+            --ctx-size 512 \
+            --parallel 2 \
+            --threads 2 \
+            --n-predict 8 \
+            > "$GITHUB_WORKSPACE/.issue859-llama.log" 2>&1 &
+          echo $! > "$GITHUB_WORKSPACE/.issue859-llama.pid"
+          python - <<'PY'
+          import json
+          import time
+          import urllib.request
+
+          for _ in range(120):
+              try:
+                  with urllib.request.urlopen("http://127.0.0.1:18020/v1/models", timeout=2) as response:
+                      body = json.load(response)
+                  if response.status == 200 and body.get("data"):
+                      break
+              except Exception:
+                  time.sleep(0.5)
+          else:
+              raise SystemExit("llama.cpp reference backend did not become healthy")
+          print(json.dumps(body, indent=2, sort_keys=True))
+          PY
+
+      - name: Warm real model once before gateways start
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import urllib.request
+
+          payload = json.dumps({
+              "model": "SmolLM2-135M-Instruct-IQ3_M.gguf",
+              "messages": [{"role": "user", "content": "Reply with the single word: ready"}],
+              "max_tokens": 8,
+              "temperature": 0,
+          }).encode("utf-8")
+          request = urllib.request.Request(
+              "http://127.0.0.1:18020/v1/chat/completions",
+              data=payload,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              body = json.load(response)
+          assert response.status == 200
+          assert body.get("choices")
+          PY
+
+      - name: Start pinned Bifrost against the same backend
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.issue859-bifrost-perf"
+          chmod 777 "$GITHUB_WORKSPACE/.issue859-bifrost-perf"
+          cat > "$GITHUB_WORKSPACE/.issue859-bifrost-perf/config.json" <<'JSON'
+          {
+            "encryption_key": "env.BIFROST_ENCRYPTION_KEY",
+            "client": {
+              "drop_excess_requests": false,
+              "enable_logging": false
+            },
+            "providers": {
+              "issue859-local": {
+                "keys": [
+                  {
+                    "name": "issue859-performance-key",
+                    "value": "env.ISSUE859_PERF_PROVIDER_KEY",
+                    "models": ["SmolLM2-135M-Instruct-IQ3_M.gguf"],
+                    "weight": 1.0
+                  }
+                ],
+                "network_config": {
+                  "base_url": "http://127.0.0.1:18020",
+                  "default_request_timeout_in_seconds": 30,
+                  "max_retries": 0
+                },
+                "custom_provider_config": {
+                  "base_provider_type": "openai",
+                  "allowed_requests": {
+                    "list_models": true,
+                    "chat_completion": true,
+                    "chat_completion_stream": true
+                  },
+                  "request_path_overrides": {
+                    "chat_completion": "/v1/chat/completions",
+                    "chat_completion_stream": "/v1/chat/completions"
+                  }
+                }
+              }
+            },
+            "config_store": {
+              "enabled": false
+            }
+          }
+          JSON
+          docker pull "maximhq/bifrost:${BIFROST_VERSION}"
+          docker run --rm -d \
+            --name issue859-bifrost-performance \
+            --network host \
+            -v "$GITHUB_WORKSPACE/.issue859-bifrost-perf:/app/data" \
+            -e APP_HOST=0.0.0.0 \
+            -e BIFROST_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef \
+            -e ISSUE859_PERF_PROVIDER_KEY=ci-performance-provider-key \
+            "maximhq/bifrost:${BIFROST_VERSION}"
+          python - <<'PY'
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+
+          payload = json.dumps({
+              "model": "issue859-local/SmolLM2-135M-Instruct-IQ3_M.gguf",
+              "messages": [{"role": "user", "content": "Reply with the single word: ready"}],
+          }).encode("utf-8")
+          for _ in range(120):
+              request = urllib.request.Request(
+                  "http://127.0.0.1:8080/v1/chat/completions",
+                  data=payload,
+                  headers={"Content-Type": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=10) as response:
+                      body = json.load(response)
+                  if response.status == 200 and body.get("choices"):
+                      break
+              except (OSError, urllib.error.HTTPError):
+                  time.sleep(0.5)
+          else:
+              raise SystemExit("Bifrost performance endpoint did not become healthy")
+          PY
+
+      - name: Start pinned LiteLLM against the same backend
+        shell: bash
+        env:
+          OPENAI_API_KEY: sk-issue859-local-only
+        run: |
+          litellm \
+            --model "openai/${MODEL_FILE}" \
+            --alias issue859-smollm \
+            --api_base http://127.0.0.1:18020/v1 \
+            --host 127.0.0.1 \
+            --port 18022 \
+            --num_workers 1 \
+            > "$GITHUB_WORKSPACE/.issue859-litellm.log" 2>&1 &
+          echo $! > "$GITHUB_WORKSPACE/.issue859-litellm.pid"
+          python - <<'PY'
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+
+          payload = json.dumps({
+              "model": "issue859-smollm",
+              "messages": [{"role": "user", "content": "Reply with the single word: ready"}],
+          }).encode("utf-8")
+          for _ in range(180):
+              request = urllib.request.Request(
+                  "http://127.0.0.1:18022/v1/chat/completions",
+                  data=payload,
+                  headers={"Content-Type": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=10) as response:
+                      body = json.load(response)
+                  if response.status == 200 and body.get("choices"):
+                      break
+              except (OSError, urllib.error.HTTPError):
+                  time.sleep(0.5)
+          else:
+              raise SystemExit("LiteLLM performance endpoint did not become healthy")
+          PY
+
+      - name: Record CPU reference environment
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import platform
+          import subprocess
+
+          cpu = subprocess.check_output(["lscpu", "-J"], text=True)
+          memory = pathlib.Path("/proc/meminfo").read_text(encoding="utf-8")
+          bifrost_digest = subprocess.check_output(
+              [
+                  "docker",
+                  "image",
+                  "inspect",
+                  "--format",
+                  "{{index .RepoDigests 0}}",
+                  f"maximhq/bifrost:{os.environ['BIFROST_VERSION']}",
+              ],
+              text=True,
+          ).strip()
+          payload = {
+              "profile": "github-hosted-ubuntu-x64-cpu-reference",
+              "production_gpu_benchmark": False,
+              "purpose": "reproducible same-backend gateway overhead reference",
+              "runner_os": platform.platform(),
+              "python": platform.python_version(),
+              "llama_cpp_version": os.environ["LLAMA_VERSION"],
+              "llama_cpp_archive_sha256": os.environ["LLAMA_ARCHIVE_SHA256"],
+              "model_file": os.environ["MODEL_FILE"],
+              "model_sha256": os.environ["MODEL_SHA256"],
+              "model_source": "bartowski/SmolLM2-135M-Instruct-GGUF",
+              "litellm_version": os.environ["LITELLM_VERSION"],
+              "bifrost_version": os.environ["BIFROST_VERSION"],
+              "bifrost_image_digest": bifrost_digest,
+              "cpu": json.loads(cpu),
+              "memory_kib": {
+                  line.split(":", 1)[0]: line.split(":", 1)[1].strip()
+                  for line in memory.splitlines()
+                  if line.startswith(("MemTotal:", "MemAvailable:"))
+              },
+          }
+          pathlib.Path("artifacts/issue-859-cpu-reference-environment.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run real direct vs Bifrost vs LiteLLM benchmark
+        shell: bash
+        run: |
+          python -m ai_multi_agent_platform.adapters.model_gateway_evaluation_cli \
+            --canonical-model-id issue859/perf-smollm2-135m \
+            --downstream-deployment-label gha-ubuntu-x64-cpu/llama.cpp-b10903/smollm2-135m-iq3_m \
+            --direct-base-url http://127.0.0.1:18020/v1 \
+            --direct-model "$MODEL_FILE" \
+            --direct-runtime-version "llama.cpp ${LLAMA_VERSION}" \
+            --bifrost-base-url http://127.0.0.1:8080/v1 \
+            --bifrost-model "issue859-local/${MODEL_FILE}" \
+            --bifrost-version transports/v2.1.1 \
+            --bifrost-core-version v1.8.6 \
+            --bifrost-revision c193745d2a713e9f58f021d43e138df5eb7e038a \
+            --litellm-base-url http://127.0.0.1:18022/v1 \
+            --litellm-model issue859-smollm \
+            --litellm-version "$LITELLM_VERSION" \
+            --operation-count 24 \
+            --concurrency 2 \
+            --warmup-operations 3 \
+            --timeout-seconds 30 \
+            --prompt "Reply with the single word: ready" \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/issue-859-real-gateway-performance.json
+
+      - name: Gate benchmark integrity
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+
+          path = pathlib.Path("artifacts/issue-859-real-gateway-performance.json")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          targets = payload["benchmark_report"]["targets"] if "benchmark_report" in payload else payload["targets"]
+          for name in ("direct", "bifrost", "litellm"):
+              target = targets[name]
+              if target["successful_operations"] != target["attempted_operations"]:
+                  raise SystemExit(f"{name} benchmark had failed operations: {target}")
+              if not target["canonical_identity_preserved"]:
+                  raise SystemExit(f"{name} did not preserve canonical model identity")
+          PY
+
+      - name: Upload real performance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-859-real-gateway-performance
+          path: |
+            artifacts/issue-859-real-gateway-performance.json
+            artifacts/issue-859-cpu-reference-environment.json
+          if-no-files-found: warn
+
+      - name: Show diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          cat "$GITHUB_WORKSPACE/.issue859-llama.log" 2>/dev/null || true
+          cat "$GITHUB_WORKSPACE/.issue859-litellm.log" 2>/dev/null || true
+          docker logs issue859-bifrost-performance 2>/dev/null || true
+
+      - name: Stop performance services
+        if: always()
+        shell: bash
+        run: |
+          docker stop issue859-bifrost-performance 2>/dev/null || true
+          if [ -f "$GITHUB_WORKSPACE/.issue859-litellm.pid" ]; then
+            kill "$(cat "$GITHUB_WORKSPACE/.issue859-litellm.pid")" 2>/dev/null || true
+          fi
+          if [ -f "$GITHUB_WORKSPACE/.issue859-llama.pid" ]; then
+            kill "$(cat "$GITHUB_WORKSPACE/.issue859-llama.pid")" 2>/dev/null || true
+          fi
