@@ -145,10 +145,33 @@ _ERROR_MAP: dict[str, ExecutionErrorCategory] = {
     "unavailable": ExecutionErrorCategory.INTERNAL,
     "sandbox_unavailable": ExecutionErrorCategory.INTERNAL,
 }
+_PROVIDER_INFRASTRUCTURE_ERROR_CODES = frozenset(
+    {
+        "internal",
+        "unavailable",
+        "sandbox_unavailable",
+    }
+)
+_PROVIDER_FAILURE_MESSAGE = "Agent-Sandbox provider execution failed"
 
 
 def _safe_provider_metadata(metadata: dict[str, JsonValue]) -> dict[str, JsonValue]:
     return {key: value for key, value in metadata.items() if key in _SAFE_PROVIDER_METADATA_KEYS}
+
+
+def _safe_provider_error_code(error_code: str | None) -> str | None:
+    if error_code is None or error_code not in _ERROR_MAP:
+        return None
+    return error_code
+
+
+def _requires_provider_failure_redaction(backend: AgentSandboxClientResult) -> bool:
+    if backend.status is AgentSandboxExecutionStatus.SUCCEEDED:
+        return False
+    safe_error_code = _safe_provider_error_code(backend.error_code)
+    if backend.error_code is not None and safe_error_code is None:
+        return True
+    return safe_error_code in _PROVIDER_INFRASTRUCTURE_ERROR_CODES
 
 
 class AgentSandboxExecutor(Executor):
@@ -284,7 +307,7 @@ class AgentSandboxExecutor(Executor):
                 started_at,
                 started,
                 ExecutionErrorCategory.INTERNAL,
-                "Agent-Sandbox provider execution failed",
+                _PROVIDER_FAILURE_MESSAGE,
                 retryable=True,
             )
 
@@ -350,45 +373,52 @@ class AgentSandboxExecutor(Executor):
             AgentSandboxExecutionStatus.TIMED_OUT: ExecutionStatus.TIMED_OUT,
             AgentSandboxExecutionStatus.CANCELLED: ExecutionStatus.CANCELLED,
         }[backend.status]
+        redact_provider_failure = _requires_provider_failure_redaction(backend)
 
         artifacts: list[ExecutionArtifact] = []
-        for artifact in backend.artifacts:
-            if not artifact.relative_path.strip():
-                return self._failure(
-                    request,
-                    started_at,
-                    started,
-                    ExecutionErrorCategory.INTERNAL,
-                    "Agent-Sandbox returned an empty artifact path",
+        if not redact_provider_failure:
+            for artifact in backend.artifacts:
+                if not artifact.relative_path.strip():
+                    return self._failure(
+                        request,
+                        started_at,
+                        started,
+                        ExecutionErrorCategory.INTERNAL,
+                        "Agent-Sandbox returned an empty artifact path",
+                    )
+                artifact_path = (workspace / artifact.relative_path).resolve()
+                if artifact_path != workspace and workspace not in artifact_path.parents:
+                    return self._failure(
+                        request,
+                        started_at,
+                        started,
+                        ExecutionErrorCategory.INTERNAL,
+                        "Agent-Sandbox returned artifact evidence outside the execution workspace",
+                    )
+                artifacts.append(
+                    ExecutionArtifact(
+                        relative_path=artifact.relative_path,
+                        media_type=artifact.media_type,
+                        size_bytes=artifact.size_bytes,
+                    )
                 )
-            artifact_path = (workspace / artifact.relative_path).resolve()
-            if artifact_path != workspace and workspace not in artifact_path.parents:
-                return self._failure(
-                    request,
-                    started_at,
-                    started,
-                    ExecutionErrorCategory.INTERNAL,
-                    "Agent-Sandbox returned artifact evidence outside the execution workspace",
-                )
-            artifacts.append(
-                ExecutionArtifact(
-                    relative_path=artifact.relative_path,
-                    media_type=artifact.media_type,
-                    size_bytes=artifact.size_bytes,
-                )
-            )
 
+        safe_error_code = _safe_provider_error_code(backend.error_code)
         error: ExecutionError | None = None
         if status is not ExecutionStatus.SUCCEEDED:
             category = self._error_category(backend)
             message = (
-                backend.error_message
-                or backend.stderr
-                or f"Agent-Sandbox execution {backend.status}"
+                _PROVIDER_FAILURE_MESSAGE
+                if redact_provider_failure
+                else (
+                    backend.error_message
+                    or backend.stderr
+                    or f"Agent-Sandbox execution {backend.status}"
+                )
             )
             details: dict[str, JsonValue] = {}
-            if backend.error_code is not None:
-                details["agent_sandbox_error_code"] = backend.error_code
+            if safe_error_code is not None:
+                details["agent_sandbox_error_code"] = safe_error_code
             error = ExecutionError(
                 category=category,
                 message=message,
@@ -406,8 +436,8 @@ class AgentSandboxExecutor(Executor):
             provider_metadata["session_id"] = backend.session_id
         if backend.snapshot_id is not None:
             provider_metadata["snapshot_id"] = backend.snapshot_id
-        if backend.error_code is not None:
-            provider_metadata["error_code"] = backend.error_code
+        if safe_error_code is not None:
+            provider_metadata["error_code"] = safe_error_code
 
         return ExecutionResult(
             task_id=request.task_id,
@@ -416,18 +446,30 @@ class AgentSandboxExecutor(Executor):
             step_id=request.step_id,
             status=status,
             result_code=backend.result_code,
-            output=backend.output,
-            stdout=backend.stdout,
-            stderr=backend.stderr,
+            output={} if redact_provider_failure else backend.output,
+            stdout="" if redact_provider_failure else backend.stdout,
+            stderr=_PROVIDER_FAILURE_MESSAGE if redact_provider_failure else backend.stderr,
             artifacts=tuple(artifacts),
-            started_at=backend.started_at or started_at,
-            finished_at=backend.finished_at or datetime.now(UTC).isoformat(),
-            duration_seconds=(
-                backend.duration_seconds
-                if backend.duration_seconds is not None
-                else monotonic() - started
+            started_at=(
+                started_at
+                if redact_provider_failure
+                else (backend.started_at or started_at)
             ),
-            resources=backend.resources,
+            finished_at=(
+                datetime.now(UTC).isoformat()
+                if redact_provider_failure
+                else (backend.finished_at or datetime.now(UTC).isoformat())
+            ),
+            duration_seconds=(
+                monotonic() - started
+                if redact_provider_failure
+                else (
+                    backend.duration_seconds
+                    if backend.duration_seconds is not None
+                    else monotonic() - started
+                )
+            ),
+            resources={} if redact_provider_failure else backend.resources,
             error=error,
             adapter_metadata={"agent_sandbox": provider_metadata},
         )
