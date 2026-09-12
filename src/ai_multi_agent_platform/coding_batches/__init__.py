@@ -1,6 +1,13 @@
 """Parallel coding-batch composition for issue #872."""
 
 from .authorization import AuthorizedCodingBatchIntegration, CodingBatchAuthorizationContext
+from .integration_runtime import (
+    CanonicalCodingIntegrationDispatcher,
+    CodingIntegrationDispatch,
+    IntegrationDispatchSlot,
+    deterministic_integration_branch_ref,
+    deterministic_integration_workspace_id,
+)
 from .materialization import CanonicalWorkstreamMaterializer, deterministic_workspace_id
 from .models import (
     BatchAggregationPolicy,
@@ -11,6 +18,7 @@ from .models import (
     CombinedValidationEvidence,
     IntegrationCandidate,
     IntegrationConflict,
+    IntegrationExecutionProvenance,
     IntegrationRepairAttempt,
     IntegrationState,
     OverlapDecision,
@@ -46,6 +54,7 @@ from .telemetry import CodingBatchTelemetry
 __all__ = [
     "AuthorizedCodingBatchIntegration",
     "BatchAggregationPolicy",
+    "CanonicalCodingIntegrationDispatcher",
     "CanonicalCodingVerificationCoordinator",
     "CanonicalCodingWorkstreamDispatcher",
     "CanonicalCombinedValidationCoordinator",
@@ -60,6 +69,7 @@ __all__ = [
     "CodingBatchStore",
     "CodingBatchTelemetry",
     "CodingDispatchSlot",
+    "CodingIntegrationDispatch",
     "CodingWorkItem",
     "CodingWorkstream",
     "CodingWorkstreamDispatch",
@@ -69,6 +79,8 @@ __all__ = [
     "InMemoryCodingBatchStore",
     "IntegrationCandidate",
     "IntegrationConflict",
+    "IntegrationDispatchSlot",
+    "IntegrationExecutionProvenance",
     "IntegrationRepairAttempt",
     "IntegrationState",
     "OverlapDecision",
@@ -84,5 +96,7 @@ __all__ = [
     "agent_revision_ref",
     "coding_batch_resource",
     "deterministic_branch_ref",
+    "deterministic_integration_branch_ref",
+    "deterministic_integration_workspace_id",
     "deterministic_workspace_id",
 ]
