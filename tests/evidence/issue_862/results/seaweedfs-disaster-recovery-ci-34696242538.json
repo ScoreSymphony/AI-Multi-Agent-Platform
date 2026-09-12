@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "backend": "seaweedfs",
+  "evidence_scope": "github_hosted_runner_clean_store_logical_blob_restore",
+  "workflow_run_id": 34696242538,
+  "workflow_head_sha": "9e821abc5537c00d9502a362b78981834cb0f2aa",
+  "artifact_id": 10299011264,
+  "artifact_digest": "sha256:2e49eec7faea156b15b8462186eebb747427f01f07b265f8c80bee3e73ac841d",
+  "runtime": {
+    "image": "chrislusf/seaweedfs:4.46",
+    "image_id": "sha256:51907b802784d01ddb60862dd02a451ee20ee5e151ef580326bba1c63894d30b",
+    "repo_digest": "chrislusf/seaweedfs@sha256:08d516132314207d10c8e37cbffc1f32b147d870169688734cc61c6231625b62"
+  },
+  "backup": {
+    "status": "pass",
+    "objects_exported": 3,
+    "bytes_exported": 1445888,
+    "manifest_sha256": "c311ba47aa2fb79309c098ff7d094bbe1a8ff9377ed95f6b63091cc9845635d9",
+    "canonical_checksum": "sha256"
+  },
+  "destructive_recovery": {
+    "original_container_removed": true,
+    "all_original_backend_data_volumes_deleted": true,
+    "replacement_store_verified_empty_before_restore": true,
+    "objects_restored": 3,
+    "bytes_restored": 1445888,
+    "all_sha256_verified": true,
+    "status": "pass"
+  },
+  "restored_objects": [
+    {"bytes": 393216, "sha256": "1ede7f755d1c1f8c168c48bbb0ce052227a7962d3386de08eecc2d3a53c162de"},
+    {"bytes": 1048576, "sha256": "836f618dabf2732a1d73e44b44bc7efd3456c6a827b39c5c248961060b49d114"},
+    {"bytes": 4096, "sha256": "35e3ef4ff5cbb488620368685c4161e3ab5df785525c4fd6dd7a66bbb3e4fd1e"}
+  ],
+  "platform_backup_integration_claimed": false,
+  "credentials_emitted": false
+}
