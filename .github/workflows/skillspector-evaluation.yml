@@ -1,0 +1,96 @@
+name: SkillSpector evaluation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/skillspector-evaluation.yml"
+      - "experiments/skillspector/*.py"
+      - "tests/test_skillspector_evaluation.py"
+      - "tests/test_skillspector_container_command.py"
+      - "tests/test_skillspector_benchmark_semantics.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-static-evaluation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out platform
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check out exact SkillSpector candidate
+        uses: actions/checkout@v7
+        with:
+          repository: NVIDIA/SkillSpector
+          ref: 69dcdfb74487d361ba4c811d088cfdea2ff3a9dc
+          path: .candidate/skillspector
+          persist-credentials: false
+
+      - name: Verify upstream pin and license
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C .candidate/skillspector rev-parse HEAD)" = "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc"
+          grep -Fq 'Apache License' .candidate/skillspector/LICENSE
+          {
+            echo "revision=$(git -C .candidate/skillspector rev-parse HEAD)"
+            echo "license_sha256=$(sha256sum .candidate/skillspector/LICENSE | awk '{print $1}')"
+            echo "dockerfile_sha256=$(sha256sum .candidate/skillspector/Dockerfile | awk '{print $1}')"
+          } | tee "$RUNNER_TEMP/skillspector-upstream-pin.txt"
+
+      - name: Build pinned evaluation image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --tag skillspector-eval:2.11.2 .candidate/skillspector
+          docker image inspect skillspector-eval:2.11.2 --format '{{json .RepoDigests}} {{.Id}}' \
+            | tee "$RUNNER_TEMP/skillspector-image.txt"
+          docker run --rm --entrypoint /app/.venv/bin/pip skillspector-eval:2.11.2 freeze \
+            | LC_ALL=C sort \
+            | tee "$RUNNER_TEMP/skillspector-pip-freeze.txt"
+          sha256sum "$RUNNER_TEMP/skillspector-pip-freeze.txt" \
+            | tee "$RUNNER_TEMP/skillspector-pip-freeze.sha256"
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Exercise platform-side harness tests
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+          python -m pytest -q \
+            tests/test_skillspector_evaluation.py \
+            tests/test_skillspector_container_command.py \
+            tests/test_skillspector_benchmark_semantics.py
+
+      - name: Run static no-LLM network-disabled benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m experiments.skillspector.run_benchmark \
+            --output "$RUNNER_TEMP/skillspector-evidence" \
+            --repeats 3 \
+            --image skillspector-eval:2.11.2 \
+            --timeout 120 \
+            | tee "$RUNNER_TEMP/skillspector-benchmark-console.json"
+
+      - name: Upload evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: skillspector-issue-800-evidence
+          path: |
+            ${{ runner.temp }}/skillspector-upstream-pin.txt
+            ${{ runner.temp }}/skillspector-image.txt
+            ${{ runner.temp }}/skillspector-pip-freeze.txt
+            ${{ runner.temp }}/skillspector-pip-freeze.sha256
+            ${{ runner.temp }}/skillspector-benchmark-console.json
+            ${{ runner.temp }}/skillspector-evidence/**
+          if-no-files-found: warn
