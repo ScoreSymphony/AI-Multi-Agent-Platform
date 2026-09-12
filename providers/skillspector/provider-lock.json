@@ -5,16 +5,21 @@
   "upstream_revision": "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc",
   "license": "Apache-2.0",
   "license_sha256": "9f8785b47596b2993a17a3fa8d747ae63126a2c5e80a9e77195a907273d71839",
-  "dockerfile_sha256": "124041bd2c81880747197f221c8d9a13b7378ac5ad98a17b4ab6a15ad22eb9aa",
-  "built_image_id": "sha256:55abb78a1f1af1f430722920b96d4e24bed03e9e9811e1cf5330b859d2387fc1",
+  "upstream_dockerfile_sha256": "124041bd2c81880747197f221c8d9a13b7378ac5ad98a17b4ab6a15ad22eb9aa",
   "dependency_set_sha256": "d6716d890040ac73494a8422ea51ef11229e71e0c0d9b538a95316a3a644fc61",
   "scan_mode": "static_no_llm_network_none",
   "policy_config_revision": "skillspector-static-v1",
+  "production": {
+    "dockerfile_sha256": "69f5a47d8d9b9551ef0b6719733d585a196d73877054ba0300e90dda7bccfa2a",
+    "requirements_sha256": "85e25c541f966f1a2d513b0be5ce8d92a54bbec6b45b635d49f36cbf817f76c7",
+    "image_identity_policy": "verify locked manifest labels and record observed immutable OCI image ID in every SecurityEvidence record"
+  },
   "evaluation": {
     "issue": 800,
     "workflow_run_id": 34657274640,
     "artifact_id": 10286034099,
     "artifact_sha256": "5c3f7f39154d23a4a77151652e1eabf7ace68056b976f912877f2ebab3bdd760",
+    "evaluated_image_id": "sha256:55abb78a1f1af1f430722920b96d4e24bed03e9e9811e1cf5330b859d2387fc1",
     "corpus": "generated-corpus-v3",
     "fixtures": 15,
     "repetitions": 3,
