@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   BrowserSessionClient,
   type AuthenticatedActor,
@@ -6,9 +6,12 @@ import {
   type ReleaseOperatorStatus,
 } from "../api/browserSession";
 import { ControlPlaneError } from "../api/client";
+import { OnboardingClient } from "../api/onboarding";
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from "../components/States";
+import { ComponentSetupPanel } from "./onboarding/ComponentSetupPanel";
 
 export function SettingsPage({ session }: { session: BrowserSessionClient }) {
+  const componentSetupClient = useMemo(() => new OnboardingClient(), []);
   const [actor, setActor] = useState<AuthenticatedActor | null>(null);
   const [sessions, setSessions] = useState<BrowserSessionSummary[] | null>(null);
   const [releaseStatus, setReleaseStatus] = useState<ReleaseOperatorStatus | null>(null);
@@ -185,6 +188,8 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
               </div>
             </Card>
           </div>
+
+          <ComponentSetupPanel onboarding={componentSetupClient} surface="settings" />
 
           <Card title="Platform release & upstream updates">
             {releaseError ? (
