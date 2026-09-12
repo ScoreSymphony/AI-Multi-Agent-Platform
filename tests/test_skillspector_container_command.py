@@ -11,7 +11,9 @@ from experiments.skillspector.runner import (  # noqa: E402
 )
 
 
-def test_container_command_uses_explicit_entrypoint_without_duplicate_binary(tmp_path: Path) -> None:
+def test_container_command_uses_explicit_entrypoint_without_duplicate_binary(
+    tmp_path: Path,
+) -> None:
     input_dir = tmp_path / "input"
     output_dir = tmp_path / "output"
     image = "skillspector-eval:2.11.2"
