@@ -1,0 +1,345 @@
+name: Issue 862 storage disaster recovery evidence
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/issue-862-storage-disaster-recovery-evidence.yml"
+      - "tests/evidence/issue_862/s3_disaster_recovery_probe.py"
+      - "tests/evidence/issue_862/s3_contract_probe.py"
+      - "docs/research/issue-862-object-storage-evaluation.md"
+
+jobs:
+  clean-store-restore:
+    if: github.head_ref == 'issue-862-rustfs-garage-storage-evaluation'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [rustfs, garage, seaweedfs]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Generate synthetic recovery credentials and backend configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          if [ "${{ matrix.backend }}" = "garage" ]; then
+            access_key="GK$(openssl rand -hex 16)"
+          else
+            access_key="I862$(openssl rand -hex 10 | tr '[:lower:]' '[:upper:]')"
+          fi
+          secret_key="$(openssl rand -hex 32)"
+          echo "::add-mask::$access_key"
+          echo "::add-mask::$secret_key"
+          echo "AWS_ACCESS_KEY_ID=$access_key" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=$secret_key" >> "$GITHUB_ENV"
+          echo "ISSUE862_DR_RUN_ID=dr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "ISSUE862_DR_BACKUP_DIR=$GITHUB_WORKSPACE/evidence/${{ matrix.backend }}-logical-backup" >> "$GITHUB_ENV"
+
+          case "${{ matrix.backend }}" in
+            rustfs)
+              echo "ISSUE862_DR_IMAGE=rustfs/rustfs:1.0.0-rc.6" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_CONTAINER=issue862-dr-rustfs" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_ENDPOINT=http://127.0.0.1:9000" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_BUCKET=issue-862-dr" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_REGION=us-east-1" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_VOLUMES=issue862-dr-rustfs-data" >> "$GITHUB_ENV"
+              ;;
+            garage)
+              echo "ISSUE862_DR_IMAGE=dxflrs/garage:v2.3.0" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_CONTAINER=issue862-dr-garage" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_ENDPOINT=http://127.0.0.1:3900" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_BUCKET=issue-862-dr" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_REGION=garage" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_VOLUMES=issue862-dr-garage-meta issue862-dr-garage-data" >> "$GITHUB_ENV"
+              rpc_secret="$(openssl rand -hex 32)"
+              admin_token="$(openssl rand -hex 32)"
+              metrics_token="$(openssl rand -hex 32)"
+              echo "::add-mask::$rpc_secret"
+              echo "::add-mask::$admin_token"
+              echo "::add-mask::$metrics_token"
+              cat > "$RUNNER_TEMP/issue862-dr-garage.toml" <<EOF
+          metadata_dir = "/var/lib/garage/meta"
+          data_dir = "/var/lib/garage/data"
+          db_engine = "sqlite"
+          replication_factor = 1
+          rpc_bind_addr = "[::]:3901"
+          rpc_public_addr = "127.0.0.1:3901"
+          rpc_secret = "$rpc_secret"
+
+          [s3_api]
+          s3_region = "garage"
+          api_bind_addr = "[::]:3900"
+          root_domain = ".s3.garage.localhost"
+
+          [admin]
+          api_bind_addr = "[::]:3903"
+          admin_token = "$admin_token"
+          metrics_token = "$metrics_token"
+          EOF
+              ;;
+            seaweedfs)
+              echo "ISSUE862_DR_IMAGE=chrislusf/seaweedfs:4.46" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_CONTAINER=issue862-dr-seaweedfs" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_ENDPOINT=http://127.0.0.1:8333" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_BUCKET=issue-862-dr" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_REGION=us-east-1" >> "$GITHUB_ENV"
+              echo "ISSUE862_DR_VOLUMES=issue862-dr-seaweedfs-data" >> "$GITHUB_ENV"
+              ;;
+          esac
+
+      - name: Start original pinned backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$ISSUE862_DR_IMAGE" >/dev/null
+          for volume in $ISSUE862_DR_VOLUMES; do
+            docker volume create "$volume" >/dev/null
+          done
+
+          case "${{ matrix.backend }}" in
+            rustfs)
+              docker run -d \
+                --name "$ISSUE862_DR_CONTAINER" \
+                -p 9000:9000 \
+                -e RUSTFS_VOLUMES=/data \
+                -e RUSTFS_ADDRESS=0.0.0.0:9000 \
+                -e RUSTFS_CONSOLE_ENABLE=false \
+                -e RUSTFS_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+                -e RUSTFS_SECRET_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -v issue862-dr-rustfs-data:/data \
+                "$ISSUE862_DR_IMAGE" >/dev/null
+              ;;
+            garage)
+              docker run -d \
+                --name "$ISSUE862_DR_CONTAINER" \
+                -p 3900:3900 \
+                -v "$RUNNER_TEMP/issue862-dr-garage.toml:/etc/garage.toml:ro" \
+                -v issue862-dr-garage-meta:/var/lib/garage/meta \
+                -v issue862-dr-garage-data:/var/lib/garage/data \
+                -e GARAGE_DEFAULT_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+                -e GARAGE_DEFAULT_SECRET_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -e GARAGE_DEFAULT_BUCKET="$ISSUE862_DR_BUCKET" \
+                "$ISSUE862_DR_IMAGE" /garage server --single-node --default-bucket >/dev/null
+              ;;
+            seaweedfs)
+              docker run -d \
+                --name "$ISSUE862_DR_CONTAINER" \
+                -p 8333:8333 \
+                -v issue862-dr-seaweedfs-data:/data \
+                -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+                -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -e S3_BUCKET="$ISSUE862_DR_BUCKET" \
+                "$ISSUE862_DR_IMAGE" >/dev/null
+              ;;
+          esac
+
+      - name: Wait for original backend readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.backend }}" = "rustfs" ]; then
+            for _ in $(seq 1 120); do
+              if curl -fsS "$ISSUE862_DR_ENDPOINT/health/ready" >/dev/null; then
+                exit 0
+              fi
+              sleep 1
+            done
+          else
+            port="${ISSUE862_DR_ENDPOINT##*:}"
+            for _ in $(seq 1 120); do
+              if python - "$port" <<'PY'
+          import socket
+          import sys
+
+          try:
+              with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+                  pass
+          except OSError:
+              raise SystemExit(1)
+          PY
+              then
+                sleep 2
+                exit 0
+              fi
+              sleep 1
+            done
+          fi
+          docker logs "$ISSUE862_DR_CONTAINER" || true
+          exit 1
+
+      - name: Export checksummed logical blob backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          create_bucket=()
+          if [ "${{ matrix.backend }}" = "rustfs" ]; then
+            create_bucket=(--create-bucket)
+          fi
+          python tests/evidence/issue_862/s3_disaster_recovery_probe.py export \
+            --backend "${{ matrix.backend }}" \
+            --endpoint "$ISSUE862_DR_ENDPOINT" \
+            --bucket "$ISSUE862_DR_BUCKET" \
+            --region "$ISSUE862_DR_REGION" \
+            --run-id "$ISSUE862_DR_RUN_ID" \
+            --backup-dir "$ISSUE862_DR_BACKUP_DIR" \
+            "${create_bucket[@]}" \
+            > "evidence/${{ matrix.backend }}-dr-export.json"
+          (
+            cd "$ISSUE862_DR_BACKUP_DIR"
+            find . -type f -print0 | sort -z | xargs -0 sha256sum
+          ) > "evidence/${{ matrix.backend }}-dr-backup-sha256s.txt"
+          docker volume inspect $ISSUE862_DR_VOLUMES \
+            > "evidence/${{ matrix.backend }}-dr-original-volumes.json"
+
+      - name: Destroy original object-store data completely
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker rm -f "$ISSUE862_DR_CONTAINER" >/dev/null
+          for volume in $ISSUE862_DR_VOLUMES; do
+            docker volume rm "$volume" >/dev/null
+            if docker volume inspect "$volume" >/dev/null 2>&1; then
+              echo "volume still exists after destruction: $volume" >&2
+              exit 1
+            fi
+          done
+          printf '%s\n' "original container removed and all backend data volumes deleted" \
+            > "evidence/${{ matrix.backend }}-dr-destruction.txt"
+
+      - name: Start clean replacement backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          for volume in $ISSUE862_DR_VOLUMES; do
+            docker volume create "$volume" >/dev/null
+          done
+
+          case "${{ matrix.backend }}" in
+            rustfs)
+              docker run -d \
+                --name "$ISSUE862_DR_CONTAINER" \
+                -p 9000:9000 \
+                -e RUSTFS_VOLUMES=/data \
+                -e RUSTFS_ADDRESS=0.0.0.0:9000 \
+                -e RUSTFS_CONSOLE_ENABLE=false \
+                -e RUSTFS_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+                -e RUSTFS_SECRET_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -v issue862-dr-rustfs-data:/data \
+                "$ISSUE862_DR_IMAGE" >/dev/null
+              ;;
+            garage)
+              docker run -d \
+                --name "$ISSUE862_DR_CONTAINER" \
+                -p 3900:3900 \
+                -v "$RUNNER_TEMP/issue862-dr-garage.toml:/etc/garage.toml:ro" \
+                -v issue862-dr-garage-meta:/var/lib/garage/meta \
+                -v issue862-dr-garage-data:/var/lib/garage/data \
+                -e GARAGE_DEFAULT_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+                -e GARAGE_DEFAULT_SECRET_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -e GARAGE_DEFAULT_BUCKET="$ISSUE862_DR_BUCKET" \
+                "$ISSUE862_DR_IMAGE" /garage server --single-node --default-bucket >/dev/null
+              ;;
+            seaweedfs)
+              docker run -d \
+                --name "$ISSUE862_DR_CONTAINER" \
+                -p 8333:8333 \
+                -v issue862-dr-seaweedfs-data:/data \
+                -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+                -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+                -e S3_BUCKET="$ISSUE862_DR_BUCKET" \
+                "$ISSUE862_DR_IMAGE" >/dev/null
+              ;;
+          esac
+          docker volume inspect $ISSUE862_DR_VOLUMES \
+            > "evidence/${{ matrix.backend }}-dr-replacement-volumes.json"
+
+      - name: Wait for replacement backend readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.backend }}" = "rustfs" ]; then
+            for _ in $(seq 1 120); do
+              if curl -fsS "$ISSUE862_DR_ENDPOINT/health/ready" >/dev/null; then
+                exit 0
+              fi
+              sleep 1
+            done
+          else
+            port="${ISSUE862_DR_ENDPOINT##*:}"
+            for _ in $(seq 1 120); do
+              if python - "$port" <<'PY'
+          import socket
+          import sys
+
+          try:
+              with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+                  pass
+          except OSError:
+              raise SystemExit(1)
+          PY
+              then
+                sleep 2
+                exit 0
+              fi
+              sleep 1
+            done
+          fi
+          docker logs "$ISSUE862_DR_CONTAINER" || true
+          exit 1
+
+      - name: Restore backup into empty replacement and verify SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          create_bucket=()
+          if [ "${{ matrix.backend }}" = "rustfs" ]; then
+            create_bucket=(--create-bucket)
+          fi
+          python tests/evidence/issue_862/s3_disaster_recovery_probe.py restore \
+            --backend "${{ matrix.backend }}" \
+            --endpoint "$ISSUE862_DR_ENDPOINT" \
+            --bucket "$ISSUE862_DR_BUCKET" \
+            --region "$ISSUE862_DR_REGION" \
+            --run-id "$ISSUE862_DR_RUN_ID" \
+            --backup-dir "$ISSUE862_DR_BACKUP_DIR" \
+            "${create_bucket[@]}" \
+            > "evidence/${{ matrix.backend }}-dr-restore.json"
+
+      - name: Record pinned image identity
+        shell: bash
+        run: |
+          {
+            echo "backend=${{ matrix.backend }}"
+            echo "image=$ISSUE862_DR_IMAGE"
+            echo "image_id=$(docker image inspect "$ISSUE862_DR_IMAGE" --format '{{.Id}}')"
+            echo "repo_digests=$(docker image inspect "$ISSUE862_DR_IMAGE" --format '{{json .RepoDigests}}')"
+          } > "evidence/${{ matrix.backend }}-dr-image.txt"
+
+      - name: Upload disaster-recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-862-${{ matrix.backend }}-disaster-recovery-evidence
+          path: evidence/${{ matrix.backend }}-*
+          if-no-files-found: warn
+
+      - name: Show backend logs on failure
+        if: failure()
+        shell: bash
+        run: docker logs "$ISSUE862_DR_CONTAINER" || true
+
+      - name: Cleanup replacement backend
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f "$ISSUE862_DR_CONTAINER" 2>/dev/null || true
+          for volume in $ISSUE862_DR_VOLUMES; do
+            docker volume rm "$volume" >/dev/null 2>&1 || true
+          done
