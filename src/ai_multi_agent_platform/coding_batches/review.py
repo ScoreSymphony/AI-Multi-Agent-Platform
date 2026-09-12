@@ -18,6 +18,7 @@ from ai_multi_agent_platform.verification import (
 
 from .models import CodingBatch, CodingWorkstream, VerificationEvidence, WorkstreamState
 from .service import CodingBatchCoordinator
+from .telemetry import CodingBatchTelemetry
 
 
 class AgentRunEvidenceReader(Protocol):
@@ -48,12 +49,14 @@ class CanonicalCodingVerificationCoordinator:
         repository_provenance: RepositoryRunEvidenceReader,
         verification_runtime: CanonicalVerificationRuntime,
         verification: VerificationService,
+        telemetry: CodingBatchTelemetry | None = None,
     ) -> None:
         self._coordinator = coordinator
         self._agent_runs = agent_runs
         self._repository_provenance = repository_provenance
         self._runtime = verification_runtime
         self._verification = verification
+        self._telemetry = telemetry
 
     async def ensure_request(
         self,
@@ -122,6 +125,14 @@ class CanonicalCodingVerificationCoordinator:
             causation_id=causation_id,
         )
         self._validate_request(request, batch, workstream, agent_run)
+        if self._telemetry is not None:
+            self._telemetry.verification_requested(
+                batch,
+                workstream,
+                run_id=agent_run.run_id,
+                verification_id=request.verification_id,
+                subject_artifact_id=subject_artifact_id,
+            )
         return request
 
     def record_completed(
@@ -160,11 +171,21 @@ class CanonicalCodingVerificationCoordinator:
             passed=result.outcome is VerificationOutcome.PASS,
             check_refs=(result.verification_result_id,),
         )
-        return self._coordinator.record_verification(
+        already_recorded = workstream.verification == evidence
+        updated = self._coordinator.record_verification(
             batch.batch_id,
             workstream.id,
             evidence,
         )
+        if self._telemetry is not None and not already_recorded:
+            self._telemetry.verification_completed(
+                self._coordinator.get(batch_id),
+                updated,
+                run_id=agent_run.run_id,
+                verification_id=request.verification_id,
+                passed=evidence.passed,
+            )
+        return updated
 
     def _output_evidence(
         self,
