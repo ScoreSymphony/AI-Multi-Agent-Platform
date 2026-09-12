@@ -10,6 +10,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_PATH = REPO_ROOT / "tests" / "evidence" / "issue_862" / "runtime_image_digests.json"
 VERIFIER_PATH = REPO_ROOT / "scripts" / "benchmarks" / "verify_issue862_storage_vps_capture.py"
+CAPTURE_PATH = REPO_ROOT / "scripts" / "benchmarks" / "run_issue862_storage_vps_capture.sh"
 
 
 def _reference() -> dict[str, Any]:
@@ -87,3 +88,16 @@ def test_runtime_identity_verifier_rejects_digest_drift(tmp_path: Path) -> None:
 
     with pytest.raises(error_type, match="rustfs runtime digest mismatch"):
         verify_runtime_identity(tmp_path, reference)
+
+
+def test_vps_capture_keeps_benchmark_services_local_and_evidence_isolated() -> None:
+    content = CAPTURE_PATH.read_text(encoding="utf-8")
+
+    for port in (9000, 3900, 8333):
+        assert f"-p 127.0.0.1:{port}:{port}" in content
+        assert f"-p {port}:{port}" not in content
+
+    assert 'find "$OUTPUT_DIR" -mindepth 1 -maxdepth 1 -print -quit' in content
+    assert "refusing to mix #862 evidence into non-empty output directory" in content
+    assert 'if [[ "$(id -u)" -eq 0 ]]; then' in content
+    assert "elif command -v sudo >/dev/null 2>&1; then" in content
