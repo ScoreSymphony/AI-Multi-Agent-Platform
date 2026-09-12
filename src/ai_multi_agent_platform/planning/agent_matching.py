@@ -181,7 +181,9 @@ def _team_candidate(
     candidate: PlanningTeamCandidate,
     agents: dict[str, PlanningAgentCandidate],
 ) -> AgentMatchCandidate:
-    members = tuple(agents[agent_id] for agent_id in candidate.member_agent_ids if agent_id in agents)
+    members = tuple(
+        agents[agent_id] for agent_id in candidate.member_agent_ids if agent_id in agents
+    )
     roles = tuple(dict.fromkeys(member.role for member in members))
     allowed = set(candidate.shared_capability_ids)
     denied: set[str] = set()

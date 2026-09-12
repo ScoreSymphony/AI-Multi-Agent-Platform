@@ -261,7 +261,9 @@ class AgentMatcher:
                 )
             outcome = self.evaluate(requirements, pinned[0])
             return AgentMatchResult(
-                status=(AgentMatchStatus.SELECTED if outcome.eligible else AgentMatchStatus.NO_MATCH),
+                status=(
+                    AgentMatchStatus.SELECTED if outcome.eligible else AgentMatchStatus.NO_MATCH
+                ),
                 selected=(pinned[0].ref if outcome.eligible else None),
                 outcomes=(outcome,),
             )
@@ -317,7 +319,9 @@ class AgentMatcher:
                 AgentMatchRejection(AgentMatchReason.UNSUPPORTED_KIND, "candidate kind not allowed")
             )
         if not candidate.enabled:
-            rejections.append(AgentMatchRejection(AgentMatchReason.DISABLED, "candidate is disabled"))
+            rejections.append(
+                AgentMatchRejection(AgentMatchReason.DISABLED, "candidate is disabled")
+            )
         if not _scope_compatible(candidate, requirements):
             rejections.append(
                 AgentMatchRejection(AgentMatchReason.WRONG_SCOPE, "candidate scope is incompatible")
@@ -494,9 +498,7 @@ class AgentMatcher:
         candidate_requirements = candidate.model_requirements or (RoutingRequirements(),)
         merged = tuple(
             value
-            for value in (
-                _merge_model_requirements(item, work) for item in candidate_requirements
-            )
+            for value in (_merge_model_requirements(item, work) for item in candidate_requirements)
             if value is not None
         )
         if not merged:
@@ -888,7 +890,9 @@ def _model_matches(
         return False
     if requirements.streaming and not capabilities.streaming:
         return False
-    if requirements.modalities and not set(requirements.modalities).issubset(capabilities.modalities):
+    if requirements.modalities and not set(requirements.modalities).issubset(
+        capabilities.modalities
+    ):
         return False
     if requirements.reasoning and not set(requirements.reasoning).issubset(capabilities.reasoning):
         return False

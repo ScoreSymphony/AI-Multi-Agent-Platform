@@ -90,11 +90,7 @@ def _search_capability(version: str = "1.5") -> CapabilitySpec:
 
 
 def _reasons(result: AgentMatchResult) -> set[AgentMatchReason]:
-    return {
-        rejection.reason
-        for outcome in result.outcomes
-        for rejection in outcome.rejections
-    }
+    return {rejection.reason for outcome in result.outcomes for rejection in outcome.rejections}
 
 
 def test_exact_role_and_capability_match() -> None:
