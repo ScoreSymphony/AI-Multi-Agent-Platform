@@ -15,8 +15,9 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 EVALUATED_REVISION = "d1b7ac007debcb1ba8de91c76afb49bee90d096a"
 
