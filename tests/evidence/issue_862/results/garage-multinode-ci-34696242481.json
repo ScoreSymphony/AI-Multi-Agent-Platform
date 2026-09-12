@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "issue": 862,
+  "backend": "garage",
+  "evidence_scope": "github_hosted_runner_three_node_replication_factor_3_partial_failure",
+  "workflow_run_id": 34696242481,
+  "workflow_head_sha": "9e821abc5537c00d9502a362b78981834cb0f2aa",
+  "artifact_id": 10299031332,
+  "artifact_digest": "sha256:8eecef58c78b2ba355e38ee8d839c259b56ad657913223ee47d178ed3c01f929",
+  "runtime": {
+    "image": "dxflrs/garage:v2.3.0",
+    "topology": "three nodes in three zones, replication_factor=3, consistency_mode=consistent",
+    "single_node_failure_exercised": true,
+    "failure_detection_waited_for": true
+  },
+  "partial_failure": {
+    "status": "pass",
+    "pre_failure_sentinel_bytes": 1048576,
+    "pre_failure_sentinel_sha256": "9669c0db54bcc431caac433d40f33b3c6be37e408a2d88b46c535d3d97ce4b53",
+    "pre_failure_object_sha256_verified_while_one_node_down": true,
+    "write_during_failure_sha256_verified": true,
+    "verified_objects_after_node_recovery": 2,
+    "deleted_after_verification": true
+  },
+  "runner_resource_observation": {
+    "classification": "diagnostic_only_not_vps_evidence",
+    "nodes": [
+      {"container": "garage1", "memory_usage_snapshot": "6.523MiB", "cpu_percent_snapshot": "0.01%", "pids": 12},
+      {"container": "garage2", "memory_usage_snapshot": "6.082MiB", "cpu_percent_snapshot": "0.01%", "pids": 11},
+      {"container": "garage3", "memory_usage_snapshot": "5.508MiB", "cpu_percent_snapshot": "0.08%", "pids": 10}
+    ]
+  },
+  "credentials_emitted": false
+}
