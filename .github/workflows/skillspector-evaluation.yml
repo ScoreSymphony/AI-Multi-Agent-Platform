@@ -36,7 +36,7 @@ jobs:
           path: .candidate/skillspector
           persist-credentials: false
 
-      - name: Verify upstream pin and license
+      - name: Verify upstream and production locks
         shell: bash
         run: |
           set -euo pipefail
@@ -46,23 +46,37 @@ jobs:
             "9f8785b47596b2993a17a3fa8d747ae63126a2c5e80a9e77195a907273d71839"
           test "$(sha256sum .candidate/skillspector/Dockerfile | awk '{print $1}')" = \
             "124041bd2c81880747197f221c8d9a13b7378ac5ad98a17b4ab6a15ad22eb9aa"
+          test "$(sha256sum providers/skillspector/Dockerfile | awk '{print $1}')" = \
+            "69f5a47d8d9b9551ef0b6719733d585a196d73877054ba0300e90dda7bccfa2a"
+          test "$(sha256sum providers/skillspector/requirements.lock | awk '{print $1}')" = \
+            "85e25c541f966f1a2d513b0be5ce8d92a54bbec6b45b635d49f36cbf817f76c7"
           {
             echo "revision=$(git -C .candidate/skillspector rev-parse HEAD)"
             echo "license_sha256=$(sha256sum .candidate/skillspector/LICENSE | awk '{print $1}')"
-            echo "dockerfile_sha256=$(sha256sum .candidate/skillspector/Dockerfile | awk '{print $1}')"
-          } | tee "$RUNNER_TEMP/skillspector-upstream-pin.txt"
+            echo "upstream_dockerfile_sha256=$(sha256sum .candidate/skillspector/Dockerfile | awk '{print $1}')"
+            echo "production_dockerfile_sha256=$(sha256sum providers/skillspector/Dockerfile | awk '{print $1}')"
+            echo "requirements_sha256=$(sha256sum providers/skillspector/requirements.lock | awk '{print $1}')"
+          } | tee "$RUNNER_TEMP/skillspector-production-lock.txt"
 
-      - name: Build and verify pinned production image
+      - name: Build locked production image
         shell: bash
         run: |
           set -euo pipefail
-          docker build --tag skillspector-eval:2.11.2 .candidate/skillspector
-          image_id="$(docker image inspect skillspector-eval:2.11.2 --format '{{.Id}}')"
-          test "$image_id" = \
-            "sha256:55abb78a1f1af1f430722920b96d4e24bed03e9e9811e1cf5330b859d2387fc1"
-          docker image inspect skillspector-eval:2.11.2 --format '{{json .RepoDigests}} {{.Id}}' \
-            | tee "$RUNNER_TEMP/skillspector-image.txt"
-          docker run --rm --entrypoint /app/.venv/bin/pip skillspector-eval:2.11.2 freeze \
+          docker build \
+            --file providers/skillspector/Dockerfile \
+            --tag skillspector-production:2.11.2 \
+            .
+          image_id="$(docker image inspect skillspector-production:2.11.2 --format '{{.Id}}')"
+          echo "image_id=$image_id" | tee "$RUNNER_TEMP/skillspector-image.txt"
+          docker image inspect skillspector-production:2.11.2 --format '{{json .Config.Labels}}' \
+            | tee -a "$RUNNER_TEMP/skillspector-image.txt"
+          test "$(docker image inspect skillspector-production:2.11.2 --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}')" = \
+            "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc"
+          test "$(docker image inspect skillspector-production:2.11.2 --format '{{index .Config.Labels \"io.scoresymphony.skillspector.dependency-set-sha256\"}}')" = \
+            "d6716d890040ac73494a8422ea51ef11229e71e0c0d9b538a95316a3a644fc61"
+          test "$(docker image inspect skillspector-production:2.11.2 --format '{{index .Config.Labels \"io.scoresymphony.skillspector.scan-mode\"}}')" = \
+            "static_no_llm_network_none"
+          docker run --rm --entrypoint /app/.venv/bin/pip skillspector-production:2.11.2 freeze \
             | LC_ALL=C sort \
             | tee "$RUNNER_TEMP/skillspector-pip-freeze.txt"
           diff -u providers/skillspector/pip-freeze.lock "$RUNNER_TEMP/skillspector-pip-freeze.txt"
@@ -94,7 +108,7 @@ jobs:
           python -m experiments.skillspector.run_benchmark \
             --output "$RUNNER_TEMP/skillspector-evidence" \
             --repeats 3 \
-            --image skillspector-eval:2.11.2 \
+            --image skillspector-production:2.11.2 \
             --timeout 120 \
             | tee "$RUNNER_TEMP/skillspector-benchmark-console.json"
 
@@ -104,7 +118,7 @@ jobs:
         with:
           name: skillspector-issue-868-evidence
           path: |
-            ${{ runner.temp }}/skillspector-upstream-pin.txt
+            ${{ runner.temp }}/skillspector-production-lock.txt
             ${{ runner.temp }}/skillspector-image.txt
             ${{ runner.temp }}/skillspector-pip-freeze.txt
             ${{ runner.temp }}/skillspector-pip-freeze.sha256
