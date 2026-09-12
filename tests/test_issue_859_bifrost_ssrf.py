@@ -34,7 +34,7 @@ def test_live_bifrost_blocks_configured_ssrf_targets_before_connection() -> None
     assert _sentinel_hits(sentinel_control_url) == 0
 
     for blocked_url in blocked_urls:
-        status, _ = _bifrost_file_url_request(
+        status, body = _bifrost_file_url_request(
             base_url=bifrost_base_url,
             native_model=native_openai_model,
             blocked_url=blocked_url,
@@ -43,6 +43,10 @@ def test_live_bifrost_blocks_configured_ssrf_targets_before_connection() -> None
         assert 400 <= status < 600, (
             f"Bifrost unexpectedly accepted SSRF probe target {blocked_url!r} "
             f"with HTTP status {status}"
+        )
+        assert _is_fetch_path_rejection(body), (
+            "Bifrost rejected the probe, but the response does not prove that the "
+            f"server-side URL fetch path evaluated target {blocked_url!r}: {body[:500]!r}"
         )
         assert _sentinel_hits(sentinel_control_url) == 0, (
             f"Bifrost connected to controlled blocked target {blocked_url!r}"
@@ -59,6 +63,21 @@ def _blocked_urls(raw: str) -> list[str]:
             raise AssertionError("every SSRF probe target must be an http(s) URL string")
         urls.append(item)
     return urls
+
+
+def _is_fetch_path_rejection(body: str) -> bool:
+    normalized = body.casefold()
+    return any(
+        marker in normalized
+        for marker in (
+            "failed to fetch document",
+            "failed to fetch from",
+            "non-public",
+            "loopback",
+            "private address",
+            "ssrf",
+        )
+    )
 
 
 def _bifrost_file_url_request(
