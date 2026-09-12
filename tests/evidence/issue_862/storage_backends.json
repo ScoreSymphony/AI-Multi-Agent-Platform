@@ -40,14 +40,21 @@
       "project_status": "pre-release release-candidate line",
       "proposed_classification": "experimental_only",
       "classification_is_final": false,
-      "known_s3_evidence": "Official compatibility matrix documents tested put/get/inspect/delete, ListObjects/ListObjectsV2, range reads and core multipart workflow; it also records excluded/planned behavior.",
+      "known_s3_evidence": "Official compatibility material plus live platform evidence covers the required object subset, ranged reads, ListObjectsV2, concurrent integrity and the canonical FileProvider seam. ETag remains diagnostic only.",
+      "verified_evidence": [
+        "required S3 subset and 8-way concurrent SHA-256 round trips",
+        "canonical FileProvider conformance against the live backend",
+        "invalid credential rejection",
+        "acknowledged object survives single-process restart",
+        "1.0.0-rc.5 to 1.0.0-rc.6 in-place upgrade preserves acknowledged SHA-256 content",
+        "four-node MNMD survives one-node loss with verified reads and new writes"
+      ],
       "open_evidence": [
-        "platform contract probe",
-        "restart/failure campaign",
-        "multi-node campaign",
-        "backup/restore",
-        "upgrade/rollback",
-        "VPS resource measurements"
+        "clean-store backup/restore campaign",
+        "certificate-verified TLS campaign",
+        "target VPS resource measurements",
+        "explicit rollback/downgrade support statement",
+        "release-maturity review before any promotion beyond experimental_only"
       ]
     },
     "garage": {
@@ -61,15 +68,22 @@
       "project_status": "stable tagged release",
       "proposed_classification": "supported_optional",
       "classification_is_final": false,
-      "known_s3_evidence": "Project describes an S3-compatible object store for small self-hosted geo-distributed deployments; compatibility must be validated only for the platform-required subset.",
+      "license_boundary": "Treat Garage as an optional separately deployed network service. The platform adapter and canonical contracts stay project-owned; operators remain responsible for obligations that apply to the Garage program or modified Garage deployments.",
+      "known_s3_evidence": "Live platform evidence covers the required object subset, ranged reads, ListObjectsV2, concurrent integrity and the canonical FileProvider seam.",
+      "verified_evidence": [
+        "required S3 subset and 8-way concurrent SHA-256 round trips",
+        "canonical FileProvider conformance against the live backend",
+        "invalid credential rejection",
+        "acknowledged object survives single-process restart",
+        "v2.2.0 to v2.3.0 in-place upgrade preserves acknowledged SHA-256 content",
+        "certificate-verified HTTPS S3 subset through the documented reverse-proxy deployment boundary"
+      ],
       "open_evidence": [
-        "platform contract probe",
-        "restart/failure campaign",
-        "multi-node campaign",
-        "backup/restore",
-        "upgrade/rollback",
-        "VPS resource measurements",
-        "AGPL deployment-boundary review"
+        "three-node replication-factor-3 one-node failure campaign after product failure detection",
+        "native metadata snapshot restore campaign",
+        "clean-store backup/restore campaign",
+        "target VPS resource measurements",
+        "explicit rollback/downgrade support statement"
       ]
     },
     "seaweedfs": {
@@ -83,16 +97,35 @@
       "project_status": "comparison baseline",
       "proposed_classification": "supported_optional",
       "classification_is_final": false,
-      "known_s3_evidence": "SeaweedFS exposes S3 through a stateless gateway in front of the filer and supports multi-node replication/topologies.",
+      "known_s3_evidence": "SeaweedFS exposes S3 through its gateway/filer stack; live platform evidence covers the same required S3 and FileProvider surface used for the candidates.",
+      "verified_evidence": [
+        "required S3 subset and 8-way concurrent SHA-256 round trips",
+        "canonical FileProvider conformance against the live backend",
+        "invalid credential rejection",
+        "acknowledged object survives single-process restart",
+        "4.45 to 4.46 in-place upgrade preserves acknowledged SHA-256 content"
+      ],
       "open_evidence": [
-        "same platform contract probe used for candidates",
-        "same resource campaign used for candidates"
+        "clean-store backup/restore campaign",
+        "certificate-verified TLS campaign",
+        "same target VPS resource campaign used for candidates"
       ]
     }
   },
+  "backup_boundary": {
+    "platform_issue_40_single_node_backup_currently_copies_external_s3_content": false,
+    "current_single_node_scope": ["db", "files", "workspaces", "configuration-metadata"],
+    "required_for_object_store_deployments": "coordinate canonical platform backup with a separately verified object-store blob backup/recovery procedure until the platform backup service gains an external FileProvider backup hook"
+  },
   "gate": {
     "final_classification_requires_runtime_evidence": true,
+    "final_classification_requires_target_vps_measurement": true,
     "setup_wizard_recommendation_requires_issue": 799,
-    "issue_799_currently_blocks_final_wizard_integration": true
+    "issue_799_currently_blocks_final_wizard_integration": true,
+    "issue_799_draft_mapping": {
+      "experimental_only": "ComponentLifecycle.EXPERIMENTAL",
+      "supported_optional": "ComponentLifecycle.SUPPORTED"
+    },
+    "setup_profiles_must_not_persist_credentials": true
   }
 }
