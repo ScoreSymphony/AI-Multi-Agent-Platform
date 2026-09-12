@@ -124,7 +124,7 @@ The Control Plane can bind a backend-neutral `TimelineReader` and merge derived 
   - Control Plane timeline;
   - health aggregation;
   - accounting handoff.
-- `tests/test_issue_16_final_e2e.py`
+- `tests/e2e/observability/test_canonical_observability_flow.py`
   - one continuous `Task -> Run -> Agent -> Model/Tool -> Worker dispatch -> transport -> remote Worker/Node` trace;
   - complete cross-boundary canonical context preservation;
   - accounting measurement handoff in the same local flow;
