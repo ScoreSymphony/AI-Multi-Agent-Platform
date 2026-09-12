@@ -1,19 +1,19 @@
 # AI Multi-Agent Platform
 
-A general-purpose, self-hostable, model-agnostic and hardware-agnostic platform for defining, orchestrating, executing, observing and evaluating AI-assisted work across one or many machines.
+A general-purpose, self-hostable, local-first, model-agnostic and hardware-agnostic platform for defining, orchestrating, executing, observing and evaluating AI-assisted work across one or many machines.
 
-The platform is built around canonical tasks, plans, steps, runs, agents, tools, models, workers, nodes, workspaces, files, artifacts, results, verification, approvals and events. Concrete systems such as Hermes, Forge, LiteLLM, MCP-compatible tool servers, model runtimes, storage engines or workflow engines integrate behind replaceable platform-owned contracts rather than defining the platform itself.
+The platform is built around canonical Tasks, Plans, Steps, Runs, Agents, Tools, Models, Workers, Nodes, Workspaces, Files, Artifacts, Results, Verification, Approvals and Events. Concrete systems such as Hermes, Forge, LiteLLM, MCP-compatible tool servers, model runtimes, storage engines or workflow engines integrate behind replaceable platform-owned contracts rather than defining the platform itself.
 
 ## Core principles
 
 - General purpose; not tied to ScoreSymphony or another application domain.
 - Supports both single-agent and multi-agent workloads.
-- Task-centric rather than chat-centric.
+- Task-centric rather than chat-centric, while still supporting interactive chat as one product surface.
 - Model/provider and hardware/deployment agnostic.
+- Local and self-hosted operation are first-class; baseline operation must not require recurring paid AI/API services.
 - Single-node operation is a first-class baseline; distributed multi-node operation extends the same conceptual model.
 - Orchestration, execution, models, tools, memory, files, knowledge, persistence, messaging, authorization, scheduling, observability and automation remain replaceable behind platform-owned boundaries.
-- API-first, plugin-friendly, self-hostable and local-first.
-- Baseline operation must not require recurring paid AI/API services.
+- API-first, plugin-friendly and designed so Web UI, CLI and external applications consume the same canonical platform state.
 
 ## Architecture at a glance
 
@@ -61,22 +61,70 @@ The authoritative product direction lives in [`docs/PRODUCT_VISION.md`](docs/PRO
 
 Material architecture decisions are recorded under [`docs/adr/`](docs/adr/README.md). Implementations must not silently contradict the normative product or architecture documents.
 
-## Implemented platform areas
+## What is implemented today
 
-The repository has moved beyond foundational scaffolding into active product integration, acceptance, hardening and operating-envelope work. Implemented platform areas include:
+The repository has moved beyond foundational scaffolding into active product integration, acceptance, hardening and operating-envelope work. The merged platform already contains substantial end-to-end functionality across the following areas.
 
-- canonical lifecycle/domain ownership and Control Plane APIs;
-- execution, model, tool and provider boundaries;
+### Core workflow and control plane
+
+- canonical Tasks, Plans, Steps, Runs, Events, Results and Artifacts;
+- versioned Control Plane APIs used by supported clients;
+- durable Plan/Step coordination with dependencies, fan-out/fan-in, waits, retries, cancellation, reconciliation and recovery semantics;
+- Projects, Workspaces, Files and portable result/artifact handling;
+- Web and CLI client paths over the canonical Control Plane.
+
+### Agents, models and capabilities
+
 - Agents and Agent Teams;
-- authentication, authorization and approvals;
-- Workspaces, files, Artifacts and results;
-- Memory, Knowledge and Search;
-- Automations and durable coordination of Plans and Steps;
-- distributed Worker execution and compute abstractions;
-- Registry/Marketplace foundations;
-- release/update foundations and conformance infrastructure.
+- autonomous planning and bounded replanning foundations;
+- exact planned Step-to-Agent execution bindings;
+- model-provider and model-routing contracts, including durable routing-profile revisions;
+- tools/capabilities and MCP-compatible integration boundaries;
+- Chat, Browser and Terminal product capabilities;
+- reference and distributed execution paths behind platform-owned execution contracts.
+
+### Memory, knowledge and repository intelligence
+
+- Memory and Knowledge domains;
+- Search and discovery over supported platform resources;
+- provider-neutral repository intelligence with repository maps, deterministic search, exact source slices and revision provenance;
+- Repository/Git integration through authorization-aware platform services;
+- reusable workflow definitions, Templates and portable import/export.
+
+### Governance, review and user-attention flows
+
+- authentication and session handling;
+- authorization, policy enforcement and human approvals;
+- Verification/Review workflows;
+- Notifications and user-attention surfaces;
+- Organizations, Teams and Memberships;
+- optional Proposal/Specification governance foundations with immutable revisions and exact Approval binding;
+- usage/resource accounting and related policy integrations.
+
+### Distributed execution and operations
+
+- Node/Worker and resource abstractions;
+- authenticated remote Worker reporting and distributed Workspace materialization;
+- network-capable distributed transport while preserving the same canonical lifecycle model;
+- host-pressure telemetry and pressure-aware admission foundations;
+- observability and diagnostic paths;
+- backup, upgrade, release-manifest and compatibility/provenance foundations;
+- deterministic performance, fault, restart, endurance and distributed-execution test tooling.
+
+### Extension and ecosystem foundations
+
+- Registry/Marketplace foundations with local/offline discovery, compatibility, integrity and trust validation;
+- Connector persistence with restart-stable identities and sync checkpoints;
+- architecture-significant upstream provenance and update workflows;
+- platform-wide conformance profiles and machine-readable acceptance evidence.
 
 This is deliberately a stable capability summary rather than an issue-by-issue progress ledger. For the curated current integration state, use [`docs/STATUS.md`](docs/STATUS.md). For individual work items, GitHub issues, dependencies, pull-request checks and the exact merged repository state remain authoritative.
+
+## Current maturity
+
+The usable single-node prototype acceptance gate has passed, and the repository now concentrates on convergence, conformance, hardening, measured operating envelopes and release readiness rather than basic platform construction.
+
+No formal GitHub release has been published yet. Release claims are therefore intentionally conservative: merged functionality is real, but operational-version acceptance still depends on the repository's release and conformance gates. See [`CHANGELOG.md`](CHANGELOG.md), [`docs/STATUS.md`](docs/STATUS.md), [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md) and [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md) for the corresponding evidence and process.
 
 ## Quickstart for development
 
@@ -157,6 +205,7 @@ The canonical single-node prototype profiles are documented in [`docs/PROTOTYPE_
 | Kernel lifecycle and recovery | [`docs/KERNEL.md`](docs/KERNEL.md) |
 | Top-level package ownership | [`docs/PACKAGE_BOUNDARIES.md`](docs/PACKAGE_BOUNDARIES.md) |
 | Current project status | [`docs/STATUS.md`](docs/STATUS.md) |
+| User-visible accumulated changes | [`CHANGELOG.md`](CHANGELOG.md) |
 | Dependency-driven implementation planning | [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) |
 | Release and operations process | [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md) |
 | Development setup and validation | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) |
