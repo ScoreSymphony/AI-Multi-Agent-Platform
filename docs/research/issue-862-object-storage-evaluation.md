@@ -1,6 +1,6 @@
 # Issue #862 — RustFS / Garage object-storage evaluation
 
-Status: **in progress**. Core S3/FileProvider compatibility, restart persistence, authentication rejection and forward-upgrade evidence are verified for all three live backends. RustFS additionally has successful four-node partial-failure evidence; Garage has successful HTTPS evidence through its documented reverse-proxy boundary. Clean-store disaster recovery, the corrected Garage three-node failure/recovery path, RustFS/SeaweedFS TLS completion and real target-VPS measurements remain open.
+Status: **runtime evaluation complete; final classification still gated by real target-VPS measurements and final #799 reconciliation**. The CI-backed campaigns now pass the canonical S3/FileProvider contract, concurrency/integrity, authentication rejection, restart persistence, forward upgrades, TLS, clean-store disaster recovery and the candidate-specific multi-node failure scenarios. Garage's documented native SQLite metadata snapshot/restore path also passes. GitHub-hosted runner resource observations remain diagnostics only and do not satisfy the VPS acceptance criterion.
 
 ## Architectural boundary
 
@@ -10,7 +10,7 @@ Local filesystem remains a valid deployment path. No object store is required or
 
 ### Required S3 subset
 
-For the current File/Artifact boundary the adapter should require only:
+For the current File/Artifact boundary the adapter requires only:
 
 - `PutObject` — create/write object content;
 - `GetObject` — full and ranged/streaming reads;
@@ -18,7 +18,7 @@ For the current File/Artifact boundary the adapter should require only:
 - `DeleteObject` — content deletion;
 - `ListObjectsV2` — repair/orphan reconciliation, not canonical file listing.
 
-Multipart upload (`CreateMultipartUpload`, `UploadPart`, `CompleteMultipartUpload`, `AbortMultipartUpload`) is conditional on the adapter's large-object path. ACLs, bucket versioning, Object Lock, provider lifecycle rules and ETag checksum semantics are not assumed by the canonical platform contract.
+Multipart upload (`CreateMultipartUpload`, `UploadPart`, `CompleteMultipartUpload`, `AbortMultipartUpload`) remains conditional on the adapter's large-object path. ACLs, bucket versioning, Object Lock, provider lifecycle rules and ETag checksum semantics are not assumed by the canonical platform contract.
 
 ## Reviewed upstream snapshots
 
@@ -26,201 +26,164 @@ Multipart upload (`CreateMultipartUpload`, `UploadPart`, `CompleteMultipartUploa
 |---|---|---|---|---|
 | RustFS | `1.0.0-rc.6-preview.1` | `5cd58319ed6148ed7f09f2a4d0b4e46e429f043a` | Apache-2.0 | candidate; provisional `experimental_only` |
 | Garage | `v2.3.0` | `7b119c0b4fa58ab3cb6d5db435fe52d990f6a7aa` | AGPL-3.0 | candidate; provisional `supported_optional` |
-| SeaweedFS | `4.46` | `d997fba1575583a89cf0cc50dc0150642286c86d` | Apache-2.0 | comparison baseline; provisional optional |
+| SeaweedFS | `4.46` | `d997fba1575583a89cf0cc50dc0150642286c86d` | Apache-2.0 | comparison baseline; provisional `supported_optional` |
 | local filesystem | platform revision | platform revision | platform license | valid no-object-store path |
 
-The classifications above remain **provisional**. The issue explicitly requires target-VPS measurements, so GitHub-hosted CI evidence alone cannot make a classification final.
+The classifications remain provisional because #862 explicitly requires target-VPS resource and operational measurements. CI evidence alone cannot close that gate.
 
 ## Source-backed findings
 
 ### RustFS
 
-RustFS publishes an S3 compatibility surface that covers the platform-required core operations, ranged reads, `ListObjectsV2` and multipart behavior while also identifying unsupported/planned features rather than claiming universal S3 compatibility. The newest reviewed label, `1.0.0-rc.6-preview.1`, intentionally has no published Docker image; the executable runtime candidate is `rustfs/rustfs:1.0.0-rc.6`. Both refs resolve to source commit `5cd58319ed6148ed7f09f2a4d0b4e46e429f043a`.
+RustFS covers the platform-required S3 object surface, ranged reads, `ListObjectsV2` and the multipart primitives relevant to a future large-object path. The newest reviewed label, `1.0.0-rc.6-preview.1`, intentionally publishes no Docker image; the executable runtime candidate is `rustfs/rustfs:1.0.0-rc.6`. Both refs resolve to source commit `5cd58319ed6148ed7f09f2a4d0b4e46e429f043a`.
 
-The reviewed production topology matters for classification: redundant MNMD operation requires a multi-node/multi-disk topology and the #862 campaign therefore tests a four-node cluster rather than pretending a two-node setup is equivalent. RustFS stays provisional `experimental_only` even after successful technical CI because the reviewed line is still a release-candidate/pre-release line and the issue requires operational/VPS maturity evidence before promotion.
+The reviewed redundant topology is MNMD, and the #862 campaign therefore uses four nodes rather than treating a smaller SNSD/non-redundant shape as equivalent. The technical campaign passes, but RustFS remains provisional `experimental_only` because the reviewed release line is still pre-release/release-candidate and VPS/maturity evidence is intentionally a separate promotion gate.
 
-TLS is configured through `RUSTFS_TLS_PATH`; the pinned source expects `rustfs_cert.pem`, `rustfs_key.pem` and may use `ca.crt` for strict verification. The TLS campaign uses those exact filenames and the runtime UID documented by the image configuration.
+TLS is tested through the native `RUSTFS_TLS_PATH` deployment boundary with certificate verification. Upstream rollback is version-specific rather than a universal downgrade contract; #862 therefore does not claim arbitrary new-version-to-old-binary safety.
 
 ### Garage
 
 Garage v2.3.0 is a stable AGPL-3.0 S3-compatible object store aimed at small self-hosted and geo-distributed deployments. The license boundary remains explicit: Garage is evaluated as a separately deployed optional network service behind the platform-owned storage adapter, not as code incorporated into the MIT platform core. Operators remain responsible for obligations applying to the Garage program or modified Garage deployments.
 
-Garage's compatibility surface contains the platform-required object operations. Features such as complete AWS ACL/policy/versioning behavior are not required by the canonical platform boundary and are not silently assumed.
+For replication factor `3` in the default `consistent` mode, the live campaign confirms operation after product failure detection with one of three zones/nodes unavailable. The test does not lower consistency to `degraded` or `dangerous` to manufacture a pass.
 
-For replication factor `3` in the default `consistent` mode, Garage documents normal read/write availability when one node or one zone fails. The live failure workflow therefore waits until `garage status` actually classifies the stopped storage node under `FAILED NODES` before exercising degraded reads/writes. It does not lower consistency to `degraded` or `dangerous` merely to make the test pass.
-
-Garage's documented TLS deployment path places a reverse proxy in front of the S3 endpoint. The CI campaign follows that architecture rather than inventing a native-TLS contract Garage does not publish for this path.
+Garage's documented TLS deployment path places a reverse proxy in front of the S3 endpoint; the TLS campaign follows that architecture. Garage's native SQLite metadata recovery path is also exercised using a metadata snapshot, replacement of the stopped database, restart and full table repair. A generic binary downgrade is not treated as supported merely because forward upgrade succeeds.
 
 ### SeaweedFS baseline
 
-SeaweedFS 4.46 remains the comparison baseline. Its all-in-one/mini mode exposes the S3 gateway while the wider architecture separates master, volume, filer and S3 roles. The pinned 4.46 source exposes native S3 TLS flags (`s3.port.https`, `s3.cert.file`, `s3.key.file`, `s3.cacert.file`). Its operational surface is broader than local filesystem and Garage single-node modes, so resource/operational comparison still requires the same target-VPS campaign rather than relying on upstream claims.
+SeaweedFS 4.46 remains the comparison baseline. Its mini mode exposes the S3 gateway while the wider architecture separates master, volume, filer and S3 roles. The pinned 4.46 implementation exposes native HTTPS for S3, and the certificate-verified TLS campaign now passes. The baseline also passes the same clean-store logical blob recovery exercise used for the candidates.
 
-## Verified live compatibility evidence
+## Authoritative runtime evidence
+
+The current authoritative CI-backed runs are:
+
+| Evidence layer | Workflow run | Result |
+|---|---:|---|
+| Common S3 subset, FileProvider, auth, restart, Garage native snapshot restore | `34697375096` | pass |
+| Forward upgrades | `34697375110` | pass |
+| TLS / HTTPS | `34697375129` | pass |
+| RustFS four-node MNMD failure | `34697375081` | pass |
+| Garage three-node RF=3 failure | `34697375089` | pass |
+| Clean-store disaster recovery | `34697375094` | pass |
 
 ### Common S3 and FileProvider boundary
 
-Workflow run `34658588799` verifies, for RustFS, Garage and SeaweedFS:
+RustFS, Garage and SeaweedFS all pass:
 
-- the required S3 subset;
+- `PutObject`, `GetObject`, `HeadObject`, `DeleteObject`;
 - ranged reads;
 - `ListObjectsV2` reconciliation behavior;
 - eight concurrent write/read round trips with independent SHA-256;
-- invalid S3 credentials are rejected;
-- the platform's canonical `assert_file_provider_contract(...)` conformance seam;
-- a real process/container restart followed by SHA-256 verification of an acknowledged 1 MiB object.
+- invalid S3 credential rejection;
+- canonical `assert_file_provider_contract(...)` conformance;
+- process/container restart followed by SHA-256 verification of an acknowledged object.
 
-RustFS and SeaweedFS completed that whole workflow successfully. Garage completed every common step successfully and failed only later in the first native metadata-snapshot enumeration attempt because the evidence workflow initially assumed a flat snapshot file. Garage actually created `snapshots/<timestamp>/db.sqlite`; the workflow now follows that documented/runtime-produced directory shape.
-
-The earlier normalized raw results remain at:
-
-- `tests/evidence/issue_862/results/rustfs-ci-34654695281.json`
-- `tests/evidence/issue_862/results/garage-ci-34654695281.json`
-- `tests/evidence/issue_862/results/seaweedfs-ci-34654695281.json`
-
-Those earlier artifacts record the pinned image digests and first identical raw workload. The later workflow establishes canonical FileProvider conformance and authentication rejection in addition to that raw S3 evidence.
+Earlier normalized raw evidence remains under `tests/evidence/issue_862/results/`; those records preserve pinned image identities/digests and the first identical raw workload. The current run table above is the authoritative pass/fail status.
 
 ## Forward-upgrade evidence
 
-Workflow run `34658588770` performed in-place upgrades against persistent backend data and verified the same acknowledged 1 MiB sentinel by independent SHA-256 before and after the upgrade.
+The pinned upgrade campaign verifies acknowledged SHA-256 content before and after an in-place runtime upgrade:
 
-| Backend | Upgrade | Result | SHA-256 preserved |
-|---|---|---|---|
-| RustFS | `1.0.0-rc.5` → `1.0.0-rc.6` | pass | yes |
-| Garage | `v2.2.0` → `v2.3.0` | pass | yes |
-| SeaweedFS | `4.45` → `4.46` | pass | yes |
+| Backend | Upgrade | Result |
+|---|---|---|
+| RustFS | `1.0.0-rc.5` → `1.0.0-rc.6` | pass |
+| Garage | `v2.2.0` → `v2.3.0` | pass |
+| SeaweedFS | `4.45` → `4.46` | pass |
 
-Normalized evidence:
-
-- `tests/evidence/issue_862/results/rustfs-upgrade-ci-34658588770.json`
-- `tests/evidence/issue_862/results/garage-upgrade-ci-34658588770.json`
-- `tests/evidence/issue_862/results/seaweedfs-upgrade-ci-34658588770.json`
-
-Garage's v2.3.0 release states that it is stable and that migration from v2.2.0 has no breaking changes, which is consistent with the successful campaign.
-
-**A successful forward upgrade is not rollback evidence.** No backend is marked downgrade-safe merely because old→new succeeded. The final report must retain an explicit unsupported/unknown rollback statement unless upstream support or a separate safe rollback campaign proves otherwise.
+A successful forward upgrade is **not** universal rollback evidence. RustFS has version-specific rollback floors; Garage recovery is documented around metadata snapshot/repair and backup procedures rather than a generic binary downgrade guarantee; SeaweedFS downgrade compatibility is likewise not assumed without version-specific upstream support.
 
 ## Distributed partial-failure evidence
 
 ### RustFS four-node MNMD
 
-Workflow run `34658588772` passed a four-node RustFS MNMD campaign using the pinned `1.0.0-rc.6` image.
-
-Before failure, the cluster passed the full required S3 subset plus eight concurrent SHA-256 round trips. After one of four nodes was stopped, an acknowledged pre-failure object remained readable with the expected SHA-256 and a new object could be written and read with its expected SHA-256. After the node returned, both objects were verified again and deleted.
-
-Normalized evidence: `tests/evidence/issue_862/results/rustfs-multinode-ci-34658588772.json`.
-
-The per-container memory/CPU observations from this workflow are **GitHub-runner diagnostics only** and are not VPS sizing evidence.
+The four-node RustFS MNMD campaign passes with `1.0.0-rc.6`. Before failure, the cluster passes the common object workload. After one node is stopped, an acknowledged pre-failure object remains readable with the expected SHA-256 and a new object can be written/read with its expected SHA-256. After the node returns, both objects are verified again.
 
 ### Garage three-node replication factor 3
 
-The first three-node attempt began the S3 probe only three seconds after stopping one node. `garage status` still considered that node healthy at that instant, and the request timed out waiting for the unavailable peer. This is not treated as proof that replication-factor-3 failure handling is broken because the product had not yet completed failure detection.
+The corrected Garage workflow deploys three v2.3.0 nodes in three zones with replication factor 3 and default `consistent` mode, waits until `garage status` classifies the stopped node under `FAILED NODES`, and then verifies both existing reads and new writes. After the node returns and leaves the failed-node set, both objects are verified again. The authoritative corrected run passes.
 
-The corrected workflow now:
-
-1. deploys three Garage v2.3.0 nodes in three zones with replication factor 3 and default `consistent` mode;
-2. writes and verifies an acknowledged object;
-3. stops one storage node;
-4. polls `garage status` until that exact node appears under `FAILED NODES`;
-5. verifies the pre-failure object and a new write while the node is unavailable;
-6. restarts the node and waits until it leaves the failed-node set;
-7. verifies both objects again.
-
-This campaign is still pending a successful corrected run and therefore is not yet counted as pass evidence.
+The earlier timeout before Garage completed failure detection is retained as a harness lesson, not as product-failure evidence.
 
 ## Security / credentials / TLS
 
-Synthetic CI credentials are generated at runtime, masked in Actions output and excluded from evidence JSON. The platform setup/profile boundary continues to store component IDs/configuration references only; credentials belong behind #34 and are not persisted into #799 setup profiles.
+Synthetic CI credentials are generated at runtime, masked in Actions output and excluded from evidence JSON. Setup/profile state continues to contain component/configuration references only; credentials remain behind #34.
 
-Invalid credentials are rejected in the common live S3 campaign for all three backends.
+All three backends reject invalid credentials and pass certificate-verified HTTPS S3 workloads:
 
-Garage has additionally passed its certificate-verified HTTPS S3 subset and invalid-credential test through the documented Nginx reverse-proxy deployment shape. RustFS and SeaweedFS TLS campaigns have corrected pinned-runtime configurations and are awaiting authoritative successful runs; a previously cancelled SeaweedFS job is not counted as a product failure.
+- RustFS: native TLS through `RUSTFS_TLS_PATH`;
+- Garage: HTTPS through the documented reverse-proxy boundary;
+- SeaweedFS: native S3 HTTPS flags in the pinned 4.46 runtime.
 
 ## Backup / restore boundary
 
 ### Important #40 limitation
 
-The platform's current #40 V1 single-node backup implementation is explicitly a local-data-root backup. It snapshots/copies `db/`, `files/`, `workspaces/` plus configuration metadata. It **does not automatically enumerate and copy opaque blob data from an external S3 endpoint**.
+The current #40 V1 single-node backup is a local-data-root backup. It covers `db/`, `files/`, `workspaces/` and configuration metadata; it does **not** automatically enumerate/copy opaque blob content from an external S3 endpoint.
 
-Therefore enabling an S3-backed `FileProvider` requires coordinated recovery of two authorities:
+An S3-backed deployment therefore has two coordinated recovery authorities:
 
 1. canonical platform metadata/state through #40; and
 2. object-store blob content through a separately verified object-store backup/recovery procedure.
 
-#862 must not claim that the existing single-node backup automatically protects an external object store. A future platform backup hook may coordinate the two boundaries, but this issue does not redesign #40.
+#862 does not claim that the existing single-node backup already coordinates those two layers.
 
 ### Garage native metadata snapshot
 
-Garage supports native metadata snapshots. The evidence campaign takes `garage meta snapshot --all`, mutates post-snapshot state, stops Garage, restores the generated `snapshots/<timestamp>/db.sqlite` into the active SQLite metadata file while retaining data blocks, starts Garage again and verifies the pre-snapshot state. This tests Garage metadata recovery, not full loss of the blob datastore.
+Garage's native metadata recovery campaign now passes. It creates `garage meta snapshot --all`, mutates state after the snapshot, stops Garage, replaces the active SQLite metadata database with the selected native snapshot according to the documented recovery procedure, restarts Garage, performs full table repair, then verifies the restored pre-snapshot state.
 
-The corrected snapshot-path campaign is pending an authoritative successful run.
+This is metadata recovery, not full blob-store-loss recovery.
 
 ### Clean-store logical blob disaster recovery
 
-A separate provider-neutral campaign now tests full loss of the object-store data itself for RustFS, Garage and SeaweedFS:
+RustFS, Garage and SeaweedFS all pass the same destructive storage-layer recovery campaign:
 
-1. write three deterministic synthetic blobs and verify SHA-256;
-2. export them to a host-side logical backup with a manifest containing object key, byte count and SHA-256, but no credentials;
-3. destroy the original object-store container and **all backend data volumes**;
-4. recreate new empty volumes and a clean replacement backend;
-5. require `ListObjectsV2` to prove the old test prefix is empty before restore;
+1. write deterministic blobs and verify SHA-256;
+2. export them to a host-side logical backup with object key, byte count and SHA-256 but no credentials;
+3. destroy the original object-store container and all backend data volumes;
+4. create new empty volumes and a clean replacement backend;
+5. verify that the old prefix is absent before restore;
 6. restore every blob;
-7. read and independently SHA-256-verify every restored object and the reconstructed listing.
+7. read and independently SHA-256-verify every restored object and listing.
 
-This proves the storage-layer recovery mechanism only. It deliberately does not claim that #40 already invokes that mechanism automatically. The first authoritative matrix run is pending.
+This proves the storage-layer recovery mechanism only; it deliberately does not imply that #40 already invokes it automatically.
 
 ## VPS resource evidence
 
-The repository now contains `scripts/benchmarks/run_issue862_storage_vps_capture.sh`. It compares the same larger workload across:
+The repository contains `scripts/benchmarks/run_issue862_storage_vps_capture.sh`. It compares the same larger workload across local filesystem, RustFS `1.0.0-rc.6`, Garage `v2.3.0` and SeaweedFS `4.46`, capturing host identity, image digests, idle/active container stats, disk usage, workload output and a SHA-256 evidence manifest.
 
-- local filesystem;
-- RustFS `1.0.0-rc.6`;
-- Garage `v2.3.0`;
-- SeaweedFS `4.46`.
+The script explicitly refuses to label a GitHub-hosted Actions execution as ordinary VPS evidence. This is intentional: #862 requires a real target-VPS measurement, and runner diagnostics cannot substitute for it.
 
-It captures host identity, image digests, idle and active container stats, disk usage, workload output and a SHA-256 evidence manifest. Like the existing #730 pattern, it explicitly refuses to run as `ordinary-VPS` evidence when `GITHUB_ACTIONS=true`.
-
-No GitHub-hosted runner measurement may satisfy #862's VPS acceptance criterion. A real target-VPS capture is still required before final classification.
+**This is now the only missing technical acceptance measurement.**
 
 ## #799 setup-wizard mapping
 
-#799 / PR #858 now defines the provider-neutral storage discovery/profile shape. Its automatic recommendation path considers `RECOMMENDED`/`SUPPORTED` components and excludes `EXPERIMENTAL` components from automatic defaults.
+#799 / PR #858 defines the provider-neutral storage discovery/profile shape, including component lifecycle classification, reversible profiles and exclusion of experimental components from automatic defaults.
 
-The intended mapping, once #799 is canonical, is therefore:
+The intended mapping is:
 
 - #862 `experimental_only` → `ComponentLifecycle.EXPERIMENTAL`;
 - #862 `supported_optional` → `ComponentLifecycle.SUPPORTED`.
 
-This mapping does not make a product canonical. Local filesystem remains the local baseline; an S3 adapter remains the product-neutral remote/object-store seam. #862 does not duplicate #799 profile persistence and does not write object-store credentials into those profiles.
+This does not make any object-store product canonical. Local filesystem remains the no-object-store baseline, while an S3 adapter remains the product-neutral seam. Credentials are not written into setup profiles.
 
-Because #799 is not yet merged, #862 records this mapping but does not import or hard-code the draft implementation as a stable dependency.
+PR #858 is still open, so #862 records the mapping but does not import or hard-code the draft implementation as a stable dependency.
 
 ## Current decision table
 
 | Backend | S3 + FileProvider | Restart | Auth | Forward upgrade | Multi-node failure | TLS | Store-loss restore | VPS measurement | Provisional outcome |
 |---|---|---|---|---|---|---|---|---|---|
-| RustFS | pass | pass | pass | pass | pass, 4-node MNMD | pending corrected run | pending clean-store run | pending | `experimental_only` |
-| Garage | pass | pass | pass | pass | pending corrected 3-node run | pass via reverse proxy | pending clean-store run; native metadata restore rerun pending | pending | candidate `supported_optional` |
-| SeaweedFS | pass | pass | pass | pass | comparison baseline | pending authoritative run | pending clean-store run | pending | baseline optional |
+| RustFS | pass | pass | pass | pass | pass, 4-node MNMD | pass, native | pass | pending | `experimental_only` |
+| Garage | pass | pass | pass | pass | pass, 3-node RF=3 | pass, reverse proxy | pass; native metadata restore pass | pending | `supported_optional` candidate |
+| SeaweedFS | pass | pass | pass | pass | comparison baseline | pass, native | pass | pending | `supported_optional` baseline |
 | local filesystem | canonical local path | platform-owned | platform-owned | platform-owned | n/a | deployment boundary | #40 local backup path | pending same campaign | valid no-object-store path |
-
-## Decision gates
-
-A backend can become `supported_optional` only when all required platform operations pass and restart/recovery, backup/restore, security and upgrade evidence are reproducible. The final #862 classification additionally requires the real target-VPS resource/operational measurement required by the issue.
-
-A useful backend with incomplete maturity or evidence remains `experimental_only`; a backend that cannot satisfy the required S3 subset or operational/security boundary becomes `reject/defer`.
-
-The setup wizard may surface a supported backend only through #799's provider-neutral component lifecycle. It must not make any object-store product canonical and must not serialize credentials into ordinary profile/configuration state.
 
 ## Remaining gates
 
-The remaining authoritative gates are now narrowly scoped:
+All reproducible CI-backed runtime gates required by #862 are now complete. The remaining gates are deliberately external to ordinary GitHub-hosted CI:
 
-1. corrected Garage three-node one-node-failure/recovery run;
-2. corrected Garage native metadata-snapshot restore run;
-3. RustFS and SeaweedFS certificate-verified TLS runs;
-4. clean-store logical blob backup→total data-volume loss→restore matrix;
-5. explicit rollback/downgrade support statements where upstream does not guarantee them;
-6. target-VPS local-filesystem/RustFS/Garage/SeaweedFS resource campaign;
-7. final #799 reconciliation after its provider lifecycle/profile contract merges.
+1. execute the prepared local-filesystem/RustFS/Garage/SeaweedFS resource campaign on the actual target VPS environment and record the resulting evidence manifest;
+2. keep RustFS at `experimental_only` unless that VPS/maturity review supports a stronger classification and the upstream release line has matured sufficiently;
+3. reconcile the final classification with #799 once PR #858 is canonical, without duplicating its provider/profile persistence or secret handling;
+4. require the normal repository CI/required checks to be green on the final documentation/evidence head before merge.
 
-Until those gates close, PR #863 remains draft and no classification is final.
+Until those gates close, PR #863 remains draft and no classification is marked final.
