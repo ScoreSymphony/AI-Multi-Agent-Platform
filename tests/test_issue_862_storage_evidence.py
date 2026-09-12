@@ -62,9 +62,7 @@ def test_external_object_store_backup_is_not_claimed_by_single_node_backup_v1() 
     backup_boundary = manifest["backup_boundary"]
 
     assert (
-        backup_boundary[
-            "platform_issue_40_single_node_backup_currently_copies_external_s3_content"
-        ]
+        backup_boundary["platform_issue_40_single_node_backup_currently_copies_external_s3_content"]
         is False
     )
     assert set(backup_boundary["current_single_node_scope"]) == {
