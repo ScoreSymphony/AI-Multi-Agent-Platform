@@ -2,10 +2,10 @@ from pathlib import Path
 
 from ai_multi_agent_platform.distribution import FilesystemRegistryProvider
 
-CATALOG = Path(__file__).parents[1] / "catalogs" / "technical-components" / "catalog.json"
+CATALOG = Path(__file__).parents[3] / "catalogs" / "technical-components" / "catalog.json"
 
 
-def test_issue_502_registry_metadata_tracks_current_candidate_audit() -> None:
+def test_registry_metadata_tracks_current_candidate_audit() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
     projectatlas = provider.get("projectatlas")
