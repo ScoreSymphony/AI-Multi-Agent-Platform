@@ -37,10 +37,10 @@ export function useShellClients(baseUrl: string) {
   const evaluationClient = useMemo(() => new EvaluationClient({ transport }), [transport]);
   const governanceClient = useMemo(() => new GovernanceClient({ transport }), [transport]);
   const integrationsClient = useMemo(() => new IntegrationsClient({ transport }), [transport]);
-  const learningClient = useMemo(() => new LearningClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const learningClient = useMemo(() => new LearningClient({ transport }), [transport]);
   const memoryKnowledgeClient = useMemo(() => new MemoryKnowledgeClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   const notificationClient = useMemo(() => new NotificationClient({ transport }), [transport]);
-  const organizationClient = useMemo(() => new OrganizationClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
+  const organizationClient = useMemo(() => new OrganizationClient({ transport }), [transport]);
   const pluginsClient = useMemo(() => new PluginsClient({ transport }), [transport]);
   const registryClient = useMemo(() => new RegistryClient({ transport }), [transport]);
   const templateClient = useMemo(() => new TemplateClient({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
