@@ -33,7 +33,6 @@ jobs:
             experimental: true
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
-    continue-on-error: ${{ matrix.experimental }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -45,18 +44,44 @@ jobs:
           python -m pip install
           -e .
           "git+https://github.com/SWE-agent/SWE-ReX.git@5c995c365dfb1fd5bc56fda688be5d8538f9931f"
-      - name: Run local runtime evidence
+      - name: Run supported local runtime evidence
+        if: ${{ !matrix.experimental }}
         run: >-
           python scripts/benchmarks/issue861_swe_rex_live.py
           --backend local
           --output "swe-rex-local-${{ runner.os }}.json"
-      - name: Run canonical Executor bridge evidence
+      - name: Run supported canonical Executor bridge evidence
+        if: ${{ !matrix.experimental }}
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: >-
           python scripts/benchmarks/issue861_swe_rex_canonical.py
           --backend local
           --output "swe-rex-canonical-local-${{ runner.os }}.json"
+      - name: Assert native Windows local unsupported evidence
+        if: ${{ matrix.experimental }}
+        shell: pwsh
+        run: |
+          $output = "swe-rex-local-${{ runner.os }}.json"
+          python scripts/benchmarks/issue861_swe_rex_live.py --backend local --output $output
+          $probeExit = $LASTEXITCODE
+          if ($probeExit -eq 0) {
+            throw "Native Windows LocalDeployment unexpectedly passed; update #861 evidence before merging."
+          }
+
+          $evidence = Get-Content $output -Raw | ConvertFrom-Json
+          if ($evidence.passed_core_semantics -ne $false) {
+            throw "Windows negative probe did not record passed_core_semantics=false."
+          }
+          if ($evidence.fatal_error.type -ne "AttributeError") {
+            throw "Expected AttributeError for the pinned Windows LocalDeployment probe, got '$($evidence.fatal_error.type)'."
+          }
+          if ($evidence.fatal_error.message -notmatch "pexpect.*spawn") {
+            throw "Pinned Windows LocalDeployment failure changed: '$($evidence.fatal_error.message)'."
+          }
+
+          Write-Host "Confirmed pinned SWE-ReX revision remains unsupported for native Windows LocalDeployment via the documented pexpect.spawn failure."
+          exit 0
       - name: Upload local evidence
         if: always()
         uses: actions/upload-artifact@v7
