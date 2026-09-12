@@ -132,14 +132,9 @@ def _topological_work_item_ids(items: tuple[CodingWorkItem, ...]) -> tuple[str, 
                 ready.sort(key=order.__getitem__)
 
     if len(result) != len(items):
-        cyclic = tuple(
-            work_item_id
-            for work_item_id in order
-            if indegree[work_item_id] > 0
-        )
+        cyclic = tuple(work_item_id for work_item_id in order if indegree[work_item_id] > 0)
         raise ValueError(
-            "coding batch dependencies must be acyclic; cycle involves: "
-            + ", ".join(cyclic)
+            "coding batch dependencies must be acyclic; cycle involves: " + ", ".join(cyclic)
         )
     return tuple(result)
 
@@ -192,12 +187,16 @@ class CodingBatchCoordinator:
         existing = self._store.get_by_request_key(request_key)
         if existing is not None:
             if existing.batch_id != batch_id:
-                raise ValueError("request_key replay does not match the original coding batch input")
+                raise ValueError(
+                    "request_key replay does not match the original coding batch input"
+                )
             return existing
 
         overlaps = self._classifier.classify_all(work_items)
         order = {item.work_item_id: index for index, item in enumerate(work_items)}
-        blockers: dict[str, set[str]] = {item.work_item_id: set(item.dependencies) for item in work_items}
+        blockers: dict[str, set[str]] = {
+            item.work_item_id: set(item.dependencies) for item in work_items
+        }
         for decision in overlaps:
             if decision.kind is OverlapKind.INDEPENDENT or decision.kind is OverlapKind.DEPENDENCY:
                 continue
@@ -220,7 +219,9 @@ class CodingBatchCoordinator:
                     repository_id=repository_id,
                     base_revision=base_revision,
                 ),
-                state=WorkstreamState.READY if not blockers[item.work_item_id] else WorkstreamState.BLOCKED,
+                state=WorkstreamState.READY
+                if not blockers[item.work_item_id]
+                else WorkstreamState.BLOCKED,
                 blocked_by=tuple(sorted(blockers[item.work_item_id], key=order.__getitem__)),
             )
             for item in work_items
@@ -363,7 +364,9 @@ class CodingBatchCoordinator:
         if current.state is WorkstreamState.ACCEPTED:
             return current
         if current.state is not WorkstreamState.VERIFIED or current.verification is None:
-            raise ValueError("workstream requires passing exact-subject verification before acceptance")
+            raise ValueError(
+                "workstream requires passing exact-subject verification before acceptance"
+            )
         if not current.verification.passed:
             raise ValueError("failed verification cannot be accepted")
         updated = current.with_state(WorkstreamState.ACCEPTED)
@@ -432,7 +435,9 @@ class CodingBatchCoordinator:
             blockers.append(
                 f"target revision changed from {batch.base_revision} to {current_target_revision}"
             )
-        revisions = tuple(item.result.output_revision for item in workstreams if item.result is not None)
+        revisions = tuple(
+            item.result.output_revision for item in workstreams if item.result is not None
+        )
         integration_id = _stable_id(
             "integration",
             {
@@ -443,7 +448,11 @@ class CodingBatchCoordinator:
             },
         )
         existing = next(
-            (item for item in batch.integration_candidates if item.integration_id == integration_id),
+            (
+                item
+                for item in batch.integration_candidates
+                if item.integration_id == integration_id
+            ),
             None,
         )
         if existing is not None:
@@ -472,7 +481,10 @@ class CodingBatchCoordinator:
     ) -> IntegrationCandidate:
         batch = self.get(batch_id)
         candidate = batch.integration_candidate(integration_id)
-        if candidate.integrated_revision == integrated_revision and candidate.state is IntegrationState.VALIDATING:
+        if (
+            candidate.integrated_revision == integrated_revision
+            and candidate.state is IntegrationState.VALIDATING
+        ):
             return candidate
         if candidate.state is not IntegrationState.READY:
             raise ValueError("blocked integration candidate cannot produce an integrated revision")
@@ -510,7 +522,9 @@ class CodingBatchCoordinator:
                 reasons.append("combined repository tests failed")
             if stale_checks:
                 reasons.append("required checks target stale revision: " + ", ".join(stale_checks))
-            failed_checks = [check.name for check in evidence.required_checks if check.state.value != "pass"]
+            failed_checks = [
+                check.name for check in evidence.required_checks if check.state.value != "pass"
+            ]
             if failed_checks:
                 reasons.append("required checks are not passing: " + ", ".join(failed_checks))
             blockers = tuple(reasons or ["combined validation did not pass"])
@@ -535,7 +549,9 @@ class CodingBatchCoordinator:
         if candidate.state is IntegrationState.MERGE_READY:
             return candidate
         if candidate.state is not IntegrationState.VALIDATED or candidate.validation is None:
-            raise ValueError("integration requires fresh combined validation before merge readiness")
+            raise ValueError(
+                "integration requires fresh combined validation before merge readiness"
+            )
         if not authorization_granted:
             raise PermissionError("merge readiness is blocked by canonical authorization")
         updated = replace(candidate, state=IntegrationState.MERGE_READY, blocker_reasons=())
