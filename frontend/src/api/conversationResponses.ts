@@ -1,5 +1,6 @@
-import { ControlPlaneError } from "./client";
 import type { CanonicalConversationMessage } from "./conversations";
+import { ApiTransport, ControlPlaneError } from "./transport";
+import type { ApiTransportOptions } from "./transport";
 import type { APIErrorBody } from "./types";
 
 export interface ConversationResponseDeltaEvent {
@@ -47,18 +48,17 @@ export interface ConversationResponseHandlers {
   onCommitted?: (event: ConversationResponseCommittedEvent) => void;
 }
 
-export interface ConversationResponseClientOptions {
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
+export interface ConversationResponseClientOptions extends ApiTransportOptions {
+  transport?: ApiTransport;
 }
 
 export class ConversationResponseClient {
   readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly transport: ApiTransport;
 
   constructor(options: ConversationResponseClientOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? "").replace(/\/$/, "");
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.transport = options.transport ?? new ApiTransport(options);
+    this.baseUrl = this.transport.baseUrl;
   }
 
   async stream(
@@ -66,30 +66,23 @@ export class ConversationResponseClient {
     handlers: ConversationResponseHandlers = {},
     idempotencyKey: string = crypto.randomUUID(),
   ): Promise<ConversationResponseCommittedEvent> {
-    const response = await this.fetchImpl(
-      `${this.baseUrl}/api/v1/conversation-messages/${encodeURIComponent(messageId)}/response/stream`,
+    if (!idempotencyKey.trim()) throw new Error("conversation response idempotency key is required");
+    const response = await this.transport.requestRaw(
+      `/conversation-messages/${encodeURIComponent(messageId)}/response/stream`,
       {
         method: "POST",
-        credentials: "include",
-        headers: {
-          Accept: "text/event-stream",
-          "Idempotency-Key": idempotencyKey,
-          "X-Correlation-ID": crypto.randomUUID(),
-        },
+        headers: { Accept: "text/event-stream" },
+        idempotencyKey,
+        retry: "never",
       },
     );
-    if (!response.ok) {
-      const text = await response.text();
-      const payload = safeJson(text);
-      throw new ControlPlaneError(response.status, normalizeError(response, payload));
-    }
     if (!response.body) {
       throw new Error("Conversation response stream returned no body");
     }
 
     let committed: ConversationResponseCommittedEvent | null = null;
     for await (const frame of parseSSE(response.body)) {
-      const payload = safeJson(frame.data);
+      const payload = parseEventJson(frame.data);
       if (frame.event === "platform.error") {
         if (isErrorBody(payload)) {
           throw new ControlPlaneError(500, payload);
@@ -175,25 +168,12 @@ function parseResponseEvent(eventName: string, payload: unknown): ConversationRe
   return null;
 }
 
-function safeJson(text: string): unknown {
+function parseEventJson(text: string): unknown {
   try {
     return JSON.parse(text) as unknown;
   } catch {
     return null;
   }
-}
-
-function normalizeError(response: Response, payload: unknown): APIErrorBody {
-  if (isErrorBody(payload)) return payload;
-  const requestId = response.headers.get("x-request-id") ?? "unknown";
-  return {
-    code: "invalid_response",
-    category: "contract",
-    message: `Control Plane returned HTTP ${response.status} without a canonical error envelope`,
-    request_id: requestId,
-    correlation_id: response.headers.get("x-correlation-id") ?? requestId,
-    retryable: false,
-  };
 }
 
 function isErrorBody(value: unknown): value is APIErrorBody {
