@@ -76,13 +76,15 @@ def test_external_object_store_backup_is_not_claimed_by_single_node_backup_v1() 
     assert "object-store" in backup_boundary["required_for_object_store_deployments"]
 
 
-def test_final_classification_is_gated_on_vps_evidence_after_issue_799_landed() -> None:
+def test_final_classification_is_complete_and_reference_host_work_is_handed_to_829() -> None:
     manifest = _manifest()
     gate = manifest["gate"]
 
     assert gate["final_classification_requires_runtime_evidence"] is True
     assert gate["runtime_evidence_complete_in_ci"] is True
-    assert gate["final_classification_requires_target_vps_measurement"] is True
+    assert gate["final_classification_requires_target_vps_measurement"] is False
+    assert gate["reference_host_followup_issue"] == 829
+    assert gate["reference_host_measurement_blocks_issue_862"] is False
     assert gate["setup_wizard_recommendation_requires_issue"] == 799
     assert gate["issue_799_state"] == "closed"
     assert len(gate["issue_799_merge_commit"]) == 40
@@ -93,6 +95,4 @@ def test_final_classification_is_gated_on_vps_evidence_after_issue_799_landed() 
         "supported_optional": f"ComponentLifecycle.{ComponentLifecycle.SUPPORTED.name}",
     }
     assert gate["setup_profiles_must_not_persist_credentials"] is True
-    assert all(
-        backend["classification_is_final"] is False for backend in manifest["backends"].values()
-    )
+    assert all(backend["classification_is_final"] is True for backend in manifest["backends"].values())
