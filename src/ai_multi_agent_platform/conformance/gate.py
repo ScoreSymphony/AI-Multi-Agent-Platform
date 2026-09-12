@@ -527,6 +527,21 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "durable fan-out/fan-in, waits, retries and cancellation advance exactly once",
             "durable Plan/Step coordination profile is optional and not enabled",
         ),
+        ConformanceScenario(
+            "Z",
+            "#872/#46 parallel coding integration",
+            (
+                "two independent coding Steps fan out concurrently, a dependent Step waits, "
+                "isolated workstreams integrate only after exact validation/authorization, and "
+                "conflicts require a bounded canonical repair with fresh validation"
+            ),
+            _pytest(
+                "tests/test_issue_46_parallel_coding_batch_e2e.py::"
+                "test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge",
+                "tests/test_issue_46_parallel_coding_batch_e2e.py::"
+                "test_conflicting_valid_workstreams_require_canonical_repair_and_fresh_combined_validation",
+            ),
+        ),
     )
 
 

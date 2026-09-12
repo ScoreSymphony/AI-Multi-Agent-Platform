@@ -21,6 +21,12 @@ from .behavior_evidence import (
     DistributedRuntimeEvidenceCaseExecutor,
 )
 from .ci_gate import EvaluationCIGateReport, run_reference_ci_gate
+from .coding_batches import (
+    CODING_BATCH_QUALITY_SUITE_ID,
+    CODING_BATCH_QUALITY_SUITE_VERSION,
+    CodingBatchEvaluationCaseExecutor,
+    canonical_coding_batch_quality_suite,
+)
 from .config import (
     EvaluationBaseline,
     load_evaluation_baseline,
@@ -164,6 +170,8 @@ def __getattr__(name: str) -> object:
 
 
 __all__ = [
+    "CODING_BATCH_QUALITY_SUITE_ID",
+    "CODING_BATCH_QUALITY_SUITE_VERSION",
     "EVALUATION_SCHEMA_VERSION",
     "EVAL_MANIFEST_SCHEMA_VERSION",
     "RESEARCH_QUALITY_SUITE_ID",
@@ -179,6 +187,7 @@ __all__ = [
     "AssertionResult",
     "AsyncEvaluator",
     "CaseReproducibilitySpec",
+    "CodingBatchEvaluationCaseExecutor",
     "Comparability",
     "ComparisonFinding",
     "ComparisonKind",
@@ -267,6 +276,7 @@ __all__ = [
     "VersionReference",
     "WorkspaceEvaluationIsolation",
     "aggregation_policy_ref",
+    "canonical_coding_batch_quality_suite",
     "canonical_research_quality_suite",
     "decode_manifest",
     "encode_manifest",

@@ -89,6 +89,13 @@ disposition = "keep"
 responsibility = "Command-line client surface over canonical platform APIs and operator entrypoints."
 
 [[package]]
+name = "coding_batches"
+kind = "integration"
+owner = "coordination"
+disposition = "keep"
+responsibility = "Parallel coding-batch composition over canonical planning, coordination, AgentRun, Workspace, repository, Verification and authorization authorities; it owns no replacement lifecycle or scheduler."
+
+[[package]]
 name = "compensation"
 kind = "domain"
 owner = "compensation"
