@@ -52,10 +52,14 @@ jobs:
 
           def count(path: str) -> int:
               text = pathlib.Path(path).read_text(encoding="utf-8")
-              match = re.search(r"(\d+) tests? collected", text)
-              if match is None:
-                  raise SystemExit(f"could not parse collection count from {path}")
-              return int(match.group(1))
+              counts = []
+              for line in text.splitlines():
+                  match = re.fullmatch(r"tests/.+\.py: (\d+)", line.strip())
+                  if match is not None:
+                      counts.append(int(match.group(1)))
+              if not counts:
+                  raise SystemExit(f"could not parse per-file collection counts from {path}")
+              return sum(counts)
 
           before = count("before-collection.txt")
           after = count("after-collection.txt")
