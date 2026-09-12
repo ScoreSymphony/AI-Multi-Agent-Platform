@@ -31,9 +31,7 @@ def _text(value: str, name: str) -> None:
 
 def _freeze_value(value: JsonValue) -> JsonValue:
     if isinstance(value, dict):
-        frozen = MappingProxyType(
-            {key: _freeze_value(item) for key, item in value.items()}
-        )
+        frozen = MappingProxyType({key: _freeze_value(item) for key, item in value.items()})
         return cast(JsonValue, frozen)
     if isinstance(value, list):
         return cast(JsonValue, tuple(_freeze_value(item) for item in value))
@@ -249,9 +247,7 @@ class InMemorySecurityEvidenceRepository:
     ) -> tuple[SecurityEvidence, ...]:
         values = [value for value in self._items.values() if value.candidate_id == candidate_id]
         if candidate_revision is not None:
-            values = [
-                value for value in values if value.candidate_revision == candidate_revision
-            ]
+            values = [value for value in values if value.candidate_revision == candidate_revision]
         return tuple(sorted(values, key=lambda value: (value.observed_at, value.evidence_id)))
 
     def list_all(self) -> tuple[SecurityEvidence, ...]:
@@ -406,9 +402,7 @@ def security_evidence_to_json(evidence: SecurityEvidence) -> dict[str, JsonValue
             for finding in evidence.findings
         ],
         "degraded_reasons": list(evidence.degraded_reasons),
-        "suppression_metadata": [
-            _mapping(value) for value in evidence.suppression_metadata
-        ],
+        "suppression_metadata": [_mapping(value) for value in evidence.suppression_metadata],
         "baseline_metadata": _mapping(evidence.baseline_metadata),
         "network_usage": _mapping(evidence.network_usage),
         "provider_usage": _mapping(evidence.provider_usage),
@@ -426,9 +420,7 @@ def security_evidence_from_json(payload: Mapping[str, object]) -> SecurityEviden
             ErrorCode.INVALID_PROVIDER_RESPONSE,
             "invalid security evidence findings",
         )
-    findings = tuple(
-        _finding(value) for value in raw_findings if isinstance(value, Mapping)
-    )
+    findings = tuple(_finding(value) for value in raw_findings if isinstance(value, Mapping))
     raw_suppressions = payload.get("suppression_metadata", [])
     suppressions = (
         tuple(_mapping(value) for value in raw_suppressions if isinstance(value, Mapping))
