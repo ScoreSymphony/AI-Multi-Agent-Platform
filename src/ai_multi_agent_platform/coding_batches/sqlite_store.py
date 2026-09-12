@@ -165,6 +165,7 @@ def _workstream_json(workstream: CodingWorkstream) -> dict[str, object]:
         "provenance": {
             "task_id": provenance.task_id,
             "plan_id": provenance.plan_id,
+            "plan_revision": provenance.plan_revision,
             "step_id": provenance.step_id,
             "repository_id": provenance.repository_id,
             "base_revision": provenance.base_revision,
@@ -308,6 +309,7 @@ def _decode_workstream(raw_value: object) -> CodingWorkstream:
         provenance=WorkstreamProvenance(
             task_id=provenance["task_id"],
             plan_id=provenance["plan_id"],
+            plan_revision=provenance.get("plan_revision"),
             step_id=provenance["step_id"],
             repository_id=provenance["repository_id"],
             base_revision=provenance["base_revision"],
