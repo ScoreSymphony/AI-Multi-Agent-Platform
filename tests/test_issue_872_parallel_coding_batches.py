@@ -7,6 +7,7 @@ from ai_multi_agent_platform.coding_batches import (
     CodingBatchCoordinator,
     CodingWorkItem,
     CombinedValidationEvidence,
+    IntegrationExecutionProvenance,
     IntegrationState,
     OverlapKind,
     RequiredCheck,
@@ -89,6 +90,29 @@ def _accept(
         ),
     )
     coordinator.accept_workstream(batch_id, workstream_id)
+
+
+def _bind_integration(
+    coordinator: CodingBatchCoordinator,
+    batch_id: str,
+    integration_id: str,
+) -> None:
+    coordinator.bind_integration_execution(
+        batch_id,
+        integration_id,
+        IntegrationExecutionProvenance(
+            task_id="task-integration",
+            plan_id="plan-integration",
+            plan_revision=1,
+            step_id="step-integration",
+            run_id="run-integration",
+            agent_revision="integration-agent@1",
+            agent_run_id="agent-run-integration",
+            workspace_id="workspace-integration",
+            snapshot_id="snapshot-integration",
+            branch_ref="coding/integration-test",
+        ),
+    )
 
 
 def test_three_proven_independent_items_are_parallel_ready() -> None:
@@ -267,6 +291,14 @@ def test_individual_passes_require_fresh_combined_validation_and_authorization()
     )
     assert candidate.state is IntegrationState.READY
 
+    with pytest.raises(ValueError, match="requires canonical integration execution provenance"):
+        coordinator.record_integrated_revision(
+            batch_id,
+            candidate.integration_id,
+            integrated_revision="3" * 40,
+        )
+
+    _bind_integration(coordinator, batch_id, candidate.integration_id)
     candidate = coordinator.record_integrated_revision(
         batch_id,
         candidate.integration_id,
@@ -295,6 +327,7 @@ def test_combined_pass_still_cannot_bypass_canonical_authorization() -> None:
         batch_id,
         current_target_revision=BASE,
     )
+    _bind_integration(coordinator, batch_id, candidate.integration_id)
     coordinator.record_integrated_revision(
         batch_id,
         candidate.integration_id,
