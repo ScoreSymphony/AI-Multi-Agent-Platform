@@ -1,0 +1,297 @@
+name: Temporary issue 903 mypy fix
+
+on:
+  push:
+    branches:
+      - issue-903-agent-matching
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: issue-903-agent-matching
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Apply targeted fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/ai_multi_agent_platform/agents/matching.py")
+          text = path.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one match, found {count}: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "from ai_multi_agent_platform.models import ModelLocation, ModelRegistry, RoutingRequirements",
+              "from ai_multi_agent_platform.models import (\n"
+              "    ModelConfiguration,\n"
+              "    ModelLocation,\n"
+              "    ModelRegistry,\n"
+              "    RoutingRequirements,\n"
+              ")",
+          )
+          replace_once(
+              "    CapabilityConstraint,\n)",
+              "    CapabilityConstraint,\n    UnavailableMemberPolicy,\n)",
+          )
+          replace_once(
+              "        if requirements.exact_agent is not None:\n"
+              "            revision = self.repository.get_agent_revision(\n"
+              "                requirements.exact_agent.agent_id,\n"
+              "                requirements.exact_agent.revision,\n"
+              "            )\n"
+              "            return (_agent_candidate(revision),)\n"
+              "        if requirements.exact_team is not None:\n"
+              "            revision = self.repository.get_team_revision(\n"
+              "                requirements.exact_team.team_id,\n"
+              "                requirements.exact_team.revision,\n"
+              "            )\n"
+              "            return (_team_candidate(revision, self.repository),)\n",
+              "        if requirements.exact_agent is not None:\n"
+              "            agent_revision = self.repository.get_agent_revision(\n"
+              "                requirements.exact_agent.agent_id,\n"
+              "                requirements.exact_agent.revision,\n"
+              "            )\n"
+              "            return (_agent_candidate(agent_revision),)\n"
+              "        if requirements.exact_team is not None:\n"
+              "            team_revision = self.repository.get_team_revision(\n"
+              "                requirements.exact_team.team_id,\n"
+              "                requirements.exact_team.revision,\n"
+              "            )\n"
+              "            return (_team_candidate(team_revision, self.repository),)\n",
+          )
+          replace_once(
+              "        if AgentCandidateKind.AGENT in requirements.candidate_kinds:\n"
+              "            for definition in self.repository.list_agents():\n"
+              "                candidates.append(\n"
+              "                    _agent_candidate(\n"
+              "                        self.repository.get_agent_revision(\n"
+              "                            definition.agent_id,\n"
+              "                            definition.current_revision,\n"
+              "                        )\n"
+              "                    )\n"
+              "                )\n"
+              "        if AgentCandidateKind.TEAM in requirements.candidate_kinds:\n"
+              "            for definition in self.repository.list_teams():\n"
+              "                candidates.append(\n"
+              "                    _team_candidate(\n"
+              "                        self.repository.get_team_revision(\n"
+              "                            definition.team_id,\n"
+              "                            definition.current_revision,\n"
+              "                        ),\n"
+              "                        self.repository,\n"
+              "                    )\n"
+              "                )\n",
+              "        if AgentCandidateKind.AGENT in requirements.candidate_kinds:\n"
+              "            for agent_definition in self.repository.list_agents():\n"
+              "                candidates.append(\n"
+              "                    _agent_candidate(\n"
+              "                        self.repository.get_agent_revision(\n"
+              "                            agent_definition.agent_id,\n"
+              "                            agent_definition.current_revision,\n"
+              "                        )\n"
+              "                    )\n"
+              "                )\n"
+              "        if AgentCandidateKind.TEAM in requirements.candidate_kinds:\n"
+              "            for team_definition in self.repository.list_teams():\n"
+              "                candidates.append(\n"
+              "                    _team_candidate(\n"
+              "                        self.repository.get_team_revision(\n"
+              "                            team_definition.team_id,\n"
+              "                            team_definition.current_revision,\n"
+              "                        ),\n"
+              "                        self.repository,\n"
+              "                    )\n"
+              "                )\n",
+          )
+
+          start = text.index("def _team_candidate(\n")
+          end = text.index("\n\ndef _matching_priority", start)
+          team_block = '''def _team_candidate(
+              revision: AgentTeamRevision,
+              repository: AgentRepository,
+          ) -> AgentMatchCandidate:
+              member_revisions = tuple(
+                  repository.get_agent_revision(member.agent.agent_id, member.agent.revision)
+                  for member in revision.profile.members
+              )
+              member_pairs = tuple(
+                  zip(revision.profile.members, member_revisions, strict=True)
+              )
+              enabled = revision.profile.enabled
+              active_pairs: list[tuple[object, AgentRevision]] = []
+              for member, member_revision in member_pairs:
+                  if member_revision.profile.enabled:
+                      active_pairs.append((member, member_revision))
+                      continue
+                  if (
+                      member.required
+                      or revision.profile.unavailable_member_policy
+                      is UnavailableMemberPolicy.FAIL
+                  ):
+                      enabled = False
+              if not active_pairs:
+                  enabled = False
+
+              required_members = tuple(
+                  member_revision
+                  for member, member_revision in active_pairs
+                  if member.required
+              )
+              model_members = (
+                  tuple(member_revision for _, member_revision in active_pairs)
+                  if revision.profile.unavailable_member_policy is UnavailableMemberPolicy.FAIL
+                  else required_members
+              )
+              roles = tuple(
+                  dict.fromkeys(
+                      [member.role for member, _ in active_pairs]
+                      + [member_revision.profile.role for _, member_revision in active_pairs]
+                  )
+              )
+              allowed = set(revision.profile.shared_capability_ids)
+              denied: set[str] = set()
+              constraints: dict[str, CapabilityConstraint] = {}
+              policies: set[str] = set()
+              if revision.profile.coordination_policy_ref is not None:
+                  policies.add(revision.profile.coordination_policy_ref)
+              for _, member_revision in active_pairs:
+                  allowed.update(member_revision.profile.capabilities.allowed)
+                  allowed.update(member_revision.profile.capabilities.required_ids)
+                  denied.update(member_revision.profile.capabilities.denied)
+                  for constraint in member_revision.profile.capabilities.constraints:
+                      constraints.setdefault(constraint.capability_id, constraint)
+                  policies.update(member_revision.profile.policy_hooks.verification_policy_refs)
+                  if member_revision.profile.policy_hooks.authorization_profile_ref is not None:
+                      policies.add(member_revision.profile.policy_hooks.authorization_profile_ref)
+              priority = _matching_priority(revision.profile.metadata)
+              return AgentMatchCandidate(
+                  ref=AgentTeamRevisionRef(revision.team_id, revision.revision),
+                  kind=AgentCandidateKind.TEAM,
+                  roles=roles,
+                  enabled=enabled,
+                  owner_ref=revision.owner_ref,
+                  project_id=revision.project_id,
+                  workspace_id=revision.workspace_id,
+                  allowed_capability_ids=tuple(sorted(allowed)),
+                  denied_capability_ids=tuple(sorted(denied)),
+                  capability_constraints=tuple(constraints[key] for key in sorted(constraints)),
+                  policy_refs=tuple(sorted(policies)),
+                  model_requirements=tuple(
+                      member.profile.model.requirements for member in model_members
+                  ),
+                  member_refs=tuple(
+                      AgentRevisionRef(member.agent_id, member.revision)
+                      for _, member in active_pairs
+                  ),
+                  matching_priority=priority,
+              )
+          '''
+          text = text[:start] + team_block + text[end:]
+
+          replace_once(
+              "    value = metadata.get(\"matching_priority\")  # type: ignore[union-attr]",
+              "    value = metadata.get(\"matching_priority\")",
+          )
+          replace_once(
+              "    return _capability_requirement_matches(requirement, pseudo)  # type: ignore[arg-type]",
+              "    return _capability_requirement_matches(requirement, pseudo)",
+          )
+          replace_once(
+              "        min_context_window=max(\n"
+              "            value for value in (first.min_context_window, second.min_context_window, 0)\n"
+              "        )\n"
+              "        or None,",
+              "        min_context_window=max(\n"
+              "            first.min_context_window or 0,\n"
+              "            second.min_context_window or 0,\n"
+              "        )\n"
+              "        or None,",
+          )
+          replace_once(
+              "        return any(\n"
+              "            any(_model_matches(config, requirement, self._models) for config in models)\n"
+              "            for requirement in merged\n"
+              "        )",
+              "        return all(\n"
+              "            any(_model_matches(config, requirement, self._models) for config in models)\n"
+              "            for requirement in merged\n"
+              "        )",
+          )
+
+          model_start = text.index("def _model_matches(\n")
+          model_end = text.index("\n\ndef _candidate_sort_key", model_start)
+          model_block = '''def _model_matches(
+              config: ModelConfiguration,
+              requirements: RoutingRequirements,
+              registry: ModelRegistry,
+          ) -> bool:
+              if not config.enabled:
+                  return False
+              if registry.effective_health(config) is HealthStatus.UNAVAILABLE:
+                  return False
+              if requirements.explicit_model_id is not None and (
+                  config.config_id != requirements.explicit_model_id
+                  and requirements.explicit_model_id not in config.aliases
+              ):
+                  return False
+              location = config.location
+              if requirements.local_only and location is not ModelLocation.LOCAL:
+                  return False
+              if requirements.self_hosted_only and location not in {
+                  ModelLocation.LOCAL,
+                  ModelLocation.SELF_HOSTED,
+              }:
+                  return False
+              capabilities = config.capabilities
+              if requirements.min_context_window is not None and (
+                  capabilities.context_window is None
+                  or capabilities.context_window < requirements.min_context_window
+              ):
+                  return False
+              if requirements.tool_calling and not capabilities.tool_calling:
+                  return False
+              if requirements.structured_output and not capabilities.structured_output:
+                  return False
+              if requirements.streaming and not capabilities.streaming:
+                  return False
+              if requirements.modalities and not set(requirements.modalities).issubset(
+                  capabilities.modalities
+              ):
+                  return False
+              if requirements.reasoning and not set(requirements.reasoning).issubset(
+                  capabilities.reasoning
+              ):
+                  return False
+              return True
+          '''
+          text = text[:model_start] + model_block + text[model_end:]
+          path.write_text(text)
+          PY
+      - name: Verify and format
+        run: |
+          python -m pip install -e '.[dev]'
+          ruff format src/ai_multi_agent_platform/agents/matching.py
+          ruff check src/ai_multi_agent_platform/agents/matching.py
+          mypy src/ai_multi_agent_platform/agents/matching.py
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/ai_multi_agent_platform/agents/matching.py
+          git commit -m "fix(#903): tighten typed team matching semantics"
+          git push origin HEAD:issue-903-agent-matching
