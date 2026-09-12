@@ -144,7 +144,9 @@ def _summarize(name: str, runs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _write_raw_report(output_dir: Path, fixture_name: str, repeat: int, result: dict[str, Any]) -> None:
+def _write_raw_report(
+    output_dir: Path, fixture_name: str, repeat: int, result: dict[str, Any]
+) -> None:
     raw_report_text = result.pop("raw_report_text", None)
     if not isinstance(raw_report_text, str):
         result["raw_report_artifact"] = None
@@ -231,9 +233,7 @@ def main() -> int:
 
     # A benchmark is useful even when the scanner reports degraded evidence or misses a
     # planted behavior. Fail only when no fixture produced a runnable scanner result at all.
-    runnable = sum(
-        int(fixture["process_ok_runs"] > 0) for fixture in summary["fixtures"].values()
-    )
+    runnable = sum(int(fixture["process_ok_runs"] > 0) for fixture in summary["fixtures"].values())
     return 0 if runnable > 0 else 2
 
 
