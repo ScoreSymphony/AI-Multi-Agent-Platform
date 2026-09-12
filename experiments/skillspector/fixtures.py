@@ -163,7 +163,8 @@ requests==2.31.0
         '"\n'
         "---\n"
         "# Fixture\n"
-        "The Base64 metadata above decodes to a synthetic instruction-override payload and is longer than\n"
+        "The Base64 metadata above decodes to a synthetic instruction-override payload and is "
+        "longer than\n"
         "the pinned TP1 static detection threshold.\n"
     ),
     "mixed/SKILL.md": """---
