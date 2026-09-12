@@ -77,7 +77,9 @@ class CanonicalCodingVerificationCoordinator:
             raise ValueError("canonical workstream Verification requires produced state")
         assert workstream.result is not None
         if subject_artifact_id not in workstream.result.artifact_ids:
-            raise ValueError("Verification subject is not part of the exact workstream diff evidence")
+            raise ValueError(
+                "Verification subject is not part of the exact workstream diff evidence"
+            )
 
         subject = await self._runtime.evidence.resolve_subject(
             task_id=workstream.work_item.task_id,
@@ -135,7 +137,11 @@ class CanonicalCodingVerificationCoordinator:
             batch_id,
             workstream_id,
         )
-        if workstream.state not in {WorkstreamState.PRODUCED, WorkstreamState.VERIFIED}:
+        if workstream.state not in {
+            WorkstreamState.PRODUCED,
+            WorkstreamState.VERIFIED,
+            WorkstreamState.FAILED,
+        }:
             raise ValueError("workstream is not awaiting canonical Verification")
         assert workstream.result is not None
 
