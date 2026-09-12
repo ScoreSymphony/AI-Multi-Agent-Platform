@@ -250,9 +250,7 @@ class CodingWorkstream:
             provenance=self.provenance if isinstance(provenance, _Unset) else provenance,
             blocked_by=self.blocked_by if isinstance(blocked_by, _Unset) else blocked_by,
             result=self.result if isinstance(result, _Unset) else result,
-            verification=self.verification
-            if isinstance(verification, _Unset)
-            else verification,
+            verification=self.verification if isinstance(verification, _Unset) else verification,
             failure_reason=self.failure_reason
             if isinstance(failure_reason, _Unset)
             else failure_reason,
