@@ -28,6 +28,8 @@ class CanonicalConsumerRequirementEvaluator:
         *,
         resolver: AgentResolver | None = None,
     ) -> None:
+        # Preserve the public #651 composition seam while delegating matching to #903.
+        self.agents = agents
         self._resolver = resolver or AgentResolver(agents)
 
     def accepts(self, requirements: tuple[str, ...], consumer: ParticipantRef) -> bool:
