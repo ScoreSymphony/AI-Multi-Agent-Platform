@@ -310,7 +310,7 @@ jobs:
           docker run --rm \
             -v issue862-garage-meta:/meta:ro \
             alpine:3.22 \
-            sh -euc 'find /meta/snapshots -maxdepth 1 -type f -print | sort' \
+            sh -euc 'find /meta/snapshots -mindepth 2 -maxdepth 2 -type f -name db.sqlite -print | sort' \
             > evidence/garage-snapshot-files.txt
           test -s evidence/garage-snapshot-files.txt
 
@@ -335,7 +335,7 @@ jobs:
             -v issue862-garage-meta:/meta \
             alpine:3.22 \
             sh -euc '
-              snapshot="$(find /meta/snapshots -maxdepth 1 -type f | sort | tail -n 1)"
+              snapshot="$(find /meta/snapshots -mindepth 2 -maxdepth 2 -type f -name db.sqlite -print | sort | tail -n 1)"
               test -n "$snapshot"
               test -f "$snapshot"
               test -f /meta/db.sqlite
