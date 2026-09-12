@@ -48,6 +48,8 @@ jobs:
           for node in 1 2 3; do
             admin_token="$(openssl rand -hex 32)"
             metrics_token="$(openssl rand -hex 32)"
+            echo "::add-mask::$admin_token"
+            echo "::add-mask::$metrics_token"
             cat > "$RUNNER_TEMP/issue862-garage-node${node}.toml" <<EOF
           metadata_dir = "/var/lib/garage/meta"
           data_dir = "/var/lib/garage/data"
@@ -121,6 +123,7 @@ jobs:
           docker exec garage1 /garage layout assign -z dc2 -c 1G "$node2_id" >/dev/null
           docker exec garage1 /garage layout assign -z dc3 -c 1G "$node3_id" >/dev/null
           docker exec garage1 /garage layout apply --version 1 >/dev/null
+          echo "ISSUE862_FAILED_NODE_PREFIX=${node2_id:0:16}" >> "$GITHUB_ENV"
           docker exec garage1 /garage status > evidence/garage-multinode-status-initial.txt
 
       - name: Configure test bucket and synthetic access key
@@ -144,12 +147,30 @@ jobs:
             --run-id "multinode-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             > evidence/garage-multinode-before.json
 
-      - name: Stop one of three storage nodes
+      - name: Stop one node and wait until Garage marks it failed
         shell: bash
         run: |
+          set -euo pipefail
           docker stop garage2
-          sleep 3
-          docker exec garage1 /garage status > evidence/garage-multinode-status-degraded.txt || true
+          detected=false
+          for _ in $(seq 1 120); do
+            status="$(docker exec garage1 /garage status)"
+            printf '%s\n' "$status" > evidence/garage-multinode-status-degraded.txt
+            if printf '%s\n' "$status" | awk -v node="$ISSUE862_FAILED_NODE_PREFIX" '
+              /==== FAILED NODES ====/ { in_failed = 1; next }
+              in_failed && index($0, node) { found = 1 }
+              END { exit(found ? 0 : 1) }
+            '; then
+              detected=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$detected" != true ]; then
+            echo "Garage did not classify the stopped storage node as failed within 120 seconds" >&2
+            cat evidence/garage-multinode-status-degraded.txt >&2
+            exit 1
+          fi
 
       - name: Verify reads and writes while one node is unavailable
         shell: bash
@@ -162,20 +183,33 @@ jobs:
             --run-id "multinode-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             > evidence/garage-multinode-degraded.json
 
-      - name: Restart failed node
+      - name: Restart failed node and wait for cluster recovery
         shell: bash
         run: |
           set -euo pipefail
           docker start garage2
-          for _ in $(seq 1 90); do
+          recovered=false
+          for _ in $(seq 1 120); do
             if docker exec garage2 /garage node id -q >/dev/null 2>&1; then
-              sleep 5
-              exit 0
+              status="$(docker exec garage1 /garage status)"
+              printf '%s\n' "$status" > evidence/garage-multinode-status-recovered.txt
+              if ! printf '%s\n' "$status" | awk -v node="$ISSUE862_FAILED_NODE_PREFIX" '
+                /==== FAILED NODES ====/ { in_failed = 1; next }
+                in_failed && index($0, node) { found = 1 }
+                END { exit(found ? 0 : 1) }
+              '; then
+                recovered=true
+                break
+              fi
             fi
             sleep 1
           done
-          docker logs garage2 || true
-          exit 1
+          if [ "$recovered" != true ]; then
+            echo "Garage did not return the restarted storage node to healthy status within 120 seconds" >&2
+            docker logs garage2 || true
+            cat evidence/garage-multinode-status-recovered.txt >&2 || true
+            exit 1
+          fi
 
       - name: Verify cluster data after node recovery
         shell: bash
@@ -187,7 +221,6 @@ jobs:
             --region "$ISSUE862_REGION" \
             --run-id "multinode-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             > evidence/garage-multinode-recovered.json
-          docker exec garage1 /garage status > evidence/garage-multinode-status-recovered.txt
 
       - name: Record cluster resource observation
         shell: bash
