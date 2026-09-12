@@ -134,9 +134,7 @@ def test_live_bifrost_unavailable_upstream_maps_to_canonical_error_when_configur
                     ModelRequest(
                         request_id="issue-859-upstream-unavailable",
                         messages=("Reply with the single word: ready",),
-                        context=OperationContext(
-                            correlation_id="issue-859:upstream-unavailable"
-                        ),
+                        context=OperationContext(correlation_id="issue-859:upstream-unavailable"),
                         requirements={"model_config_id": canonical_model_id},
                     )
                 )
