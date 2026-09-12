@@ -167,6 +167,11 @@ jobs:
               endpoint="https://127.0.0.1:9443"
               bucket="issue-862-tls"
               region="us-east-1"
+              chmod 644 "$RUNNER_TEMP/issue862-tls/cert.pem"
+              chmod 600 "$RUNNER_TEMP/issue862-tls/key.pem"
+              sudo chown 1000:1000 \
+                "$RUNNER_TEMP/issue862-tls/cert.pem" \
+                "$RUNNER_TEMP/issue862-tls/key.pem"
               docker volume create issue862-tls-seaweedfs-data >/dev/null
               docker run -d \
                 --name "$container" \
