@@ -9,9 +9,9 @@ The evaluation deliberately separates four evidence layers:
 1. **Source/revision evidence** — exact upstream refs, commits, licenses and known compatibility limits.
 2. **CI live-service evidence** — pinned containers exercised through the same S3 subset, SHA-256 checks, canonical `FileProvider` conformance, authentication rejection, concurrency and acknowledged-object restart recovery.
 3. **Deployment evidence** — clean-store backup/restore, forward upgrade plus explicit rollback limits, TLS/auth deployment and multi-node partial-failure scenarios using deployment-shaped layouts.
-4. **VPS evidence** — measured CPU, memory, disk footprint and operational behavior on the actual target VPS environment.
+4. **Reference-host evidence** — measured CPU, memory, disk footprint and operational behavior on a documented real VPS/reference host.
 
-Layers 2 and 3 are complete in CI. GitHub-hosted runner resource observations remain diagnostic only and MUST NOT be promoted to VPS sizing evidence. Layer 4 is the remaining technical acceptance measurement.
+Layers 1-3 are the #862 completion evidence and are complete in CI. Layer 4 cannot be established honestly on GitHub-hosted runners, is therefore owned by #829, and does not block completion or repository-side classification in #862. GitHub-hosted runner resource observations remain diagnostic only and MUST NOT be promoted to reference-host sizing evidence.
 
 ## Canonical boundary
 
@@ -93,15 +93,17 @@ The authoritative passing run IDs are recorded in `storage_backends.json` and `d
 
 The mapping does not make an object-store product canonical, and credentials remain outside ordinary setup/profile persistence.
 
-## Target-VPS capture
+## Reference-host capture owned by #829
 
-Run the prepared campaign on the actual target Linux VPS:
+The capture tooling was implemented and regression-tested by #862, but execution and retention on a real host belongs to #829.
+
+On the documented reference host/VPS run:
 
 ```bash
 scripts/benchmarks/run_issue862_storage_vps_capture.sh
 ```
 
-The script compares local filesystem, RustFS, Garage and SeaweedFS with the same larger workload, records host and image identity, idle/active resource samples, disk usage and workload timings, then creates a SHA-256 manifest and evidence archive. It refuses `GITHUB_ACTIONS=true` so hosted-runner numbers cannot be mislabeled as target-VPS evidence.
+The script compares local filesystem, RustFS, Garage and SeaweedFS with the same larger workload, records host and image identity, idle/active resource samples, disk usage and workload timings, then creates a SHA-256 manifest and evidence archive. It refuses `GITHUB_ACTIONS=true` so hosted-runner numbers cannot be mislabeled as reference-host evidence.
 
 It also invokes:
 
@@ -111,12 +113,24 @@ scripts/benchmarks/summarize_issue862_storage_vps_capture.py artifacts/issue862-
 
 The summarizer emits `storage-vps-summary.json` and `storage-vps-summary.md` while retaining explicit comparability guardrails. In particular, local-process RSS is not presented as equivalent to resident object-store daemon memory, and residual data-root bytes are not presented as storage amplification.
 
-## Remaining gate before final classification
+Verify the retained campaign with:
 
-All reproducible CI-backed storage/deployment gates and the #799 reconciliation are complete. Final classifications remain provisional only until:
+```bash
+python3 scripts/benchmarks/verify_issue862_storage_vps_capture.py \
+  artifacts/issue862-storage-vps
+```
 
-- the target-VPS campaign is executed and its evidence retained;
-- classifications are finalized from those measurements; and
-- normal repository CI and required checks are green on the final head.
+#829 owns the resulting host resource/operational evidence and any later host-specific deployment recommendation or promotion/demotion decision.
 
-RustFS may validly finalize as `experimental_only`; closing the evaluation does not require waiting for a stable RustFS release if the evidence supports retaining that classification.
+## Final #862 classifications
+
+The reproducible repository-side evaluation is complete:
+
+- RustFS: `experimental_only`;
+- Garage: `supported_optional`;
+- SeaweedFS: `supported_optional` comparison baseline;
+- local filesystem: valid no-object-store path.
+
+A future #829 reference-host campaign may add host-specific suitability evidence, but its absence does not make these #862 classifications provisional and does not block #862.
+
+Refs #829 #862
