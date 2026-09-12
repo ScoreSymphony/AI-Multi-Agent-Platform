@@ -32,6 +32,13 @@ def _freeze_mapping(value: Mapping[str, str]) -> Mapping[str, str]:
     return MappingProxyType(dict(value))
 
 
+class _Unset:
+    """Typed sentinel used by immutable state-transition helpers."""
+
+
+_UNSET = _Unset()
+
+
 class BatchAggregationPolicy(StrEnum):
     ALL_REQUIRED = "all_required"
     BEST_EFFORT = "best_effort"
@@ -225,8 +232,31 @@ class CodingWorkstream:
     def id(self) -> str:
         return self.work_item.work_item_id
 
-    def with_state(self, state: WorkstreamState, **changes: object) -> CodingWorkstream:
-        return replace(self, state=state, **changes)
+    def with_state(
+        self,
+        state: WorkstreamState,
+        *,
+        provenance: WorkstreamProvenance | _Unset = _UNSET,
+        blocked_by: tuple[str, ...] | _Unset = _UNSET,
+        result: WorkstreamResult | None | _Unset = _UNSET,
+        verification: VerificationEvidence | None | _Unset = _UNSET,
+        failure_reason: str | None | _Unset = _UNSET,
+    ) -> CodingWorkstream:
+        """Return a typed immutable transition while preserving unspecified evidence."""
+
+        return replace(
+            self,
+            state=state,
+            provenance=self.provenance if isinstance(provenance, _Unset) else provenance,
+            blocked_by=self.blocked_by if isinstance(blocked_by, _Unset) else blocked_by,
+            result=self.result if isinstance(result, _Unset) else result,
+            verification=self.verification
+            if isinstance(verification, _Unset)
+            else verification,
+            failure_reason=self.failure_reason
+            if isinstance(failure_reason, _Unset)
+            else failure_reason,
+        )
 
 
 @dataclass(frozen=True, slots=True)
