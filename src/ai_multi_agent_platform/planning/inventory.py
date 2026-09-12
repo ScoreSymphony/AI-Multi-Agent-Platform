@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ai_multi_agent_platform.agents.models import UnavailableMemberPolicy
 from ai_multi_agent_platform.agents.repository import AgentRepository
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.contracts import ContractError, HealthStatus
@@ -68,6 +69,7 @@ class PlanningInventoryBuilder:
                         denied_capability_ids=agent_profile.capabilities.denied,
                         required_capability_ids=agent_profile.capabilities.required_ids,
                         model_requirements=agent_profile.model.requirements,
+                        allow_task_model_override=agent_profile.model.allow_task_override,
                     )
                 )
             for team_definition in self.agents.list_teams():
@@ -83,7 +85,7 @@ class PlanningInventoryBuilder:
                 ):
                     continue
                 team_profile = team_revision.profile
-                member_enabled = True
+                team_enabled = team_profile.enabled
                 for member in team_profile.members:
                     try:
                         member_revision = self.agents.get_agent_revision(
@@ -91,22 +93,38 @@ class PlanningInventoryBuilder:
                             member.agent.revision,
                         )
                     except ContractError:
-                        member_enabled = False
-                        break
-                    if not member_revision.profile.enabled:
-                        member_enabled = False
-                        break
+                        if (
+                            member.required
+                            or team_profile.unavailable_member_policy
+                            is UnavailableMemberPolicy.FAIL
+                        ):
+                            team_enabled = False
+                        continue
+                    if not member_revision.profile.enabled and (
+                        member.required
+                        or team_profile.unavailable_member_policy is UnavailableMemberPolicy.FAIL
+                    ):
+                        team_enabled = False
                 team_candidates.append(
                     PlanningTeamCandidate(
                         team_id=team_definition.team_id,
                         revision=team_revision.revision,
-                        enabled=team_profile.enabled and member_enabled,
+                        enabled=team_enabled,
                         member_agent_ids=tuple(
                             member.agent.agent_id for member in team_profile.members
                         ),
                         project_id=team_definition.project_id,
                         workspace_id=team_definition.workspace_id,
                         shared_capability_ids=team_profile.shared_capability_ids,
+                        required_member_agent_ids=tuple(
+                            member.agent.agent_id
+                            for member in team_profile.members
+                            if member.required
+                        ),
+                        skip_optional_unavailable=(
+                            team_profile.unavailable_member_policy
+                            is UnavailableMemberPolicy.SKIP_OPTIONAL
+                        ),
                         max_parallel_agents=team_profile.max_parallel_agents,
                         max_steps=team_profile.max_steps,
                     )

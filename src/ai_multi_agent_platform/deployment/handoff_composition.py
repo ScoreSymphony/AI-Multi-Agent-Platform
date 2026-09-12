@@ -6,7 +6,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
 
-from ai_multi_agent_platform.agents import AgentRepository, AgentRevisionRef, AgentRuntime
+from ai_multi_agent_platform.agents import (
+    AgentRepository,
+    AgentResolver,
+    AgentRevisionRef,
+    AgentRuntime,
+)
 from ai_multi_agent_platform.context import (
     ContextAssemblyRequest,
     ContextAssemblyService,
@@ -258,7 +263,15 @@ def build_single_node_handoff_composition(
         skills=skill_repository,
         contexts=context_bundle_repository,
     )
-    consumer_requirements = CanonicalConsumerRequirementEvaluator(agents)
+    consumer_requirements = CanonicalConsumerRequirementEvaluator(
+        agents,
+        resolver=AgentResolver(
+            agents,
+            capability_registry=agent_runtime.capability_registry,
+            model_registry=agent_runtime.model_registry,
+            routing_profiles=agent_runtime.routing_profiles,
+        ),
+    )
     audit = TelemetryHandoffAuditSink(telemetry)
     service = HandoffService(
         repository,

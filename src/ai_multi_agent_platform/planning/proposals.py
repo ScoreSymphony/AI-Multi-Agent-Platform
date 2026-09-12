@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .agent_matching import resolve_planning_steps
 from .models import (
     PlannerOutput,
     PlanningRequest,
@@ -24,7 +25,7 @@ class PlanningProposalFactory:
             trigger=request.trigger,
             reason=request.reason,
             summary=output.draft.summary,
-            steps=output.draft.steps,
+            steps=resolve_planning_steps(output.draft.steps, request),
             assumptions=output.draft.assumptions,
             constraints=tuple(
                 dict.fromkeys((*request.task_constraints, *output.draft.constraints))
