@@ -25,7 +25,8 @@
   },
   "policy": {
     "vps_capture_must_record_repo_digest": true,
-    "digest_mismatch_blocks_final_classification": true,
-    "tag_match_without_digest_match_is_insufficient": true
+    "digest_mismatch_blocks_reference_host_claim": true,
+    "tag_match_without_digest_match_is_insufficient": true,
+    "reference_host_followup_issue": 829
   }
 }
