@@ -1,0 +1,23 @@
+{
+  "provider": "nvidia/skillspector",
+  "version": "2.11.2",
+  "upstream_repository": "https://github.com/NVIDIA/SkillSpector",
+  "upstream_revision": "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc",
+  "license": "Apache-2.0",
+  "license_sha256": "9f8785b47596b2993a17a3fa8d747ae63126a2c5e80a9e77195a907273d71839",
+  "dockerfile_sha256": "124041bd2c81880747197f221c8d9a13b7378ac5ad98a17b4ab6a15ad22eb9aa",
+  "built_image_id": "sha256:55abb78a1f1af1f430722920b96d4e24bed03e9e9811e1cf5330b859d2387fc1",
+  "dependency_set_sha256": "d6716d890040ac73494a8422ea51ef11229e71e0c0d9b538a95316a3a644fc61",
+  "scan_mode": "static_no_llm_network_none",
+  "policy_config_revision": "skillspector-static-v1",
+  "evaluation": {
+    "issue": 800,
+    "workflow_run_id": 34657274640,
+    "artifact_id": 10286034099,
+    "artifact_sha256": "5c3f7f39154d23a4a77151652e1eabf7ace68056b976f912877f2ebab3bdd760",
+    "corpus": "generated-corpus-v3",
+    "fixtures": 15,
+    "repetitions": 3,
+    "executed_scans": 45
+  }
+}
