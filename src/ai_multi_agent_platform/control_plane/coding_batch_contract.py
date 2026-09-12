@@ -152,8 +152,7 @@ def _parse_work_item(raw_value: JsonValue) -> CodingWorkItem:
     raw = cast(Mapping[str, JsonValue], raw_value)
     metadata_raw = raw.get("metadata", {})
     if not isinstance(metadata_raw, dict) or not all(
-        isinstance(key, str) and isinstance(value, str)
-        for key, value in metadata_raw.items()
+        isinstance(key, str) and isinstance(value, str) for key, value in metadata_raw.items()
     ):
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
