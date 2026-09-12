@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from ai_multi_agent_platform.contracts import HealthStatus
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.distributed.models import NodeStatus, WorkerStatus
 from ai_multi_agent_platform.models import ModelLocation, ModelRegistry
 
@@ -18,6 +17,9 @@ from .components import (
     DiscoveredComponent,
     SetupMode,
 )
+
+if TYPE_CHECKING:
+    from ai_multi_agent_platform.distributed.runtime import DistributedRuntime
 
 
 class SingleNodeComponentDiscoverySource:
