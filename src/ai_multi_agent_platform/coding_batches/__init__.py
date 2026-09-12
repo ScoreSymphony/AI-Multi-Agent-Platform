@@ -25,6 +25,7 @@ from .models import (
 from .overlap import ConservativeOverlapClassifier
 from .projection import coding_batch_resource
 from .repair import DEFAULT_MAX_REPAIR_ATTEMPTS, CodingBatchRepairCoordinator
+from .review import CanonicalCodingVerificationCoordinator
 from .runtime import (
     CanonicalCodingWorkstreamDispatcher,
     CodingDispatchSlot,
@@ -42,6 +43,7 @@ from .sqlite_store import SqliteCodingBatchStore
 __all__ = [
     "AuthorizedCodingBatchIntegration",
     "BatchAggregationPolicy",
+    "CanonicalCodingVerificationCoordinator",
     "CanonicalCodingWorkstreamDispatcher",
     "CanonicalWorkstreamMaterializer",
     "CheckState",
