@@ -348,7 +348,7 @@ export class EvaluationClient {
     );
   }
 
-  private command<T>(
+  private async command<T>(
     command: string,
     resourceRef: string,
     payload: Record<string, JsonValue>,
