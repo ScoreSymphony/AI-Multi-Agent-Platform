@@ -1,0 +1,3 @@
+from control_plane_extension_cases import test_manifest_and_openapi_include_current_domains_without_speculation
+
+__all__ = ["test_manifest_and_openapi_include_current_domains_without_speculation"]
