@@ -9,12 +9,15 @@ from ai_multi_agent_platform.coding_batches import (
     CodingBatchCoordinator,
     CodingWorkItem,
     CombinedValidationEvidence,
+    IntegrationExecutionProvenance,
     IntegrationState,
     RequiredCheck,
     VerificationEvidence,
     WorkstreamResult,
 )
-from ai_multi_agent_platform.coding_batches.service import CodingBatchCoordinator as StateCoordinator
+from ai_multi_agent_platform.coding_batches.service import (
+    CodingBatchCoordinator as StateCoordinator,
+)
 from ai_multi_agent_platform.contracts import ContractError, OperationContext
 from ai_multi_agent_platform.security import (
     ActorIdentity,
@@ -72,6 +75,22 @@ def _validated_candidate() -> tuple[CodingBatchCoordinator, str, str]:
     candidate = coordinator.build_integration_candidate(
         batch.batch_id,
         current_target_revision=BASE,
+    )
+    coordinator.bind_integration_execution(
+        batch.batch_id,
+        candidate.integration_id,
+        IntegrationExecutionProvenance(
+            task_id="task-integration",
+            plan_id="plan-integration",
+            plan_revision=1,
+            step_id="step-integration",
+            run_id="run-integration",
+            agent_revision="integration-agent@1",
+            agent_run_id="agent-run-integration",
+            workspace_id="workspace-integration",
+            snapshot_id="snapshot-integration",
+            branch_ref="coding/integration-authorization",
+        ),
     )
     coordinator.record_integrated_revision(
         batch.batch_id,
