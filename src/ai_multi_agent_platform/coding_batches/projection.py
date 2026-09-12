@@ -27,6 +27,7 @@ def coding_batch_resource(batch: CodingBatch) -> dict[str, Any]:
                 "id": workstream.id,
                 "task_id": workstream.provenance.task_id,
                 "plan_id": workstream.provenance.plan_id,
+                "plan_revision": workstream.provenance.plan_revision,
                 "step_id": workstream.provenance.step_id,
                 "state": workstream.state.value,
                 "blocked_by": list(workstream.blocked_by),
