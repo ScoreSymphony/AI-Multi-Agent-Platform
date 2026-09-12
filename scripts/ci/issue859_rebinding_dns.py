@@ -1,0 +1,268 @@
+"""Controlled DNS rebinding fixture for issue #859 runtime evidence.
+
+The fixture answers the first A query for one configured hostname with a
+synthetic public address and subsequent A queries with a blocked loopback
+address. All non-target DNS traffic is forwarded to an upstream resolver so
+putting Bifrost behind the controlled resolver does not break unrelated name
+resolution during startup. A small HTTP control surface exposes query counts,
+answers, and forwarding diagnostics so the Bifrost integration lane can prove
+that every new dial revalidates DNS and that a rebound private answer is
+rejected before connection.
+"""
+
+from __future__ import annotations
+
+import argparse
+import ipaddress
+import json
+import socket
+import socketserver
+import struct
+import threading
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import ClassVar
+
+
+class _DNSState:
+    def __init__(
+        self,
+        *,
+        hostname: str,
+        first_ip: str,
+        rebound_ip: str,
+        upstream_host: str,
+        upstream_port: int,
+    ) -> None:
+        self.hostname = hostname.rstrip(".").casefold()
+        self.first_ip = first_ip
+        self.rebound_ip = rebound_ip
+        self.upstream_host = upstream_host
+        self.upstream_port = upstream_port
+        self._a_queries = 0
+        self._aaaa_queries = 0
+        self._forwarded_queries = 0
+        self._forward_failures = 0
+        self._answers: list[str] = []
+        self._lock = threading.Lock()
+
+    def answer_a(self) -> str:
+        with self._lock:
+            self._a_queries += 1
+            answer = self.first_ip if self._a_queries == 1 else self.rebound_ip
+            self._answers.append(answer)
+            return answer
+
+    def record_aaaa(self) -> None:
+        with self._lock:
+            self._aaaa_queries += 1
+
+    def record_forward(self, *, success: bool) -> None:
+        with self._lock:
+            self._forwarded_queries += 1
+            if not success:
+                self._forward_failures += 1
+
+    def reset(self) -> None:
+        with self._lock:
+            self._a_queries = 0
+            self._aaaa_queries = 0
+            self._forwarded_queries = 0
+            self._forward_failures = 0
+            self._answers.clear()
+
+    def snapshot(self) -> dict[str, object]:
+        with self._lock:
+            return {
+                "hostname": self.hostname,
+                "first_ip": self.first_ip,
+                "rebound_ip": self.rebound_ip,
+                "a_queries": self._a_queries,
+                "aaaa_queries": self._aaaa_queries,
+                "a_answers": list(self._answers),
+                "forwarded_queries": self._forwarded_queries,
+                "forward_failures": self._forward_failures,
+            }
+
+
+def _decode_question(packet: bytes) -> tuple[str, int, int, int]:
+    if len(packet) < 12:
+        raise ValueError("DNS packet is shorter than the fixed header")
+    offset = 12
+    labels: list[str] = []
+    while True:
+        if offset >= len(packet):
+            raise ValueError("truncated DNS qname")
+        length = packet[offset]
+        offset += 1
+        if length == 0:
+            break
+        if length & 0xC0:
+            raise ValueError("compressed DNS questions are not supported")
+        if offset + length > len(packet):
+            raise ValueError("truncated DNS label")
+        labels.append(packet[offset : offset + length].decode("ascii"))
+        offset += length
+    if offset + 4 > len(packet):
+        raise ValueError("truncated DNS question type/class")
+    qtype, qclass = struct.unpack("!HH", packet[offset : offset + 4])
+    return ".".join(labels).casefold(), qtype, qclass, offset + 4
+
+
+def _target_dns_response(
+    packet: bytes,
+    state: _DNSState,
+) -> bytes | None:
+    """Return a controlled answer for the rebinding host, otherwise ``None``."""
+
+    transaction_id = packet[:2]
+    try:
+        hostname, qtype, qclass, question_end = _decode_question(packet)
+    except (UnicodeDecodeError, ValueError):
+        return transaction_id + struct.pack("!HHHHH", 0x8181, 0, 0, 0, 0)
+
+    if hostname != state.hostname or qclass != 1:
+        return None
+
+    question = packet[12:question_end]
+    answer = b""
+    answer_count = 0
+
+    if qtype == 1:
+        ip = ipaddress.IPv4Address(state.answer_a()).packed
+        answer = b"\xc0\x0c" + struct.pack("!HHIH", 1, 1, 0, len(ip)) + ip
+        answer_count = 1
+    elif qtype == 28:
+        state.record_aaaa()
+
+    header = transaction_id + struct.pack("!HHHHH", 0x8180, 1, answer_count, 0, 0)
+    return header + question + answer
+
+
+def _forward_dns_query(packet: bytes, state: _DNSState) -> bytes:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as upstream:
+            upstream.settimeout(2.0)
+            upstream.sendto(packet, (state.upstream_host, state.upstream_port))
+            response, _ = upstream.recvfrom(65535)
+    except OSError:
+        state.record_forward(success=False)
+        transaction_id = packet[:2]
+        return transaction_id + struct.pack("!HHHHH", 0x8182, 0, 0, 0, 0)
+
+    state.record_forward(success=True)
+    return response
+
+
+def _specific_dns_bind_host(requested_host: str, peer_ip: str) -> str:
+    """Avoid wildcard port 53 when forwarding to Docker's loopback DNS stub.
+
+    Docker exposes its embedded resolver at 127.0.0.11 inside containers. A
+    UDP server bound to 0.0.0.0:53 can also receive packets sent to that
+    loopback address, creating a forwarding loop. When wildcard binding was
+    requested, infer the concrete interface address used to reach the
+    controlled public peer and bind DNS only to that address.
+    """
+
+    if requested_host not in {"0.0.0.0", ""}:
+        return requested_host
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        probe.connect((peer_ip, 9))
+        bind_host = str(probe.getsockname()[0])
+    if ipaddress.ip_address(bind_host).is_loopback:
+        raise RuntimeError("could not infer a non-loopback DNS bind address")
+    return bind_host
+
+
+class _DNSHandler(socketserver.BaseRequestHandler):
+    state: ClassVar[_DNSState]
+
+    def handle(self) -> None:
+        packet, sock = self.request
+        response = _target_dns_response(packet, self.state)
+        if response is None:
+            response = _forward_dns_query(packet, self.state)
+        sock.sendto(response, self.client_address)
+
+
+class _ControlHandler(BaseHTTPRequestHandler):
+    server_version = "Issue859RebindingDNS/1.2"
+    state: ClassVar[_DNSState]
+
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path == "/healthz":
+            self._json(HTTPStatus.OK, {"healthy": True})
+            return
+        if self.path == "/stats":
+            self._json(HTTPStatus.OK, self.state.snapshot())
+            return
+        self.send_error(HTTPStatus.NOT_FOUND)
+
+    def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/reset":
+            self.state.reset()
+            self._json(HTTPStatus.OK, self.state.snapshot())
+            return
+        self.send_error(HTTPStatus.NOT_FOUND)
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+    def _json(self, status: HTTPStatus, payload: object) -> None:
+        encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+        self.wfile.flush()
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run the issue #859 rebinding DNS fixture")
+    parser.add_argument("--dns-host", default="127.0.0.1")
+    parser.add_argument("--dns-port", type=int, default=53)
+    parser.add_argument("--control-host", default="127.0.0.1")
+    parser.add_argument("--control-port", type=int, default=18002)
+    parser.add_argument("--hostname", default="issue859-rebind.test")
+    parser.add_argument("--first-ip", default="203.0.113.10")
+    parser.add_argument("--rebound-ip", default="127.0.0.1")
+    parser.add_argument(
+        "--upstream-dns-host",
+        default="127.0.0.11",
+        help="resolver used for DNS names other than the controlled rebinding host",
+    )
+    parser.add_argument("--upstream-dns-port", type=int, default=53)
+    args = parser.parse_args(argv)
+
+    first_ip = str(ipaddress.IPv4Address(args.first_ip))
+    dns_bind_host = _specific_dns_bind_host(args.dns_host, first_ip)
+    state = _DNSState(
+        hostname=args.hostname,
+        first_ip=first_ip,
+        rebound_ip=str(ipaddress.IPv4Address(args.rebound_ip)),
+        upstream_host=args.upstream_dns_host,
+        upstream_port=args.upstream_dns_port,
+    )
+    _DNSHandler.state = state
+    _ControlHandler.state = state
+
+    dns_server = socketserver.ThreadingUDPServer((dns_bind_host, args.dns_port), _DNSHandler)
+    control_server = ThreadingHTTPServer((args.control_host, args.control_port), _ControlHandler)
+    control_thread = threading.Thread(target=control_server.serve_forever, daemon=True)
+    control_thread.start()
+    try:
+        dns_server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        dns_server.shutdown()
+        dns_server.server_close()
+        control_server.shutdown()
+        control_server.server_close()
+        control_thread.join(timeout=2.0)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
