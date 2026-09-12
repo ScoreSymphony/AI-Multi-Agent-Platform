@@ -159,9 +159,7 @@ def _verify_summary(root: Path) -> dict[str, Any]:
     if source_manifest.get("evidence_class") != "ordinary-vps-reference":
         raise EvidenceValidationError("source manifest is not ordinary target-VPS evidence")
     platform_commit = source_manifest.get("platform_commit")
-    if not isinstance(platform_commit, str) or not re.fullmatch(
-        r"[0-9a-f]{40}", platform_commit
-    ):
+    if not isinstance(platform_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", platform_commit):
         raise EvidenceValidationError("source manifest has invalid platform_commit")
 
     local = summary.get("local_filesystem")
