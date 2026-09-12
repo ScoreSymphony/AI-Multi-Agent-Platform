@@ -56,6 +56,21 @@ class CodingBatchCoordinator:
     def get(self, batch_id: str) -> CodingBatch:
         return self._state.get(batch_id)
 
+    def bind_plan_revision(
+        self,
+        batch_id: str,
+        workstream_id: str,
+        *,
+        plan_revision: int,
+    ) -> CodingWorkstream:
+        """Bind the exact canonical #439/#384 Plan revision before materialization."""
+
+        return self._state.bind_plan_revision(
+            batch_id,
+            workstream_id,
+            plan_revision=plan_revision,
+        )
+
     def ready_workstreams(self, batch_id: str) -> tuple[CodingWorkstream, ...]:
         return self._state.ready_workstreams(batch_id)
 
