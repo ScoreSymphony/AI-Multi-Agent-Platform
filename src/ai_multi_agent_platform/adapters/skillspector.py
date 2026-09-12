@@ -95,7 +95,9 @@ class ImageInspection:
 class SkillSpectorSecurityEvidenceProvider:
     """Container-only advisory scanner; canonical Skill trust remains platform-owned."""
 
-    def __init__(self, config: SkillSpectorConfig, raw_report_store: RawSecurityReportStore) -> None:
+    def __init__(
+        self, config: SkillSpectorConfig, raw_report_store: RawSecurityReportStore
+    ) -> None:
         self.config = config
         self.raw_report_store = raw_report_store
 
@@ -130,7 +132,9 @@ class SkillSpectorSecurityEvidenceProvider:
             try:
                 completed = _run(command, timeout_seconds=self.config.timeout_seconds)
             except subprocess.TimeoutExpired:
-                return self._degraded(candidate, observed_at, "scanner_timeout", inspection.image_id)
+                return self._degraded(
+                    candidate, observed_at, "scanner_timeout", inspection.image_id
+                )
             except OSError:
                 return self._degraded(
                     candidate,
@@ -256,9 +260,7 @@ class SkillSpectorSecurityEvidenceProvider:
                 reasons.append("provider_findings_invalid")
             else:
                 findings = tuple(
-                    _normalize_finding(value)
-                    for value in values
-                    if isinstance(value, Mapping)
+                    _normalize_finding(value) for value in values if isinstance(value, Mapping)
                 )
             completeness = report.get("analysis_completeness")
             if not isinstance(completeness, Mapping):
@@ -490,14 +492,10 @@ def _finding_values(report: Mapping[str, object]) -> list[object] | None:
 
 def _normalize_finding(item: Mapping[object, object]) -> SecurityFinding:
     raw_location = item.get("location")
-    location: Mapping[object, object] = (
-        raw_location if isinstance(raw_location, Mapping) else {}
-    )
+    location: Mapping[object, object] = raw_location if isinstance(raw_location, Mapping) else {}
     line = _opt_int(location.get("start_line") or location.get("line"))
     if line is None:
-        line = _opt_int(
-            item.get("start_line") or item.get("line") or item.get("line_number")
-        )
+        line = _opt_int(item.get("start_line") or item.get("line") or item.get("line_number"))
     extras: dict[str, JsonValue] = {}
     for key in ("pattern", "remediation", "intent", "match_fingerprint", "tags", "evidence"):
         if key in item:
@@ -521,10 +519,7 @@ def _normalize_finding(item: Mapping[object, object]) -> SecurityFinding:
             )
         ),
         path=_opt_str(
-            location.get("file")
-            or location.get("path")
-            or item.get("file")
-            or item.get("path")
+            location.get("file") or location.get("path") or item.get("file") or item.get("path")
         ),
         line=line,
         metadata=extras,
