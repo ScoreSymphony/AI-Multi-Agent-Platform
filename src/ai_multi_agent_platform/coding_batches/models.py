@@ -162,6 +162,7 @@ class WorkstreamProvenance:
     step_id: str
     repository_id: str
     base_revision: str
+    plan_revision: int | None = None
     agent_revision: str | None = None
     agent_run_id: str | None = None
     workspace_id: str | None = None
@@ -172,6 +173,8 @@ class WorkstreamProvenance:
     def __post_init__(self) -> None:
         for field_name in ("task_id", "plan_id", "step_id", "repository_id", "base_revision"):
             object.__setattr__(self, field_name, _required(getattr(self, field_name), field_name))
+        if self.plan_revision is not None and self.plan_revision < 1:
+            raise ValueError("plan_revision must be positive when provided")
         for field_name in (
             "agent_revision",
             "agent_run_id",
