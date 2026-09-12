@@ -2,11 +2,11 @@
 
 Reviewed upstream revision: `5c995c365dfb1fd5bc56fda688be5d8538f9931f`  
 Review date: 2026-09-12  
-Status: static review plus platform adapter tests; live backend security evidence pending.
+Security classification: **`experimental_only`**
 
-## Trust-boundary rule
+This review combines static source inspection, canonical adapter tests, and live Local/Docker/Remote evidence. SWE-ReX is treated as an optional runtime implementation below platform-owned authorization, secrets, Workspace, Worker and security boundaries.
 
-SWE-ReX is treated as an optional execution implementation below canonical authorization, secret, Workspace and Worker boundaries. Installation or selection of the adapter grants no authority by itself.
+## Trust boundary
 
 ```text
 Actor / Agent output
@@ -21,122 +21,112 @@ canonical Executor request
 SwerexExecutor boundary
         |
         +--> #37 Workspace materialization
-        +--> #34 scoped secrets (future concrete path)
+        +--> #34 scoped secrets (no direct env projection in PoC)
         |
         v
 SWE-ReX backend
 ```
 
-## Finding 1: LocalDeployment is host execution
+Selecting or installing SWE-ReX grants no authority and establishes no generic sandbox guarantee.
 
-The reviewed `LocalDeployment` creates a `LocalRuntime` in the current host process environment. It is useful as a cross-platform execution abstraction but is not a containment mechanism.
+## 1. LocalDeployment is host execution
 
-Platform consequence:
+Live Linux evidence confirms LocalDeployment can execute and access files outside the selected canonical Workspace. Directly supplied environment data is visible to child code.
 
-- local mode must never be described as sandboxed;
-- high-risk or untrusted workloads must not select it through a sandbox-required profile;
-- the evaluation adapter requires an explicit `allow_unsandboxed_local=True` opt-in;
-- #799 discovery metadata must distinguish execution availability from isolation strength.
+Controls in #861:
 
-Severity for sandbox-required workloads: **high if mislabeled**, otherwise an explicit trusted-host execution mode.
+- local mode requires explicit `allow_unsandboxed_local=True`;
+- discovery must label it trusted-host/unsandboxed;
+- sandbox-required or untrusted workloads must not select it based on this evaluation.
 
-## Finding 2: provider file APIs do not enforce canonical Workspace ownership
+Residual risk if mislabeled as sandbox: **high**.
 
-The runtime API exposes direct file read/write/upload operations using provider paths. The reviewed remote server also accepts a target path and performs the operation through its local runtime.
+## 2. Provider file APIs are not the canonical Workspace boundary
 
-Platform consequence:
+Local, Docker and loopback Remote evidence all show that provider file operations can address paths beyond the intended per-run Workspace. Docker read `/etc/hostname`; Local/Remote read deliberately created outside-Workspace files.
 
-- canonical Workspace materialization must remain the source of allowed paths;
-- provider operations must be constrained to that materialization;
-- returned Artifact paths must be revalidated at the canonical boundary;
-- live fixtures must attempt reads/writes outside the Workspace, including traversal and platform-specific path forms;
-- remote provider success must never be interpreted as proof that a path was authorized.
+Platform controls therefore remain mandatory:
 
-The PoC validates selected workspaces and returned Artifact paths, but that alone does not prove provider-side filesystem containment.
+- canonical #37 Workspace materialization and authorization;
+- provider requests constrained by adapter-owned mapping;
+- returned Artifact path validation;
+- acceptance only after Artifact collection into the canonical Workspace.
 
-## Finding 3: remote authentication is a bearer API key, transport protection is external
+The PoC enforces those result-side/platform guards, but provider success never proves path authorization.
 
-The reviewed remote path sends `X-API-Key` when an auth token is configured. `RemoteRuntime` accepts HTTP hosts, and the server binds to `0.0.0.0` by default when launched through its CLI.
+## 3. Remote auth is useful but transport security is external
 
-Platform consequence:
+The reviewed server uses `X-API-Key`. Live loopback evidence accepts the correct key and rejects the wrong key. The transport remains HTTP in the exercised profile; TLS/private-network protection is external.
 
-- the token must be a #34-managed secret/reference, not normal profile state;
-- protected deployments need a trusted/private network or TLS termination outside SWE-ReX;
-- discovery should not promote an arbitrary reachable HTTP SWE-ReX server to a trusted executor;
-- #15/#36 service identity and worker trust remain independent of provider authentication;
-- token rotation/revocation and redaction require platform controls.
+Implications:
 
-## Finding 4: remote server exposes privileged execution and file operations
+- tokens belong behind #34, not ordinary profiles;
+- arbitrary reachable HTTP endpoints must not become trusted executors through discovery alone;
+- #15/#36 service identity and Worker trust remain independent of provider authentication;
+- token rotation/redaction/revocation are platform/deployment responsibilities.
 
-The reviewed server exposes endpoints for command execution, persistent shell sessions, file read/write/upload and runtime close. Compromise of that service or its API token therefore has direct execution impact within the server host's effective privilege boundary.
+## 4. Default Docker network exposure is not deny-by-default
 
-Platform consequence:
+Live default Docker evidence:
 
-- run SWE-ReX remote services with the minimum OS/container privileges needed;
-- do not reuse broad host credentials or platform administrator identity;
-- isolate server filesystem/network access according to the backend threat model;
-- audit executor selection and remote target identity through platform-owned telemetry.
+- outbound Internet access succeeded (HTTP 200 to `example.com`);
+- the runtime control port was published on `0.0.0.0` and IPv6;
+- provider file APIs could read outside the intended provider Workspace.
 
-## Finding 5: canonical idempotency cannot rely on SWE-ReX request caching
+Attempts to add `--network=none` or Docker `--internal` networking broke the host-to-runtime HTTP control channel needed by DockerDeployment startup. Therefore #861 has no working deny-egress Docker profile using these flags alone.
 
-The server caches only the last processed request/response and explicitly notes that idempotency is not guaranteed for multiple concurrent clients. `RemoteRuntime` generates an `X-Request-ID` for one logical request/retry sequence.
+A future protected profile needs a separately designed network/proxy boundary and must fail closed if that policy cannot be enforced.
 
-Platform consequence:
+## 5. Timeout does not establish process-tree cleanup
 
-- #14 WorkerJob dispatch/idempotency remains authoritative;
-- a provider request ID is adapter-private metadata;
-- duplicate execution/reconciliation must be tested at the platform Worker boundary rather than delegated to SWE-ReX.
+Live Docker evidence produced `CommandTimeoutError` for the parent while a spawned child survived and later wrote its marker file. The reviewed LocalRuntime one-shot implementation uses `subprocess.run(..., timeout=...)`; uniform descendant cleanup is not provided by the abstraction.
 
-## Finding 6: environment variables are a credential-risk surface
+Additionally, `LocalRuntime.execute()` performs that synchronous subprocess call from an async method. Canonical `CancellationToken` observation cannot interrupt the event loop while the call is blocking, so adapter-level cancellation semantics do not prove real LocalRuntime in-flight kill semantics.
 
-The upstream command type can accept arbitrary environment variables. That is technically convenient but would allow broad process environment or plaintext secret projection if used directly.
+Implications:
 
-Platform consequence:
+- timeout result mapping may be used as evidence of signaling only;
+- cancellation/process-tree cleanup must be separately proven for any future supported backend;
+- sandbox-required workloads cannot rely on #861 for cleanup containment.
 
-- the evaluation adapter currently rejects every non-empty canonical `ExecutionRequest.environment`;
-- a future concrete SWE-ReX client may receive only explicitly authorized, scoped #34 deliveries;
-- synthetic credential tests must exercise enumeration, subprocess inheritance, stdout/stderr leakage and cleanup/revocation;
-- secrets must not be persisted into adapter metadata or ordinary configuration.
+## 6. Environment variables remain a secret/exfiltration surface
 
-## Finding 7: egress is backend-specific
+Raw provider fixtures show an explicitly injected synthetic value is visible to executed code. In the exercised Docker fixture it did not persist into a later command, but that does not prove a complete secret lifecycle.
 
-The reviewed abstraction exposes execution backends but does not establish one uniform deny-by-default network policy model. Local, container, remote and cloud deployments can have materially different network boundaries.
+The platform PoC therefore rejects every non-empty canonical `ExecutionRequest.environment`. Any future concrete secret delivery path must use explicitly authorized #34-scoped material and separately test enumeration, inheritance, output leakage, redaction, revocation and cleanup.
 
-Platform consequence:
+## 7. Canonical idempotency remains platform-owned
 
-- do not advertise a generic SWE-ReX egress guarantee;
-- record isolation and egress evidence per backend;
-- protected profiles must fail closed if their required network policy cannot be enforced;
-- live tests must include Internet deny/allow, DNS, loopback, private/RFC1918, link-local/metadata and IPv6 where applicable.
+SWE-ReX remote request IDs and its limited request-response cache are provider mechanics. They cannot replace #14 WorkerJob dispatch/idempotency, especially with concurrent clients.
 
-## Finding 8: cancellation and cleanup are not assumed from the API shape
+Provider request IDs remain adapter-private metadata; duplicate execution/reconciliation remains a platform responsibility.
 
-The runtime exposes command timeouts, shell interrupt actions and deployment/runtime close operations, but a uniform platform cancellation guarantee is not established by static inspection alone.
+## 8. Server/client provenance must be pinned independently
 
-Platform consequence:
+Host-side SWE-ReX revision pinning does not guarantee that DockerDeployment starts the same server revision. Accepted #861 Docker evidence builds an image directly from the exact evaluated commit and uses `pull="never"`.
 
-- the PoC models canonical cancellation through a provider-private client seam so the architecture can be tested;
-- each supported concrete backend must prove in-flight cancellation, child-process cleanup and deployment cleanup;
-- inability to stop a provider operation must surface as explicit residual risk/failure evidence rather than a successful canonical cancellation claim.
+An unpinned provider fallback is not acceptable evidence for a supported execution/security profile.
 
-## Finding 9: provider metadata is untrusted diagnostic data
+## 9. Dependency completeness is an operational security concern
 
-Backend images, platforms, runtime identities and provider errors can aid diagnostics but cannot authorize platform actions.
+At the reviewed revision `swerex.runtime.remote` imports `aiohttp`, while the base package does not declare it. Remote-backed fixtures explicitly install `aiohttp>=3.11,<4`; the platform baseline does not.
 
-The PoC allows only a small metadata allowlist into canonical evidence and keeps provider deployment/runtime/session IDs under `adapter_metadata["swe_rex"]`.
+A future integration must pin and audit the effective dependency set rather than silently relying on ambient packages.
 
-## Static security conclusion
+## 10. Provider metadata is diagnostic only
 
-SWE-ReX can fit safely behind the platform boundary only if treated as a **backend abstraction with variable trust/isolation**, not as a security boundary in itself.
+Provider image/platform/version/runtime IDs and errors cannot authorize actions. The PoC allowlists diagnostic metadata, keeps deployment/runtime/session IDs under `adapter_metadata["swe_rex"]`, prevents provider `backend_kind` override, and redacts unexpected exception text to type-only diagnostic information.
 
-Current security classification: **`experimental_only`**.
+## Security conclusion
 
-Required live evidence before promotion:
+SWE-ReX fits safely only as an **experimental backend abstraction with variable trust/isolation** behind existing platform controls. #861 specifically does not establish SWE-ReX as:
 
-- Linux and available Windows-path Workspace escape tests;
-- Docker/Podman and relevant remote effective isolation;
-- blocked/allowed egress and SSRF-relevant destinations;
-- scoped synthetic credential delivery/exfiltration/redaction/revocation;
-- timeout/cancellation/crash/child-process and deployment cleanup;
-- remote service authentication/transport deployment profile;
-- concurrent request/idempotency behavior under canonical #14 dispatch semantics.
+- a generic sandbox;
+- a Workspace security boundary;
+- a deny-egress network boundary;
+- a secret boundary;
+- a uniform cancellation/process-cleanup boundary;
+- a secure remote transport layer;
+- a native Windows-local executor at the evaluated revision.
+
+Promotion requires a new evaluation of one precisely defined profile against the then-current upstream revision, including Workspace escape, explicit deny/allow egress (including private/link-local/IPv6 where relevant), scoped-secret exfiltration/redaction/revocation, cancellation/process-tree cleanup, remote transport/auth/provenance and operational resource limits.

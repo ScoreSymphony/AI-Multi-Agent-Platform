@@ -1,80 +1,74 @@
 # SWE-ReX comparison matrix (#861)
 
-This matrix is intentionally conservative. A property is treated as unknown until it has been measured or verified for the relevant backend in this repository.
+Final #861 classification: **`experimental_only`**. This comparison stays conservative: unknown/unexercised provider behavior remains unknown.
 
 | Area | Reference Executor | Forge | Containarium | Agent-Sandbox (#798) | SWE-ReX (#861) |
 | --- | --- | --- | --- | --- | --- |
-| Canonical Executor fit | Native baseline | Adapter exists | Candidate/alternative | PoC on #798 branch | PoC plus live bridge on #861 branch |
-| Baseline dependency | Yes | Optional | Optional | Optional | Optional; no runtime dependency in platform package |
-| Local host execution | Deterministic approved actions | Backend-specific | Backend-specific | No | Linux live works; explicitly unsandboxed |
-| Container path | No production sandbox claim | Backend-specific | Primary area to compare | Kubernetes-native | Docker/Podman deployment; pinned-server evidence in progress |
-| Remote abstraction | Through #14 Worker path | Forge transport/sidecar | Backend-specific | Provider API/cluster | Remote server plus cloud adapters; loopback live fixture added |
-| Linux support | Platform baseline | Yes where backend supports | To verify | Kubernetes/Linux-oriented | Linux LocalDeployment live functional; container/remote evidence in progress |
-| Native Windows local execution | Platform path semantics | Backend-specific | To verify | Not a primary Windows-local path | **Negative at reviewed pin:** LocalDeployment import fails on available Windows runner (`pexpect.spawn`) |
-| Windows remote-client value | Platform-owned | Backend-specific | To verify | Provider/API path | Separate hypothesis; not yet demonstrated |
-| Command stdout/stderr | Canonical result | Mapped | To verify | Mapped in PoC | Linux local live verified; canonical bridge added |
-| Streaming stdout/stderr | Not required for baseline | Backend-specific | To verify | Pending live evidence | Not established by reviewed one-shot command API |
-| Timeout | Canonical/tested | Mapped/tested | To verify | PoC/tested; live pending | Linux local provider timeout observed; canonical bridge/live cleanup still being measured |
-| Cancellation | Canonical/tested | Mapped/tested | To verify | PoC/tested; live pending | PoC seam tested; provider kill/cleanup pending |
-| Workspace ownership | Platform | Platform | Must remain platform | Platform | Platform; Linux Local provider itself does not enforce it |
-| Artifact ownership | Platform | Platform | Must remain platform | Platform | Platform; live bridge performs explicit provider-to-canonical collection |
-| Provider-private IDs | N/A | Namespaced | Must be namespaced | Namespaced | Namespaced; contract tests added |
-| Local isolation strength | None claimed | Backend-specific | To verify | N/A | **None; live outside-Workspace read confirmed** |
-| Docker/container isolation | N/A | Backend-specific | To verify | N/A | Backend-specific; authoritative pinned-server run pending |
-| High-isolation option | No | Not assumed | Candidate property | Core evaluation goal | Not a uniform SWE-ReX property |
-| Egress control | Policy hook only | Backend-specific | To verify | Critical live test | Backend-specific; default/`--network=none` experiment in progress |
-| Credential boundary | #34/platform | Platform | Must remain platform | Environment projection blocked in PoC | Environment projection blocked in PoC; Linux provider env canary was visible when supplied directly |
-| Remote auth | #36/#14 | Adapter/transport-specific | To verify | Provider/cluster-specific | X-API-Key; correct/wrong-token loopback fixture added |
-| Remote transport security | Platform-owned | Transport-specific | To verify | Cluster/API-specific | HTTP supported; TLS/private transport must be supplied externally |
-| Remote dependency completeness | Platform baseline | Adapter-specific | To verify | Provider-specific | **Gap at reviewed pin:** base package omits `aiohttp` required by RemoteRuntime import |
-| Server/client revision coupling | Platform-owned | Adapter-specific | To verify | Provider-specific | **Not automatic:** Docker fallback can run unpinned `pipx run swe-rex`; #861 now builds exact pinned server image |
-| File transfer primitives | Canonical Files/Artifacts | Adapter-specific | To verify | Provider-specific | Upstream read/write/upload APIs; Linux local live round-trip verified |
-| Provider filesystem containment | Platform-enforced baseline | Backend-specific | To verify | Core sandbox property | Local/remote server APIs accept provider paths directly; Local live outside-Workspace read succeeded |
-| Persistent shell sessions | No canonical requirement | Backend-specific | To verify | Backend-specific | Upstream bash sessions available; remain provider-private |
-| Snapshot/pause/resume | Not canonical | Backend-specific | To verify | Explicit provider feature under evaluation | Not a reviewed generic SWE-ReX capability |
-| Browser/computer use | Owned by #74 | Not canonical here | To verify | Explicit overlap with #74 | No canonical browser value claimed by #861 |
-| Kubernetes dependency | No | No baseline requirement | To verify | Yes for reviewed Agent-Sandbox path | No |
-| Docker/Podman dependency | No | Backend-specific | To verify | Kubernetes runtime dependency instead | Optional for container path |
-| Paid external service required | No | No baseline requirement | To verify | No for self-hosted path | No for local/Docker/remote self-host; some cloud adapters can cost money |
-| Operational burden | Lowest | Moderate/backend-specific | To measure | High/Kubernetes | Low for Linux local; moderate for Docker/remote plus dependency/provenance handling; provider-specific for cloud |
-| Security burden | Platform baseline | Adapter/backend-specific | To measure | High but stronger-isolation candidate | High if runtime abstraction is mistaken for isolation; each backend needs its own security profile |
-| Current outcome | Baseline | Existing optional adapter | Comparison pending | Evaluation in progress | `experimental_only` provisional |
+| Canonical Executor fit | Native baseline | Existing optional adapter | Candidate/alternative | Evaluation open | PoC + live Local bridge; corrected Docker bridge fixture |
+| Baseline dependency | Yes | Optional | Optional | Optional | Optional; no SWE-ReX runtime dependency in platform package |
+| Local host execution | Approved baseline actions | Backend-specific | Backend-specific | Not primary model | Linux functional; explicitly unsandboxed |
+| Native Windows local | Platform-owned path | Backend-specific | Unknown | Not primary model | **Unavailable at evaluated revision** (`pexpect.spawn` import failure) |
+| Docker/container path | No generic sandbox claim | Backend-specific | Primary comparison area | Kubernetes-native | Pinned Docker raw execution passes; security properties remain backend/deployment-specific |
+| Remote abstraction | Canonical Worker path | Sidecar/transport | Backend-specific | Provider/cluster API | `swerex-remote` works in loopback; HTTP/external protection required |
+| Workspace ownership | Platform | Platform | Must remain platform | Must remain platform | Platform; Local/Docker/Remote provider paths can access outside selected Workspace |
+| Artifact ownership | Platform | Platform | Must remain platform | Must remain platform | Platform; adapter accepts only collected in-Workspace files |
+| Provider-private IDs | N/A | Namespaced | Must be namespaced | Must be namespaced | Namespaced adapter metadata |
+| Timeout result mapping | Canonical/tested | Mapped/tested | Unknown | Evaluation requirement | Provider timeout signaling works; mapped canonically |
+| In-flight cancellation | Canonical/tested | Backend-specific | Unknown | Evaluation requirement | Adapter seam maps it, but Local provider blocks in synchronous `subprocess.run` |
+| Process-tree cleanup | Platform/backend specific | Backend-specific | Unknown | Core evaluation requirement | **Negative evidence:** Docker child survives parent timeout |
+| Local isolation | None claimed | Backend-specific | Unknown | N/A | **None**; outside-Workspace access live-confirmed |
+| Container filesystem containment | N/A | Backend-specific | Unknown | Core sandbox property | Provider API read `/etc/hostname`; not a canonical Workspace boundary |
+| Default Internet egress | Policy-owned | Backend-specific | Unknown | Critical evaluation item | **Allowed** in default Docker fixture (HTTP 200) |
+| Functional deny-egress profile | Policy/deployment-owned | Backend-specific | Unknown | Critical evaluation item | **Not demonstrated**; `network=none`/`--internal` break DockerDeployment control path |
+| Remote auth | Platform/service identity | Transport-specific | Unknown | Provider/cluster-specific | X-API-Key correct/wrong-token behavior live-verified |
+| Remote transport security | Platform-owned | Transport-specific | Unknown | Cluster/API-specific | HTTP in reviewed loopback; TLS/private network external |
+| Credential boundary | #34/platform | Platform | Must remain platform | Core evaluation item | Direct canonical env blocked; raw synthetic env is visible when directly supplied |
+| Environment persistence | Platform-controlled | Backend-specific | Unknown | Evaluation requirement | Synthetic Docker command env did not persist into next exercised command |
+| Dependency completeness | Baseline managed | Adapter-specific | Unknown | Provider-specific | Reviewed RemoteRuntime needs undeclared `aiohttp`; evaluation installs explicitly |
+| Server/client revision coupling | Platform-owned | Adapter-specific | Unknown | Provider-specific | Not automatic; #861 builds exact pinned server image and uses `pull=never` |
+| Concurrent remote commands | Platform Worker model | Backend-specific | Unknown | Provider-specific | 4 concurrent loopback commands passed |
+| Streaming stdout/stderr | Baseline-dependent | Backend-specific | Unknown | Evaluation item | Not established by reviewed one-shot API; no claim |
+| Snapshot/pause/resume | Not canonical baseline | Backend-specific | Unknown | Explicit #798 evaluation item | No generic #861 claim |
+| Browser/computer use | #74-owned | Not canonical here | Unknown | Explicit #798 overlap | No canonical browser value claimed |
+| Kubernetes dependency | No | No baseline requirement | Unknown | Yes for reviewed path | No |
+| Docker/Podman dependency | No | Backend-specific | Unknown | Kubernetes runtime path | Optional container path |
+| Paid external service required | No | No baseline requirement | Unknown | No for self-hosted path | No for local/Docker/self-hosted remote; cloud adapters may cost money |
+| Operational burden | Lowest | Moderate/backend-specific | Unknown | Higher/Kubernetes | Low Local; moderate Docker/Remote plus dependency, transport and provenance handling |
+| Security positioning | Platform baseline | Backend-specific | Candidate to measure | High-isolation evaluation | Runtime portability, **not high-isolation** |
+| Current outcome | Baseline | Existing optional adapter | Comparison pending | Evaluation remains open | **`experimental_only` final** |
 
 ## Interpretation
 
-SWE-ReX's strongest potential advantage is not stronger isolation. It is a common runtime/deployment abstraction spanning direct local execution, Docker/Podman, a separately hosted server and multiple cloud provider adapters.
+SWE-ReX's demonstrated advantage is a common runtime/deployment abstraction, not stronger isolation. Linux Local, pinned Docker and loopback Remote show useful functional coverage, while the same evidence exposes important limits:
 
-The first live evidence narrows that claim substantially:
+- Local is trusted-host execution with no Workspace containment;
+- native Windows Local fails at the evaluated revision;
+- default Docker permits Internet egress and broad provider filesystem access;
+- Docker parent timeout does not clean descendant processes;
+- simple Docker deny-egress network modes also break SWE-ReX's own control channel;
+- remote transport protection and canonical Workspace enforcement remain external;
+- the remote-backed dependency set needs explicit correction/pinning;
+- server-side provenance must be pinned independently from the host client.
 
-- Linux local execution is functional, but it is trusted-host execution with no Workspace containment;
-- native Windows LocalDeployment is not functional on the available runner at the reviewed revision;
-- remote-backed paths expose a missing `aiohttp` dependency in the base package;
-- Docker server provenance is not automatically coupled to the host library revision;
-- isolation and egress remain deployment properties rather than guarantees of the SWE-ReX abstraction.
+This makes SWE-ReX fundamentally different from #798 Agent-Sandbox. #798 remains the open evaluation for a possible high-isolation optional provider; #861 must not be treated as a substitute for that decision.
 
-That abstraction can still be useful only if the platform continues to own:
+## Discovery/product mapping
 
-- canonical execution lifecycle and IDs;
-- Worker scheduling, dispatch and idempotency;
-- Workspace materialization and Artifact durability;
-- authorization/approval;
-- secret delivery;
-- egress policy and effective security profile;
-- server/client provenance.
+#799 is also still open. Its candidate taxonomy uses `recommended`, `supported`, `experimental/evaluate`, and `reject/defer`. The #861 result maps to **`experimental/evaluate`**, and only to Advanced/Custom selection with backend-specific warnings/capabilities.
 
-SWE-ReX should therefore be compared with Agent-Sandbox as a **different kind of option**, not a drop-in security equivalent. Agent-Sandbox is being evaluated primarily for high-isolation Kubernetes-native workloads; SWE-ReX is being evaluated primarily for backend/runtime portability and a common execution API.
+Discovery metadata must distinguish at least:
 
-## Decision gates for `supported_optional`
+- runtime availability from isolation strength;
+- Linux Local from native Windows Local;
+- default Docker Internet access from any future protected network profile;
+- raw provider file access from canonical Workspace authorization;
+- timeout signaling from descendant cleanup;
+- HTTP remote reachability from trusted transport/service identity.
 
-The provisional `experimental_only` classification may be promoted only if live evidence shows all of the following:
+## Why not `supported_optional` or `reject/defer`?
 
-1. material backend simplification compared with direct platform adapters despite the native Windows limitation;
-2. canonical contract behavior remains stable across the exact supported profile(s);
-3. Workspace and Artifact boundaries fail closed at the platform boundary and the provider cannot bypass the effective supported containment model;
-4. scoped credentials can be delivered without broad environment leakage;
-5. required egress policy can be enforced without breaking the provider control channel;
-6. timeout/cancellation/crash cleanup is operationally reliable;
-7. remote transport can be deployed with acceptable authentication, provenance and network security;
-8. operational cost is lower than, or justified relative to, maintaining equivalent direct adapters.
+`supported_optional` is not justified because the evaluated profiles do not provide a uniform security, Windows portability, egress, cleanup or transport contract.
 
-If only one or two backends are viable and SWE-ReX adds little beyond a thin wrapper around those runtimes, the correct outcome may be `reject/defer` even if the PoC itself works.
+`reject/defer` is unnecessarily strong because the runtime abstraction does work for Linux Local, pinned Docker and loopback Remote, and the platform can keep canonical ownership while making the provider completely optional.
+
+The balanced decision is **`experimental_only`** until a future evaluation proves one narrowly defined profile worthy of promotion.

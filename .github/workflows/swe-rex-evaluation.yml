@@ -68,17 +68,12 @@ jobs:
           if-no-files-found: warn
 
   docker-runtime:
-    name: docker-runtime (${{ matrix.backend }})
+    name: docker-runtime (docker)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        backend: [docker, docker-internal]
     env:
       ISSUE861_SWEREX_IMAGE: issue861-swerex:5c995c365dfb1fd5bc56fda688be5d8538f9931f
-      ISSUE861_DOCKER_NETWORK: issue861-internal
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -107,33 +102,26 @@ jobs:
             --file /tmp/issue861-swe-rex.Dockerfile \
             .
           docker image inspect "$ISSUE861_SWEREX_IMAGE" --format '{{.Id}}'
-      - name: Create internal Docker network
-        if: ${{ matrix.backend == 'docker-internal' }}
-        run: docker network create --internal "$ISSUE861_DOCKER_NETWORK"
       - name: Run Docker runtime evidence
         run: >-
           python scripts/benchmarks/issue861_swe_rex_live.py
-          --backend "${{ matrix.backend }}"
-          --output "swe-rex-${{ matrix.backend }}.json"
+          --backend docker
+          --output swe-rex-docker.json
       - name: Run canonical Executor bridge evidence
-        if: ${{ matrix.backend == 'docker' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: >-
           python scripts/benchmarks/issue861_swe_rex_canonical.py
           --backend docker
           --output swe-rex-canonical-docker.json
-      - name: Remove internal Docker network
-        if: ${{ always() && matrix.backend == 'docker-internal' }}
-        run: docker network rm "$ISSUE861_DOCKER_NETWORK" || true
       - name: Upload Docker evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: "swe-rex-${{ matrix.backend }}"
+          name: swe-rex-docker
           path: |
-            swe-rex-${{ matrix.backend }}.json
-            swe-rex-canonical-${{ matrix.backend }}.json
+            swe-rex-docker.json
+            swe-rex-canonical-docker.json
           if-no-files-found: warn
 
   remote-loopback:

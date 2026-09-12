@@ -1,179 +1,132 @@
 # SWE-ReX live evidence log (#861)
 
-This file distinguishes completed adapter/static evidence from **live backend evidence**. No row may be marked passed from upstream documentation or interface shape alone.
+Final evaluation classification: **`experimental_only`**.
+
+This log records only behavior observed against the exact evaluated revision `5c995c365dfb1fd5bc56fda688be5d8538f9931f` (package metadata `1.4.0`). Provider guarantees remain backend-specific; no result for one backend is generalized to another.
 
 ## Evidence policy
 
-For every exercised backend record:
+Accepted evidence records the exact revision, host/backend, fixture, canonical mapping where exercised, cleanup/security observations, and a raw workflow/artifact reference. Upstream documentation or API shape alone is not counted as a live pass.
 
-- host OS/architecture;
-- SWE-ReX revision/version;
-- deployment/backend type and relevant runtime version;
-- exact fixture/command;
-- canonical request/result mapping;
-- wall-clock timing where relevant;
-- cleanup state;
-- security-policy preconditions;
-- raw evidence location or CI/run identifier.
+## Linux LocalDeployment
 
-Provider guarantees are recorded per backend. A passing Docker test does not establish Local, Remote, Modal, Fargate or Daytona security properties.
+GitHub-hosted Ubuntu 24.04 / Python 3.12 evidence demonstrated:
 
-## Campaign 1 — PR #866, workflow run 34654403144
+- one-shot execution with exit code `0`;
+- separate stdout/stderr markers;
+- provider file write/read round-trip;
+- timeout signaling with `CommandTimeoutError`;
+- direct synthetic environment projection is visible to the child process;
+- a sibling file outside the selected temporary Workspace is readable;
+- the canonical `SwerexExecutor -> LocalRuntime` bridge preserves canonical IDs, maps controlled failure/timeout, collects an Artifact into the canonical Workspace, and dispatches nothing for blocked environment or Workspace-traversal requests.
 
-Evaluated branch head: `461fbb5187108a8e97a0a2a9fa964429c807c2c6`  
-Pinned SWE-ReX revision: `5c995c365dfb1fd5bc56fda688be5d8538f9931f`  
-Package version built from that revision: `1.4.0`
+Interpretation: **functional trusted-host execution, not a sandbox**. The provider does not enforce the canonical Workspace boundary.
 
-### Linux LocalDeployment — functional pass, isolation rejection confirmed
+The reviewed `LocalRuntime.execute()` is `async` in signature but uses synchronous `subprocess.run(...)`. The provider call therefore blocks the event loop while the child runs; canonical in-flight cancellation cannot be treated as a reliable LocalRuntime kill guarantee. Child-process cleanup must not be inferred from parent timeout signaling.
 
-Environment:
+Representative raw evidence: workflow runs `34654403144` and `34658070981`, artifact `swe-rex-local-Linux`.
 
-- GitHub-hosted Ubuntu 24.04 runner;
-- Python 3.12.14;
-- Linux `6.17.0-1022-azure` x86_64.
+## Native Windows LocalDeployment
 
-Observed live evidence:
-
-- pinned SWE-ReX installed successfully;
-- `LocalDeployment` started and stopped successfully;
-- one-shot command returned exit code `0`;
-- stdout and stderr remained distinguishable;
-- an explicitly supplied synthetic environment canary was visible to the child process;
-- provider write/read round-trip succeeded;
-- a read of a sibling path **outside the selected temporary Workspace directory succeeded**;
-- a `0.05s` command timeout raised `CommandTimeoutError` after about `0.051s`.
-
-Interpretation:
-
-- Linux local execution semantics are useful and fast;
-- direct environment projection is demonstrably a credential exposure surface, validating the adapter's fail-closed default;
-- `LocalDeployment` provides no effective Workspace containment and remains rejected as a sandbox/high-isolation profile;
-- timeout signaling exists for this fixture, but child-process cleanup still requires explicit follow-up evidence.
-
-Raw evidence artifact: workflow run `34654403144`, artifact `swe-rex-local-Linux`.
-
-### Windows LocalDeployment — native local path fails at import
-
-Environment:
-
-- GitHub-hosted Windows Server 2025 runner;
-- Python 3.12.10.
-
-Installation of the exact pinned revision succeeded. Importing `swerex.deployment.local.LocalDeployment` then failed before any execution fixture could start:
+On GitHub-hosted Windows Server 2025 / Python 3.12 the exact revision installs, but importing `LocalDeployment` fails before execution:
 
 ```text
 AttributeError: module 'pexpect' has no attribute 'spawn'
 ```
 
-The failure originates while defining SWE-ReX `BashSession` in `swerex.runtime.local`, whose annotation references `pexpect.spawn`. The installed `pexpect` module on the native Windows runner does not expose that attribute.
+Interpretation: native Windows LocalDeployment is **not demonstrated/supported** at the evaluated revision. A Windows remote client is a separate profile and is not inferred from Linux evidence.
+
+Representative raw evidence: workflow run `34658070981`, artifact `swe-rex-local-Windows`.
+
+## Default DockerDeployment
+
+Workflow run `34658070981`, artifact `swe-rex-docker`, exercised a server image built from the exact reviewed revision with `pull="never"`.
+
+Observed raw runtime evidence:
+
+| Observation | Result |
+| --- | --- |
+| Core command semantics | pass |
+| Artifact round-trip | pass |
+| Synthetic env visible in the command | yes |
+| Synthetic env persisted to the next command | no |
+| Read outside intended provider Workspace (`/etc/hostname`) | **succeeded** |
+| Internet request to `http://example.com` | **allowed**, HTTP `200` |
+| Runtime port exposure | `0.0.0.0:<port>` and `[::]:<port>` |
+| Parent timeout | `CommandTimeoutError` |
+| Spawned child survives parent timeout | **yes** |
+| Startup | ~`0.78s` |
+| Stop | ~`0.22s` |
+| Test image size | `176,887,972` bytes (~177 MB) |
+| One resource sample | `38.26MiB / 15.61GiB`, `0.13%` CPU |
 
 Interpretation:
 
-- the reviewed revision does **not** demonstrate a working native Windows `LocalDeployment` path on this available Windows runner;
-- cross-platform value must not be claimed from package installation or upstream positioning alone;
-- a Windows client talking to a remote Linux SWE-ReX server remains a separate hypothesis and needs its own evidence;
-- no platform workaround should monkey-patch this upstream behavior into the canonical Executor path.
+- the pinned Docker path is functionally useful;
+- default DockerDeployment is **not** evidence of deny-by-default networking or Workspace containment;
+- parent timeout does not establish process-tree cleanup;
+- the default published control port requires an external exposure policy before production use.
 
-### DockerDeployment — first run exposed an upstream dependency packaging gap
+The same run exercised the canonical Docker bridge. Artifact collection, controlled failure, timeout mapping, canonical guards and canonical IDs behaved as expected, but the `echo` command failed because the evaluation fixture uploaded an empty host Workspace to a provider path that did not yet exist. This was a fixture defect, not a provider isolation result. The branch now explicitly creates `/tmp/issue861-canonical` before upload; that corrected bridge remains subject to the final current-head CI/live run before merge readiness.
 
-Both `docker` and `docker-network-none` fixtures installed the exact pinned SWE-ReX revision successfully but failed while importing `swerex.deployment.docker.DockerDeployment`:
+## Deny-egress Docker attempts
 
-```text
-ModuleNotFoundError: No module named 'aiohttp'
-```
+Two negative profiles were exercised:
 
-`DockerDeployment` imports `RemoteRuntime`, and `RemoteRuntime` imports `aiohttp`. At the reviewed revision the base SWE-ReX package metadata does not declare `aiohttp` among its installed dependencies.
+1. `DockerDeployment(..., docker_args=["--network=none"])`;
+2. Docker `--internal` network.
 
-Interpretation:
+Both remove/break the host-to-runtime HTTP path that SWE-ReX itself needs to reach the container server. The internal-network experiment reached startup timeout rather than yielding a working executor with denied Internet egress.
 
-- this is an operational/packaging defect, not evidence that Docker execution itself is broken;
-- campaign 2 explicitly installs `aiohttp` **only in the evaluation fixture** so Docker behavior can be measured;
-- the platform package remains dependency-free with respect to SWE-ReX;
-- any future supported integration must account for the effective dependency set rather than assuming the upstream base package is self-sufficient for remote-backed deployments.
+Interpretation: #861 did **not** demonstrate a functional deny-egress profile by applying Docker network flags directly to SWE-ReX `DockerDeployment`. Protected egress requires a separate network/proxy design outside the provider abstraction and fresh evidence. The known-negative internal-network experiment is therefore retained as historical evidence, not repeated in the normal evaluation workflow.
 
-## Current matrix
+## Remote loopback
 
-| Scenario | Adapter/static evidence | Live Linux | Live Windows-path | Live remote/container | Status |
-| --- | --- | --- | --- | --- | --- |
-| Canonical IDs preserved | Contract test added | adapter CI pending | native provider path not reached | pending | partial |
-| Provider IDs namespaced | Contract test added | adapter CI pending | native provider path not reached | pending | partial |
-| Success/stdout/stderr/exit mapping | Contract test added; upstream one-shot model inspected | Local: success/stdout/stderr verified | Local: import failure | Docker rerun pending | partial |
-| Controlled failure mapping | Contract test added | pending | Local: import failure | pending | partial |
-| Timeout | Contract test added | Local: `CommandTimeoutError` observed | Local: import failure | pending | partial |
-| In-flight cancellation | Adapter seam test added | pending | Local: import failure | pending | partial |
-| Child-process cleanup after timeout/cancel | none | pending | Local: import failure | pending | missing |
-| Provider crash/restart cleanup | none | pending | Local: import failure | pending | missing |
-| Missing Workspace rejection | Contract suite | provider Local has no such boundary | Local: import failure | pending | partial |
-| `../` traversal rejection | Contract suite | provider Local has no such boundary | Local: import failure | pending | partial |
-| Absolute/outside path read/write rejection | boundary design only | **outside sibling read succeeded** | Local: import failure | pending | confirms Local is not containment |
-| Symlink/junction escape | canonical #37 owns policy; provider interaction untested | pending | native fixture unavailable | pending | missing |
-| Artifact/file round-trip | Contract suite/fake client | Local write/read verified | Local: import failure | Docker rerun pending | partial |
-| Provider reports escaped Artifact | Adapter test added | adapter CI pending | adapter CI pending | adapter CI pending | partial |
-| Direct environment secret projection | rejected by adapter | provider Local canary visible | Local: import failure | Docker rerun pending | validates fail-closed adapter |
-| Scoped synthetic credential use | none | only broad provider env behavior measured | Local: import failure | pending | missing |
-| Credential enumeration/exfiltration | none | pending | pending | pending | missing |
-| Credential redaction/revocation cleanup | none | pending | pending | pending | missing |
-| Internet blocked | no uniform upstream claim accepted | not measured | not measured | `--network=none` rerun pending | missing |
-| Scoped Internet allow | no uniform upstream claim accepted | not measured | not measured | default Docker rerun pending | missing |
-| Loopback/private/link-local/metadata blocked | none | pending | pending | pending | missing |
-| DNS/redirect/IPv6 bypass cases | none | pending | pending | pending | missing |
-| Concurrent executions | fake client request-ref uniqueness | pending | pending | pending | partial |
-| Duplicate/retry behavior | static server limitation identified | N/A for local fixture | pending | pending | missing |
-| Local backend isolation | upstream source proves host LocalRuntime | **live outside-Workspace read confirms none** | native Local unavailable on runner | N/A | **rejected as sandbox** |
-| Docker/Podman isolation | implementation path verified statically | first import blocked by missing `aiohttp`; rerun pending | not exercised | rerun pending | partial |
-| Remote auth/transport | X-API-Key + HTTP behavior inspected | pending | remote-client hypothesis pending | pending | partial |
-| Resource/latency overhead | none | Local startup/stop near-zero in fixture | Local unavailable | pending | partial |
-| Reference Executor unaffected when SWE-ReX absent | PoC adds no runtime dependency | canonical CI pending | canonical CI pending | N/A | partial |
+Workflow run `34658070981`, artifact `swe-rex-remote-loopback`, started the exact `swerex-remote` server on `127.0.0.1`.
 
-## Required live fixture sequence
+Observed:
 
-### A. Linux local execution semantics
+- correct API key accepted;
+- wrong API key rejected (401 behavior); the wrong client's authenticated `/close` attempt is also rejected;
+- command stdout/stderr and exit semantics pass;
+- provider file round-trip passes;
+- four concurrent commands all pass;
+- a path outside the selected Workspace is readable;
+- server process cleanup succeeds;
+- raw auth token is not recorded in JSON evidence;
+- transport scheme is `http`;
+- startup was ~`0.63s`.
 
-Core one-shot execution/file/timeout semantics have now been demonstrated. Remaining local work:
+Interpretation: the remote API is functionally viable but is not a canonical Workspace or transport-security boundary. TLS/private-network protection and service identity remain external platform/deployment responsibilities.
 
-1. controlled non-zero exit mapping;
-2. child-process survival/cleanup after timeout;
-3. explicit interrupt/cancellation behavior;
-4. concurrent execution behavior;
-5. canonical adapter integration against a concrete client, if local mode remains useful as a trusted-host option.
+## Packaging and provenance evidence
 
-The result continues to label LocalDeployment as unsandboxed regardless of functional success.
+The reviewed base package imports `aiohttp` through `swerex.runtime.remote` but does not declare it in the base dependency set. Docker/remote evaluation jobs therefore install `aiohttp>=3.11,<4` explicitly while the platform baseline remains SWE-ReX-free.
 
-### B. Docker or Podman backend
+Host-side SWE-ReX pinning is not sufficient to establish Docker server provenance because DockerDeployment can start/install a separate server. Accepted Docker evidence therefore builds the server image from the exact evaluated revision and uses `pull="never"`; an unpinned fallback is not accepted as #861 evidence.
 
-Campaign 2 retries after explicitly installing the missing `aiohttp` remote-runtime dependency. Then run the canonical fixture plus:
+## Final matrix
 
-1. host filesystem read/write attempts outside the intended mount/materialization;
-2. process/container cleanup after timeout/cancel/crash;
-3. CPU/RAM limit behavior if configured;
-4. network deny/allow and bypass targets;
-5. synthetic secret delivery and exfiltration attempts;
-6. concurrent execution density and cold-start overhead.
+| Scenario | Evidence | #861 result |
+| --- | --- | --- |
+| Canonical IDs/provider-ID namespacing | Contract suite + live Local bridge | pass |
+| Canonical Workspace traversal guard | Contract suite + live bridge | pass at platform boundary |
+| Provider filesystem containment | Local/Remote/Docker outside reads | **not provided by SWE-ReX abstraction** |
+| Artifact collection | Contract suite + Local bridge; Docker raw round-trip | pass; Docker corrected bridge requires final current-head run |
+| Timeout mapping | Contract suite + Local/Docker evidence | pass for signaling |
+| In-flight cancellation / process-tree cleanup | adapter seam works; Local blocks in `subprocess.run`; Docker child survives timeout | **not a uniform provider guarantee** |
+| Direct secret/environment projection | adapter rejects; raw canary is visible if directly supplied | fail-closed platform policy retained |
+| Environment persistence | Docker synthetic canary follow-up | not persisted in exercised Docker command path |
+| Default Docker Internet egress | live request | **allowed** |
+| Functional deny-egress Docker profile | `network=none` + internal network | **not demonstrated** |
+| Native Windows Local | live Windows runner | **unavailable at evaluated revision** |
+| Remote auth | loopback correct/wrong key | pass |
+| Remote transport | loopback | HTTP; external protection required |
+| Remote concurrency | 4 concurrent commands | pass |
+| Reference Executor independent of SWE-ReX | dependency-free adapter + normal platform CI path | design satisfied; final current-head CI is merge gate |
 
-Record the exact container runtime, image digest and arguments.
+## Decision
 
-### C. Windows-path behavior
+The evidence is sufficient to decide #861 without pretending that all possible backend/security cases have been solved. SWE-ReX belongs, at most, behind the platform as an **experimental runtime/backend abstraction**. It does not qualify as a generic sandbox, native Windows-local provider, deny-egress provider, secret boundary, Workspace authority, or lifecycle/idempotency authority.
 
-Native `LocalDeployment` is currently blocked by the reviewed upstream implementation on the available Windows runner. Remaining Windows work therefore separates two questions:
-
-1. whether the native local runtime can be supported without carrying a platform-owned compatibility fork;
-2. whether a Windows-side SWE-ReX remote client can reliably target a supported Linux/container runtime while preserving canonical Windows Workspace/File semantics.
-
-Do not infer Windows support from Linux tests.
-
-### D. Remote server path
-
-Exercise a disposable remote/server instance through a protected test transport:
-
-1. authentication success/failure;
-2. canonical Workspace mapping on the remote host;
-3. duplicate/retry behavior under concurrent requests;
-4. timeout/cancellation/connection loss;
-5. server/runtime crash and restart cleanup;
-6. Artifact upload/download round-trip;
-7. secret handling without storing raw token in ordinary profile/evidence;
-8. transport exposure and TLS/private-network assumptions.
-
-## Promotion rule
-
-`experimental_only` remains binding until the live matrix demonstrates the supported profile(s) with reproducible evidence. Unsupported backends must stay explicitly unsupported rather than inheriting guarantees from another backend.
+A future promotion attempt must define one precise supported profile and rerun security/contract/live evidence against the then-current upstream revision. Unknown/unexercised cloud backends remain unknown rather than inheriting these results.
