@@ -1,0 +1,46 @@
+name: NVIDIA SkillSpector
+purpose: Optional static pre-install security evidence for third-party Skill review.
+status: approved
+integration_categories:
+  - optional adapter
+  - security review tooling
+  - pre-install evidence provider
+canonical_upstream: https://github.com/NVIDIA/SkillSpector
+pinned_revision: 69dcdfb74487d361ba4c811d088cfdea2ff3a9dc
+verified_license: Apache-2.0
+license_verification_date: 2026-09-12
+last_review_date: 2026-09-12
+platform_adapter_or_boundary: ai_multi_agent_platform.adapters.skillspector.SkillSpectorSecurityEvidenceProvider implements the platform-owned SecurityEvidenceProvider boundary; canonical Skill trust and Approval remain platform-owned.
+local_source_path: src/ai_multi_agent_platform/adapters/skillspector.py; providers/skillspector/
+source_origin_path: No upstream source is vendored. The production image copies the exact reviewed upstream pyproject.toml, README.md and src/ tree from a CI checkout at the pinned commit.
+modified_locally: false
+modification_summary: Platform-owned adapter, lock files and container recipe only; upstream source is not modified.
+required_notices:
+  - Preserve Apache-2.0 upstream license/notice obligations if upstream source is redistributed outside the transient build context.
+compatibility_constraints:
+  - Only SkillSpector 2.11.2 at the pinned revision is approved.
+  - Only static_no_llm_network_none is approved.
+  - LLM-assisted/provider-backed scan modes require a new evaluation and policy review.
+security_constraints:
+  - Candidate snapshots are local, immutable, digest-bound and read-only.
+  - Candidate code is never executed by the integration.
+  - Container networking is disabled.
+  - Linux capabilities are dropped and no-new-privileges is required.
+  - Provider credentials are not forwarded.
+  - Scanner output is advisory evidence only and cannot mutate canonical trust or Approval state.
+deployment_constraints:
+  - Requires Docker or Podman when the optional provider is enabled.
+  - Production image labels and dependency-set identity are verified before scanning.
+  - Historical evidence must remain readable if the provider is later removed.
+resource_constraints:
+  - Default scan timeout 120 seconds.
+  - Default memory limit 1 GiB.
+  - Default CPU limit 1.0 CPU.
+  - Default PID limit 256.
+  - Default tmpfs limit 64 MiB.
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: Explicit pin-update PR; reverify license and upstream revision, review dependency drift, rebuild the locked image, rerun the #800 deterministic corpus and #868 negative-path tests, then require full repository CI and SkillSpector evaluation workflow success.
+exit_replacement_strategy: Disable/unregister and remove the optional adapter/image package while retaining immutable historical SecurityEvidence. Replace with any implementation of the platform-owned SecurityEvidenceProvider; canonical Skill/Approval/Task/Run data requires no migration.
+adr: none required while SkillSpector remains a subordinate optional evidence provider.
+notes: See docs/upstream/SKILLSPECTOR_ADOPTION.md and docs/security/SKILLSPECTOR_SECURITY_EVIDENCE.md.
