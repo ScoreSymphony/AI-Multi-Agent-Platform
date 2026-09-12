@@ -3,19 +3,24 @@ from __future__ import annotations
 import json
 import runpy
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-REFERENCE_PATH = REPO_ROOT / "tests" / "evidence" / "issue_862" / "runtime_image_digests.json"
-VERIFIER_PATH = REPO_ROOT / "scripts" / "benchmarks" / "verify_issue862_storage_vps_capture.py"
+REFERENCE_PATH = (
+    REPO_ROOT / "tests" / "evidence" / "issue_862" / "runtime_image_digests.json"
+)
+VERIFIER_PATH = (
+    REPO_ROOT / "scripts" / "benchmarks" / "verify_issue862_storage_vps_capture.py"
+)
 
 
-def _reference() -> dict[str, object]:
+def _reference() -> dict[str, Any]:
     return json.loads(REFERENCE_PATH.read_text(encoding="utf-8"))
 
 
-def _write_image_identity(root: Path, backend: str, expected: dict[str, object]) -> None:
+def _write_image_identity(root: Path, backend: str, expected: dict[str, Any]) -> None:
     image = expected["image"]
     image_id = expected["image_id_on_ci_runner"]
     repo_digest = expected["repo_digest"]
@@ -45,9 +50,11 @@ def test_runtime_digest_reference_is_complete_and_blocks_tag_only_equivalence() 
     }
 
     for backend in reference["backends"].values():
+        image_repository = str(backend["image"]).split(":", 1)[0]
+        repo_digest = str(backend["repo_digest"])
         assert backend["image"]
-        assert str(backend["repo_digest"]).startswith(str(backend["image"]).split(":", 1)[0])
-        assert "@sha256:" in str(backend["repo_digest"])
+        assert repo_digest.startswith(image_repository)
+        assert "@sha256:" in repo_digest
 
 
 def test_runtime_identity_verifier_accepts_authoritative_ci_digests(tmp_path: Path) -> None:
