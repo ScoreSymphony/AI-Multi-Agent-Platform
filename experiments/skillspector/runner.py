@@ -12,9 +12,9 @@ import os
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Mapping, Sequence
 from hashlib import sha256
 from pathlib import Path
-from typing import Mapping, Sequence
 
 PINNED_VERSION = "2.11.2"
 PINNED_REVISION = "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc"
