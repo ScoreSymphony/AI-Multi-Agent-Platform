@@ -1,6 +1,14 @@
 {
   "issue": 862,
   "captured_at": "2026-09-12",
+  "runtime_evidence_runs": {
+    "common_storage_contract_restart_auth_and_garage_snapshot": 34697375096,
+    "forward_upgrade": 34697375110,
+    "tls": 34697375129,
+    "rustfs_multinode": 34697375081,
+    "garage_multinode": 34697375089,
+    "clean_store_disaster_recovery": 34697375094
+  },
   "platform_invariants": {
     "metadata_authority": "platform_metadata_db",
     "content_store_role": "opaque_blob_content_only",
@@ -41,19 +49,19 @@
       "proposed_classification": "experimental_only",
       "classification_is_final": false,
       "known_s3_evidence": "Official compatibility material plus live platform evidence covers the required object subset, ranged reads, ListObjectsV2, concurrent integrity and the canonical FileProvider seam. ETag remains diagnostic only.",
+      "rollback_policy": "Version-specific rollback floors apply upstream; universal binary downgrade safety is not assumed. Recovery must follow the documented version-compatible rollback/recovery path.",
       "verified_evidence": [
         "required S3 subset and 8-way concurrent SHA-256 round trips",
         "canonical FileProvider conformance against the live backend",
         "invalid credential rejection",
         "acknowledged object survives single-process restart",
         "1.0.0-rc.5 to 1.0.0-rc.6 in-place upgrade preserves acknowledged SHA-256 content",
-        "four-node MNMD survives one-node loss with verified reads and new writes"
+        "four-node MNMD survives one-node loss with verified reads and new writes",
+        "certificate-verified native HTTPS S3 subset and authentication rejection",
+        "logical blob backup survives complete original container and data-volume loss and restores into a verified-empty replacement store"
       ],
       "open_evidence": [
-        "clean-store backup/restore campaign",
-        "certificate-verified TLS campaign",
         "target VPS resource measurements",
-        "explicit rollback/downgrade support statement",
         "release-maturity review before any promotion beyond experimental_only"
       ]
     },
@@ -70,20 +78,20 @@
       "classification_is_final": false,
       "license_boundary": "Treat Garage as an optional separately deployed network service. The platform adapter and canonical contracts stay project-owned; operators remain responsible for obligations that apply to the Garage program or modified Garage deployments.",
       "known_s3_evidence": "Live platform evidence covers the required object subset, ranged reads, ListObjectsV2, concurrent integrity and the canonical FileProvider seam.",
+      "rollback_policy": "A generic new-version-to-old-binary downgrade is not claimed. Recovery uses the documented metadata snapshot/repair and backup paths where rollback is required.",
       "verified_evidence": [
         "required S3 subset and 8-way concurrent SHA-256 round trips",
         "canonical FileProvider conformance against the live backend",
         "invalid credential rejection",
         "acknowledged object survives single-process restart",
         "v2.2.0 to v2.3.0 in-place upgrade preserves acknowledged SHA-256 content",
-        "certificate-verified HTTPS S3 subset through the documented reverse-proxy deployment boundary"
+        "certificate-verified HTTPS S3 subset through the documented reverse-proxy deployment boundary",
+        "three-node replication-factor-3 consistent-mode cluster survives one-node failure after product failure detection with verified reads and new writes",
+        "native metadata snapshot restore follows the documented SQLite replacement plus full table-repair procedure",
+        "logical blob backup survives complete original container and data-volume loss and restores into a verified-empty replacement store"
       ],
       "open_evidence": [
-        "three-node replication-factor-3 one-node failure campaign after product failure detection",
-        "native metadata snapshot restore campaign",
-        "clean-store backup/restore campaign",
-        "target VPS resource measurements",
-        "explicit rollback/downgrade support statement"
+        "target VPS resource measurements"
       ]
     },
     "seaweedfs": {
@@ -98,16 +106,17 @@
       "proposed_classification": "supported_optional",
       "classification_is_final": false,
       "known_s3_evidence": "SeaweedFS exposes S3 through its gateway/filer stack; live platform evidence covers the same required S3 and FileProvider surface used for the candidates.",
+      "rollback_policy": "Forward upgrade is verified, but generic binary downgrade compatibility is not assumed without version-specific upstream support.",
       "verified_evidence": [
         "required S3 subset and 8-way concurrent SHA-256 round trips",
         "canonical FileProvider conformance against the live backend",
         "invalid credential rejection",
         "acknowledged object survives single-process restart",
-        "4.45 to 4.46 in-place upgrade preserves acknowledged SHA-256 content"
+        "4.45 to 4.46 in-place upgrade preserves acknowledged SHA-256 content",
+        "certificate-verified native HTTPS S3 subset and authentication rejection",
+        "logical blob backup survives complete original container and data-volume loss and restores into a verified-empty replacement store"
       ],
       "open_evidence": [
-        "clean-store backup/restore campaign",
-        "certificate-verified TLS campaign",
         "same target VPS resource campaign used for candidates"
       ]
     }
@@ -119,6 +128,7 @@
   },
   "gate": {
     "final_classification_requires_runtime_evidence": true,
+    "runtime_evidence_complete_in_ci": true,
     "final_classification_requires_target_vps_measurement": true,
     "setup_wizard_recommendation_requires_issue": 799,
     "issue_799_currently_blocks_final_wizard_integration": true,
