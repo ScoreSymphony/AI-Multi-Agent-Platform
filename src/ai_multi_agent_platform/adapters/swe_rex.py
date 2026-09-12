@@ -378,9 +378,7 @@ class SwerexExecutor(Executor):
         if status is not ExecutionStatus.SUCCEEDED:
             category = self._error_category(backend)
             message = (
-                backend.error_message
-                or backend.stderr
-                or f"SWE-ReX execution {backend.status}"
+                backend.error_message or backend.stderr or f"SWE-ReX execution {backend.status}"
             )
             details: dict[str, JsonValue] = {}
             if backend.error_code is not None:
