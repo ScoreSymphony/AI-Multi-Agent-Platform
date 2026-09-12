@@ -53,7 +53,7 @@ telemetry.
 
 ## Regression coverage
 
-`tests/test_issue_591_strict_external_profiles.py` proves:
+`tests/integration/security/test_strict_external_profiles.py` proves:
 
 - profileless external targets are `UNKNOWN_BLOCKED` by the durable runtime default;
 - the public single-node composition inherits the strict rule;
