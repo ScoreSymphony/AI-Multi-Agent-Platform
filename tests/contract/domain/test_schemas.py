@@ -6,7 +6,7 @@ import pytest
 from jsonschema import Draft202012Validator, ValidationError
 from referencing import Registry, Resource
 
-SCHEMA_DIR = Path(__file__).parents[1] / "schemas" / "domain"
+SCHEMA_DIR = Path(__file__).parents[3] / "schemas" / "domain"
 SCHEMA_NAMES = ("common", "task", "run", "event", "event.v2")
 
 
