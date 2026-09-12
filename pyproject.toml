@@ -46,6 +46,7 @@ platform-reference-host-campaign = "ai_multi_agent_platform.benchmarking.referen
 platform-reference-host-reproducibility = "ai_multi_agent_platform.benchmarking.reference_host_reproducibility_cli:main"
 platform-reference-host-regression = "ai_multi_agent_platform.benchmarking.reference_host_regression_cli:main"
 platform-reference-host-absolute-budget = "ai_multi_agent_platform.benchmarking.reference_host_absolute_budget_cli:main"
+platform-inference-backend-evaluation = "ai_multi_agent_platform.benchmarking.inference_backend_evaluation_cli:main"
 platform-release = "ai_multi_agent_platform.release.cli:main"
 
 [project.optional-dependencies]

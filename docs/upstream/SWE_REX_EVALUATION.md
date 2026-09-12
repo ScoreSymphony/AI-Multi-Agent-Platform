@@ -123,9 +123,9 @@ The appropriate scope is therefore:
 
 ## Product/discovery implication
 
-#799 should map the #861 result to `experimental/evaluate` and may surface SWE-ReX only in Advanced/Custom discovery with backend-specific capability/risk metadata. It must not advertise generic sandboxing, native Windows-local support, deny-by-default egress, provider-owned Workspace security, or uniform cancellation/cleanup.
+#799 is completed. Its candidate taxonomy maps the #861 result to `experimental/evaluate`, so SWE-ReX may be surfaced only in Advanced/Custom discovery with backend-specific capability/risk metadata. It must not advertise generic sandboxing, native Windows-local support, deny-by-default egress, provider-owned Workspace security, or uniform cancellation/cleanup.
 
-#798 remains the separate high-isolation-provider evaluation and should not inherit or be pre-empted by #861.
+#798 is completed as the source-backed architecture/security/adapter evaluation for the separate high-isolation Agent-Sandbox candidate. Production-shaped runtime evidence and Agent-Sandbox's final support classification are owned by #829. Closing the #861 comparison dependency does not upgrade Agent-Sandbox to a proven production isolation profile and does not substitute for #829's decision.
 
 ## Re-evaluation rule
 
