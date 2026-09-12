@@ -16,7 +16,7 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal
 
 EVALUATED_REVISION = "d1b7ac007debcb1ba8de91c76afb49bee90d096a"
 TERMINAL_SCENARIO_STATUSES = frozenset({"pass", "fail", "unsupported"})
@@ -68,7 +68,7 @@ REQUIRED_ENVIRONMENT_FIELDS: tuple[str, ...] = (
 _NUMERIC_ENVIRONMENT_FIELDS = frozenset({"vcpu", "memory_gib", "disk_gib"})
 _DIGEST_ENVIRONMENT_FIELDS = frozenset({"agent_sandbox_image_digest", "sandbox_image_digest"})
 
-Status: TypeAlias = Literal["pass", "fail", "not_run"]
+type Status = Literal["pass", "fail", "not_run"]
 
 
 @dataclass(frozen=True, slots=True)
