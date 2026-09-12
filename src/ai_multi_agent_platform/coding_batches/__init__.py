@@ -28,6 +28,7 @@ from .service import (
     InMemoryCodingBatchStore,
     deterministic_branch_ref,
 )
+from .sqlite_store import SqliteCodingBatchStore
 
 __all__ = [
     "AuthorizedCodingBatchIntegration",
@@ -49,6 +50,7 @@ __all__ = [
     "OverlapDecision",
     "OverlapKind",
     "RequiredCheck",
+    "SqliteCodingBatchStore",
     "VerificationEvidence",
     "WorkstreamProvenance",
     "WorkstreamResult",
