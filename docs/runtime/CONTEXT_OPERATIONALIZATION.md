@@ -142,7 +142,7 @@ new binding. Existing correct bindings are preserved unchanged.
 
 The combined #650/#680 operational regression evidence is:
 
-- `tests/test_issue_650_context_operationalization.py`
+- `tests/integration/context/test_operational_context.py`
   - optional vs mandatory source unavailability;
   - server-owned Context-window requirement merging;
   - external secret-reference egress denial;
