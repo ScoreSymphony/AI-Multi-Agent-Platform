@@ -33,13 +33,14 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install platform and pinned LiteLLM
+      - name: Install platform and pinned LiteLLM proxy
         shell: bash
         run: |
           python -m venv .venv
           source .venv/bin/activate
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,litellm]"
+          python -m pip install "litellm[proxy]==${LITELLM_VERSION}"
           python - <<'PY'
           from importlib.metadata import version
           assert version("litellm") == "1.99.0", version("litellm")
