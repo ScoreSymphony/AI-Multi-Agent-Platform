@@ -98,7 +98,7 @@ def test_live_bifrost_revalidates_redirect_target_before_connection() -> None:
 
 def test_ssrf_guard_classifier_does_not_accept_generic_request_failures() -> None:
     assert _is_ssrf_guard_rejection(
-        'failed to fetch document: blocked connection to non-public address 127.0.0.1'
+        "failed to fetch document: blocked connection to non-public address 127.0.0.1"
     )
     assert not _is_ssrf_guard_rejection("invalid request body")
     assert not _is_ssrf_guard_rejection("dial tcp: network is unreachable")
