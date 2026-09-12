@@ -87,7 +87,9 @@ def _bifrost_file_url_request(
     if api_key_env:
         api_key = os.getenv(api_key_env)
         if not api_key:
-            raise AssertionError(f"configured API key environment variable {api_key_env!r} is empty")
+            raise AssertionError(
+                f"configured API key environment variable {api_key_env!r} is empty"
+            )
         headers["Authorization"] = f"Bearer {api_key}"
 
     request = urlrequest.Request(
