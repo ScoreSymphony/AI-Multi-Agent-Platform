@@ -19,8 +19,7 @@ from ai_multi_agent_platform.agents import (
     InMemoryAgentRepository,
     InstructionSource,
 )
-from ai_multi_agent_platform.capabilities import CapabilitySpec
-from ai_multi_agent_platform.contracts import HealthStatus, OperationContext
+from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.models import ModelLocation, RoutingRequirements
 from ai_multi_agent_platform.planning.models import (
@@ -119,13 +118,8 @@ def test_agent_capability_maximum_version_is_exclusive_like_runtime() -> None:
             ),
         ),
     )
-    matcher = AgentResolver(
-        repository,
-        matcher=None,
-        capability_registry=None,
-    )
-    # Without a registry the range-overlap path must still preserve the exclusive maximum.
-    result = matcher.resolve(
+
+    result = AgentResolver(repository).resolve(
         AgentMatchingRequirements(
             exact_agent=revision,
             required_capabilities=(
