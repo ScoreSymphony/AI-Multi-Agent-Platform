@@ -27,12 +27,15 @@ from .service import (
     InMemoryCodingBatchStore,
     deterministic_branch_ref,
 )
+from .authorization import AuthorizedCodingBatchIntegration, CodingBatchAuthorizationContext
 
 __all__ = [
+    "AuthorizedCodingBatchIntegration",
     "BatchAggregationPolicy",
     "CanonicalWorkstreamMaterializer",
     "CheckState",
     "CodingBatch",
+    "CodingBatchAuthorizationContext",
     "CodingBatchCoordinator",
     "CodingBatchStore",
     "CodingWorkItem",
