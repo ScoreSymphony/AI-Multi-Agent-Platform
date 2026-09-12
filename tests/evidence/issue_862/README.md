@@ -6,12 +6,12 @@ This directory contains the reproducible evidence harness for the RustFS / Garag
 
 The evaluation deliberately separates four evidence layers:
 
-1. **Source/revision evidence** — exact upstream refs, commits, licenses, known compatibility limits.
-2. **CI live-service evidence** — pinned containers exercised through the same S3 subset, SHA-256 checks, concurrency workload and acknowledged-object restart recovery.
-3. **Deployment evidence** — backup/restore, upgrade/rollback behavior, TLS/auth deployment and multi-node partial failure using deployment-shaped storage/layouts.
-4. **VPS evidence** — measured CPU, RSS, disk overhead and operational behavior on the actual target VPS class.
+1. **Source/revision evidence** — exact upstream refs, commits, licenses and known compatibility limits.
+2. **CI live-service evidence** — pinned containers exercised through the same S3 subset, SHA-256 checks, canonical `FileProvider` conformance, authentication rejection, concurrency and acknowledged-object restart recovery.
+3. **Deployment evidence** — clean-store backup/restore, forward upgrade plus explicit rollback limits, TLS/auth deployment and multi-node partial-failure scenarios using deployment-shaped layouts.
+4. **VPS evidence** — measured CPU, memory, disk footprint and operational behavior on the actual target VPS environment.
 
-A GitHub-hosted runner can satisfy layer 2 and can provide useful diagnostic resource observations, but its resource numbers MUST NOT be promoted to VPS sizing evidence.
+Layers 2 and 3 are complete in CI. GitHub-hosted runner resource observations remain diagnostic only and MUST NOT be promoted to VPS sizing evidence. Layer 4 is the remaining technical acceptance measurement.
 
 ## Canonical boundary
 
@@ -21,13 +21,13 @@ The current object-operation subset is intentionally small:
 
 - `PutObject`
 - `HeadObject`
-- `GetObject`, including a ranged read
+- `GetObject`, including ranged reads
 - `ListObjectsV2` for repair/orphan reconciliation
 - `DeleteObject`
 
-Multipart upload is conditional on a future adapter actually selecting a multipart large-object path. The current canonical platform contract does not require ACL, bucket versioning, Object Lock or provider lifecycle policy support.
+Multipart upload is conditional on an adapter actually selecting a multipart large-object path. The canonical platform contract does not require ACLs, bucket versioning, Object Lock, provider lifecycle policies or ETag checksum semantics.
 
-## Local probe
+## Local probes
 
 Export synthetic or deployment-scoped credentials through the environment; do not write them to evidence files:
 
@@ -70,27 +70,53 @@ python tests/evidence/issue_862/s3_restart_probe.py verify \
 
 The verify phase recomputes the deterministic expected payload, validates SHA-256 after restart and deletes the sentinel only after successful verification.
 
-## CI campaign
+## CI campaigns
 
-`.github/workflows/issue-862-storage-evidence.yml` uses the same probe for:
+The issue-specific workflows cover:
 
-- RustFS `rustfs/rustfs:1.0.0-rc.6`;
-- Garage `dxflrs/garage:v2.3.0`;
-- SeaweedFS `chrislusf/seaweedfs:4.46` as the comparison baseline.
+- the common S3/FileProvider/auth/restart contract for RustFS `1.0.0-rc.6`, Garage `v2.3.0` and SeaweedFS `4.46`;
+- pinned forward upgrades from RustFS `rc.5`, Garage `v2.2.0` and SeaweedFS `4.45`;
+- certificate-verified HTTPS through each backend's intended deployment boundary;
+- RustFS four-node MNMD one-node failure;
+- Garage three-node / three-zone replication-factor-3 one-node failure in default consistent mode;
+- destructive clean-store logical blob backup/restore for all three backends;
+- Garage's documented native SQLite metadata snapshot/restore plus table repair.
 
-RustFS source review also tracks the newer `1.0.0-rc.6-preview.1` label. The preview and published `1.0.0-rc.6` runtime tag resolve to the same reviewed commit; the preview tag itself intentionally has no published Docker image.
+The authoritative passing run IDs are recorded in `storage_backends.json` and `docs/research/issue-862-object-storage-evaluation.md`. Synthetic credentials are generated only at runtime, masked in Actions output and excluded from evidence JSON.
 
-Each CI matrix leg uploads backend-specific evidence files containing the pinned image identity, S3 subset result, SHA-256 values, timings, post-workload Docker stats and both sides of the restart check. Synthetic credentials are passed only at runtime and are not serialized into those evidence files.
+## #799 reconciliation
 
-## Remaining gates before a final classification
+#799 is complete and merged into `main`. The #862 branch includes that canonical component discovery/profile contract. The evidence mapping is regression-tested against the actual `ComponentLifecycle` enum:
 
-A CI subset pass is necessary but not sufficient for `supported_optional`. The final backend decision still requires:
+- `experimental_only` -> `ComponentLifecycle.EXPERIMENTAL`
+- `supported_optional` -> `ComponentLifecycle.SUPPORTED`
 
-- backend-appropriate backup **and verified restore** evidence;
-- upgrade evidence and an explicit statement about whether rollback/downgrade is supported;
-- TLS/auth deployment evidence with credentials supplied through the platform secret boundary;
-- multi-node partial-failure evidence for backends proposed for distributed deployment;
-- measurements on the target VPS class;
-- reconciliation with #799 before any setup-wizard recommendation is encoded.
+The mapping does not make an object-store product canonical, and credentials remain outside ordinary setup/profile persistence.
 
-Until those gates pass, classifications in `storage_backends.json` remain provisional.
+## Target-VPS capture
+
+Run the prepared campaign on the actual target Linux VPS:
+
+```bash
+scripts/benchmarks/run_issue862_storage_vps_capture.sh
+```
+
+The script compares local filesystem, RustFS, Garage and SeaweedFS with the same larger workload, records host and image identity, idle/active resource samples, disk usage and workload timings, then creates a SHA-256 manifest and evidence archive. It refuses `GITHUB_ACTIONS=true` so hosted-runner numbers cannot be mislabeled as target-VPS evidence.
+
+It also invokes:
+
+```bash
+scripts/benchmarks/summarize_issue862_storage_vps_capture.py artifacts/issue862-storage-vps
+```
+
+The summarizer emits `storage-vps-summary.json` and `storage-vps-summary.md` while retaining explicit comparability guardrails. In particular, local-process RSS is not presented as equivalent to resident object-store daemon memory, and residual data-root bytes are not presented as storage amplification.
+
+## Remaining gate before final classification
+
+All reproducible CI-backed storage/deployment gates and the #799 reconciliation are complete. Final classifications remain provisional only until:
+
+- the target-VPS campaign is executed and its evidence retained;
+- classifications are finalized from those measurements; and
+- normal repository CI and required checks are green on the final head.
+
+RustFS may validly finalize as `experimental_only`; closing the evaluation does not require waiting for a stable RustFS release if the evidence supports retaining that classification.
