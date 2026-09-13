@@ -155,3 +155,8 @@ replace_exact(
     '"tests/test_issue_384_control_plane_authorization.py::"',
     '"tests/integration/security/test_coordination_control_plane_authorization.py::"',
 )
+replace_exact(
+    "src/ai_multi_agent_platform/conformance/optional_profiles.py",
+    '"tests/test_issue_87_cross_org_authorization.py::"',
+    '"tests/integration/security/test_cross_organization_authorization.py::"',
+)
