@@ -74,7 +74,7 @@ class CompensatingSqliteWorkspaceProvider(
     """Restart-safe reference provider with durable guarded compensation."""
 
     async def compensate_workspace(self, workspace_id: str) -> Workspace:
-        async with self._persistence_lock:
+        async with self._persistence_boundary():
             checkpoint = self._checkpoint()
             workspace = await CompensatingLocalWorkspaceProvider.compensate_workspace(
                 self,
