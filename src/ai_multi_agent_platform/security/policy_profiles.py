@@ -615,7 +615,7 @@ class AuthorizationPolicyProfileService:
         self._repository = repository
         self._authorization = authorization
 
-    def _resolve_create_profile_id(
+    async def _resolve_create_profile_id(
         self,
         policy_profile_id: str | None,
         context: AuthorizationPolicyProfileCallContext,
@@ -625,7 +625,7 @@ class AuthorizationPolicyProfileService:
         if context.approval_id is None:
             return new_id("authorization_policy_profile")
 
-        approval = self._authorization.approvals.get(context.approval_id)
+        approval = await self._authorization.runtime_approvals.get(context.approval_id)
         expected_prefix = f"{approval.resource_id}@create:sha256:"
         if (
             approval.requester_ref != context.actor_ref
@@ -652,7 +652,7 @@ class AuthorizationPolicyProfileService:
         team_id: str | None = None,
         policy_profile_id: str | None = None,
     ) -> AuthorizationPolicyProfileDefinition:
-        profile_id = self._resolve_create_profile_id(policy_profile_id, context)
+        profile_id = await self._resolve_create_profile_id(policy_profile_id, context)
         definition = AuthorizationPolicyProfileDefinition(
             policy_profile_id=profile_id,
             owner_ref=owner_ref,
