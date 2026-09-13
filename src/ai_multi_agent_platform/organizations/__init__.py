@@ -1,5 +1,6 @@
 """Organization, team, membership, invitation and ownership domain."""
 
+from .async_sqlite import SqliteOrganizationRepository
 from .authorization import MembershipAuthorizationProvider
 from .file_ownership import OrganizationOwnershipFileProvider, with_organization_file_ownership
 from .models import (
@@ -19,7 +20,6 @@ from .models import (
 )
 from .repository import InMemoryOrganizationRepository, OrganizationRepository
 from .service import OrganizationService
-from .sqlite import SqliteOrganizationRepository
 
 __all__ = [
     "ExternalGroupMapping",
