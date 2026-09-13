@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 
 from ai_multi_agent_platform.capabilities.provider import CapabilityToolProvider
@@ -40,6 +40,7 @@ from .mcp_tasks import (
     binding_for_snapshot,
     mark_cancellation_requested,
     mark_cancellation_result,
+    mark_input_requests_responded,
     observe_snapshot,
     validate_binding_for_invocation,
 )
@@ -366,6 +367,15 @@ class MCPToolProvider(CapabilityToolProvider):
                 current = await self._task_binding_store.save(candidate)
                 self._active_task_bindings[invocation.invocation_id] = current
 
+                # The binding store is the monotonic external-observation authority. If it retained
+                # a newer observation, this poll is stale and must never drive terminal handling.
+                if (
+                    current.latest_observed_at != snapshot.last_updated_at
+                    or current.latest_status is not snapshot.status
+                ):
+                    snapshot = None
+                    continue
+
                 if snapshot.status is MCPTaskStatus.COMPLETED:
                     output = self._normalize_completed_task_result(snapshot.result, current)
                     return ToolResult(
@@ -401,29 +411,49 @@ class MCPToolProvider(CapabilityToolProvider):
                     )
 
                 if snapshot.status is MCPTaskStatus.INPUT_REQUIRED:
-                    if self._task_input_handler is None:
-                        await self._cancel_bound_task(client, invocation, current)
-                        raise ContractError(
-                            ErrorCode.UNSUPPORTED_CAPABILITY,
-                            "MCP task requires interactive input but no governed input handler is configured",
-                            provider_id=self.descriptor.provider_id,
-                            details={"mcp_task_input_required": True},
-                            adapter_metadata=binding_adapter_metadata(
-                                self._active_task_bindings[invocation.invocation_id]
-                            ),
-                        )
-                    responses = await self._task_input_handler(invocation, snapshot)
-                    if not responses:
-                        await self._cancel_bound_task(client, invocation, current)
-                        raise ContractError(
-                            ErrorCode.CANCELLED,
-                            "MCP task input handler declined the external input request",
-                            provider_id=self.descriptor.provider_id,
-                            adapter_metadata=binding_adapter_metadata(
-                                self._active_task_bindings[invocation.invocation_id]
-                            ),
-                        )
-                    await client.update_task(current.external_task_id, responses)
+                    requests = snapshot.input_requests or {}
+                    outstanding = {
+                        key: value
+                        for key, value in requests.items()
+                        if key not in current.responded_input_keys
+                    }
+                    if outstanding:
+                        if self._task_input_handler is None:
+                            await self._cancel_bound_task(client, invocation, current)
+                            raise ContractError(
+                                ErrorCode.UNSUPPORTED_CAPABILITY,
+                                "MCP task requires interactive input but no governed input handler is configured",
+                                provider_id=self.descriptor.provider_id,
+                                details={"mcp_task_input_required": True},
+                                adapter_metadata=binding_adapter_metadata(
+                                    self._active_task_bindings[invocation.invocation_id]
+                                ),
+                            )
+                        handler_snapshot = replace(snapshot, input_requests=outstanding)
+                        responses = await self._task_input_handler(invocation, handler_snapshot)
+                        if not responses:
+                            await self._cancel_bound_task(client, invocation, current)
+                            raise ContractError(
+                                ErrorCode.CANCELLED,
+                                "MCP task input handler declined the external input request",
+                                provider_id=self.descriptor.provider_id,
+                                adapter_metadata=binding_adapter_metadata(
+                                    self._active_task_bindings[invocation.invocation_id]
+                                ),
+                            )
+                        unknown_keys = set(responses) - set(outstanding)
+                        if unknown_keys:
+                            await self._cancel_bound_task(client, invocation, current)
+                            raise ContractError(
+                                ErrorCode.CONTRACT_VIOLATION,
+                                "MCP task input handler responded to unknown request keys",
+                                provider_id=self.descriptor.provider_id,
+                                details={"unknown_input_response_keys": sorted(unknown_keys)},
+                            )
+                        await client.update_task(current.external_task_id, responses)
+                        current = mark_input_requests_responded(current, tuple(responses))
+                        current = await self._task_binding_store.save(current)
+                        self._active_task_bindings[invocation.invocation_id] = current
 
                 interval_ms = (
                     snapshot.poll_interval_ms
