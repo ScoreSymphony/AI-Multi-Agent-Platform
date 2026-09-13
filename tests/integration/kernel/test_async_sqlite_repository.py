@@ -40,6 +40,19 @@ class _SlowCommitRepository(SqliteKernelRepository):
         return super()._commit_sync(**kwargs)
 
 
+class _BlockingCommitRepository(SqliteKernelRepository):
+    def __init__(self, path: str | Path) -> None:
+        self.commit_started = threading.Event()
+        self.release_commits = threading.Event()
+        super().__init__(path)
+
+    def _commit_sync(self, **kwargs: Any) -> Any:
+        self.commit_started.set()
+        if not self.release_commits.wait(timeout=2):
+            raise TimeoutError("test commit release timed out")
+        return super()._commit_sync(**kwargs)
+
+
 class _BusyRepository(SqliteKernelRepository):
     def _revision_sync(self, stream_id: str) -> int:
         del stream_id
@@ -113,6 +126,71 @@ def test_sqlite_kernel_cancellation_waits_for_transaction_boundary(tmp_path: Pat
         recovered = SqliteKernelRepository(database)
         assert await recovered.revision(stream_id) == 1
         assert await recovered.read_events(stream_id) == (event,)
+
+    asyncio.run(scenario())
+
+
+def test_sqlite_kernel_repeated_cancellation_keeps_transaction_guarded(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        database = tmp_path / "kernel.sqlite3"
+        repository = _BlockingCommitRepository(database)
+        stream_id = new_id("task")
+        event = _event(stream_id)
+        pending = asyncio.create_task(
+            repository.commit(
+                stream_id=stream_id,
+                expected_revision=0,
+                events=(event,),
+            )
+        )
+
+        assert await asyncio.to_thread(repository.commit_started.wait, 1)
+        pending.cancel()
+        await asyncio.sleep(0)
+        pending.cancel()
+        await asyncio.sleep(0)
+
+        # Repeated cancellation must not release repository synchronization while the
+        # underlying to_thread transaction is still blocked and cannot itself be cancelled.
+        assert not pending.done()
+
+        repository.release_commits.set()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+
+        recovered = SqliteKernelRepository(database)
+        assert await recovered.revision(stream_id) == 1
+        assert await recovered.read_events(stream_id) == (event,)
+
+    asyncio.run(scenario())
+
+
+def test_sqlite_kernel_waiting_writers_do_not_starve_reads(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        repository = _BlockingCommitRepository(tmp_path / "kernel.sqlite3")
+        streams = tuple(new_id("task") for _ in range(5))
+        writes = tuple(
+            asyncio.create_task(
+                repository.commit(
+                    stream_id=stream_id,
+                    expected_revision=0,
+                    events=(_event(stream_id),),
+                )
+            )
+            for stream_id in streams
+        )
+
+        assert await asyncio.to_thread(repository.commit_started.wait, 1)
+        read = asyncio.create_task(repository.revision(new_id("task")))
+        try:
+            done, _ = await asyncio.wait({read}, timeout=1.0)
+            assert read in done
+            assert read.result() == 0
+        finally:
+            repository.release_commits.set()
+            await asyncio.gather(*writes)
+            if not read.done():
+                await read
 
     asyncio.run(scenario())
 

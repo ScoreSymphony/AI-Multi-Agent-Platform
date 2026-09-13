@@ -36,10 +36,13 @@ class AsyncSqliteOffload:
         while the caller assumes the database operation has already stopped.
         """
 
-        async with self._slots:
-            if write:
-                async with self._write_lock:
+        if write:
+            # Waiting writers must not consume the shared offload capacity. SQLite WAL can
+            # serve reads through separate connections while one serialized write is active.
+            async with self._write_lock:
+                async with self._slots:
                     return await _run_to_transaction_boundary(operation)
+        async with self._slots:
             return await _run_to_transaction_boundary(operation)
 
 
@@ -48,8 +51,17 @@ async def _run_to_transaction_boundary[T](operation: Callable[[], T]) -> T:
     try:
         return await asyncio.shield(worker)
     except asyncio.CancelledError:
+        # A Task may be cancelled repeatedly (for example timeout followed by disconnect).
+        # Keep shielding the worker until the synchronous transaction has actually settled;
+        # releasing repository locks/semaphore capacity earlier would let another operation
+        # overlap a still-running SQLite transaction in the worker thread.
+        while not worker.done():
+            try:
+                await asyncio.shield(worker)
+            except asyncio.CancelledError:
+                continue
         try:
-            await worker
+            worker.result()
         except Exception:
             # The caller is already cancelled. Waiting here is solely to settle the
             # database transaction before cancellation crosses the repository boundary.
