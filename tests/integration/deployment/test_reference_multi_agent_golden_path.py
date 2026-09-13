@@ -317,7 +317,7 @@ def test_public_single_node_runs_reference_multi_agent_golden_path_to_completion
 
         completed_task = await deployment.kernel.get_task(task.task_id)
         assert completed_task.status is TaskStatus.SUCCEEDED
-        state = deployment.coordination.get_plan(activated.activation_plan_id)
+        state = deployment.coordination_repository.get_plan(activated.activation_plan_id)
         assert len(state.steps) == 4
         assert all(step.status is StepStatus.SUCCEEDED for step in state.steps)
 
