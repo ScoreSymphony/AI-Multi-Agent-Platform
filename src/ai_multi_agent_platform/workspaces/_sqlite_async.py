@@ -49,10 +49,12 @@ async def _run_to_transaction_boundary[T](operation: Callable[[], T]) -> T:
                 await asyncio.shield(worker)
             except asyncio.CancelledError:
                 continue
-        try:
-            worker.result()
-        except Exception:
-            pass
+        # If the transaction itself failed, preserve that failure so callers can perform
+        # adapter-specific rollback before cancellation semantics would otherwise hide it.
+        # Cancellation remains authoritative only after a successful transaction boundary.
+        failure = worker.exception()
+        if failure is not None:
+            raise failure
         raise
 
 
