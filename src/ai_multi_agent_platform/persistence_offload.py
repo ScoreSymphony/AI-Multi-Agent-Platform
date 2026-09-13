@@ -6,18 +6,15 @@ import threading
 import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Generic, TypeVar
-
-_OffloadT = TypeVar("_OffloadT")
 
 
 @dataclass(slots=True)
-class _SharedOffloadEntry(Generic[_OffloadT]):
+class _SharedOffloadEntry[_OffloadT]:
     offload: _OffloadT
     owners: list[weakref.ReferenceType[object]]
 
 
-class SharedPersistenceOffloadRegistry(Generic[_OffloadT]):
+class SharedPersistenceOffloadRegistry[_OffloadT]:
     """Share one offload per live repository identity without retaining repositories.
 
     Repository protocols do not require hashability or weak-reference support. The registry
