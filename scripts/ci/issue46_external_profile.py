@@ -94,36 +94,15 @@ def _hermes() -> int:
     )
 
 
-def _forge() -> int:
-    base_url = os.getenv("FORGE_SIDECAR_BASE_URL")
-    workspace_root = os.getenv("FORGE_SIDECAR_WORKSPACE_ROOT")
-    if not base_url or not workspace_root:
-        print(
-            "Forge profile requires FORGE_SIDECAR_BASE_URL and FORGE_SIDECAR_WORKSPACE_ROOT",
-            file=sys.stderr,
-        )
-        return 2
-    if not Path(workspace_root).is_dir():
-        print(f"Forge workspace root does not exist: {workspace_root}", file=sys.stderr)
-        return 2
-    return _run_pytest(
-        "tests/integration/forge/test_sidecar.py::"
-        "test_real_sidecar_health_and_execution_preserve_canonical_identity",
-        "tests/integration/forge/test_sidecar.py::"
-        "test_real_sidecar_executes_through_canonical_kernel_lifecycle",
-        "tests/integration/forge/test_sidecar.py::test_real_sidecar_cancellation_stays_canonical",
-    )
-
-
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) != 1 or args[0] not in {"B", "C"}:
+    if args != ["B"]:
         print(
-            "usage: python scripts/ci/issue46_external_profile.py B|C",
+            "usage: python scripts/ci/issue46_external_profile.py B",
             file=sys.stderr,
         )
         return 2
-    return _hermes() if args[0] == "B" else _forge()
+    return _hermes()
 
 
 if __name__ == "__main__":
