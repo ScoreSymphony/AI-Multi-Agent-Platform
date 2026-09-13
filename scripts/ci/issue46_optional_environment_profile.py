@@ -57,7 +57,7 @@ _PROFILES: dict[str, OptionalEnvironmentProfile] = {
         component_name="mcp-python-sdk",
         expected_version="2.1.1",
         pytest_node=(
-            "tests/test_mcp_sdk_transport.py::"
+            "tests/integration/mcp/test_sdk_transports.py::"
             "test_official_mcp_sdk_streamable_http_uses_exact_claimed_profile"
         ),
         protocol_revision="2025-11-25",
