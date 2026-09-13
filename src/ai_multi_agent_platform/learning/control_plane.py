@@ -61,11 +61,11 @@ class LearningCandidateResourceService(ResourceService):
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
-        return tuple(
-            _candidate_resource(self._learning, candidate)
-            for candidate in self._learning.list_candidates()
-            if _candidate_visible(candidate, context)
-        )
+        resources: list[dict[str, JsonValue]] = []
+        for candidate in self._learning.list_candidates():
+            if _candidate_visible(candidate, context):
+                resources.append(await _candidate_resource(self._learning, candidate))
+        return tuple(resources)
 
     async def get_resource(
         self,
@@ -74,7 +74,7 @@ class LearningCandidateResourceService(ResourceService):
     ) -> dict[str, JsonValue]:
         candidate = self._learning.get_candidate(resource_id)
         _require_candidate_visible(candidate, context)
-        return _candidate_resource(self._learning, candidate)
+        return await _candidate_resource(self._learning, candidate)
 
 
 class LearningFeedbackResourceService(ResourceService):
@@ -163,7 +163,7 @@ def register_learning_control_plane(control_plane: ControlPlane, learning: Learn
             proposed_artifact_ref=_optional_reference(payload.get("proposed_artifact_ref")),
             project_id=_optional_string(payload.get("project_id"), "project_id"),
         )
-        return _candidate_resource(learning, candidate)
+        return await _candidate_resource(learning, candidate)
 
     async def propose_from_feedback(
         context: RequestContext,
@@ -186,7 +186,7 @@ def register_learning_control_plane(control_plane: ControlPlane, learning: Learn
             proposed_artifact_ref=_optional_reference(payload.get("proposed_artifact_ref")),
             evidence_refs=_reference_tuple(payload.get("evidence_refs"), "evidence_refs"),
         )
-        return _candidate_resource(learning, candidate)
+        return await _candidate_resource(learning, candidate)
 
     async def record_evidence(
         context: RequestContext,
@@ -207,7 +207,7 @@ def register_learning_control_plane(control_plane: ControlPlane, learning: Learn
             ),
             expected_revision=_required_positive_int(payload, "expected_revision"),
         )
-        return _candidate_resource(learning, updated)
+        return await _candidate_resource(learning, updated)
 
     async def accept(
         context: RequestContext,
@@ -219,7 +219,7 @@ def register_learning_control_plane(control_plane: ControlPlane, learning: Learn
             resource_ref,
             expected_revision=_required_positive_int(payload, "expected_revision"),
         )
-        return _candidate_resource(learning, updated)
+        return await _candidate_resource(learning, updated)
 
     async def reject(
         context: RequestContext,
@@ -231,7 +231,7 @@ def register_learning_control_plane(control_plane: ControlPlane, learning: Learn
             resource_ref,
             expected_revision=_required_positive_int(payload, "expected_revision"),
         )
-        return _candidate_resource(learning, updated)
+        return await _candidate_resource(learning, updated)
 
     async def supersede(
         context: RequestContext,
@@ -246,7 +246,7 @@ def register_learning_control_plane(control_plane: ControlPlane, learning: Learn
             superseded_by=replacement_id,
             expected_revision=_required_positive_int(payload, "expected_revision"),
         )
-        return _candidate_resource(learning, updated)
+        return await _candidate_resource(learning, updated)
 
     async def promote(
         context: RequestContext,
@@ -263,7 +263,7 @@ def register_learning_control_plane(control_plane: ControlPlane, learning: Learn
             automatic=False,
             expected_revision=_required_positive_int(payload, "expected_revision"),
         )
-        return _candidate_resource(learning, updated)
+        return await _candidate_resource(learning, updated)
 
     handlers = {
         "learning.feedback.create": create_feedback,
@@ -279,7 +279,7 @@ def register_learning_control_plane(control_plane: ControlPlane, learning: Learn
         control_plane.register_command(command, handler)
 
 
-def _candidate_resource(
+async def _candidate_resource(
     learning: LearningService,
     candidate: LearningCandidate,
 ) -> dict[str, JsonValue]:
@@ -290,9 +290,10 @@ def _candidate_resource(
         _candidate_history_entry(learning.get_candidate(candidate.learning_candidate_id, revision))
         for revision in range(1, candidate.revision + 1)
     ]
+    approvals = await learning.authorization_gate.runtime_approvals.all()
     payload["approvals"] = [
         _approval_resource(record)
-        for record in learning.authorization_gate.approvals.all()
+        for record in approvals
         if record.payload_ref is not None
         and record.payload_ref.startswith(f"{candidate.learning_candidate_id}@r")
     ]
