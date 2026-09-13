@@ -91,59 +91,23 @@ class NotificationService:
             )
             return None
 
+        notification = _notification_from_candidate(candidate, current)
         if candidate.aggregation_key and preference.aggregate_duplicates:
-            existing = await self._repository.find_active_aggregate(
-                recipient=candidate.recipient,
-                aggregation_key=candidate.aggregation_key,
+            persisted, existed = await self._repository.save_active_aggregate(
+                notification,
+                increment_existing=True,
             )
-            if existing is not None:
-                aggregated = replace(
-                    existing,
-                    title=candidate.title,
-                    summary=candidate.summary,
-                    severity=candidate.severity,
-                    state=NotificationState.UNREAD,
-                    occurrence_count=existing.occurrence_count + 1,
-                    updated_at=current,
-                    read_at=None,
-                    correlation_id=candidate.correlation_id or existing.correlation_id,
-                    causation_id=candidate.causation_id or existing.causation_id,
-                )
-                persisted = await self._repository.save(aggregated)
+            if existed:
                 await self._emit(
                     "notification.aggregated",
                     notification=persisted,
                     occurrence_count=persisted.occurrence_count,
                 )
-                await self._deliver_external(persisted, preference, now=current)
-                return persisted
+            else:
+                await self._emit("notification.created", notification=persisted)
+            await self._deliver_external(persisted, preference, now=current)
+            return persisted
 
-        notification = Notification(
-            category=candidate.category,
-            severity=candidate.severity,
-            title=candidate.title,
-            summary=candidate.summary,
-            recipient=candidate.recipient,
-            source=candidate.source,
-            project_id=candidate.project_id,
-            workspace_id=candidate.workspace_id,
-            task_id=candidate.task_id,
-            run_id=candidate.run_id,
-            approval_id=candidate.approval_id,
-            verification_id=candidate.verification_id,
-            node_id=candidate.node_id,
-            automation_id=candidate.automation_id,
-            membership_id=candidate.membership_id,
-            resource_ref=candidate.resource_ref,
-            actions=candidate.actions,
-            aggregation_key=candidate.aggregation_key,
-            created_at=current,
-            updated_at=current,
-            expires_at=candidate.expires_at,
-            correlation_id=candidate.correlation_id,
-            causation_id=candidate.causation_id,
-            delivery_metadata=candidate.delivery_metadata,
-        )
         persisted = await self._repository.save(notification)
         await self._emit("notification.created", notification=persisted)
         await self._deliver_external(persisted, preference, now=current)
@@ -185,14 +149,21 @@ class NotificationService:
                 category=candidate.category.value,
             )
             return None
+
+        notification = _notification_from_candidate(candidate, current)
         if candidate.aggregation_key is not None:
-            existing = await self._repository.find_active_aggregate(
-                recipient=candidate.recipient,
-                aggregation_key=candidate.aggregation_key,
+            persisted, existed = await self._repository.save_active_aggregate(
+                notification,
+                increment_existing=False,
             )
-            if existing is not None:
-                return existing
-        return await self.create(candidate, now=current)
+            if existed:
+                return persisted
+        else:
+            persisted = await self._repository.save(notification)
+
+        await self._emit("notification.created", notification=persisted)
+        await self._deliver_external(persisted, preference, now=current)
+        return persisted
 
     async def get(self, notification_id: str, *, recipient: RecipientRef) -> Notification:
         notification = await self._repository.get(notification_id)
@@ -472,6 +443,35 @@ class NotificationService:
             **metadata,
         }
         await self._event_sink(payload)
+
+
+def _notification_from_candidate(candidate: NotificationCandidate, current: datetime) -> Notification:
+    return Notification(
+        category=candidate.category,
+        severity=candidate.severity,
+        title=candidate.title,
+        summary=candidate.summary,
+        recipient=candidate.recipient,
+        source=candidate.source,
+        project_id=candidate.project_id,
+        workspace_id=candidate.workspace_id,
+        task_id=candidate.task_id,
+        run_id=candidate.run_id,
+        approval_id=candidate.approval_id,
+        verification_id=candidate.verification_id,
+        node_id=candidate.node_id,
+        automation_id=candidate.automation_id,
+        membership_id=candidate.membership_id,
+        resource_ref=candidate.resource_ref,
+        actions=candidate.actions,
+        aggregation_key=candidate.aggregation_key,
+        created_at=current,
+        updated_at=current,
+        expires_at=candidate.expires_at,
+        correlation_id=candidate.correlation_id,
+        causation_id=candidate.causation_id,
+        delivery_metadata=candidate.delivery_metadata,
+    )
 
 
 def _aware(value: datetime, name: str) -> datetime:
