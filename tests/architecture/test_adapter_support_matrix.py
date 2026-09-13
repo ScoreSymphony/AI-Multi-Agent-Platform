@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tomllib
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MATRIX_PATH = ROOT / "docs" / "ADAPTER_SUPPORT_MATRIX.toml"
@@ -308,6 +307,18 @@ def test_adapter_support_matrix_points_at_real_implementation_symbols_and_docs()
         for doc in docs:
             path = ROOT / str(doc)
             assert path.is_file(), f"missing documentation for {entry['id']}: {doc}"
+
+
+def test_adapter_support_matrix_evidence_targets_are_current() -> None:
+    for entry in _implementations():
+        evidence = entry["evidence"]
+        assert isinstance(evidence, list)
+        for target in evidence:
+            target_text = str(target)
+            if target_text.startswith("workflow:"):
+                continue
+            path = ROOT / target_text
+            assert path.exists(), f"stale evidence for {entry['id']}: {target_text}"
 
 
 def test_reference_and_supported_entries_have_evidence_and_reference_is_free_baseline() -> None:
