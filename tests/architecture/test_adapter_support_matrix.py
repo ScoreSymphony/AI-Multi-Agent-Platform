@@ -127,7 +127,12 @@ def test_experimental_and_deprecated_entries_cannot_imply_unqualified_support() 
         if entry["tier"] == "experimental":
             assert any(
                 marker in compatibility
-                for marker in ("no production", "no supported", "not part", "implemented and tested")
+                for marker in (
+                    "no production",
+                    "no supported",
+                    "not part",
+                    "implemented and tested",
+                )
             ), f"experimental entry {entry['id']} must explicitly limit its compatibility claim"
         if entry["tier"] == "deprecated":
             migration = str(entry["migration"])
