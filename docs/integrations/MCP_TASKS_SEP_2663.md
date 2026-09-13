@@ -83,6 +83,12 @@ task ID as required by the pinned extension profile. The reference implementatio
 optional `notifications/tasks` subscriptions are not required for lifecycle correctness and are not
 yet claimed as supported.
 
+`CreateTaskResult` is `Result & Task`, not `DetailedTask`. Its embedded seed may therefore already
+report `completed`, `failed` or `input_required` without the status-specific payload that is required
+on `tasks/get`. The client resolves any such non-working seed through `tasks/get` before handing it
+to the provider lifecycle logic. This avoids both draft-era assumptions and fabricated result/error
+payloads.
+
 ## Canonical-to-external binding
 
 `MCPTaskBinding` stores the minimum state needed to recover one external task without giving it
@@ -93,12 +99,14 @@ canonical authority:
 - canonical Task ID;
 - canonical Run ID;
 - actor owner type/ID and Project scope;
-- canonical causation identity where present (normally the canonical ToolInvocation after binding);
+- canonical causation identity where present;
+- canonical correlation ID and idempotency key where present;
 - raw external MCP task ID in the protected adapter store;
 - external creation and latest-observation timestamps;
 - latest provider-native status;
 - protocol revision and extension identifier;
 - polling metadata;
+- durable keys for already-answered `inputRequests`;
 - cancellation request/ack/error evidence;
 - digest of terminal result/error payload rather than the payload itself.
 
@@ -115,8 +123,8 @@ attempt instead of creating a second Run or rebinding a task to another invocati
 
 SEP-2663 permits task IDs to behave like bearer tokens. The exact ID is therefore persisted only
 where recovery needs it. Generic `AdapterMetadata` emits a SHA-256 digest plus server, extension,
-protocol, status and cancellation evidence. Raw tool arguments, external result payloads and raw
-task IDs are not copied into ordinary invocation telemetry.
+protocol, status, correlation and cancellation evidence. Raw tool arguments, idempotency keys,
+external result payloads and raw task IDs are not copied into ordinary invocation telemetry.
 
 ## Status mapping
 
@@ -136,20 +144,31 @@ A completed task whose embedded `CallToolResult` has `isError: true` preserves t
 adapter behavior and becomes `BACKEND_ERROR`; `completed` in MCP means the task machinery finished,
 not that the underlying tool result was semantically successful.
 
+The durable binding is also the monotonic external-observation authority. If a poll carries an older
+`lastUpdatedAt` than the stored observation, that poll is retained only as stale provider evidence
+and cannot drive terminal handling. In particular, a delayed success observation cannot replace a
+newer external terminal observation or mutate canonical Run lifecycle state.
+
 ## Authorization and input requests
 
 Authorization/Approval remains upstream of `MCPToolProvider.invoke` in the normal
 `CapabilityInvoker` pipeline. Enabling Tasks cannot grant a capability or bypass #15.
 
-Every persisted binding also records and re-validates the canonical Task, Run, owner, Project and
-causation context before recovery. Knowing an external task ID is therefore insufficient to query
-or cancel it through the provider: public platform calls resolve the binding from the authorized
-canonical invocation, not from caller-supplied arbitrary MCP task IDs.
+Every persisted binding records and re-validates the canonical Task, Run, owner, Project,
+causation, correlation and idempotency context before recovery. Knowing an external task ID is
+therefore insufficient to query or cancel it through the provider: public platform calls resolve the
+binding from the authorized canonical invocation, not from caller-supplied arbitrary MCP task IDs.
 
 `input_required` payloads are untrusted provider requests. The adapter never automatically answers
 them. A deployment may provide a `task_input_handler` only when that handler supplies the normal
 user/model trust and governance semantics. Without one, the provider requests cancellation of the
 exact external task and fails closed instead of inventing input or approval.
+
+SEP-2663 guarantees input-request keys are unique for the lifetime of a task and recommends clients
+deduplicate them across repeated observations. The binding therefore persists successfully answered
+keys. A repeated `input_required` poll cannot present the same request to the governed handler or
+send the same response a second time after a successful `tasks/update`. Unknown response keys fail
+closed and trigger cancellation of the exact bound task.
 
 ## Cancellation authority
 
@@ -177,17 +196,22 @@ On restart, the provider looks up `(provider_id, capability_invocation_id)` befo
 - no binding -> perform one new task-capable `tools/call` for that canonical attempt;
 - missing/expired bound task -> explicit `NOT_FOUND` / `mcp_task_lost` failure;
 - conflicting binding/context -> fail closed;
-- stale external observations -> cannot replace a newer persisted external terminal observation.
+- duplicate observations -> merge idempotently without creating a second canonical attempt;
+- stale external observations -> cannot replace a newer persisted external observation.
 
 A restart therefore does not create another canonical Run and does not deliberately create a second
-external task for an already-known handle.
+external task for an already-known handle. Answered input-request keys and cancellation evidence are
+part of the durable binding, so reconnect does not silently repeat those provider-side actions.
 
 ## Idempotency and ambiguous delivery
 
-SEP-2663 does not define a client-supplied idempotency key for task creation. Consequently the
-adapter **does not automatically retry a task-capable `tools/call` after ambiguous transport
-failure**. If the server might have created work but the client never received the task handle,
-blind redispatch could duplicate a side effect.
+SEP-2663 does not define a client-supplied idempotency key for task creation. The platform still
+persists its own canonical idempotency key in the binding so a recovered handle can be checked
+against the exact attempt context, but that value is not presented as a server-side MCP guarantee.
+
+Consequently the adapter **does not automatically retry a task-capable `tools/call` after ambiguous
+transport failure**. If the server might have created work but the client never received the task
+handle, blind redispatch could duplicate a side effect.
 
 The safe distinction is:
 
@@ -213,9 +237,10 @@ artifact/result handling and any downstream Verification policy.
 The #964 profile enforces these boundaries:
 
 - no caller-facing API accepts an arbitrary external task ID for lookup/cancellation;
-- exact canonical Task/Run/actor/Project/causation context is checked on recovery;
+- exact canonical Task/Run/actor/Project/causation/correlation/idempotency context is checked on
+  recovery;
 - one external handle cannot bind to two canonical invocations for the same provider;
-- raw bearer-like task IDs are not written into generic telemetry;
+- raw bearer-like task IDs and canonical idempotency keys are not written into generic telemetry;
 - external result and input-request payloads remain untrusted;
 - unknown provider statuses fail closed;
 - a server without Tasks continues through the ordinary synchronous path;
@@ -227,8 +252,8 @@ The #964 profile enforces these boundaries:
 
 The architecture and wire path are implemented and contract-tested against the finalized SEP-2663
 shape, including negotiation, asynchronous completion, update/cancel, missing-task handling,
-recovery and synchronous fallback. It should remain an explicit experimental adapter profile until
-at least one maintained upstream client SDK/conformance line supports the same finalized extension
-and a real external implementation is included in repeatable interoperability evidence. Promoting
-it earlier would overstate upstream compatibility even though the platform-side authority boundary
-is already correct.
+recovery, stale/duplicate observation handling and synchronous fallback. It should remain an
+explicit experimental adapter profile until at least one maintained upstream client SDK/conformance
+line supports the same finalized extension and a real external implementation is included in
+repeatable interoperability evidence. Promoting it earlier would overstate upstream compatibility
+even though the platform-side authority boundary is already correct.
