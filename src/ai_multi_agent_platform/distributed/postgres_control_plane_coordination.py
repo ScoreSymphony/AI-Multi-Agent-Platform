@@ -325,7 +325,12 @@ def _require_current(
     expires_at: datetime | None,
     now: datetime,
 ) -> None:
-    if owner != token.instance_id or epoch != token.epoch or expires_at is None or now >= expires_at:
+    if (
+        owner != token.instance_id
+        or epoch != token.epoch
+        or expires_at is None
+        or now >= expires_at
+    ):
         raise StaleFencingToken(
             "leadership fencing token is stale or belongs to another Control Plane instance"
         )
