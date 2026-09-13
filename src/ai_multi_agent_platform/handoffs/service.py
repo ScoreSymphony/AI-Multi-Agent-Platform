@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Protocol
 
 from ai_multi_agent_platform.agents.models import (
@@ -74,6 +75,23 @@ class InMemoryHandoffAuditSink:
         self.events.append(event)
 
 
+async def _await_audited_effect[T](operation: asyncio.Task[T]) -> T:
+    """Do not surface cancellation until a started durable effect and its audit have settled."""
+
+    try:
+        return await asyncio.shield(operation)
+    except asyncio.CancelledError:
+        while not operation.done():
+            try:
+                await asyncio.shield(operation)
+            except asyncio.CancelledError:
+                continue
+        failure = operation.exception()
+        if failure is not None:
+            raise failure from None
+        raise
+
+
 class HandoffService:
     """Create immutable Handoffs and bind their exact revisions to consuming Runs.
 
@@ -140,7 +158,7 @@ class HandoffService:
         handoff_id: str | None = None,
         expected_previous_revision: int = 0,
     ) -> AgentHandoff:
-        """Persist one explicit transfer through the awaitable runtime boundary."""
+        """Persist one explicit transfer and its audit before surfacing cancellation."""
 
         handoff = self._prepare_creation(
             content,
@@ -148,10 +166,28 @@ class HandoffService:
             handoff_id=handoff_id,
             expected_previous_revision=expected_previous_revision,
         )
+        operation = asyncio.create_task(
+            self._persist_creation(
+                handoff,
+                idempotency_key=idempotency_key,
+                request_digest=compute_creation_request_digest(content),
+                expected_previous_revision=expected_previous_revision,
+            )
+        )
+        return await _await_audited_effect(operation)
+
+    async def _persist_creation(
+        self,
+        handoff: AgentHandoff,
+        *,
+        idempotency_key: str,
+        request_digest: str,
+        expected_previous_revision: int,
+    ) -> AgentHandoff:
         stored, created = await self._runtime_repository.create_handoff(
             handoff,
             idempotency_key=idempotency_key,
-            request_digest=compute_creation_request_digest(content),
+            request_digest=request_digest,
             expected_previous_revision=expected_previous_revision,
         )
         self._record_creation(stored, created)
@@ -194,7 +230,7 @@ class HandoffService:
         consumer: ParticipantRef,
         context_bundle_ref: HandoffSourceRef | None = None,
     ) -> HandoffRuntimeContext:
-        """Authorize, validate and durably bind through the awaitable runtime boundary."""
+        """Authorize, bind and record audit evidence before surfacing cancellation."""
 
         validate_id(consuming_run_id, "run")
         self._require_participant_revision(consumer)
@@ -205,6 +241,14 @@ class HandoffService:
             consumer=consumer,
             context_bundle_ref=context_bundle_ref,
         )
+        operation = asyncio.create_task(self._persist_consumption(handoff, candidate))
+        return await _await_audited_effect(operation)
+
+    async def _persist_consumption(
+        self,
+        handoff: AgentHandoff,
+        candidate: HandoffConsumption,
+    ) -> HandoffRuntimeContext:
         consumption, created = await self._runtime_repository.bind_consumption(candidate)
         self._record_consumption(handoff, consumption, created)
         return HandoffRuntimeContext(
