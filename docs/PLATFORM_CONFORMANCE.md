@@ -94,12 +94,13 @@ The reference release tier extends integration with representative operational p
 | O — Usage/resources | Task/Run/Executor/model/Worker/Node usage is canonically attributed, provider-neutral resource gauges are retained and unavailable measurements are explicit rather than fabricated | #76 |
 | P — Standard Agents/Teams | catalog discovery is non-installing; Control Plane bootstrap/clone/delete supports independent user Agent and AgentTeam customization/removal while bundled definitions remain protected | #77 |
 | W — Task management | priority/deadline/not-before, assignment and dependency semantics stay canonical metadata; bulk updates preflight authorization and urgent priority cannot bypass distributed Worker admission | #88 |
+| Z — Parallel coding integration | independent coding Steps fan out concurrently, dependent work waits, integration requires exact validation/authorization, and conflicts require bounded canonical repair with fresh combined validation | #872 / #46 |
 
 G is intentionally one coherent test rather than two unrelated assertions: a real canonical Run fails through the lifecycle backend, the Task becomes failed, `retry_task()` creates a distinct second Run with `attempt == 2`, canonical history contains the failed and retry events, and the Observability event provider emits exactly one `platform.run.retries` metric for that retry.
 
 #### Required release-lifecycle evidence
 
-The release tier also has explicit claim-blocking lifecycle and cross-layer checks required by the #46 release acceptance matrix. These are not additional A–X product scenarios; `REL-*` IDs distinguish release-level evidence from the product-surface scenario IDs:
+The release tier also has explicit claim-blocking lifecycle and cross-layer checks required by the #46 release acceptance matrix. These are not additional product scenarios; `REL-*` IDs distinguish release-level evidence from the product-surface scenario IDs:
 
 | Release check | Maintained acceptance evidence | Owner |
 | --- | --- | --- |
@@ -200,7 +201,7 @@ The repository treats conformance as three different cost/coverage tiers rather 
 2. **Integration** — explicitly enabled optional adapters/services, distributed fixtures and richer cross-domain paths.
 3. **Release acceptance** — representative operational, recovery, portability, security and product-path evidence required for the compatibility claims made by that release.
 
-`.github/workflows/platform-conformance.yml` retains separate machine-readable reports for:
+`.github/workflows/conformance.yml` retains separate machine-readable reports for:
 
 - `conformance-fast`;
 - `conformance-release` for the reference single-node release claim;
