@@ -531,8 +531,8 @@ class MCPToolProvider(CapabilityToolProvider):
                 await asyncio.sleep(interval_ms / 1000)
                 snapshot = None
         except asyncio.CancelledError:
-            preserve_failure_metadata = True
             await asyncio.shield(self._cancel_bound_task(client, invocation, current))
+            preserve_failure_metadata = True
             raise
         finally:
             if not preserve_failure_metadata:
