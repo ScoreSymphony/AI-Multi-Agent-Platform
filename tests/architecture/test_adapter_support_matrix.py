@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
+import tomllib
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,6 +53,202 @@ REQUIRED_FIELDS = {
     "migration",
 }
 
+# Independent reverse-coverage inventory for every audited first-party implementation.
+# Adding/removing a concrete implementation behind an audited boundary must update this inventory
+# as well as the support matrix; the equality check below prevents one-sided classification drift.
+FIRST_PARTY_IMPLEMENTATION_INVENTORY = {
+    (
+        "planner.reference",
+        "src/ai_multi_agent_platform/planning/providers.py",
+        "DeterministicReferencePlanner",
+    ),
+    (
+        "planner.model-backed",
+        "src/ai_multi_agent_platform/planning/providers.py",
+        "ModelBackedPlanner",
+    ),
+    (
+        "orchestrator.reference",
+        "src/ai_multi_agent_platform/orchestration/reference.py",
+        "ReferenceOrchestrator",
+    ),
+    (
+        "orchestrator.hermes",
+        "src/ai_multi_agent_platform/adapters/hermes.py",
+        "HermesOrchestrator",
+    ),
+    (
+        "executor.reference",
+        "src/ai_multi_agent_platform/execution/reference.py",
+        "ReferenceExecutor",
+    ),
+    (
+        "executor.forge",
+        "src/ai_multi_agent_platform/adapters/forge.py",
+        "ForgeExecutor",
+    ),
+    (
+        "executor.agent-sandbox",
+        "src/ai_multi_agent_platform/adapters/agent_sandbox.py",
+        "AgentSandboxExecutor",
+    ),
+    (
+        "executor.swe-rex",
+        "src/ai_multi_agent_platform/adapters/swe_rex.py",
+        "SwerexExecutor",
+    ),
+    (
+        "model.openai-compatible",
+        "src/ai_multi_agent_platform/adapters/openai_compatible_streaming.py",
+        "OpenAICompatibleModelProvider",
+    ),
+    (
+        "model.litellm",
+        "src/ai_multi_agent_platform/adapters/litellm.py",
+        "LiteLLMModelProvider",
+    ),
+    (
+        "model.router",
+        "src/ai_multi_agent_platform/models/router.py",
+        "DeterministicModelRouter",
+    ),
+    (
+        "capability.native",
+        "src/ai_multi_agent_platform/capabilities/native.py",
+        "NativeEchoProvider",
+    ),
+    (
+        "capability.mcp",
+        "src/ai_multi_agent_platform/adapters/mcp.py",
+        "MCPToolProvider",
+    ),
+    (
+        "mcp.python-sdk",
+        "src/ai_multi_agent_platform/adapters/mcp_sdk.py",
+        "MCPPythonSDKClient",
+    ),
+    (
+        "mcp.stateless-http",
+        "src/ai_multi_agent_platform/adapters/mcp_stateless.py",
+        "MCPStatelessHTTPClient",
+    ),
+    (
+        "browser.stdlib",
+        "src/ai_multi_agent_platform/browser/reference.py",
+        "StdlibBrowserProvider",
+    ),
+    (
+        "data.file.local",
+        "src/ai_multi_agent_platform/data/reference_file.py",
+        "LocalFileProvider",
+    ),
+    (
+        "data.memory.local",
+        "src/ai_multi_agent_platform/data/reference_memory.py",
+        "LocalMemoryProvider",
+    ),
+    (
+        "data.knowledge.local",
+        "src/ai_multi_agent_platform/data/reference_knowledge.py",
+        "LocalKnowledgeProvider",
+    ),
+    (
+        "persistence.single-node-topology",
+        "src/ai_multi_agent_platform/backup/inventory.py",
+        "SINGLE_NODE_DURABLE_STORES",
+    ),
+    (
+        "persistence.kernel.in-memory",
+        "src/ai_multi_agent_platform/kernel/repository.py",
+        "InMemoryKernelRepository",
+    ),
+    (
+        "persistence.kernel.sqlite",
+        "src/ai_multi_agent_platform/kernel/sqlite_repository.py",
+        "SqliteKernelRepository",
+    ),
+    (
+        "persistence.agent.in-memory",
+        "src/ai_multi_agent_platform/agents/repository.py",
+        "InMemoryAgentRepository",
+    ),
+    (
+        "persistence.agent.json",
+        "src/ai_multi_agent_platform/agents/persistence.py",
+        "JsonAgentRepository",
+    ),
+    (
+        "messaging.in-process",
+        "src/ai_multi_agent_platform/messaging/reference.py",
+        "InProcessMessageTransport",
+    ),
+    (
+        "messaging.tcp",
+        "src/ai_multi_agent_platform/messaging/network.py",
+        "TcpMessageTransport",
+    ),
+    (
+        "connector.reference",
+        "src/ai_multi_agent_platform/connectors/reference.py",
+        "ReferenceConnectorProvider",
+    ),
+    (
+        "connector.github-releases",
+        "src/ai_multi_agent_platform/connectors/github_releases.py",
+        "GitHubReleaseConnectorProvider",
+    ),
+    (
+        "repository.local-git",
+        "src/ai_multi_agent_platform/repositories/local_git.py",
+        "LocalGitRepositoryProvider",
+    ),
+    (
+        "repository.connector",
+        "src/ai_multi_agent_platform/repositories/connector_repository.py",
+        "ConnectorRepositoryProvider",
+    ),
+    (
+        "observability.noop",
+        "src/ai_multi_agent_platform/observability/exporters.py",
+        "NoOpExporter",
+    ),
+    (
+        "observability.in-memory",
+        "src/ai_multi_agent_platform/observability/exporters.py",
+        "InMemoryExporter",
+    ),
+    (
+        "observability.accounting-bridge",
+        "src/ai_multi_agent_platform/observability/integrations.py",
+        "AccountingBridgeExporter",
+    ),
+    (
+        "verification.completion",
+        "src/ai_multi_agent_platform/verification/gate.py",
+        "VerificationCompletionAuthority",
+    ),
+    (
+        "evaluation.deterministic-assertions",
+        "src/ai_multi_agent_platform/evaluation/evaluators.py",
+        "DeterministicAssertionEvaluator",
+    ),
+    (
+        "evaluation.metric-threshold",
+        "src/ai_multi_agent_platform/evaluation/evaluators.py",
+        "MetricThresholdEvaluator",
+    ),
+    (
+        "security-evidence.skillspector",
+        "src/ai_multi_agent_platform/adapters/skillspector.py",
+        "SkillSpectorSecurityEvidenceProvider",
+    ),
+    (
+        "deployment.distributed-lifecycle",
+        "src/ai_multi_agent_platform/distributed/lifecycle.py",
+        "DistributedLifecycleBackend",
+    ),
+}
+
 
 def _matrix() -> dict[str, object]:
     return tomllib.loads(MATRIX_PATH.read_text(encoding="utf-8"))
@@ -72,6 +268,14 @@ def test_adapter_support_matrix_covers_issue_904_boundaries() -> None:
     audited = matrix["audited_boundaries"]
     assert isinstance(audited, list)
     assert REQUIRED_BOUNDARIES <= set(audited)
+
+
+def test_adapter_support_matrix_matches_explicit_first_party_inventory() -> None:
+    classified = {
+        (str(entry["id"]), str(entry["source"]), str(entry["symbol"]))
+        for entry in _implementations()
+    }
+    assert classified == FIRST_PARTY_IMPLEMENTATION_INVENTORY
 
 
 def test_adapter_support_matrix_entries_are_complete_and_unique() -> None:
