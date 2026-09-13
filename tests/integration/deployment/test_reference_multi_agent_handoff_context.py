@@ -203,7 +203,11 @@ def test_dependency_handoff_is_materialized_after_restart_before_context_collect
             revision=consumer.revision,
         )
 
-        adapter = ReferenceIncomingHandoffContextAdapter(restarted.handoffs)
+        adapter = ReferenceIncomingHandoffContextAdapter(
+            restarted.handoffs,
+            coordinator=restarted.coordination_repository,
+            kernel=restarted.kernel,
+        )
         candidates = await adapter.collect(
             OperationalContextSourceRequest(
                 task_id=task.task_id,
