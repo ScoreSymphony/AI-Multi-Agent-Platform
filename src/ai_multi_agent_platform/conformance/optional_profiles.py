@@ -112,11 +112,11 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "test_signed_artifact_requires_and_accepts_authoritative_verification",
     ),
     "T": _pytest(
-        "tests/test_issue_82_repository_control_plane_provenance.py::"
+        "tests/integration/control_plane/test_repository_run_provenance.py::"
         "test_control_plane_records_repository_input_before_start_and_on_retry",
-        "tests/test_issue_82_repository_run_integration.py::"
+        "tests/integration/workspaces/test_repository_run_changes.py::"
         "test_repository_run_records_exact_input_and_returns_changed_file_artifacts",
-        "tests/test_issue_82_repository_run_integration.py::"
+        "tests/integration/workspaces/test_repository_run_input_revision.py::"
         "test_run_input_recovers_materialized_sha_when_snapshot_keeps_symbolic_ref",
     ),
     "V": _pytest(
