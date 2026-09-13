@@ -77,6 +77,7 @@ The #982 ownership audit found several places where independent later domains or
 | `PluginControlPlane + TerminalControlPlane` | two domain parents; plugin/terminal behavior coupled through MRO | Plugin lifecycle is an explicit `plugins` module and Terminal is an explicit `terminal` module; canonical plugin/terminal composition has one Control Plane base |
 | `ConversationControlPlane + NotificationControlPlane` | two independently evolving later-domain parents shared registration and command-dispatch state through cooperative MRO | Conversations are an explicit `conversations` module; Notifications publish one explicit `notifications` owner; the current Conversation façade has one Control Plane base |
 | `AutomationControlPlane + progressive Search` | Automation collections/commands entered the canonical path through a domain subclass and a multiple-inheritance hardening layer | canonical authorization imports `automation_explicit_composition`; Automation is an explicit `automation` module above the linear Search checkpoint composition |
+| `RunWorkspaceControlPlane + TaskManagementControlPlane` | independent Workspace/Run and Task-management branches were combined in the canonical Search ancestry; MRO selected command and initialization behavior | the historical `workspace_task_management_api` path is behavior-free; the linear Workspace/Run composition has one domain base and `task-management` explicitly owns its command vocabulary |
 | Goals, Decision Records and Governance in the product constructor | direct registrations had anonymous/manual ownership rather than domain ownership | named `goals`, `decision-records` and `governance` modules |
 | `portability_api.ControlPlane` | commands/resources and conflict guards lived in a subclass | compatibility façade only; domain behavior lives in `portability_module.py` |
 | `plugin_api.ControlPlane` | lifecycle commands/resources and conflict guards lived in a subclass | compatibility façade only; domain behavior lives in `plugin_module.py` |
@@ -87,6 +88,16 @@ Reviewed historical implementation classes may still exist for compatibility or 
 Any later domain that adds a resource, command or special route must register an explicit module rather than adding another domain-composition superclass.
 
 ## Current explicit domain examples
+
+### Task management
+
+The historical `workspace_task_management_api` module is a behavior-free compatibility import. Canonical composition uses a linear Workspace/Run implementation path and installs a named `task-management` module that owns:
+
+- `task-management.update`;
+- `task-management.bulk-update`;
+- the Task-management OpenAPI additions.
+
+The `TaskManagementService` remains the behavior owner. The module's explicit command authorizer defers to the existing hardened handlers so exact-payload authorization, per-Task scope checks and idempotency semantics remain unchanged; module registration does not replace those checks with a generic command-name authorization preflight.
 
 ### Automation
 
