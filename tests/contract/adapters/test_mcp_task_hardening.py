@@ -5,7 +5,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from ai_multi_agent_platform.adapters.mcp import MCPServerConfig, MCPTool, MCPToolProvider
+from ai_multi_agent_platform.adapters.mcp import (
+    MCPServerConfig,
+    MCPTaskInputHandler,
+    MCPTool,
+    MCPToolProvider,
+)
 from ai_multi_agent_platform.adapters.mcp_tasks import (
     MCPTaskCallResult,
     MCPTaskSnapshot,
@@ -13,7 +18,12 @@ from ai_multi_agent_platform.adapters.mcp_tasks import (
     MCPTaskStatus,
     InMemoryMCPTaskBindingStore,
 )
-from ai_multi_agent_platform.capabilities import CapabilityInvocation, CapabilityInvoker, CapabilityRegistry
+from ai_multi_agent_platform.capabilities import (
+    CapabilityInvocation,
+    CapabilityInvoker,
+    CapabilityRegistry,
+    InvocationTrace,
+)
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import (
     JsonValue,
@@ -67,13 +77,13 @@ def _request(
         capability_id="tool.lookup",
         arguments={"query": "abc"},
         context=context,
-        trace={
-            "correlation_id": context.correlation_id,
-            "task_id": new_id("task"),
-            "run_id": new_id("run"),
-            "agent_id": new_id("agent"),
-            "project_id": project_id,
-        },
+        trace=InvocationTrace(
+            correlation_id=context.correlation_id,
+            task_id=new_id("task"),
+            run_id=new_id("run"),
+            agent_id=new_id("agent"),
+            project_id=project_id,
+        ),
     )
 
 
@@ -160,7 +170,7 @@ async def _registry(
     client: _HardeningClient,
     store: InMemoryMCPTaskBindingStore,
     *,
-    input_handler: object | None = None,
+    input_handler: MCPTaskInputHandler | None = None,
 ) -> CapabilityRegistry:
     provider = MCPToolProvider(
         MCPServerConfig(
@@ -172,7 +182,7 @@ async def _registry(
         ),
         client,
         task_binding_store=store,
-        task_input_handler=input_handler,  # type: ignore[arg-type]
+        task_input_handler=input_handler,
     )
     registry = CapabilityRegistry()
     await registry.register_provider(provider)
