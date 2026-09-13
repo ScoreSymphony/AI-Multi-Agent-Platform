@@ -36,11 +36,16 @@ def test_forge_has_no_active_ci_or_external_conformance_lane() -> None:
     assert "def _forge" not in external
 
     # main still requires the historical check context. The dedicated guard may
-    # preserve that name, but must never recreate a Forge runtime/sidecar lane.
+    # preserve that name and refer to retired tokens in negative grep assertions,
+    # but it must never recreate a Forge runtime/sidecar lane.
     assert "forge-sidecar-integration" in guard
-    assert "ScoreSymphony/AI-Agent-VPS" not in guard
-    assert "FORGE_SIDECAR_" not in guard
-    assert "executor-sidecar" not in guard
+    assert ".upstream/forge" not in guard
+    assert "FORGE_EXECUTOR_" not in guard
+    assert "cargo build" not in guard
+    assert "http://127.0.0.1:8787" not in guard
+    assert '! grep -Fq "ScoreSymphony/AI-Agent-VPS" .github/workflows/ci.yml' in guard
+    assert '! grep -Fq "FORGE_SIDECAR_" .github/workflows/ci.yml' in guard
+    assert '! grep -Fq "executor-sidecar" .github/workflows/ci.yml' in guard
 
 
 def test_forge_is_not_a_first_party_or_release_compatibility_claim() -> None:
