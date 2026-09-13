@@ -73,7 +73,7 @@ async def authorize_template_target_scopes(
         workspace_ids.update(workspaces)
 
     for project_id in sorted(project_ids):
-        project = scope_access.control_plane.scopes.get_project(project_id)
+        project = await scope_access.get_project(project_id)
         await scope_access.authorize(
             context,
             action,
