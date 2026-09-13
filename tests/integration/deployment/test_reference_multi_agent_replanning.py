@@ -47,11 +47,11 @@ class _ExecuteFailureProvider(FakeModelProvider):
         self.execute_failures = 0
 
     async def generate(self, request: ModelRequest):
-        if (
-            request.messages
-            and "Produce the task result using the completed research" in request.messages[-1]
-            and self.fail_execute
-        ):
+        # The reference DAG has exactly two model-backed READY roots (research + approach).
+        # Their relative completion order is intentionally irrelevant. Once both calls have
+        # reached the provider, every subsequent ordinary model call belongs to execute until
+        # execute succeeds; review cannot start across the canonical fan-in barrier first.
+        if self.fail_execute and len(self.calls) >= 2:
             self.calls.append(request)
             self.execute_failures += 1
             raise ContractError(ErrorCode.TRANSIENT_FAILURE, "injected canonical execute failure")
