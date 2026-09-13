@@ -106,7 +106,11 @@ jobs:
           from pathlib import Path
 
           lines = Path(".pytest-collect.txt").read_text(encoding="utf-8").splitlines()
-          nodeids = [line.strip() for line in lines if "::" in line]
+          nodeids = [
+              line.strip()
+              for line in lines
+              if line.startswith("tests/") and "::" in line
+          ]
           duplicates = sorted(nodeid for nodeid, count in Counter(nodeids).items() if count > 1)
           summary = (
               f"collected_nodeids={len(nodeids)}\n"
@@ -116,61 +120,103 @@ jobs:
           print(summary, end="")
           assert not duplicates, duplicates
           PY
-      - name: Directory and marker collection selections
+      - name: Directory and marker collection reconciliation
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           import subprocess
 
+          runtime_suites = (
+              "unit",
+              "contract",
+              "integration",
+              "e2e",
+              "performance",
+              "regression",
+              "release",
+          )
+          primary_directories = ("architecture", *runtime_suites)
           failures: list[str] = []
 
-          def collect(label: str, command: list[str], output: Path) -> None:
+          def parse_nodeids(text: str) -> set[str]:
+              return {
+                  line.strip()
+                  for line in text.splitlines()
+                  if line.startswith("tests/") and "::" in line
+              }
+
+          def collect(label: str, command: list[str], output: Path) -> set[str]:
               completed = subprocess.run(command, text=True, capture_output=True)
               text = completed.stdout + completed.stderr
               output.write_text(text, encoding="utf-8")
+              selected = parse_nodeids(text)
               summary = next(
                   (line for line in reversed(text.splitlines()) if " collected " in line),
                   "no collection summary",
               )
-              print(f"{label}: rc={completed.returncode}; {summary}")
+              print(
+                  f"{label}: rc={completed.returncode}; nodeids={len(selected)}; {summary}"
+              )
               if completed.returncode != 0:
                   failures.append(label)
                   print(text)
+              return selected
 
-          for suite in (
-              "architecture",
-              "unit",
-              "contract",
-              "integration",
-              "e2e",
-              "performance",
-              "regression",
-              "release",
-          ):
-              collect(
+          directories = {
+              suite: collect(
                   f"directory:{suite}",
                   ["pytest", "--collect-only", f"tests/{suite}"],
                   Path(f".pytest-directory-{suite}.txt"),
               )
-
-          for marker in (
-              "unit",
-              "contract",
-              "integration",
-              "e2e",
-              "performance",
-              "regression",
-              "release",
-          ):
-              collect(
+              for suite in primary_directories
+          }
+          markers = {
+              marker: collect(
                   f"marker:{marker}",
                   ["pytest", "--collect-only", "-m", marker],
                   Path(f".pytest-marker-{marker}.txt"),
               )
+              for marker in runtime_suites
+          }
+
+          full = parse_nodeids(Path(".pytest-collect.txt").read_text(encoding="utf-8"))
+          primary = set().union(*(directories[suite] for suite in primary_directories))
+          missing_primary = sorted(full - primary)
+          unexpected_primary = sorted(primary - full)
+          if missing_primary or unexpected_primary:
+              failures.append("primary-directory-reconciliation")
+              print(f"missing_primary={missing_primary}")
+              print(f"unexpected_primary={unexpected_primary}")
+
+          for suite in runtime_suites:
+              directory_only = sorted(directories[suite] - markers[suite])
+              marker_only = sorted(markers[suite] - directories[suite])
+              if directory_only or marker_only:
+                  failures.append(f"marker-directory:{suite}")
+                  print(f"{suite}: directory_only={directory_only}")
+                  print(f"{suite}: marker_only={marker_only}")
+
+          reconciliation = (
+              f"full_collection_nodeids={len(full)}\n"
+              f"primary_directory_nodeids={len(primary)}\n"
+              + "".join(
+                  f"directory_{suite}_nodeids={len(directories[suite])}\n"
+                  for suite in primary_directories
+              )
+              + "".join(
+                  f"marker_{suite}_nodeids={len(markers[suite])}\n"
+                  for suite in runtime_suites
+              )
+          )
+          Path(".pytest-selector-reconciliation.txt").write_text(
+              reconciliation,
+              encoding="utf-8",
+          )
+          print(reconciliation, end="")
 
           if failures:
-              raise SystemExit("collection selections failed: " + ", ".join(failures))
+              raise SystemExit("collection reconciliation failed: " + ", ".join(failures))
           PY
       - name: Exact-path guard regression
         run: pytest tests/unit/governance/test_test_layout_policy.py
@@ -178,12 +224,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-layout-collection-${{ github.sha }}
+          name: test-layout-collection-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             .pytest-collect.txt
             .pytest-collection-summary.txt
             .pytest-directory-*.txt
             .pytest-marker-*.txt
+            .pytest-selector-reconciliation.txt
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 14
