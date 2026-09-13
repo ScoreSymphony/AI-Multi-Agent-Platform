@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .repository import SqliteResearchRepository
+from .runtime_service import AsyncResearchService
 from .search import register_searchable_research_control_plane
-from .service import ResearchService
 
 if TYPE_CHECKING:
     from ai_multi_agent_platform.deployment.single_node import SingleNodeDeployment
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class SingleNodeResearchComposition:
     """Durable Research service attached to one standard single-node deployment."""
 
-    service: ResearchService
+    service: AsyncResearchService
     database_path: Path
 
 
@@ -41,7 +41,7 @@ def compose_single_node_research(
             database_path=standard_path,
         )
 
-    research = ResearchService(
+    research = AsyncResearchService(
         SqliteResearchRepository(database_path),
         authorization=deployment.approval_gate,
     )
