@@ -1,0 +1,18 @@
+import search_control_plane_cases as cases
+
+
+test_global_search_exact_keyword_project_filter_and_run_lookup = (
+    cases.test_global_search_exact_keyword_project_filter_and_run_lookup
+)
+test_search_authorization_filters_items_counts_and_snippets = (
+    cases.test_search_authorization_filters_items_counts_and_snippets
+)
+test_search_provider_unavailable_returns_retryable_503 = (
+    cases.test_search_provider_unavailable_returns_retryable_503
+)
+test_search_rebuild_removes_stale_provider_state_and_semantic_degrades_cleanly = (
+    cases.test_search_rebuild_removes_stale_provider_state_and_semantic_degrades_cleanly
+)
+test_search_time_filter_rejects_naive_timestamp = (
+    cases.test_search_time_filter_rejects_naive_timestamp
+)

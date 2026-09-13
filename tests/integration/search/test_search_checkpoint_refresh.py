@@ -1,0 +1,12 @@
+import search_checkpoint_cases as cases
+
+
+test_checkpointed_control_plane_reuses_fresh_index_and_recovers_when_marked_stale = (
+    cases.test_checkpointed_control_plane_reuses_fresh_index_and_recovers_when_marked_stale
+)
+test_checkpointed_mode_fails_closed_for_incompatible_index_schema = (
+    cases.test_checkpointed_mode_fails_closed_for_incompatible_index_schema
+)
+test_checkpointed_mode_falls_back_to_rebuild_for_legacy_provider_without_checkpoints = (
+    cases.test_checkpointed_mode_falls_back_to_rebuild_for_legacy_provider_without_checkpoints
+)

@@ -1,0 +1,4 @@
+import search_control_plane_cases as cases
+
+
+test_search_openapi_is_published = cases.test_search_openapi_is_published

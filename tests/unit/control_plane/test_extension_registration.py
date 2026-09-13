@@ -1,0 +1,9 @@
+import control_plane_extension_cases as cases
+
+
+test_extension_registration_rejects_existing_and_builtin_routes = (
+    cases.test_extension_registration_rejects_existing_and_builtin_routes
+)
+test_issue_32_foundation_is_separate_from_later_implemented_domains = (
+    cases.test_issue_32_foundation_is_separate_from_later_implemented_domains
+)

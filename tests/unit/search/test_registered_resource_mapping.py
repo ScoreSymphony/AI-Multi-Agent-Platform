@@ -1,0 +1,6 @@
+import search_registered_resource_cases as cases
+
+
+test_registered_agent_shape_maps_to_canonical_search_document = (
+    cases.test_registered_agent_shape_maps_to_canonical_search_document
+)

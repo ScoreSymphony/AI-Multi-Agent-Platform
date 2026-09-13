@@ -47,21 +47,21 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "test_scheduler_reservation_and_dispatch_emit_correlated_safe_telemetry",
     ),
     "N": _pytest(
-        "tests/test_issue75_control_plane.py::"
+        "tests/integration/notifications/test_control_plane_inbox.py::"
         "test_control_plane_inbox_is_recipient_scoped_and_commands_are_idempotent",
-        "tests/test_issue75_control_plane.py::"
+        "tests/integration/notifications/test_control_plane_inbox.py::"
         "test_authenticated_http_ignores_spoofed_owner_headers_for_notification_inbox",
-        "tests/test_issue75_notifications.py::"
+        "tests/unit/notifications/test_notification_service.py::"
         "test_task_completed_and_failed_events_project_to_canonical_notifications",
-        "tests/test_issue75_notifications.py::"
+        "tests/unit/notifications/test_notification_service.py::"
         "test_duplicate_task_event_aggregates_without_notification_storm",
         "tests/test_issue75_completed_source_runtime.py::"
         "test_authorization_gate_required_and_resolved_events_project_into_notifications",
-        "tests/test_issue75_notifications.py::"
+        "tests/unit/notifications/test_notification_service.py::"
         "test_approval_required_projection_uses_exact_approval_reference_without_payload",
         "tests/test_issue75_followup_integrations.py::"
         "test_verification_required_and_changes_requested_use_opaque_issue86_attention_contract",
-        "tests/test_issue75_control_plane.py::"
+        "tests/unit/notifications/test_event_projection.py::"
         "test_event_provider_projects_task_event_and_replay_aggregates_safely",
     ),
     "Q": _pytest(
