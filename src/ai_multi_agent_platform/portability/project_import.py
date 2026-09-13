@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.control_plane.async_scope import AsyncScopeStore, AsyncScopeStoreAdapter
+from ai_multi_agent_platform.control_plane.async_scope import (
+    AsyncScopeStore,
+    AsyncScopeStoreAdapter,
+)
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.domain import Project
 
