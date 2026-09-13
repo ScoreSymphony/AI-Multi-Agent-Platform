@@ -31,7 +31,7 @@ These are progressive measurement producers or consumers, not reasons to keep th
 
 ## Acceptance / required-test mapping
 
-- Task/Run/duration/retry, quality, missing metrics, thresholds, restart persistence and budget history: `tests/test_issue76_accounting.py`.
+- Task/Run/duration/retry, quality, missing metrics, thresholds, restart persistence and budget history: `tests/integration/accounting/test_accounting.py`.
 - Current storage and latest-gauge semantics: `tests/integration/accounting/test_storage_accounting.py`.
 - Real Control Plane HTTP/OpenAPI resources: `tests/integration/accounting/test_control_plane_http.py`.
 - Bounded historical trends without synthetic zero/carry-forward: `tests/integration/accounting/test_usage_trends.py`.

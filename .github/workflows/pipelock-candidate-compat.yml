@@ -5,8 +5,8 @@ on:
     paths:
       - ".github/workflows/pipelock-candidate-compat.yml"
       - "src/ai_multi_agent_platform/adapters/pipelock.py"
-      - "tests/test_issue_730_pipelock_evaluation.py"
-      - "tests/test_issue_730_pipelock_transports.py"
+      - "tests/integration/security/test_pipelock_evaluation.py"
+      - "tests/integration/security/test_pipelock_transports.py"
       - "tests/integration/pipelock/**"
       - "tests/fixtures/mcp_*server.py"
       - "tests/fixtures/websocket_*server.py"
@@ -116,7 +116,7 @@ jobs:
           PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
           PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-audit.yaml
         run: |
-          pytest -q tests/test_issue_730_pipelock_evaluation.py \
+          pytest -q tests/integration/security/test_pipelock_evaluation.py \
             -k pipelock_mcp_stdio_wraps_canonical_invocation_path \
             --junitxml="$RUNNER_TEMP/pipelock-mcp-stdio-junit.xml"
 
@@ -125,7 +125,7 @@ jobs:
           PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
           PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-audit.yaml
         run: |
-          pytest -q tests/test_issue_730_pipelock_transports.py \
+          pytest -q tests/integration/security/test_pipelock_transports.py \
             --junitxml="$RUNNER_TEMP/pipelock-mcp-remote-junit.xml"
 
       - name: Exercise adversarial WebSocket DLP and injection corpus

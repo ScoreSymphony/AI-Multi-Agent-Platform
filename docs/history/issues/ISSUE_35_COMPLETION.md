@@ -40,7 +40,7 @@ without changing canonical event ownership established by #6.
 
 ## Required test coverage
 
-`tests/test_message_transport.py` and `MessageTransportContractSuite` cover:
+`tests/integration/distributed/test_message_transport.py` and `MessageTransportContractSuite` cover:
 
 - publish/subscribe success;
 - duplicate delivery and idempotent consumer handling;

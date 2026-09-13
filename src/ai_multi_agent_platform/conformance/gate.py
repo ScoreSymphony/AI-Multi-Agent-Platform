@@ -170,7 +170,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "across service reconstruction"
             ),
             _pytest(
-                "tests/test_issue39_single_node_deployment.py::"
+                "tests/integration/deployment/test_single_node_deployment_runtime.py::"
                 "test_single_node_reference_smoke_is_retry_safe_across_restart"
             ),
         ),
@@ -179,7 +179,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             "#10/#250/#252 local model",
             "local/self-hosted model invocation works without a paid external service",
             _pytest(
-                "tests/test_issue_252_acceptance_gate.py::"
+                "tests/integration/files/test_acceptance_gate.py::"
                 "test_local_ai_profile_uses_real_loopback_openai_compatible_endpoint"
             ),
         ),
@@ -197,7 +197,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "and executes its pinned native capability through CapabilityInvoker"
             ),
             _pytest(
-                "tests/test_issue_46_local_model_native_capability_e2e.py::"
+                "tests/e2e/models/test_local_model_native_capability_e2e.py::"
                 "test_authenticated_local_model_executes_native_capability_end_to_end"
             ),
         ),
@@ -220,11 +220,11 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "deterministic queued/pre-accept/orphan recovery semantics"
             ),
             _pytest(
-                "tests/test_kernel.py::"
+                "tests/unit/kernel/test_kernel.py::"
                 "test_restart_reconciles_post_accept_crash_without_duplicate_dispatch",
-                "tests/test_kernel.py::"
+                "tests/unit/kernel/test_kernel.py::"
                 "test_recovery_distinguishes_queued_pre_accept_and_orphaned_running",
-                "tests/test_run_workspace_binding_restart.py::"
+                "tests/integration/workspaces/test_run_workspace_binding_restart.py::"
                 "test_restart_between_run_creation_and_binding_recovers_same_run",
             ),
         ),
@@ -236,7 +236,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "Control Plane resource paths"
             ),
             _pytest(
-                "tests/test_issue_46_client_state_parity.py::"
+                "tests/integration/cli/test_client_state_parity.py::"
                 "test_cli_reads_shared_canonical_task_run_result_state"
             ),
         ),
@@ -266,19 +266,19 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "repair loops bounded and auditable"
             ),
             _pytest(
-                "tests/test_issue_86_kernel_gate.py::"
+                "tests/integration/kernel/test_kernel_gate.py::"
                 "test_successful_run_cannot_bypass_required_verification",
-                "tests/test_issue_86_kernel_gate.py::"
+                "tests/integration/kernel/test_kernel_gate.py::"
                 "test_changed_subject_invalidates_old_verification_at_completion_gate",
-                "tests/test_issue_86_kernel_gate.py::"
+                "tests/integration/kernel/test_kernel_gate.py::"
                 "test_rejected_verification_blocks_completion_without_rewriting_run_outcome",
-                "tests/test_issue_86_verification.py::"
+                "tests/integration/verification/test_verification.py::"
                 "test_changed_result_revision_cannot_reuse_old_verification",
-                "tests/test_issue_86_verification.py::"
+                "tests/integration/verification/test_verification.py::"
                 "test_deterministic_reference_verifier_passes_and_fails_without_llm",
-                "tests/test_issue_86_verification.py::"
+                "tests/integration/verification/test_verification.py::"
                 "test_agent_reviewer_independence_and_read_only_rules_are_enforced",
-                "tests/test_issue_86_verification.py::"
+                "tests/integration/verification/test_verification.py::"
                 "test_bounded_repair_preserves_history_and_stops_at_policy_limit",
             ),
         ),
@@ -286,7 +286,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             "ARCH",
             "#46 architecture invariants",
             "canonical core remains independent from optional backend implementations",
-            _pytest("tests/test_issue_46_architecture_invariants.py"),
+            _pytest("tests/contract/portability/test_architecture_invariants.py"),
         ),
     )
 
@@ -340,7 +340,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
                 "service readiness"
             ),
             _pytest(
-                "tests/test_issue40_replacement_machine.py::"
+                "tests/integration/application_distribution/test_replacement_machine.py::"
                 "test_clean_replacement_machine_restore_preserves_canonical_history"
             ),
         ),
@@ -352,11 +352,11 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
                 "and explicit recovery"
             ),
             _pytest(
-                "tests/test_issue41_upgrade_lifecycle.py::"
+                "tests/release/release/test_upgrade_lifecycle.py::"
                 "test_upgrade_from_previous_schema_fixture_records_history",
-                "tests/test_issue41_upgrade_lifecycle.py::"
+                "tests/release/release/test_upgrade_lifecycle.py::"
                 "test_forward_only_migration_requires_matching_verified_backup",
-                "tests/test_issue41_upgrade_lifecycle.py::"
+                "tests/release/release/test_upgrade_lifecycle.py::"
                 "test_failed_upgrade_stays_in_maintenance_until_explicit_resume",
             ),
         ),
@@ -379,7 +379,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             ),
             _pytest(
                 "-s",
-                "tests/test_issue_46_worker_artifact_verification_vertical.py::"
+                "tests/integration/artifacts/test_worker_artifact_verification_vertical.py::"
                 "test_authenticated_worker_artifact_is_exact_verification_evidence_same_run",
             ),
             requires_runtime_evidence=True,
@@ -389,7 +389,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "#46 failure/retry",
             "controlled failures preserve canonical retries and telemetry",
             _pytest(
-                "tests/test_issue_46_failure_retry_e2e.py::"
+                "tests/e2e/observability/test_failure_retry_e2e.py::"
                 "test_controlled_failure_retry_preserves_canonical_history_and_retry_telemetry"
             ),
         ),
@@ -398,7 +398,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "#18 automation",
             "automation creates a normal canonical Task lifecycle",
             _pytest(
-                "tests/test_automation.py::"
+                "tests/unit/automation/test_automation.py::"
                 "test_one_time_schedule_creates_canonical_task_with_provenance"
             ),
         ),
@@ -407,7 +407,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "#72 Chat",
             "Chat creates durable canonical work without becoming lifecycle truth",
             _pytest(
-                "tests/test_issue_72_control_plane.py::"
+                "tests/integration/context/test_conversation_control_plane.py::"
                 "test_message_to_task_handoff_is_canonical_and_bidirectionally_linked"
             ),
         ),
@@ -416,7 +416,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "#73 Terminal",
             "terminal/session access remains authorized and Workspace-bounded",
             _pytest(
-                "tests/test_issue73_control_plane_e2e.py::"
+                "tests/e2e/control_plane/test_control_plane_e2e.py::"
                 "test_terminal_http_resource_and_command_use_standard_composition_and_"
                 "idempotent_create"
             ),
@@ -426,9 +426,9 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "#74 Browser",
             "browser work uses replaceable Capability/File/security boundaries",
             _pytest(
-                "tests/test_browser_capability.py::"
+                "tests/unit/browser/test_browser_capability.py::"
                 "test_download_enters_canonical_file_and_artifact_path_with_redacted_provenance",
-                "tests/test_browser_capability.py::"
+                "tests/unit/browser/test_browser_capability.py::"
                 "test_form_side_effect_is_policy_gated_and_upload_reads_authorized_canonical_file",
             ),
         ),
@@ -449,7 +449,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
                 "fabricating unavailable measurements"
             ),
             _pytest(
-                "tests/test_issue76_accounting.py::"
+                "tests/integration/accounting/test_accounting.py::"
                 "test_task_run_executor_accounting_is_idempotent_and_aggregated",
                 "tests/integration/accounting/test_model_usage_attribution.py::"
                 "test_auto_routed_model_usage_is_attributed_to_selected_canonical_configuration",
@@ -457,7 +457,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
                 "test_worker_dispatch_usage_is_additive_and_attributed",
                 "tests/integration/accounting/test_accounting_composition.py::"
                 "test_worker_and_node_reported_resources_are_latest_provider_neutral_gauges",
-                "tests/test_issue76_accounting.py::"
+                "tests/integration/accounting/test_accounting.py::"
                 "test_missing_measurement_is_unavailable_not_zero",
             ),
         ),
@@ -469,13 +469,13 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
                 "clones are scoped, customizable and independently removable"
             ),
             _pytest(
-                "tests/test_issue_77_completion_hardening.py::"
+                "tests/regression/control_plane/test_control_plane_completion_hardening.py::"
                 "test_standard_catalog_is_discoverable_without_installing_definitions",
-                "tests/test_issue_77_completion_hardening.py::"
+                "tests/regression/control_plane/test_control_plane_completion_hardening.py::"
                 "test_standard_catalog_lifecycle_uses_real_control_plane_http_command_path",
-                "tests/test_issue_77_completion_hardening.py::"
+                "tests/regression/control_plane/test_control_plane_completion_hardening.py::"
                 "test_control_plane_bootstrap_clone_scope_customize_and_delete_workflow",
-                "tests/test_issue_77_completion_hardening.py::"
+                "tests/regression/control_plane/test_control_plane_completion_hardening.py::"
                 "test_scoped_software_team_clone_requires_explicit_scope_and_is_deletable",
             ),
         ),
@@ -514,14 +514,14 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
                 "lifecycle; authorization and Worker admission remain mandatory"
             ),
             _pytest(
-                "tests/test_task_management.py::"
+                "tests/integration/task_management/test_task_management_control_plane.py::"
                 "test_priority_deadline_not_before_and_query_projection",
-                "tests/test_task_management.py::"
+                "tests/integration/task_management/test_task_management_control_plane.py::"
                 "test_responsibility_reassignment_and_agent_assignment_are_permission_neutral",
-                "tests/test_task_management.py::"
+                "tests/integration/task_management/test_task_management_control_plane.py::"
                 "test_dependency_satisfaction_cycle_cross_project_and_blocked_reason",
-                "tests/test_task_management.py::test_bulk_update_preflights_per_task_authorization",
-                "tests/test_issue_46_task_management_worker_admission.py::"
+                "tests/integration/task_management/test_task_management_control_plane.py::test_bulk_update_preflights_per_task_authorization",
+                "tests/integration/distributed/test_task_management_worker_admission.py::"
                 "test_urgent_task_cannot_bypass_distributed_worker_admission",
             ),
         ),
@@ -540,9 +540,9 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
                 "conflicts require a bounded canonical repair with fresh validation"
             ),
             _pytest(
-                "tests/test_issue_46_parallel_coding_batch_e2e.py::"
+                "tests/e2e/verification/test_parallel_coding_batch_e2e.py::"
                 "test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge",
-                "tests/test_issue_46_parallel_coding_batch_e2e.py::"
+                "tests/e2e/verification/test_parallel_coding_batch_e2e.py::"
                 "test_conflicting_valid_workstreams_require_canonical_repair_and_fresh_combined_validation",
             ),
         ),

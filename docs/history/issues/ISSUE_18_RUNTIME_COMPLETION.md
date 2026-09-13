@@ -136,7 +136,7 @@ A caller-supplied event sink is teed after runtime persistence rather than repla
 
 ## Tests
 
-`tests/test_issue_18_runtime_completion.py` covers:
+`tests/regression/recovery/test_runtime_completion.py` covers:
 
 - autonomous one-time schedule execution without manual `tick()`;
 - durable Automation/Delivery state across Control Plane restart;
@@ -149,7 +149,7 @@ A caller-supplied event sink is teed after runtime persistence rather than repla
 - rejection of caller-controlled scheduler time;
 - ASGI lifespan start/stop of the autonomous runtime.
 
-`tests/test_issue_18_runtime_security.py` additionally covers:
+`tests/integration/security/test_runtime_security.py` additionally covers:
 
 - no historical Event backfire after a new Automation subscription is created;
 - no cross-owner event triggering for an unscoped Automation;

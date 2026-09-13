@@ -77,7 +77,7 @@ BIFROST_EVAL_TOOL_CALLING=1        # only when the model declares tool support
 Run:
 
 ```bash
-pytest -q tests/test_issue_859_bifrost_live_conformance.py
+pytest -q tests/contract/models/test_bifrost_live_conformance.py
 ```
 
 Required evidence:

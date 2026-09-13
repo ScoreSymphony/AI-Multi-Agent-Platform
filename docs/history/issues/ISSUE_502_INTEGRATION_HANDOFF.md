@@ -135,7 +135,7 @@ No marketing token-savings claim is evidence unless reproduced through this plat
 
 ## Prepared acceptance coverage
 
-`tests/test_issue_502_completion_prep.py` is intentionally prepared but not executed on this branch. It covers the remaining integration contracts:
+`tests/regression/context/test_completion_prep.py` is intentionally prepared but not executed on this branch. It covers the remaining integration contracts:
 
 | #502 requirement | Prepared evidence |
 | --- | --- |

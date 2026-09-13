@@ -258,10 +258,10 @@ This means the production path uses the same canonical services for Learning pro
 
 Issue #595's product path is covered at several layers:
 
-- `tests/test_issue_595_governed_learning.py` — core governed candidate, gate, promotion, persistence and recovery behavior;
-- `tests/test_issue_594_595_integration_review.py` — #594 Evaluation/Learning integration and exact evidence binding;
-- `tests/test_issue_81_cli_entrypoint.py` — public `platform learning` dispatch, promotion confirmation and generic-executor bypass prevention;
-- `tests/test_issue_595_product_surfaces.py` — public Shell/navigation/CLI wiring plus pagination-boundary regression;
+- `tests/integration/evaluation/test_governed_learning.py` — core governed candidate, gate, promotion, persistence and recovery behavior;
+- `tests/regression/task_management/test_integration_review.py` — #594 Evaluation/Learning integration and exact evidence binding;
+- `tests/integration/cli/test_cli_entrypoint.py` — public `platform learning` dispatch, promotion confirmation and generic-executor bypass prevention;
+- `tests/integration/cli/test_product_surfaces.py` — public Shell/navigation/CLI wiring plus pagination-boundary regression;
 - `frontend/src/app/navigation.test.ts` — Learning navigation registration;
 - `frontend/src/app/learningManifest.test.ts` — required-resource, read-only and manifest-command gating.
 

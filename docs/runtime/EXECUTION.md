@@ -48,7 +48,7 @@ The contract already carries `policy_context`, `environment`, timeout and cancel
 
 ## Kernel integration and artifact attachment
 
-`ExecutorLifecycleBackend` adapts the new executor abstraction to the lifecycle seam currently consumed by `PlatformKernel`. The integration test `tests/test_executor_kernel_integration.py` demonstrates:
+`ExecutorLifecycleBackend` adapts the new executor abstraction to the lifecycle seam currently consumed by `PlatformKernel`. The integration test `tests/integration/kernel/test_executor_kernel_integration.py` demonstrates:
 
 `Task -> Run -> LifecycleBackend -> Executor -> canonical ExecutionResult -> Run/Task terminal state`
 
