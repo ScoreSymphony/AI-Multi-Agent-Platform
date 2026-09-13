@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from datetime import datetime
 from typing import Literal, Protocol
@@ -22,6 +23,7 @@ from .models import (
 from .repository import CoordinatorRepository
 
 _SUCCESSFUL_PREDECESSORS = frozenset({StepStatus.SUCCEEDED, StepStatus.SKIPPED})
+_STALE_STREAM_RETRY_LIMIT = 8
 
 
 class ProgressionRunKernel(Protocol):
@@ -238,13 +240,7 @@ class CoordinationProgression:
             ):
                 return False
             attempt = current.current_attempt + 1
-            run = await self.kernel.create_run(
-                idempotency_key=self._attempt_key(current, attempt),
-                task_id=current.task_id,
-                subject_type="step",
-                subject_id=current.step_id,
-                source="platform-coordinator",
-            )
+            run = await self._create_run_with_stale_retry(current, attempt)
             if run.attempt != attempt:
                 raise ContractError(
                     ErrorCode.CONFLICT,
@@ -276,12 +272,7 @@ class CoordinationProgression:
                 claim=step_claim,
                 now=now,
             )
-            await self.kernel.start_run(
-                idempotency_key=self._start_key(current, attempt),
-                task_id=current.task_id,
-                run_id=run.run_id,
-                source="platform-coordinator",
-            )
+            await self._start_run_with_stale_retry(current, attempt, run.run_id)
             emit(
                 "coordination.attempt.dispatched",
                 current.task_id,
@@ -302,6 +293,54 @@ class CoordinationProgression:
         finally:
             self.repository.release_claim(step_claim)
 
+    async def _create_run_with_stale_retry(
+        self,
+        record: StepCoordinationRecord,
+        attempt: int,
+    ) -> RunState:
+        last_stale_conflict: ContractError | None = None
+        for _ in range(_STALE_STREAM_RETRY_LIMIT):
+            try:
+                return await self.kernel.create_run(
+                    idempotency_key=self._attempt_key(record, attempt),
+                    task_id=record.task_id,
+                    subject_type="step",
+                    subject_id=record.step_id,
+                    source="platform-coordinator",
+                )
+            except ContractError as exc:
+                if not _is_stale_revision_conflict(exc):
+                    raise
+                last_stale_conflict = exc
+                await asyncio.sleep(0)
+        if last_stale_conflict is None:
+            raise RuntimeError("stale-revision create_run retry loop exited without a conflict")
+        raise last_stale_conflict
+
+    async def _start_run_with_stale_retry(
+        self,
+        record: StepCoordinationRecord,
+        attempt: int,
+        run_id: str,
+    ) -> RunState:
+        last_stale_conflict: ContractError | None = None
+        for _ in range(_STALE_STREAM_RETRY_LIMIT):
+            try:
+                return await self.kernel.start_run(
+                    idempotency_key=self._start_key(record, attempt),
+                    task_id=record.task_id,
+                    run_id=run_id,
+                    source="platform-coordinator",
+                )
+            except ContractError as exc:
+                if not _is_stale_revision_conflict(exc):
+                    raise
+                last_stale_conflict = exc
+                await asyncio.sleep(0)
+        if last_stale_conflict is None:
+            raise RuntimeError("stale-revision start_run retry loop exited without a conflict")
+        raise last_stale_conflict
+
     @staticmethod
     def _attempt_key(record: StepCoordinationRecord, attempt: int) -> str:
         return f"coord:{record.plan_id}:{record.step_id}:attempt:{attempt}"
@@ -309,3 +348,11 @@ class CoordinationProgression:
     @staticmethod
     def _start_key(record: StepCoordinationRecord, attempt: int) -> str:
         return f"coord:{record.plan_id}:{record.step_id}:attempt:{attempt}:start"
+
+
+def _is_stale_revision_conflict(exc: ContractError) -> bool:
+    return (
+        exc.code is ErrorCode.CONFLICT
+        and exc.retryable
+        and exc.details.get("reason") == "stale_stream_revision"
+    )
