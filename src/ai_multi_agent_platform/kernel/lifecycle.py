@@ -137,7 +137,13 @@ class KernelLifecycleReconciler:
                 f"lifecycle backend returned handle for wrong run: {handle.run_id}",
             )
 
+        # Lifecycle start may block in a provider while another command cancels the canonical Run.
+        # Re-read canonical state before projecting RUNNING so late provider completion can never
+        # revive a terminal Run or its Task.
         task = await self._host.get_task(task_id)
+        run = await self._host.get_run(task_id, run_id)
+        if run.status is not RunStatus.STARTING:
+            return
         specs: list[EventSpec] = [
             (
                 "run.running",
