@@ -452,10 +452,7 @@ class DurablePlanStepCoordinator:
         """Runtime-safe projection that never performs blocking persistence inline."""
 
         state = await self.runtime_repository.get_plan(plan_id)
-        records = {
-            item.step_id: item
-            for item in await self.runtime_repository.list_step_records(plan_id)
-        }
+        records = {item.step_id: item for item in await self.runtime_repository.list_step_records(plan_id)}
         return self._projection_from_state(state, records)
 
     @staticmethod
