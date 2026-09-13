@@ -22,14 +22,24 @@ from ai_multi_agent_platform.planning.models import PlanningTrigger, ProposalRec
 from ai_multi_agent_platform.planning.supersession import PlanningService
 
 from .models import ResearchActionContext
+from .runtime_service import AsyncResearchService
 from .service import ResearchService
+
+
+def _runtime_research(research: ResearchService) -> AsyncResearchService:
+    if isinstance(research, AsyncResearchService):
+        return research
+    return AsyncResearchService(
+        research.repository,
+        authorization=research.authorization,
+    )
 
 
 class ResearchPlanningBridge:
     """Pass exact Research provenance into #439 rather than mutating Plans directly."""
 
     def __init__(self, research: ResearchService, planning: PlanningService) -> None:
-        self.research = research
+        self.research = _runtime_research(research)
         self.planning = planning
 
     async def propose(
@@ -46,13 +56,13 @@ class ResearchPlanningBridge:
         granted_permissions: frozenset[str] = frozenset(),
         available_worker_capabilities: frozenset[str] = frozenset(),
     ) -> ProposalRecord:
-        item = self.research.repository.get_item(research_item_id)
+        item = await self.research.runtime_repository.get_item(research_item_id)
         if item.task_id is not None and item.task_id != task_id:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "Research Item is bound to a different canonical Task",
             )
-        context = self.research.build_action_context(
+        context = await self.research.build_action_context_runtime(
             research_item_id,
             require_verification=require_verification,
         )
@@ -79,7 +89,7 @@ class ResearchPromotionBridge:
         knowledge: KnowledgeProvider | None = None,
         memory: MemoryProvider | None = None,
     ) -> None:
-        self.research = research
+        self.research = _runtime_research(research)
         self.knowledge = knowledge
         self.memory = memory
 
@@ -95,11 +105,11 @@ class ResearchPromotionBridge:
     ) -> KnowledgeSource:
         if self.knowledge is None:
             raise ContractError(ErrorCode.UNAVAILABLE, "Knowledge provider is not configured")
-        action = self.research.build_action_context(
+        action = await self.research.build_action_context_runtime(
             research_item_id,
             require_verification=require_verification,
         )
-        item = self.research.repository.get_item(research_item_id)
+        item = await self.research.runtime_repository.get_item(research_item_id)
         now = datetime.now(UTC)
         source = KnowledgeSource(
             source_id=new_knowledge_source_id(),
@@ -131,19 +141,22 @@ class ResearchPromotionBridge:
     ) -> MemoryEntry:
         if self.memory is None:
             raise ContractError(ErrorCode.UNAVAILABLE, "Memory provider is not configured")
-        action = self.research.build_action_context(
+        action = await self.research.build_action_context_runtime(
             research_item_id,
             require_verification=require_verification,
         )
-        item = self.research.repository.get_item(research_item_id)
+        item = await self.research.runtime_repository.get_item(research_item_id)
         provenance = (
             SourceRef(
                 kind="research_item",
                 ref=item.research_item_id,
                 revision=str(item.revision),
             ),
-            *(SourceRef(kind="research_claim", ref=value) for value in action.claim_ids),
-            *(SourceRef(kind="research_evidence", ref=value) for value in action.evidence_ids),
+            *(SourceRef(kind="research_claim", ref=claim_id) for claim_id in action.claim_ids),
+            *(
+                SourceRef(kind="research_evidence", ref=evidence_id)
+                for evidence_id in action.evidence_ids
+            ),
         )
         entry = MemoryEntry(
             memory_id=new_memory_id(),

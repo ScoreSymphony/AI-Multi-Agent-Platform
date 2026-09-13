@@ -1,5 +1,10 @@
 """Canonical Research Evidence layer."""
 
+from .async_repository import (
+    AsyncResearchRepository,
+    AsyncResearchRepositoryAdapter,
+    ResearchPersistenceOffload,
+)
 from .control_plane import (
     RESEARCH_CLAIM_COLLECTION,
     RESEARCH_COLLECTIONS,
@@ -51,6 +56,7 @@ from .repository import (
     ResearchRepository,
     SqliteResearchRepository,
 )
+from .runtime_service import AsyncResearchService
 from .search import (
     ResearchClaimSearchResourceService,
     ResearchEvidenceSearchResourceService,
@@ -60,8 +66,12 @@ from .search import (
     register_searchable_research_control_plane,
     research_search_resource_services,
 )
-from .service import ResearchService
+from .service import ResearchService as SynchronousResearchService
 from .verification import ResearchVerificationBridge, ResearchVerificationSubject
+
+# The package-level service is the runtime-safe composition. The synchronous base remains an
+# explicit setup/offline/test compatibility seam for callers that deliberately need it.
+ResearchService = AsyncResearchService
 
 __all__ = [
     "RESEARCH_BUNDLE_KIND",
@@ -74,6 +84,9 @@ __all__ = [
     "RESEARCH_OBSERVATION_COLLECTION",
     "RESEARCH_PERSISTENCE_SCHEMA_VERSION",
     "RESEARCH_SOURCE_COLLECTION",
+    "AsyncResearchRepository",
+    "AsyncResearchRepositoryAdapter",
+    "AsyncResearchService",
     "Claim",
     "ClaimConfidence",
     "ClaimStatus",
@@ -95,6 +108,7 @@ __all__ = [
     "ResearchItemSearchResourceService",
     "ResearchObservationResourceService",
     "ResearchObservationSearchResourceService",
+    "ResearchPersistenceOffload",
     "ResearchPlanningBridge",
     "ResearchPromotionBridge",
     "ResearchRepository",
@@ -111,6 +125,7 @@ __all__ = [
     "SourceObservationState",
     "SourceRecord",
     "SqliteResearchRepository",
+    "SynchronousResearchService",
     "UntrustedResearchExecutionProfile",
     "VerificationBindingValidator",
     "canonical_verification_binding_validator",
