@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import threading
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -128,7 +130,11 @@ class RecordingTransport:
             headers=headers,
             timeout_seconds=timeout_seconds,
         )
-        if method == "POST" and url.endswith("/v1/runs") and isinstance(response.payload, Mapping):
+        if (
+            method == "POST"
+            and url.endswith("/v1/runs")
+            and isinstance(response.payload, Mapping)
+        ):
             run_id = response.payload.get("run_id")
             if isinstance(run_id, str):
                 self.external_run_id = run_id
@@ -154,14 +160,14 @@ async def _terminal_status(
 
 
 def test_parallel_candidate_completion_and_cancellation_remain_isolated(
-    tmp_path,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    upstream_value = __import__("os").environ.get("HERMES_UPSTREAM_DIR")
+    upstream_value = os.environ.get("HERMES_UPSTREAM_DIR")
     if not upstream_value:
         pytest.skip("set HERMES_UPSTREAM_DIR to run Hermes v0.21.2 concurrency tests")
-    upstream = __import__("pathlib").Path(upstream_value).resolve()
-    assert __import__("os").environ.get("HERMES_UPSTREAM_REVISION") == HERMES_V0_21_2_REVISION
+    upstream = Path(upstream_value).resolve()
+    assert os.environ.get("HERMES_UPSTREAM_REVISION") == HERMES_V0_21_2_REVISION
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes-home"))
     monkeypatch.syspath_prepend(str(upstream))
 
@@ -226,8 +232,10 @@ def test_parallel_candidate_completion_and_cancellation_remain_isolated(
                 assert await asyncio.to_thread(slow_agent.interrupted.wait, 5.0)
                 assert await asyncio.to_thread(slow_agent.finished.wait, 5.0)
 
-                assert await _terminal_status(slow_orchestrator, slow_run_id, "cancel") == "cancelled"
-                assert await _terminal_status(fast_orchestrator, fast_run_id, "complete") == "completed"
+                slow_status = await _terminal_status(slow_orchestrator, slow_run_id, "cancel")
+                fast_status = await _terminal_status(fast_orchestrator, fast_run_id, "complete")
+                assert slow_status == "cancelled"
+                assert fast_status == "completed"
                 assert completed.adapter_metadata[0].values["external_run_id"] == fast_run_id
                 assert (
                     completed.adapter_metadata[0].values["upstream_revision"]
