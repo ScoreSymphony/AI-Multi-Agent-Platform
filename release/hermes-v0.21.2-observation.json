@@ -9,7 +9,7 @@
       "license": "MIT",
       "classifications": [
         "feature",
-        "reliability"
+        "bugfix"
       ],
       "release_ref": "v2026.9.11",
       "patch_conflicts": [],
