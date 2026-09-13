@@ -648,7 +648,7 @@ def build_single_node_deployment(
         project_id=evaluation_project.id,
         run_workspace_bindings=run_workspace_bindings,
         evidence_providers=tuple(evaluation_evidence_providers),
-        approval_reader=approval_gate.approvals,
+        approval_reader=approval_gate.runtime_approvals,
         distributed_runtime=effective_distributed_runtime,
     )
 
