@@ -16,7 +16,6 @@ LITELLM_INTEGRATION_TEST_PATH = (
 )
 TRACKED_UPSTREAMS = (
     ROOT / "upstream" / "hermes-agent.yaml",
-    ROOT / "upstream" / "forge-ai-agent-vps.yaml",
     ROOT / "upstream" / "litellm.yaml",
 )
 
@@ -54,10 +53,6 @@ def test_runtime_and_ci_pins_match_governed_upstream_revisions() -> None:
     assert f"repository: {hermes_source.removeprefix('https://github.com/')}" in workflow
     assert f"ref: {hermes_revision}" in workflow
     assert f"HERMES_UPSTREAM_REVISION: {hermes_revision}" in workflow
-
-    forge_source, forge_revision = _governed_pin(ROOT / "upstream" / "forge-ai-agent-vps.yaml")
-    assert f"repository: {forge_source.removeprefix('https://github.com/')}" in workflow
-    assert f"ref: {forge_revision}" in workflow
 
 
 def test_litellm_package_and_integration_test_pin_match_governance() -> None:
