@@ -46,7 +46,7 @@ Composition validates a complete module batch before installing it:
 2. required modules must already exist or be present in the same batch;
 3. collection names and command names must satisfy the canonical naming rules;
 4. duplicate collection, command or route ownership fails before the batch mutates registry state;
-5. installation is sorted by module name after validation, so caller order does not silently alter semantics.
+5. installation follows explicit dependency order; independent modules use lexical order, so caller order does not silently alter semantics.
 
 Constructor-supplied legacy resource/command registrations receive the explicit owner `constructor`. Direct compatibility registrations receive `manual`. New platform domains must use named modules instead.
 
@@ -59,7 +59,7 @@ Registered commands use one registry-aware dispatch boundary. The dispatcher:
 3. invokes the module-owned authorizer when one is declared, otherwise preserving the exact-payload default authorization binding;
 4. invokes the canonical handler;
 5. validates that the result does not expose private payload state;
-6. invokes registered post-success observers in deterministic module-name order.
+6. invokes registered post-success observers in deterministic dependency-first order, with lexical order among independent modules.
 
 This is important for domains whose authorization cannot be represented as a generic command/resource check. Task management, Conversations, Organization collaboration and Task Project reassignment keep their existing relationship- or payload-aware authorization semantics in explicit authorizers/handlers instead of relying on an inherited `execute_command` override.
 
@@ -69,7 +69,7 @@ Observers are projections/integration hooks, not a second dispatch mechanism. Or
 
 Generic collections and commands continue to use the existing `/api/v1` mapping. A module may register an exact route only when that generic mapping is insufficient. Exact routes are keyed by normalized HTTP method and absolute path and are subject to the same duplicate-owner validation.
 
-OpenAPI contributors mutate the generated document only after the base schema and generic registered-resource/command paths have been created. Contributors run in deterministic module-name order.
+OpenAPI contributors mutate the generated document only after the base schema and generic registered-resource/command paths have been created. Contributors run in deterministic dependency-first order, with lexical order among independent modules.
 
 Request IDs, correlation IDs, authentication, authorization, idempotency and canonical error mapping remain transport/application concerns of the existing Control Plane. Module registration does not bypass those boundaries.
 
@@ -100,6 +100,7 @@ The #982 ownership audit found several places where independent later domains or
 | `organization_runtime_composition.ControlPlane` | Organization commands/resources and optional Accounting projections were registered through a later subclass; Organization authorization and ownership mirroring depended on its `execute_command` override | `organization_runtime_composition` is a behavior-free shim; `organizations` and `accounting` are named modules; Organization scope authorization is module-owned and ownership mirroring is a post-success observer |
 | `task_project_reassignment.ControlPlane.execute_command` | Task Project commands were selected by a later inherited dispatcher and guarded by a private conflict override | `task-project-reassignment` explicitly owns both move commands and their OpenAPI contribution; relationship-aware authorization remains in the handlers |
 | `release_api.ControlPlaneHTTP` special-case route | the release status endpoint and OpenAPI contribution were owned implicitly by an HTTP subclass override | `release-status` explicitly owns `GET /api/v1/release/status` and its OpenAPI contribution; the HTTP façade only preserves root-manifest compatibility and the operator property |
+| Searchable Research registration | canonical Research services were registered first and then silently replaced by Search-aware services | `research` installs the Search-aware projections and command inventory exactly once; Context reuses the same durable `base.research` service instead of registering a second owner |
 | Goals, Decision Records and Governance in the product constructor | direct registrations had anonymous/manual ownership rather than domain ownership | named `goals`, `decision-records` and `governance` modules |
 | `portability_api.ControlPlane` | commands/resources and conflict guards lived in a subclass | compatibility façade only; domain behavior lives in `portability_module.py` |
 | `plugin_api.ControlPlane` | lifecycle commands/resources and conflict guards lived in a subclass | compatibility façade only; domain behavior lives in `plugin_module.py` |
