@@ -22,7 +22,6 @@ from .models import (
 )
 from .repository import CoordinatorRepository
 
-_SUCCESSFUL_PREDECESSORS = frozenset({StepStatus.SUCCEEDED, StepStatus.SKIPPED})
 _STALE_STREAM_RETRY_LIMIT = 32
 _STALE_STREAM_RETRY_DELAY_SECONDS = 0.001
 
@@ -94,16 +93,30 @@ class CoordinationProgression:
     ) -> bool:
         if step.status is not StepStatus.PENDING:
             return False
-        satisfied = tuple(
-            dependency_id
-            for dependency_id in record.dependency_ids
-            if by_id[dependency_id].status in _SUCCESSFUL_PREDECESSORS
-        )
-        failed = tuple(
-            dependency_id
-            for dependency_id in record.dependency_ids
-            if by_id[dependency_id].status in {StepStatus.FAILED, StepStatus.CANCELLED}
-        )
+
+        # A Step may be SKIPPED intentionally after all of its own dependencies were satisfied,
+        # or because its predecessor barrier failed. Only the former is a successful prerequisite.
+        # Preserve that distinction from canonical coordination records so a skipped fan-in caused
+        # by failure propagates transitively instead of incorrectly unblocking downstream work.
+        satisfied_items: list[str] = []
+        failed_items: list[str] = []
+        for dependency_id in record.dependency_ids:
+            dependency = by_id[dependency_id]
+            if dependency.status is StepStatus.SUCCEEDED:
+                satisfied_items.append(dependency_id)
+            elif dependency.status in {StepStatus.FAILED, StepStatus.CANCELLED}:
+                failed_items.append(dependency_id)
+            elif dependency.status is StepStatus.SKIPPED:
+                dependency_record = self.repository.get_step_record(dependency_id)
+                if set(dependency_record.satisfied_dependency_ids) == set(
+                    dependency_record.dependency_ids
+                ):
+                    satisfied_items.append(dependency_id)
+                else:
+                    failed_items.append(dependency_id)
+        satisfied = tuple(satisfied_items)
+        failed = tuple(failed_items)
+
         if failed:
             step_claim = claim(step.id, now)
             if step_claim is None:
