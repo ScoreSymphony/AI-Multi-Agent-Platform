@@ -56,8 +56,8 @@ class CoordinatorRepairService:
         if current_time.tzinfo is None:
             raise ValueError("repair time must be timezone-aware")
 
-        repository = self.coordinator.repository
-        record = repository.get_step_record(step_id)
+        repository = self.coordinator.runtime_repository
+        record = await repository.get_step_record(step_id)
         if record.plan_id != plan_id:
             raise ContractError(
                 ErrorCode.NOT_FOUND,
@@ -65,10 +65,10 @@ class CoordinatorRepairService:
             )
         repair_key = f"repair:{idempotency_key}"
         if repair_key in record.processed_keys:
-            return self.coordinator.projection(plan_id)
+            return await self.coordinator.async_projection(plan_id)
         self._require_repairable(record.phase, record.revision, expected_revision)
 
-        claim = repository.acquire_claim(
+        claim = await repository.acquire_claim(
             step_id=step_id,
             owner_id=self.coordinator.coordinator_id,
             ttl=self.coordinator.claim_ttl,
@@ -81,11 +81,11 @@ class CoordinatorRepairService:
                 details={"step_id": step_id},
             )
         try:
-            current = repository.get_step_record(step_id)
+            current = await repository.get_step_record(step_id)
             if repair_key in current.processed_keys:
-                return self.coordinator.projection(plan_id)
+                return await self.coordinator.async_projection(plan_id)
             self._require_repairable(current.phase, current.revision, expected_revision)
-            state = repository.get_plan(plan_id)
+            state = await repository.get_plan(plan_id)
             step = state.step(step_id)
 
             if action is CoordinatorRepairAction.CANCEL_MISSING_RUN:
@@ -161,7 +161,7 @@ class CoordinatorRepairService:
                 reconciliation=ReconciliationDisposition.CANONICAL_TERMINAL,
                 reconciliation_detail=f"operator repair applied: {action.value}",
             )
-            repository.save_step(
+            await repository.save_step(
                 step=repaired_step,
                 record=updated,
                 expected_revision=current.revision,
@@ -169,12 +169,10 @@ class CoordinatorRepairService:
                 now=current_time,
             )
         finally:
-            repository.release_claim(claim)
+            await repository.release_claim(claim)
 
-        # Reuse ordinary coordinator aggregation after the repair. This may cancel/fail/complete
-        # the canonical Task, but it never creates a replacement Run for ambiguous missing work.
         await self.coordinator.advance(plan_id, now=current_time)
-        return self.coordinator.projection(plan_id)
+        return await self.coordinator.async_projection(plan_id)
 
     @staticmethod
     def _require_repairable(

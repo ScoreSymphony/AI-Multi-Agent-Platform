@@ -11,6 +11,7 @@ from ai_multi_agent_platform.domain import RunStatus, StepStatus, TaskStatus
 from ai_multi_agent_platform.kernel.models import RunState, TaskState
 from ai_multi_agent_platform.observability import TelemetryOutcome
 
+from .async_repository import AsyncCoordinatorRepository
 from .models import (
     CoordinationPhase,
     CoordinatorClaim,
@@ -20,7 +21,6 @@ from .models import (
     StepWait,
     WaitResolution,
 )
-from .repository import CoordinatorRepository
 
 _TERMINAL_RUNS = frozenset(
     {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED, RunStatus.TIMED_OUT}
@@ -53,7 +53,7 @@ class CancellationKernel(Protocol):
 
 
 class ClaimProvider(Protocol):
-    def __call__(self, step_id: str, now: datetime) -> CoordinatorClaim | None: ...
+    async def __call__(self, step_id: str, now: datetime) -> CoordinatorClaim | None: ...
 
 
 class CloseWait(Protocol):
@@ -87,7 +87,7 @@ class CoordinationCancellation:
     def __init__(
         self,
         *,
-        repository: CoordinatorRepository,
+        repository: AsyncCoordinatorRepository,
         kernel: CancellationKernel,
     ) -> None:
         self.repository = repository
@@ -105,17 +105,17 @@ class CoordinationCancellation:
     ) -> str:
         if not idempotency_key.strip():
             raise ValueError("idempotency_key must not be blank")
-        state = self.repository.get_plan(plan_id)
-        for record in self.repository.list_step_records(plan_id):
-            step = self.repository.get_plan(plan_id).step(record.step_id)
+        state = await self.repository.get_plan(plan_id)
+        for record in await self.repository.list_step_records(plan_id):
+            step = (await self.repository.get_plan(plan_id)).step(record.step_id)
             if step.status in {StepStatus.SUCCEEDED, StepStatus.SKIPPED, StepStatus.CANCELLED}:
                 continue
-            step_claim = claim(step.id, now)
+            step_claim = await claim(step.id, now)
             if step_claim is None:
                 continue
             try:
-                current = self.repository.get_step_record(step.id)
-                current_step = self.repository.get_plan(plan_id).step(step.id)
+                current = await self.repository.get_step_record(step.id)
+                current_step = (await self.repository.get_plan(plan_id)).step(step.id)
                 await self.cancel_active_run(current, f"{idempotency_key}:run:{step.id}")
                 if current_step.status in {
                     StepStatus.PENDING,
@@ -142,7 +142,7 @@ class CoordinationCancellation:
                     ),
                     reconciliation=ReconciliationDisposition.CANONICAL_TERMINAL,
                 )
-                self.repository.save_step(
+                await self.repository.save_step(
                     step=current_step,
                     record=updated,
                     expected_revision=current.revision,
@@ -159,7 +159,7 @@ class CoordinationCancellation:
                     attributes={"source": "plan_cancellation"},
                 )
             finally:
-                self.repository.release_claim(step_claim)
+                await self.repository.release_claim(step_claim)
         task = await self.kernel.get_task(state.plan.task_id)
         if task.status is not TaskStatus.CANCELLED:
             await self.kernel.cancel_task(

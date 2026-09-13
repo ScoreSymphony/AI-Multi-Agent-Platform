@@ -28,6 +28,8 @@ class PlanCoordinationReader(Protocol):
 
     def projection(self, plan_id: str) -> PlanCoordinationProjection: ...
 
+    async def async_projection(self, plan_id: str) -> PlanCoordinationProjection: ...
+
 
 class CodingAgentRuntime(Protocol):
     """Narrow #33 AgentRuntime start boundary used by coding dispatch."""
@@ -128,7 +130,7 @@ class CanonicalCodingWorkstreamDispatcher:
         self._telemetry = telemetry
 
     def dispatchable_workstreams(self, batch_id: str) -> tuple[CodingDispatchSlot, ...]:
-        """Intersect #872 safety readiness with already-active canonical #384 Step attempts."""
+        """Synchronous compatibility view for setup/planning callers."""
 
         batch = self._coordinator.get(batch_id)
         locally_ready = {
@@ -166,7 +168,7 @@ class CanonicalCodingWorkstreamDispatcher:
         batch = self._coordinator.get(batch_id)
         workstream = batch.workstream(workstream_id)
         was_running = workstream.state is WorkstreamState.RUNNING
-        slot = self._active_slot(batch, workstream)
+        slot = await self._active_slot_async(batch, workstream)
         if slot is None:
             raise ValueError("coding workstream has no active canonical #384 Step attempt")
 
@@ -240,6 +242,22 @@ class CanonicalCodingWorkstreamDispatcher:
         workstream: CodingWorkstream,
     ) -> CodingDispatchSlot | None:
         projection = self._plan_coordination.projection(workstream.work_item.plan_id)
+        return self._slot_from_projection(batch, workstream, projection)
+
+    async def _active_slot_async(
+        self,
+        batch: CodingBatch,
+        workstream: CodingWorkstream,
+    ) -> CodingDispatchSlot | None:
+        projection = await self._plan_coordination.async_projection(workstream.work_item.plan_id)
+        return self._slot_from_projection(batch, workstream, projection)
+
+    @staticmethod
+    def _slot_from_projection(
+        batch: CodingBatch,
+        workstream: CodingWorkstream,
+        projection: PlanCoordinationProjection,
+    ) -> CodingDispatchSlot | None:
         if projection.plan_id != workstream.work_item.plan_id:
             raise ValueError("#384 projection plan identity does not match coding workstream")
         if projection.task_id != workstream.work_item.task_id:

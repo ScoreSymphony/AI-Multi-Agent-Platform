@@ -12,6 +12,7 @@ from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.kernel.models import RecoveryReport, RunState
 from ai_multi_agent_platform.observability import TelemetryOutcome
 
+from .async_repository import AsyncCoordinatorRepository
 from .models import (
     CoordinationPhase,
     CoordinatorClaim,
@@ -19,7 +20,6 @@ from .models import (
     ReconciliationDisposition,
     StepCoordinationRecord,
 )
-from .repository import CoordinatorRepository
 
 _TERMINAL_RUNS = frozenset(
     {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED, RunStatus.TIMED_OUT}
@@ -72,7 +72,7 @@ class AdvancePlan(Protocol):
 
 
 class ClaimProvider(Protocol):
-    def __call__(self, step_id: str, now: datetime) -> CoordinatorClaim | None: ...
+    async def __call__(self, step_id: str, now: datetime) -> CoordinatorClaim | None: ...
 
 
 class ReconciliationEmitter(Protocol):
@@ -95,7 +95,7 @@ class CoordinationReconciliation:
     def __init__(
         self,
         *,
-        repository: CoordinatorRepository,
+        repository: AsyncCoordinatorRepository,
         kernel: ReconciliationKernel,
     ) -> None:
         self.repository = repository
@@ -112,9 +112,9 @@ class CoordinationReconciliation:
         claim: ClaimProvider,
         emit: ReconciliationEmitter,
     ) -> str:
-        state = self.repository.get_plan(plan_id)
+        state = await self.repository.get_plan(plan_id)
         await self.kernel.recover_task(state.plan.task_id)
-        for record in self.repository.list_step_records(plan_id):
+        for record in await self.repository.list_step_records(plan_id):
             if record.phase is not CoordinationPhase.ATTEMPT_ACTIVE:
                 continue
             if record.latest_run_id is None:
@@ -185,19 +185,19 @@ class CoordinationReconciliation:
         claim: ClaimProvider,
         emit: ReconciliationEmitter,
     ) -> None:
-        step_claim = claim(record.step_id, now)
+        step_claim = await claim(record.step_id, now)
         if step_claim is None:
             return
         try:
-            current = self.repository.get_step_record(record.step_id)
-            step = self.repository.get_plan(record.plan_id).step(record.step_id)
+            current = await self.repository.get_step_record(record.step_id)
+            step = (await self.repository.get_plan(record.plan_id)).step(record.step_id)
             updated = replace(
                 current,
                 phase=CoordinationPhase.INCONSISTENT,
                 reconciliation=disposition,
                 reconciliation_detail=detail,
             )
-            self.repository.save_step(
+            await self.repository.save_step(
                 step=step,
                 record=updated,
                 expected_revision=current.revision,
@@ -214,7 +214,7 @@ class CoordinationReconciliation:
                 attributes={"disposition": disposition.value, "detail": detail},
             )
         finally:
-            self.repository.release_claim(step_claim)
+            await self.repository.release_claim(step_claim)
 
     @staticmethod
     def start_key(record: StepCoordinationRecord, attempt: int) -> str:
