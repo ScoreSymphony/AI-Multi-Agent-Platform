@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
@@ -56,6 +57,7 @@ class RepositoryManagementService:
         self._authorization = authorization
         self._managed_local_root = Path(managed_local_root).expanduser().resolve()
         self._discovery_resolver = discovery_resolver
+        self._mutation_lock = asyncio.Lock()
 
     async def attach_local(
         self,
@@ -235,9 +237,8 @@ class RepositoryManagementService:
             side_effect="local_write",
             payload={"delete_provider_content": False},
         )
-        await self._catalog.delete(repository_id)
-        self._registry.unregister(repository_id)
-        return binding.reference
+        removed = await self._unregister_and_delete(repository_id)
+        return removed.reference
 
     async def detach_connection(
         self,
@@ -255,15 +256,8 @@ class RepositoryManagementService:
         persisted_ids: set[str] = set()
         for record in await self._catalog.list(connection_id=connection.id):
             persisted_ids.add(record.repository_id)
-            await self._catalog.delete(record.repository_id)
-            try:
-                binding = self._registry.unregister(record.repository_id)
-            except ContractError as exc:
-                if exc.code is not ErrorCode.NOT_FOUND:
-                    raise
-                detached.append(record.reference)
-            else:
-                detached.append(binding.reference)
+            removed = await self._unregister_and_delete(record.repository_id, missing_ok=True)
+            detached.append(record.reference if removed is None else removed.reference)
 
         for binding in tuple(self._registry.list(connection_id=connection.id)):
             if binding.reference.id in persisted_ids:
@@ -313,12 +307,72 @@ class RepositoryManagementService:
             connection_metadata=connection_metadata,
             adapter_configuration=adapter_configuration,
         )
-        self._registry.register(binding)
-        try:
+        async with self._mutation_lock:
+            try:
+                self._registry.resolve(binding.reference.id)
+            except ContractError as exc:
+                if exc.code is not ErrorCode.NOT_FOUND:
+                    raise
+            else:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    f"repository already registered: {binding.reference.id}",
+                )
+
+            previous = await self._catalog_record_or_none(binding.reference.id)
             await self._catalog.save(record)
-        except Exception:
-            self._registry.unregister(binding.reference.id)
+            try:
+                self._registry.register(binding)
+            except Exception:
+                await self._restore_catalog_record(binding.reference.id, previous)
+                raise
+
+    async def _unregister_and_delete(
+        self,
+        repository_id: str,
+        *,
+        missing_ok: bool = False,
+    ) -> RepositoryBinding | None:
+        async with self._mutation_lock:
+            removed: RepositoryBinding | None
+            try:
+                removed = self._registry.unregister(repository_id)
+            except ContractError as exc:
+                if not missing_ok or exc.code is not ErrorCode.NOT_FOUND:
+                    raise
+                removed = None
+            try:
+                await self._catalog.delete(repository_id)
+            except Exception:
+                if removed is not None:
+                    self._registry.register(removed)
+                raise
+            return removed
+
+    async def _catalog_record_or_none(
+        self,
+        repository_id: str,
+    ) -> RepositoryBindingRecord | None:
+        try:
+            return await self._catalog.get(repository_id)
+        except ContractError as exc:
+            if exc.code is ErrorCode.NOT_FOUND:
+                return None
             raise
+
+    async def _restore_catalog_record(
+        self,
+        repository_id: str,
+        previous: RepositoryBindingRecord | None,
+    ) -> None:
+        if previous is not None:
+            await self._catalog.save(previous)
+            return
+        try:
+            await self._catalog.delete(repository_id)
+        except ContractError as exc:
+            if exc.code is not ErrorCode.NOT_FOUND:
+                raise
 
     async def _enforce_management(
         self,
