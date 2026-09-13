@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import importlib.util
 import json
+import socket
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 _SCRIPT = (
     Path(__file__).resolve().parents[3] / "scripts" / "acceptance" / "two_vps_private_tunnel.py"
@@ -131,8 +136,10 @@ def _probe(endpoint: str, scope: str) -> dict[str, object]:
         "port": 8765 if endpoint == "message-broker" else 8443,
         "expected": "reachable" if reachable else "closed",
         "reachable": reachable,
+        "outcome": "connected" if reachable else "refused",
         "latency_ms": 8.5 if reachable else 3.0,
         "error_class": None if reachable else "ConnectionRefusedError",
+        "error_errno": None,
         "target_address_recorded": False,
         "credential_material_recorded": False,
     }
@@ -213,11 +220,8 @@ def _finalize_command(paths: dict[str, Path], report: Path) -> list[str]:
     return command
 
 
-def test_finalizer_accepts_complete_sanitized_real_host_evidence(tmp_path: Path) -> None:
-    paths = _materialize_evidence(tmp_path)
-    report_path = tmp_path / "issue562.json"
-
-    completed = subprocess.run(
+def _run_finalizer(paths: dict[str, Path], report_path: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         _finalize_command(paths, report_path),
         check=False,
         capture_output=True,
@@ -225,11 +229,28 @@ def test_finalizer_accepts_complete_sanitized_real_host_evidence(tmp_path: Path)
         timeout=10,
     )
 
+
+def _load_acceptance_module():
+    spec = importlib.util.spec_from_file_location("issue562_acceptance", _SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_finalizer_accepts_complete_sanitized_real_host_evidence(tmp_path: Path) -> None:
+    paths = _materialize_evidence(tmp_path)
+    report_path = tmp_path / "issue562.json"
+
+    completed = _run_finalizer(paths, report_path)
+
     assert completed.returncode == 0, completed.stderr
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["status"] == "pass"
     assert report["platform_commit"] == _COMMIT
     assert report["canonical"]["worker_id"] == _WORKER_ID
+    assert report["advertised_capability_refs"] == ["execution:general"]
     assert report["phases"] == {
         "dispatch": "pass",
         "interruption": "pass",
@@ -245,25 +266,61 @@ def test_finalizer_accepts_complete_sanitized_real_host_evidence(tmp_path: Path)
     assert report["provider_or_tunnel_identity_canonicalized"] is False
 
 
+def test_probe_rejects_address_resolution_failure(tmp_path: Path, monkeypatch) -> None:
+    module = _load_acceptance_module()
+    report_path = tmp_path / "probe.json"
+
+    def fail_resolution(*_args, **_kwargs):
+        raise socket.gaierror(socket.EAI_NONAME, "unresolvable test target")
+
+    monkeypatch.setattr(module.socket, "create_connection", fail_resolution)
+    args = SimpleNamespace(
+        port=8443,
+        timeout_seconds=1.0,
+        target_address="unresolvable.invalid",
+        expect="closed",
+        platform_commit=_COMMIT,
+        source_host_label="host-b",
+        endpoint_label="worker-protocol",
+        scope="public",
+        json_report=report_path,
+    )
+
+    with pytest.raises(module.AcceptanceError, match="did not resolve"):
+        module._run_probe(args)
+
+    assert not report_path.exists()
+
+
 def test_finalizer_rejects_publicly_reachable_internal_service(tmp_path: Path) -> None:
     paths = _materialize_evidence(tmp_path)
     public_broker = paths["probe-message-broker-public"]
     payload = _probe("message-broker", "public")
     payload["reachable"] = True
+    payload["outcome"] = "connected"
     payload["status"] = "fail"
     _write(public_broker, payload)
     report_path = tmp_path / "issue562.json"
 
-    completed = subprocess.run(
-        _finalize_command(paths, report_path),
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
+    completed = _run_finalizer(paths, report_path)
 
     assert completed.returncode == 2
     assert "network evidence contains a non-passing/unsupported probe" in completed.stderr
+    assert not report_path.exists()
+
+
+def test_finalizer_rejects_mismatched_public_probe_port(tmp_path: Path) -> None:
+    paths = _materialize_evidence(tmp_path)
+    public_broker = paths["probe-message-broker-public"]
+    payload = _probe("message-broker", "public")
+    payload["port"] = 8766
+    _write(public_broker, payload)
+    report_path = tmp_path / "issue562.json"
+
+    completed = _run_finalizer(paths, report_path)
+
+    assert completed.returncode == 2
+    assert "public/private probes must test the same service port" in completed.stderr
     assert not report_path.exists()
 
 
@@ -274,16 +331,38 @@ def test_finalizer_rejects_worker_identity_drift(tmp_path: Path) -> None:
     _write(paths["recovery"], recovery)
     report_path = tmp_path / "issue562.json"
 
-    completed = subprocess.run(
-        _finalize_command(paths, report_path),
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
+    completed = _run_finalizer(paths, report_path)
 
     assert completed.returncode == 2
     assert "changed the canonical Worker identity" in completed.stderr
+    assert not report_path.exists()
+
+
+def test_finalizer_rejects_missing_advertised_capabilities(tmp_path: Path) -> None:
+    paths = _materialize_evidence(tmp_path)
+    registration = _registration()
+    registration["capability_refs"] = []
+    _write(paths["registration"], registration)
+    report_path = tmp_path / "issue562.json"
+
+    completed = _run_finalizer(paths, report_path)
+
+    assert completed.returncode == 2
+    assert "must contain advertised capabilities" in completed.stderr
+    assert not report_path.exists()
+
+
+def test_finalizer_rejects_reused_run_id_after_recovery(tmp_path: Path) -> None:
+    paths = _materialize_evidence(tmp_path)
+    recovery = _recovery()
+    recovery["post_recovery_run_id"] = _dispatch()["run_id"]
+    _write(paths["recovery"], recovery)
+    report_path = tmp_path / "issue562.json"
+
+    completed = _run_finalizer(paths, report_path)
+
+    assert completed.returncode == 2
+    assert "must use distinct canonical Run IDs" in completed.stderr
     assert not report_path.exists()
 
 
@@ -294,13 +373,7 @@ def test_finalizer_rejects_sensitive_manual_evidence_key(tmp_path: Path) -> None
     _write(paths["registration"], registration)
     report_path = tmp_path / "issue562.json"
 
-    completed = subprocess.run(
-        _finalize_command(paths, report_path),
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
+    completed = _run_finalizer(paths, report_path)
 
     assert completed.returncode == 2
     assert "unsafe evidence key is not allowed" in completed.stderr
