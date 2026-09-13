@@ -10,13 +10,11 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from collections.abc import Callable
-from typing import Protocol, TypeVar, cast
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
 from .catalog import RepositoryBindingRecord, SqliteRepositoryBindingCatalog
-
-_T = TypeVar("_T")
 
 _BUSY_MARKERS = (
     "database is locked",
@@ -139,13 +137,13 @@ class AsyncSqliteRepositoryBindingCatalog:
             message="failed to delete repository binding",
         )
 
-    async def _run(
+    async def _run[T](
         self,
-        operation: Callable[[], _T],
+        operation: Callable[[], T],
         *,
         write: bool,
         message: str,
-    ) -> _T:
+    ) -> T:
         try:
             if write:
                 async with self._write_lock:
@@ -177,7 +175,7 @@ def ensure_async_repository_binding_catalog(
     return cast(RepositoryBindingCatalog, catalog)
 
 
-async def _run_to_transaction_boundary(operation: Callable[[], _T]) -> _T:
+async def _run_to_transaction_boundary[T](operation: Callable[[], T]) -> T:
     worker = asyncio.create_task(asyncio.to_thread(operation))
     try:
         return await asyncio.shield(worker)
