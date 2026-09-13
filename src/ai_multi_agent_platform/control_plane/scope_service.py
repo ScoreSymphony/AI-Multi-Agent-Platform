@@ -4,20 +4,20 @@ from __future__ import annotations
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
+from .async_scope import AsyncScopeStore
 from .authorization_service import ControlPlaneAuthorization
 from .models import PageQuery, RequestContext, paginate
 from .request_validation import optional_string, require_key, required_string, resolve_owner
 from .resources import project_resource, workspace_resource
-from .scope_store import ScopeStore
 
 
 class ControlPlaneScopeService:
-    """Own Project/Workspace API mechanics while ScopeStore owns identity state."""
+    """Own Project/Workspace API mechanics while the Scope store owns identity state."""
 
     def __init__(
         self,
         *,
-        scopes: ScopeStore,
+        scopes: AsyncScopeStore,
         authorization: ControlPlaneAuthorization,
     ) -> None:
         self._scopes = scopes
@@ -37,7 +37,7 @@ class ControlPlaneScopeService:
             owner_id=owner_id,
             request_payload_digest=ControlPlaneAuthorization.payload_digest(payload),
         )
-        project = self._scopes.create_project(
+        project = await self._scopes.create_project(
             key=require_key(context),
             name=required_string(payload, "name"),
             owner_type=owner_type,
@@ -53,7 +53,7 @@ class ControlPlaneScopeService:
     ) -> dict[str, JsonValue]:
         await self._authorization.authorize(context, "project:list", "projects")
         resources: list[dict[str, JsonValue]] = []
-        for project in self._scopes.list_projects():
+        for project in await self._scopes.list_projects():
             if await self._authorization.allowed(
                 context,
                 "project:list",
@@ -70,7 +70,7 @@ class ControlPlaneScopeService:
         context: RequestContext,
         project_id: str,
     ) -> dict[str, JsonValue]:
-        project = self._scopes.get_project(project_id)
+        project = await self._scopes.get_project(project_id)
         await self._authorization.authorize(
             context,
             "project:read",
@@ -87,7 +87,7 @@ class ControlPlaneScopeService:
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         project_id = required_string(payload, "project_id")
-        project = self._scopes.get_project(project_id)
+        project = await self._scopes.get_project(project_id)
         await self._authorization.authorize(
             context,
             "workspace:create",
@@ -97,7 +97,7 @@ class ControlPlaneScopeService:
             project_id=project.id,
             request_payload_digest=ControlPlaneAuthorization.payload_digest(payload),
         )
-        workspace = self._scopes.create_workspace(
+        workspace = await self._scopes.create_workspace(
             key=require_key(context),
             project_id=project_id,
             workspace_id=optional_string(payload, "workspace_id"),
@@ -111,7 +111,7 @@ class ControlPlaneScopeService:
     ) -> dict[str, JsonValue]:
         await self._authorization.authorize(context, "workspace:list", "workspaces")
         resources: list[dict[str, JsonValue]] = []
-        for workspace in self._scopes.list_workspaces():
+        for workspace in await self._scopes.list_workspaces():
             if await self._authorization.allowed(
                 context,
                 "workspace:list",
@@ -128,7 +128,7 @@ class ControlPlaneScopeService:
         context: RequestContext,
         workspace_id: str,
     ) -> dict[str, JsonValue]:
-        workspace = self._scopes.get_workspace(workspace_id)
+        workspace = await self._scopes.get_workspace(workspace_id)
         await self._authorization.authorize(
             context,
             "workspace:read",
