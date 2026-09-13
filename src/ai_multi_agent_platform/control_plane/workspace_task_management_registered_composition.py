@@ -1,9 +1,10 @@
 """Module-owned Workspace/Task-management composition for issue #982.
 
 The lower-level linear composition preserves the established Workspace, Run and Task
-behavior without the historical diamond MRO.  This layer makes Task-management command
-and OpenAPI ownership explicit through the canonical ``ControlPlaneModule`` registry so
-canonical callers do not retain a second command-dispatch path.
+behavior without the historical diamond MRO. This layer makes Task-management command
+and OpenAPI ownership explicit through the canonical ``ControlPlaneModule`` registry
+while preserving the exact-payload authorization semantics already enforced by the
+hardened composition.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from typing import Any
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
+from .authorization_hardening import AuthorizationBoundaryHardeningMixin
 from .extensions import ControlPlane as _RegistryControlPlane
 from .extensions import ControlPlaneModule
 from .models import RequestContext
@@ -22,6 +24,7 @@ from .task_management_api import (
 )
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
+    TASK_MANAGEMENT_COMMANDS,
     TASK_MANAGEMENT_UPDATE_COMMAND,
     _augment_openapi as _augment_task_management_openapi,
 )
@@ -43,6 +46,22 @@ def _augment_task_management_module_openapi(specification: dict[str, Any]) -> No
     _add_task_management_query_contract(specification)
 
 
+async def _task_management_authorizer(
+    context: RequestContext,
+    resource_ref: str,
+    payload: dict[str, JsonValue],
+) -> None:
+    """Defer authorization to the exact-payload Task-management handlers.
+
+    The hardening mixin authorizes individual Task relationships and includes the
+    request payload digest. Running the generic command-name preflight first would
+    change that established #15 contract, so the module declares this exception
+    explicitly rather than relying on subclass dispatch order.
+    """
+
+    del context, resource_ref, payload
+
+
 class ControlPlane(_LinearControlPlane):
     """Canonical linear composition with explicitly owned Task-management commands."""
 
@@ -54,8 +73,12 @@ class ControlPlane(_LinearControlPlane):
                 ControlPlaneModule(
                     name=TASK_MANAGEMENT_MODULE,
                     command_handlers={
-                        TASK_MANAGEMENT_UPDATE_COMMAND: self._update_management_command,
-                        TASK_MANAGEMENT_BULK_UPDATE_COMMAND: self._bulk_update_management_command,
+                        TASK_MANAGEMENT_UPDATE_COMMAND: self._execute_task_management_update,
+                        TASK_MANAGEMENT_BULK_UPDATE_COMMAND: self._execute_task_management_bulk_update,
+                    },
+                    command_authorizers={
+                        TASK_MANAGEMENT_UPDATE_COMMAND: _task_management_authorizer,
+                        TASK_MANAGEMENT_BULK_UPDATE_COMMAND: _task_management_authorizer,
                     },
                     openapi_contributors=(_augment_task_management_module_openapi,),
                 ),
@@ -69,12 +92,40 @@ class ControlPlane(_LinearControlPlane):
         resource_ref: str,
         payload: dict[str, JsonValue] | None = None,
     ) -> dict[str, JsonValue]:
-        """Dispatch every canonical command through the explicit ownership registry."""
+        """Use explicit ownership for Task management and preserve earlier domain dispatch."""
 
-        return await _RegistryControlPlane.execute_command(
+        if command in TASK_MANAGEMENT_COMMANDS:
+            return await _RegistryControlPlane.execute_command(
+                self,
+                context,
+                command,
+                resource_ref,
+                payload,
+            )
+        return await super().execute_command(context, command, resource_ref, payload)
+
+    async def _execute_task_management_update(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        return await AuthorizationBoundaryHardeningMixin._update_management_command(
             self,
             context,
-            command,
+            resource_ref,
+            payload,
+        )
+
+    async def _execute_task_management_bulk_update(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        return await AuthorizationBoundaryHardeningMixin._bulk_update_management_command(
+            self,
+            context,
             resource_ref,
             payload,
         )
