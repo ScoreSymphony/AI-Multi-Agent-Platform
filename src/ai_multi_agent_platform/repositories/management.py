@@ -7,6 +7,7 @@ import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
+from typing import TypeVar
 
 from ai_multi_agent_platform.connectors import Connection
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -37,6 +38,7 @@ RepositoryDiscoveryResolver = Callable[
     [str, str], Awaitable[tuple[RepositoryConnection, RepositoryProvider]]
 ]
 
+_T = TypeVar("_T")
 _MANAGED_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
@@ -307,6 +309,13 @@ class RepositoryManagementService:
             connection_metadata=connection_metadata,
             adapter_configuration=adapter_configuration,
         )
+        await _complete_repository_mutation(self._persist_and_register(binding, record))
+
+    async def _persist_and_register(
+        self,
+        binding: RepositoryBinding,
+        record: RepositoryBindingRecord,
+    ) -> None:
         async with self._mutation_lock:
             try:
                 self._registry.resolve(binding.reference.id)
@@ -332,6 +341,16 @@ class RepositoryManagementService:
         repository_id: str,
         *,
         missing_ok: bool = False,
+    ) -> RepositoryBinding | None:
+        return await _complete_repository_mutation(
+            self._delete_and_unregister(repository_id, missing_ok=missing_ok)
+        )
+
+    async def _delete_and_unregister(
+        self,
+        repository_id: str,
+        *,
+        missing_ok: bool,
     ) -> RepositoryBinding | None:
         async with self._mutation_lock:
             removed: RepositoryBinding | None
@@ -424,6 +443,25 @@ class RepositoryManagementService:
             ),
         )
         return operation
+
+
+async def _complete_repository_mutation(operation: Awaitable[_T]) -> _T:
+    """Keep a logical registry/catalog mutation atomic with respect to caller cancellation."""
+
+    task = asyncio.ensure_future(operation)
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
+        try:
+            task.result()
+        except Exception:
+            pass
+        raise
 
 
 def _managed_name(value: str) -> str:
