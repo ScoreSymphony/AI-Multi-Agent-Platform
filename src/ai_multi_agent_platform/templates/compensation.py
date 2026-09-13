@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from ai_multi_agent_platform.agents import AgentService
 from ai_multi_agent_platform.automation import AutomationService
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.control_plane.async_scope import AsyncScopeStore, AsyncScopeStoreAdapter
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.workspaces import WorkspaceProvider
 
@@ -75,6 +76,7 @@ class AutomationTemplateCompensator:
 @dataclass(slots=True)
 class ProjectTemplateCompensator:
     scopes: ScopeStore
+    runtime_scopes: AsyncScopeStore | None = None
 
     async def compensate(
         self,
@@ -83,13 +85,14 @@ class ProjectTemplateCompensator:
         context: TemplateInstantiationContext,
     ) -> None:
         del provenance, context
+        runtime = self.runtime_scopes or AsyncScopeStoreAdapter(self.scopes)
         for resource in reversed(resources):
             _require_type(resource, "project")
             # Template application compensates in reverse dependency order, so resources
             # created later in this same graph have already been removed. ScopeStore still
             # performs its own Workspace guard and refuses compensation if that proof is
             # no longer true.
-            self.scopes.compensate_project(
+            await runtime.compensate_project(
                 resource.resource_id,
                 external_dependencies=(),
             )
