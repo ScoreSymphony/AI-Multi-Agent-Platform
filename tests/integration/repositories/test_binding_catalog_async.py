@@ -5,19 +5,40 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
+from typing import cast
 
 import pytest
 
-from ai_multi_agent_platform.connectors import ExternalNativeReference, ExternalResourceReference
+from ai_multi_agent_platform.connectors import (
+    Connection,
+    ExternalNativeReference,
+    ExternalResourceReference,
+)
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.repositories import (
     AsyncSqliteRepositoryBindingCatalog,
     InMemoryRepositoryBindingCatalog,
+    RepositoryBinding,
+    RepositoryBindingCatalog,
     RepositoryBindingRecord,
+    RepositoryCallContext,
+    RepositoryConnection,
+    RepositoryManagementService,
+    RepositoryProvider,
     RepositoryReference,
+    RepositoryRegistry,
     RepositoryVisibility,
     SqliteRepositoryBindingCatalog,
+)
+from ai_multi_agent_platform.security import (
+    ActorType,
+    AuthorizationAction,
+    AuthorizationGate,
+    LocalAuthorizationProvider,
+    LocalPrincipalPolicy,
+    ResourceType,
 )
 
 
@@ -43,9 +64,11 @@ def _record(*, connection_id: str | None = None, native_id: str = "fixture") -> 
 
 def test_in_memory_and_sqlite_catalogs_share_async_contract(tmp_path: Path) -> None:
     async def scenario() -> None:
-        memory = InMemoryRepositoryBindingCatalog()
-        sqlite = AsyncSqliteRepositoryBindingCatalog(
-            SqliteRepositoryBindingCatalog(tmp_path / "bindings.sqlite3")
+        catalogs: tuple[RepositoryBindingCatalog, ...] = (
+            InMemoryRepositoryBindingCatalog(),
+            AsyncSqliteRepositoryBindingCatalog(
+                SqliteRepositoryBindingCatalog(tmp_path / "bindings.sqlite3")
+            ),
         )
         connection_id = new_id("connection")
         records = (
@@ -53,7 +76,7 @@ def test_in_memory_and_sqlite_catalogs_share_async_contract(tmp_path: Path) -> N
             _record(connection_id=connection_id, native_id="two"),
         )
 
-        for catalog in (memory, sqlite):
+        for catalog in catalogs:
             for record in records:
                 assert await catalog.save(record) == record
             assert await catalog.get(records[0].repository_id) == records[0]
@@ -201,5 +224,90 @@ def test_sqlite_catalog_maps_busy_errors_to_retryable_transient_failure(tmp_path
             await catalog.list()
         assert failure.value.code is ErrorCode.TRANSIENT_FAILURE
         assert failure.value.retryable is True
+
+    asyncio.run(scenario())
+
+
+def test_management_hides_binding_until_durable_save_succeeds(tmp_path: Path) -> None:
+    class FailingCatalog(InMemoryRepositoryBindingCatalog):
+        def __init__(self) -> None:
+            super().__init__()
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def save(self, record: RepositoryBindingRecord) -> RepositoryBindingRecord:
+            self.started.set()
+            await self.release.wait()
+            raise ContractError(ErrorCode.BACKEND_ERROR, "injected persistence failure")
+
+    class Provider:
+        provider_id = "local-git"
+
+    async def scenario() -> None:
+        owner_id = new_id("user")
+        project_id = new_id("project")
+        record = _record(native_id="pending")
+        connection = RepositoryConnection(
+            connection=Connection(
+                id=record.connection_id,
+                connector_type_id="local-git",
+                connector_version="1.0",
+                owner_type="user",
+                owner_id=owner_id,
+                display_name="Pending repository",
+                project_id=project_id,
+            ),
+            provider_id="local-git",
+            local=True,
+        )
+        binding = RepositoryBinding(
+            connection,
+            record.reference,
+            cast(RepositoryProvider, Provider()),
+        )
+        registry = RepositoryRegistry()
+        catalog = FailingCatalog()
+        authorization = AuthorizationGate(
+            LocalAuthorizationProvider(
+                (
+                    LocalPrincipalPolicy(
+                        principal_ref=owner_id,
+                        actor_types=frozenset({ActorType.HUMAN}),
+                        allowed_actions=frozenset({AuthorizationAction.CREATE}),
+                        resource_types=frozenset({ResourceType.GENERIC}),
+                        project_ids=frozenset({project_id}),
+                    ),
+                )
+            )
+        )
+        service = RepositoryManagementService(
+            registry,
+            catalog,
+            authorization,
+            managed_local_root=tmp_path / "managed",
+        )
+        context = RepositoryCallContext(
+            operation=OperationContext(
+                correlation_id="issue-892-pending-binding",
+                owner_type="user",
+                owner_id=owner_id,
+                project_id=project_id,
+            ),
+            actor_ref=owner_id,
+        )
+
+        attach = asyncio.create_task(service.attach_binding(binding, context))
+        await catalog.started.wait()
+        with pytest.raises(ContractError) as pending:
+            registry.resolve(record.repository_id)
+        assert pending.value.code is ErrorCode.NOT_FOUND
+
+        catalog.release.set()
+        with pytest.raises(ContractError) as failure:
+            await attach
+        assert failure.value.code is ErrorCode.BACKEND_ERROR
+        with pytest.raises(ContractError) as rolled_back:
+            registry.resolve(record.repository_id)
+        assert rolled_back.value.code is ErrorCode.NOT_FOUND
 
     asyncio.run(scenario())
