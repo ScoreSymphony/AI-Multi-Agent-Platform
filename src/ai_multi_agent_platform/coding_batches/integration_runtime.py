@@ -42,6 +42,8 @@ class IntegrationPlanCoordinationReader(Protocol):
 
     def projection(self, plan_id: str) -> PlanCoordinationProjection: ...
 
+    async def async_projection(self, plan_id: str) -> PlanCoordinationProjection: ...
+
 
 class IntegrationRepositoryEvidenceReader(Protocol):
     """Read exact #82 Run provenance after integration execution completes."""
@@ -247,7 +249,7 @@ class CanonicalCodingIntegrationDispatcher:
         if candidate.stale_base or candidate.conflicts:
             raise ValueError("blocked/stale integration candidate cannot be dispatched")
 
-        slot = self._active_slot(plan_id=plan_id, step_id=step_id)
+        slot = await self._active_slot_async(plan_id=plan_id, step_id=step_id)
         context = self._verification_context(batch, candidate, slot)
         agent_run = await self._ensure_agent_run(
             slot,
@@ -360,7 +362,23 @@ class CanonicalCodingIntegrationDispatcher:
         return updated
 
     def _active_slot(self, *, plan_id: str, step_id: str) -> IntegrationDispatchSlot:
-        projection = self._plan_coordination.projection(plan_id)
+        return self._slot_from_projection(
+            self._plan_coordination.projection(plan_id),
+            step_id=step_id,
+        )
+
+    async def _active_slot_async(self, *, plan_id: str, step_id: str) -> IntegrationDispatchSlot:
+        return self._slot_from_projection(
+            await self._plan_coordination.async_projection(plan_id),
+            step_id=step_id,
+        )
+
+    @staticmethod
+    def _slot_from_projection(
+        projection: PlanCoordinationProjection,
+        *,
+        step_id: str,
+    ) -> IntegrationDispatchSlot:
         step = next((item for item in projection.steps if item.step_id == step_id), None)
         if step is None:
             raise ValueError("integration Step is absent from canonical #384 projection")

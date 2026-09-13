@@ -16,6 +16,7 @@ from ai_multi_agent_platform.coordination import (
     StepWait,
     WaitResolution,
     WaitType,
+    runtime_coordinator_repository,
 )
 from ai_multi_agent_platform.coordination.repair import (
     CoordinatorRepairAction,
@@ -84,6 +85,7 @@ class _UnusedKernel:
 class _RepairCoordinator:
     def __init__(self, repository: InMemoryCoordinatorRepository) -> None:
         self.repository = repository
+        self.runtime_repository = runtime_coordinator_repository(repository)
         self.coordinator_id = "repair-regression"
         self.claim_ttl = timedelta(seconds=30)
         self.kernel = _UnusedKernel()
@@ -93,6 +95,10 @@ class _RepairCoordinator:
         return object()
 
     def projection(self, plan_id: str) -> object:
+        del plan_id
+        return object()
+
+    async def async_projection(self, plan_id: str) -> object:
         del plan_id
         return object()
 

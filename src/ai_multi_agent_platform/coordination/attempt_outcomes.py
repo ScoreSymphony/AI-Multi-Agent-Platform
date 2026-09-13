@@ -12,6 +12,7 @@ from ai_multi_agent_platform.domain import RunStatus, Step, StepStatus
 from ai_multi_agent_platform.kernel.models import RunState
 from ai_multi_agent_platform.observability import TelemetryOutcome
 
+from .async_repository import AsyncCoordinatorRepository
 from .models import (
     CoordinationPhase,
     CoordinatorClaim,
@@ -21,7 +22,6 @@ from .models import (
     StepWait,
     WaitResolution,
 )
-from .repository import CoordinatorRepository
 
 _TERMINAL_RUNS = frozenset(
     {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED, RunStatus.TIMED_OUT}
@@ -35,7 +35,7 @@ class AttemptOutcomeKernel(Protocol):
 
 
 class ClaimProvider(Protocol):
-    def __call__(self, step_id: str, now: datetime) -> CoordinatorClaim | None: ...
+    async def __call__(self, step_id: str, now: datetime) -> CoordinatorClaim | None: ...
 
 
 class CloseWait(Protocol):
@@ -75,7 +75,7 @@ class CoordinationAttemptOutcomes:
     def __init__(
         self,
         *,
-        repository: CoordinatorRepository,
+        repository: AsyncCoordinatorRepository,
         kernel: AttemptOutcomeKernel,
     ) -> None:
         self.repository = repository
@@ -98,20 +98,20 @@ class CoordinationAttemptOutcomes:
             raise ContractError(ErrorCode.INVALID_REQUEST, "coordinator accepts only Step Runs")
         if run.status not in _TERMINAL_RUNS:
             raise ContractError(ErrorCode.CONFLICT, f"run {run_id} is not terminal")
-        record = self.repository.get_step_record(run.run.subject_id)
+        record = await self.repository.get_step_record(run.run.subject_id)
         if record.task_id != task_id:
             raise ContractError(ErrorCode.CONFLICT, "Run/Step task scope mismatch")
         key = observation_key or f"run:{run_id}:{run.status.value}"
         if key in record.processed_keys:
             return AttemptOutcomeMutation(plan_id=record.plan_id, changed=False)
 
-        step_claim = claim(record.step_id, now)
+        step_claim = await claim(record.step_id, now)
         if step_claim is None:
             return AttemptOutcomeMutation(plan_id=record.plan_id, changed=False)
         try:
-            state = self.repository.get_plan(record.plan_id)
+            state = await self.repository.get_plan(record.plan_id)
             step = state.step(record.step_id)
-            current = self.repository.get_step_record(record.step_id)
+            current = await self.repository.get_step_record(record.step_id)
             if key in current.processed_keys:
                 return AttemptOutcomeMutation(plan_id=current.plan_id, changed=False)
             next_step = step
@@ -229,7 +229,7 @@ class CoordinationAttemptOutcomes:
                     ),
                 )
 
-            self.repository.save_step(
+            await self.repository.save_step(
                 step=next_step,
                 record=next_record,
                 expected_revision=current.revision,
@@ -246,7 +246,7 @@ class CoordinationAttemptOutcomes:
             )
             return AttemptOutcomeMutation(plan_id=current.plan_id, changed=True)
         finally:
-            self.repository.release_claim(step_claim)
+            await self.repository.release_claim(step_claim)
 
     async def activate_retry(
         self,
@@ -259,12 +259,12 @@ class CoordinationAttemptOutcomes:
     ) -> bool:
         if step.status is not StepStatus.FAILED:
             return False
-        step_claim = claim(step.id, now)
+        step_claim = await claim(step.id, now)
         if step_claim is None:
             return False
         try:
-            current = self.repository.get_step_record(step.id)
-            current_step = self.repository.get_plan(step.plan_id).step(step.id)
+            current = await self.repository.get_step_record(step.id)
+            current_step = (await self.repository.get_plan(step.plan_id)).step(step.id)
             if (
                 current.phase is not CoordinationPhase.RETRY_SCHEDULED
                 or current.retry_due_at is None
@@ -278,7 +278,7 @@ class CoordinationAttemptOutcomes:
                 retry_due_at=None,
                 retry_state=RetryState.ACTIVE,
             )
-            self.repository.save_step(
+            await self.repository.save_step(
                 step=ready,
                 record=updated,
                 expected_revision=current.revision,
@@ -294,7 +294,7 @@ class CoordinationAttemptOutcomes:
             )
             return True
         finally:
-            self.repository.release_claim(step_claim)
+            await self.repository.release_claim(step_claim)
 
     @staticmethod
     def run_outcome(status: RunStatus) -> TelemetryOutcome:
