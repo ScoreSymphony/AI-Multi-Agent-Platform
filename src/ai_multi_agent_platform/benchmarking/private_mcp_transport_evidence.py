@@ -116,14 +116,14 @@ def verify_private_mcp_transport_evidence_files(
 
 def _resolve_evidence_path(root: Path, path_text: str) -> Path:
     if "\\" in path_text:
-        raise ValueError(
-            f"raw_evidence path must use canonical forward slashes: {path_text!r}"
-        )
+        raise ValueError(f"raw_evidence path must use canonical forward slashes: {path_text!r}")
     posix_path = PurePosixPath(path_text)
     if posix_path.is_absolute() or PureWindowsPath(path_text).is_absolute():
         raise ValueError(f"raw_evidence path must be relative: {path_text!r}")
     if ".." in posix_path.parts:
-        raise ValueError(f"raw_evidence path must not traverse outside evidence_root: {path_text!r}")
+        raise ValueError(
+            f"raw_evidence path must not traverse outside evidence_root: {path_text!r}"
+        )
     if posix_path.as_posix() != path_text:
         raise ValueError(f"raw_evidence path must be normalized: {path_text!r}")
 
