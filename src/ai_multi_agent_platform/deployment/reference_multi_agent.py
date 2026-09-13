@@ -8,7 +8,7 @@ resolver assembles the consuming Run's immutable ContextBundle.
 
 from __future__ import annotations
 
-from ai_multi_agent_platform.agents import AgentRevisionRef, AgentRunStatus
+from ai_multi_agent_platform.agents import AgentRevisionRef, AgentRunRecord, AgentRunStatus
 from ai_multi_agent_platform.context import ContextCandidate, ContextSourceRequest
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.handoffs import (
@@ -270,13 +270,15 @@ class ReferenceIncomingHandoffContextAdapter:
                 operation=operation,
             )
 
-    async def _source_refs(self, task_id: str, producer_run: object) -> tuple[HandoffSourceRef, ...]:
-        result_ids = getattr(producer_run, "result_ids", ())
-        artifact_ids = getattr(producer_run, "artifact_ids", ())
+    async def _source_refs(
+        self,
+        task_id: str,
+        producer_run: AgentRunRecord,
+    ) -> tuple[HandoffSourceRef, ...]:
         references: list[HandoffSourceRef] = []
         for kind, resource_ids in (
-            (HandoffSourceKind.RESULT, result_ids),
-            (HandoffSourceKind.ARTIFACT, artifact_ids),
+            (HandoffSourceKind.RESULT, producer_run.result_ids),
+            (HandoffSourceKind.ARTIFACT, producer_run.artifact_ids),
         ):
             for resource_id in sorted(resource_ids):
                 subject = await self._handoffs.references.verification.resolve_subject(
@@ -288,7 +290,7 @@ class ReferenceIncomingHandoffContextAdapter:
                     HandoffSourceRef(
                         kind,
                         resource_id,
-                        revision=subject.revision,
+                        revision=str(subject.revision),
                         digest=subject.digest.removeprefix("sha256:"),
                     )
                 )
