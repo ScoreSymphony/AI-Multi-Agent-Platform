@@ -192,6 +192,27 @@ def test_memory_sqlite_runtime_rolls_back_failed_write(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
+def test_memory_delete_preserves_serial_not_found_semantics_under_concurrency(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        provider = LocalMemoryProvider(tmp_path / "delete-race.sqlite3")
+        entry = _entry(value="delete once")
+        await provider.write_entry(entry, _context())
+
+        outcomes = await asyncio.gather(
+            provider.delete_entry(entry.memory_id, _context()),
+            provider.delete_entry(entry.memory_id, _context()),
+            return_exceptions=True,
+        )
+        assert sum(outcome is None for outcome in outcomes) == 1
+        failures = [outcome for outcome in outcomes if isinstance(outcome, ContractError)]
+        assert len(failures) == 1
+        assert failures[0].code is ErrorCode.NOT_FOUND
+
+    asyncio.run(scenario())
+
+
 def test_memory_sqlite_runtime_preserves_restart_semantics(tmp_path: Path) -> None:
     async def scenario() -> None:
         db_path = tmp_path / "restart.sqlite3"
