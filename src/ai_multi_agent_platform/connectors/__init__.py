@@ -1,5 +1,6 @@
 """Canonical external connector framework."""
 
+from .async_sqlite import SqliteConnectorRepository
 from .capability_bridge import ConnectorActorResolver, ConnectorCapabilityProvider
 from .durable_github_releases import DurableGitHubReleaseConnectorProvider
 from .egress import EgressConnectorService
@@ -42,7 +43,6 @@ from .reference import (
 from .registry import ConnectorRegistry
 from .repository import ConnectorRepository, InMemoryConnectorRepository
 from .service import ConnectorService
-from .sqlite_repository import SqliteConnectorRepository
 
 __all__ = [
     "ConflictPolicy",
