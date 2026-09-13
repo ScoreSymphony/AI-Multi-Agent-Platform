@@ -218,6 +218,8 @@ class MCPTaskBindingStore(Protocol):
 
     async def get(self, provider_id: str, invocation_id: str) -> MCPTaskBinding | None: ...
 
+    async def claim_dispatch(self, provider_id: str, invocation_id: str) -> bool: ...
+
     async def bind(self, binding: MCPTaskBinding) -> MCPTaskBinding: ...
 
     async def save(self, binding: MCPTaskBinding) -> MCPTaskBinding: ...
@@ -229,15 +231,26 @@ class InMemoryMCPTaskBindingStore:
     def __init__(self) -> None:
         self._by_invocation: dict[tuple[str, str], MCPTaskBinding] = {}
         self._by_external: dict[tuple[str, str], tuple[str, str]] = {}
+        self._dispatch_claims: set[tuple[str, str]] = set()
 
     async def get(self, provider_id: str, invocation_id: str) -> MCPTaskBinding | None:
         return self._by_invocation.get((provider_id, invocation_id))
+
+    async def claim_dispatch(self, provider_id: str, invocation_id: str) -> bool:
+        """Atomically consume permission to create external work for one canonical attempt."""
+
+        key = (provider_id, invocation_id)
+        if key in self._by_invocation or key in self._dispatch_claims:
+            return False
+        self._dispatch_claims.add(key)
+        return True
 
     async def bind(self, binding: MCPTaskBinding) -> MCPTaskBinding:
         key = (binding.provider_id, binding.invocation_id)
         existing = self._by_invocation.get(key)
         if existing is not None:
             _assert_same_binding_identity(existing, binding)
+            self._dispatch_claims.discard(key)
             return existing
         external_key = (binding.provider_id, binding.external_task_id)
         owner = self._by_external.get(external_key)
@@ -249,6 +262,7 @@ class InMemoryMCPTaskBindingStore:
             )
         self._by_invocation[key] = binding
         self._by_external[external_key] = key
+        self._dispatch_claims.discard(key)
         return binding
 
     async def save(self, binding: MCPTaskBinding) -> MCPTaskBinding:
@@ -319,6 +333,16 @@ class SqliteMCPTaskBindingStore:
                     )
                     """
                 )
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS mcp_task_dispatch_claims (
+                        provider_id TEXT NOT NULL,
+                        invocation_id TEXT NOT NULL,
+                        claimed_at TEXT NOT NULL,
+                        PRIMARY KEY(provider_id, invocation_id)
+                    )
+                    """
+                )
         except sqlite3.Error as exc:
             raise _map_sqlite_error(
                 exc,
@@ -373,6 +397,41 @@ class SqliteMCPTaskBindingStore:
             return None
         return _decode_binding(str(row["payload"]))
 
+    async def claim_dispatch(self, provider_id: str, invocation_id: str) -> bool:
+        return await self._run(lambda: self._claim_dispatch_sync(provider_id, invocation_id))
+
+    def _claim_dispatch_sync(self, provider_id: str, invocation_id: str) -> bool:
+        self._ensure_initialized_sync()
+        try:
+            with self._connect() as connection:
+                binding = connection.execute(
+                    """
+                    SELECT 1 FROM mcp_task_bindings
+                    WHERE provider_id = ? AND invocation_id = ?
+                    """,
+                    (provider_id, invocation_id),
+                ).fetchone()
+                if binding is not None:
+                    return False
+                try:
+                    connection.execute(
+                        """
+                        INSERT INTO mcp_task_dispatch_claims(
+                            provider_id, invocation_id, claimed_at
+                        ) VALUES (?, ?, ?)
+                        """,
+                        (provider_id, invocation_id, datetime.now(UTC).isoformat()),
+                    )
+                except sqlite3.IntegrityError:
+                    return False
+        except sqlite3.Error as exc:
+            raise _map_sqlite_error(
+                exc,
+                "failed to claim MCP task dispatch",
+                provider_id=provider_id,
+            ) from exc
+        return True
+
     async def bind(self, binding: MCPTaskBinding) -> MCPTaskBinding:
         return await self._run(lambda: self._bind_sync(binding))
 
@@ -390,6 +449,13 @@ class SqliteMCPTaskBindingStore:
                 if row is not None:
                     existing = _decode_binding(str(row["payload"]))
                     _assert_same_binding_identity(existing, binding)
+                    connection.execute(
+                        """
+                        DELETE FROM mcp_task_dispatch_claims
+                        WHERE provider_id = ? AND invocation_id = ?
+                        """,
+                        (binding.provider_id, binding.invocation_id),
+                    )
                     return existing
                 connection.execute(
                     """
@@ -403,6 +469,13 @@ class SqliteMCPTaskBindingStore:
                         binding.external_task_id,
                         _encode_binding(binding),
                     ),
+                )
+                connection.execute(
+                    """
+                    DELETE FROM mcp_task_dispatch_claims
+                    WHERE provider_id = ? AND invocation_id = ?
+                    """,
+                    (binding.provider_id, binding.invocation_id),
                 )
         except sqlite3.IntegrityError as exc:
             stored = self._get_sync(binding.provider_id, binding.invocation_id)
@@ -488,15 +561,8 @@ def _map_sqlite_error(
     )
 
 
-def binding_for_snapshot(
-    invocation: ToolInvocation,
-    *,
-    provider_id: str,
-    server_id: str,
-    protocol_revision: str,
-    snapshot: MCPTaskSnapshot,
-) -> MCPTaskBinding:
-    """Bind a server task to the exact canonical attempt that caused it."""
+def validate_task_invocation_context(invocation: ToolInvocation, *, provider_id: str) -> None:
+    """Reject task-aware dispatch before external work exists if canonical scope is incomplete."""
 
     if invocation.task_id is None or invocation.run_id is None:
         raise ContractError(
@@ -510,6 +576,23 @@ def binding_for_snapshot(
             "MCP Tasks require an authenticated canonical owner context",
             provider_id=provider_id,
         )
+
+
+def binding_for_snapshot(
+    invocation: ToolInvocation,
+    *,
+    provider_id: str,
+    server_id: str,
+    protocol_revision: str,
+    snapshot: MCPTaskSnapshot,
+) -> MCPTaskBinding:
+    """Bind a server task to the exact canonical attempt that caused it."""
+
+    validate_task_invocation_context(invocation, provider_id=provider_id)
+    assert invocation.task_id is not None
+    assert invocation.run_id is not None
+    assert invocation.context.owner_type is not None
+    assert invocation.context.owner_id is not None
     return MCPTaskBinding(
         provider_id=provider_id,
         server_id=server_id,
