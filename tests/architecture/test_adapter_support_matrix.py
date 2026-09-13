@@ -92,6 +92,11 @@ FIRST_PARTY_IMPLEMENTATION_INVENTORY = {
         "AgentSandboxExecutor",
     ),
     (
+        "executor.openshell",
+        "src/ai_multi_agent_platform/adapters/openshell.py",
+        "OpenShellExecutor",
+    ),
+    (
         "executor.swe-rex",
         "src/ai_multi_agent_platform/adapters/swe_rex.py",
         "SwerexExecutor",
