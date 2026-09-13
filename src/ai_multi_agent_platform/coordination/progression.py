@@ -23,7 +23,8 @@ from .models import (
 from .repository import CoordinatorRepository
 
 _SUCCESSFUL_PREDECESSORS = frozenset({StepStatus.SUCCEEDED, StepStatus.SKIPPED})
-_STALE_STREAM_RETRY_LIMIT = 8
+_STALE_STREAM_RETRY_LIMIT = 32
+_STALE_STREAM_RETRY_DELAY_SECONDS = 0.001
 
 
 class ProgressionRunKernel(Protocol):
@@ -312,7 +313,7 @@ class CoordinationProgression:
                 if not _is_stale_revision_conflict(exc):
                     raise
                 last_stale_conflict = exc
-                await asyncio.sleep(0)
+                await asyncio.sleep(_STALE_STREAM_RETRY_DELAY_SECONDS)
         if last_stale_conflict is None:
             raise RuntimeError("stale-revision create_run retry loop exited without a conflict")
         raise last_stale_conflict
@@ -336,7 +337,7 @@ class CoordinationProgression:
                 if not _is_stale_revision_conflict(exc):
                     raise
                 last_stale_conflict = exc
-                await asyncio.sleep(0)
+                await asyncio.sleep(_STALE_STREAM_RETRY_DELAY_SECONDS)
         if last_stale_conflict is None:
             raise RuntimeError("stale-revision start_run retry loop exited without a conflict")
         raise last_stale_conflict
