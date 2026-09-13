@@ -21,6 +21,7 @@ from .plugin_module import (
     PLUGIN_MODULE,
     PluginControlPlaneBinding,
     PluginPermissionResolver,
+    _manifest_document,
 )
 
 
