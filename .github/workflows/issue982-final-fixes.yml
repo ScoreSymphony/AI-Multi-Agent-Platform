@@ -1,0 +1,170 @@
+name: issue982-final-fixes
+
+on:
+  push:
+    branches:
+      - issue/982-explicit-control-plane-composition
+    paths:
+      - .github/workflows/issue982-final-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: issue/982-explicit-control-plane-composition
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Apply focused fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{path}: expected one replacement, found {count}")
+              target.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "src/ai_multi_agent_platform/control_plane/workspace_task_management_explicit_composition.py",
+              '''    async def _call_task_management_adapter(\n        self,\n        handler: Any,\n        *args: Any,\n    ) -> Any:\n        return await handler(self, *args)\n''',
+              '''    async def _call_task_management_adapter(\n        self,\n        handler: Any,\n        *args: Any,\n    ) -> dict[str, JsonValue]:\n        return cast(dict[str, JsonValue], await handler(self, *args))\n''',
+          )
+
+          replace_once(
+              "src/ai_multi_agent_platform/control_plane/workspace_task_management_registered_composition.py",
+              "from typing import Any, cast\n",
+              "from typing import Any\n",
+          )
+          replace_once(
+              "src/ai_multi_agent_platform/control_plane/workspace_task_management_registered_composition.py",
+              "        normalized = cast(dict[str, JsonValue], result)\n",
+              "        normalized = result\n",
+          )
+
+          replace_once(
+              "src/ai_multi_agent_platform/control_plane/automation_explicit_composition.py",
+              '''    async def _call_legacy_command(\n        self,\n        handler: Any,\n        context: RequestContext,\n        resource_ref: str,\n        payload: dict[str, JsonValue],\n    ) -> dict[str, JsonValue]:\n        return await handler(self, context, resource_ref, payload)\n''',
+              '''    async def _call_legacy_command(\n        self,\n        handler: Any,\n        context: RequestContext,\n        resource_ref: str,\n        payload: dict[str, JsonValue],\n    ) -> dict[str, JsonValue]:\n        return cast(dict[str, JsonValue], await handler(self, context, resource_ref, payload))\n''',
+          )
+
+          replace_once(
+              "src/ai_multi_agent_platform/control_plane/terminal_explicit_composition.py",
+              "                _AuthorizedStreamSessions(control_plane, control_plane.terminal_sessions),\n",
+              "                _AuthorizedStreamSessions(cast(Any, control_plane), control_plane.terminal_sessions),\n",
+          )
+
+          for path, collection_guard, command_guard in (
+              (
+                  "src/ai_multi_agent_platform/control_plane/automation_api.py",
+                  '''    def register_resource_service(self, collection: str, service: ResourceService) -> None:\n        if collection in {AUTOMATION_COLLECTION, DELIVERY_COLLECTION}:\n            raise ValueError(\n                f"extension collection conflicts with canonical automation route: {collection}"\n            )\n        super().register_resource_service(collection, service)\n''',
+                  '''    def register_command(self, command: str, handler: CommandHandler) -> None:\n        if command in AUTOMATION_COMMANDS:\n            raise ValueError(\n                f"extension command conflicts with canonical automation command: {command}"\n            )\n        super().register_command(command, handler)\n''',
+              ),
+              (
+                  "src/ai_multi_agent_platform/control_plane/organization_api.py",
+                  '''    def register_resource_service(self, collection: str, service: ResourceService) -> None:\n        if collection in ORGANIZATION_COLLECTIONS:\n            raise ValueError(\n                f"extension collection conflicts with canonical organization route: {collection}"\n            )\n        super().register_resource_service(collection, service)\n''',
+                  '''    def register_command(self, command: str, handler: CommandHandler) -> None:\n        if command in ORGANIZATION_COMMANDS:\n            raise ValueError(\n                f"extension command conflicts with canonical organization command: {command}"\n            )\n        super().register_command(command, handler)\n''',
+              ),
+              (
+                  "src/ai_multi_agent_platform/control_plane/conversation_composition.py",
+                  '''    def register_resource_service(self, collection: str, service: ResourceService) -> None:\n        if collection in CONVERSATION_COLLECTIONS and not self._installing_conversations:\n            raise ValueError(\n                f"extension collection conflicts with canonical conversation route: {collection}"\n            )\n        super().register_resource_service(collection, service)\n''',
+                  '''    def register_command(self, command: str, handler: CommandHandler) -> None:\n        if command in _ALL_CONVERSATION_COMMANDS and not self._installing_conversations:\n            raise ValueError(\n                f"extension command conflicts with canonical conversation command: {command}"\n            )\n        super().register_command(command, handler)\n''',
+              ),
+              (
+                  "src/ai_multi_agent_platform/control_plane/notifications_plugin_composition.py",
+                  '''    def register_resource_service(self, collection: str, service: ResourceService) -> None:\n        if self._notification_routes_locked and collection in _NOTIFICATION_COLLECTIONS:\n            raise ValueError(f"cannot override canonical notification collection: {collection}")\n        super().register_resource_service(collection, service)\n''',
+                  '''    def register_command(self, command: str, handler: CommandHandler) -> None:\n        if self._notification_routes_locked and command in _NOTIFICATION_COMMAND_SET:\n            raise ValueError(f"cannot override canonical notification command: {command}")\n        super().register_command(command, handler)\n''',
+              ),
+              (
+                  "src/ai_multi_agent_platform/control_plane/notifications_explicit_composition.py",
+                  '''    def register_resource_service(self, collection: str, service: ResourceService) -> None:\n        if self._capturing_notification_composition and collection in _NOTIFICATION_COLLECTIONS:\n            self._captured_notification_resources[collection] = service\n            return\n        super().register_resource_service(collection, service)\n''',
+                  '''    def register_command(self, command: str, handler: CommandHandler) -> None:\n        if self._capturing_notification_composition and command in _NOTIFICATION_COMMANDS:\n            self._captured_notification_commands[command] = handler\n            return\n        super().register_command(command, handler)\n''',
+              ),
+          ):
+              replace_once(
+                  path,
+                  collection_guard,
+                  collection_guard.replace(
+                      "def register_resource_service(self, collection: str, service: ResourceService) -> None:",
+                      "def register_resource_service(\n        self,\n        collection: str,\n        service: ResourceService,\n        *,\n        owner: str = \"manual\",\n    ) -> None:",
+                  ).replace(
+                      "super().register_resource_service(collection, service)",
+                      "super().register_resource_service(collection, service, owner=owner)",
+                  ),
+              )
+              replace_once(
+                  path,
+                  command_guard,
+                  command_guard.replace(
+                      "def register_command(self, command: str, handler: CommandHandler) -> None:",
+                      "def register_command(\n        self,\n        command: str,\n        handler: CommandHandler,\n        *,\n        owner: str = \"manual\",\n    ) -> None:",
+                  ).replace(
+                      "super().register_command(command, handler)",
+                      "super().register_command(command, handler, owner=owner)",
+                  ),
+              )
+
+          template_path = "src/ai_multi_agent_platform/templates/control_plane.py"
+          template_old = '''    repository = application.repository\n    scope_access = TemplateScopeAccess(control_plane)\n'''
+          template_new = '''    existing_handlers = getattr(application, "_control_plane_template_handlers", None)\n    existing_control_plane = getattr(application, "_control_plane_template_control_plane", None)\n    if isinstance(existing_handlers, TemplateCommandHandlers):\n        if existing_control_plane is not control_plane:\n            raise ValueError("Template Control Plane registration is already bound elsewhere")\n        if environment_resolver is not None:\n            existing_handlers.environment_resolver = environment_resolver\n        if agent_exporter is not None:\n            if existing_handlers.agent_exporter is None:\n                control_plane.register_command(\n                    "template.create-from-agent",\n                    existing_handlers.create_from_agent,\n                )\n            existing_handlers.agent_exporter = agent_exporter\n        if automation_exporter is not None:\n            if existing_handlers.automation_exporter is None:\n                control_plane.register_command(\n                    "template.create-from-automation",\n                    existing_handlers.create_from_automation,\n                )\n            existing_handlers.automation_exporter = automation_exporter\n        return\n\n    repository = application.repository\n    scope_access = TemplateScopeAccess(control_plane)\n'''
+          replace_once(template_path, template_old, template_new)
+          replace_once(
+              template_path,
+              '''    control_plane.register_command("template.reapply", handlers.reapply_template)\n''',
+              '''    control_plane.register_command("template.reapply", handlers.reapply_template)\n    setattr(application, "_control_plane_template_control_plane", control_plane)\n    setattr(application, "_control_plane_template_handlers", handlers)\n''',
+          )
+          PY
+      - name: Install development environment
+        run: python -m pip install -e ".[dev,server]"
+      - name: Format focused files
+        run: |
+          ruff format \
+            src/ai_multi_agent_platform/control_plane/workspace_task_management_explicit_composition.py \
+            src/ai_multi_agent_platform/control_plane/workspace_task_management_registered_composition.py \
+            src/ai_multi_agent_platform/control_plane/automation_explicit_composition.py \
+            src/ai_multi_agent_platform/control_plane/terminal_explicit_composition.py \
+            src/ai_multi_agent_platform/control_plane/automation_api.py \
+            src/ai_multi_agent_platform/control_plane/organization_api.py \
+            src/ai_multi_agent_platform/control_plane/conversation_composition.py \
+            src/ai_multi_agent_platform/control_plane/notifications_plugin_composition.py \
+            src/ai_multi_agent_platform/control_plane/notifications_explicit_composition.py \
+            src/ai_multi_agent_platform/templates/control_plane.py
+      - name: Ruff
+        run: ruff check .
+      - name: Mypy
+        run: mypy
+      - name: Install-smoke probe
+        id: smoke
+        continue-on-error: true
+        run: python scripts/ci/issue39_install_lifecycle_smoke.py
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/ai_multi_agent_platform/control_plane/workspace_task_management_explicit_composition.py \
+            src/ai_multi_agent_platform/control_plane/workspace_task_management_registered_composition.py \
+            src/ai_multi_agent_platform/control_plane/automation_explicit_composition.py \
+            src/ai_multi_agent_platform/control_plane/terminal_explicit_composition.py \
+            src/ai_multi_agent_platform/control_plane/automation_api.py \
+            src/ai_multi_agent_platform/control_plane/organization_api.py \
+            src/ai_multi_agent_platform/control_plane/conversation_composition.py \
+            src/ai_multi_agent_platform/control_plane/notifications_plugin_composition.py \
+            src/ai_multi_agent_platform/control_plane/notifications_explicit_composition.py \
+            src/ai_multi_agent_platform/templates/control_plane.py
+          git commit -m "Resolve issue 982 final CI blockers"
+          git push origin HEAD:issue/982-explicit-control-plane-composition
+      - name: Require install smoke
+        if: steps.smoke.outcome != 'success'
+        run: exit 1
