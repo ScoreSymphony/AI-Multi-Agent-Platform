@@ -84,6 +84,10 @@ _DEFAULT_CONTEXT_BUDGET = ContextBudget(
     max_items=128,
 )
 
+_AGENT_TERMINAL_STATUSES = frozenset(
+    {AgentRunStatus.SUCCEEDED, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED}
+)
+
 
 class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
     """Execute Agent-bound Runs through exactly one canonical Context Bundle.
@@ -92,6 +96,10 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
     pass legacy ``task_context``/``project_context`` dictionaries to orchestrator adapters: source
     domains contribute through #590 adapters, #15 resolves visibility, the immutable Bundle derives
     #10 routing constraints, and the exact egress-approved rendering becomes the model input.
+
+    Once a bound Run enters this lifecycle it stays owned here through cancellation. That keeps the
+    exact AgentRun and Context binding aligned with the canonical Run and prevents a late provider
+    completion from reviving work that the platform already cancelled.
     """
 
     def __init__(
@@ -123,6 +131,7 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
         self._snapshots: dict[str, ExecutionSnapshot] = {}
         self._backend_refs: dict[str, str] = {}
         self._context_refs: dict[str, tuple[str, str]] = {}
+        self._owned_run_ids: set[str] = set()
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -134,6 +143,23 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
             available=True,
             resources={"delegate_provider_id": self._delegate.descriptor.provider_id},
         )
+
+    def register_source_binding_factory(self, factory: ContextBindingFactory) -> None:
+        """Extend #590 source composition without replacing Context lifecycle authority.
+
+        Deployment integrations may contribute additional canonical source bindings at the normal
+        assembly boundary. Existing bindings stay intact and the lifecycle remains the sole owner
+        of ContextBundle assembly and Agent execution.
+        """
+
+        previous = self._binding_factory
+
+        def combined(
+            source: ContextLifecycleSourceRequest,
+        ) -> Sequence[ContextSourceAdapterBinding]:
+            return (*previous(source), *factory(source))
+
+        self._binding_factory = combined
 
     async def start(self, request: ExecutionRequest) -> ExecutionHandle:
         task = await self._tasks.get_task(request.context.correlation_id)
@@ -157,6 +183,7 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
         existing = self._snapshots.get(request.run_id)
         if existing is not None:
             return self._handle(request.run_id)
+        self._owned_run_ids.add(request.run_id)
 
         if binding is None:
             agent_id = _required_metadata_string(
@@ -276,6 +303,13 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
         )
         backend_ref = f"agent-run:{agent_run.agent_run_id}"
         self._backend_refs[request.run_id] = backend_ref
+        if self._cancelled(request.run_id):
+            self._cancel_agent_run(agent_run.agent_run_id)
+            self._snapshots[request.run_id] = self._cancelled_snapshot(
+                request.run_id,
+                agent_run.agent_run_id,
+            )
+            return self._handle(request.run_id)
         result_id = new_id("result")
 
         instruction = context_execution.model_input.system_instruction
@@ -335,6 +369,9 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
                 capability_results = ()
                 model_usage = dict(response.usage)
         except ContractError as exc:
+            if self._cancelled(request.run_id):
+                self._cancel_agent_run(agent_run.agent_run_id)
+                return self._handle(request.run_id)
             self._agents.finish_agent_run(
                 agent_run.agent_run_id,
                 status=AgentRunStatus.FAILED,
@@ -354,6 +391,9 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
             )
             return self._handle(request.run_id)
 
+        if self._cancelled(request.run_id):
+            self._cancel_agent_run(agent_run.agent_run_id)
+            return self._handle(request.run_id)
         telemetry = dict(agent_run.telemetry)
         telemetry.update(
             {
@@ -397,13 +437,86 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
         snapshot = self._snapshots.get(run_id)
         if snapshot is not None:
             return snapshot
+        if run_id in self._owned_run_ids:
+            return ExecutionSnapshot(
+                run_id=run_id,
+                status=ExecutionStatus.RUNNING,
+                adapter_metadata=self._metadata_for_owned_run(run_id),
+            )
         return await self._delegate.get(run_id, context)
 
     async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
         snapshot = self._snapshots.get(run_id)
         if snapshot is not None:
             return snapshot
-        return await self._delegate.cancel(run_id, context)
+        if run_id not in self._owned_run_ids:
+            return await self._delegate.cancel(run_id, context)
+
+        agent_run_id = self._owned_agent_run_id(run_id)
+        if agent_run_id is not None:
+            self._cancel_agent_run(agent_run_id)
+        snapshot = self._cancelled_snapshot(run_id, agent_run_id)
+        self._snapshots[run_id] = snapshot
+        return snapshot
+
+    def _cancel_agent_run(self, agent_run_id: str) -> None:
+        current = self._agents.service.repository.get_agent_run(agent_run_id)
+        if current.status in _AGENT_TERMINAL_STATUSES:
+            return
+        self._agents.finish_agent_run(
+            agent_run_id,
+            status=AgentRunStatus.CANCELLED,
+            error="canonical Run cancellation requested",
+        )
+
+    def _cancelled(self, run_id: str) -> bool:
+        snapshot = self._snapshots.get(run_id)
+        return snapshot is not None and snapshot.status is ExecutionStatus.CANCELLED
+
+    def _cancelled_snapshot(
+        self,
+        run_id: str,
+        agent_run_id: str | None,
+    ) -> ExecutionSnapshot:
+        output: dict[str, JsonValue] = {}
+        if agent_run_id is not None:
+            output["agent_run_id"] = agent_run_id
+        context_ref = self._context_refs.get(run_id)
+        if context_ref is not None:
+            output["context_bundle_id"] = context_ref[0]
+            output["context_bundle_digest"] = context_ref[1]
+        return ExecutionSnapshot(
+            run_id=run_id,
+            status=ExecutionStatus.CANCELLED,
+            output=output,
+            adapter_metadata=self._metadata_for_owned_run(run_id),
+        )
+
+    def _owned_agent_run_id(self, run_id: str) -> str | None:
+        backend_ref = self._backend_refs.get(run_id)
+        if backend_ref is not None and backend_ref.startswith("agent-run:"):
+            return backend_ref.removeprefix("agent-run:")
+        matches = self._agents.service.repository.list_agent_runs(run_id)
+        if len(matches) == 1:
+            return matches[0].agent_run_id
+        return None
+
+    def _metadata_for_owned_run(self, run_id: str) -> tuple[AdapterMetadata, ...]:
+        values: dict[str, JsonValue] = {}
+        agent_run_id = self._owned_agent_run_id(run_id)
+        if agent_run_id is not None:
+            values["agent_run_id"] = agent_run_id
+        context_ref = self._context_refs.get(run_id)
+        if context_ref is not None:
+            values.update(
+                {
+                    "context_bundle_id": context_ref[0],
+                    "context_bundle_digest": context_ref[1],
+                }
+            )
+        if not values:
+            return ()
+        return (AdapterMetadata(namespace="canonical-context-agent-lifecycle", values=values),)
 
     def _resolve_capability_turn(self) -> AgentCapabilityTurn:
         if self._capability_turn is not None:
@@ -427,7 +540,7 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
     def _handle(self, run_id: str) -> ExecutionHandle:
         return ExecutionHandle(
             run_id=run_id,
-            backend_ref=self._backend_refs[run_id],
+            backend_ref=self._backend_refs.get(run_id),
             adapter_metadata=self._snapshots[run_id].adapter_metadata,
         )
 

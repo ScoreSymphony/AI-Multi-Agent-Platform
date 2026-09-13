@@ -202,6 +202,19 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             ),
         ),
         ConformanceScenario(
+            "MA",
+            "#889/#46 reference multi-agent baseline",
+            (
+                "the maintained Hermes/Forge-free single-node multi-agent golden path preserves "
+                "canonical Plan/Step/Run/AgentRun, Handoff, ContextBundle, Result and Verification "
+                "provenance through accepted completion"
+            ),
+            _pytest(
+                "tests/integration/deployment/test_reference_multi_agent_provenance.py::"
+                "test_reference_multi_agent_golden_path_persists_complete_canonical_provenance"
+            ),
+        ),
+        ConformanceScenario(
             "F",
             "#15 authorization/approval",
             "approval is exact-action bound and changed-payload reuse is rejected",
