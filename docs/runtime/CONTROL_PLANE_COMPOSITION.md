@@ -3,7 +3,7 @@
 Issue: #982  
 Builds on: #723, #32
 
-The canonical Control Plane has one extension mechanism for later platform domains: explicit module registration. Domain behavior remains in the domain service or an adapter around that service; Python inheritance is not a domain-composition mechanism.
+The canonical Control Plane has one extension mechanism for later platform domains: explicit module registration. Domain behavior remains in the domain service or an adapter around that service; Python inheritance is not a domain-ownership mechanism.
 
 ## Boundary
 
@@ -63,13 +63,13 @@ A historical `ControlPlane` class may remain temporarily when external or intern
 - register that module;
 - expose compatibility properties that return the explicitly supplied service/binding.
 
-It must not reimplement domain commands, maintain a second resource/command registry, override generic dispatch to accumulate domain behavior, or participate in multiple-inheritance composition.
+It must not reimplement domain commands, maintain a second resource/command registry, override generic dispatch to accumulate domain behavior, or participate in multiple-inheritance domain composition.
 
-Architecture tests enforce that `ControlPlane` and `ControlPlaneHTTP` classes in the Control Plane package do not use multiple inheritance. Migrated compatibility façades additionally have method allow-lists so domain behavior cannot silently grow back into them.
+Architecture tests reject every new or changed multiple-inheritance stack on a `ControlPlane` or `ControlPlaneHTTP` façade unless it is an explicitly reviewed implementation-only composition. The small reviewed compatibility list is exact (file, class and base set), so it cannot silently expand. This preserves #982's non-goal: ordinary implementation inheritance that does not establish competing domain ownership is not rewritten merely to eliminate Python inheritance. Migrated compatibility façades additionally have method allow-lists so domain behavior cannot silently grow back into them.
 
 ## Migration inventory
 
-The #982 audit found two actual Control Plane diamonds plus a longer historical chain of single-inheritance compatibility/transport layers.
+The #982 ownership audit found two Control Plane diamonds in which independent later domains competed to contribute northbound resources/commands through MRO, plus a longer historical chain of compatibility/transport layers.
 
 | Pre-#982 composition | Risk | #982 state |
 | --- | --- | --- |
@@ -79,7 +79,9 @@ The #982 audit found two actual Control Plane diamonds plus a longer historical 
 | `plugin_api.ControlPlane` | lifecycle commands/resources and conflict guards lived in a subclass | compatibility façade only; domain behavior lives in `plugin_module.py` |
 | focused #723 service façade | ordinary implementation façade, not a later-domain composition mechanism | preserved |
 
-The remaining historical single-inheritance layers are reviewed by role. Ordinary implementation inheritance that does not select or accumulate independent domains is not prohibited by #982. Any later domain that adds a resource, command or special route must register an explicit module rather than adding another domain-composition superclass.
+There are also reviewed structural multiple-inheritance sites whose extra parents provide implementation/cross-cutting semantics rather than independent extension ownership (for example Automation + progressive Search behavior, and the existing Workspace/Task-management integration). They are not an alternative registration mechanism: they do not authorize a new later domain to claim resources, commands or special routes through MRO. The architecture guard records their exact current bases and rejects any unreviewed new stack or mutation of an existing one.
+
+Any later domain that adds a resource, command or special route must register an explicit module rather than adding another domain-composition superclass.
 
 ## Current explicit domain examples
 
