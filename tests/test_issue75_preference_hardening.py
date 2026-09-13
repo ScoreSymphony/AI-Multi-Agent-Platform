@@ -64,7 +64,7 @@ def test_deadline_preferences_filter_approaching_and_overdue_independently() -> 
     async def scenario() -> None:
         recipient = RecipientRef(RecipientType.USER, new_id("user"))
         preferences = InMemoryNotificationPreferenceRepository()
-        preferences.save(
+        await preferences.save(
             NotificationPreference(
                 recipient=recipient,
                 deadline_reminders_enabled=False,
@@ -90,7 +90,7 @@ def test_quiet_hours_suppress_external_delivery_but_keep_in_app_attention() -> N
     async def scenario() -> None:
         recipient = RecipientRef(RecipientType.USER, new_id("user"))
         preferences = InMemoryNotificationPreferenceRepository()
-        preferences.save(
+        await preferences.save(
             NotificationPreference(
                 recipient=recipient,
                 external_channels=frozenset({"fixture"}),

@@ -89,12 +89,14 @@ def test_duplicate_task_event_aggregates_without_notification_storm() -> None:
 
 def test_preference_filters_category_severity_and_project_without_touching_source_state() -> None:
     preferences = InMemoryNotificationPreferenceRepository()
-    preferences.save(
-        NotificationPreference(
-            recipient=USER,
-            enabled_categories=frozenset({NotificationCategory.APPROVAL}),
-            minimum_severity=NotificationSeverity.WARNING,
-            project_ids=frozenset({PROJECT_ID}),
+    asyncio.run(
+        preferences.save(
+            NotificationPreference(
+                recipient=USER,
+                enabled_categories=frozenset({NotificationCategory.APPROVAL}),
+                minimum_severity=NotificationSeverity.WARNING,
+                project_ids=frozenset({PROJECT_ID}),
+            )
         )
     )
     service = NotificationService(

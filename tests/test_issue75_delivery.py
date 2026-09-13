@@ -78,7 +78,7 @@ def test_in_app_can_be_disabled_without_disabling_configured_external_delivery()
     async def scenario() -> None:
         recipient = _recipient()
         preferences = InMemoryNotificationPreferenceRepository()
-        preferences.save(
+        await preferences.save(
             NotificationPreference(
                 recipient=recipient,
                 in_app_enabled=False,
@@ -116,7 +116,7 @@ def test_external_delivery_retry_reuses_stable_idempotency_key_and_dedupes_succe
         channel = _FlakyChannel()
         delivery = NotificationDeliveryCoordinator(channels={"fixture": channel})
         preferences = InMemoryNotificationPreferenceRepository()
-        preferences.save(
+        await preferences.save(
             NotificationPreference(
                 recipient=recipient,
                 external_channels=frozenset({"fixture"}),
@@ -157,7 +157,7 @@ def test_unconfigured_external_channel_is_recorded_without_breaking_in_app_notif
     async def scenario() -> None:
         recipient = _recipient()
         preferences = InMemoryNotificationPreferenceRepository()
-        preferences.save(
+        await preferences.save(
             NotificationPreference(
                 recipient=recipient,
                 external_channels=frozenset({"missing"}),

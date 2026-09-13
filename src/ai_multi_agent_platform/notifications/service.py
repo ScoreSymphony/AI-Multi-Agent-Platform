@@ -19,7 +19,7 @@ from .models import (
     RecipientRef,
 )
 from .preferences import (
-    NotificationPreferenceRepository,
+    AsyncNotificationPreferenceRepository,
     external_delivery_allowed,
     preference_allows,
 )
@@ -38,7 +38,7 @@ class NotificationService:
         self,
         *,
         repository: NotificationRepository,
-        preferences: NotificationPreferenceRepository,
+        preferences: AsyncNotificationPreferenceRepository,
         rules: Sequence[NotificationRule] = (),
         delivery: NotificationDeliveryCoordinator | None = None,
         event_sink: NotificationEventSink | None = None,
@@ -80,7 +80,7 @@ class NotificationService:
             )
             return None
 
-        preference = self._preferences.get(candidate.recipient)
+        preference = await self._preferences.get(candidate.recipient)
         if not preference_allows(preference, candidate):
             await self._emit(
                 "notification.filtered",
@@ -139,7 +139,7 @@ class NotificationService:
             )
             return None
 
-        preference = self._preferences.get(candidate.recipient)
+        preference = await self._preferences.get(candidate.recipient)
         if not preference_allows(preference, candidate):
             await self._emit(
                 "notification.filtered",
@@ -172,7 +172,7 @@ class NotificationService:
         return notification
 
     async def list(self, query: NotificationQuery) -> tuple[Notification, ...]:
-        if not self._preferences.get(query.recipient).in_app_enabled:
+        if not (await self._preferences.get(query.recipient)).in_app_enabled:
             return ()
         repository_query = replace(query, limit=None, offset=0)
         candidates = await self._repository.list(repository_query)
@@ -209,16 +209,14 @@ class NotificationService:
         )
 
     async def unread_count(self, recipient: RecipientRef) -> int:
-        if not self._preferences.get(recipient).in_app_enabled:
-            return 0
         visible = await self.list(NotificationQuery(recipient=recipient, unread_only=True))
         return len(visible)
 
-    def get_preference(self, recipient: RecipientRef) -> NotificationPreference:
-        return self._preferences.get(recipient)
+    async def get_preference(self, recipient: RecipientRef) -> NotificationPreference:
+        return await self._preferences.get(recipient)
 
-    def set_preference(self, preference: NotificationPreference) -> NotificationPreference:
-        return self._preferences.save(preference)
+    async def set_preference(self, preference: NotificationPreference) -> NotificationPreference:
+        return await self._preferences.save(preference)
 
     async def delivery_attempts(
         self,

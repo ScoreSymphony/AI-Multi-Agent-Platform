@@ -10,6 +10,7 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.kernel import TaskState
 from ai_multi_agent_platform.notifications import (
+    AsyncNotificationPreferenceRepository,
     DeliveryAttempt,
     EventOwnerRecipientResolver,
     InMemoryNotificationPreferenceRepository,
@@ -19,7 +20,6 @@ from ai_multi_agent_platform.notifications import (
     NotificationDeliveryCoordinator,
     NotificationEventSink,
     NotificationPreference,
-    NotificationPreferenceRepository,
     NotificationQuery,
     NotificationRepository,
     NotificationService,
@@ -118,7 +118,7 @@ class _PreferenceResources(ResourceService):
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
         recipient = _recipient_from_context(context)
-        preference = self._service.get_preference(recipient)
+        preference = await self._service.get_preference(recipient)
         return (
             _preference_resource(
                 preference,
@@ -135,7 +135,7 @@ class _PreferenceResources(ResourceService):
         if resource_id != recipient.id:
             raise ContractError(ErrorCode.NOT_FOUND, "notification preference not found")
         return _preference_resource(
-            self._service.get_preference(recipient),
+            await self._service.get_preference(recipient),
             unread_count=await self._service.unread_count(recipient),
         )
 
@@ -147,7 +147,7 @@ class ControlPlane(_BaseControlPlane):
         self,
         *args: Any,
         notification_repository: NotificationRepository | None = None,
-        notification_preference_repository: NotificationPreferenceRepository | None = None,
+        notification_preference_repository: AsyncNotificationPreferenceRepository | None = None,
         notification_delivery: NotificationDeliveryCoordinator | None = None,
         notification_service: NotificationService | None = None,
         notification_event_sink: NotificationEventSink | None = None,
@@ -389,7 +389,7 @@ class ControlPlane(_BaseControlPlane):
         recipient = _recipient_from_context(context)
         if resource_ref != recipient.id:
             raise ContractError(ErrorCode.NOT_FOUND, "notification preference not found")
-        current = self._notification_service.get_preference(recipient)
+        current = await self._notification_service.get_preference(recipient)
         preference = NotificationPreference(
             recipient=recipient,
             enabled_categories=_category_set(payload, current.enabled_categories),
@@ -408,7 +408,7 @@ class ControlPlane(_BaseControlPlane):
                 current.aggregate_duplicates,
             ),
         )
-        saved = self._notification_service.set_preference(preference)
+        saved = await self._notification_service.set_preference(preference)
         return _preference_resource(
             saved,
             unread_count=await self._notification_service.unread_count(recipient),

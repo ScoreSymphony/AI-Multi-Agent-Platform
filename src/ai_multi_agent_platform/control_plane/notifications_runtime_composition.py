@@ -56,7 +56,7 @@ class _RuntimePreferenceResources(ResourceService):
         recipient = _recipient_from_context(context)
         return (
             _preference_resource(
-                self._control_plane.notification_service.get_preference(recipient),
+                await self._control_plane.notification_service.get_preference(recipient),
                 unread_count=await self._control_plane.notification_service.unread_count(recipient),
             ),
         )
@@ -70,7 +70,7 @@ class _RuntimePreferenceResources(ResourceService):
         if resource_id != recipient.id:
             raise ContractError(ErrorCode.NOT_FOUND, "notification preference not found")
         return _preference_resource(
-            self._control_plane.notification_service.get_preference(recipient),
+            await self._control_plane.notification_service.get_preference(recipient),
             unread_count=await self._control_plane.notification_service.unread_count(recipient),
         )
 
@@ -185,7 +185,7 @@ class ControlPlane(_BaseControlPlane):
                     due_at = view.metadata.due_at
                     if due_at is None:
                         continue
-                    preference = self.notification_service.get_preference(candidate.recipient)
+                    preference = await self.notification_service.get_preference(candidate.recipient)
                     remaining = due_at - current.astimezone(UTC)
                     if remaining > timedelta(seconds=preference.deadline_reminder_lead_seconds):
                         continue
@@ -203,7 +203,7 @@ class ControlPlane(_BaseControlPlane):
         recipient = _recipient_from_context(context)
         if resource_ref != recipient.id:
             raise ContractError(ErrorCode.NOT_FOUND, "notification preference not found")
-        current = self.notification_service.get_preference(recipient)
+        current = await self.notification_service.get_preference(recipient)
         preference = NotificationPreference(
             recipient=recipient,
             enabled_categories=_category_set(payload, current.enabled_categories),
@@ -252,7 +252,7 @@ class ControlPlane(_BaseControlPlane):
                 current.quiet_hours_timezone,
             ),
         )
-        saved = self.notification_service.set_preference(preference)
+        saved = await self.notification_service.set_preference(preference)
         return _preference_resource(
             saved,
             unread_count=await self.notification_service.unread_count(recipient),

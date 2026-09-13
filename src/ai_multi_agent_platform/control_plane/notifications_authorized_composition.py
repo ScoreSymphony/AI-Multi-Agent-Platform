@@ -100,7 +100,7 @@ class _AuthorizedPreferenceResources(ResourceService):
         recipient = _recipient_from_context(context)
         return (
             _preference_resource(
-                self._control_plane.notification_service.get_preference(recipient),
+                await self._control_plane.notification_service.get_preference(recipient),
                 unread_count=await self._control_plane.notification_unread_count(context),
             ),
         )
@@ -114,7 +114,7 @@ class _AuthorizedPreferenceResources(ResourceService):
         if resource_id != recipient.id:
             raise ContractError(ErrorCode.NOT_FOUND, "notification preference not found")
         return _preference_resource(
-            self._control_plane.notification_service.get_preference(recipient),
+            await self._control_plane.notification_service.get_preference(recipient),
             unread_count=await self._control_plane.notification_unread_count(context),
         )
 

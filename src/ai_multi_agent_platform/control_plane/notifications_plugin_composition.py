@@ -105,7 +105,7 @@ class ControlPlane(_NotificationControlPlane):
             return False
         if result.owner_type != recipient.type.value or result.owner_id != recipient.id:
             return False
-        if not self.notification_service.get_preference(recipient).in_app_enabled:
+        if not (await self.notification_service.get_preference(recipient)).in_app_enabled:
             return False
 
         try:

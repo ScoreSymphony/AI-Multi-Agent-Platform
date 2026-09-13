@@ -24,21 +24,33 @@ _SEVERITY_ORDER = {
 
 
 class NotificationPreferenceRepository(Protocol):
+    """Legacy synchronous preference-storage seam for non-runtime adapters."""
+
     def get(self, recipient: RecipientRef) -> NotificationPreference: ...
 
     def save(self, preference: NotificationPreference) -> NotificationPreference: ...
 
 
+class AsyncNotificationPreferenceRepository(Protocol):
+    """Backend-neutral preference persistence used by async runtime/application services."""
+
+    async def get(self, recipient: RecipientRef) -> NotificationPreference: ...
+
+    async def save(self, preference: NotificationPreference) -> NotificationPreference: ...
+
+
 class InMemoryNotificationPreferenceRepository:
+    """Deterministic async preference repository with no blocking I/O boundary."""
+
     def __init__(self) -> None:
         self._items: dict[RecipientRef, NotificationPreference] = {}
         self._lock = RLock()
 
-    def get(self, recipient: RecipientRef) -> NotificationPreference:
+    async def get(self, recipient: RecipientRef) -> NotificationPreference:
         with self._lock:
             return self._items.get(recipient, NotificationPreference(recipient=recipient))
 
-    def save(self, preference: NotificationPreference) -> NotificationPreference:
+    async def save(self, preference: NotificationPreference) -> NotificationPreference:
         with self._lock:
             self._items[preference.recipient] = preference
             return preference
