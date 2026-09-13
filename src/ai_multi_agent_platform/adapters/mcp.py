@@ -45,7 +45,6 @@ from .mcp_tasks import (
     validate_binding_for_invocation,
 )
 
-
 type MCPTaskInputHandler = Callable[
     [ToolInvocation, MCPTaskSnapshot], Awaitable[dict[str, JsonValue] | None]
 ]
