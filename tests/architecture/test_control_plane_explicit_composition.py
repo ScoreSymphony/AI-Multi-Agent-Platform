@@ -33,7 +33,6 @@ _ALLOWED_IMPLEMENTATION_MULTIPLE_INHERITANCE = {
 # internally. None of these is the canonical ownership boundary after #982. Keeping
 # this list exact makes a *new* ControlPlane subclass with self.register_* fail CI.
 _LEGACY_DIRECT_REGISTRATION_SUBCLASSES = {
-    "extensions.py",
     "notifications_composition.py",
     "notifications_authorized_composition.py",
     "notifications_runtime_composition.py",
