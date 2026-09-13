@@ -7,6 +7,7 @@ import json
 import sqlite3
 import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -54,16 +55,20 @@ _BUSY_MARKERS = (
 
 
 class _MemorySqliteOffload:
-    """Bound blocking Memory SQLite operations without binding state to one event loop."""
+    """Bound blocking Memory SQLite operations without using the shared executor."""
 
     def __init__(self, *, max_concurrency: int = 4) -> None:
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be >= 1")
-        self._slots = threading.BoundedSemaphore(max_concurrency)
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_concurrency,
+            thread_name_prefix="memory-sqlite",
+        )
         self._write_lock = threading.Lock()
 
     async def run[T](self, operation: Callable[[], T], *, write: bool = False) -> T:
-        worker = asyncio.create_task(asyncio.to_thread(self._run_sync, operation, write))
+        loop = asyncio.get_running_loop()
+        worker = loop.run_in_executor(self._executor, self._run_sync, operation, write)
         try:
             return await asyncio.shield(worker)
         except asyncio.CancelledError:
@@ -80,10 +85,8 @@ class _MemorySqliteOffload:
     def _run_sync[T](self, operation: Callable[[], T], write: bool) -> T:
         if write:
             with self._write_lock:
-                with self._slots:
-                    return operation()
-        with self._slots:
-            return operation()
+                return operation()
+        return operation()
 
 
 class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
