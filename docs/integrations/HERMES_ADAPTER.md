@@ -21,12 +21,14 @@ The reverse direction is not canonicalization. A Hermes run/session ID never bec
 The baseline transport is Hermes' documented OpenAI-compatible API server. The compatibility target is:
 
 - upstream: `NousResearch/hermes-agent`
-- release: Hermes Agent v0.21.1 / tag `v2026.9.7`
-- pinned commit: `2237be355906fbe6065ce1815711eee52b2d646e`
+- release: Hermes Agent v0.21.2 / tag `v2026.9.11`
+- pinned commit: `939e45c91d751fadd94dcd1b873ac3cb44846213`
 - verified license: MIT
 - transport: HTTP JSON against the API-server `/v1/runs` surface
 
-The version-specific compatibility review is recorded in `docs/upstream/HERMES_AGENT_V0_21_1_VALIDATION.md`.
+The version-specific compatibility review is recorded in `docs/upstream/HERMES_AGENT_V0_21_2_VALIDATION.md`.
+
+The previous v0.21.1 validation evidence remains retained as the exact rollback baseline at `2237be355906fbe6065ce1815711eee52b2d646e`.
 
 No Hermes Python package or source tree is required by platform core or reference tests.
 
@@ -257,7 +259,7 @@ Hermes is pinned by commit, not tracked implicitly from `main`.
 
 For an update:
 
-1. compare the proposed revision with the current governed pin in `upstream/hermes-agent.yaml` (currently `2237be355906fbe6065ce1815711eee52b2d646e`);
+1. compare the proposed revision with the current governed pin in `upstream/hermes-agent.yaml` (currently `939e45c91d751fadd94dcd1b873ac3cb44846213`);
 2. re-verify the license and programmatic-integration/API-server contracts;
 3. review `/v1/runs`, status, stop, approval, capability and health behavior;
 4. review security/auth/profile changes;
