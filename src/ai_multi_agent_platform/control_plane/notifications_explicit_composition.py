@@ -1,18 +1,16 @@
 """Explicit ownership boundary for the completed canonical Notification stack (#982).
 
 Notification persistence, runtime projection, source integration and authorization are
-one domain implementation refined through the existing single-inheritance chain.  This
+one domain implementation refined through the existing single-inheritance chain. This
 composition intercepts that domain's historical direct registrations while the chain is
 constructed and publishes the final resource/command adapters exactly once as a named
-ControlPlaneModule.  Independent platform domains therefore no longer observe
+ControlPlaneModule. Independent platform domains therefore no longer observe
 Notification ownership as anonymous MRO side effects.
 """
 
 from __future__ import annotations
 
 from typing import Any
-
-from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .extensions import (
     CommandHandler,
@@ -34,7 +32,9 @@ from .notifications_plugin_composition import (
     ControlPlaneHTTP,
     build_openapi,
 )
-from .notifications_plugin_composition import ControlPlane as _NotificationImplementationControlPlane
+from .notifications_plugin_composition import (
+    ControlPlane as _NotificationImplementationControlPlane,
+)
 
 NOTIFICATION_MODULE = "notifications"
 _NOTIFICATION_COLLECTIONS = frozenset(
@@ -48,7 +48,7 @@ async def _notification_stream_transport_route(request: HTTPRequest) -> HTTPResp
     """Declare ownership for the SSE-only route on generic HTTP transports.
 
     The canonical Notification HTTP façade still performs the richer error-envelope
-    mapping before generic route dispatch.  This fallback exists so the registered
+    mapping before generic route dispatch. This fallback exists so the registered
     special route remains executable and inspectably owned even when a lower-level
     generic HTTP façade is embedded directly.
     """
@@ -100,10 +100,7 @@ class ControlPlane(_NotificationImplementationControlPlane):
         )
 
     def register_resource_service(self, collection: str, service: ResourceService) -> None:
-        if (
-            self._capturing_notification_composition
-            and collection in _NOTIFICATION_COLLECTIONS
-        ):
+        if self._capturing_notification_composition and collection in _NOTIFICATION_COLLECTIONS:
             self._captured_notification_resources[collection] = service
             return
         super().register_resource_service(collection, service)
