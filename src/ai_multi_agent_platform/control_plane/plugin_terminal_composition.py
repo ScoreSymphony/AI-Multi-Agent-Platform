@@ -13,8 +13,8 @@ from .extensions import _singular, _validate_resources
 from .models import PageQuery, RequestContext, paginate
 from .module_registry import install_control_plane_modules
 from .plugin_module import PluginControlPlaneBinding, PluginPermissionResolver
-from .terminal_composition import ControlPlane as _TerminalControlPlane
-from .terminal_composition import (
+from .terminal_explicit_composition import ControlPlane as _TerminalControlPlane
+from .terminal_explicit_composition import (
     ControlPlaneASGI,
     ControlPlaneHTTP,
     build_openapi,
