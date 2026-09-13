@@ -170,6 +170,7 @@ class MCPStatelessHTTPClient(MCPClient):
                     )
                 )
 
+            initial_poll_delay = 0.0
             async with self._task_dispatch_lock:
                 # Re-check after acquiring the dispatch lock so transport/concurrent retries
                 # cannot create a second external task for one canonical invocation attempt.
@@ -191,8 +192,11 @@ class MCPStatelessHTTPClient(MCPClient):
                             output=self._normalize_tool_result(invocation.tool_ref, result)
                         )
                     binding = await self._bind_created_task(invocation, result)
+                    initial_poll_delay = _poll_delay_seconds(result)
                 else:
                     validate_binding_scope(binding, invocation)
+            if initial_poll_delay:
+                await asyncio.sleep(initial_poll_delay)
             return await self._drive_bound_task(invocation, binding)
         except asyncio.CancelledError:
             binding = await self._task_bindings.get(
@@ -527,9 +531,7 @@ class MCPStatelessHTTPClient(MCPClient):
         request_id = self._request_id
         client_capabilities: dict[str, JsonValue] = {}
         if client_extensions:
-            client_capabilities["extensions"] = {
-                extension: {} for extension in client_extensions
-            }
+            client_capabilities["extensions"] = {extension: {} for extension in client_extensions}
         wire_params: dict[str, JsonValue] = dict(params)
         wire_params["_meta"] = {
             _META_PROTOCOL_VERSION: self._protocol_revision,
