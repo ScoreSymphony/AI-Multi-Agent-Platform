@@ -1,0 +1,301 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/private-mcp-transport-evaluation-report.v1.schema.json",
+  "title": "AI Multi-Agent Platform Private MCP Transport Evaluation Report v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "campaign_id",
+    "provider",
+    "provider_revision",
+    "platform_commit",
+    "started_at",
+    "completed_at",
+    "components",
+    "topology",
+    "authority_boundary",
+    "secret_handling",
+    "network_exposure_results",
+    "identity_authorization_results",
+    "capability_results",
+    "secret_results",
+    "failure_recovery_results",
+    "lateral_movement_results",
+    "workload_results",
+    "cost_results",
+    "comparison_results",
+    "latency",
+    "raw_evidence",
+    "decision_eligible",
+    "recommendation"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "campaign_id": {"type": "string", "minLength": 1},
+    "provider": {"type": "string", "minLength": 1},
+    "provider_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "platform_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/component"}
+    },
+    "topology": {
+      "type": "object",
+      "required": [
+        "profile",
+        "node_a_role",
+        "node_b_role",
+        "client_binding",
+        "backend_binding",
+        "public_backend_exposed",
+        "self_hosted_overlay",
+        "recurring_paid_service_required",
+        "overlay_control_plane_exposure"
+      ],
+      "properties": {
+        "profile": {"type": "string", "minLength": 1},
+        "node_a_role": {"type": "string", "minLength": 1},
+        "node_b_role": {"type": "string", "minLength": 1},
+        "client_binding": {"type": "string", "minLength": 1},
+        "backend_binding": {"type": "string", "minLength": 1},
+        "public_backend_exposed": {"type": "boolean"},
+        "self_hosted_overlay": {"type": "boolean"},
+        "recurring_paid_service_required": {"type": "boolean"},
+        "overlay_control_plane_exposure": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "authority_boundary": {
+      "type": "object",
+      "required": [
+        "canonical_authorization_authority",
+        "transport_identity_authority",
+        "transport_identity_separate_from_authorization"
+      ],
+      "properties": {
+        "canonical_authorization_authority": {"type": "string", "minLength": 1},
+        "transport_identity_authority": {"type": "string", "minLength": 1},
+        "transport_identity_separate_from_authorization": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "secret_handling": {
+      "type": "object",
+      "required": [
+        "secret_references_only",
+        "plaintext_secret_leak_detected",
+        "process_argv_secret_exposure_detected"
+      ],
+      "properties": {
+        "secret_references_only": {"type": "boolean"},
+        "plaintext_secret_leak_detected": {"type": "boolean"},
+        "process_argv_secret_exposure_detected": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "network_exposure_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidenceResult"}
+    },
+    "identity_authorization_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidenceResult"}
+    },
+    "capability_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidenceResult"}
+    },
+    "secret_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidenceResult"}
+    },
+    "failure_recovery_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidenceResult"}
+    },
+    "lateral_movement_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidenceResult"}
+    },
+    "workload_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidenceResult"}
+    },
+    "cost_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidenceResult"}
+    },
+    "comparison_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidenceResult"}
+    },
+    "latency": {
+      "type": "object",
+      "required": [
+        "direct_local",
+        "private_overlay_warm",
+        "small_response",
+        "moderate_structured_response",
+        "connection_establishment",
+        "reconnect",
+        "simpler_private_warm",
+        "streaming_supported",
+        "streaming_or_long_running"
+      ],
+      "properties": {
+        "direct_local": {"$ref": "#/$defs/latencyDistribution"},
+        "private_overlay_warm": {"$ref": "#/$defs/latencyDistribution"},
+        "small_response": {"$ref": "#/$defs/latencyDistribution"},
+        "moderate_structured_response": {"$ref": "#/$defs/latencyDistribution"},
+        "connection_establishment": {"$ref": "#/$defs/latencyDistribution"},
+        "reconnect": {"$ref": "#/$defs/latencyDistribution"},
+        "simpler_private_warm": {"$ref": "#/$defs/latencyDistribution"},
+        "streaming_supported": {"type": "boolean"},
+        "streaming_or_long_running": {
+          "oneOf": [
+            {"$ref": "#/$defs/latencyDistribution"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"streaming_supported": {"const": true}},
+            "required": ["streaming_supported"]
+          },
+          "then": {
+            "properties": {
+              "streaming_or_long_running": {"$ref": "#/$defs/latencyDistribution"}
+            }
+          },
+          "else": {
+            "properties": {"streaming_or_long_running": {"type": "null"}}
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "raw_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidenceFile"}
+    },
+    "decision_eligible": {"type": "boolean"},
+    "recommendation": {
+      "oneOf": [
+        {
+          "enum": [
+            "adopt_reference_private_mcp_profile",
+            "experimental_only",
+            "prefer_simpler_private_networking",
+            "reject/defer"
+          ]
+        },
+        {"type": "null"}
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"decision_eligible": {"const": true}},
+        "required": ["decision_eligible"]
+      },
+      "then": {
+        "properties": {
+          "recommendation": {
+            "enum": [
+              "adopt_reference_private_mcp_profile",
+              "experimental_only",
+              "prefer_simpler_private_networking",
+              "reject/defer"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"recommendation": {"type": "string"}},
+        "required": ["recommendation"]
+      },
+      "then": {
+        "properties": {"decision_eligible": {"const": true}}
+      }
+    }
+  ],
+  "$defs": {
+    "component": {
+      "type": "object",
+      "required": ["name", "version", "revision", "license"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "license": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "evidenceResult": {
+      "type": "object",
+      "required": ["case_id", "status", "evidence_refs"],
+      "properties": {
+        "case_id": {"type": "string", "minLength": 1},
+        "status": {
+          "enum": ["pass", "fail", "not_measured", "not_supported"]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {"enum": ["pass", "fail", "not_supported"]}
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {"evidence_refs": {"minItems": 1}}
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "latencyDistribution": {
+      "type": "object",
+      "required": ["count", "p50_ms", "p95_ms"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 1},
+        "p50_ms": {"type": "number", "minimum": 0},
+        "p95_ms": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "evidenceFile": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,42 @@
+# Compose override for the *pinned* upstream zrok v2.0.0-rc7 self-host project.
+#
+# Usage from an exact checkout of openziti/zrok at
+# a325978114282cfb59d794f67c5d1e82956e816a, directory
+# docker/compose/zrok-instance:
+#
+#   docker compose \
+#     -f compose.yml \
+#     -f /path/to/AI-Multi-Agent-Platform/deploy/distributed/openziti-private-mcp-evaluation/zrok-instance.issue967.override.yml \
+#     config
+#
+# The three ISSUE967_* image variables MUST include immutable digests, for example
+# registry/repository:tag@sha256:<digest>. Do not use `latest` for decision evidence.
+#
+# The base RC7 compose file already allows ZROK_CLI_TAG to be overridden. We set the
+# release tag explicitly below and require the operator to capture the resolved base-image
+# digest in the evidence report after build.
+
+services:
+  ziti-quickstart:
+    image: ${ISSUE967_ZITI_CLI_IMAGE:?set an immutable OpenZiti CLI image with digest}
+
+  ziti-quickstart-init:
+    image: ${ISSUE967_BUSYBOX_IMAGE:?set an immutable busybox image with digest}
+
+  ziti-quickstart-check:
+    image: ${ISSUE967_BUSYBOX_IMAGE:?set an immutable busybox image with digest}
+
+  zrok-permissions:
+    image: ${ISSUE967_BUSYBOX_IMAGE:?set an immutable busybox image with digest}
+
+  zrok-controller:
+    build:
+      args:
+        ZROK_CLI_IMAGE: ${ISSUE967_ZROK_CLI_IMAGE:-docker.io/openziti/zrok}
+        ZROK_CLI_TAG: v2.0.0-rc7
+
+  zrok-frontend:
+    build:
+      args:
+        ZROK_CLI_IMAGE: ${ISSUE967_ZROK_CLI_IMAGE:-docker.io/openziti/zrok}
+        ZROK_CLI_TAG: v2.0.0-rc7
