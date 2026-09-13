@@ -54,7 +54,7 @@ class ApprovalRecords:
     def __init__(self, records: tuple[ApprovalRecord, ...]) -> None:
         self.records = records
 
-    def all(self) -> tuple[ApprovalRecord, ...]:
+    async def all(self) -> tuple[ApprovalRecord, ...]:
         return self.records
 
 
