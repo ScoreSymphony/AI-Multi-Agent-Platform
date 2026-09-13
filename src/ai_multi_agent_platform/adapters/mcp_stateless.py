@@ -23,13 +23,13 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .mcp import MCPClient, MCPServerConfig, MCPTool, MCPToolProvider
 from .mcp_tasks import (
+    MCP_TASKS_EXTENSION_ID,
+    MCP_TASKS_PROTOCOL_REVISION,
     MCPImmediateToolResult,
+    MCPTaskCallResult,
     MCPTaskSnapshot,
     MCPTaskStarted,
     MCPTaskStatus,
-    MCP_TASKS_EXTENSION_ID,
-    MCP_TASKS_PROTOCOL_REVISION,
-    MCPTaskCallResult,
 )
 
 MCP_STATELESS_PROTOCOL_REVISION = "2026-07-28"
@@ -303,7 +303,8 @@ class MCPStatelessHTTPClient(MCPClient):
         if method in _TASK_METHODS and code == _MISSING_REQUIRED_CLIENT_CAPABILITY:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
-                "MCP server rejected a negotiated Tasks request as missing the extension capability",
+                "MCP server rejected a negotiated Tasks request as missing the "
+                "extension capability",
                 provider_id=self._provider_id,
                 details=details,
             )
