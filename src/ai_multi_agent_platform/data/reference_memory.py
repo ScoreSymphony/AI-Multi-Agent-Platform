@@ -267,28 +267,41 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
         replacement: MemoryEntry,
         context: DataAccessContext,
     ) -> MemoryEntry:
-        current = await self.get_entry(memory_id, context)
-        if replacement.scope is not current.scope or replacement.scope_id != current.scope_id:
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "replacement memory must remain in the same scope",
-            )
-        if replacement.owner_ref != current.owner_ref:
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "replacement memory must preserve owner_ref",
-            )
-        if replacement.supersedes_memory_id not in (None, memory_id):
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "replacement supersedes a different memory entry",
-            )
-        linked = replace(replacement, supersedes_memory_id=memory_id)
-        self._check_scope(linked.scope, linked.scope_id, context)
+        validate_id(memory_id, "memory")
 
         def operation() -> MemoryEntry:
             try:
                 with self._connect() as connection:
+                    row = connection.execute(
+                        "SELECT * FROM data_memory WHERE memory_id = ? AND deleted = 0",
+                        (memory_id,),
+                    ).fetchone()
+                    if row is None:
+                        raise _not_found("memory", memory_id)
+                    current = self._memory_from_row(row)
+                    self._check_scope(current.scope, current.scope_id, context)
+                    if current.expired:
+                        raise _not_found("memory", memory_id)
+                    if (
+                        replacement.scope is not current.scope
+                        or replacement.scope_id != current.scope_id
+                    ):
+                        raise ContractError(
+                            ErrorCode.INVALID_REQUEST,
+                            "replacement memory must remain in the same scope",
+                        )
+                    if replacement.owner_ref != current.owner_ref:
+                        raise ContractError(
+                            ErrorCode.INVALID_REQUEST,
+                            "replacement memory must preserve owner_ref",
+                        )
+                    if replacement.supersedes_memory_id not in (None, memory_id):
+                        raise ContractError(
+                            ErrorCode.INVALID_REQUEST,
+                            "replacement supersedes a different memory entry",
+                        )
+                    linked = replace(replacement, supersedes_memory_id=memory_id)
+                    self._check_scope(linked.scope, linked.scope_id, context)
                     self._insert_entry(connection, linked)
                     connection.execute(
                         "UPDATE data_memory SET superseded_by_memory_id = ? WHERE memory_id = ?",
@@ -297,7 +310,7 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
             except sqlite3.IntegrityError as exc:
                 raise ContractError(
                     ErrorCode.CONFLICT,
-                    f"memory entry already exists: {linked.memory_id}",
+                    f"memory entry already exists: {replacement.memory_id}",
                 ) from exc
             return linked
 
@@ -308,10 +321,20 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
         )
 
     async def delete_entry(self, memory_id: str, context: DataAccessContext) -> None:
-        await self.get_entry(memory_id, context)
+        validate_id(memory_id, "memory")
 
         def operation() -> None:
             with self._connect() as connection:
+                row = connection.execute(
+                    "SELECT * FROM data_memory WHERE memory_id = ? AND deleted = 0",
+                    (memory_id,),
+                ).fetchone()
+                if row is None:
+                    raise _not_found("memory", memory_id)
+                entry = self._memory_from_row(row)
+                self._check_scope(entry.scope, entry.scope_id, context)
+                if entry.expired:
+                    raise _not_found("memory", memory_id)
                 connection.execute(
                     "UPDATE data_memory SET deleted = 1 WHERE memory_id = ?",
                     (memory_id,),
