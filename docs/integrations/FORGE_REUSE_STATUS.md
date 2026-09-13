@@ -1,12 +1,12 @@
 # Forge reuse implementation status
 
-> **Historical status snapshot (2026-09-03).** This document records the state while #9 was still deciding and implementing the execution-only runtime boundary. It is no longer the source of truth for active Forge support status. #9 subsequently completed with a real pinned Rust sidecar integration, and #991 later deprecated Forge after determining that the proven real profile exercises the sidecar `null` executor rather than establishing a non-null Forge CLI capability advantage. See [`FORGE_RETENTION_DECISION.md`](FORGE_RETENTION_DECISION.md) and `docs/ADAPTER_SUPPORT_MATRIX.toml` for the current decision and removal gates.
+> **Historical status snapshot (2026-09-03).** This document records the state while #9 was still deciding and implementing the execution-only runtime boundary. It is no longer the source of truth for active Forge support status. #9 subsequently completed with a real pinned Rust sidecar integration; #991 first deprecated that integration and then removed the executable Forge adapter/transport under ADR 0014 after the generic guarantees and #889/#46 gates were satisfied. See [`FORGE_RETENTION_DECISION.md`](FORGE_RETENTION_DECISION.md) and `docs/ADAPTER_SUPPORT_MATRIX.toml` for the current removed/non-active state.
 
 Status date: 2026-09-03
 
 Issue: #9 — Audit and port reusable Forge capabilities behind the execution interface
 
-The remainder of this document is intentionally preserved as historical evidence. Statements such as “current blocker” and “recommended next #9 slice” describe the 2026-09-03 snapshot and are superseded by the completed #9 evidence and #991 retention decision.
+The remainder of this document is intentionally preserved as historical evidence. Statements such as “current blocker” and “recommended next #9 slice” describe the 2026-09-03 snapshot and are superseded by the completed #9 evidence and #991/ADR 0014 removal decision.
 
 This document separates what is **implemented and proven** from what remains unresolved. It intentionally does not equate a tested Forge adapter boundary with a connected legacy Forge runtime.
 
