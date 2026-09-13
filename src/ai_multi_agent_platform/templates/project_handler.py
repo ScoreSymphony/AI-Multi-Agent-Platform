@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.control_plane.async_scope import AsyncScopeStore, AsyncScopeStoreAdapter
+from ai_multi_agent_platform.control_plane.async_scope import (
+    AsyncScopeStore,
+    AsyncScopeStoreAdapter,
+)
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.domain import OwnerRef, Project
 
