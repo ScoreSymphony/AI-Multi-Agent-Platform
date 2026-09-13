@@ -51,6 +51,12 @@ Detach hides the route before awaiting durable deletion and restores it if delet
 unexpected registry-registration failure happens after persistence, the previous catalog record is
 restored (or the new record is removed) before the error is propagated.
 
+Caller cancellation is deferred across the whole logical management mutation, not only the SQLite
+worker call. If a save commits while the caller is cancelled, the registry publish still completes
+before `CancelledError` is returned. The same boundary lets detach finish its durable delete or its
+rollback before cancellation becomes observable, preventing durable and in-memory routing state
+from diverging because of cancellation timing.
+
 `restore_connector_repositories()` likewise uses the async catalog boundary for durable list/delete
 operations while it awaits canonical Connector state. Missing Connector Connections still remove
 stale repository routing records, but the SQLite cleanup no longer blocks the event loop.
@@ -69,5 +75,6 @@ The integration suite verifies:
 - bounded concurrent worker operations;
 - repeated cancellation that does not release the write boundary before persistence settles;
 - restart-visible persistence after a cancelled caller;
+- service-level cancellation waits for durable save plus registry publication;
 - canonical retryable mapping for SQLite busy/locked failures;
 - failed attach persistence never publishes an uncommitted repository binding.
