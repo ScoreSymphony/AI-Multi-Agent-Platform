@@ -13,6 +13,7 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import validate_id
 
+from .async_repository import AsyncHandoffRepository, runtime_handoff_repository
 from .models import (
     AgentHandoff,
     HandoffAuditEvent,
@@ -78,7 +79,8 @@ class HandoffService:
 
     This service deliberately never changes Task/Plan/Step/Run state. The durable coordinator
     remains the lifecycle authority; this service only records the transfer artifact and its
-    exact consumption evidence.
+    exact consumption evidence. Synchronous methods remain compatibility seams; production
+    async callers use the awaitable siblings backed by ``runtime_repository``.
     """
 
     def __init__(
@@ -89,12 +91,21 @@ class HandoffService:
         references: HandoffReferenceGateway,
         audit: HandoffAuditSink | None = None,
         consumer_requirements: ConsumerRequirementEvaluator | None = None,
+        runtime_repository: AsyncHandoffRepository | None = None,
     ) -> None:
         self._repository = repository
+        self._runtime_repository = runtime_handoff_repository(
+            repository,
+            runtime_repository=runtime_repository,
+        )
         self._agents = agents
         self._references = references
         self._audit = audit or NullHandoffAuditSink()
         self._consumer_requirements = consumer_requirements
+
+    @property
+    def runtime_repository(self) -> AsyncHandoffRepository:
+        return self._runtime_repository
 
     def create_handoff(
         self,
@@ -104,8 +115,160 @@ class HandoffService:
         handoff_id: str | None = None,
         expected_previous_revision: int = 0,
     ) -> AgentHandoff:
-        """Persist one explicit transfer before any consumer may rely on it."""
+        """Synchronous compatibility seam for setup/tests and offline callers."""
 
+        handoff = self._prepare_creation(
+            content,
+            idempotency_key=idempotency_key,
+            handoff_id=handoff_id,
+            expected_previous_revision=expected_previous_revision,
+        )
+        stored, created = self._repository.create_handoff(
+            handoff,
+            idempotency_key=idempotency_key,
+            request_digest=compute_creation_request_digest(content),
+            expected_previous_revision=expected_previous_revision,
+        )
+        self._record_creation(stored, created)
+        return stored
+
+    async def async_create_handoff(
+        self,
+        content: HandoffContent,
+        *,
+        idempotency_key: str,
+        handoff_id: str | None = None,
+        expected_previous_revision: int = 0,
+    ) -> AgentHandoff:
+        """Persist one explicit transfer through the awaitable runtime boundary."""
+
+        handoff = self._prepare_creation(
+            content,
+            idempotency_key=idempotency_key,
+            handoff_id=handoff_id,
+            expected_previous_revision=expected_previous_revision,
+        )
+        stored, created = await self._runtime_repository.create_handoff(
+            handoff,
+            idempotency_key=idempotency_key,
+            request_digest=compute_creation_request_digest(content),
+            expected_previous_revision=expected_previous_revision,
+        )
+        self._record_creation(stored, created)
+        return stored
+
+    def consume_handoff(
+        self,
+        handoff_id: str,
+        revision: int,
+        *,
+        consuming_run_id: str,
+        consumer: ParticipantRef,
+        context_bundle_ref: HandoffSourceRef | None = None,
+    ) -> HandoffRuntimeContext:
+        """Synchronous compatibility seam for setup/tests and offline callers."""
+
+        validate_id(consuming_run_id, "run")
+        self._require_participant_revision(consumer)
+        handoff = self._repository.get_handoff(handoff_id, revision)
+        candidate = self._prepare_consumption(
+            handoff,
+            consuming_run_id=consuming_run_id,
+            consumer=consumer,
+            context_bundle_ref=context_bundle_ref,
+        )
+        consumption, created = self._repository.bind_consumption(candidate)
+        self._record_consumption(handoff, consumption, created)
+        return HandoffRuntimeContext(
+            handoff=handoff,
+            consumption=consumption,
+            context_source=handoff_context_source(handoff),
+        )
+
+    async def async_consume_handoff(
+        self,
+        handoff_id: str,
+        revision: int,
+        *,
+        consuming_run_id: str,
+        consumer: ParticipantRef,
+        context_bundle_ref: HandoffSourceRef | None = None,
+    ) -> HandoffRuntimeContext:
+        """Authorize, validate and durably bind through the awaitable runtime boundary."""
+
+        validate_id(consuming_run_id, "run")
+        self._require_participant_revision(consumer)
+        handoff = await self._runtime_repository.get_handoff(handoff_id, revision)
+        candidate = self._prepare_consumption(
+            handoff,
+            consuming_run_id=consuming_run_id,
+            consumer=consumer,
+            context_bundle_ref=context_bundle_ref,
+        )
+        consumption, created = await self._runtime_repository.bind_consumption(candidate)
+        self._record_consumption(handoff, consumption, created)
+        return HandoffRuntimeContext(
+            handoff=handoff,
+            consumption=consumption,
+            context_source=handoff_context_source(handoff),
+        )
+
+    def get_handoff(self, handoff_id: str, revision: int | None = None) -> AgentHandoff:
+        return self._repository.get_handoff(handoff_id, revision)
+
+    async def async_get_handoff(
+        self,
+        handoff_id: str,
+        revision: int | None = None,
+    ) -> AgentHandoff:
+        return await self._runtime_repository.get_handoff(handoff_id, revision)
+
+    def list_handoffs(self) -> tuple[AgentHandoff, ...]:
+        return self._repository.list_handoffs()
+
+    async def async_list_handoffs(self) -> tuple[AgentHandoff, ...]:
+        return await self._runtime_repository.list_handoffs()
+
+    def list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]:
+        validate_id(task_id, "task")
+        return self._repository.list_handoffs_for_task(task_id)
+
+    async def async_list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]:
+        validate_id(task_id, "task")
+        return await self._runtime_repository.list_handoffs_for_task(task_id)
+
+    def list_handoffs_for_step(self, step_id: str) -> tuple[AgentHandoff, ...]:
+        validate_id(step_id, "step")
+        return self._repository.list_handoffs_for_step(step_id)
+
+    async def async_list_handoffs_for_step(self, step_id: str) -> tuple[AgentHandoff, ...]:
+        validate_id(step_id, "step")
+        return await self._runtime_repository.list_handoffs_for_step(step_id)
+
+    def list_consumptions(self, handoff_id: str, revision: int) -> tuple[HandoffConsumption, ...]:
+        return self._repository.list_consumptions(handoff_id, revision)
+
+    async def async_list_consumptions(
+        self,
+        handoff_id: str,
+        revision: int,
+    ) -> tuple[HandoffConsumption, ...]:
+        return await self._runtime_repository.list_consumptions(handoff_id, revision)
+
+    async def async_list_consumptions_for_run(
+        self,
+        run_id: str,
+    ) -> tuple[HandoffConsumption, ...]:
+        return await self._runtime_repository.list_consumptions_for_run(run_id)
+
+    def _prepare_creation(
+        self,
+        content: HandoffContent,
+        *,
+        idempotency_key: str,
+        handoff_id: str | None,
+        expected_previous_revision: int,
+    ) -> AgentHandoff:
         if not idempotency_key.strip():
             raise ContractError(ErrorCode.INVALID_REQUEST, "handoff idempotency key is required")
         if expected_previous_revision < 0:
@@ -120,58 +283,48 @@ class HandoffService:
 
         canonical_id = handoff_id or new_handoff_id()
         validate_id(canonical_id, "handoff")
-        handoff = build_handoff(
+        return build_handoff(
             handoff_id=canonical_id,
             revision=expected_previous_revision + 1,
             content=content,
         )
-        stored, created = self._repository.create_handoff(
-            handoff,
-            idempotency_key=idempotency_key,
-            request_digest=compute_creation_request_digest(content),
-            expected_previous_revision=expected_previous_revision,
-        )
-        if created:
-            details: dict[str, JsonValue] = {
-                "producer": _participant_label(content.producer),
-                "content_digest": stored.content_digest,
-                "producer_step_id": content.producer_step_id,
-                "consumer_step_id": content.consumer_step_id,
-            }
-            if content.intended_consumer is not None:
-                details["consumer"] = _participant_label(content.intended_consumer)
-            self._audit.record(
-                HandoffAuditEvent(
-                    event_type="handoff.created",
-                    handoff_id=stored.handoff_id,
-                    revision=stored.revision,
-                    task_id=stored.content.task_id,
-                    details=details,
-                )
-            )
-        return stored
 
-    def consume_handoff(
+    def _record_creation(self, stored: AgentHandoff, created: bool) -> None:
+        if not created:
+            return
+        content = stored.content
+        details: dict[str, JsonValue] = {
+            "producer": _participant_label(content.producer),
+            "content_digest": stored.content_digest,
+            "producer_step_id": content.producer_step_id,
+            "consumer_step_id": content.consumer_step_id,
+        }
+        if content.intended_consumer is not None:
+            details["consumer"] = _participant_label(content.intended_consumer)
+        self._audit.record(
+            HandoffAuditEvent(
+                event_type="handoff.created",
+                handoff_id=stored.handoff_id,
+                revision=stored.revision,
+                task_id=content.task_id,
+                details=details,
+            )
+        )
+
+    def _prepare_consumption(
         self,
-        handoff_id: str,
-        revision: int,
+        handoff: AgentHandoff,
         *,
         consuming_run_id: str,
         consumer: ParticipantRef,
-        context_bundle_ref: HandoffSourceRef | None = None,
-    ) -> HandoffRuntimeContext:
-        """Authorize, validate and durably bind a Handoff before returning runtime context."""
-
-        validate_id(consuming_run_id, "run")
-        self._require_participant_revision(consumer)
-        handoff = self._repository.get_handoff(handoff_id, revision)
+        context_bundle_ref: HandoffSourceRef | None,
+    ) -> HandoffConsumption:
         self._require_expected_consumer(handoff, consumer)
         self._validate_sources_for_consumer(handoff, consumer)
         if context_bundle_ref is not None:
             self._require_reference_exists(context_bundle_ref)
             self._require_reference_readable(consumer, context_bundle_ref)
-
-        candidate = HandoffConsumption(
+        return HandoffConsumption(
             handoff_id=handoff.handoff_id,
             handoff_revision=handoff.revision,
             handoff_digest=handoff.content_digest,
@@ -179,43 +332,28 @@ class HandoffService:
             consumer=consumer,
             context_bundle_ref=context_bundle_ref,
         )
-        consumption, created = self._repository.bind_consumption(candidate)
-        if created:
-            self._audit.record(
-                HandoffAuditEvent(
-                    event_type="handoff.consumed",
-                    handoff_id=handoff.handoff_id,
-                    revision=handoff.revision,
-                    task_id=handoff.content.task_id,
-                    consuming_run_id=consuming_run_id,
-                    details={
-                        "consumer": _participant_label(consumer),
-                        "content_digest": handoff.content_digest,
-                    },
-                )
+
+    def _record_consumption(
+        self,
+        handoff: AgentHandoff,
+        consumption: HandoffConsumption,
+        created: bool,
+    ) -> None:
+        if not created:
+            return
+        self._audit.record(
+            HandoffAuditEvent(
+                event_type="handoff.consumed",
+                handoff_id=handoff.handoff_id,
+                revision=handoff.revision,
+                task_id=handoff.content.task_id,
+                consuming_run_id=consumption.consuming_run_id,
+                details={
+                    "consumer": _participant_label(consumption.consumer),
+                    "content_digest": handoff.content_digest,
+                },
             )
-        return HandoffRuntimeContext(
-            handoff=handoff,
-            consumption=consumption,
-            context_source=handoff_context_source(handoff),
         )
-
-    def get_handoff(self, handoff_id: str, revision: int | None = None) -> AgentHandoff:
-        return self._repository.get_handoff(handoff_id, revision)
-
-    def list_handoffs(self) -> tuple[AgentHandoff, ...]:
-        return self._repository.list_handoffs()
-
-    def list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]:
-        validate_id(task_id, "task")
-        return self._repository.list_handoffs_for_task(task_id)
-
-    def list_handoffs_for_step(self, step_id: str) -> tuple[AgentHandoff, ...]:
-        validate_id(step_id, "step")
-        return self._repository.list_handoffs_for_step(step_id)
-
-    def list_consumptions(self, handoff_id: str, revision: int) -> tuple[HandoffConsumption, ...]:
-        return self._repository.list_consumptions(handoff_id, revision)
 
     def _validate_sources_for_creation(self, content: HandoffContent) -> None:
         for reference in content.source_refs:
