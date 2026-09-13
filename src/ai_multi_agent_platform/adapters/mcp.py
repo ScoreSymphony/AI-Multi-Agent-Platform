@@ -27,6 +27,8 @@ from ai_multi_agent_platform.contracts.types import (
 )
 
 from .mcp_tasks import (
+    MCP_TASKS_PROTOCOL_REVISION,
+    InMemoryMCPTaskBindingStore,
     MCPImmediateToolResult,
     MCPTaskBinding,
     MCPTaskBindingStore,
@@ -34,8 +36,6 @@ from .mcp_tasks import (
     MCPTaskSnapshot,
     MCPTaskStarted,
     MCPTaskStatus,
-    MCP_TASKS_PROTOCOL_REVISION,
-    InMemoryMCPTaskBindingStore,
     binding_adapter_metadata,
     binding_for_snapshot,
     mark_cancellation_requested,
@@ -422,7 +422,8 @@ class MCPToolProvider(CapabilityToolProvider):
                             await self._cancel_bound_task(client, invocation, current)
                             raise ContractError(
                                 ErrorCode.UNSUPPORTED_CAPABILITY,
-                                "MCP task requires interactive input but no governed input handler is configured",
+                                "MCP task requires interactive input but no governed input "
+                                "handler is configured",
                                 provider_id=self.descriptor.provider_id,
                                 details={"mcp_task_input_required": True},
                                 adapter_metadata=binding_adapter_metadata(
