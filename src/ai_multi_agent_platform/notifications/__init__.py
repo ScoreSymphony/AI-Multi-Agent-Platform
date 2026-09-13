@@ -1,5 +1,10 @@
 """Canonical notification and user-attention domain for Issue #75."""
 
+from .async_sqlite import (
+    SqliteDeliveryAttemptRepository,
+    SqliteNotificationRepository,
+    SqliteNotificationRuntimeState,
+)
 from .delivery import (
     DeliveryAttempt,
     DeliveryAttemptRepository,
@@ -10,7 +15,6 @@ from .delivery import (
     NotificationDeliveryCoordinator,
     UnavailableDeliveryChannel,
 )
-from .delivery_sqlite import SqliteDeliveryAttemptRepository
 from .events import NotificationProjectingEventProvider, ProjectionFailureSink
 from .integrations import (
     approval_required_candidate,
@@ -60,10 +64,9 @@ from .runtime import (
     NotificationRuntimeState,
     NotificationRuntimeTick,
     ReminderEvaluator,
-    SqliteNotificationRuntimeState,
 )
 from .service import NotificationEventSink, NotificationService
-from .sqlite import SqliteNotificationPreferenceRepository, SqliteNotificationRepository
+from .sqlite import SqliteNotificationPreferenceRepository
 from .visibility import AllowAllNotificationVisibilityGuard, NotificationVisibilityGuard
 
 __all__ = [
