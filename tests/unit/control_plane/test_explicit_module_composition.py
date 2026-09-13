@@ -118,6 +118,107 @@ def test_missing_module_dependency_is_rejected() -> None:
         _control_plane(module)
 
 
+def test_command_authorizer_must_belong_to_same_module_command() -> None:
+    async def authorize(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> None:
+        del context, resource_ref, payload
+
+    with pytest.raises(ValueError, match="must belong to commands owned by the same module"):
+        ControlPlaneModule(
+            name="domain.alpha",
+            command_authorizers={"widget.refresh": authorize},
+        )
+
+
+def test_explicit_command_authorizer_and_observer_run_in_declared_boundary() -> None:
+    calls: list[tuple[str, str]] = []
+
+    async def authorize(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> None:
+        del context, payload
+        calls.append(("authorize", resource_ref))
+
+    async def observe(
+        context: RequestContext,
+        command: str,
+        resource_ref: str,
+        result: dict[str, JsonValue],
+    ) -> None:
+        del context
+        assert result == {"id": resource_ref, "type": "widget"}
+        calls.append(("observe", command))
+
+    module = ControlPlaneModule(
+        name="domain.alpha",
+        command_handlers={"widget.refresh": _command},
+        command_authorizers={"widget.refresh": authorize},
+        command_observers=(observe,),
+    )
+    control_plane = _control_plane(module)
+    context = RequestContext(
+        request_id="request-policy",
+        correlation_id="correlation-policy",
+        idempotency_key="idempotency-policy",
+    )
+
+    result = asyncio.run(
+        control_plane.execute_command(
+            context,
+            "widget.refresh",
+            "widget-1",
+            {"reason": "test"},
+        )
+    )
+
+    assert result == {"id": "widget-1", "type": "widget"}
+    assert calls == [
+        ("authorize", "widget-1"),
+        ("observe", "widget.refresh"),
+    ]
+
+
+def test_command_observers_run_in_deterministic_module_order() -> None:
+    calls: list[str] = []
+
+    def observer(name: str):
+        async def observe(
+            context: RequestContext,
+            command: str,
+            resource_ref: str,
+            result: dict[str, JsonValue],
+        ) -> None:
+            del context, command, resource_ref, result
+            calls.append(name)
+
+        return observe
+
+    alpha = ControlPlaneModule(
+        name="domain.alpha",
+        command_observers=(observer("alpha"),),
+    )
+    beta = ControlPlaneModule(
+        name="domain.beta",
+        command_handlers={"widget.refresh": _command},
+        command_observers=(observer("beta"),),
+    )
+    control_plane = _control_plane(beta, alpha)
+    context = RequestContext(
+        request_id="request-observers",
+        correlation_id="correlation-observers",
+        idempotency_key="idempotency-observers",
+    )
+
+    asyncio.run(control_plane.execute_command(context, "widget.refresh", "widget-1", {}))
+
+    assert calls == ["alpha", "beta"]
+
+
 def test_normalized_special_route_ownership_conflict_is_rejected() -> None:
     async def status(request: HTTPRequest) -> HTTPResponse:
         del request
