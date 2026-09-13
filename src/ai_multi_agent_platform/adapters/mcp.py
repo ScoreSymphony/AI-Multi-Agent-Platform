@@ -44,6 +44,7 @@ from .mcp_tasks import (
     mark_input_requests_responded,
     observe_snapshot,
     validate_binding_for_invocation,
+    validate_task_invocation_context,
 )
 
 type MCPTaskInputHandler = Callable[
@@ -292,9 +293,45 @@ class MCPToolProvider(CapabilityToolProvider):
                 # canonical attempt has no durable external-task binding to reconcile.
                 return await self._invoke_synchronous(invocation)
 
+            # Validate all canonical authority/scoping inputs before the provider is allowed to
+            # create external work. A task handle received before this check could otherwise become
+            # an unbound side effect if binding construction later rejected the invocation context.
+            validate_task_invocation_context(invocation, provider_id=self.descriptor.provider_id)
+
+            # The in-process lock above only serializes one provider instance. The durable claim is
+            # the cross-instance/process exactly-one dispatch boundary. It is intentionally retained
+            # when delivery is ambiguous or when a task-capable call completes synchronously: the
+            # same canonical attempt must not silently create external work again merely because no
+            # async task handle exists to recover.
+            claimed = await self._task_binding_store.claim_dispatch(
+                self.descriptor.provider_id,
+                invocation.invocation_id,
+            )
+            if not claimed:
+                binding = await self._task_binding_store.get(
+                    self.descriptor.provider_id,
+                    invocation.invocation_id,
+                )
+                if binding is not None:
+                    validate_binding_for_invocation(binding, invocation)
+                    self._active_task_bindings[invocation.invocation_id] = binding
+                    return await self._poll_bound_task(client, invocation, binding, initial=None)
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "MCP task-aware dispatch for this canonical invocation was already claimed; "
+                    "refusing automatic redispatch because prior delivery may be in flight or "
+                    "ambiguous",
+                    provider_id=self.descriptor.provider_id,
+                    details={
+                        "mcp_task_dispatch_claimed": True,
+                        "automatic_redispatch_blocked": True,
+                    },
+                )
+
             # Deliberately no transport-level retry here. If delivery becomes ambiguous before a
-            # task handle is received, this canonical attempt fails rather than risking a duplicate
-            # external side effect. A platform retry creates a new Run/attempt explicitly.
+            # task handle is received, the durable dispatch claim remains consumed so this canonical
+            # attempt fails closed rather than risking a duplicate external side effect. A platform
+            # retry creates a new Run/attempt explicitly.
             outcome = await client.call_tool_with_tasks(
                 invocation.tool_ref,
                 invocation.arguments_json(),
