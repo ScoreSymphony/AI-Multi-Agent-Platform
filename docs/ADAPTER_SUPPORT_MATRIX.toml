@@ -682,7 +682,7 @@ security_surface = "inherits connector credentials/network side effects plus rep
 upstream_health = "depends on selected connector"
 compatibility = "Supported only with a supported underlying connector/profile."
 usage = "Remote repository collaboration."
-evidence = ["tests/test_issue_82_connector_repository.py"]
+evidence = ["tests/contract/connectors/test_repository_connector_provider.py"]
 docs = ["docs/integrations/REPOSITORY_INTEGRATION.md"]
 migration = "Rebind to LocalGit or another RepositoryProvider; canonical provenance remains stable."
 
