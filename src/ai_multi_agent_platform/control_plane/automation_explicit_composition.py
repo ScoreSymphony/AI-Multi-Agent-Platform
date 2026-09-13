@@ -125,9 +125,7 @@ class ControlPlane(_SearchCheckpointControlPlane):
         supplied_resources = kwargs.get("resource_services")
         if isinstance(supplied_resources, Mapping):
             conflicts = sorted(
-                set(supplied_resources).intersection(
-                    {AUTOMATION_COLLECTION, DELIVERY_COLLECTION}
-                )
+                set(supplied_resources).intersection({AUTOMATION_COLLECTION, DELIVERY_COLLECTION})
             )
             if conflicts:
                 raise ValueError(

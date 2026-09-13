@@ -65,7 +65,9 @@ def _install_release_status_module(
 
     operator = release_operator or _runtime_release_operator()
     registered_modules = getattr(control_plane, "registered_modules", ())
-    if RELEASE_STATUS_MODULE not in registered_modules and hasattr(control_plane, "register_modules"):
+    if RELEASE_STATUS_MODULE not in registered_modules and hasattr(
+        control_plane, "register_modules"
+    ):
         install_control_plane_modules(control_plane, (_release_status_module(operator),))
     setattr(control_plane, "_release_operator", operator)
     return operator

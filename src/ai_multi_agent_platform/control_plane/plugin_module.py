@@ -134,9 +134,7 @@ class PluginControlPlaneBinding:
             PLUGIN_COLLECTION: _PluginResources(registry),
         }
         if self._plugin_catalog is not None:
-            resources[PLUGIN_CANDIDATE_COLLECTION] = _PluginCandidateResources(
-                self._plugin_catalog
-            )
+            resources[PLUGIN_CANDIDATE_COLLECTION] = _PluginCandidateResources(self._plugin_catalog)
         return ControlPlaneModule(
             name=PLUGIN_MODULE,
             resource_services=resources,

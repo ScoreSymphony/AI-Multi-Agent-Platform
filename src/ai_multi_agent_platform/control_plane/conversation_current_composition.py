@@ -182,9 +182,7 @@ class ControlPlane(_NotificationControlPlane):
         }
         if state.task.metadata.get("conversation_input") != input_ref:
             await self._kernel.update_task(
-                idempotency_key=(
-                    f"{context.idempotency_key}:conversation-input:{message_id}"
-                ),
+                idempotency_key=(f"{context.idempotency_key}:conversation-input:{message_id}"),
                 task_id=task_id,
                 metadata={"conversation_input": input_ref},
                 actor_ref=context.actor.principal_ref,

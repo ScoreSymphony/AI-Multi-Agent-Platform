@@ -186,14 +186,10 @@ class ControlPlaneModule:
 
     def __post_init__(self) -> None:
         if _MODULE_PATTERN.fullmatch(self.name) is None:
-            raise ValueError(
-                "Control Plane module name must use lowercase canonical segments"
-            )
+            raise ValueError("Control Plane module name must use lowercase canonical segments")
         if self.name in self.requires:
             raise ValueError("Control Plane module cannot require itself")
-        orphan_authorizers = sorted(
-            set(self.command_authorizers).difference(self.command_handlers)
-        )
+        orphan_authorizers = sorted(set(self.command_authorizers).difference(self.command_handlers))
         if orphan_authorizers:
             raise ValueError(
                 "Control Plane module command authorizers must belong to commands "
@@ -513,7 +509,9 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                     extension_collections=self._extended_control_plane.registered_collections,
                     extension_commands=self._extended_control_plane.registered_commands,
                 )
-                specification = self._extended_control_plane.apply_openapi_contributions(specification)
+                specification = self._extended_control_plane.apply_openapi_contributions(
+                    specification
+                )
                 return self._response(200, specification, request_id, correlation_id)
 
             if request.method == "GET" and relative in {"", "/"}:

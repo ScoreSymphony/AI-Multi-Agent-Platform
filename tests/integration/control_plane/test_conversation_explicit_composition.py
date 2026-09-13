@@ -80,9 +80,7 @@ def test_notification_surface_has_one_explicit_owner(tmp_path: Path) -> None:
         assert control_plane.resource_owner(resource) == "notifications"
     for command in NOTIFICATION_COMMANDS:
         assert control_plane.command_owner(command) == "notifications"
-    assert (
-        control_plane.route_owner("GET", "/api/v1/notifications/stream") == "notifications"
-    )
+    assert control_plane.route_owner("GET", "/api/v1/notifications/stream") == "notifications"
 
 
 def test_explicit_conversation_module_preserves_ergonomic_http_creation(tmp_path: Path) -> None:

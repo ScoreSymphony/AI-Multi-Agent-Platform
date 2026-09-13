@@ -14,7 +14,11 @@ from ai_multi_agent_platform.workspaces import WorkspaceProvider
 from .extensions import CommandAuthorizer, ControlPlaneModule
 from .models import RequestContext
 from .service import _payload_digest
-from .terminal_session_contract import RunCanceller, terminal_command_handlers, terminal_resource_services
+from .terminal_session_contract import (
+    RunCanceller,
+    terminal_command_handlers,
+    terminal_resource_services,
+)
 
 TERMINAL_MODULE = "terminal"
 

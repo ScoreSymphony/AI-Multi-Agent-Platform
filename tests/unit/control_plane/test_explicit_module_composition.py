@@ -52,9 +52,13 @@ def test_module_batch_is_order_independent_and_ownership_is_inspectable() -> Non
     first = _control_plane(alpha, beta)
     second = _control_plane(beta, alpha)
 
-    assert first.registered_modules == second.registered_modules == (
-        "domain.alpha",
-        "domain.beta",
+    assert (
+        first.registered_modules
+        == second.registered_modules
+        == (
+            "domain.alpha",
+            "domain.beta",
+        )
     )
     assert first.registered_collections == second.registered_collections == ("widgets",)
     assert first.registered_commands == second.registered_commands == ("widget.refresh",)

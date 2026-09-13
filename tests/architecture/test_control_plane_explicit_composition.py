@@ -96,8 +96,7 @@ def test_control_plane_domain_facades_do_not_add_unreviewed_multiple_inheritance
     missing = sorted(set(_ALLOWED_IMPLEMENTATION_MULTIPLE_INHERITANCE) - seen_allowlisted)
     if missing:
         violations.append(
-            "stale Control Plane multiple-inheritance allow-list entries: "
-            f"{missing!r}"
+            f"stale Control Plane multiple-inheritance allow-list entries: {missing!r}"
         )
     assert violations == []
 
@@ -237,23 +236,15 @@ def test_current_conversation_composition_has_one_control_plane_base() -> None:
 def test_migrated_domains_declare_explicit_module_owners() -> None:
     portability = (CONTROL_PLANE / "portability_module.py").read_text(encoding="utf-8")
     plugins = (CONTROL_PLANE / "plugin_module.py").read_text(encoding="utf-8")
-    organization_audit = (CONTROL_PLANE / "organization_audit_api.py").read_text(
-        encoding="utf-8"
-    )
-    approval_decisions = (CONTROL_PLANE / "approval_decision_module.py").read_text(
-        encoding="utf-8"
-    )
-    automation = (CONTROL_PLANE / "automation_explicit_composition.py").read_text(
-        encoding="utf-8"
-    )
+    organization_audit = (CONTROL_PLANE / "organization_audit_api.py").read_text(encoding="utf-8")
+    approval_decisions = (CONTROL_PLANE / "approval_decision_module.py").read_text(encoding="utf-8")
+    automation = (CONTROL_PLANE / "automation_explicit_composition.py").read_text(encoding="utf-8")
     conversations = (CONTROL_PLANE / "conversation_module.py").read_text(encoding="utf-8")
     notifications = (CONTROL_PLANE / "notifications_explicit_composition.py").read_text(
         encoding="utf-8"
     )
     terminal = (CONTROL_PLANE / "terminal_module.py").read_text(encoding="utf-8")
-    product = (CONTROL_PLANE / "approval_portability_composition.py").read_text(
-        encoding="utf-8"
-    )
+    product = (CONTROL_PLANE / "approval_portability_composition.py").read_text(encoding="utf-8")
     governance = (GOVERNANCE / "control_plane_module.py").read_text(encoding="utf-8")
 
     assert 'PORTABILITY_MODULE = "portability"' in portability
