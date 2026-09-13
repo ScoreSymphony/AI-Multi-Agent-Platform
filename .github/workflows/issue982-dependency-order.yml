@@ -1,0 +1,116 @@
+name: Issue 982 dependency-order fixes
+
+on:
+  push:
+    branches:
+      - issue/982-explicit-control-plane-composition
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: issue/982-explicit-control-plane-composition
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Apply narrow source fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          search = Path('src/ai_multi_agent_platform/research/search.py')
+          text = search.read_text()
+          needle = 'from __future__ import annotations\n\n'
+          replacement = 'from __future__ import annotations\n\nfrom typing import cast\n\n'
+          if 'from typing import cast' not in text:
+              if needle not in text:
+                  raise SystemExit('research import anchor not found')
+              text = text.replace(needle, replacement, 1)
+              search.write_text(text)
+
+          extensions = Path('src/ai_multi_agent_platform/control_plane/extensions.py')
+          text = extensions.read_text()
+          old_install = '''        # Commit only after all claims have been validated. Explicit base-class
+          # dispatch prevents a legacy compatibility subclass from turning module
+          # installation back into MRO-sensitive behavior during the migration.
+          for name in sorted(by_name):
+          '''
+          new_install = '''        # Commit only after all claims have been validated. Dependencies determine
+          # the only meaningful ordering; independent modules retain lexical order.
+          installation_order = _module_dependency_order(by_name)
+          for name in installation_order:
+          '''
+          if old_install not in text:
+              raise SystemExit('module installation anchor not found')
+          text = text.replace(old_install, new_install, 1)
+
+          old_sort = '''        self._command_observers.sort(key=lambda item: item[0])
+          self._openapi_contributors.sort(key=lambda item: item[0])
+          '''
+          new_sort = '''        dependency_order = {
+              name: index
+              for index, name in enumerate(_module_dependency_order(self._registered_modules))
+          }
+          self._command_observers.sort(key=lambda item: dependency_order[item[0]])
+          self._openapi_contributors.sort(key=lambda item: dependency_order[item[0]])
+          '''
+          if old_sort not in text:
+              raise SystemExit('observer ordering anchor not found')
+          text = text.replace(old_sort, new_sort, 1)
+
+          helper_anchor = '''def _claim(
+              claims: dict[Any, str],
+          '''
+          helper = '''def _module_dependency_order(
+              modules: Mapping[str, ControlPlaneModule],
+          ) -> tuple[str, ...]:
+              """Return deterministic dependency-first module order or reject a cycle."""
+
+              remaining = set(modules)
+              ordered: list[str] = []
+              while remaining:
+                  ready = sorted(
+                      name
+                      for name in remaining
+                      if modules[name].requires.isdisjoint(remaining)
+                  )
+                  if not ready:
+                      raise ValueError(
+                          "Control Plane module dependency cycle: "
+                          f"{sorted(remaining)!r}"
+                      )
+                  ordered.extend(ready)
+                  remaining.difference_update(ready)
+              return tuple(ordered)
+
+
+          def _claim(
+              claims: dict[Any, str],
+          '''
+          if helper_anchor not in text:
+              raise SystemExit('module dependency helper anchor not found')
+          text = text.replace(helper_anchor, helper, 1)
+          extensions.write_text(text)
+          PY
+      - name: Install matching Ruff
+        run: python -m pip install ruff==0.16.7
+      - name: Format patched files
+        run: ruff format src/ai_multi_agent_platform/control_plane/extensions.py src/ai_multi_agent_platform/research/search.py tests/release/test_release_control_plane.py
+      - name: Commit fixes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/ai_multi_agent_platform/control_plane/extensions.py src/ai_multi_agent_platform/research/search.py tests/release/test_release_control_plane.py
+          git commit -m 'Honor explicit Control Plane module dependencies'
+          git push origin HEAD:issue/982-explicit-control-plane-composition
