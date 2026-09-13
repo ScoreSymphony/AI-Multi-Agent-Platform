@@ -49,6 +49,9 @@ FIRST_RUN_MODEL_REQUIREMENTS = RoutingRequirements(
 
 _PREFLIGHT_TASK_ID = "task_00000000-0000-4000-8000-000000000250"
 _PREFLIGHT_RUN_ID = "run_00000000-0000-4000-8000-000000000250"
+_AGENT_TERMINAL_STATUSES = frozenset(
+    {AgentRunStatus.SUCCEEDED, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED}
+)
 
 
 def preflight_first_run_agent(
@@ -88,6 +91,11 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
     A Step binding takes precedence over a Task-wide binding for that exact canonical Step.
     The binding may carry model requirements, capability IDs, Workspace scope and safe Step
     execution context. Unmarked Runs are delegated unchanged.
+
+    Bound Runs are owned by this lifecycle adapter from the moment execution starts. Cancellation
+    therefore terminates the corresponding AgentRun here rather than delegating it to an unrelated
+    backend. A late model/provider completion observes the terminal lifecycle snapshot and cannot
+    overwrite the cancelled AgentRun or revive the canonical Run.
     """
 
     def __init__(
@@ -106,6 +114,7 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         self._capability_turn = capability_turn
         self._snapshots: dict[str, ExecutionSnapshot] = {}
         self._backend_refs: dict[str, str] = {}
+        self._owned_run_ids: set[str] = set()
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -136,6 +145,7 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         existing = self._snapshots.get(request.run_id)
         if existing is not None:
             return self._handle(request.run_id)
+        self._owned_run_ids.add(request.run_id)
 
         if generic_binding is None:
             agent_id = task.task.metadata.get(FIRST_RUN_AGENT_ID_KEY)
@@ -215,8 +225,15 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         )
         backend_ref = f"agent-run:{agent_run.agent_run_id}"
         self._backend_refs[request.run_id] = backend_ref
-        result_id = new_id("result")
+        if self._cancelled(request.run_id):
+            self._cancel_agent_run(agent_run.agent_run_id)
+            self._snapshots[request.run_id] = self._cancelled_snapshot(
+                request.run_id,
+                agent_run.agent_run_id,
+            )
+            return self._handle(request.run_id)
 
+        result_id = new_id("result")
         try:
             resolved_revision = self._agents.service.get_agent_revision(
                 agent_run.agent.agent_id,
@@ -278,6 +295,9 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
                 capability_results = ()
                 model_usage = dict(response.usage)
         except ContractError as exc:
+            if self._cancelled(request.run_id):
+                self._cancel_agent_run(agent_run.agent_run_id)
+                return self._handle(request.run_id)
             self._agents.finish_agent_run(
                 agent_run.agent_run_id,
                 status=AgentRunStatus.FAILED,
@@ -295,6 +315,9 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
             )
             return self._handle(request.run_id)
 
+        if self._cancelled(request.run_id):
+            self._cancel_agent_run(agent_run.agent_run_id)
+            return self._handle(request.run_id)
         self._agents.finish_agent_run(
             agent_run.agent_run_id,
             status=AgentRunStatus.SUCCEEDED,
@@ -330,13 +353,71 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         snapshot = self._snapshots.get(run_id)
         if snapshot is not None:
             return snapshot
+        if run_id in self._owned_run_ids:
+            return ExecutionSnapshot(
+                run_id=run_id,
+                status=ExecutionStatus.RUNNING,
+                adapter_metadata=self._owned_metadata(run_id),
+            )
         return await self._delegate.get(run_id, context)
 
     async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
         snapshot = self._snapshots.get(run_id)
         if snapshot is not None:
             return snapshot
-        return await self._delegate.cancel(run_id, context)
+        if run_id not in self._owned_run_ids:
+            return await self._delegate.cancel(run_id, context)
+
+        agent_run_id = self._owned_agent_run_id(run_id)
+        if agent_run_id is not None:
+            self._cancel_agent_run(agent_run_id)
+        snapshot = self._cancelled_snapshot(run_id, agent_run_id)
+        self._snapshots[run_id] = snapshot
+        return snapshot
+
+    def _cancel_agent_run(self, agent_run_id: str) -> None:
+        current = self._agents.service.repository.get_agent_run(agent_run_id)
+        if current.status in _AGENT_TERMINAL_STATUSES:
+            return
+        self._agents.finish_agent_run(
+            agent_run_id,
+            status=AgentRunStatus.CANCELLED,
+            error="canonical Run cancellation requested",
+        )
+
+    def _cancelled(self, run_id: str) -> bool:
+        snapshot = self._snapshots.get(run_id)
+        return snapshot is not None and snapshot.status is ExecutionStatus.CANCELLED
+
+    def _cancelled_snapshot(
+        self,
+        run_id: str,
+        agent_run_id: str | None,
+    ) -> ExecutionSnapshot:
+        output: dict[str, JsonValue] = {
+            "error": "canonical Run cancellation requested",
+            "error_code": ErrorCode.CANCELLED.value,
+        }
+        metadata: tuple[AdapterMetadata, ...] = ()
+        if agent_run_id is not None:
+            output["agent_run_id"] = agent_run_id
+            metadata = self._metadata(agent_run_id)
+        return ExecutionSnapshot(
+            run_id=run_id,
+            status=ExecutionStatus.CANCELLED,
+            output=output,
+            adapter_metadata=metadata,
+        )
+
+    def _owned_agent_run_id(self, run_id: str) -> str | None:
+        backend_ref = self._backend_refs.get(run_id)
+        if backend_ref is None or not backend_ref.startswith("agent-run:"):
+            return None
+        return backend_ref.removeprefix("agent-run:")
+
+    def _owned_metadata(self, run_id: str) -> tuple[AdapterMetadata, ...]:
+        agent_run_id = self._owned_agent_run_id(run_id)
+        return () if agent_run_id is None else self._metadata(agent_run_id)
 
     def _resolve_capability_turn(self) -> AgentCapabilityTurn:
         if self._capability_turn is not None:
@@ -360,7 +441,7 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
     def _handle(self, run_id: str) -> ExecutionHandle:
         return ExecutionHandle(
             run_id=run_id,
-            backend_ref=self._backend_refs[run_id],
+            backend_ref=self._backend_refs.get(run_id),
             adapter_metadata=self._snapshots[run_id].adapter_metadata,
         )
 
