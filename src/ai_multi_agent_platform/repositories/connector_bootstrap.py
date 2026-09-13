@@ -10,6 +10,10 @@ from ai_multi_agent_platform.connectors import (
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
+from .async_catalog import (
+    RepositoryBindingCatalog,
+    ensure_async_repository_binding_catalog,
+)
 from .catalog import SqliteRepositoryBindingCatalog
 from .connector_repository import ConnectorRepositoryProvider
 from .management import RepositoryDiscoveryResolver
@@ -61,7 +65,7 @@ def connector_repository_discovery_resolver(
 
 
 async def restore_connector_repositories(
-    catalog: SqliteRepositoryBindingCatalog,
+    catalog: RepositoryBindingCatalog | SqliteRepositoryBindingCatalog,
     repository_registry: RepositoryRegistry,
     connections: ConnectorRepository,
     connectors: ConnectorRegistry,
@@ -73,8 +77,9 @@ async def restore_connector_repositories(
     disabled providers fail closed instead of silently substituting a different adapter.
     """
 
+    runtime_catalog = ensure_async_repository_binding_catalog(catalog)
     restored: list[RepositoryBinding] = []
-    for record in catalog.list():
+    for record in await runtime_catalog.list():
         if record.local:
             continue
         try:
@@ -83,7 +88,7 @@ async def restore_connector_repositories(
             if exc.code is not ErrorCode.NOT_FOUND:
                 raise
             # A removed canonical Connection cannot retain repository routing/search state.
-            catalog.delete(record.repository_id)
+            await runtime_catalog.delete(record.repository_id)
             continue
         _require_usable_connection(connection)
         connector = connectors.resolve(

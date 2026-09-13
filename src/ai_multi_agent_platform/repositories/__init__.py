@@ -1,5 +1,10 @@
 """Provider-neutral repository and Git integration."""
 
+from .async_catalog import (
+    AsyncSqliteRepositoryBindingCatalog,
+    InMemoryRepositoryBindingCatalog,
+    RepositoryBindingCatalog,
+)
 from .capabilities import (
     EXTERNAL_SIDE_EFFECT_OPERATIONS,
     LOCAL_GIT_CAPABILITIES,
@@ -62,14 +67,17 @@ from .service import (
 from .workspace import RepositoryWorkspaceSourceResolver
 
 __all__ = [
+    "AsyncSqliteRepositoryBindingCatalog",
     "ConnectorRepositoryProvider",
     "EXTERNAL_SIDE_EFFECT_OPERATIONS",
+    "InMemoryRepositoryBindingCatalog",
     "LOCAL_GIT_CAPABILITIES",
     "LOCAL_WRITE_OPERATIONS",
     "LocalGitRepositoryProvider",
     "READ_OPERATIONS",
     "RepositoryActorResolver",
     "RepositoryBinding",
+    "RepositoryBindingCatalog",
     "RepositoryBindingRecord",
     "RepositoryCallContext",
     "RepositoryCapability",
