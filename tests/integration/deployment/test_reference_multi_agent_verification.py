@@ -407,7 +407,7 @@ def test_reference_golden_path_repairs_needs_changes_and_reverifies_exact_new_re
             reviewer=refs["reviewer"],
             suffix="verification-repair",
             max_repair_attempts=1,
-            automatic_subject_types=(),
+            automatic_subject_types=("artifact",),
         )
         blocked = await deployment.kernel.get_task(task.task_id)
         assert blocked.status is TaskStatus.WAITING
