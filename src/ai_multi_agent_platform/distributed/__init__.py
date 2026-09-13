@@ -75,6 +75,7 @@ from .persistence import (
     DistributedStateStore,
     JsonDistributedStateStore,
 )
+from .postgres_control_plane_coordination import PostgresCoordinationProvider
 from .pressure import (
     AdmissionAction,
     AdmissionDecision,
@@ -199,6 +200,7 @@ __all__ = [
     "NodeRecord",
     "NodeResourceService",
     "NodeStatus",
+    "PostgresCoordinationProvider",
     "PressureAdmissionPolicy",
     "PressureKind",
     "PressureSignal",
