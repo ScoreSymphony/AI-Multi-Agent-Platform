@@ -15,7 +15,7 @@ The machine-readable audit lives in [`FEATURE_CLASSIFICATION.toml`](FEATURE_CLAS
 
 A canonical platform foundation or lifecycle/control-plane capability that belongs to the baseline architecture. Core identifies architectural responsibility, not operational maturity.
 
-Typical Core responsibilities include canonical lifecycle/domain contracts, the Control Plane, provider contracts, Agents, Models, Capabilities/Tools, execution, Workspaces, security, verification and cross-cutting observability/accounting foundations.
+Typical Core responsibilities include canonical lifecycle/domain contracts, the Control Plane, provider contracts, Agents, Models, Capabilities/Tools, execution, Workspaces, security, verification, evaluation and cross-cutting observability/accounting foundations.
 
 A concrete optional adapter can implement a Core boundary without becoming Core architecture itself.
 
@@ -117,7 +117,7 @@ Compatibility must never be inferred from a role label alone. #46-style evidence
 
 ## Current major public-surface audit
 
-The table below is a human-readable view of the canonical machine-readable registry. It intentionally classifies major user/integrator surfaces rather than every package or source file.
+The table below is a human-readable view of the canonical machine-readable registry. It intentionally classifies major user/integrator surfaces rather than every package or source file. `Canonical owner(s)` records the authoritative `owner` values from [`PACKAGE_BOUNDARIES.toml`](PACKAGE_BOUNDARIES.toml), not necessarily the names of the packages that implement or expose the surface.
 
 | ID | Capability / public surface | Canonical owner(s) | Role | Stability |
 | --- | --- | --- | --- | --- |
@@ -131,16 +131,17 @@ The table below is a human-readable view of the canonical machine-readable regis
 | `workspaces-data` | Workspaces plus canonical file/data boundaries | `workspaces`, `data` | Core | Beta |
 | `security-governance` | authentication, authorization, approvals and governed actions | `security`, `governance` | Core | Beta |
 | `verification-review` | verification/review records and completion gates | `verification` | Core | Beta |
+| `evaluation-regression` | Evaluation suites/runs plus regression CLI/browser workflows | `evaluation` | Core | Beta |
 | `observability-accounting` | public telemetry/health/usage/accounting views | `observability`, `accounting` | Core | Beta |
-| `cli-surface` | documented `platform` CLI user surface | `cli` | Core | Beta |
+| `cli-surface` | documented `platform` CLI user surface | `control_plane` | Core | Beta |
 | `memory-knowledge-search` | Memory, Knowledge, Context and Search capabilities | `data`, `context`, `search` | Platform Extension | Beta |
 | `conversations-browser-terminal` | conversational, browser and terminal product capabilities | `conversations`, `browser`, `terminal` | Platform Extension | Beta |
 | `automation-notifications` | schedules/triggers and notification delivery surfaces | `automation`, `notifications` | Platform Extension | Beta |
 | `templates-workflows-portability` | Templates, reusable Workflows and import/export | `templates`, `workflows`, `portability` | Platform Extension | Beta |
-| `repositories-connectors` | Repository/Git and external connector integration | `repositories`, `connectors` | Platform Extension | Beta |
+| `repositories-connectors` | Repository/Git and external connector integration | `repositories`, `repository` | Platform Extension | Beta |
 | `organizations-collaboration` | Organizations, Teams, Memberships and sharing | `organizations` | Platform Extension | Beta |
 | `goals-task-management` | Goals plus priority/deadline/dependency/assignment work management | `goals`, `task_management` | Platform Extension | Beta |
-| `plugin-skill-ecosystem` | plugin/skill discovery and loading extension points | `plugins`, `skills` | Platform Extension | Beta |
+| `plugin-skill-ecosystem` | plugin/skill discovery and loading extension points | `repository`, `skills` | Platform Extension | Beta |
 | `distributed-workers` | multi-node Node/Worker scheduling and distributed execution profile | `distributed` | Optional / Advanced | Beta |
 | `registry-marketplace` | component registry/catalog/marketplace distribution | `distribution` | Optional / Advanced | Beta |
 | `high-availability` | Control Plane leadership/fencing/failover profile | `distributed` | Optional / Advanced | Experimental |
@@ -183,7 +184,7 @@ Use maturity labels where they prevent a wrong compatibility inference, not as g
 - Navigation grouping may reflect architectural/product role for clarity, but navigation is never the source of truth for role or stability.
 - Availability, health, permissions and conformance status must remain separate from maturity labels.
 
-The machine-readable registry field `user_signaling` documents the minimum expected signaling for each major surface.
+The machine-readable registry field `user_signaling` documents the minimum expected signaling for each major surface. The current browser shell uses this policy to mark the Learning route as Experimental while leaving ordinary Stable/Beta navigation uncluttered.
 
 ## Contributor and review guard
 
