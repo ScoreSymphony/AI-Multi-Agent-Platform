@@ -1,5 +1,5 @@
 name: Apply Test Migration 722
-# Current-main baseline after the merged #892 cohorts: 3780 collected tests.
+# Current-main baseline at de65bfcd: 3789 collected tests.
 
 on:
   push:
@@ -166,7 +166,7 @@ jobs:
           python -m pytest --collect-only -q | tee /tmp/collection.txt
           count=$(awk -F': ' '/\.py: [0-9]+$/{sum+=$2} END{print sum+0}' /tmp/collection.txt)
           echo "Collected tests: ${count}"
-          test "${count}" = "3780"
+          test "${count}" = "3789"
       - name: Verify full pytest
         run: python -m pytest
       - name: Remove temporary migration machinery
