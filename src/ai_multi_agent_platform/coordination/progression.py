@@ -107,7 +107,7 @@ class CoordinationProgression:
             elif dependency.status in {StepStatus.FAILED, StepStatus.CANCELLED}:
                 failed_items.append(dependency_id)
             elif dependency.status is StepStatus.SKIPPED:
-                dependency_record = self.repository.get_step_record(dependency_id)
+                dependency_record = await self.repository.get_step_record(dependency_id)
                 if set(dependency_record.satisfied_dependency_ids) == set(
                     dependency_record.dependency_ids
                 ):
