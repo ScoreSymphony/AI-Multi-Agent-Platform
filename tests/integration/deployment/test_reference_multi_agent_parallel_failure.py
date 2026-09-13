@@ -144,16 +144,17 @@ async def _run_order(tmp_path: Path, order: Literal["failure-first", "success-fi
     assert research_runs[0].status is AgentRunStatus.FAILED
     assert approach_runs[0].status is AgentRunStatus.SUCCEEDED
 
+    ordered_steps = sorted(state.steps, key=lambda step: step.title)
     return (
         terminal_task.status,
-        tuple((step.title, step.status) for step in state.steps),
+        tuple((step.title, step.status) for step in ordered_steps),
         tuple(
             (
                 step.title,
                 deployment.coordination_repository.get_step_record(step.id).latest_run_id
                 is not None,
             )
-            for step in state.steps
+            for step in ordered_steps
         ),
     )
 
