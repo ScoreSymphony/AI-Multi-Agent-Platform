@@ -8,6 +8,8 @@ resolver assembles the consuming Run's immutable ContextBundle.
 
 from __future__ import annotations
 
+from typing import Any
+
 from ai_multi_agent_platform.agents import AgentRevisionRef, AgentRunRecord, AgentRunStatus
 from ai_multi_agent_platform.context import ContextCandidate, ContextSourceRequest
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
@@ -141,6 +143,12 @@ class ReferenceIncomingHandoffContextAdapter:
     only turns already-durable predecessor AgentRun outputs into idempotent Handoffs at the safe
     consumer Context boundary. This makes a producer -> process restart -> consumer path equivalent
     to the uninterrupted path without reserving a second kernel output-observer slot.
+
+    A context transfer also needs the predecessor output to be a canonical Result/Artifact
+    reference. Reference Agent execution records the immutable output identity on the AgentRun and
+    kernel Run snapshot first; this adapter publishes that exact identity through the existing
+    kernel attachment command before asking #651/#86 to resolve it. The attachment is idempotent and
+    remains platform history rather than Handoff-private state.
     """
 
     adapter_id = "reference-multi-agent-incoming-handoff/v1"
@@ -152,6 +160,7 @@ class ReferenceIncomingHandoffContextAdapter:
             repository=handoffs.repository,
             agents=handoffs.runtime.agents,
         )
+        self._kernel = getattr(handoffs.references.verification, "_kernel", None)
 
     async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
         if request.step_id is None:
@@ -163,7 +172,7 @@ class ReferenceIncomingHandoffContextAdapter:
                 "reference Handoff Context adapter requires the operational Context request",
             )
 
-        await self._ensure_dependency_handoffs(request, operation)
+        has_dependencies = await self._ensure_dependency_handoffs(request, operation)
         incoming = tuple(
             handoff
             for handoff in self._handoffs.service.list_handoffs_for_step(request.step_id)
@@ -172,6 +181,12 @@ class ReferenceIncomingHandoffContextAdapter:
             and (request.plan_id is None or handoff.content.plan_id == request.plan_id)
         )
         if not incoming:
+            if has_dependencies:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "dependency Step has no canonical incoming Agent Handoff",
+                    details={"step_id": request.step_id, "run_id": request.run_id},
+                )
             return ()
 
         consumer = AgentRevisionRef(request.agent_id, request.agent_revision)
@@ -185,13 +200,20 @@ class ReferenceIncomingHandoffContextAdapter:
                 consumer_actor=consumer_actor,
                 operation=operation,
             )
-        return await self._durable.collect(request)
+        candidates = await self._durable.collect(request)
+        if has_dependencies and not candidates:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "consumed dependency Handoffs produced no canonical Context contribution",
+                details={"step_id": request.step_id, "run_id": request.run_id},
+            )
+        return candidates
 
     async def _ensure_dependency_handoffs(
         self,
         request: ContextSourceRequest,
         operation: OperationContext,
-    ) -> None:
+    ) -> bool:
         assert request.step_id is not None
         consumer_record = self._coordinator.get_step_record(request.step_id)
         if consumer_record.task_id != request.task_id:
@@ -207,7 +229,7 @@ class ReferenceIncomingHandoffContextAdapter:
         state = self._coordinator.get_plan(consumer_record.plan_id)
         consumer_step = state.step(request.step_id)
         if not consumer_step.depends_on:
-            return
+            return False
 
         consumer = AgentRevisionRef(request.agent_id, request.agent_revision)
         consumer_actor = _agent_actor(consumer)
@@ -223,12 +245,14 @@ class ReferenceIncomingHandoffContextAdapter:
             producer_runs = tuple(
                 item
                 for item in self._handoffs.runtime.agents.list_agent_runs(producer_run_id)
-                if item.task_id == request.task_id and item.status is AgentRunStatus.SUCCEEDED
+                if item.task_id == request.task_id
+                and item.status is AgentRunStatus.SUCCEEDED
+                and not item.verification_context.get("verification_id")
             )
             if len(producer_runs) != 1:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    "dependency output does not resolve to exactly one successful AgentRun",
+                    "dependency output does not resolve to exactly one successful producer AgentRun",
                     details={
                         "producer_step_id": producer_step_id,
                         "producer_run_id": producer_run_id,
@@ -276,6 +300,7 @@ class ReferenceIncomingHandoffContextAdapter:
                 intended_consumer_actor=consumer_actor,
                 operation=operation,
             )
+        return True
 
     async def _source_refs(
         self,
@@ -288,10 +313,11 @@ class ReferenceIncomingHandoffContextAdapter:
             (HandoffSourceKind.ARTIFACT, producer_run.artifact_ids),
         ):
             for resource_id in sorted(resource_ids):
-                subject = await self._handoffs.references.verification.resolve_subject(
+                subject = await self._resolve_source_subject(
                     task_id=task_id,
-                    subject_type=kind.value,
-                    subject_id=resource_id,
+                    producer_run=producer_run,
+                    kind=kind,
+                    resource_id=resource_id,
                 )
                 references.append(
                     HandoffSourceRef(
@@ -302,6 +328,111 @@ class ReferenceIncomingHandoffContextAdapter:
                     )
                 )
         return tuple(references)
+
+    async def _resolve_source_subject(
+        self,
+        *,
+        task_id: str,
+        producer_run: AgentRunRecord,
+        kind: HandoffSourceKind,
+        resource_id: str,
+    ) -> Any:
+        resolver = self._handoffs.references.verification
+        try:
+            return await resolver.resolve_subject(
+                task_id=task_id,
+                subject_type=kind.value,
+                subject_id=resource_id,
+            )
+        except ContractError as exc:
+            if exc.code is not ErrorCode.NOT_FOUND:
+                raise
+
+        await self._publish_kernel_output(
+            task_id=task_id,
+            producer_run=producer_run,
+            kind=kind,
+            resource_id=resource_id,
+        )
+        try:
+            return await resolver.resolve_subject(
+                task_id=task_id,
+                subject_type=kind.value,
+                subject_id=resource_id,
+            )
+        except ContractError as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "dependency AgentRun output could not be resolved as canonical Handoff evidence",
+                details={
+                    "producer_run_id": producer_run.run_id,
+                    "source_kind": kind.value,
+                    "resource_id": resource_id,
+                    "resolution_error": exc.code.value,
+                },
+            ) from exc
+
+    async def _publish_kernel_output(
+        self,
+        *,
+        task_id: str,
+        producer_run: AgentRunRecord,
+        kind: HandoffSourceKind,
+        resource_id: str,
+    ) -> None:
+        kernel = self._kernel
+        if kernel is None:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "reference Handoff output publication requires the canonical kernel",
+            )
+        try:
+            run = await kernel.get_run(task_id, producer_run.run_id)
+        except (AttributeError, ContractError) as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "dependency AgentRun is missing its canonical producer Run",
+                details={"producer_run_id": producer_run.run_id},
+            ) from exc
+
+        if kind is HandoffSourceKind.RESULT:
+            if resource_id in run.result_ids:
+                return
+            if run.output.get("result_id") != resource_id:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "AgentRun Result identity does not match canonical producer Run output",
+                    details={"producer_run_id": producer_run.run_id, "result_id": resource_id},
+                )
+            await kernel.attach_result(
+                idempotency_key=(
+                    f"reference-multi-agent-output:{producer_run.run_id}:result:{resource_id}"
+                ),
+                task_id=task_id,
+                result_id=resource_id,
+                run_id=producer_run.run_id,
+                source="reference-multi-agent-handoff",
+            )
+            return
+
+        if resource_id in run.artifact_ids:
+            return
+        artifact_refs = run.output.get("artifact_refs")
+        if not isinstance(artifact_refs, (list, tuple)) or resource_id not in artifact_refs:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "AgentRun Artifact identity does not match canonical producer Run output",
+                details={"producer_run_id": producer_run.run_id, "artifact_id": resource_id},
+            )
+        await kernel.attach_artifact(
+            idempotency_key=(
+                f"reference-multi-agent-output:{producer_run.run_id}:artifact:{resource_id}"
+            ),
+            task_id=task_id,
+            artifact_id=resource_id,
+            run_id=producer_run.run_id,
+            source="reference-multi-agent-handoff",
+        )
 
 
 __all__ = ["ReferenceIncomingHandoffContextAdapter", "ReferenceMultiAgentPlanner"]
