@@ -77,7 +77,7 @@
     "payload": "http://169.254.169.254/latest/meta-data/",
     "transform": "plain",
     "expected_signal": "ssrf",
-    "notes": "Already exercised by test_issue_730_pipelock_transports.py."
+    "notes": "Already exercised by tests/integration/security/test_pipelock_transports.py."
   },
   {
     "id": "ssrf-dns-rebinding",
