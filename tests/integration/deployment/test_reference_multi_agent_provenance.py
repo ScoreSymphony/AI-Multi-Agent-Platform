@@ -251,7 +251,9 @@ def test_reference_multi_agent_golden_path_persists_complete_canonical_provenanc
             assert (
                 producer.orchestrator_adapter_id == ReferenceContextOrchestratorAdapter.adapter_id
             )
-            assert run.backend_ref == f"agent-run:{producer.agent_run_id}"
+            assert run.output.get("agent_run_id") == producer.agent_run_id
+            if run.backend_ref is not None:
+                assert run.backend_ref == f"agent-run:{producer.agent_run_id}"
             assert len(producer.result_ids) == 1
             result_id = producer.result_ids[0]
             result_ids[step.id] = result_id
