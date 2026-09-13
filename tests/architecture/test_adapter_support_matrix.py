@@ -3,8 +3,6 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-import pytest
-
 
 ROOT = Path(__file__).resolve().parents[2]
 MATRIX_PATH = ROOT / "docs" / "ADAPTER_SUPPORT_MATRIX.toml"
@@ -65,7 +63,6 @@ def _implementations() -> list[dict[str, object]]:
     return raw
 
 
-@pytest.mark.architecture
 def test_adapter_support_matrix_covers_issue_904_boundaries() -> None:
     matrix = _matrix()
 
@@ -76,7 +73,6 @@ def test_adapter_support_matrix_covers_issue_904_boundaries() -> None:
     assert REQUIRED_BOUNDARIES <= set(audited)
 
 
-@pytest.mark.architecture
 def test_adapter_support_matrix_entries_are_complete_and_unique() -> None:
     matrix = _matrix()
     allowed_tiers = set(matrix["allowed_tiers"])
@@ -92,7 +88,6 @@ def test_adapter_support_matrix_entries_are_complete_and_unique() -> None:
     assert len(ids) == len(set(ids)), "adapter support ids must be unique"
 
 
-@pytest.mark.architecture
 def test_adapter_support_matrix_points_at_real_implementation_symbols_and_docs() -> None:
     for entry in _implementations():
         source = ROOT / str(entry["source"])
@@ -110,7 +105,6 @@ def test_adapter_support_matrix_points_at_real_implementation_symbols_and_docs()
             assert path.is_file(), f"missing documentation for {entry['id']}: {doc}"
 
 
-@pytest.mark.architecture
 def test_reference_and_supported_entries_have_evidence_and_reference_is_free_baseline() -> None:
     for entry in _implementations():
         tier = entry["tier"]
@@ -126,7 +120,6 @@ def test_reference_and_supported_entries_have_evidence_and_reference_is_free_bas
             )
 
 
-@pytest.mark.architecture
 def test_experimental_and_deprecated_entries_cannot_imply_unqualified_support() -> None:
     for entry in _implementations():
         compatibility = str(entry["compatibility"]).lower()
@@ -142,7 +135,6 @@ def test_experimental_and_deprecated_entries_cannot_imply_unqualified_support() 
             )
 
 
-@pytest.mark.architecture
 def test_policy_document_mentions_every_first_party_support_entry() -> None:
     policy = POLICY_PATH.read_text(encoding="utf-8")
     for entry in _implementations():
