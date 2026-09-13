@@ -170,21 +170,22 @@ jobs:
           test "${count}" = "3788"
       - name: Verify full pytest
         run: python -m pytest
-      - name: Remove temporary migration machinery
+      - name: Remove temporary migration scripts
         run: |
           git rm -f \
             scripts/ci/apply_test_migration_722.py \
             scripts/ci/apply_test_migration_722_residual.py \
             scripts/ci/plan_test_migration_722.py \
-            scripts/ci/report_test_inventory.py \
-            .github/workflows/apply-test-migration-722.yml \
-            .github/workflows/test-migration-audit.yml \
-            .github/workflows/test-migration-plan.yml
+            scripts/ci/report_test_inventory.py
       - name: Verify Ruff lint
         run: python -m ruff check .
       - name: Verify Ruff formatting
         run: python -m ruff format --check .
-      - name: Commit verified final migration
+      - name: Capture workflow migration diff
+        run: git diff -- .github/workflows
+      - name: Restore workflows for token-safe push
+        run: git checkout HEAD -- .github/workflows
+      - name: Commit verified non-workflow migration
         run: |
           if git diff --quiet && git diff --cached --quiet; then
             echo "No migration changes to commit"
