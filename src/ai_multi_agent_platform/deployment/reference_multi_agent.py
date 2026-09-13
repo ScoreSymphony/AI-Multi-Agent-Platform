@@ -169,7 +169,7 @@ class ReferenceIncomingHandoffContextAdapter:
         self._handoffs = handoffs
         self._durable = DurableConsumedHandoffContextAdapter(
             repository=handoffs.repository,
-            agents=handoffs.context_runtime.runtime.repository,
+            agents=handoffs.runtime.agents,
         )
 
     async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
