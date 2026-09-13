@@ -11,6 +11,7 @@ from .models import (
     TaskState,
 )
 from .output_observer import OutputAttachmentObserver, OutputObservingPlatformKernel
+from .postgres_repository import PostgresKernelRepository
 from .repository import (
     CommandRecord,
     CommitResult,
@@ -39,6 +40,7 @@ __all__ = [
     "OutputAttachmentObserver",
     "OutputObservingPlatformKernel",
     "PlatformKernel",
+    "PostgresKernelRepository",
     "RecoveryDisposition",
     "RecoveryEntry",
     "RecoveryReport",

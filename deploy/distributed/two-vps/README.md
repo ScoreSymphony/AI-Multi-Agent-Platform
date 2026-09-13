@@ -1,10 +1,17 @@
 # Two-VPS private-tunnel reference topology
 
-Issue: #562
+Repository preparation: #562  
+Real reference-host execution and retained live evidence: #829
 
 This directory contains a credential-free **deployment reference**, not a new platform contract.
 The canonical #14 Node/Worker/scheduler path, #35 transport, #36 service authentication, #15
 authorization and #240 distributed composition remain authoritative.
+
+Issue #562 owns this repository-side topology, placeholder configuration and validation tooling.
+Issue #829 owns actually deploying the topology on independent VPS/reference hosts and retaining the
+sanitized live evidence. The `issue562-*` evidence/schema names remain stable because they identify
+the repository contract introduced by #562; they do not imply that physical-host execution is still
+owned by #562.
 
 The reference uses WireGuard because it is self-hosted and easy to reproduce. WireGuard is not a
 canonical dependency: another private tunnel may be substituted when it preserves the same network
@@ -31,6 +38,7 @@ canonical Node/Worker/Task/Run identity.
 
 The complete operator procedure, firewall matrix, failure/recovery phases and evidence commands are
 in [`docs/operations/TWO_VPS_PRIVATE_TUNNEL_ACCEPTANCE.md`](../../../docs/operations/TWO_VPS_PRIVATE_TUNNEL_ACCEPTANCE.md).
+That runbook is prepared under #562 and executed on real hosts under #829.
 
 ## Network invariant
 
