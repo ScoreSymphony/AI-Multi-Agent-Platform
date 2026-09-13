@@ -114,6 +114,17 @@ compatibility = "Exact-revision verification semantics are canonical while publi
 user_signaling = "documentation"
 
 [[feature]]
+id = "evaluation-regression"
+name = "Evaluation and regression"
+owners = ["evaluation"]
+role = "core"
+stability = "beta"
+public_surfaces = ["Evaluation Suite resources", "Evaluation Run resources", "evaluation/regression CLI and browser workflows"]
+docs = ["docs/quality/EVALUATION.md", "docs/cli/CLI.md"]
+compatibility = "Evaluation is a canonical platform quality boundary and public product surface; its resource/workflow contracts are supported but may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
 id = "observability-accounting"
 name = "Observability and accounting"
 owners = ["observability", "accounting"]
@@ -127,7 +138,7 @@ user_signaling = "documentation"
 [[feature]]
 id = "cli-surface"
 name = "Platform CLI"
-owners = ["cli"]
+owners = ["control_plane"]
 role = "core"
 stability = "beta"
 public_surfaces = ["documented platform CLI commands and output contracts"]
@@ -182,7 +193,7 @@ user_signaling = "documentation"
 [[feature]]
 id = "repositories-connectors"
 name = "Repositories and Connectors"
-owners = ["repositories", "connectors"]
+owners = ["repositories", "repository"]
 role = "platform_extension"
 stability = "beta"
 public_surfaces = ["Repository/Git resources", "connector resources and sync behavior"]
@@ -215,7 +226,7 @@ user_signaling = "documentation"
 [[feature]]
 id = "plugin-skill-ecosystem"
 name = "Plugin and Skill ecosystem"
-owners = ["plugins", "skills"]
+owners = ["repository", "skills"]
 role = "platform_extension"
 stability = "beta"
 public_surfaces = ["plugin loading/discovery", "Skill metadata/execution integration"]
@@ -263,7 +274,7 @@ owners = ["learning", "research"]
 role = "optional_advanced"
 stability = "experimental"
 public_surfaces = ["learning/improvement resources", "research workflow resources"]
-docs = ["docs/PACKAGE_BOUNDARIES.md"]
+docs = ["docs/product/GOVERNED_LEARNING.md", "docs/PACKAGE_BOUNDARIES.md"]
 compatibility = "Experimental advanced capabilities; public contracts may change incompatibly in non-patch releases without deprecation."
 user_signaling = "documentation_and_ui_contextual"
 
