@@ -93,10 +93,7 @@ class CompositeEvaluationEvidenceProvider:
 
     def collect(self, *, task_id: str, run_id: str) -> EvaluationEvidence:
         return _merge_evidence(
-            tuple(
-                provider.collect(task_id=task_id, run_id=run_id)
-                for provider in self._providers
-            )
+            tuple(provider.collect(task_id=task_id, run_id=run_id) for provider in self._providers)
         )
 
     async def async_collect(self, *, task_id: str, run_id: str) -> EvaluationEvidence:
