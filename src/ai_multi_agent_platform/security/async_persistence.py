@@ -126,19 +126,23 @@ _SHARED_APPROVAL_OFFLOADS: WeakKeyDictionary[ApprovalService, SecurityPersistenc
 _SHARED_APPROVAL_OFFLOADS_LOCK = threading.Lock()
 
 
-def _shared_approval_offload(approvals: ApprovalService) -> SecurityPersistenceOffload:
-    """Return the process-local serialization owner for one mutable Approval service.
+def _approval_offload(
+    approvals: ApprovalService,
+    requested: SecurityPersistenceOffload | None,
+) -> SecurityPersistenceOffload:
+    """Return the single process-local serialization owner for one Approval service.
 
     Multiple runtime projections may wrap the same synchronous ApprovalService. They must share
     the same Approval lock or a reader could observe an in-memory mutation before its durable
-    SQLite write settles. Weak ownership avoids extending the lifetime of the backing service.
+    SQLite write settles. The first adapter may supply a custom offload; later adapters for the
+    same service reuse it. Weak ownership avoids extending the lifetime of the backing service.
     """
 
     with _SHARED_APPROVAL_OFFLOADS_LOCK:
         existing = _SHARED_APPROVAL_OFFLOADS.get(approvals)
         if existing is not None:
             return existing
-        created = SecurityPersistenceOffload()
+        created = requested or SecurityPersistenceOffload()
         _SHARED_APPROVAL_OFFLOADS[approvals] = created
         return created
 
@@ -220,7 +224,7 @@ class AsyncApprovalServiceAdapter(_AsyncAdapterBase):
         *,
         offload: SecurityPersistenceOffload | None = None,
     ) -> None:
-        super().__init__(offload=offload or _shared_approval_offload(approvals))
+        super().__init__(offload=_approval_offload(approvals, offload))
         self._approvals = approvals
 
     async def get(self, approval_id: str) -> ApprovalRecord:
