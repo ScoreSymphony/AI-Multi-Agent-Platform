@@ -197,7 +197,9 @@ def test_verifier_rejects_duplicate_manifest_path(tmp_path: Path) -> None:
         verify_private_mcp_transport_evidence_files(report, evidence_root=tmp_path)
 
 
-def test_cli_validate_emits_verified_manifest(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_validate_emits_verified_manifest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     evidence = _write_evidence(tmp_path)
     report_path = _write_report(tmp_path, _report(_sha256(evidence)))
 
@@ -217,7 +219,9 @@ def test_cli_validate_emits_verified_manifest(tmp_path: Path, capsys: pytest.Cap
     assert payload["evidence"]["files_verified"] == 1
 
 
-def test_cli_can_gate_definition_of_done(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_can_gate_definition_of_done(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     evidence = _write_evidence(tmp_path)
     report = _report(_sha256(evidence), recommendation=None, decision_eligible=False)
     report_path = _write_report(tmp_path, report)
