@@ -120,5 +120,6 @@ def test_experimental_surfaces_have_concrete_labeled_entrypoints() -> None:
             assert path.is_file(), f"{feature_id}: missing signaling doc {document!r}"
             text = path.read_text(encoding="utf-8").casefold()
             assert "experimental" in text, (
-                f"{feature_id}: signaling doc {document!r} must visibly label the surface Experimental"
+                f"{feature_id}: signaling doc {document!r} must visibly label "
+                "the surface Experimental"
             )
