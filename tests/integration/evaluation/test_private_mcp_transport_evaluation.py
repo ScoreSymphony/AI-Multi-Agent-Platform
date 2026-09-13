@@ -216,6 +216,27 @@ def test_hard_security_failure_rejects_experimental_only_recommendation() -> Non
     )
 
 
+@pytest.mark.parametrize(
+    "case_id",
+    [
+        "established_session_revocation_fails_closed",
+        "service_removal_reconfiguration_fails_closed",
+    ],
+)
+def test_hard_recovery_failure_rejects_experimental_only_recommendation(case_id: str) -> None:
+    report = _report(recommendation="experimental_only")
+    _replace_result(report, "failure_recovery_results", case_id, "fail")
+
+    readiness = assess_private_mcp_transport_evaluation(report)
+
+    assert readiness.decision_ready is True
+    assert readiness.adoption_eligible is False
+    assert readiness.definition_of_done is False
+    assert (
+        "hard security/cost blockers require a negative final recommendation" in readiness.blockers
+    )
+
+
 def test_operational_failure_can_support_experimental_only() -> None:
     report = _report(recommendation="experimental_only")
     _replace_result(report, "failure_recovery_results", "gateway_restart", "fail")
