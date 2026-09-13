@@ -20,7 +20,7 @@ If a known local materialization disappears outside the normal release path, `cl
 
 ## Completion coverage
 
-`tests/test_issue37_source_lifecycle_completion.py` verifies:
+`tests/regression/context/test_source_lifecycle_completion.py` verifies:
 
 - snapshot source -> Control Plane -> initial canonical snapshot -> local materialization end to end;
 - the derived Workspace remains pinned to the original source snapshot after the source Workspace advances;

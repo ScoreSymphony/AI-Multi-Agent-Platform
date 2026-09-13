@@ -179,7 +179,7 @@ Scenarios may emit a structured runtime-evidence envelope after their maintained
 
 ## Architecture invariants
 
-`tests/test_issue_46_architecture_invariants.py` currently automates four platform-boundary invariant families plus a focused self-test of the annotation guard:
+`tests/contract/portability/test_architecture_invariants.py` currently automates four platform-boundary invariant families plus a focused self-test of the annotation guard:
 
 1. canonical `contracts`, `domain` and `kernel` source must not import platform adapter implementations or Hermes/Forge/LiteLLM/MCP runtime packages;
 2. public canonical type annotations, including quoted/forward-reference annotations, must not expose backend-private Hermes/Forge/LiteLLM/MCP classes;

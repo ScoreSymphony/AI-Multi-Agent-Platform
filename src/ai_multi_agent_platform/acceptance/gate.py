@@ -83,7 +83,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
                 "#39 single-node deployment",
                 "authenticated canonical Task/Run/Result path and observable capability execution",
                 _pytest(
-                    "tests/test_issue39_single_node_deployment.py::"
+                    "tests/integration/deployment/test_single_node_deployment_runtime.py::"
                     "test_single_node_reference_smoke_is_retry_safe_across_restart"
                 ),
             ),
@@ -101,20 +101,23 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
                 "verification-boundary",
                 "#86 task verification",
                 "verification remains canonical and independently gates concrete completion",
-                _pytest("tests/test_issue_86_kernel_gate.py"),
+                _pytest("tests/integration/kernel/test_kernel_gate.py"),
             ),
             AcceptanceCheck(
                 "memory-knowledge-lifecycle",
                 "#251 data lifecycle",
                 "Memory/Knowledge create, provenance/update and delete lifecycle remains canonical",
-                _pytest("tests/test_issue_251_lifecycle_commands.py"),
+                _pytest(
+                    "tests/integration/memory/test_memory_lifecycle_commands.py",
+                    "tests/integration/knowledge/test_knowledge_lifecycle_commands.py",
+                ),
             ),
             AcceptanceCheck(
                 "memory-delete-not-found",
                 "#251/#252 data acceptance",
                 "Memory is retrieved with provenance, deleted, then unavailable as NOT_FOUND",
                 _pytest(
-                    "tests/test_issue_252_acceptance_gate.py::"
+                    "tests/integration/files/test_acceptance_gate.py::"
                     "test_memory_acceptance_create_retrieve_provenance_delete_not_found"
                 ),
             ),
@@ -126,7 +129,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
                     "Control Plane path"
                 ),
                 _pytest(
-                    "tests/test_issue_252_acceptance_gate.py::"
+                    "tests/integration/files/test_acceptance_gate.py::"
                     "test_cli_and_web_share_canonical_task_fixture_and_route"
                 ),
             ),
@@ -158,7 +161,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
                     "without paid service"
                 ),
                 _pytest(
-                    "tests/test_issue_252_acceptance_gate.py::"
+                    "tests/integration/files/test_acceptance_gate.py::"
                     "test_local_ai_profile_uses_real_loopback_openai_compatible_endpoint"
                 ),
             ),
@@ -196,7 +199,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             "#39 single-node deployment",
             "single-node canonical execution remains retry-safe across process reconstruction",
             _pytest(
-                "tests/test_issue39_single_node_deployment.py::"
+                "tests/integration/deployment/test_single_node_deployment_runtime.py::"
                 "test_single_node_reference_smoke_is_retry_safe_across_restart"
             ),
         ),
@@ -213,7 +216,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             "verification-restart",
             "#86 task verification",
             "canonical verification history persists through service reconstruction",
-            _pytest("tests/test_issue_86_persistence.py"),
+            _pytest("tests/integration/verification/test_verification_sqlite_persistence.py"),
         ),
         AcceptanceCheck(
             "first-task-restart",
