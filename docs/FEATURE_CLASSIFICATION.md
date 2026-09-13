@@ -119,10 +119,12 @@ Compatibility must never be inferred from a role label alone. #46-style evidence
 
 The table below is a human-readable view of the canonical machine-readable registry. It intentionally classifies major user/integrator surfaces rather than every package or source file. `Canonical owner(s)` records the authoritative `owner` values from [`PACKAGE_BOUNDARIES.toml`](PACKAGE_BOUNDARIES.toml), not necessarily the names of the packages that implement or expose the surface.
 
+The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation conventions. It does **not** automatically make every later-domain resource registered below `/api/v1` Stable; the resource-family rows below retain their own declared stability.
+
 | ID | Capability / public surface | Canonical owner(s) | Role | Stability |
 | --- | --- | --- | --- | --- |
 | `task-run-lifecycle` | canonical Task/Run/Plan/Step lifecycle schemas and kernel behavior | `domain`, `kernel`, `planning` | Core | Stable |
-| `control-plane-v1` | HTTP `/api/v1` + generated OpenAPI conventions | `control_plane` | Core | Stable |
+| `control-plane-v1` | shared HTTP `/api/v1` protocol/foundation + generated OpenAPI conventions | `control_plane` | Core | Stable |
 | `provider-contracts-v2` | provider/adapter contracts `2.0` | `contracts` | Core | Stable |
 | `agents-teams` | Agent and Agent Team public resources/behavior | `agents` | Core | Beta |
 | `models-routing` | model/provider registry, routing and assignments | `models` | Core | Beta |
@@ -134,6 +136,7 @@ The table below is a human-readable view of the canonical machine-readable regis
 | `evaluation-regression` | Evaluation suites/runs plus regression CLI/browser workflows | `evaluation` | Core | Beta |
 | `observability-accounting` | public telemetry/health/usage/accounting views | `observability`, `accounting` | Core | Beta |
 | `cli-surface` | documented `platform` CLI user surface | `control_plane` | Core | Beta |
+| `onboarding-first-run` | first-run status/commands plus CLI and browser onboarding workflow | `onboarding` | Platform Extension | Beta |
 | `memory-knowledge-search` | Memory, Knowledge, Context and Search capabilities | `data`, `context`, `search` | Platform Extension | Beta |
 | `conversations-browser-terminal` | conversational, browser and terminal product capabilities | `conversations`, `browser`, `terminal` | Platform Extension | Beta |
 | `automation-notifications` | schedules/triggers and notification delivery surfaces | `automation`, `notifications` | Platform Extension | Beta |
@@ -156,9 +159,11 @@ The registry carries the compatibility note, canonical documentation links and u
 
 ### Control Plane
 
-`/api/v1` is a Stable public API major. Stability applies to the currently implemented/registered routes and their documented canonical semantics, not to future domains that do not yet exist in the composed API.
+`/api/v1` is the first Stable major for the **shared Control Plane protocol/foundation conventions**. The Stable promise covers those conventions and any separately Stable-classified resource contract; namespace membership alone does not upgrade a resource's maturity.
 
-Adding a new Beta or Experimental later-domain resource under `/api/v1` does **not** make the entire `/api/v1` namespace Beta/Experimental. That resource must be discoverably classified and must not weaken existing Stable `v1` behavior.
+A Beta or Experimental domain resource may compose under `/api/v1` while retaining its own compatibility policy. Such a resource may receive the bounded incompatible non-patch changes allowed by its stability level without forcing a rename of the entire Control Plane namespace, provided it does not break the shared Stable `v1` foundation or another separately Stable surface.
+
+Conversely, an incompatible change to the shared Stable `v1` foundation or to a separately Stable `v1` resource must use the applicable versioned replacement/deprecation mechanism, normally a new Control Plane major such as `/api/v2` when the incompatibility is part of the HTTP foundation.
 
 ### Canonical schemas and provider contracts
 
@@ -184,7 +189,7 @@ Use maturity labels where they prevent a wrong compatibility inference, not as g
 - Navigation grouping may reflect architectural/product role for clarity, but navigation is never the source of truth for role or stability.
 - Availability, health, permissions and conformance status must remain separate from maturity labels.
 
-The machine-readable registry field `user_signaling` documents the minimum expected signaling for each major surface. The current browser shell uses this policy to mark the Learning route as Experimental while leaving ordinary Stable/Beta navigation uncluttered.
+The machine-readable registry field `user_signaling` documents the minimum expected signaling for each major surface. The current browser shell uses this policy to mark the Learning route as Experimental while leaving ordinary Stable/Beta navigation uncluttered. The first-class Learning CLI and its dedicated documentation also mark that surface Experimental.
 
 ## Contributor and review guard
 
