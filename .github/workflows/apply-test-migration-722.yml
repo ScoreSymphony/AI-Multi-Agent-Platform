@@ -172,7 +172,7 @@ jobs:
         run: python -m pytest
       - name: Remove temporary migration machinery
         run: |
-          git rm \
+          git rm -f \
             scripts/ci/apply_test_migration_722.py \
             scripts/ci/apply_test_migration_722_residual.py \
             scripts/ci/plan_test_migration_722.py \
