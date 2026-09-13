@@ -59,6 +59,17 @@ compatibility = "Supported for real use; bounded contract evolution may occur in
 user_signaling = "documentation"
 
 [[feature]]
+id = "agent-handoffs"
+name = "Canonical Agent Handoffs"
+owners = ["handoffs"]
+role = "core"
+stability = "beta"
+public_surfaces = ["Handoff resources", "handoff create/consume commands", "handoff-to-ContextBundle runtime bridge"]
+docs = ["docs/runtime/AGENT_HANDOFFS.md", "docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Explicit Agent/AgentTeam work-transfer contracts are canonical runtime semantics without owning Task/Plan/Run progression; their public resource and command contracts may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
 id = "models-routing"
 name = "Models, providers and routing"
 owners = ["models"]
@@ -185,7 +196,7 @@ name = "Memory, Knowledge, Context and Search"
 owners = ["data", "context", "search"]
 role = "platform_extension"
 stability = "beta"
-public_surfaces = ["Memory resources", "Knowledge resources", "context assembly", "platform Search APIs"]
+public_surfaces = ["Memory resources", "Knowledge resources", "ContextBundle/context assembly resources", "platform Search APIs"]
 docs = ["docs/DOMAIN_MODEL.md"]
 compatibility = "First-class optional platform capabilities with supported APIs that may evolve in bounded non-patch changes."
 user_signaling = "documentation"
@@ -254,6 +265,17 @@ stability = "beta"
 public_surfaces = ["Goal resources", "priority/deadline/dependency/assignment Task management"]
 docs = ["docs/PLATFORM_CONFORMANCE.md"]
 compatibility = "Supported work-management extension over the canonical Task lifecycle; public details may evolve without creating a second lifecycle."
+user_signaling = "documentation"
+
+[[feature]]
+id = "proposal-specification-governance"
+name = "Proposal and Specification governance"
+owners = ["governance"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["Proposal and immutable Specification resources", "proposal/specification governance commands", "governance Web and CLI workflows"]
+docs = ["docs/extensions/PROPOSAL_SPECIFICATION_GOVERNANCE.md", "docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Proposal/Specification governance is a supported optional layer over canonical Task, Approval and owner-domain authorities; its public contracts may receive bounded non-patch changes with migration guidance."
 user_signaling = "documentation"
 
 [[feature]]
