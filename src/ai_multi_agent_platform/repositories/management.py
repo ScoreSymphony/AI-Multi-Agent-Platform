@@ -7,7 +7,6 @@ import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import TypeVar
 
 from ai_multi_agent_platform.connectors import Connection
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -38,7 +37,6 @@ RepositoryDiscoveryResolver = Callable[
     [str, str], Awaitable[tuple[RepositoryConnection, RepositoryProvider]]
 ]
 
-_T = TypeVar("_T")
 _MANAGED_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
@@ -445,7 +443,7 @@ class RepositoryManagementService:
         return operation
 
 
-async def _complete_repository_mutation(operation: Awaitable[_T]) -> _T:
+async def _complete_repository_mutation[T](operation: Awaitable[T]) -> T:
     """Keep a logical registry/catalog mutation atomic with respect to caller cancellation."""
 
     task = asyncio.ensure_future(operation)
