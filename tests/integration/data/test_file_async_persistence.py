@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.data import DataAccessContext, FileRecord, LocalFileProvider
 from ai_multi_agent_platform.data._async_offload import AsyncDataOffload
 from ai_multi_agent_platform.domain import new_id
@@ -77,6 +78,41 @@ class _BoundedReadProvider(LocalFileProvider):
                 self.active_reads -= 1
 
 
+class _BlockingCreateProvider(LocalFileProvider):
+    def __init__(self, root: Path, db_path: Path) -> None:
+        self.block_creates = False
+        self.create_started = threading.Event()
+        self.release_create = threading.Event()
+        self.orphan_scan_started = threading.Event()
+        super().__init__(root, db_path)
+        self.block_creates = True
+
+    def _create_file_sync(
+        self,
+        data: bytes,
+        context: DataAccessContext,
+        *,
+        canonical_id: str,
+        content_type: str | None,
+        metadata: dict[str, JsonValue] | None,
+    ) -> FileRecord:
+        if self.block_creates:
+            self.create_started.set()
+            if not self.release_create.wait(timeout=2):
+                raise TimeoutError("test create release timed out")
+        return super()._create_file_sync(
+            data,
+            context,
+            canonical_id=canonical_id,
+            content_type=content_type,
+            metadata=metadata,
+        )
+
+    def _detect_orphans_sync(self, context: DataAccessContext):  # type: ignore[no-untyped-def]
+        self.orphan_scan_started.set()
+        return super()._detect_orphans_sync(context)
+
+
 class _BusyProvider(LocalFileProvider):
     def __init__(self, root: Path, db_path: Path) -> None:
         self.raise_busy = False
@@ -136,6 +172,49 @@ def test_file_runtime_concurrency_is_bounded(tmp_path: Path) -> None:
 
         assert records == [record] * 10
         assert 1 < provider.max_active_reads <= 2
+
+    asyncio.run(scenario())
+
+
+def test_file_runtime_gates_survive_multiple_event_loop_lifetimes(tmp_path: Path) -> None:
+    context = _context()
+    provider = _BoundedReadProvider(
+        tmp_path / "objects",
+        tmp_path / "files.sqlite3",
+        max_concurrency=1,
+    )
+    record = asyncio.run(provider.create_file(b"payload", context))
+    provider.measure_reads = True
+
+    async def contended_batch() -> None:
+        records = await asyncio.gather(
+            *(provider.get_file(record.file_id, context) for _ in range(3))
+        )
+        assert records == [record] * 3
+
+    asyncio.run(contended_batch())
+    asyncio.run(contended_batch())
+
+
+def test_file_orphan_scan_serializes_with_create_mutation(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        context = _context()
+        provider = _BlockingCreateProvider(tmp_path / "objects", tmp_path / "files.sqlite3")
+
+        create = asyncio.create_task(provider.create_file(b"payload", context))
+        assert await asyncio.to_thread(provider.create_started.wait, 1)
+
+        orphan_scan = asyncio.create_task(provider.detect_orphans(context))
+        assert not await asyncio.to_thread(provider.orphan_scan_started.wait, 0.1)
+        assert not orphan_scan.done()
+
+        provider.release_create.set()
+        record = await create
+        report = await orphan_scan
+
+        assert provider.orphan_scan_started.is_set()
+        assert record.file_id not in report.missing_objects
+        assert record.file_id not in report.unreferenced_objects
 
     asyncio.run(scenario())
 
