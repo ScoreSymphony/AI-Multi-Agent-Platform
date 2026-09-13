@@ -2,21 +2,48 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.data import (
     DataAccessContext,
     KnowledgeDocument,
     KnowledgeSource,
     KnowledgeStatus,
     LocalKnowledgeProvider,
+    new_knowledge_source_id,
 )
 from ai_multi_agent_platform.domain import new_id
 
-from .test_knowledge_async_persistence import _context, _source
+
+def _context(project_id: str) -> DataAccessContext:
+    return DataAccessContext(
+        operation=OperationContext(
+            correlation_id="corr-892-knowledge-reindex",
+            project_id=project_id,
+            owner_type="user",
+            owner_id="user-a",
+        ),
+        actor_ref="user:user-a",
+    )
+
+
+def _source(project_id: str) -> KnowledgeSource:
+    now = datetime.now(UTC)
+    return KnowledgeSource(
+        source_id=new_knowledge_source_id(),
+        project_id=project_id,
+        owner_ref="user:user-a",
+        created_by="user:user-a",
+        title="Knowledge reindex source",
+        revision="r1",
+        status=KnowledgeStatus.REGISTERED,
+        created_at=now,
+        updated_at=now,
+    )
 
 
 def test_knowledge_reindex_serializes_same_source_lifecycle(tmp_path: Path) -> None:
