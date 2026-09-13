@@ -346,9 +346,7 @@ class EvaluationRunner:
                 baseline_comparable: tuple[ComparableEvaluationResult, ...]
                 current_comparable: tuple[ComparableEvaluationResult, ...]
                 if aggregation_policy is None:
-                    baseline_comparable = await self._async_repository.list_results(
-                        baseline.run_id
-                    )
+                    baseline_comparable = await self._async_repository.list_results(baseline.run_id)
                     current_comparable = results
                 else:
                     baseline_results = await self._async_repository.list_results(baseline.run_id)
