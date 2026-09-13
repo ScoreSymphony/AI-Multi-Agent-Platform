@@ -5,9 +5,9 @@ from __future__ import annotations
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import validate_id
 
+from .async_sqlite import SqliteWorkspaceProvider
 from .models import Workspace, WorkspaceStatus
 from .reference import LocalWorkspaceProvider
-from .sqlite import SqliteWorkspaceProvider
 
 
 class CompensatingLocalWorkspaceProvider(LocalWorkspaceProvider):
@@ -80,7 +80,7 @@ class CompensatingSqliteWorkspaceProvider(
                 self,
                 workspace_id,
             )
-            self._persist_or_restore(checkpoint)
+            await self._persist_or_restore_async(checkpoint)
             return workspace
 
 
