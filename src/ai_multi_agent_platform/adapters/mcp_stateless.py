@@ -12,6 +12,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -40,8 +42,11 @@ _META_CLIENT_CAPABILITIES = "io.modelcontextprotocol/clientCapabilities"
 _META_CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
 _MCP_NAME_HEADER = "Mcp-Name"
 _MCP_METHOD_HEADER = "Mcp-Method"
+_MCP_PARAM_HEADER_PREFIX = "Mcp-Param-"
+_X_MCP_HEADER = "x-mcp-header"
 _UNSUPPORTED_PROTOCOL_VERSION = -32022
 _MISSING_REQUIRED_CLIENT_CAPABILITY = -32021
+_HEADER_MISMATCH = -32020
 _INVALID_PARAMS = -32602
 _METHOD_NOT_FOUND = -32601
 _TASK_METHODS = frozenset({"tasks/get", "tasks/update", "tasks/cancel"})
@@ -55,12 +60,24 @@ _NAME_PARAM_BY_METHOD = {
 }
 _BASE64_SENTINEL_PREFIX = "=?base64?"
 _BASE64_SENTINEL_SUFFIX = "?="
+_HTTP_FIELD_NAME = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
+_HEADER_PARAMETER_TYPES = frozenset({"string", "integer", "boolean"})
+_MAX_SAFE_INTEGER = (2**53) - 1
+_MISSING = object()
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
 class _WireResponse:
     status: int
     payload: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class _ToolHeaderParameter:
+    path: tuple[str, ...]
+    header_name: str
+    value_type: str
 
 
 class MCPStatelessHTTPClient(MCPClient):
@@ -88,6 +105,7 @@ class MCPStatelessHTTPClient(MCPClient):
         self._client_name = client_name
         self._client_version = client_version
         self._request_id = 0
+        self._tool_header_parameters: dict[str, tuple[_ToolHeaderParameter, ...]] = {}
 
     @property
     def task_protocol_revision(self) -> str:
@@ -100,6 +118,7 @@ class MCPStatelessHTTPClient(MCPClient):
             raise self._invalid_response("tools/list result did not contain a tools array")
 
         converted: list[MCPTool] = []
+        header_parameters: dict[str, tuple[_ToolHeaderParameter, ...]] = {}
         for item in tools:
             if not isinstance(item, Mapping):
                 raise self._invalid_response("tools/list contained a non-object tool")
@@ -107,13 +126,24 @@ class MCPStatelessHTTPClient(MCPClient):
             if not isinstance(name, str) or not name.strip():
                 raise self._invalid_response("tools/list contained a tool without a name")
             description = item.get("description")
-            input_schema = item.get("inputSchema", {})
+            input_schema = _json_object(item.get("inputSchema", {}), field="inputSchema")
             output_schema = item.get("outputSchema")
+            try:
+                tool_header_parameters = _extract_tool_header_parameters(input_schema)
+            except ValueError as exc:
+                # 2026-07-28 requires an invalid x-mcp-header annotation to reject only the
+                # malformed tool definition, not otherwise valid tools from the same tools/list.
+                _LOGGER.warning(
+                    "excluding MCP tool %r because x-mcp-header metadata is invalid: %s",
+                    name,
+                    exc,
+                )
+                continue
             converted.append(
                 MCPTool(
                     name=name,
                     description=description if isinstance(description, str) else "",
-                    input_schema=_json_object(input_schema, field="inputSchema"),
+                    input_schema=input_schema,
                     output_schema=(
                         _json_object(output_schema, field="outputSchema")
                         if output_schema is not None
@@ -121,6 +151,10 @@ class MCPStatelessHTTPClient(MCPClient):
                     ),
                 )
             )
+            header_parameters[name] = tool_header_parameters
+        # Replace the cache only after the whole discovery response has been processed so removed
+        # tools/annotations cannot survive a subsequent tools/list refresh.
+        self._tool_header_parameters = header_parameters
         return tuple(converted)
 
     async def call_tool(self, name: str, arguments: dict[str, JsonValue]) -> JsonValue:
@@ -281,6 +315,14 @@ class MCPStatelessHTTPClient(MCPClient):
             response = await self._send(method, params, client_extensions=client_extensions)
             error = response.payload.get("error")
 
+        if isinstance(error, Mapping) and error.get("code") == _HEADER_MISMATCH and method == "tools/call":
+            # The modern transport recommends refreshing tools/list because x-mcp-header metadata
+            # can change independently of an already-cached tool definition. Retry exactly once
+            # after that authoritative schema refresh.
+            await self.list_tools()
+            response = await self._send(method, params, client_extensions=client_extensions)
+            error = response.payload.get("error")
+
         if error is not None:
             self._raise_jsonrpc_error(method, response.status, error)
 
@@ -421,6 +463,35 @@ class MCPStatelessHTTPClient(MCPClient):
                 provider_id=self._provider_id,
             )
         headers[_MCP_NAME_HEADER] = _encode_header_value(name)
+
+        if method == "tools/call":
+            arguments = params.get("arguments", {})
+            if not isinstance(arguments, Mapping):
+                raise ContractError(
+                    ErrorCode.INVALID_REQUEST,
+                    "MCP tools/call arguments must be a JSON object",
+                    provider_id=self._provider_id,
+                )
+            for parameter in self._tool_header_parameters.get(name, ()):
+                value = _value_at_path(arguments, parameter.path)
+                if value is _MISSING or value is None:
+                    continue
+                try:
+                    text = _header_parameter_text(value, parameter.value_type)
+                except ValueError as exc:
+                    raise ContractError(
+                        ErrorCode.INVALID_REQUEST,
+                        "MCP tools/call argument does not match its x-mcp-header primitive type",
+                        provider_id=self._provider_id,
+                        details={
+                            "tool_name": name,
+                            "argument_path": ".".join(parameter.path),
+                            "expected_type": parameter.value_type,
+                        },
+                    ) from exc
+                headers[f"{_MCP_PARAM_HEADER_PREFIX}{parameter.header_name}"] = _encode_header_value(
+                    text
+                )
         return headers
 
     def _invalid_response(self, message: str) -> ContractError:
@@ -512,8 +583,125 @@ def _optional_non_negative_int(value: object, field: str, *, nullable: bool) -> 
     return value
 
 
+def _extract_tool_header_parameters(
+    input_schema: Mapping[str, JsonValue],
+) -> tuple[_ToolHeaderParameter, ...]:
+    """Validate and collect every statically reachable 2026-07-28 x-mcp-header annotation."""
+
+    collected: list[_ToolHeaderParameter] = []
+    used_header_names: set[str] = set()
+
+    def walk_property_schema(node: Mapping[str, object], path: tuple[str, ...]) -> None:
+        annotation = node.get(_X_MCP_HEADER, _MISSING)
+        if annotation is not _MISSING:
+            if not path:
+                raise ValueError("x-mcp-header must annotate a property, not the schema root")
+            if not isinstance(annotation, str) or not annotation:
+                raise ValueError("x-mcp-header must be a non-empty string")
+            if _HTTP_FIELD_NAME.fullmatch(annotation) is None:
+                raise ValueError("x-mcp-header must use HTTP field-name token syntax")
+            folded = annotation.casefold()
+            if folded in used_header_names:
+                raise ValueError("x-mcp-header values must be case-insensitively unique")
+            value_type = node.get("type")
+            if not isinstance(value_type, str) or value_type not in _HEADER_PARAMETER_TYPES:
+                raise ValueError(
+                    "x-mcp-header may only annotate string, integer, or boolean properties"
+                )
+            used_header_names.add(folded)
+            collected.append(
+                _ToolHeaderParameter(
+                    path=path,
+                    header_name=annotation,
+                    value_type=value_type,
+                )
+            )
+
+        properties = node.get("properties")
+        if isinstance(properties, Mapping):
+            for property_name, property_schema in properties.items():
+                if not isinstance(property_name, str):
+                    raise ValueError("JSON Schema property names must be strings")
+                if isinstance(property_schema, Mapping):
+                    walk_property_schema(property_schema, (*path, property_name))
+                else:
+                    _reject_disallowed_header_annotation(property_schema)
+
+        # Any annotation reachable through a keyword other than a direct `properties` chain is
+        # invalid in the 2026-07-28 transport profile. Scan those branches solely to reject such
+        # annotations; ordinary JSON Schema features otherwise remain untouched.
+        for keyword, value in node.items():
+            if keyword in {_X_MCP_HEADER, "properties"}:
+                continue
+            _reject_disallowed_header_annotation(value)
+
+    root = cast_mapping(input_schema)
+    if _X_MCP_HEADER in root:
+        raise ValueError("x-mcp-header must annotate a property, not the schema root")
+    properties = root.get("properties")
+    if isinstance(properties, Mapping):
+        for property_name, property_schema in properties.items():
+            if not isinstance(property_name, str):
+                raise ValueError("JSON Schema property names must be strings")
+            if isinstance(property_schema, Mapping):
+                walk_property_schema(property_schema, (property_name,))
+            else:
+                _reject_disallowed_header_annotation(property_schema)
+    for keyword, value in root.items():
+        if keyword == "properties":
+            continue
+        _reject_disallowed_header_annotation(value)
+    return tuple(collected)
+
+
+def cast_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, object]:
+    """Narrow a JSON object for recursive schema inspection without altering its data."""
+
+    return value
+
+
+def _reject_disallowed_header_annotation(value: object) -> None:
+    if isinstance(value, Mapping):
+        if _X_MCP_HEADER in value:
+            raise ValueError(
+                "x-mcp-header must be statically reachable through properties-only schema paths"
+            )
+        for nested in value.values():
+            _reject_disallowed_header_annotation(nested)
+    elif isinstance(value, list | tuple):
+        for nested in value:
+            _reject_disallowed_header_annotation(nested)
+
+
+def _value_at_path(arguments: Mapping[str, object], path: tuple[str, ...]) -> object:
+    current: object = arguments
+    for part in path:
+        if not isinstance(current, Mapping) or part not in current:
+            return _MISSING
+        current = current[part]
+    return current
+
+
+def _header_parameter_text(value: object, value_type: str) -> str:
+    if value_type == "string":
+        if not isinstance(value, str):
+            raise ValueError("expected string")
+        return value
+    if value_type == "integer":
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError("expected integer")
+        if value < -_MAX_SAFE_INTEGER or value > _MAX_SAFE_INTEGER:
+            raise ValueError("integer is outside the JavaScript safe range")
+        return str(value)
+    if value_type == "boolean":
+        if not isinstance(value, bool):
+            raise ValueError("expected boolean")
+        return "true" if value else "false"
+    raise ValueError("unsupported x-mcp-header primitive type")
+
+
 def _encode_header_value(value: str) -> str:
-    """Encode Mcp-Name values using the 2026-07-28 Base64 sentinel rules."""
+    """Encode mirrored MCP values using the 2026-07-28 Base64 sentinel rules."""
 
     matches_sentinel = value.startswith(_BASE64_SENTINEL_PREFIX) and value.endswith(
         _BASE64_SENTINEL_SUFFIX
