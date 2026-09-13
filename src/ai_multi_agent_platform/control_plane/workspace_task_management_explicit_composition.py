@@ -35,12 +35,13 @@ from .task_management_api import (
 )
 from .task_management_api import build_openapi as _build_task_management_openapi
 from .task_management_contract import (
-    TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
     TASK_MANAGEMENT_COMMANDS,
     TASK_MANAGEMENT_UPDATE_COMMAND,
-    _augment_openapi as _augment_task_management_openapi,
 )
 from .task_management_contract import ControlPlane as _TaskManagementAdapter
+from .task_management_contract import (
+    _augment_openapi as _augment_task_management_openapi,
+)
 from .workspace_contract import _augment_workspace_openapi
 
 INSECURE_CONTROL_PLANE_ENV = "AI_MULTI_AGENT_PLATFORM_ALLOW_INSECURE_CONTROL_PLANE"
