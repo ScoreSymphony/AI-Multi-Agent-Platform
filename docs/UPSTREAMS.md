@@ -208,6 +208,56 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Provenance:** `upstream/forge-ai-agent-vps.yaml`.
 - **Completion audit:** `docs/FORGE_REUSE_AUDIT.md`.
 
+### PostgreSQL
+
+- **Purpose:** optional self-hosted transactional coordination authority for the multi-instance Control Plane HA reference profile in #566.
+- **Status:** approved for the #566 coordination slice; becomes integrated when the corresponding adapter PR merges.
+- **Integration category/categories:** optional external self-hosted service; adapter integration.
+- **Canonical upstream repository:** `https://github.com/postgres/postgres`.
+- **Pinned version/tag/commit or deployed revision:** `18.6`.
+- **Verified license:** PostgreSQL License (permissive BSD-like).
+- **License verification date:** 2026-09-13.
+- **Last review date:** 2026-09-13.
+- **Platform adapter/boundary:** `ai_multi_agent_platform.distributed.postgres_control_plane_coordination.PostgresCoordinationProvider` implements the platform-owned Control Plane HA coordination contract; PostgreSQL does not own canonical Task/Run/Agent identity or lifecycle.
+- **Local source path:** none; PostgreSQL is separately deployed and no server source is vendored.
+- **Source origin/path:** no upstream source copied into this repository.
+- **Modified locally:** no.
+- **Required notices / attribution:** the separately deployed service retains its upstream license metadata; no server source/NOTICE material is redistributed by this repository.
+- **Known compatibility constraints:** PostgreSQL `18.6` is the initial reviewed compatibility target. Broader server-version claims require retained compatibility evidence. The adapter uses transactions, row locks, `TIMESTAMPTZ`, `clock_timestamp()` and `ON CONFLICT`.
+- **Security/deployment/resource constraints:** endpoint must be private/authenticated by default; non-loopback traffic follows #36/#43 TLS/service-identity requirements; DSNs/credentials remain deployment secrets and are excluded from canonical state/error text. Schema bootstrap precedes runtime leadership operations.
+- **Required for baseline:** no; #39 single-node operation and ordinary platform imports remain PostgreSQL-independent.
+- **Recurring paid service required:** no; the reference path is self-hostable.
+- **Update/review method:** explicit compatibility update PR; re-review release/security/license changes and run deterministic adapter tests, the real process-boundary PostgreSQL acceptance and full repository CI.
+- **Exit/replacement strategy:** replace this adapter with another `CoordinationProvider` after a safe leaderless/reconciled transition. Canonical Task/Run/Agent state requires no coordination-table migration.
+- **ADR:** `docs/adr/0009-control-plane-active-passive-high-availability.md`.
+- **Provenance:** `upstream/postgresql-ha-coordination.yaml`.
+- **Adoption review:** `docs/upstream/POSTGRES_HA_COORDINATION_ADOPTION.md`.
+
+### Psycopg 3
+
+- **Purpose:** optional Python PostgreSQL transport used only by the #566 PostgreSQL `CoordinationProvider` adapter.
+- **Status:** approved for the #566 coordination slice; becomes integrated when the corresponding adapter PR merges.
+- **Integration category/categories:** optional library dependency; adapter integration.
+- **Canonical upstream repository:** `https://github.com/psycopg/psycopg`.
+- **Pinned version/tag/commit or deployed revision:** `3.3.5`.
+- **Verified license:** LGPL-3.0-only.
+- **License verification date:** 2026-09-13.
+- **Last review date:** 2026-09-13.
+- **Platform adapter/boundary:** private connection transport inside `ai_multi_agent_platform.distributed.postgres_control_plane_coordination.PostgresCoordinationProvider`; no Psycopg types appear in canonical contracts.
+- **Local source path:** none; normal optional package dependency only.
+- **Source origin/path:** no Psycopg source copied or vendored into this repository.
+- **Modified locally:** no.
+- **Required notices / attribution:** the installed dependency retains its upstream package/license metadata; no Psycopg source is redistributed by this repository.
+- **Known compatibility constraints:** platform Python >=3.12; reviewed Psycopg release `3.3.5`; the selected pure `psycopg` package requires an available PostgreSQL client library (`libpq`).
+- **Security/deployment/resource constraints:** installed only through the optional `ha-postgres` extra. Backend/driver failures are translated at the adapter boundary so raw DSNs/driver exception text do not become canonical coordination errors.
+- **Required for baseline:** no; normal platform imports and #39 single-node operation do not install or eagerly import Psycopg.
+- **Recurring paid service required:** no.
+- **Update/review method:** explicit pinned dependency update; re-review license/security/API changes and run deterministic adapter tests, real PostgreSQL integration and full repository CI.
+- **Exit/replacement strategy:** remove the optional dependency and replace the private connection implementation while preserving the platform-owned coordination contract.
+- **ADR:** none required for the driver choice; PostgreSQL itself remains a replaceable adapter backend.
+- **Provenance:** `upstream/psycopg-ha-coordination.yaml`.
+- **Adoption review:** `docs/upstream/POSTGRES_HA_COORDINATION_ADOPTION.md`.
+
 ## Current direct build/development dependencies
 
 These packages are third-party software already declared by `pyproject.toml`. Packages promoted to required or architecture-significant production use must also appear in the registry above when required by `LICENSE_POLICY.md`.
@@ -221,6 +271,7 @@ These packages are third-party software already declared by `pyproject.toml`. Pa
 | mcp | optional MCP transport + CI integration coverage | `==2.1.1` | `https://github.com/modelcontextprotocol/python-sdk` | MIT | yes; optional adapter recorded above |
 | litellm | optional model gateway SDK / proxy compatibility target | `==1.99.0` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed | yes; optional adapter recorded above |
 | uvicorn | optional ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause | no |
+| psycopg | optional PostgreSQL HA coordination transport | `==3.3.5` | `https://github.com/psycopg/psycopg` | LGPL-3.0-only | yes; optional adapter recorded above |
 | pytest | test runner | `>=8.3,<10` | `https://github.com/pytest-dev/pytest` | MIT | no |
 | ruff | linting | `>=0.12,<1` | `https://github.com/astral-sh/ruff` | MIT | no |
 | mypy | static type checking | `>=1.17,<3` | `https://github.com/python/mypy` | MIT | no |

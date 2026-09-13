@@ -53,6 +53,9 @@ platform-release = "ai_multi_agent_platform.release.cli:main"
 server = [
   "uvicorn>=0.35,<1",
 ]
+ha-postgres = [
+  "psycopg==3.3.5",
+]
 mcp = [
   "mcp==2.1.1",
 ]
