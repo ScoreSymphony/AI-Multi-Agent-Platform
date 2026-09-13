@@ -73,13 +73,15 @@ def main() -> int:
 
     # Upstream's own release-specific state.db regressions. These are run from the
     # exact source checkout so the evidence is tied to the tagged implementation,
-    # not merely to release-note claims.
+    # not merely to release-note claims. The write-lock patience suite supplies the
+    # explicit legitimate writer-vs-writer contention case required by #959.
     upstream_status = _run(
         "tests/hermes_state/test_corrupt_row_robustness.py",
         "tests/hermes_state/test_read_path_transient_ioerr.py",
         "tests/hermes_state/test_wal_active_confirmed.py",
         "tests/hermes_state/test_deleted_wal_generation_guard.py",
         "tests/hermes_state/test_shared_session_db_registry.py",
+        "tests/state/test_write_lock_patience.py",
         "tests/tui_gateway/test_session_resume_db_ownership.py",
         "tests/tui_gateway/test_launch_db_home_override_race.py",
         cwd=upstream,
