@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Literal, Protocol, cast
 
@@ -187,7 +188,13 @@ class DurablePlanStepCoordinator:
         *,
         now: datetime | None = None,
     ) -> PlanCoordinationProjection:
-        """Deterministically activate dependencies, due retries and ready attempts."""
+        """Deterministically activate dependencies, due retries and ready attempts.
+
+        Dependency and retry transitions remain ordered against the durable repository. Once that
+        barrier work settles for an iteration, every canonical READY Step in the same frontier is
+        dispatched concurrently. Each Step still acquires its independent durable coordinator
+        claim and creates exactly one canonical Run; this changes no scheduling authority.
+        """
 
         current_time = self._now(now)
         made_progress = True
@@ -208,11 +215,25 @@ class DurablePlanStepCoordinator:
                         await self._refresh_dependencies(step, record, by_id, current_time)
                         or made_progress
                     )
-                    continue
-                if record.phase is CoordinationPhase.READY:
-                    made_progress = (
-                        await self._start_attempt(step, record, current_time) or made_progress
+
+            # Refresh canonical projection after barrier/retry mutations. The repository ordering
+            # defines a deterministic batch; asyncio affects only execution overlap, never which
+            # Steps are eligible to run.
+            state = self.repository.get_plan(plan_id)
+            by_id = {step.id: step for step in state.steps}
+            ready = tuple(
+                record
+                for record in self.repository.list_step_records(plan_id)
+                if record.phase is CoordinationPhase.READY
+            )
+            if ready:
+                started = await asyncio.gather(
+                    *(
+                        self._start_attempt(by_id[record.step_id], record, current_time)
+                        for record in ready
                     )
+                )
+                made_progress = any(started) or made_progress
         await self._aggregate_task(plan_id)
         return await self.async_projection(plan_id)
 

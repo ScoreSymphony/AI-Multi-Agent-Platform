@@ -59,6 +59,7 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | D-model — local model | loopback OpenAI-compatible local/self-hosted ModelProvider fixture | #10 / #250 / #252 |
 | D-capability — capability boundary | capability discovery/invocation contract suite | #12 |
 | D-vertical — local model + distributed capability | authenticated AgentRun -> real loopback OpenAI-compatible model tool call -> pinned `tool.echo@1.0` -> canonical CapabilityInvoker/ToolInvocation -> DistributedExecutorEchoProvider -> ReferenceExecutor -> exact Worker/Node while preserving the root Run and Workspace/Snapshot binding | #46 / #10 / #12 / #7 / #14 |
+| MA — reference multi-agent baseline | maintained Hermes/Forge-free single-node #889 golden path: canonical multi-Step Plan with parallel roots/fan-in -> exact Agent revisions -> Handoffs -> ContextBundles -> Result -> exact Verification -> accepted Task, with persisted provenance across every boundary | #889 / #46 |
 | F — approval gate | exact-action approval and changed-payload rejection | #15 |
 | H — restart/recovery | crash after backend accept -> process reconstruction -> same running canonical Run with no duplicate dispatch, plus queued/pre-accept/orphaned recovery classification | #46 / canonical kernel recovery |
 | J-cli — client consistency | CLI reads shared canonical Task/Run/Result fixtures through versioned Control Plane routes | #17 / #46 |
@@ -67,6 +68,8 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | ARCH — architecture invariants | canonical/backend isolation, AST-resolved northbound Python client backend isolation, backend-private public-type guard and platform-owned Task/Run identity preserved through distributed restart/failover | #46 |
 
 The fast tier is intentionally local/reference-only and deterministic. It requires no paid AI/API service and no Hermes, Forge, LiteLLM, Registry, remote distributed deployment or HA service. D-vertical does instantiate an in-process local Worker/Node fixture so the canonical Executor/Worker boundary is continuously exercised without claiming the optional distributed deployment profile.
+
+`MA` is the maintained #46 acceptance registration for the #889 reference multi-agent runtime rather than a second demo implementation. Its conformance command executes `test_reference_multi_agent_golden_path_persists_complete_canonical_provenance` directly. The test constructs the ordinary `build_single_node_deployment` path with local `FakeModelProvider` execution and the reference Context orchestrator, then proves persisted Task -> Plan -> Step -> Run -> AgentRun -> Handoff -> ContextBundle -> Result -> Verification -> accepted Task lineage. Hermes and Forge stay disabled and are not imported as hidden fallback owners.
 
 ### `integration`
 
@@ -94,12 +97,13 @@ The reference release tier extends integration with representative operational p
 | O — Usage/resources | Task/Run/Executor/model/Worker/Node usage is canonically attributed, provider-neutral resource gauges are retained and unavailable measurements are explicit rather than fabricated | #76 |
 | P — Standard Agents/Teams | catalog discovery is non-installing; Control Plane bootstrap/clone/delete supports independent user Agent and AgentTeam customization/removal while bundled definitions remain protected | #77 |
 | W — Task management | priority/deadline/not-before, assignment and dependency semantics stay canonical metadata; bulk updates preflight authorization and urgent priority cannot bypass distributed Worker admission | #88 |
+| Z — Parallel coding integration | independent coding Steps fan out concurrently, dependent work waits, integration requires exact validation/authorization, and conflicts require bounded canonical repair with fresh combined validation | #872 / #46 |
 
 G is intentionally one coherent test rather than two unrelated assertions: a real canonical Run fails through the lifecycle backend, the Task becomes failed, `retry_task()` creates a distinct second Run with `attempt == 2`, canonical history contains the failed and retry events, and the Observability event provider emits exactly one `platform.run.retries` metric for that retry.
 
 #### Required release-lifecycle evidence
 
-The release tier also has explicit claim-blocking lifecycle and cross-layer checks required by the #46 release acceptance matrix. These are not additional A–X product scenarios; `REL-*` IDs distinguish release-level evidence from the product-surface scenario IDs:
+The release tier also has explicit claim-blocking lifecycle and cross-layer checks required by the #46 release acceptance matrix. These are not additional product scenarios; `REL-*` IDs distinguish release-level evidence from the product-surface scenario IDs:
 
 | Release check | Maintained acceptance evidence | Owner |
 | --- | --- | --- |
@@ -196,11 +200,11 @@ Additional #46 invariants should be added as they can be checked reliably withou
 
 The repository treats conformance as three different cost/coverage tiers rather than one giant permutation matrix:
 
-1. **Fast PR** — deterministic local/reference components, architecture invariants and critical lifecycle/security/verification checks.
+1. **Fast PR** — deterministic local/reference components, architecture invariants and critical lifecycle/security/verification checks, including the required `MA` reference multi-agent golden path.
 2. **Integration** — explicitly enabled optional adapters/services, distributed fixtures and richer cross-domain paths.
 3. **Release acceptance** — representative operational, recovery, portability, security and product-path evidence required for the compatibility claims made by that release.
 
-`.github/workflows/platform-conformance.yml` retains separate machine-readable reports for:
+`.github/workflows/conformance.yml` retains separate machine-readable reports for:
 
 - `conformance-fast`;
 - `conformance-release` for the reference single-node release claim;
