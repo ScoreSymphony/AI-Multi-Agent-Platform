@@ -125,7 +125,8 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _write_and_run(
-    tmp_path: Path, payload: dict[str, object]
+    tmp_path: Path,
+    payload: dict[str, object],
 ) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     evidence_path = tmp_path / "issue562.json"
     evidence_path.write_text(json.dumps(payload), encoding="utf-8")
