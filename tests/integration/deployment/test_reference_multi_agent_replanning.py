@@ -212,7 +212,6 @@ def test_failure_evidence_replans_to_new_revision_and_repairs_success(tmp_path: 
         replacement = await deployment.replanning.from_terminal_run(
             task_id=task.task_id,
             run_id=failed_run.run_id,
-            task_constraints=(REFERENCE_MULTI_AGENT_CONSTRAINT,),
         )
         assert replacement.status is ProposalStatus.VALIDATED
         assert replacement.proposal.base_plan_id == first_plan_id
@@ -290,7 +289,6 @@ def test_replan_budget_exhaustion_is_resource_exhausted_and_stops_progress(tmp_p
         replacement = await deployment.replanning.from_terminal_run(
             task_id=task.task_id,
             run_id=first_failed_run.run_id,
-            task_constraints=(REFERENCE_MULTI_AGENT_CONSTRAINT,),
         )
         activated_replacement = await deployment.planning.activate(
             replacement.proposal.proposal_id,
@@ -315,7 +313,6 @@ def test_replan_budget_exhaustion_is_resource_exhausted_and_stops_progress(tmp_p
             await deployment.replanning.from_terminal_run(
                 task_id=task.task_id,
                 run_id=second_failed_run.run_id,
-                task_constraints=(REFERENCE_MULTI_AGENT_CONSTRAINT,),
             )
         assert raised.value.code is ErrorCode.RESOURCE_EXHAUSTED
         assert raised.value.message == "bounded replanning budget exhausted"
