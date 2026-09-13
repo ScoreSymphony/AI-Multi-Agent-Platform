@@ -1,6 +1,8 @@
 # Forge execution adapter
 
-Status: **Issue #9 is complete: the optional execution-only Forge transport and adapter boundary are implemented.**
+Status: **Deprecated compatibility backend pending the removal gates in [`FORGE_RETENTION_DECISION.md`](FORGE_RETENTION_DECISION.md) (#991).** Forge is not the reference/default executor and new platform features must not depend on it.
+
+Issue #9 completed the optional execution-only Forge transport and adapter boundary. That implementation remains useful as compatibility and regression evidence during the deprecation window, but the current real sidecar evidence does not establish a non-null Forge CLI execution capability that justifies long-term `supported` status.
 
 `ai_multi_agent_platform.adapters.forge.ForgeExecutor` is an optional execution adapter behind the platform-owned `Executor` contract.
 
@@ -62,7 +64,7 @@ The canonical kernel already provides:
 3. Step execution preserves distinct Task and Step identities at the Forge boundary;
 4. if a canonical Run is `RUNNING` after restart but the fresh lifecycle adapter cannot find the Forge job, recovery marks reconciliation as required and does not redispatch the work.
 
-This deliberately preserves the useful mechanisms identified in the legacy Forge audit while keeping canonical state ownership in `PlatformKernel`.
+These are platform guarantees, not a reason to retain Forge indefinitely. Before final removal, any still-unique regression assertion in the Forge-specific suite must be generalized into backend-neutral/reference coverage as specified by #991.
 
 ## Workspace and artifact boundary
 
@@ -111,8 +113,8 @@ No source from `ScoreSymphony/AI-Agent-VPS` is copied into this adapter. The cur
 
 ## Concrete runtime coverage
 
-`tests/integration/forge/test_forge_http.py` validates protocol and identity translation for the concrete HTTP
-client. `tests/integration/forge/test_sidecar.py`, run by the `forge-sidecar-integration` CI job,
-builds the exact pinned Rust sidecar and verifies real health, execution and cancellation behavior.
-The sidecar is loopback-only and optional; removing it does not affect core startup or reference
-execution.
+`tests/integration/forge/test_forge_http.py` validates protocol and identity translation for the concrete HTTP client. `tests/integration/forge/test_sidecar.py`, run by the `forge-sidecar-integration` CI job, builds the exact pinned Rust sidecar and verifies real health, execution and cancellation behavior.
+
+The proven sidecar integration profile currently exercises the sidecar's `null` executor. It therefore proves the transport/runtime boundary but does **not** by itself prove a non-null Forge CLI executor family as a supported platform capability. This evidence distinction is the basis for the #991 deprecation decision.
+
+The sidecar is loopback-only and optional; removing it does not affect core startup or reference execution. No replacement backend is promoted by this deprecation decision.
