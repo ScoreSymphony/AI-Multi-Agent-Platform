@@ -1,5 +1,6 @@
 """Canonical notification and user-attention domain for Issue #75."""
 
+from .async_preferences import SqliteNotificationPreferenceRepository
 from .async_sqlite import (
     SqliteDeliveryAttemptRepository,
     SqliteNotificationRepository,
@@ -43,6 +44,7 @@ from .models import (
     SourceRef,
 )
 from .preferences import (
+    AsyncNotificationPreferenceRepository,
     InMemoryNotificationPreferenceRepository,
     NotificationPreferenceRepository,
     external_delivery_allowed,
@@ -66,12 +68,12 @@ from .runtime import (
     ReminderEvaluator,
 )
 from .service import NotificationEventSink, NotificationService
-from .sqlite import SqliteNotificationPreferenceRepository
 from .visibility import AllowAllNotificationVisibilityGuard, NotificationVisibilityGuard
 
 __all__ = [
     "AllowAllNotificationVisibilityGuard",
     "AllowAllRecipientEligibilityGuard",
+    "AsyncNotificationPreferenceRepository",
     "DeliveryAttempt",
     "DeliveryAttemptRepository",
     "DeliveryResult",
