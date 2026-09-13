@@ -2,17 +2,32 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
 
-from ai_multi_agent_platform.contracts import OperationContext
+from ai_multi_agent_platform.agents import (
+    AgentInstructions,
+    AgentProfile,
+    AgentRevisionRef,
+    InstructionSource,
+)
+from ai_multi_agent_platform.contracts import HealthStatus, OperationContext
 from ai_multi_agent_platform.coordination import (
     CoordinationPhase,
     InMemoryCoordinatorRepository,
     StepCoordinationRecord,
 )
 from ai_multi_agent_platform.coordination.plan_step_coordinator import DurablePlanStepCoordinator
+from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.deployment.reference_multi_agent import ReferenceMultiAgentPlanner
-from ai_multi_agent_platform.domain import OwnerRef, Plan, Step, StepStatus, new_id
+from ai_multi_agent_platform.domain import OwnerRef, Plan, Step, StepStatus, TaskStatus, new_id
+from ai_multi_agent_platform.handoffs import HandoffSourceKind
+from ai_multi_agent_platform.models import (
+    ModelCapabilities,
+    ModelConfiguration,
+    ModelLocation,
+)
+from ai_multi_agent_platform.planning import ProposalStatus
 from ai_multi_agent_platform.planning.agent_matching import resolve_planning_steps
 from ai_multi_agent_platform.planning.models import (
     PlanningAgentCandidate,
@@ -20,6 +35,14 @@ from ai_multi_agent_platform.planning.models import (
     PlanningRequest,
     PriorPlanSnapshot,
 )
+from ai_multi_agent_platform.security import (
+    ActorIdentity,
+    ActorType,
+    AuthorizationAction,
+    LocalPrincipalPolicy,
+    ResourceType,
+)
+from ai_multi_agent_platform.testing import FakeModelProvider
 
 
 def _candidate(role: str, *, revision: int) -> PlanningAgentCandidate:
@@ -28,6 +51,43 @@ def _candidate(role: str, *, revision: int) -> PlanningAgentCandidate:
         revision=revision,
         role=role,
     )
+
+
+def _profile(name: str, role: str) -> AgentProfile:
+    return AgentProfile(
+        name=name,
+        role=role,
+        instructions=AgentInstructions(
+            role=InstructionSource(
+                content=f"Act as the canonical {role} for the reference multi-agent task.",
+                version="1",
+            )
+        ),
+    )
+
+
+def _principal(agent: AgentRevisionRef) -> str:
+    return f"agent:{agent.agent_id}@{agent.revision}"
+
+
+def _install_local_model(deployment: Any) -> FakeModelProvider:
+    provider = FakeModelProvider()
+    deployment.models.register_provider(provider)
+    deployment.models.register_model(
+        ModelConfiguration(
+            config_id="model-issue-889-reference-golden-path",
+            display_name="Issue 889 reference golden-path model",
+            provider_id=provider.descriptor.provider_id,
+            capabilities=ModelCapabilities(
+                context_window=32_768,
+                modalities=("text",),
+            ),
+            location=ModelLocation.LOCAL,
+            health=HealthStatus.HEALTHY,
+            priority=100,
+        )
+    )
+    return provider
 
 
 def test_reference_multi_agent_planner_builds_exact_parallel_fan_in_dag() -> None:
@@ -160,5 +220,163 @@ def test_coordinator_dispatches_one_ready_frontier_concurrently() -> None:
         await coordinator.advance(plan.id)
 
         assert coordinator.max_active == 2
+
+    asyncio.run(scenario())
+
+
+def test_public_single_node_runs_reference_multi_agent_golden_path_to_completion(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        deployment = build_single_node_deployment(
+            SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
+        )
+        model_provider = _install_local_model(deployment)
+        admin = deployment.bootstrap_admin(
+            "issue-889-admin",
+            "correct horse battery staple for issue 889",
+        )
+        owner = OwnerRef(type="user", id=admin.user_id)
+        revisions = {
+            "researcher": deployment.agents.create_agent(
+                _profile("Issue 889 Research Agent", "researcher"),
+                owner_ref=owner,
+            ),
+            "developer": deployment.agents.create_agent(
+                _profile("Issue 889 Execution Agent", "developer"),
+                owner_ref=owner,
+            ),
+            "reviewer": deployment.agents.create_agent(
+                _profile("Issue 889 Review Agent", "reviewer"),
+                owner_ref=owner,
+            ),
+        }
+        agent_refs = {
+            role: AgentRevisionRef(revision.agent_id, revision.revision)
+            for role, revision in revisions.items()
+        }
+        for agent in agent_refs.values():
+            deployment.authorization.register(
+                LocalPrincipalPolicy(
+                    principal_ref=_principal(agent),
+                    actor_types=frozenset({ActorType.AGENT}),
+                    allowed_actions=frozenset(
+                        {
+                            AuthorizationAction.READ,
+                            AuthorizationAction.RESULT_READ,
+                        }
+                    ),
+                    resource_types=frozenset(
+                        {
+                            ResourceType.ARTIFACT,
+                            ResourceType.GENERIC,
+                        }
+                    ),
+                )
+            )
+
+        task = await deployment.kernel.create_task(
+            idempotency_key="issue-889:golden-path:create",
+            title="Complete the reference multi-agent golden path",
+            objective=(
+                "Research the requested change, prepare an execution approach, produce the "
+                "result, and review the exact produced result."
+            ),
+            owner_type="user",
+            owner_id=admin.user_id,
+        )
+        await deployment.kernel.ready_task(
+            idempotency_key="issue-889:golden-path:ready",
+            task_id=task.task_id,
+        )
+
+        proposal = await deployment.planning.propose(
+            task_id=task.task_id,
+            idempotency_key="issue-889:golden-path:propose",
+        )
+        assert proposal.status is ProposalStatus.VALIDATED
+        assert tuple(step.key for step in proposal.proposal.steps) == (
+            "research",
+            "approach",
+            "execute",
+            "review",
+        )
+        expected_roles = ("researcher", "developer", "developer", "reviewer")
+        for draft, role in zip(proposal.proposal.steps, expected_roles, strict=True):
+            assert draft.assignment is not None
+            assert draft.assignment.agent_id == agent_refs[role].agent_id
+            assert draft.assignment.agent_revision == agent_refs[role].revision
+
+        activated = await deployment.planning.activate(
+            proposal.proposal.proposal_id,
+            idempotency_key="issue-889:golden-path:activate",
+            actor=ActorIdentity(actor_id=admin.user_id, actor_type=ActorType.HUMAN),
+        )
+        assert activated.status is ProposalStatus.ACTIVATED
+        assert activated.activation_plan_id is not None
+
+        completed_task = await deployment.kernel.get_task(task.task_id)
+        assert completed_task.status is TaskStatus.SUCCEEDED
+        state = deployment.coordination.get_plan(activated.activation_plan_id)
+        assert len(state.steps) == 4
+        assert all(step.status is StepStatus.SUCCEEDED for step in state.steps)
+
+        step_runs: dict[str, str] = {}
+        for run_id in completed_task.run_ids:
+            run = await deployment.kernel.get_run(task.task_id, run_id)
+            if run.run.subject_type == "step":
+                step_runs[run.run.subject_id] = run.run_id
+        assert set(step_runs) == {step.id for step in state.steps}
+
+        for draft, step in zip(proposal.proposal.steps, state.steps, strict=True):
+            assert draft.assignment is not None
+            agent_runs = deployment.agents.repository.list_agent_runs(step_runs[step.id])
+            assert len(agent_runs) == 1
+            assert agent_runs[0].agent.agent_id == draft.assignment.agent_id
+            assert agent_runs[0].agent.revision == draft.assignment.agent_revision
+            assert len(agent_runs[0].result_ids) == 1
+
+        research_step, approach_step, execute_step, review_step = state.steps
+        execute_handoffs = tuple(
+            handoff
+            for handoff in deployment.handoffs.service.list_handoffs_for_step(execute_step.id)
+            if handoff.content.consumer_step_id == execute_step.id
+        )
+        assert len(execute_handoffs) == 2
+        assert {handoff.content.producer_step_id for handoff in execute_handoffs} == {
+            research_step.id,
+            approach_step.id,
+        }
+        assert all(
+            source.kind is HandoffSourceKind.RESULT
+            for handoff in execute_handoffs
+            for source in handoff.content.source_refs
+        )
+        execute_consumptions = deployment.handoffs.repository.list_consumptions_for_run(
+            step_runs[execute_step.id]
+        )
+        assert {item.handoff_id for item in execute_consumptions} == {
+            handoff.handoff_id for handoff in execute_handoffs
+        }
+
+        review_handoffs = tuple(
+            handoff
+            for handoff in deployment.handoffs.service.list_handoffs_for_step(review_step.id)
+            if handoff.content.consumer_step_id == review_step.id
+        )
+        assert len(review_handoffs) == 1
+        assert review_handoffs[0].content.producer_step_id == execute_step.id
+        review_consumptions = deployment.handoffs.repository.list_consumptions_for_run(
+            step_runs[review_step.id]
+        )
+        assert {item.handoff_id for item in review_consumptions} == {
+            review_handoffs[0].handoff_id
+        }
+
+        assert len(model_provider.calls) == 4
+        assert all(run_id.startswith("run_") for run_id in step_runs.values())
+        assert all(step.id.startswith("step_") for step in state.steps)
+        assert activated.activation_plan_id.startswith("plan_")
+        assert completed_task.task_id.startswith("task_")
 
     asyncio.run(scenario())
