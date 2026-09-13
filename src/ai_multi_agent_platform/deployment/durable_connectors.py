@@ -30,6 +30,12 @@ from ai_multi_agent_platform.connectors import (
     SqliteConnectorRepository,
 )
 from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
+from ai_multi_agent_platform.context import (
+    ContextEntryRole,
+    ContextSourceAdapterBinding,
+    ContextSourceType,
+)
+from ai_multi_agent_platform.context.lifecycle import ContextLifecycleSourceRequest
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.kernel import (
@@ -52,11 +58,11 @@ from ai_multi_agent_platform.observability import (
 from ai_multi_agent_platform.onboarding import OnboardingModelAdapter
 from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.planning import (
-    DeterministicReferencePlanner,
     JsonPlanningRepository,
     PlanningOrchestratorAdapter,
     PlanningService,
     PolicyAwarePlanningEnvironmentResolver,
+    ReplanningEvidenceBridge,
     planning_command_handlers,
     planning_resource_services,
 )
@@ -113,6 +119,10 @@ from .handoff_composition import (
     HandoffDeploymentComposition,
     build_single_node_handoff_composition,
 )
+from .reference_multi_agent import (
+    ReferenceIncomingHandoffContextAdapter,
+    ReferenceMultiAgentPlanner,
+)
 from .single_node import (
     SingleNodeDeployment as BaseSingleNodeDeployment,
 )
@@ -141,10 +151,12 @@ class SingleNodeDeployment(BaseSingleNodeDeployment):
     planning_repository: JsonPlanningRepository
     planning_kernel: PlatformKernel
     planning: PlanningService
+    replanning: ReplanningEvidenceBridge
     egress: EgressDeploymentBindings
     context: SingleNodeContextComposition
     learning: SingleNodeLearningComposition
     handoffs: HandoffDeploymentComposition
+    automatic_reviewer: AutomaticReviewerWorkflow
     reviewer_recovery: AutomaticReviewerStartupReconciler
 
 
@@ -363,7 +375,7 @@ def build_single_node_deployment(
         authorization=base.approval_gate,
     )
     planning = ReferencePlanningService(
-        planner=DeterministicReferencePlanner(),
+        planner=ReferenceMultiAgentPlanner(),
         repository=planning_repository,
         kernel=planning_kernel,
         agents=base.agents.repository,
@@ -373,6 +385,12 @@ def build_single_node_deployment(
         coordinator=planning_coordinator,
         event_sink=_planning_event_sink(base.telemetry),
         environment_resolver=planning_environment,
+    )
+    replanning = ReplanningEvidenceBridge(
+        planning,
+        coordination_repository=base.coordination_repository,
+        verification_repository=base.verification,
+        event_sink=_planning_event_sink(base.telemetry),
     )
     for collection, service in planning_resource_services(planning).items():
         base.control_plane.register_resource_service(collection, service)
@@ -413,6 +431,32 @@ def build_single_node_deployment(
         egress_gate=egress.runtime.gate,
         model_runtime=base.model_runtime,
     )
+
+    # #889 adds no second Context lifecycle. It contributes one additional #590 source factory
+    # through the public Context composition seam. Root Steps simply contribute no Handoff source.
+    incoming_handoffs = ReferenceIncomingHandoffContextAdapter(
+        handoffs,
+        coordinator=base.coordination_repository,
+        kernel=base.kernel,
+    )
+
+    def reference_binding_factory(
+        source: ContextLifecycleSourceRequest,
+    ) -> tuple[ContextSourceAdapterBinding, ...]:
+        if source.step_id is None:
+            return ()
+        return (
+            ContextSourceAdapterBinding(
+                adapter=incoming_handoffs,
+                source_type=ContextSourceType.AGENT_HANDOFF,
+                source_id=f"run:{source.run_id}:incoming-handoffs",
+                role=ContextEntryRole.CONTEXT,
+                project_id=source.project_id,
+                workspace_id=source.workspace_id,
+            ),
+        )
+
+    context.lifecycle.register_source_binding_factory(reference_binding_factory)
 
     template_environment = PlatformTemplateEnvironmentResolver(
         workspaces=base.workspaces,
@@ -464,10 +508,12 @@ def build_single_node_deployment(
         planning_repository=planning_repository,
         planning_kernel=planning_kernel,
         planning=planning,
+        replanning=replanning,
         egress=egress,
         context=context,
         learning=learning,
         handoffs=handoffs,
+        automatic_reviewer=automatic_reviewer,
         reviewer_recovery=reviewer_recovery,
     )
 
