@@ -707,7 +707,8 @@ def _encode_header_value(value: str) -> str:
         _BASE64_SENTINEL_SUFFIX
     )
     safe_ascii = (
-        value == value.strip(" \t")
+        bool(value)
+        and value == value.strip(" \t")
         and not matches_sentinel
         and all(char in {" ", "\t"} or 0x21 <= ord(char) <= 0x7E for char in value)
     )
