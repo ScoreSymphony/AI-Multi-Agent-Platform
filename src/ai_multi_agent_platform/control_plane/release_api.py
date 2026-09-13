@@ -69,7 +69,7 @@ def _install_release_status_module(
         control_plane, "register_modules"
     ):
         install_control_plane_modules(control_plane, (_release_status_module(operator),))
-    setattr(control_plane, "_release_operator", operator)
+    control_plane._release_operator = operator
     return operator
 
 
