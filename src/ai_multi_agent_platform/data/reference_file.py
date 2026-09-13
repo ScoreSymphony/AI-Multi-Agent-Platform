@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import sqlite3
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,6 +24,7 @@ from ai_multi_agent_platform.contracts.types import (
 )
 from ai_multi_agent_platform.domain import validate_id
 
+from ._async_offload import AsyncDataOffload, map_contract_sqlite_error, map_sqlite_error
 from .contracts import FileProvider
 from .models import DataAccessContext, FileRecord, FileState, OrphanReport, new_file_id
 from .reference_support import SqliteReferenceStore as _SqliteMixin
@@ -38,12 +39,19 @@ from .reference_support import parse_time as _parse_time
 class LocalFileProvider(_SqliteMixin, FileProvider):
     """Filesystem bytes with SQLite metadata and canonical file IDs."""
 
-    def __init__(self, root: str | Path, db_path: str | Path) -> None:
+    def __init__(
+        self,
+        root: str | Path,
+        db_path: str | Path,
+        *,
+        max_concurrency: int = 4,
+    ) -> None:
         self._root = Path(root)
         self._db_path = Path(db_path)
         self._root.mkdir(parents=True, exist_ok=True)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
+        self._async_io = AsyncDataOffload(max_concurrency=max_concurrency)
         capability = Capability(
             name="local-files",
             kind=CapabilityKind.FILE,
@@ -92,6 +100,23 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
                 """
             )
 
+    async def _run_blocking[T](
+        self,
+        operation: Callable[[], T],
+        *,
+        message: str,
+        write: bool = False,
+    ) -> T:
+        try:
+            return await self._async_io.run(operation, write=write)
+        except ContractError as exc:
+            mapped = map_contract_sqlite_error(exc, message)
+            if mapped is exc:
+                raise
+            raise mapped from exc
+        except sqlite3.Error as exc:
+            raise map_sqlite_error(exc, message) from exc
+
     async def create_file(
         self,
         data: bytes,
@@ -103,6 +128,27 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
     ) -> FileRecord:
         canonical_id = file_id or new_file_id()
         validate_id(canonical_id, "file")
+        return await self._run_blocking(
+            lambda: self._create_file_sync(
+                data,
+                context,
+                canonical_id=canonical_id,
+                content_type=content_type,
+                metadata=metadata,
+            ),
+            message="failed to persist file",
+            write=True,
+        )
+
+    def _create_file_sync(
+        self,
+        data: bytes,
+        context: DataAccessContext,
+        *,
+        canonical_id: str,
+        content_type: str | None,
+        metadata: dict[str, JsonValue] | None,
+    ) -> FileRecord:
         digest = hashlib.sha256(data).hexdigest()
         now = datetime.now(UTC)
         pending = FileRecord(
@@ -197,6 +243,12 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
 
     async def get_file(self, file_id: str, context: DataAccessContext) -> FileRecord:
         validate_id(file_id, "file")
+        return await self._run_blocking(
+            lambda: self._get_file_sync(file_id, context),
+            message="failed to read file metadata",
+        )
+
+    def _get_file_sync(self, file_id: str, context: DataAccessContext) -> FileRecord:
         try:
             with self._connect() as connection:
                 row = connection.execute(
@@ -214,6 +266,12 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
         return record
 
     async def list_files(self, context: DataAccessContext) -> tuple[FileRecord, ...]:
+        return await self._run_blocking(
+            lambda: self._list_files_sync(context),
+            message="failed to list files",
+        )
+
+    def _list_files_sync(self, context: DataAccessContext) -> tuple[FileRecord, ...]:
         try:
             with self._connect() as connection:
                 if context.project_id is None:
@@ -234,7 +292,14 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
 
     async def read(self, object_ref: str, context: OperationContext) -> bytes:
         access = _compat_context(context)
-        record = await self.get_file(object_ref, access)
+        validate_id(object_ref, "file")
+        return await self._run_blocking(
+            lambda: self._read_sync(object_ref, access),
+            message="failed to read file",
+        )
+
+    def _read_sync(self, file_id: str, context: DataAccessContext) -> bytes:
+        record = self._get_file_sync(file_id, context)
         path = self._root / record.file_id
         try:
             data = path.read_bytes()
@@ -263,7 +328,15 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
             yield data[offset : offset + chunk_size]
 
     async def delete_file(self, file_id: str, context: DataAccessContext) -> FileRecord:
-        record = await self.get_file(file_id, context)
+        validate_id(file_id, "file")
+        return await self._run_blocking(
+            lambda: self._delete_file_sync(file_id, context),
+            message="failed to tombstone file",
+            write=True,
+        )
+
+    def _delete_file_sync(self, file_id: str, context: DataAccessContext) -> FileRecord:
+        record = self._get_file_sync(file_id, context)
         try:
             with self._connect() as connection:
                 connection.execute(
@@ -276,7 +349,14 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
         return replace(record, state=FileState.TOMBSTONED)
 
     async def verify_checksum(self, file_id: str, context: DataAccessContext) -> bool:
-        record = await self.get_file(file_id, context)
+        validate_id(file_id, "file")
+        return await self._run_blocking(
+            lambda: self._verify_checksum_sync(file_id, context),
+            message="failed to verify file checksum",
+        )
+
+    def _verify_checksum_sync(self, file_id: str, context: DataAccessContext) -> bool:
+        record = self._get_file_sync(file_id, context)
         path = self._root / record.file_id
         try:
             if not path.exists():
@@ -291,8 +371,21 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
         artifact_id: str,
         context: DataAccessContext,
     ) -> FileRecord:
+        validate_id(file_id, "file")
         validate_id(artifact_id, "artifact")
-        record = await self.get_file(file_id, context)
+        return await self._run_blocking(
+            lambda: self._link_artifact_sync(file_id, artifact_id, context),
+            message="failed to link artifact",
+            write=True,
+        )
+
+    def _link_artifact_sync(
+        self,
+        file_id: str,
+        artifact_id: str,
+        context: DataAccessContext,
+    ) -> FileRecord:
+        record = self._get_file_sync(file_id, context)
         artifact_ids = record.artifact_ids
         if artifact_id not in artifact_ids:
             artifact_ids = (*artifact_ids, artifact_id)
@@ -307,16 +400,27 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
         return replace(record, artifact_ids=artifact_ids)
 
     async def detect_orphans(self, context: DataAccessContext) -> OrphanReport:
-        records = await self.list_files(context)
-        known = {record.file_id for record in records}
-        missing = tuple(sorted(file_id for file_id in known if not (self._root / file_id).exists()))
-        unreferenced = tuple(
-            sorted(
-                path.name
-                for path in self._root.iterdir()
-                if path.is_file() and path.name.startswith("file_") and path.name not in known
-            )
+        return await self._run_blocking(
+            lambda: self._detect_orphans_sync(context),
+            message="failed to inspect file orphans",
         )
+
+    def _detect_orphans_sync(self, context: DataAccessContext) -> OrphanReport:
+        records = self._list_files_sync(context)
+        known = {record.file_id for record in records}
+        try:
+            missing = tuple(
+                sorted(file_id for file_id in known if not (self._root / file_id).exists())
+            )
+            unreferenced = tuple(
+                sorted(
+                    path.name
+                    for path in self._root.iterdir()
+                    if path.is_file() and path.name.startswith("file_") and path.name not in known
+                )
+            )
+        except OSError as exc:
+            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to inspect file orphans") from exc
         return OrphanReport(missing_objects=missing, unreferenced_objects=unreferenced)
 
     @staticmethod
