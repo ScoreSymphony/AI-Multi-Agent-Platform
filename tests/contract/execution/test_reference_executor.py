@@ -6,6 +6,9 @@ from pathlib import Path
 from executor_contract_suite import ExecutorContractSuite
 
 from ai_multi_agent_platform.execution import (
+    CancellationToken,
+    ExecutionRequest,
+    ExecutionStatus,
     Executor,
     ExecutorRegistry,
     ReferenceExecutor,
@@ -35,3 +38,37 @@ def test_health_and_capability_metadata(tmp_path: Path) -> None:
     assert descriptor.executor_id == "reference"
     assert "echo" in descriptor.capabilities
     assert descriptor.metadata["arbitrary_commands"] is False
+
+
+def test_inflight_cancellation_is_acknowledged_by_reference_executor(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "workspaces"
+    workspace = workspace_root / "run-1"
+    workspace.mkdir(parents=True)
+    executor = ReferenceExecutor(workspace_root)
+    token = CancellationToken()
+    request = ExecutionRequest(
+        task_id="task-1",
+        run_id="run-1",
+        step_id="step-1",
+        correlation_id="corr-1",
+        action="sleep",
+        workspace="run-1",
+        arguments={"seconds": 1.0},
+        cancellation=token,
+    )
+
+    async def scenario() -> None:
+        execution = asyncio.create_task(executor.execute(request))
+        await asyncio.sleep(0.01)
+        token.cancel()
+        result = await execution
+
+        assert result.status is ExecutionStatus.CANCELLED
+        assert result.error is not None
+        assert result.error.category.value == "cancelled"
+        assert result.task_id == request.task_id
+        assert result.run_id == request.run_id
+        assert result.step_id == request.step_id
+        assert result.correlation_id == request.correlation_id
+
+    asyncio.run(scenario())
