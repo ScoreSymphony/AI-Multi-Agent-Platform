@@ -30,6 +30,12 @@ from ai_multi_agent_platform.connectors import (
     SqliteConnectorRepository,
 )
 from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
+from ai_multi_agent_platform.context import (
+    ContextEntryRole,
+    ContextSourceAdapterBinding,
+    ContextSourceType,
+)
+from ai_multi_agent_platform.context.lifecycle import ContextLifecycleSourceRequest
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.kernel import (
@@ -52,7 +58,6 @@ from ai_multi_agent_platform.observability import (
 from ai_multi_agent_platform.onboarding import OnboardingModelAdapter
 from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.planning import (
-    DeterministicReferencePlanner,
     JsonPlanningRepository,
     PlanningOrchestratorAdapter,
     PlanningService,
@@ -112,6 +117,10 @@ from .egress_bindings import EgressDeploymentBindings
 from .handoff_composition import (
     HandoffDeploymentComposition,
     build_single_node_handoff_composition,
+)
+from .reference_multi_agent import (
+    ReferenceIncomingHandoffContextAdapter,
+    ReferenceMultiAgentPlanner,
 )
 from .single_node import (
     SingleNodeDeployment as BaseSingleNodeDeployment,
@@ -363,7 +372,7 @@ def build_single_node_deployment(
         authorization=base.approval_gate,
     )
     planning = ReferencePlanningService(
-        planner=DeterministicReferencePlanner(),
+        planner=ReferenceMultiAgentPlanner(),
         repository=planning_repository,
         kernel=planning_kernel,
         agents=base.agents.repository,
@@ -413,6 +422,31 @@ def build_single_node_deployment(
         egress_gate=egress.runtime.gate,
         model_runtime=base.model_runtime,
     )
+
+    # #889 adds no second Context lifecycle. It extends the already-installed #590 source factory
+    # with one adapter that asks the canonical #651 owner to bind incoming Handoffs to the exact
+    # consuming Run before Context assembly. Root Steps simply contribute no Handoff candidates.
+    incoming_handoffs = ReferenceIncomingHandoffContextAdapter(handoffs)
+    canonical_binding_factory = context.lifecycle._binding_factory  # noqa: SLF001
+
+    def reference_binding_factory(
+        source: ContextLifecycleSourceRequest,
+    ) -> tuple[ContextSourceAdapterBinding, ...]:
+        bindings = list(canonical_binding_factory(source))
+        if source.step_id is not None:
+            bindings.append(
+                ContextSourceAdapterBinding(
+                    adapter=incoming_handoffs,
+                    source_type=ContextSourceType.AGENT_HANDOFF,
+                    source_id=f"run:{source.run_id}:incoming-handoffs",
+                    role=ContextEntryRole.CONTEXT,
+                    project_id=source.project_id,
+                    workspace_id=source.workspace_id,
+                )
+            )
+        return tuple(bindings)
+
+    context.lifecycle._binding_factory = reference_binding_factory  # noqa: SLF001
 
     template_environment = PlatformTemplateEnvironmentResolver(
         workspaces=base.workspaces,
