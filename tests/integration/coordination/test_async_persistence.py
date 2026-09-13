@@ -109,7 +109,9 @@ def test_sqlite_connections_are_worker_owned_and_event_loop_remains_responsive(
         assert (await read).plan == plan
         assert heartbeat >= 2
         assert repository.connection_threads
-        assert all(name.startswith("coordination-persistence") for name in repository.connection_threads)
+        assert all(
+            name.startswith("coordination-persistence") for name in repository.connection_threads
+        )
 
     asyncio.run(scenario())
 
@@ -254,8 +256,9 @@ def test_async_repository_preserves_read_after_write_restart_and_retirement(
 
 
 def test_in_memory_and_sqlite_async_contracts_have_matching_basic_semantics(tmp_path: Path) -> None:
+    plan, step, record = _pending_plan()
+
     async def exercise(adapter: AsyncCoordinatorRepositoryAdapter) -> tuple[str, str, int]:
-        plan, step, record = _pending_plan()
         await adapter.create_plan(plan, (step,), (record,))
         state = await adapter.get_plan(plan.id)
         stored = await adapter.get_step_record(step.id)
