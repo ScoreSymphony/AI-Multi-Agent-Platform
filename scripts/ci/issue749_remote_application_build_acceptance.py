@@ -6,16 +6,16 @@ import subprocess
 import sys
 
 PYTEST_TARGETS = (
-    "tests/test_issue749_application_build_requirements.py",
-    "tests/test_issue749_remote_build_worker_lifecycle.py",
-    "tests/test_issue749_placement_conformance.py",
+    "tests/integration/application_distribution/test_application_build_requirements.py",
+    "tests/integration/application_distribution/test_remote_build_worker_lifecycle.py",
+    "tests/contract/application_distribution/test_placement_conformance.py",
     "tests/integration/application_distribution/test_remote_worker_builds.py",
     "tests/integration/application_distribution/test_remote_worker_multitarget.py",
     "tests/integration/application_distribution/test_remote_worker_recovery.py",
     "tests/integration/application_distribution/test_remote_worker_result_evidence.py",
     "tests/integration/application_distribution/test_remote_worker_restart.py",
     "tests/integration/application_distribution/test_remote_worker_lost_replies.py",
-    "tests/integration/application_distribution/test_issue749_remote_build_security.py",
+    "tests/integration/application_distribution/test_remote_build_security.py",
     (
         "tests/integration/application_distribution/"
         "test_execution_and_github_connector.py::"

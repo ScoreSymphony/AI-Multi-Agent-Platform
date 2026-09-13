@@ -1,0 +1,598 @@
+# Final test migration for #722
+
+This document records the final rest-cohort migration inventory. Historical issue provenance
+is retained by Git rename history rather than issue-numbered filenames.
+
+## Baseline
+
+- Baseline test modules: 892
+- Baseline root-level ordinary test modules: 480
+- Baseline issue-numbered test modules: 482
+- Safe moves/renames applied in the first pass: 477
+- Tracked text files with exact-path references updated: 32
+
+## First-pass residuals
+
+These files are deliberately not guessed into a destination. Mixed files require function-level
+classification/splitting; exact destination collisions require behavior-specific naming rather
+than reusing an issue number or overwriting another test module.
+
+- `tests/performance/test_issue_440_operating_envelope_catalog.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/performance/test_issue_440_reference_host_absolute_budget.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/performance/test_issue_440_reference_host_campaign.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/performance/test_issue_440_reference_host_regression.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_issue39_single_node_deployment.py` — destination collision at tests/integration/deployment/test_single_node_deployment.py
+- `tests/test_issue40_backup_restore.py` — destination collision at tests/integration/recovery/test_backup_restore.py
+- `tests/test_issue75_persistence.py` — destination collision at tests/integration/recovery/test_persistence.py
+- `tests/test_issue75_task_management.py` — destination collision at tests/integration/task_management/test_task_management.py
+- `tests/test_issue_14_control_plane.py` — destination collision at tests/integration/control_plane/test_control_plane.py
+- `tests/test_issue_18_single_node_deployment.py` — destination collision at tests/integration/deployment/test_single_node_deployment.py
+- `tests/test_issue_20_control_plane.py` — destination collision at tests/integration/control_plane/test_control_plane.py
+- `tests/test_issue_251_lifecycle_commands.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_issue_251_reference_lifecycle.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_issue_33_completion_hardening.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_issue_33_control_plane.py` — destination collision at tests/integration/control_plane/test_control_plane.py
+- `tests/test_issue_33_persistence.py` — destination collision at tests/integration/recovery/test_persistence.py
+- `tests/test_issue_366_single_node.py` — destination collision at tests/integration/deployment/test_single_node.py
+- `tests/test_issue_384_backup_restore.py` — destination collision at tests/integration/recovery/test_backup_restore.py
+- `tests/test_issue_439_single_node.py` — destination collision at tests/integration/deployment/test_single_node.py
+- `tests/test_issue_591_egress_policy.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_issue_595_governed_learning.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_issue_596_compensation.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_issue_598_single_node_integration.py` — destination collision at tests/integration/deployment/test_single_node_integration.py
+- `tests/test_issue_718_memory_portability.py` — destination collision at tests/integration/memory/test_memory_portability.py
+- `tests/test_issue_72_completion_audit.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_issue_72_control_plane.py` — destination collision at tests/integration/control_plane/test_control_plane.py
+- `tests/test_issue_72_single_node_deployment.py` — destination collision at tests/integration/deployment/test_single_node_deployment.py
+- `tests/test_issue_78_control_plane.py` — destination collision at tests/integration/control_plane/test_control_plane.py
+- `tests/test_issue_78_persistence.py` — destination collision at tests/integration/recovery/test_persistence.py
+- `tests/test_issue_78_reopened_materialization.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_issue_799_component_setup.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_issue_799_component_setup_service.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_issue_799_single_node_integration.py` — destination collision at tests/integration/deployment/test_single_node_integration.py
+- `tests/test_issue_79_memory_portability.py` — destination collision at tests/integration/memory/test_memory_portability.py
+- `tests/test_issue_86_control_plane.py` — destination collision at tests/integration/control_plane/test_control_plane.py
+- `tests/test_issue_86_observability.py` — destination collision at tests/integration/observability/test_observability.py
+- `tests/test_issue_86_persistence.py` — destination collision at tests/integration/recovery/test_persistence.py
+- `tests/test_issue_872_control_plane.py` — destination collision at tests/integration/control_plane/test_control_plane.py
+- `tests/test_issue_872_observability.py` — destination collision at tests/integration/observability/test_observability.py
+- `tests/test_issue_87_control_plane.py` — destination collision at tests/integration/control_plane/test_control_plane.py
+- `tests/test_issue_8_completion_hardening.py` — generic historical module has 2+ substantial test-function domains; split required
+- `tests/test_task_management.py` — destination collision at tests/integration/task_management/test_task_management.py
+
+## Safe move map
+
+- `tests/contract/test_issue_745_memory_provider_conformance.py` → `tests/contract/memory/test_memory_provider_conformance.py`
+- `tests/e2e/distributed/test_issue240_distributed_socket_e2e.py` → `tests/e2e/distributed/test_distributed_socket_e2e.py`
+- `tests/e2e/hermes/test_issue_8_hermes_e2e.py` → `tests/e2e/hermes/test_hermes_e2e.py`
+- `tests/integration/application_distribution/test_issue749_remote_build_security.py` → `tests/integration/application_distribution/test_remote_build_security.py`
+- `tests/integration/application_distribution/test_issue751_client_parity.py` → `tests/integration/application_distribution/test_client_parity.py`
+- `tests/integration/application_distribution/test_issue751_connector_authorization.py` → `tests/integration/application_distribution/test_connector_authorization.py`
+- `tests/integration/application_distribution/test_issue751_control_plane_security.py` → `tests/integration/application_distribution/test_control_plane_security.py`
+- `tests/integration/application_distribution/test_issue751_github_conformance.py` → `tests/integration/application_distribution/test_github_conformance.py`
+- `tests/integration/application_distribution/test_issue751_github_validation_failure.py` → `tests/integration/application_distribution/test_github_validation_failure.py`
+- `tests/performance/test_issue500_host_pressure_benchmark.py` → `tests/performance/platform/test_host_pressure_benchmark.py`
+- `tests/performance/test_issue_440_api_pressure.py` → `tests/performance/files/test_api_pressure.py`
+- `tests/performance/test_issue_440_benchmarking.py` → `tests/performance/deployment/test_benchmarking.py`
+- `tests/performance/test_issue_440_coordination_contention.py` → `tests/performance/cli/test_coordination_contention.py`
+- `tests/performance/test_issue_440_coordination_pressure.py` → `tests/performance/cli/test_coordination_pressure.py`
+- `tests/performance/test_issue_440_distributed_faults.py` → `tests/performance/distributed/test_distributed_faults.py`
+- `tests/performance/test_issue_440_distributed_scale.py` → `tests/performance/distributed/test_distributed_scale.py`
+- `tests/performance/test_issue_440_endurance.py` → `tests/performance/context/test_endurance.py`
+- `tests/performance/test_issue_440_ha_failover_benchmark.py` → `tests/performance/distributed/test_ha_failover_benchmark.py`
+- `tests/performance/test_issue_440_heterogeneous_placement.py` → `tests/performance/application_distribution/test_heterogeneous_placement.py`
+- `tests/performance/test_issue_440_host_pressure_observer.py` → `tests/performance/deployment/test_host_pressure_observer.py`
+- `tests/performance/test_issue_440_host_pressure_observer_timing.py` → `tests/performance/deployment/test_host_pressure_observer_timing.py`
+- `tests/performance/test_issue_440_operating_envelope.py` → `tests/performance/evaluation/test_operating_envelope.py`
+- `tests/performance/test_issue_440_persistence.py` → `tests/performance/recovery/test_persistence.py`
+- `tests/performance/test_issue_440_persistence_contention.py` → `tests/performance/recovery/test_persistence_contention.py`
+- `tests/performance/test_issue_440_persistence_fault_benchmark.py` → `tests/performance/recovery/test_persistence_fault_benchmark.py`
+- `tests/performance/test_issue_440_plan_step.py` → `tests/performance/planning/test_plan_step.py`
+- `tests/performance/test_issue_440_planning_graph_scale.py` → `tests/performance/planning/test_planning_graph_scale.py`
+- `tests/performance/test_issue_440_planning_pressure.py` → `tests/performance/planning/test_planning_pressure.py`
+- `tests/performance/test_issue_440_provider_faults.py` → `tests/performance/models/test_provider_faults.py`
+- `tests/performance/test_issue_440_reference_host_reproducibility.py` → `tests/performance/cli/test_reference_host_reproducibility.py`
+- `tests/performance/test_issue_440_stress_fault.py` → `tests/performance/deployment/test_stress_fault.py`
+- `tests/performance/test_issue_440_sweep.py` → `tests/performance/deployment/test_sweep.py`
+- `tests/performance/test_issue_440_transport_faults.py` → `tests/performance/context/test_transport_faults.py`
+- `tests/performance/test_issue_440_workloads.py` → `tests/performance/files/test_workloads.py`
+- `tests/regression/test_issue_501_followup.py` → `tests/regression/security/test_followup.py`
+- `tests/test_application_distribution.py` → `tests/integration/application_distribution/test_application_distribution.py`
+- `tests/test_automation.py` → `tests/unit/automation/test_automation.py`
+- `tests/test_browser_capability.py` → `tests/unit/browser/test_browser_capability.py`
+- `tests/test_control_plane_workspaces.py` → `tests/integration/workspaces/test_control_plane_workspaces.py`
+- `tests/test_evaluation_aggregation.py` → `tests/unit/evaluation/test_evaluation_aggregation.py`
+- `tests/test_evaluation_regression_identity.py` → `tests/regression/evaluation/test_evaluation_regression_identity.py`
+- `tests/test_evaluation_sqlite_history.py` → `tests/integration/evaluation/test_evaluation_sqlite_history.py`
+- `tests/test_executor_kernel_integration.py` → `tests/integration/kernel/test_executor_kernel_integration.py`
+- `tests/test_filesystem_registry_fragments.py` → `tests/unit/files/test_filesystem_registry_fragments.py`
+- `tests/test_forge_http.py` → `tests/integration/forge/test_forge_http.py`
+- `tests/test_forge_kernel_regressions.py` → `tests/regression/forge/test_forge_kernel_regressions.py`
+- `tests/test_forge_optionality.py` → `tests/contract/forge/test_forge_optionality.py`
+- `tests/test_handoff_reference_pinning_651.py` → `tests/integration/agents/test_handoff_reference_pinning.py`
+- `tests/test_inference_backend_evaluation.py` → `tests/integration/evaluation/test_inference_backend_evaluation.py`
+- `tests/test_integration_591_650_651_context_egress.py` → `tests/integration/context/test_context_egress_integration.py`
+- `tests/test_integration_591_650_651_final_review_regressions.py` → `tests/regression/context/test_context_egress_final_review_regressions.py`
+- `tests/test_integration_591_650_651_review_regressions.py` → `tests/regression/context/test_context_egress_review_regressions.py`
+- `tests/test_issue13_canonical_id_stability.py` → `tests/integration/knowledge/test_canonical_id_stability.py`
+- `tests/test_issue171_accounting_integrations.py` → `tests/integration/accounting/test_accounting_integrations.py`
+- `tests/test_issue171_control_plane_composition.py` → `tests/integration/control_plane/test_control_plane_composition.py`
+- `tests/test_issue171_final_gaps.py` → `tests/regression/accounting/test_final_gaps.py`
+- `tests/test_issue171_notification_security_hardening.py` → `tests/regression/notifications/test_notification_security_hardening.py`
+- `tests/test_issue171_organization_aggregate_hardening.py` → `tests/regression/organizations/test_organization_aggregate_hardening.py`
+- `tests/test_issue171_runtime_hardening.py` → `tests/regression/accounting/test_runtime_hardening.py`
+- `tests/test_issue240_advanced_deployment.py` → `tests/integration/deployment/test_advanced_deployment.py`
+- `tests/test_issue240_completion_gaps.py` → `tests/regression/files/test_completion_gaps.py`
+- `tests/test_issue240_distributed_process_composition.py` → `tests/integration/distributed/test_distributed_process_composition.py`
+- `tests/test_issue240_final_hardening.py` → `tests/regression/workspaces/test_final_hardening.py`
+- `tests/test_issue240_multi_process_workers.py` → `tests/integration/distributed/test_multi_process_workers.py`
+- `tests/test_issue240_network_loss_restart_e2e.py` → `tests/e2e/recovery/test_network_loss_restart_e2e.py`
+- `tests/test_issue240_operator_entrypoints.py` → `tests/integration/distributed/test_operator_entrypoints.py`
+- `tests/test_issue240_production_completion.py` → `tests/regression/distributed/test_production_completion.py`
+- `tests/test_issue240_reaudit.py` → `tests/regression/workspaces/test_reaudit.py`
+- `tests/test_issue240_secure_entrypoint_e2e.py` → `tests/e2e/files/test_secure_entrypoint_e2e.py`
+- `tests/test_issue240_worker_protocol_http.py` → `tests/contract/distributed/test_worker_protocol_http.py`
+- `tests/test_issue240_worker_restart_reattach.py` → `tests/integration/distributed/test_worker_restart_reattach.py`
+- `tests/test_issue37_source_lifecycle_completion.py` → `tests/regression/context/test_source_lifecycle_completion.py`
+- `tests/test_issue388_network_message_transport.py` → `tests/integration/distributed/test_network_message_transport.py`
+- `tests/test_issue39_single_server_hardening.py` → `tests/regression/deployment/test_single_server_hardening.py`
+- `tests/test_issue40_cross_store_integrity.py` → `tests/integration/recovery/test_cross_store_integrity.py`
+- `tests/test_issue40_current_main_durable_state.py` → `tests/integration/recovery/test_current_main_durable_state.py`
+- `tests/test_issue40_replacement_machine.py` → `tests/integration/application_distribution/test_replacement_machine.py`
+- `tests/test_issue40_restore_hardening.py` → `tests/regression/recovery/test_restore_hardening.py`
+- `tests/test_issue41_backup_inventory.py` → `tests/integration/recovery/test_backup_inventory.py`
+- `tests/test_issue41_baseline_adoption.py` → `tests/integration/release/test_baseline_adoption.py`
+- `tests/test_issue41_historical_event_compatibility.py` → `tests/integration/kernel/test_historical_event_compatibility.py`
+- `tests/test_issue41_interrupted_migration.py` → `tests/integration/recovery/test_interrupted_migration.py`
+- `tests/test_issue41_migration_preconditions.py` → `tests/integration/recovery/test_migration_preconditions.py`
+- `tests/test_issue41_migration_revision_consistency.py` → `tests/integration/recovery/test_migration_revision_consistency.py`
+- `tests/test_issue41_plugin_manifest_compatibility.py` → `tests/contract/plugins/test_plugin_manifest_compatibility.py`
+- `tests/test_issue41_plugin_state_upgrade.py` → `tests/integration/plugins/test_plugin_state_upgrade.py`
+- `tests/test_issue41_release_maintenance.py` → `tests/release/release/test_release_maintenance.py`
+- `tests/test_issue41_server_maintenance_gate.py` → `tests/integration/deployment/test_server_maintenance_gate.py`
+- `tests/test_issue41_server_version_gate.py` → `tests/integration/deployment/test_server_version_gate.py`
+- `tests/test_issue41_upgrade_lifecycle.py` → `tests/release/release/test_upgrade_lifecycle.py`
+- `tests/test_issue41_upgrade_recovery.py` → `tests/release/recovery/test_upgrade_recovery.py`
+- `tests/test_issue433_remote_workspace_hardening.py` → `tests/regression/workspaces/test_remote_workspace_hardening.py`
+- `tests/test_issue433_remote_workspace_transport.py` → `tests/integration/workspaces/test_remote_workspace_transport.py`
+- `tests/test_issue449_remote_workspace_lifecycle_hardening.py` → `tests/regression/workspaces/test_remote_workspace_lifecycle_hardening.py`
+- `tests/test_issue500_linux_pressure.py` → `tests/performance/models/test_linux_pressure.py`
+- `tests/test_issue500_pressure_core.py` → `tests/performance/configuration/test_pressure_core.py`
+- `tests/test_issue500_pressure_deployment.py` → `tests/performance/deployment/test_pressure_deployment.py`
+- `tests/test_issue500_pressure_reporting.py` → `tests/performance/models/test_pressure_reporting.py`
+- `tests/test_issue500_pressure_sampling.py` → `tests/performance/evaluation/test_pressure_sampling.py`
+- `tests/test_issue500_pressure_telemetry.py` → `tests/performance/observability/test_pressure_telemetry.py`
+- `tests/test_issue6_subject_integrity.py` → `tests/integration/organizations/test_subject_integrity.py`
+- `tests/test_issue707_distributed_backup_contract.py` → `tests/contract/distributed/test_distributed_backup_contract.py`
+- `tests/test_issue707_distributed_restart_recovery.py` → `tests/integration/distributed/test_distributed_restart_recovery.py`
+- `tests/test_issue707_distributed_startup_blockers.py` → `tests/integration/distributed/test_distributed_startup_blockers.py`
+- `tests/test_issue707_lost_distributed_lifecycle.py` → `tests/integration/distributed/test_lost_distributed_lifecycle.py`
+- `tests/test_issue707_recovery_snapshot.py` → `tests/integration/recovery/test_recovery_snapshot.py`
+- `tests/test_issue707_review_regressions.py` → `tests/regression/recovery/test_review_regressions.py`
+- `tests/test_issue707_single_node_startup_recovery.py` → `tests/integration/deployment/test_single_node_startup_recovery.py`
+- `tests/test_issue725_canonical_runtime_assets.py` → `tests/release/repository/test_repository_canonical_runtime_assets.py`
+- `tests/test_issue73_acceptance.py` → `tests/integration/security/test_acceptance.py`
+- `tests/test_issue73_authenticated_websocket.py` → `tests/integration/platform/test_authenticated_websocket.py`
+- `tests/test_issue73_control_plane_e2e.py` → `tests/e2e/control_plane/test_control_plane_e2e.py`
+- `tests/test_issue73_manifest_contract.py` → `tests/contract/platform/test_manifest_contract.py`
+- `tests/test_issue73_redaction_integration.py` → `tests/integration/security/test_redaction_integration.py`
+- `tests/test_issue73_terminal_hardening.py` → `tests/regression/workspaces/test_terminal_hardening.py`
+- `tests/test_issue73_terminal_sessions.py` → `tests/integration/security/test_terminal_sessions.py`
+- `tests/test_issue749_application_build_requirements.py` → `tests/integration/application_distribution/test_application_build_requirements.py`
+- `tests/test_issue749_placement_conformance.py` → `tests/contract/application_distribution/test_placement_conformance.py`
+- `tests/test_issue749_remote_build_worker_lifecycle.py` → `tests/integration/application_distribution/test_remote_build_worker_lifecycle.py`
+- `tests/test_issue75_attention_hooks.py` → `tests/integration/models/test_attention_hooks.py`
+- `tests/test_issue75_completed_source_runtime.py` → `tests/integration/context/test_completed_source_runtime.py`
+- `tests/test_issue75_connector_source_runtime.py` → `tests/integration/context/test_connector_source_runtime.py`
+- `tests/test_issue75_control_plane_visibility_hardening.py` → `tests/regression/control_plane/test_control_plane_visibility_hardening.py`
+- `tests/test_issue75_delivery.py` → `tests/integration/notifications/test_delivery.py`
+- `tests/test_issue75_followup_integrations.py` → `tests/regression/notifications/test_followup_integrations.py`
+- `tests/test_issue75_plugin_composition.py` → `tests/integration/plugins/test_plugin_composition.py`
+- `tests/test_issue75_preference_hardening.py` → `tests/regression/configuration/test_preference_hardening.py`
+- `tests/test_issue75_preference_persistence_hardening.py` → `tests/regression/recovery/test_preference_persistence_hardening.py`
+- `tests/test_issue75_runtime_hardening_v2.py` → `tests/regression/deployment/test_runtime_hardening_v2.py`
+- `tests/test_issue75_visibility_hardening.py` → `tests/regression/context/test_visibility_hardening.py`
+- `tests/test_issue76_accounting.py` → `tests/integration/accounting/test_accounting.py`
+- `tests/test_issue798_agent_sandbox_evidence_gate.py` → `tests/integration/agents/test_agent_sandbox_evidence_gate.py`
+- `tests/test_issue798_agent_sandbox_exception_redaction.py` → `tests/integration/security/test_agent_sandbox_exception_redaction.py`
+- `tests/test_issue798_agent_sandbox_live_harness.py` → `tests/integration/agents/test_agent_sandbox_live_harness.py`
+- `tests/test_issue798_agent_sandbox_native_auth_probe.py` → `tests/integration/agents/test_agent_sandbox_native_auth_probe.py`
+- `tests/test_issue88_finalization.py` → `tests/integration/planning/test_finalization.py`
+- `tests/test_issue88_hardening.py` → `tests/regression/task_management/test_task_management_hardening.py`
+- `tests/test_issue88_workspace_composition_hardening.py` → `tests/regression/workspaces/test_workspace_composition_hardening.py`
+- `tests/test_issue_10_control_plane_inventory.py` → `tests/integration/control_plane/test_control_plane_inventory.py`
+- `tests/test_issue_14_controlled_failover.py` → `tests/integration/distributed/test_controlled_failover.py`
+- `tests/test_issue_14_distributed_runtime.py` → `tests/integration/distributed/test_distributed_runtime.py`
+- `tests/test_issue_14_distributed_telemetry.py` → `tests/integration/distributed/test_distributed_telemetry.py`
+- `tests/test_issue_14_final_contract_hardening.py` → `tests/contract/distributed/test_final_contract_hardening.py`
+- `tests/test_issue_14_node_reboot.py` → `tests/integration/distributed/test_node_reboot.py`
+- `tests/test_issue_14_provider_adapters.py` → `tests/integration/models/test_provider_adapters.py`
+- `tests/test_issue_14_registry_completion.py` → `tests/regression/plugins/test_registry_completion.py`
+- `tests/test_issue_14_remote_workspace.py` → `tests/integration/workspaces/test_remote_workspace.py`
+- `tests/test_issue_14_restart_persistence.py` → `tests/integration/recovery/test_restart_persistence.py`
+- `tests/test_issue_14_security_result_recovery.py` → `tests/integration/security/test_security_result_recovery.py`
+- `tests/test_issue_14_worker_message_transport.py` → `tests/integration/distributed/test_worker_message_transport.py`
+- `tests/test_issue_157_ownership_compatibility.py` → `tests/integration/organizations/test_ownership_compatibility.py`
+- `tests/test_issue_157_task_project_openapi.py` → `tests/integration/task_management/test_task_project_openapi.py`
+- `tests/test_issue_157_task_project_reassignment.py` → `tests/integration/task_management/test_task_project_reassignment.py`
+- `tests/test_issue_157_task_project_reassignment_hardening.py` → `tests/regression/task_management/test_task_project_reassignment_hardening.py`
+- `tests/test_issue_18_hardening.py` → `tests/regression/configuration/test_configuration_hardening.py`
+- `tests/test_issue_18_review_fixes.py` → `tests/regression/automation/test_review_fixes.py`
+- `tests/test_issue_18_runtime_completion.py` → `tests/regression/recovery/test_runtime_completion.py`
+- `tests/test_issue_18_runtime_security.py` → `tests/integration/security/test_runtime_security.py`
+- `tests/test_issue_19_agent_execution_profile.py` → `tests/integration/agents/test_agent_execution_profile.py`
+- `tests/test_issue_19_behavior_evidence.py` → `tests/integration/evaluation/test_behavior_evidence.py`
+- `tests/test_issue_19_completion_hardening.py` → `tests/regression/context/test_context_completion_hardening.py`
+- `tests/test_issue_19_final_audit_gaps.py` → `tests/regression/agents/test_final_audit_gaps.py`
+- `tests/test_issue_19_product_completion.py` → `tests/regression/models/test_product_completion.py`
+- `tests/test_issue_19_product_evidence_composition.py` → `tests/integration/evaluation/test_product_evidence_composition.py`
+- `tests/test_issue_19_suite_assets.py` → `tests/integration/recovery/test_suite_assets.py`
+- `tests/test_issue_20_cli_and_approval.py` → `tests/integration/security/test_cli_and_approval.py`
+- `tests/test_issue_241_final_acceptance_audit.py` → `tests/regression/recovery/test_final_acceptance_audit.py`
+- `tests/test_issue_241_invalid_lifecycle.py` → `tests/integration/automation/test_invalid_lifecycle.py`
+- `tests/test_issue_241_retry_acceptance.py` → `tests/integration/security/test_retry_acceptance.py`
+- `tests/test_issue_241_retry_lifecycle_acceptance.py` → `tests/integration/platform/test_retry_lifecycle_acceptance.py`
+- `tests/test_issue_241_retry_overlap_acceptance.py` → `tests/integration/platform/test_retry_overlap_acceptance.py`
+- `tests/test_issue_241_retry_policy.py` → `tests/integration/security/test_retry_policy.py`
+- `tests/test_issue_241_retry_runtime.py` → `tests/integration/recovery/test_retry_runtime.py`
+- `tests/test_issue_241_revalidation_failures.py` → `tests/integration/platform/test_revalidation_failures.py`
+- `tests/test_issue_241_workspace_event_scope.py` → `tests/integration/workspaces/test_workspace_event_scope.py`
+- `tests/test_issue_241_workspace_runtime_composition.py` → `tests/integration/workspaces/test_workspace_runtime_composition.py`
+- `tests/test_issue_251_control_plane_http.py` → `tests/integration/control_plane/test_control_plane_control_plane_http.py`
+- `tests/test_issue_251_control_plane_resources.py` → `tests/integration/control_plane/test_control_plane_resources.py`
+- `tests/test_issue_251_memory_contract.py` → `tests/contract/memory/test_memory_contract.py`
+- `tests/test_issue_252_acceptance_gate.py` → `tests/integration/files/test_acceptance_gate.py`
+- `tests/test_issue_288_node_worker_search.py` → `tests/integration/search/test_node_worker_search.py`
+- `tests/test_issue_288_worker_job_search_boundary.py` → `tests/integration/search/test_worker_job_search_boundary.py`
+- `tests/test_issue_289_conversation_search.py` → `tests/integration/search/test_conversation_search.py`
+- `tests/test_issue_289_global_search_acceptance.py` → `tests/integration/search/test_global_search_acceptance.py`
+- `tests/test_issue_290_degraded_rebuild.py` → `tests/integration/memory/test_degraded_rebuild.py`
+- `tests/test_issue_290_expiry.py` → `tests/integration/memory/test_expiry.py`
+- `tests/test_issue_290_hardening.py` → `tests/regression/memory/test_memory_hardening.py`
+- `tests/test_issue_290_memory_knowledge_search.py` → `tests/integration/memory/test_memory_knowledge_search.py`
+- `tests/test_issue_290_provenance.py` → `tests/integration/memory/test_provenance.py`
+- `tests/test_issue_291_verification_search.py` → `tests/integration/search/test_verification_search.py`
+- `tests/test_issue_291_verification_search_acceptance.py` → `tests/integration/search/test_verification_search_acceptance.py`
+- `tests/test_issue_291_verification_search_restart.py` → `tests/integration/search/test_verification_search_restart.py`
+- `tests/test_issue_292_external_resource_search.py` → `tests/integration/context/test_external_resource_search.py`
+- `tests/test_issue_292_hardening.py` → `tests/regression/context/test_context_hardening.py`
+- `tests/test_issue_308_project_persistence.py` → `tests/integration/recovery/test_project_persistence.py`
+- `tests/test_issue_309_assignment_authorization.py` → `tests/integration/security/test_assignment_authorization.py`
+- `tests/test_issue_309_routing_profile_consumers.py` → `tests/integration/files/test_routing_profile_consumers.py`
+- `tests/test_issue_309_routing_profile_reference_portability.py` → `tests/integration/files/test_routing_profile_reference_portability.py`
+- `tests/test_issue_309_template_routing_profile_portability.py` → `tests/integration/files/test_template_routing_profile_portability.py`
+- `tests/test_issue_310_policy_persistence_atomicity.py` → `tests/integration/recovery/test_policy_persistence_atomicity.py`
+- `tests/test_issue_310_policy_portability_dependencies.py` → `tests/integration/portability/test_policy_portability_dependencies.py`
+- `tests/test_issue_310_policy_profile_portability.py` → `tests/integration/files/test_policy_profile_portability.py`
+- `tests/test_issue_33_control_plane_hardening.py` → `tests/regression/control_plane/test_control_plane_hardening.py`
+- `tests/test_issue_33_final_completeness.py` → `tests/regression/agents/test_final_completeness.py`
+- `tests/test_issue_364_security_hardening.py` → `tests/regression/security/test_security_hardening.py`
+- `tests/test_issue_364_workflows.py` → `tests/integration/workflows/test_workflows.py`
+- `tests/test_issue_366_hardening.py` → `tests/regression/recovery/test_recovery_hardening.py`
+- `tests/test_issue_366_invariants.py` → `tests/contract/platform/test_invariants.py`
+- `tests/test_issue_366_repository.py` → `tests/integration/repository/test_repository.py`
+- `tests/test_issue_366_service.py` → `tests/integration/security/test_service.py`
+- `tests/test_issue_366_template_compatibility.py` → `tests/integration/platform/test_template_compatibility.py`
+- `tests/test_issue_366_template_handler.py` → `tests/integration/platform/test_template_handler.py`
+- `tests/test_issue_384_coordination_durability.py` → `tests/integration/recovery/test_coordination_durability.py`
+- `tests/test_issue_384_coordinator_upgrade.py` → `tests/integration/release/test_coordinator_upgrade.py`
+- `tests/test_issue_384_distributed_worker_integration.py` → `tests/integration/distributed/test_distributed_worker_integration.py`
+- `tests/test_issue_384_durable_coordination.py` → `tests/integration/recovery/test_durable_coordination.py`
+- `tests/test_issue_384_edge_cases.py` → `tests/integration/security/test_edge_cases.py`
+- `tests/test_issue_384_evaluation_evidence.py` → `tests/integration/evaluation/test_evaluation_evidence.py`
+- `tests/test_issue_384_large_fanout.py` → `tests/integration/platform/test_large_fanout.py`
+- `tests/test_issue_384_lost_worker_acknowledgement.py` → `tests/integration/knowledge/test_lost_worker_acknowledgement.py`
+- `tests/test_issue_384_observability_completeness.py` → `tests/integration/observability/test_observability_completeness.py`
+- `tests/test_issue_384_operator_repair.py` → `tests/integration/verification/test_operator_repair.py`
+- `tests/test_issue_384_orchestrator_replacement.py` → `tests/integration/application_distribution/test_orchestrator_replacement.py`
+- `tests/test_issue_384_ready_crash.py` → `tests/integration/recovery/test_ready_crash.py`
+- `tests/test_issue_384_restore_history_consistency.py` → `tests/integration/recovery/test_restore_history_consistency.py`
+- `tests/test_issue_414_node_worker_state_timestamps.py` → `tests/integration/distributed/test_node_worker_state_timestamps.py`
+- `tests/test_issue_416_durable_connectors.py` → `tests/integration/recovery/test_durable_connectors.py`
+- `tests/test_issue_416_hardening.py` → `tests/regression/search/test_search_hardening.py`
+- `tests/test_issue_416_sync_resume.py` → `tests/integration/models/test_sync_resume.py`
+- `tests/test_issue_421_reference_coordinator_cli.py` → `tests/integration/cli/test_reference_coordinator_cli.py`
+- `tests/test_issue_439_planning.py` → `tests/integration/planning/test_planning.py`
+- `tests/test_issue_439_server_resolved_inventory.py` → `tests/integration/deployment/test_server_resolved_inventory.py`
+- `tests/test_issue_443_immutable_revision_followup.py` → `tests/regression/platform/test_immutable_revision_followup.py`
+- `tests/test_issue_443_routing_profile_control_plane.py` → `tests/integration/files/test_routing_profile_control_plane.py`
+- `tests/test_issue_445_import_transaction_order.py` → `tests/integration/portability/test_import_transaction_order.py`
+- `tests/test_issue_445_routing_profile_consumer_assignments.py` → `tests/integration/files/test_routing_profile_consumer_assignments.py`
+- `tests/test_issue_445_routing_profile_regressions.py` → `tests/regression/files/test_routing_profile_regressions.py`
+- `tests/test_issue_447_routing_profile_reference_audit.py` → `tests/integration/files/test_routing_profile_reference_audit.py`
+- `tests/test_issue_46_architecture_invariants.py` → `tests/contract/portability/test_architecture_invariants.py`
+- `tests/test_issue_46_client_state_parity.py` → `tests/integration/cli/test_client_state_parity.py`
+- `tests/test_issue_46_failure_retry_e2e.py` → `tests/e2e/observability/test_failure_retry_e2e.py`
+- `tests/test_issue_46_local_model_native_capability_e2e.py` → `tests/e2e/models/test_local_model_native_capability_e2e.py`
+- `tests/test_issue_46_parallel_coding_batch_e2e.py` → `tests/e2e/verification/test_parallel_coding_batch_e2e.py`
+- `tests/test_issue_46_task_management_worker_admission.py` → `tests/integration/distributed/test_task_management_worker_admission.py`
+- `tests/test_issue_46_worker_artifact_integration.py` → `tests/integration/artifacts/test_worker_artifact_integration.py`
+- `tests/test_issue_46_worker_artifact_verification_vertical.py` → `tests/integration/artifacts/test_worker_artifact_verification_vertical.py`
+- `tests/test_issue_4_final_p2.py` → `tests/regression/models/test_final_p2.py`
+- `tests/test_issue_501_governance.py` → `tests/integration/security/test_governance.py`
+- `tests/test_issue_501_governance_cli.py` → `tests/integration/cli/test_governance_cli.py`
+- `tests/test_issue_501_governance_hardening.py` → `tests/regression/search/test_governance_hardening.py`
+- `tests/test_issue_502_completion_prep.py` → `tests/regression/context/test_completion_prep.py`
+- `tests/test_issue_502_production_wiring.py` → `tests/integration/deployment/test_production_wiring.py`
+- `tests/test_issue_502_projectatlas_plugin.py` → `tests/integration/plugins/test_projectatlas_plugin.py`
+- `tests/test_issue_502_provider_evaluation.py` → `tests/integration/models/test_provider_evaluation.py`
+- `tests/test_issue_502_repository_intelligence_foundation.py` → `tests/integration/repository/test_repository_intelligence_foundation.py`
+- `tests/test_issue_502_workspace_freshness.py` → `tests/integration/workspaces/test_workspace_freshness.py`
+- `tests/test_issue_560_workflow_progress.py` → `tests/integration/workflows/test_workflows_workflow_progress.py`
+- `tests/test_issue_567_task_mutation_boundary.py` → `tests/integration/task_management/test_task_mutation_boundary.py`
+- `tests/test_issue_588_skill_security.py` → `tests/integration/security/test_skill_security.py`
+- `tests/test_issue_591_capability_egress_paths.py` → `tests/integration/security/test_capability_egress_paths.py`
+- `tests/test_issue_591_connector_result_classification.py` → `tests/integration/connectors/test_connector_result_classification.py`
+- `tests/test_issue_591_context_inline_profile_regression.py` → `tests/regression/files/test_context_inline_profile_regression.py`
+- `tests/test_issue_591_egress_observability.py` → `tests/integration/observability/test_egress_observability.py`
+- `tests/test_issue_591_egress_profiles.py` → `tests/integration/files/test_egress_profiles.py`
+- `tests/test_issue_592_agent_handoffs.py` → `tests/integration/agents/test_agent_handoffs.py`
+- `tests/test_issue_592_context_bundle_integration.py` → `tests/integration/context/test_context_bundle_integration.py`
+- `tests/test_issue_592_coordination_integration.py` → `tests/integration/platform/test_coordination_integration.py`
+- `tests/test_issue_594_595_backup_contract_versions.py` → `tests/contract/recovery/test_backup_contract_versions.py`
+- `tests/test_issue_594_595_evaluation_readiness.py` → `tests/integration/evaluation/test_evaluation_readiness.py`
+- `tests/test_issue_594_595_evidence_identity.py` → `tests/integration/evaluation/test_evidence_identity.py`
+- `tests/test_issue_594_595_final_review_regressions.py` → `tests/regression/evaluation/test_final_review_regressions.py`
+- `tests/test_issue_594_595_final_review_round4.py` → `tests/regression/models/test_final_review_round4.py`
+- `tests/test_issue_594_595_final_review_round5.py` → `tests/regression/recovery/test_final_review_round5.py`
+- `tests/test_issue_594_595_integration_review.py` → `tests/regression/task_management/test_integration_review.py`
+- `tests/test_issue_594_595_restore_scope_regression.py` → `tests/regression/recovery/test_restore_scope_regression.py`
+- `tests/test_issue_594_595_scope_security_regressions.py` → `tests/regression/security/test_scope_security_regressions.py`
+- `tests/test_issue_594_candidate_dimensions.py` → `tests/integration/context/test_candidate_dimensions.py`
+- `tests/test_issue_594_eval_reproducibility.py` → `tests/integration/models/test_eval_reproducibility.py`
+- `tests/test_issue_594_manifest_identity.py` → `tests/contract/platform/test_manifest_identity.py`
+- `tests/test_issue_594_manifest_schema.py` → `tests/contract/platform/test_manifest_schema.py`
+- `tests/test_issue_594_paired_ab_drift_guard.py` → `tests/integration/platform/test_paired_ab_drift_guard.py`
+- `tests/test_issue_594_reproducibility_hardening.py` → `tests/regression/context/test_reproducibility_hardening.py`
+- `tests/test_issue_595_product_surfaces.py` → `tests/integration/cli/test_product_surfaces.py`
+- `tests/test_issue_596_completion_hardening.py` → `tests/regression/security/test_security_completion_hardening.py`
+- `tests/test_issue_596_recovery_boundary_hardening.py` → `tests/regression/recovery/test_recovery_boundary_hardening.py`
+- `tests/test_issue_596_running_recovery_projection.py` → `tests/integration/recovery/test_running_recovery_projection.py`
+- `tests/test_issue_596_upgrade_conflict.py` → `tests/integration/release/test_upgrade_conflict.py`
+- `tests/test_issue_597_goals.py` → `tests/integration/goals/test_goals.py`
+- `tests/test_issue_598_decision_records.py` → `tests/integration/search/test_decision_records.py`
+- `tests/test_issue_638_manual_preview.py` → `tests/regression/plugins/test_manual_preview.py`
+- `tests/test_issue_638_technical_marketplace_catalog.py` → `tests/integration/plugins/test_technical_marketplace_catalog.py`
+- `tests/test_issue_638_technical_metadata_validation.py` → `tests/integration/models/test_technical_metadata_validation.py`
+- `tests/test_issue_650_crash_binding_recovery.py` → `tests/integration/recovery/test_crash_binding_recovery.py`
+- `tests/test_issue_650_multisource_single_node_e2e.py` → `tests/e2e/context/test_multisource_single_node_e2e.py`
+- `tests/test_issue_650_source_authorization_redaction.py` → `tests/integration/context/test_source_authorization_redaction.py`
+- `tests/test_issue_651_deployment_composition.py` → `tests/integration/deployment/test_deployment_composition.py`
+- `tests/test_issue_651_production_handoff_runtime.py` → `tests/integration/agents/test_production_handoff_runtime.py`
+- `tests/test_issue_651_public_production_e2e.py` → `tests/e2e/artifacts/test_public_production_e2e.py`
+- `tests/test_issue_651_security_observability.py` → `tests/integration/security/test_security_observability.py`
+- `tests/test_issue_651_source_gateway.py` → `tests/integration/context/test_source_gateway.py`
+- `tests/test_issue_680_context_security_regression.py` → `tests/regression/context/test_context_security_regression.py`
+- `tests/test_issue_694_planning_source_evidence.py` → `tests/integration/context/test_planning_source_evidence.py`
+- `tests/test_issue_694_research_operator_sources.py` → `tests/integration/search/test_research_operator_sources.py`
+- `tests/test_issue_694_run_source_evidence.py` → `tests/integration/context/test_run_source_evidence.py`
+- `tests/test_issue_694_source_immutability.py` → `tests/integration/context/test_source_immutability.py`
+- `tests/test_issue_696_single_node_configuration.py` → `tests/integration/deployment/test_single_node_configuration.py`
+- `tests/test_issue_711_agent_review_workflow.py` → `tests/regression/agents/test_agent_review_workflow.py`
+- `tests/test_issue_711_kernel_output_observer.py` → `tests/integration/kernel/test_kernel_output_observer.py`
+- `tests/test_issue_711_reference_reviewer.py` → `tests/regression/verification/test_reference_reviewer.py`
+- `tests/test_issue_711_reviewer_input.py` → `tests/regression/verification/test_reviewer_input.py`
+- `tests/test_issue_711_standard_team.py` → `tests/integration/agents/test_standard_team.py`
+- `tests/test_issue_718_backward_compatibility.py` → `tests/integration/memory/test_backward_compatibility.py`
+- `tests/test_issue_718_memory_api.py` → `tests/integration/memory/test_memory_api.py`
+- `tests/test_issue_718_memory_types.py` → `tests/integration/memory/test_memory_types.py`
+- `tests/test_issue_72_conversations.py` → `tests/integration/recovery/test_conversations.py`
+- `tests/test_issue_72_knowledge_references.py` → `tests/integration/knowledge/test_knowledge_references.py`
+- `tests/test_issue_72_lifecycle_projection.py` → `tests/integration/artifacts/test_lifecycle_projection.py`
+- `tests/test_issue_72_pr_300_semantics.py` → `tests/integration/agents/test_pr_300_semantics.py`
+- `tests/test_issue_72_response_streaming.py` → `tests/integration/models/test_response_streaming.py`
+- `tests/test_issue_72_retention.py` → `tests/integration/memory/test_retention.py`
+- `tests/test_issue_72_streaming.py` → `tests/integration/task_management/test_streaming.py`
+- `tests/test_issue_72_task_links.py` → `tests/integration/task_management/test_task_links.py`
+- `tests/test_issue_72_waiting_input.py` → `tests/integration/task_management/test_waiting_input.py`
+- `tests/test_issue_730_pipelock_containment.py` → `tests/integration/security/test_pipelock_containment.py`
+- `tests/test_issue_730_pipelock_evaluation.py` → `tests/integration/security/test_pipelock_evaluation.py`
+- `tests/test_issue_730_pipelock_mcp_adversarial.py` → `tests/integration/security/test_pipelock_mcp_adversarial.py`
+- `tests/test_issue_730_pipelock_network_exfiltration.py` → `tests/integration/security/test_pipelock_network_exfiltration.py`
+- `tests/test_issue_730_pipelock_outage_recovery.py` → `tests/integration/security/test_pipelock_outage_recovery.py`
+- `tests/test_issue_730_pipelock_profile_bypass.py` → `tests/integration/files/test_pipelock_profile_bypass.py`
+- `tests/test_issue_730_pipelock_security_corpus.py` → `tests/integration/security/test_pipelock_security_corpus.py`
+- `tests/test_issue_730_pipelock_transports.py` → `tests/integration/security/test_pipelock_transports.py`
+- `tests/test_issue_758_durable_process_restart_e2e.py` → `tests/e2e/recovery/test_durable_process_restart_e2e.py`
+- `tests/test_issue_758_local_model_recovery.py` → `tests/integration/models/test_local_model_recovery.py`
+- `tests/test_issue_758_repair_handoff_recovery.py` → `tests/integration/verification/test_repair_handoff_recovery.py`
+- `tests/test_issue_758_repair_startup_handoffs.py` → `tests/integration/verification/test_repair_startup_handoffs.py`
+- `tests/test_issue_758_reviewer_restart_boundaries.py` → `tests/regression/verification/test_reviewer_restart_boundaries.py`
+- `tests/test_issue_758_reviewer_restart_recovery.py` → `tests/regression/verification/test_reviewer_restart_recovery.py`
+- `tests/test_issue_758_reviewer_selection_recovery.py` → `tests/regression/verification/test_reviewer_selection_recovery.py`
+- `tests/test_issue_758_single_node_reviewer_startup_integration.py` → `tests/regression/verification/test_single_node_reviewer_startup_integration.py`
+- `tests/test_issue_77_completion_hardening.py` → `tests/regression/control_plane/test_control_plane_completion_hardening.py`
+- `tests/test_issue_77_standard_agents.py` → `tests/integration/agents/test_standard_agents.py`
+- `tests/test_issue_77_standard_agents_runtime.py` → `tests/integration/agents/test_standard_agents_runtime.py`
+- `tests/test_issue_77_standard_agents_upgrade.py` → `tests/integration/agents/test_standard_agents_upgrade.py`
+- `tests/test_issue_78_agent_export_portability.py` → `tests/integration/agents/test_agent_export_portability.py`
+- `tests/test_issue_78_agent_team_exporter.py` → `tests/integration/agents/test_agent_team_exporter.py`
+- `tests/test_issue_78_application.py` → `tests/integration/context/test_application.py`
+- `tests/test_issue_78_automation_handler.py` → `tests/integration/automation/test_automation_handler.py`
+- `tests/test_issue_78_capability_assignment_compensation.py` → `tests/integration/repository/test_capability_assignment_compensation.py`
+- `tests/test_issue_78_capability_assignment_exporter.py` → `tests/integration/portability/test_capability_assignment_exporter.py`
+- `tests/test_issue_78_completion_hardening.py` → `tests/regression/deployment/test_deployment_completion_hardening.py`
+- `tests/test_issue_78_control_plane_environment_wiring.py` → `tests/integration/control_plane/test_control_plane_environment_wiring.py`
+- `tests/test_issue_78_final_composition.py` → `tests/regression/models/test_final_composition.py`
+- `tests/test_issue_78_final_environment_exports.py` → `tests/regression/portability/test_final_environment_exports.py`
+- `tests/test_issue_78_owner_resource_projections.py` → `tests/integration/context/test_owner_resource_projections.py`
+- `tests/test_issue_78_project_handler.py` → `tests/integration/task_management/test_project_handler.py`
+- `tests/test_issue_78_reopened_agent_team_export_compensation.py` → `tests/regression/agents/test_reopened_agent_team_export_compensation.py`
+- `tests/test_issue_78_reopened_binding_environment.py` → `tests/regression/deployment/test_reopened_binding_environment.py`
+- `tests/test_issue_78_reopened_compatibility.py` → `tests/regression/platform/test_reopened_compatibility.py`
+- `tests/test_issue_78_reopened_durable_trust_guard.py` → `tests/regression/recovery/test_reopened_durable_trust_guard.py`
+- `tests/test_issue_78_reopened_environment_versions.py` → `tests/regression/deployment/test_reopened_environment_versions.py`
+- `tests/test_issue_78_reopened_integrated_target_scope.py` → `tests/regression/task_management/test_reopened_integrated_target_scope.py`
+- `tests/test_issue_78_reopened_materialized_secret_guard.py` → `tests/regression/security/test_reopened_materialized_secret_guard.py`
+- `tests/test_issue_78_reopened_p0_authorization.py` → `tests/regression/security/test_reopened_p0_authorization.py`
+- `tests/test_issue_78_reopened_permission_environment.py` → `tests/regression/deployment/test_reopened_permission_environment.py`
+- `tests/test_issue_78_reopened_preview_resolution.py` → `tests/regression/platform/test_reopened_preview_resolution.py`
+- `tests/test_issue_78_reopened_trust_activation.py` → `tests/regression/context/test_reopened_trust_activation.py`
+- `tests/test_issue_78_reopened_trust_control_plane.py` → `tests/regression/control_plane/test_reopened_trust_control_plane.py`
+- `tests/test_issue_78_reopened_trust_revision_guard.py` → `tests/regression/platform/test_reopened_trust_revision_guard.py`
+- `tests/test_issue_78_single_node_agent_team_template.py` → `tests/integration/deployment/test_single_node_agent_team_template.py`
+- `tests/test_issue_78_single_node_templates.py` → `tests/integration/deployment/test_single_node_templates.py`
+- `tests/test_issue_78_template_environment.py` → `tests/integration/deployment/test_template_environment.py`
+- `tests/test_issue_78_template_examples.py` → `tests/integration/platform/test_template_examples.py`
+- `tests/test_issue_78_templates.py` → `tests/integration/context/test_templates.py`
+- `tests/test_issue_78_version_constraints.py` → `tests/contract/platform/test_version_constraints.py`
+- `tests/test_issue_78_workflow_exporter.py` → `tests/integration/portability/test_workflow_exporter.py`
+- `tests/test_issue_78_workflow_template_handler.py` → `tests/integration/workflows/test_workflow_template_handler.py`
+- `tests/test_issue_78_workspace_structure_handler.py` → `tests/integration/workspaces/test_workspace_structure_handler.py`
+- `tests/test_issue_799_profile_fallback.py` → `tests/integration/files/test_profile_fallback.py`
+- `tests/test_issue_799_runtime_discovery.py` → `tests/integration/models/test_runtime_discovery.py`
+- `tests/test_issue_79_agent_portability.py` → `tests/integration/agents/test_agent_portability.py`
+- `tests/test_issue_79_automation_portability.py` → `tests/integration/automation/test_automation_portability.py`
+- `tests/test_issue_79_cli_portability.py` → `tests/integration/cli/test_cli_portability.py`
+- `tests/test_issue_79_control_plane_portability.py` → `tests/integration/control_plane/test_control_plane_portability.py`
+- `tests/test_issue_79_file_portability.py` → `tests/integration/files/test_file_portability.py`
+- `tests/test_issue_79_import_executor.py` → `tests/integration/portability/test_import_executor.py`
+- `tests/test_issue_79_knowledge_portability.py` → `tests/integration/knowledge/test_knowledge_portability.py`
+- `tests/test_issue_79_project_portability.py` → `tests/integration/task_management/test_project_portability.py`
+- `tests/test_issue_79_single_node_portability.py` → `tests/integration/deployment/test_single_node_portability.py`
+- `tests/test_issue_79_task_history_portability.py` → `tests/integration/task_management/test_task_history_portability.py`
+- `tests/test_issue_79_template_portability.py` → `tests/integration/portability/test_template_portability.py`
+- `tests/test_issue_81_canonical_router.py` → `tests/integration/artifacts/test_canonical_router.py`
+- `tests/test_issue_81_cli_entrypoint.py` → `tests/integration/cli/test_cli_entrypoint.py`
+- `tests/test_issue_81_marketplace_completion.py` → `tests/regression/plugins/test_marketplace_completion.py`
+- `tests/test_issue_81_plugin_update_handoff.py` → `tests/integration/plugins/test_plugin_update_handoff.py`
+- `tests/test_issue_81_production_composition.py` → `tests/integration/deployment/test_production_composition.py`
+- `tests/test_issue_81_registry_activation.py` → `tests/integration/plugins/test_registry_activation.py`
+- `tests/test_issue_81_registry_cli.py` → `tests/integration/plugins/test_registry_cli.py`
+- `tests/test_issue_81_registry_control_plane.py` → `tests/integration/plugins/test_registry_control_plane.py`
+- `tests/test_issue_81_registry_domain_validation.py` → `tests/integration/plugins/test_registry_domain_validation.py`
+- `tests/test_issue_81_registry_signature.py` → `tests/integration/plugins/test_registry_signature.py`
+- `tests/test_issue_81_registry_validation.py` → `tests/integration/plugins/test_registry_validation.py`
+- `tests/test_issue_81_restart_and_marketplace_hardening.py` → `tests/regression/recovery/test_restart_and_marketplace_hardening.py`
+- `tests/test_issue_82_repository_capability_bridge.py` → `tests/integration/repository/test_repository_capability_bridge.py`
+- `tests/test_issue_82_repository_collaboration.py` → `tests/integration/repository/test_repository_collaboration.py`
+- `tests/test_issue_82_repository_collaboration_cli.py` → `tests/integration/repository/test_repository_collaboration_cli.py`
+- `tests/test_issue_82_repository_execution_lifecycle.py` → `tests/integration/repository/test_repository_execution_lifecycle.py`
+- `tests/test_issue_82_repository_management.py` → `tests/integration/repository/test_repository_management.py`
+- `tests/test_issue_82_repository_runtime_event_ingress.py` → `tests/integration/repository/test_repository_runtime_event_ingress.py`
+- `tests/test_issue_82_repository_search.py` → `tests/integration/search/test_repository_search.py`
+- `tests/test_issue_82_search_lifecycle_hardening.py` → `tests/regression/search/test_search_lifecycle_hardening.py`
+- `tests/test_issue_82_single_node_capability_composition.py` → `tests/integration/deployment/test_single_node_capability_composition.py`
+- `tests/test_issue_82_single_node_discovery_composition.py` → `tests/integration/deployment/test_single_node_discovery_composition.py`
+- `tests/test_issue_82_single_node_run_workspace_bindings.py` → `tests/integration/workspaces/test_single_node_run_workspace_bindings.py`
+- `tests/test_issue_859_bifrost_dns_rebinding.py` → `tests/integration/platform/test_bifrost_dns_rebinding.py`
+- `tests/test_issue_859_bifrost_evaluation.py` → `tests/integration/evaluation/test_bifrost_evaluation.py`
+- `tests/test_issue_859_bifrost_evidence.py` → `tests/integration/evaluation/test_bifrost_evidence.py`
+- `tests/test_issue_859_bifrost_live_conformance.py` → `tests/contract/models/test_bifrost_live_conformance.py`
+- `tests/test_issue_859_bifrost_ssrf.py` → `tests/integration/configuration/test_bifrost_ssrf.py`
+- `tests/test_issue_860_sglang_evaluation.py` → `tests/integration/models/test_sglang_evaluation.py`
+- `tests/test_issue_862_storage_evidence.py` → `tests/integration/storage/test_storage_evidence.py`
+- `tests/test_issue_862_vps_runtime_identity.py` → `tests/integration/verification/test_vps_runtime_identity.py`
+- `tests/test_issue_868_skillspector_security_evidence.py` → `tests/integration/security/test_skillspector_security_evidence.py`
+- `tests/test_issue_86_authority_integrity.py` → `tests/integration/task_management/test_authority_integrity.py`
+- `tests/test_issue_86_deterministic_verifier_contract.py` → `tests/contract/verification/test_deterministic_verifier_contract.py`
+- `tests/test_issue_86_hardening.py` → `tests/regression/verification/test_verification_hardening.py`
+- `tests/test_issue_86_hardening_integration.py` → `tests/regression/verification/test_hardening_integration.py`
+- `tests/test_issue_86_kernel_gate.py` → `tests/integration/kernel/test_kernel_gate.py`
+- `tests/test_issue_86_output_invalidation_crash_safety.py` → `tests/integration/verification/test_output_invalidation_crash_safety.py`
+- `tests/test_issue_86_repair_runtime.py` → `tests/integration/verification/test_repair_runtime.py`
+- `tests/test_issue_86_replacement_conformance.py` → `tests/contract/application_distribution/test_replacement_conformance.py`
+- `tests/test_issue_86_risk_policy_persistence.py` → `tests/integration/recovery/test_risk_policy_persistence.py`
+- `tests/test_issue_86_verification.py` → `tests/integration/verification/test_verification.py`
+- `tests/test_issue_872_aggregation_policy.py` → `tests/integration/platform/test_aggregation_policy.py`
+- `tests/test_issue_872_canonical_verification.py` → `tests/integration/verification/test_canonical_verification.py`
+- `tests/test_issue_872_evaluation.py` → `tests/integration/evaluation/test_evaluation.py`
+- `tests/test_issue_872_repair.py` → `tests/integration/verification/test_repair.py`
+- `tests/test_issue_872_repository_verification.py` → `tests/integration/verification/test_repository_verification.py`
+- `tests/test_issue_872_sqlite_store.py` → `tests/integration/recovery/test_sqlite_store.py`
+- `tests/test_issue_87_admin_ownership_visibility.py` → `tests/integration/organizations/test_admin_ownership_visibility.py`
+- `tests/test_issue_87_audit_history.py` → `tests/integration/organizations/test_audit_history.py`
+- `tests/test_issue_87_authorization_bridge.py` → `tests/integration/security/test_authorization_bridge.py`
+- `tests/test_issue_87_data_ownership_mirrors.py` → `tests/integration/organizations/test_data_ownership_mirrors.py`
+- `tests/test_issue_87_extended_ownership_mirrors.py` → `tests/integration/organizations/test_extended_ownership_mirrors.py`
+- `tests/test_issue_87_file_ownership_adapter.py` → `tests/integration/files/test_file_ownership_adapter.py`
+- `tests/test_issue_87_historical_provenance.py` → `tests/integration/task_management/test_historical_provenance.py`
+- `tests/test_issue_87_management_completion.py` → `tests/regression/organizations/test_management_completion.py`
+- `tests/test_issue_87_organization_domain.py` → `tests/integration/organizations/test_organization_domain.py`
+- `tests/test_issue_87_resource_ownership_integration.py` → `tests/integration/context/test_resource_ownership_integration.py`
+- `tests/test_issue_87_search_and_invitation_security.py` → `tests/integration/search/test_search_and_invitation_security.py`
+- `tests/test_issue_87_sqlite_repository.py` → `tests/integration/repository/test_sqlite_repository.py`
+- `tests/test_issue_89_control_plane_ha.py` → `tests/integration/control_plane/test_control_plane_ha.py`
+- `tests/test_issue_89_failover_reconciliation.py` → `tests/integration/distributed/test_failover_reconciliation.py`
+- `tests/test_issue_89_final_failover_acceptance.py` → `tests/regression/distributed/test_final_failover_acceptance.py`
+- `tests/test_issue_89_ha_integrations.py` → `tests/integration/distributed/test_ha_integrations.py`
+- `tests/test_issue_89_ha_observability.py` → `tests/integration/distributed/test_ha_observability.py`
+- `tests/test_issue_89_promotion_worker_cancel.py` → `tests/integration/distributed/test_promotion_worker_cancel.py`
+- `tests/test_issue_89_worker_epoch_transport.py` → `tests/integration/distributed/test_worker_epoch_transport.py`
+- `tests/test_issue_8_hermes_adapter.py` → `tests/integration/models/test_hermes_adapter.py`
+- `tests/test_kernel.py` → `tests/unit/kernel/test_kernel.py`
+- `tests/test_kernel_consistency.py` → `tests/regression/kernel/test_kernel_consistency.py`
+- `tests/test_message_transport.py` → `tests/integration/distributed/test_message_transport.py`
+- `tests/test_package.py` → `tests/unit/packaging/test_package.py`
+- `tests/test_plugin_discovery_and_state.py` → `tests/integration/plugins/test_plugin_discovery_and_state.py`
+- `tests/test_plugins.py` → `tests/unit/plugins/test_plugins.py`
+- `tests/test_portability.py` → `tests/integration/portability/test_portability.py`
+- `tests/test_portability_connectors.py` → `tests/integration/portability/test_portability_connectors.py`
+- `tests/test_run_workspace_binding_restart.py` → `tests/integration/workspaces/test_run_workspace_binding_restart.py`
+- `tests/test_run_workspace_bindings.py` → `tests/integration/workspaces/test_run_workspace_bindings.py`
+- `tests/test_skillspector_benchmark_semantics.py` → `tests/performance/skills/test_skillspector_benchmark_semantics.py`
+- `tests/test_skillspector_container_command.py` → `tests/integration/skills/test_skillspector_container_command.py`
+- `tests/test_skillspector_evaluation.py` → `tests/integration/skills/test_skillspector_evaluation.py`
+- `tests/test_workspace_persistence.py` → `tests/integration/workspaces/test_workspace_persistence.py`
+- `tests/test_workspace_remote_contract.py` → `tests/contract/workspaces/test_workspace_remote_contract.py`
+- `tests/test_workspace_retention.py` → `tests/integration/workspaces/test_workspace_retention.py`
+- `tests/test_workspace_sources.py` → `tests/integration/workspaces/test_workspace_sources.py`
+- `tests/test_workspace_task_management_composition.py` → `tests/integration/workspaces/test_workspace_task_management_composition.py`
+- `tests/test_workspaces.py` → `tests/unit/workspaces/test_workspaces.py`
+
+## Final residual resolution
+
+- Explicit whole-file moves/renames: 40
+- Mixed historical modules split: 3
+- Final root-level ordinary test modules: 0
+- Final issue-numbered test modules: 0
+- Intentional numeric filenames: Hermes v0.21.1 upstream-version tests only
+
+### Explicit residual move map
+
+- `tests/contract/memory/test_memory_portability_schema_compatibility.py` → `tests/contract/memory/test_memory_portability_schema_compatibility.py`
+- `tests/e2e/context/test_conversation_single_node_restart.py` → `tests/e2e/context/test_conversation_single_node_restart.py`
+- `tests/integration/agents/test_agent_control_plane.py` → `tests/integration/agents/test_agent_control_plane.py`
+- `tests/integration/agents/test_agent_repository_persistence.py` → `tests/integration/agents/test_agent_repository_persistence.py`
+- `tests/integration/agents/test_conversation_canonical_semantics.py` → `tests/integration/agents/test_conversation_canonical_semantics.py`
+- `tests/integration/automation/test_automation_single_node_persistence.py` → `tests/integration/automation/test_automation_single_node_persistence.py`
+- `tests/integration/capability_assignments/test_capability_assignment_single_node.py` → `tests/integration/capability_assignments/test_capability_assignment_single_node.py`
+- `tests/integration/context/test_conversation_control_plane.py` → `tests/integration/context/test_conversation_control_plane.py`
+- `tests/integration/deployment/test_single_node_deployment_runtime.py` → `tests/integration/deployment/test_single_node_deployment_runtime.py`
+- `tests/integration/distributed/test_distributed_control_plane.py` → `tests/integration/distributed/test_distributed_control_plane.py`
+- `tests/integration/evaluation/test_governed_learning.py` → `tests/integration/evaluation/test_governed_learning.py`
+- `tests/integration/memory/test_memory_portability_scope_security.py` → `tests/integration/memory/test_memory_portability_scope_security.py`
+- `tests/integration/notifications/test_notification_sqlite_persistence.py` → `tests/integration/notifications/test_notification_sqlite_persistence.py`
+- `tests/integration/notifications/test_task_attention_notifications.py` → `tests/integration/notifications/test_task_attention_notifications.py`
+- `tests/integration/onboarding/test_component_setup.py` → `tests/integration/onboarding/test_component_setup.py`
+- `tests/integration/onboarding/test_component_setup_service.py` → `tests/integration/onboarding/test_component_setup_service.py`
+- `tests/integration/onboarding/test_component_setup_single_node.py` → `tests/integration/onboarding/test_component_setup_single_node.py`
+- `tests/integration/organizations/test_organization_control_plane.py` → `tests/integration/organizations/test_organization_control_plane.py`
+- `tests/integration/planning/test_planning_single_node.py` → `tests/integration/planning/test_planning_single_node.py`
+- `tests/integration/plugins/test_plugin_control_plane.py` → `tests/integration/plugins/test_plugin_control_plane.py`
+- `tests/integration/recovery/test_backup_restore_durable_state.py` → `tests/integration/recovery/test_backup_restore_durable_state.py`
+- `tests/integration/recovery/test_coordination_backup_restore.py` → `tests/integration/recovery/test_coordination_backup_restore.py`
+- `tests/integration/search/test_decision_record_single_node_integration.py` → `tests/integration/search/test_decision_record_single_node_integration.py`
+- `tests/integration/security/test_egress_policy.py` → `tests/integration/security/test_egress_policy.py`
+- `tests/integration/task_management/test_task_management_control_plane.py` → `tests/integration/task_management/test_task_management_control_plane.py`
+- `tests/integration/templates/test_template_control_plane.py` → `tests/integration/templates/test_template_control_plane.py`
+- `tests/integration/templates/test_template_repository_persistence.py` → `tests/integration/templates/test_template_repository_persistence.py`
+- `tests/integration/verification/test_canonical_verification_control_plane.py` → `tests/integration/verification/test_canonical_verification_control_plane.py`
+- `tests/integration/verification/test_canonical_verification_observability.py` → `tests/integration/verification/test_canonical_verification_observability.py`
+- `tests/integration/verification/test_verification_control_plane.py` → `tests/integration/verification/test_verification_control_plane.py`
+- `tests/integration/verification/test_verification_observability.py` → `tests/integration/verification/test_verification_observability.py`
+- `tests/integration/verification/test_verification_sqlite_persistence.py` → `tests/integration/verification/test_verification_sqlite_persistence.py`
+- `tests/integration/workflows/test_workflow_compensation.py` → `tests/integration/workflows/test_workflow_compensation.py`
+- `tests/performance/evaluation/test_operating_envelope_catalog.py` → `tests/performance/evaluation/test_operating_envelope_catalog.py`
+- `tests/performance/evaluation/test_reference_host_absolute_budget.py` → `tests/performance/evaluation/test_reference_host_absolute_budget.py`
+- `tests/performance/evaluation/test_reference_host_campaign.py` → `tests/performance/evaluation/test_reference_host_campaign.py`
+- `tests/performance/evaluation/test_reference_host_regression.py` → `tests/performance/evaluation/test_reference_host_regression.py`
+- `tests/regression/agents/test_agent_completion_hardening.py` → `tests/regression/agents/test_agent_completion_hardening.py`
+- `tests/regression/templates/test_template_materialization_regression.py` → `tests/regression/templates/test_template_materialization_regression.py`
+- `tests/regression/upstreams/test_hermes_adapter_hardening.py` → `tests/regression/upstreams/test_hermes_adapter_hardening.py`
+
+### Mixed-file split map
+
+- `tests/test_issue_251_lifecycle_commands.py` → `tests/integration/knowledge/test_knowledge_lifecycle_commands.py`, `tests/integration/memory/test_memory_lifecycle_commands.py`
+- `tests/test_issue_251_reference_lifecycle.py` → `tests/integration/knowledge/test_knowledge_reference_lifecycle.py`, `tests/integration/memory/test_memory_reference_lifecycle.py`
+- `tests/test_issue_72_completion_audit.py` → `tests/integration/context/test_resource_reference_context.py`, `tests/integration/models/test_agent_conversation_routing.py`, `tests/integration/task_management/test_conversation_task_handoff.py`

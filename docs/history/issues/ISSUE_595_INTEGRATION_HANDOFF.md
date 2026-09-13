@@ -17,7 +17,7 @@ The canonical Learning core arrived through the earlier integration of #595 grou
 
 ### Acceptance coverage
 
-`tests/test_issue_595_governed_learning.py` contains the issue-required scenarios:
+`tests/integration/evaluation/test_governed_learning.py` contains the issue-required scenarios:
 
 - user correction -> candidate;
 - Verification finding -> candidate;

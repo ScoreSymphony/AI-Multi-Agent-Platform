@@ -374,7 +374,7 @@ security_surface = "network egress, redirects, transfers, forms and content trus
 upstream_health = "platform-owned Python stdlib implementation"
 compatibility = "Reference browser scenario in #46."
 usage = "Single-node reference browser capability."
-evidence = ["tests/test_browser_capability.py", "docs/PLATFORM_CONFORMANCE.md"]
+evidence = ["tests/unit/browser/test_browser_capability.py", "docs/PLATFORM_CONFORMANCE.md"]
 docs = ["docs/product/BROWSER_CAPABILITY.md", "docs/PLATFORM_CONFORMANCE.md"]
 migration = "n/a"
 
@@ -836,7 +836,7 @@ security_surface = "isolated container execution, untrusted Skill content and ra
 upstream_health = "pinned/reviewed upstream with retained regression evidence"
 compatibility = "Supported only for the evaluated static_no_llm_network_none provider profile; scanner verdicts are advisory."
 usage = "Optional production pre-install SecurityEvidence enrichment."
-evidence = ["tests/test_issue_868_skillspector_security_evidence.py", "upstream/skillspector.yaml"]
+evidence = ["tests/integration/security/test_skillspector_security_evidence.py", "upstream/skillspector.yaml"]
 docs = ["docs/UPSTREAMS.md"]
 migration = "Disable/remove provider without changing canonical Skill identity, trust history or Approval state."
 
@@ -858,6 +858,6 @@ security_surface = "Worker/Node authorization, dispatch/reconciliation, remote w
 upstream_health = "platform-owned"
 compatibility = "Supported advanced deployment profile when distributed #46/conformance evidence passes."
 usage = "Advanced self-hosted distributed control-plane/Worker deployment."
-evidence = ["docs/PLATFORM_CONFORMANCE.md", "tests/test_issue_384_distributed_worker_integration.py"]
+evidence = ["docs/PLATFORM_CONFORMANCE.md", "tests/integration/distributed/test_distributed_worker_integration.py"]
 docs = ["docs/runtime/DISTRIBUTED_RUNTIME.md", "docs/operations/ADVANCED_DEPLOYMENT.md"]
 migration = "Return to single-node lifecycle composition or replace the LifecycleBackend without changing canonical Run identity."
