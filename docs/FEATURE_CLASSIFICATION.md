@@ -15,7 +15,7 @@ The machine-readable audit lives in [`FEATURE_CLASSIFICATION.toml`](FEATURE_CLAS
 
 A canonical platform foundation or lifecycle/control-plane capability that belongs to the baseline architecture. Core identifies architectural responsibility, not operational maturity.
 
-Typical Core responsibilities include canonical lifecycle/domain contracts, the Control Plane, durable coordination, Agent/Team handoffs, provider contracts, Agents, Models, Capabilities/Tools, execution, Projects/Workspaces, security, verification, evaluation, the provider-neutral repository-intelligence baseline and cross-cutting observability/accounting foundations.
+Typical Core responsibilities include canonical lifecycle/domain contracts, the Control Plane, durable coordination, Agent/Team handoffs, provider contracts, Agents, Models, Capabilities/Tools, execution, internal messaging/transport, Projects/Workspaces, security, verification, evaluation, the provider-neutral repository-intelligence baseline and cross-cutting observability/accounting foundations.
 
 A concrete optional adapter can implement a Core boundary without becoming Core architecture itself.
 
@@ -38,6 +38,8 @@ Optional / Advanced is a role classification only. It does not mean unsupported,
 ## Stability taxonomy
 
 Stability applies only to **named public surfaces**: versioned HTTP APIs, canonical schemas/contracts, documented CLI behavior, documented extension interfaces, or specifically documented public Python interfaces. Merely being importable from `ai_multi_agent_platform` does not make a module a supported public API.
+
+Surface-specific versioning rules can be stricter than the generic maturity rules below. A maturity label never authorizes bypassing an existing major-version, schema-version, envelope-version or migration contract.
 
 ### Stable (`stable`)
 
@@ -62,8 +64,8 @@ Beta means the surface is supported, documented and intended for real use, but b
 Rules:
 
 - additive changes are normal;
-- incompatible changes may occur in a non-patch release when documented with migration guidance;
-- deprecation before a Beta breaking change is preferred when practical but is not mandatory;
+- incompatible changes may occur in a non-patch release when documented with migration guidance, subject to any stricter versioned replacement mechanism owned by that surface;
+- deprecation before a Beta breaking change is preferred when practical but is not mandatory unless the surface's own versioning contract requires it;
 - compatibility/conformance tests should protect behavior that the documentation currently promises;
 - patch releases remain non-breaking except for unavoidable security/correctness remediation;
 - Beta must be visible in integrator-facing documentation and, when a user directly encounters the evolving feature in product UI, may receive a contextual Beta marker.
@@ -74,7 +76,7 @@ Experimental means the public surface is intentionally unstable and is not cover
 
 Rules:
 
-- incompatible changes may occur in a non-patch release without a deprecation window;
+- incompatible changes may occur in a non-patch release without a maturity-level deprecation window, but any stricter surface-specific major/version migration mechanism still applies;
 - the surface must be discoverably marked Experimental wherever users or integrators would otherwise reasonably infer compatibility;
 - release notes should still mention user-visible incompatible changes;
 - Experimental must not be silently promoted to Stable or Beta merely because implementation coverage improves;
@@ -97,7 +99,7 @@ The repository currently declares package version `0.0.1`, and no formal GitHub 
 - `0.x` must **not** be interpreted as “every public surface is Experimental”.
 - A Stable surface can have stricter compatibility rules than the repository's package-level `0.x` version would imply in generic Semantic Versioning.
 - Before the first published release, Stable classifications are contributor-facing compatibility commitments for changes landing on `main`; after publication they also become release-to-release commitments for releases containing the surface.
-- A `0.x` minor release may contain intentional breaking changes to Beta/Experimental surfaces under the rules above, but must not silently break a Stable surface. Stable surfaces use their own versioned replacement/deprecation mechanism.
+- A `0.x` minor release may contain intentional breaking changes to Beta/Experimental surfaces under the rules above, but must not silently break a Stable surface or bypass a stricter surface-specific versioning mechanism. Stable surfaces use their own versioned replacement/deprecation mechanism.
 - Repository patch releases remain backward-compatible fixes across all documented public surfaces except unavoidable security/correctness emergencies.
 
 The operational `1.0.0` release gate remains governed by [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md) and platform conformance. A surface does not become Stable merely because the repository reaches `1.0.0`, and a Stable surface does not by itself make the whole platform `1.0.0`-ready.
@@ -119,7 +121,7 @@ Compatibility must never be inferred from a role label alone. #46-style evidence
 
 The table below is a human-readable view of the canonical machine-readable registry. It intentionally classifies major user/integrator surfaces rather than every package or source file. `Canonical owner(s)` records the authoritative `owner` values from [`PACKAGE_BOUNDARIES.toml`](PACKAGE_BOUNDARIES.toml), not necessarily the names of the packages that implement or expose the surface.
 
-The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation conventions. It does **not** automatically make every later-domain resource registered below `/api/v1` Stable; the resource-family rows below retain their own declared stability. Likewise, the generic CLI row covers shared CLI framework conventions rather than overriding a more specific feature classification such as Experimental Learning commands.
+The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation conventions. It does **not** automatically make every later-domain resource registered below `/api/v1` Stable; the resource-family rows below retain their own declared stability. ADR 0003 nevertheless remains authoritative for the northbound wire contract: any breaking canonical Control Plane contract change uses a new API major even when the affected resource is Beta or Experimental. Likewise, the generic CLI row covers shared CLI framework conventions rather than overriding a more specific feature classification such as Experimental Learning commands.
 
 | ID | Capability / public surface | Canonical owner(s) | Role | Stability |
 | --- | --- | --- | --- | --- |
@@ -132,6 +134,7 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `models-routing` | model/provider registry, routing and assignments | `models` | Core | Beta |
 | `capabilities-tools` | capability/tool declaration, discovery and invocation | `capabilities` | Core | Beta |
 | `execution-runtime` | executor/reference execution public contracts | `execution` | Core | Beta |
+| `message-transport` | `MessageTransport`, TransportEnvelope `1.0` and delivery semantics | `messaging` | Core | Beta |
 | `workspaces-data` | Projects, Workspaces plus canonical file/data boundaries | `domain`, `workspaces`, `data` | Core | Beta |
 | `security-governance` | authentication, authorization, approvals and governed actions | `security`, `governance` | Core | Beta |
 | `verification-review` | verification/review records and completion gates | `verification` | Core | Beta |
@@ -154,6 +157,7 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `research-evidence` | Research Item/Source/Claim/Evidence resources and research workflow | `research` | Optional / Advanced | Beta |
 | `decision-compensation` | advanced decision and compensation/rollback workflows | `decisions`, `compensation` | Optional / Advanced | Beta |
 | `application-distribution` | application build/distribution state and release integration | `application_distribution` | Optional / Advanced | Beta |
+| `backup-restore` | `platform-backup`, manifest v1 and restore compatibility boundary | `repository` | Optional / Advanced | Beta |
 | `high-availability` | Control Plane leadership/fencing/failover profile | `distributed` | Optional / Advanced | Experimental |
 | `learning` | governed learning/improvement resources and workflows | `learning` | Optional / Advanced | Experimental |
 | `repository-intelligence-enhanced-providers` | named enhanced repository-intelligence provider integrations | `repositories` | Optional / Advanced | Experimental |
@@ -162,7 +166,7 @@ The registry carries the compatibility note, canonical documentation links and u
 
 Repository Intelligence is deliberately split across role boundaries per ADR 0011: the provider-neutral layer and deterministic local baseline are Core, while named enhanced providers remain optional integrations. Classifying a provider as Experimental does not downgrade the canonical baseline.
 
-The same independence applies to other advanced capabilities: Research, Decision/Compensation and Application Distribution are Optional / Advanced because the reference baseline does not require them, but their current canonical public contracts are supported as Beta rather than being labelled Experimental merely because they are advanced. Governed Learning, HA and named enhanced repository-intelligence providers retain explicit Experimental status where current compatibility commitments are intentionally weaker.
+The same independence applies to other advanced capabilities: Research, Decision/Compensation, Application Distribution and Backup/Restore are Optional / Advanced because the reference runtime does not require those advanced workflows for ordinary execution, but their current public contracts are supported as Beta rather than being labelled Experimental merely because they are advanced. Governed Learning, HA and named enhanced repository-intelligence providers retain explicit Experimental status where current compatibility commitments are intentionally weaker.
 
 ## API, schema and DTO policy
 
@@ -170,13 +174,15 @@ The same independence applies to other advanced capabilities: Research, Decision
 
 `/api/v1` is the first Stable major for the **shared Control Plane protocol/foundation conventions**. The Stable promise covers those conventions and any separately Stable-classified resource contract; namespace membership alone does not upgrade a resource's maturity.
 
-A Beta or Experimental domain resource may compose under `/api/v1` while retaining its own compatibility policy. Such a resource may receive the bounded incompatible non-patch changes allowed by its stability level without forcing a rename of the entire Control Plane namespace, provided it does not break the shared Stable `v1` foundation or another separately Stable surface.
+A Beta or Experimental domain resource may compose under `/api/v1` while retaining its own maturity label. However, accepted ADR 0003 is the stricter versioning authority for the northbound wire contract: removing/renaming canonical HTTP fields or commands, changing their meaning/type incompatibly, or otherwise breaking a canonical Control Plane contract requires a new Control Plane major such as `/api/v2` regardless of feature maturity.
 
-Conversely, an incompatible change to the shared Stable `v1` foundation or to a separately Stable `v1` resource must use the applicable versioned replacement/deprecation mechanism, normally a new Control Plane major such as `/api/v2` when the incompatibility is part of the HTTP foundation.
+The maturity label therefore controls the compatibility/support expectations of the feature surface and the guidance around its versioned transition; it does not authorize in-place reinterpretation of `/api/v1`. Control Plane deprecations and version replacements retain ADR 0003's documented migration overlap. This stricter rule coexists with Beta/Experimental classification rather than promoting those features to Stable.
 
 ### Canonical schemas and provider contracts
 
 Canonical `schema_version` and provider `contract_version` are independent version spaces. Their own major-version rules remain authoritative. The feature registry records the stability of the named family; it does not replace the concrete version field carried by payloads/providers.
+
+The same rule applies to other explicitly versioned public formats such as `TransportEnvelope` and backup manifests: a Beta feature may still carry a wire/storage format whose incompatible changes require an explicit format-major transition.
 
 ### Generated frontend DTOs
 
@@ -218,7 +224,7 @@ Every new **public platform capability** or newly public surface must declare, i
 
 Prefer extending an existing registry entry when the new surface is part of an existing capability. Add a new entry only when the capability has a distinct public compatibility boundary.
 
-A pull request that changes a Stable public contract must explain why the change is backward compatible or identify the required versioned replacement/deprecation path. A Beta breaking change must include migration guidance. An Experimental change must preserve discoverable Experimental labeling.
+A pull request that changes a Stable public contract must explain why the change is backward compatible or identify the required versioned replacement/deprecation path. A Beta breaking change must include migration guidance. An Experimental change must preserve discoverable Experimental labeling. In every case, a stricter surface-specific major/version mechanism remains mandatory.
 
 This guard complements top-level package ownership rules; it does not authorize new packages or change canonical ownership.
 
