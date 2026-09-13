@@ -19,6 +19,12 @@ from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.workspaces import RunWorkspaceBindingRepository, WorkspaceProvider
 
 from .agent_evidence import AgentRunEvidenceCaseExecutor
+from .async_persistence import (
+    AsyncEvalManifestRepositoryAdapter,
+    AsyncEvaluationHistoryRepositoryAdapter,
+    AsyncEvaluationSuiteAssetRepositoryAdapter,
+    EvaluationPersistenceOffload,
+)
 from .behavior_evidence import (
     ApprovalEvidenceCaseExecutor,
     ApprovalRecordReader,
@@ -198,7 +204,21 @@ def build_single_node_evaluation(
 
     repository = SqliteEvaluationRepository(database_path)
     repository.reconcile_interrupted_runs()
+    manifest_repository = SqliteEvalManifestRepository(database_path)
     suite_assets = SqliteEvaluationSuiteAssetRepository(database_path)
+    persistence_offload = EvaluationPersistenceOffload()
+    async_repository = AsyncEvaluationHistoryRepositoryAdapter(
+        repository,
+        offload=persistence_offload,
+    )
+    async_manifest_repository = AsyncEvalManifestRepositoryAdapter(
+        manifest_repository,
+        offload=persistence_offload,
+    )
+    async_suite_assets = AsyncEvaluationSuiteAssetRepositoryAdapter(
+        suite_assets,
+        offload=persistence_offload,
+    )
     fixture_resolver = DirectoryEvaluationFixtureResolver(
         fixture_root=Path(asset_dir) / "fixtures",
         files=files,
@@ -253,10 +273,12 @@ def build_single_node_evaluation(
 
     runner = EvaluationRunner(
         repository=repository,
+        async_repository=async_repository,
         executor=case_executor,
         evaluators=tuple(evaluators),
         isolation=isolation,
-        manifest_repository=SqliteEvalManifestRepository(database_path),
+        manifest_repository=manifest_repository,
+        async_manifest_repository=async_manifest_repository,
         configuration_references=(
             VersionReference(
                 kind="orchestrator",
@@ -278,6 +300,7 @@ def build_single_node_evaluation(
     )
     service = TargetAwareEvaluationService(
         repository=repository,
+        async_repository=async_repository,
         runner=runner,
         suites=suites,
         policies=policies,
@@ -287,7 +310,10 @@ def build_single_node_evaluation(
             models=models,
         ),
     )
-    service.attach_suite_assets(suite_assets)
+    service.attach_suite_assets(
+        suite_assets,
+        async_repository=async_suite_assets,
+    )
     return SingleNodeEvaluationComposition(
         repository=repository,
         suite_assets=suite_assets,

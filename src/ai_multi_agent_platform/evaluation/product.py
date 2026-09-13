@@ -37,6 +37,7 @@ from ai_multi_agent_platform.workspaces import (
 
 from .aggregation import AggregationPolicy, ResultAggregator
 from .aggregation_config import load_aggregation_policy
+from .async_persistence import AsyncEvaluationHistoryRepository
 from .config import load_evaluation_suite, load_regression_policy
 from .context import EvaluationExecutionContext
 from .contracts import EvaluationCaseExecutor, EvaluationHistoryRepository
@@ -389,6 +390,7 @@ class TargetAwareEvaluationService(EvaluationService):
         aggregation_policies: tuple[AggregationPolicy, ...] = (),
         regression_engine: RegressionEngine | None = None,
         result_aggregator: ResultAggregator | None = None,
+        async_repository: AsyncEvaluationHistoryRepository | None = None,
     ) -> None:
         super().__init__(
             repository=repository,
@@ -398,6 +400,7 @@ class TargetAwareEvaluationService(EvaluationService):
             aggregation_policies=aggregation_policies,
             regression_engine=regression_engine,
             result_aggregator=result_aggregator,
+            async_repository=async_repository,
         )
         self._target_enricher = target_enricher
 
@@ -417,10 +420,10 @@ class TargetAwareEvaluationService(EvaluationService):
         candidate_reference_kinds: frozenset[str] = frozenset(),
         performance_sensitive_comparison: bool = False,
     ) -> EvaluationRunSummary:
-        suite = self.get_suite(suite_ref)
+        suite = await self.get_suite_async(suite_ref)
         enriched = self._target_enricher.enrich(suite, snapshot)
-        return await super().run_suite(
-            suite_ref=suite_ref,
+        return await self._run_suite_for_suite(
+            suite=suite,
             snapshot=enriched,
             repetitions=repetitions,
             seed=seed,
@@ -698,18 +701,3 @@ def _string_tuple(value: object, context: str) -> tuple[str, ...]:
     if len(parsed) != len(set(parsed)):
         raise ValueError(f"{context} must contain unique values")
     return tuple(parsed)
-
-
-__all__ = [
-    "AgentEvaluationTarget",
-    "AgentTargetValidatingCaseExecutor",
-    "DirectoryEvaluationFixtureResolver",
-    "EVALUATION_TARGET_KEY",
-    "EvaluationAssetBundle",
-    "EvaluationModelJudgeConfiguration",
-    "EvaluationTargetSnapshotEnricher",
-    "TargetAwareEvaluationService",
-    "evaluation_task_metadata",
-    "load_evaluation_assets",
-    "parse_agent_evaluation_target",
-]
