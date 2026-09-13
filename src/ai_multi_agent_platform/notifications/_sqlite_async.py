@@ -6,6 +6,7 @@ import asyncio
 import sqlite3
 import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import TypeVar
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -23,15 +24,19 @@ _BUSY_MARKERS = (
 class AsyncSqliteOffload:
     """Bound and serialize blocking Notification SQLite work off the event loop.
 
-    Thread-based gates keep one repository instance reusable across separate asyncio event-loop
-    lifetimes while preserving a bounded number of active provider operations. Writers acquire
-    the mutation gate before shared capacity so queued writes do not consume read capacity.
+    Each adapter owns a dedicated executor bounded by ``max_concurrency``. Notification backlog
+    therefore remains queued outside asyncio's process-wide default executor instead of consuming
+    unrelated ``asyncio.to_thread`` capacity. The worker-side mutation gate is thread-based, so an
+    adapter remains reusable across separate asyncio event-loop lifetimes.
     """
 
     def __init__(self, *, max_concurrency: int = 4) -> None:
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be >= 1")
-        self._slots = threading.BoundedSemaphore(max_concurrency)
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_concurrency,
+            thread_name_prefix="notification-sqlite",
+        )
         self._write_lock = threading.Lock()
 
     async def run(self, operation: Callable[[], _T], *, write: bool = False) -> _T:
@@ -41,19 +46,18 @@ class AsyncSqliteOffload:
         Callers create, use and close SQLite connections entirely inside ``operation``.
         """
 
-        worker = asyncio.create_task(asyncio.to_thread(self._run_sync, operation, write))
+        loop = asyncio.get_running_loop()
+        worker = loop.run_in_executor(self._executor, self._run_sync, operation, write)
         return await _run_to_transaction_boundary(worker)
 
     def _run_sync(self, operation: Callable[[], _T], write: bool) -> _T:
         if write:
             with self._write_lock:
-                with self._slots:
-                    return operation()
-        with self._slots:
-            return operation()
+                return operation()
+        return operation()
 
 
-async def _run_to_transaction_boundary[T](worker: asyncio.Task[T]) -> T:
+async def _run_to_transaction_boundary[T](worker: asyncio.Future[T]) -> T:
     try:
         return await asyncio.shield(worker)
     except asyncio.CancelledError:
