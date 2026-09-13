@@ -47,12 +47,12 @@ def layout_violations(changes: tuple[ChangedPath, ...]) -> tuple[str, ...]:
 
         if len(path.parts) == 2 and path.name.startswith("test_"):
             violations.append(
-                f"{change.path}: new ordinary tests must live in a canonical suite directory"
+                f"{change.path}: new ordinary tests must live in a canonical suite directory",
             )
 
         if ISSUE_TEST_NAME.fullmatch(path.name):
             violations.append(
-                f"{change.path}: new test filenames must describe behavior, not an issue number"
+                f"{change.path}: new test filenames must describe behavior, not an issue number",
             )
     return tuple(violations)
 
@@ -79,7 +79,7 @@ def git_name_status(base: str, head: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Reject newly introduced root-level or issue-numbered test modules."
+        description="Reject newly introduced root-level or issue-numbered test modules.",
     )
     parser.add_argument("--base", required=True, help="Base commit SHA/ref")
     parser.add_argument("--head", required=True, help="Head commit SHA/ref")
