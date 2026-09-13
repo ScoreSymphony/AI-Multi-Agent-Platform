@@ -482,7 +482,7 @@ Use [`SECURITY_EXTENSION_CHECKLIST.md`](SECURITY_EXTENSION_CHECKLIST.md) for eve
 
 ## 15. Initial regression ownership
 
-`tests/test_security_baseline.py` establishes regression fixtures for currently implementable invariants:
+`tests/unit/security/test_security_primitives.py` and `tests/integration/security/test_executor_confinement.py` establish regression fixtures for currently implementable invariants:
 
 - traversal and absolute-path rejection;
 - symlink-resolved workspace/artifact escape;

@@ -35,8 +35,8 @@ from .reference import LocalMemoryProvider as _BaseLocalMemoryProvider
 class LocalMemoryProvider(_BaseLocalMemoryProvider):
     """Local Memory provider with lifecycle metadata and canonical Memory Types."""
 
-    def __init__(self, db_path: str | Path) -> None:
-        super().__init__(db_path)
+    def __init__(self, db_path: str | Path, *, max_concurrency: int = 4) -> None:
+        super().__init__(db_path, max_concurrency=max_concurrency)
         added_operations = ("expire_entry", "list_entries_for_discovery")
         capabilities = tuple(
             replace(
@@ -181,16 +181,19 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
         statement = (
             "SELECT * FROM data_memory WHERE " + " AND ".join(clauses) + " ORDER BY created_at DESC"
         )
-        try:
+
+        def operation() -> tuple[MemoryEntry, ...]:
             with self._connect() as connection:
                 rows = connection.execute(statement, tuple(parameters)).fetchall()
-        except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to query memory entries") from exc
+            return tuple(self._memory_from_row(row) for row in rows)
 
+        stored = await self._run_memory_sqlite(
+            operation,
+            message="failed to query memory entries",
+        )
         now = datetime.now(UTC)
         entries: list[MemoryEntry] = []
-        for row in rows:
-            entry = self._memory_from_row(row)
+        for entry in stored:
             if query.owner_ref is not None and entry.owner_ref != query.owner_ref:
                 continue
             if (
@@ -228,7 +231,8 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
 
         validate_id(memory_id, "memory")
         self._check_scope(query.scope, query.scope_id, context)
-        try:
+
+        def operation() -> MemoryEntry:
             with self._connect() as connection:
                 row = connection.execute(
                     "SELECT * FROM data_memory WHERE memory_id = ? AND deleted = 0",
@@ -256,45 +260,42 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
                     "UPDATE data_memory SET deleted = 1 WHERE memory_id = ?",
                     (memory_id,),
                 )
-        except ContractError:
-            raise
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to expire memory entry",
-            ) from exc
-        return entry
+            return entry
+
+        return await self._run_memory_sqlite(
+            operation,
+            message="failed to expire memory entry",
+            write=True,
+        )
 
     async def list_entries_for_discovery(self) -> tuple[MemoryEntry, ...]:
         """Return current canonical entries without exposing SQLite/provider identity."""
 
-        try:
+        def operation() -> tuple[MemoryEntry, ...]:
             with self._connect() as connection:
                 rows = connection.execute(
                     "SELECT * FROM data_memory WHERE deleted = 0 ORDER BY created_at, memory_id"
                 ).fetchall()
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to enumerate memory discovery snapshot",
-            ) from exc
+            return tuple(self._memory_from_row(row) for row in rows)
+
+        stored = await self._run_memory_sqlite(
+            operation,
+            message="failed to enumerate memory discovery snapshot",
+        )
         now = datetime.now(UTC)
-        entries: list[MemoryEntry] = []
-        for row in rows:
-            entry = self._memory_from_row(row)
-            if entry.expires_at is not None and entry.expires_at <= now:
-                continue
-            if entry.superseded_by_memory_id is not None:
-                continue
-            entries.append(entry)
-        return tuple(entries)
+        return tuple(
+            entry
+            for entry in stored
+            if (entry.expires_at is None or entry.expires_at > now)
+            and entry.superseded_by_memory_id is None
+        )
 
 
 class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
     """#13 local Knowledge provider with canonical #251 source management."""
 
-    def __init__(self, db_path: str | Path) -> None:
-        super().__init__(db_path)
+    def __init__(self, db_path: str | Path, *, max_concurrency: int = 4) -> None:
+        super().__init__(db_path, max_concurrency=max_concurrency)
         added_operations = (
             "get_source",
             "list_sources",
@@ -344,40 +345,40 @@ class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
         return await self._list_sources(context)
 
     async def list_sources_for_discovery(self) -> tuple[KnowledgeSource, ...]:
-        try:
+        def operation() -> tuple[KnowledgeSource, ...]:
             with self._connect() as connection:
                 rows = connection.execute(
                     "SELECT * FROM data_knowledge_sources ORDER BY created_at, source_id"
                 ).fetchall()
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to enumerate knowledge source discovery snapshot",
-            ) from exc
-        return tuple(self._source_from_row(row) for row in rows)
+            return tuple(self._source_from_row(row) for row in rows)
+
+        return await self._run_knowledge_sqlite(
+            operation,
+            message="failed to enumerate knowledge source discovery snapshot",
+        )
 
     async def list_documents_for_discovery(self) -> tuple[KnowledgeDocument, ...]:
-        try:
+        def operation() -> tuple[KnowledgeDocument, ...]:
             with self._connect() as connection:
                 rows = connection.execute(
                     "SELECT * FROM data_knowledge_documents ORDER BY created_at, document_id"
                 ).fetchall()
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to enumerate knowledge document discovery snapshot",
-            ) from exc
-        return tuple(
-            KnowledgeDocument(
-                document_id=cast(str, row["document_id"]),
-                source_id=cast(str, row["source_id"]),
-                revision=cast(str, row["revision"]),
-                content=cast(str, row["content"]),
-                location=cast(str, row["location"]),
-                checksum=cast(str, row["checksum"]),
-                created_at=datetime.fromisoformat(cast(str, row["created_at"])),
+            return tuple(
+                KnowledgeDocument(
+                    document_id=cast(str, row["document_id"]),
+                    source_id=cast(str, row["source_id"]),
+                    revision=cast(str, row["revision"]),
+                    content=cast(str, row["content"]),
+                    location=cast(str, row["location"]),
+                    checksum=cast(str, row["checksum"]),
+                    created_at=datetime.fromisoformat(cast(str, row["created_at"])),
+                )
+                for row in rows
             )
-            for row in rows
+
+        return await self._run_knowledge_sqlite(
+            operation,
+            message="failed to enumerate knowledge document discovery snapshot",
         )
 
     async def update_source(
@@ -388,15 +389,17 @@ class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
         title: str | None = None,
         metadata: dict[str, JsonValue] | None = None,
     ) -> KnowledgeSource:
-        source = await self._get_source(source_id, context)
-        updated = replace(
-            source,
-            title=source.title if title is None else title,
-            metadata=dict(source.metadata) if metadata is None else dict(metadata),
-            updated_at=datetime.now(UTC),
-        )
-        try:
+        validate_id(source_id, "knowledge_source")
+
+        def operation() -> KnowledgeSource:
             with self._connect() as connection:
+                source = self._read_source(connection, source_id, context)
+                updated = replace(
+                    source,
+                    title=source.title if title is None else title,
+                    metadata=dict(source.metadata) if metadata is None else dict(metadata),
+                    updated_at=datetime.now(UTC),
+                )
                 connection.execute(
                     """
                     UPDATE data_knowledge_sources
@@ -410,12 +413,13 @@ class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
                         source_id,
                     ),
                 )
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to update knowledge source metadata",
-            ) from exc
-        return updated
+            return updated
+
+        return await self._run_knowledge_sqlite(
+            operation,
+            message="failed to update knowledge source metadata",
+            write=True,
+        )
 
     async def reindex_source(
         self,
@@ -427,27 +431,60 @@ class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
     ) -> KnowledgeDocument:
         """Expose a durable FAILED state when re-indexing starts but ingestion fails."""
 
+        validate_id(source_id, "knowledge_source")
+        if not revision.strip():
+            raise ContractError(ErrorCode.INVALID_REQUEST, "knowledge revision must not be blank")
+        return await self._complete_knowledge_mutation(
+            self._serialize_source_mutation(
+                source_id,
+                lambda: self._reindex_with_failure_state(
+                    source_id,
+                    revision,
+                    content,
+                    location,
+                    context,
+                ),
+            )
+        )
+
+    async def _reindex_with_failure_state(
+        self,
+        source_id: str,
+        revision: str,
+        content: str,
+        location: str,
+        context: DataAccessContext,
+    ) -> KnowledgeDocument:
         try:
-            return await super().reindex_source(source_id, revision, content, location, context)
+            return await self._reindex_source_impl(source_id, revision, content, location, context)
         except ContractError as exc:
-            if exc.code is ErrorCode.BACKEND_ERROR:
-                self._mark_reindex_failed(source_id, revision)
+            if exc.code in {ErrorCode.BACKEND_ERROR, ErrorCode.TRANSIENT_FAILURE}:
+                await self._mark_reindex_failed(source_id, revision)
             raise
 
-    def _mark_reindex_failed(self, source_id: str, revision: str) -> None:
+    async def _mark_reindex_failed(self, source_id: str, revision: str) -> None:
         """Best-effort failure checkpoint without masking the original provider error."""
 
-        now = datetime.now(UTC).isoformat()
-        try:
+        def operation() -> None:
+            now = datetime.now(UTC).isoformat()
             with self._connect() as connection:
-                connection.execute(
+                source_update = connection.execute(
                     """
                     UPDATE data_knowledge_sources
                     SET revision = ?, status = ?, updated_at = ?
-                    WHERE source_id = ?
+                    WHERE source_id = ? AND revision = ? AND status = ?
                     """,
-                    (revision, KnowledgeStatus.FAILED.value, now, source_id),
+                    (
+                        revision,
+                        KnowledgeStatus.FAILED.value,
+                        now,
+                        source_id,
+                        revision,
+                        KnowledgeStatus.INDEXING.value,
+                    ),
                 )
+                if source_update.rowcount == 0:
+                    return
                 connection.execute(
                     """
                     UPDATE data_knowledge_indexes
@@ -456,7 +493,14 @@ class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
                     """,
                     (revision, KnowledgeStatus.FAILED.value, now, source_id),
                 )
-        except sqlite3.Error:
+
+        try:
+            await self._run_knowledge_sqlite(
+                operation,
+                message="failed to persist knowledge reindex failure state",
+                write=True,
+            )
+        except ContractError:
             # Preserve the original backend failure. A completely unavailable metadata
             # store cannot be made healthier by replacing it with a secondary error.
             return

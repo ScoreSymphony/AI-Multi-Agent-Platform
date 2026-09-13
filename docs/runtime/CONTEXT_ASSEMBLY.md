@@ -154,6 +154,6 @@ The #19 evaluation framework remains the canonical evaluation owner. Context ass
 
 `tests/unit/context/test_secret_reference_metadata.py` proves the reference-only secret metadata boundary. `tests/integration/context/test_agent_run_binding.py` proves that an actual `ContextBoundAgentRuntime` AgentRun carries and persists the exact canonical Bundle ID/digest. `tests/integration/context/test_context_evaluation.py` runs the context scenarios through the canonical #19 evaluation framework.
 
-The operational completion coverage additionally uses `tests/test_issue_650_single_node_context_e2e.py` for the public AgentRun / restart path and `tests/test_issue_680_context_completion.py` for Verification projection, explicit user-intent ownership, real single-node source-adapter composition and historical Bundle stability across a changed Task revision.
+The operational completion coverage additionally uses `tests/e2e/context/test_single_node_agent_context.py` for the public AgentRun/restart path, `tests/integration/context/test_verification_evidence_projection.py` for Verification projection, `tests/integration/context/test_task_context_ownership.py` for explicit user-intent ownership, and `tests/e2e/context/test_source_revision_persistence.py` for real single-node source-adapter composition and historical Bundle stability across a changed Task revision.
 
 All #590/#650/#680 Context tests use local fakes/reference implementations and therefore preserve the self-hosted/no-paid-service requirement.

@@ -132,7 +132,7 @@ security_surface = "allow-listed actions and workspace path enforcement"
 upstream_health = "platform-owned"
 compatibility = "Required by reference and vertical conformance paths."
 usage = "Single-node, Worker reference and release vertical paths."
-evidence = ["docs/PLATFORM_CONFORMANCE.md", "tests/test_security_baseline.py"]
+evidence = ["docs/PLATFORM_CONFORMANCE.md", "tests/unit/security/test_security_primitives.py", "tests/integration/security/test_executor_confinement.py"]
 docs = ["docs/runtime/EXECUTION.md", "docs/PLATFORM_CONFORMANCE.md"]
 migration = "n/a"
 
