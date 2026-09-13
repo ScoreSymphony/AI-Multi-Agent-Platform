@@ -20,7 +20,7 @@ on:
       - "src/ai_multi_agent_platform/distributed/**"
       - "src/ai_multi_agent_platform/workspaces/**"
       - "tests/integration/application_distribution/**"
-      - "tests/test_issue749_*.py"
+      - "tests/contract/application_distribution/**"
       - "scripts/ci/issue749_remote_application_build_acceptance.py"
   schedule:
     - cron: "17 3 * * *"

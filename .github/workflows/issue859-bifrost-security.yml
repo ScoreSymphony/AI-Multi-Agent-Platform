@@ -7,7 +7,7 @@ on:
       - ".github/workflows/issue859-bifrost-security.yml"
       - "scripts/ci/issue859_mock_openai.py"
       - "scripts/ci/issue859_ssrf_sentinel.py"
-      - "tests/test_issue_859_bifrost_ssrf.py"
+      - "tests/integration/configuration/test_bifrost_ssrf.py"
       - "upstream/bifrost.yaml"
 
 permissions:
@@ -262,7 +262,7 @@ jobs:
           BIFROST_EVAL_SSRF_BLOCKED_URLS_JSON: '["http://127.0.0.1:18001/ssrf-sentinel.txt","http://10.254.0.1:18001/ssrf-sentinel.txt","http://172.31.255.254:18001/ssrf-sentinel.txt","http://192.168.255.254:18001/ssrf-sentinel.txt","http://169.254.169.254:18001/ssrf-sentinel.txt","http://100.64.0.1:18001/ssrf-sentinel.txt","http://[::1]:18001/ssrf-sentinel.txt","http://[::ffff:127.0.0.1]:18001/ssrf-sentinel.txt","http://[fe80::1]:18001/ssrf-sentinel.txt","http://[fd00::1]:18001/ssrf-sentinel.txt","http://[fec0::1]:18001/ssrf-sentinel.txt","http://[2002:7f00:1::1]:18001/ssrf-sentinel.txt","http://[64:ff9b::7f00:1]:18001/ssrf-sentinel.txt","http://[64:ff9b:1:7f00:0:100::]:18001/ssrf-sentinel.txt","http://[2001:0::1]:18001/ssrf-sentinel.txt"]'
           BIFROST_EVAL_SSRF_REDIRECT_URL: http://203.0.113.10:18001/redirect-to-loopback
           BIFROST_EVAL_SSRF_SENTINEL_CONTROL_URL: http://127.0.0.1:18001/control
-        run: pytest -q tests/test_issue_859_bifrost_ssrf.py -m integration
+        run: pytest -q tests/integration/configuration/test_bifrost_ssrf.py -m integration
 
       - name: Record controlled SSRF evidence
         shell: bash

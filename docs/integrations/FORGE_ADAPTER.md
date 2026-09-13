@@ -55,7 +55,7 @@ The canonical kernel already provides:
 - restart recovery and external-job reconciliation;
 - explicit orphaned-running detection without blind redispatch.
 
-`tests/test_forge_kernel_regressions.py` binds those mechanisms to the Forge adapter and proves that:
+`tests/regression/forge/test_forge_kernel_regressions.py` binds those mechanisms to the Forge adapter and proves that:
 
 1. a namespaced Forge execution ID survives canonical SQLite event replay and restart;
 2. retrying the original canonical create command after restart returns the existing Task rather than creating another one;
@@ -99,9 +99,9 @@ A health transport failure marks the Forge executor unhealthy rather than breaki
 - in-flight cancellation forwarding;
 - backend availability/retry hints without adapter-owned retries.
 
-`tests/test_forge_optionality.py` proves importing the execution core does not import the Forge adapter.
+`tests/contract/forge/test_forge_optionality.py` proves importing the execution core does not import the Forge adapter.
 
-`tests/test_forge_kernel_regressions.py` covers canonical persistence/replay, Step identity propagation and restart reconciliation with a Forge-backed executor boundary.
+`tests/regression/forge/test_forge_kernel_regressions.py` covers canonical persistence/replay, Step identity propagation and restart reconciliation with a Forge-backed executor boundary.
 
 ## Provenance
 
@@ -111,7 +111,7 @@ No source from `ScoreSymphony/AI-Agent-VPS` is copied into this adapter. The cur
 
 ## Concrete runtime coverage
 
-`tests/test_forge_http.py` validates protocol and identity translation for the concrete HTTP
+`tests/integration/forge/test_forge_http.py` validates protocol and identity translation for the concrete HTTP
 client. `tests/integration/forge/test_sidecar.py`, run by the `forge-sidecar-integration` CI job,
 builds the exact pinned Rust sidecar and verifies real health, execution and cancellation behavior.
 The sidecar is loopback-only and optional; removing it does not affect core startup or reference

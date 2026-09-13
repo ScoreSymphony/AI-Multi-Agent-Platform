@@ -89,7 +89,7 @@ Automatic Candidate generation is **not enabled by this hardening**. Candidate g
 - operator-source impersonation rejection;
 - public `learning.propose` source-type boundary.
 
-`tests/test_issue_694_source_immutability.py` additionally proves that resolving/projecting canonical Run, Planning and Research evidence leaves the historical owner records unchanged.
+`tests/integration/context/test_source_immutability.py` additionally proves that resolving/projecting canonical Run, Planning and Research evidence leaves the historical owner records unchanged.
 
 Existing #595 tests continue to prove quality gates, authorization/Approval, stale target handling, restart-safe owner revision promotion and historical Feedback/Verification/Evaluation immutability.
 

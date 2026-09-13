@@ -6,7 +6,7 @@ on:
     paths:
       - ".github/workflows/issue-862-storage-evidence.yml"
       - "tests/evidence/issue_862/**"
-      - "tests/test_issue_862_storage_evidence.py"
+      - "tests/integration/storage/test_storage_evidence.py"
       - "docs/research/issue-862-object-storage-evaluation.md"
 
 jobs:
