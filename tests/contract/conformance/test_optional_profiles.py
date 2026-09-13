@@ -11,6 +11,7 @@ from ai_multi_agent_platform.cli.conformance import (
     _select_scenarios,
 )
 from ai_multi_agent_platform.conformance import (
+    CompatibilityResult,
     ConformanceProfile,
     ConformanceStatus,
     activate_optional_scenarios,
@@ -43,7 +44,6 @@ def test_optional_claims_remain_disabled_by_default() -> None:
 def test_maintained_optional_evidence_registry_is_explicit() -> None:
     assert optional_evidence_ids() == (
         "B",
-        "C",
         "E",
         "N",
         "Q",
@@ -54,6 +54,22 @@ def test_maintained_optional_evidence_registry_is_explicit() -> None:
         "X",
         "Y",
     )
+
+
+def test_retired_forge_profile_has_no_executable_compatibility_evidence() -> None:
+    scenario = _by_id(ConformanceProfile.INTEGRATION, ("C",))["C"]
+    assert scenario.required is True
+    assert scenario.command is None
+    assert scenario.unavailable_status is ConformanceStatus.NOT_IMPLEMENTED
+
+    report = run_conformance(
+        ConformanceProfile.INTEGRATION,
+        repository_root=Path.cwd(),
+        scenarios=(scenario,),
+    )
+    assert report.passed is False
+    assert report.compatibility_result == CompatibilityResult.INCOMPLETE.value
+    assert report.scenarios[0].status == ConformanceStatus.NOT_IMPLEMENTED.value
 
 
 def test_enabling_supported_optional_claim_makes_it_required_and_executable() -> None:
@@ -126,11 +142,11 @@ def test_activation_rejects_unknown_or_already_required_scenarios() -> None:
 def test_cli_optional_and_component_version_parsing_is_deterministic() -> None:
     assert _parse_optional(["n,r", "X", " t "]) == ("N", "R", "X", "T")
     assert _parse_component_versions(
-        ["hermes-agent=6327930", "forge-sidecar=00b821b"],
+        ["hermes-agent=6327930", "example-adapter=1.0"],
         "--adapter-version",
     ) == {
         "hermes-agent": "6327930",
-        "forge-sidecar": "00b821b",
+        "example-adapter": "1.0",
     }
     with pytest.raises(ValueError, match="NAME=VERSION"):
         _parse_component_versions(["missing-version"], "--adapter-version")
@@ -150,23 +166,21 @@ def test_cli_scenario_selection_is_case_insensitive_deduplicated_and_ordered() -
         _select_scenarios(scenarios, ("UNKNOWN",))
 
 
-def test_external_adapter_profiles_fail_closed_without_real_environment(
+def test_external_adapter_profile_fails_closed_without_real_environment(
     tmp_path: Path, monkeypatch
 ) -> None:
+    del tmp_path
     for variable in (
         "HERMES_UPSTREAM_DIR",
         "HERMES_UPSTREAM_REVISION",
-        "FORGE_SIDECAR_BASE_URL",
-        "FORGE_SIDECAR_WORKSPACE_ROOT",
     ):
         monkeypatch.delenv(variable, raising=False)
 
-    scenarios = _by_id(ConformanceProfile.RELEASE, ("B", "C"))
-    for scenario_id in ("B", "C"):
-        report = run_conformance(
-            ConformanceProfile.RELEASE,
-            repository_root=Path.cwd(),
-            scenarios=(scenarios[scenario_id],),
-        )
-        assert report.passed is False
-        assert report.scenarios[0].status == ConformanceStatus.FAIL.value
+    scenario = _by_id(ConformanceProfile.RELEASE, ("B",))["B"]
+    report = run_conformance(
+        ConformanceProfile.RELEASE,
+        repository_root=Path.cwd(),
+        scenarios=(scenario,),
+    )
+    assert report.passed is False
+    assert report.scenarios[0].status == ConformanceStatus.FAIL.value
