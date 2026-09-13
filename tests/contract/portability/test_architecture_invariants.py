@@ -4,6 +4,7 @@ import ast
 import re
 import tomllib
 from collections.abc import Iterable
+from dataclasses import replace
 from pathlib import Path
 
 from ai_multi_agent_platform.domain import ExternalRef, OwnerRef, Run, Task, new_id, validate_id
@@ -12,6 +13,11 @@ _CORE_ROOTS = (
     Path("src/ai_multi_agent_platform/contracts"),
     Path("src/ai_multi_agent_platform/domain"),
     Path("src/ai_multi_agent_platform/kernel"),
+)
+_NORTHBOUND_CLIENT_ROOTS = (
+    Path("src/ai_multi_agent_platform/cli"),
+    Path("src/ai_multi_agent_platform/conversations"),
+    Path("src/ai_multi_agent_platform/terminal"),
 )
 _OPTIONAL_BACKEND_IMPORTS = (
     re.compile(
@@ -37,6 +43,12 @@ _MANDATORY_DEPENDENCY_DENYLIST = {
 def _canonical_python_files() -> Iterable[Path]:
     for root in _CORE_ROOTS:
         assert root.is_dir(), f"missing canonical source root: {root}"
+        yield from sorted(root.rglob("*.py"))
+
+
+def _northbound_client_python_files() -> Iterable[Path]:
+    for root in _NORTHBOUND_CLIENT_ROOTS:
+        assert root.is_dir(), f"missing northbound client source root: {root}"
         yield from sorted(root.rglob("*.py"))
 
 
@@ -110,6 +122,16 @@ def test_canonical_core_does_not_import_optional_backend_implementations() -> No
     assert offenders == []
 
 
+def test_northbound_python_clients_do_not_import_optional_backend_implementations() -> None:
+    offenders: list[str] = []
+    for path in _northbound_client_python_files():
+        source = path.read_text(encoding="utf-8")
+        if any(pattern.search(source) for pattern in _OPTIONAL_BACKEND_IMPORTS):
+            offenders.append(path.as_posix())
+
+    assert offenders == []
+
+
 def test_canonical_core_public_types_do_not_reference_backend_private_classes() -> None:
     offenders: dict[str, list[str]] = {}
     for path in _canonical_python_files():
@@ -145,6 +167,53 @@ def test_canonical_shaped_backend_ids_remain_namespaced_external_refs() -> None:
     assert run.external_refs == (forge_run,)
     assert task.id != external_task_id
     assert run.id != external_run_id
+
+
+def test_host_process_and_ha_metadata_do_not_become_task_or_run_identity() -> None:
+    owner = OwnerRef(type="user", id="issue-46")
+    initial_infrastructure = {
+        "host_id": "reference-host-a",
+        "process_id": "control-plane-process-a",
+        "ha_leader_id": "leader-generation-a",
+    }
+    replacement_infrastructure = {
+        "host_id": "reference-host-b",
+        "process_id": "control-plane-process-b",
+        "ha_leader_id": "leader-generation-b",
+    }
+    first_worker_id = new_id("worker")
+    replacement_worker_id = new_id("worker")
+
+    task = Task(
+        title="Infrastructure-neutral identity",
+        owner_ref=owner,
+        metadata=initial_infrastructure,
+    )
+    run = Run(
+        subject_type="task",
+        subject_id=task.id,
+        owner_ref=owner,
+        correlation_id=task.id,
+        worker_id=first_worker_id,
+        metadata=initial_infrastructure,
+    )
+
+    task_after_control_plane_change = replace(task, metadata=replacement_infrastructure)
+    run_after_relocation = replace(
+        run,
+        worker_id=replacement_worker_id,
+        metadata=replacement_infrastructure,
+    )
+
+    validate_id(task_after_control_plane_change.id, "task")
+    validate_id(run_after_relocation.id, "run")
+    assert task_after_control_plane_change.id == task.id
+    assert run_after_relocation.id == run.id
+    assert run_after_relocation.subject_id == task.id
+    assert run_after_relocation.worker_id == replacement_worker_id
+    assert run_after_relocation.worker_id != first_worker_id
+    assert task.id not in replacement_infrastructure.values()
+    assert run.id not in replacement_infrastructure.values()
 
 
 def test_optional_backend_packages_are_not_mandatory_runtime_dependencies() -> None:
