@@ -43,7 +43,7 @@ class AsyncSqliteOffload:
             return await _run_to_transaction_boundary(operation)
 
 
-async def _run_to_transaction_boundary(operation: Callable[[], _T]) -> _T:
+async def _run_to_transaction_boundary[T](operation: Callable[[], T]) -> T:
     worker = asyncio.create_task(asyncio.to_thread(operation))
     try:
         return await asyncio.shield(worker)
