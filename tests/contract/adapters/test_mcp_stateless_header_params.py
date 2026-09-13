@@ -140,6 +140,28 @@ async def test_x_mcp_header_uses_base64_sentinel_for_unsafe_values() -> None:
 
 
 @pytest.mark.asyncio
+async def test_x_mcp_header_uses_base64_sentinel_for_empty_string() -> None:
+    client = _DiscoveryClient(
+        [
+            {
+                "name": "lookup",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "label": {"type": "string", "x-mcp-header": "Label"}
+                    },
+                },
+            }
+        ]
+    )
+    await client.list_tools()
+
+    headers = client._request_headers(_tools_call_body("lookup", {"label": ""}))
+
+    assert headers["Mcp-Param-Label"] == "=?base64??="
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "invalid_schema",
     [
