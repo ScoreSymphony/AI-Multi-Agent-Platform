@@ -7,11 +7,11 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.kernel.repository import EventRepository
 
+from .async_scope import AsyncScopeStore
 from .authorization_service import ControlPlaneAuthorization
 from .models import PageQuery, RequestContext, paginate
 from .request_validation import optional_string, require_key, required_string, resolve_owner
 from .resources import run_resource, task_resource
-from .scope_store import ScopeStore
 
 
 class ControlPlaneTaskRunService:
@@ -22,7 +22,7 @@ class ControlPlaneTaskRunService:
         *,
         kernel: PlatformKernel,
         events: EventRepository,
-        scopes: ScopeStore,
+        scopes: AsyncScopeStore,
         authorization: ControlPlaneAuthorization,
     ) -> None:
         self._kernel = kernel
@@ -40,7 +40,7 @@ class ControlPlaneTaskRunService:
         owner_type, owner_id = resolve_owner(context.actor, payload)
         project_id = optional_string(payload, "project_id")
         if project_id is not None:
-            self._scopes.get_project(project_id)
+            await self._scopes.get_project(project_id)
         bound_payload = payload if authorization_payload is None else authorization_payload
         await self._authorization.authorize(
             context,

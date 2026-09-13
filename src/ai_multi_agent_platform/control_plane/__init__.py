@@ -5,6 +5,7 @@ from .approval_decision_composition import (
     APPROVAL_DECISION_COMMANDS,
     APPROVAL_DENY_COMMAND,
 )
+from .async_scope import AsyncScopeStore, AsyncScopeStoreAdapter, ScopePersistenceOffload
 from .automation_api import (
     AUTOMATION_COLLECTION,
     AUTOMATION_COMMANDS,
@@ -126,6 +127,8 @@ __all__ = [
     "AUTOMATION_COMMANDS",
     "AUTOMATION_STATE_ENV",
     "ActorContext",
+    "AsyncScopeStore",
+    "AsyncScopeStoreAdapter",
     "AuthenticatedControlPlaneHTTP",
     "CODING_BATCH_COLLECTION",
     "CODING_BATCH_COMMANDS",
@@ -176,6 +179,7 @@ __all__ = [
     "RequestContext",
     "ResourceService",
     "SUPPORTED_API_VERSIONS",
+    "ScopePersistenceOffload",
     "ScopeStore",
     "TASK_MANAGEMENT_BULK_UPDATE_COMMAND",
     "TASK_MANAGEMENT_COMMANDS",
