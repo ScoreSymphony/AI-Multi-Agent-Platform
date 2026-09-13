@@ -255,7 +255,7 @@ def test_reference_multi_agent_golden_path_persists_complete_canonical_provenanc
             assert len(producer.result_ids) == 1
             result_id = producer.result_ids[0]
             result_ids[step.id] = result_id
-            assert result_id in run.result_ids
+            assert run.output.get("result_id") == result_id
 
             binding = deployment.context.run_bindings.get(producer.agent_run_id)
             bundle = deployment.context.bundles.get(binding.context_bundle_id)
