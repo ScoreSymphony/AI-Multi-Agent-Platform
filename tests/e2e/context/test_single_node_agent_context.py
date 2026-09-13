@@ -1,3 +1,5 @@
+"""Single-node canonical Context E2E coverage originating in issue #650."""
+
 from __future__ import annotations
 
 import asyncio

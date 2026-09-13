@@ -148,27 +148,31 @@ The combined #650/#680 operational regression evidence is:
   - external secret-reference egress denial;
   - Control Plane source redaction;
   - idempotent crash/restart binding repair;
-- `tests/test_issue_650_source_adapters.py`
+- `tests/integration/context/test_source_adapters.py`
   - exact Task and Agent revision/instruction projection;
   - Skill Bundle identity/digest projection;
   - Research Claim/Evidence provenance and untrusted authority;
   - Repository Run provenance and bounded immutable source slices;
   - File/Artifact/Result reference-oriented projection;
   - scoped Memory and Agent-allowlisted Knowledge retrieval;
-- `tests/test_issue_650_routing_rendering.py`
+- `tests/integration/context/test_routing_and_rendering.py`
   - Context-derived `min_context_window` causes #10 routing to reject an undersized model;
   - local/reference rendering preserves Bundle identity without an egress dependency;
-- `tests/test_issue_650_single_node_context_e2e.py`
+  - canonical Context mapping rejects legacy task/project context mixing;
+- `tests/e2e/context/test_single_node_agent_context.py`
   - public durable single-node composition;
   - real first Agent task through Context assembly/rendering/model input;
   - persisted AgentRun → Bundle binding;
   - Control Plane inspection;
   - restart restoration/reconciliation;
-- `tests/test_issue_680_context_completion.py`
+- `tests/integration/context/test_verification_evidence_projection.py`
   - completed Verification finding/result → canonical `VERIFICATION` evidence;
+  - expired Verification result projects as stale evidence;
   - pending Verification is not misrepresented as evidence;
   - reviewer-owned arbitrary metadata is not copied into Context;
+- `tests/integration/context/test_task_context_ownership.py`
   - explicit user objective remains Task-owned and exact-revision bound;
+- `tests/e2e/context/test_source_revision_persistence.py`
   - the public single-node binding factory includes the Verification source adapter;
   - a real Task revision changes the Bundle digest while the historical Bundle remains stable across restart;
 - `tests/unit/cli/test_cli_context_inspection.py`

@@ -1,3 +1,5 @@
+"""Context routing/rendering regression coverage originating in issue #650."""
+
 from __future__ import annotations
 
 import asyncio
