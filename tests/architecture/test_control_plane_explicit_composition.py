@@ -13,9 +13,6 @@ GOVERNANCE = ROOT / "src" / "ai_multi_agent_platform" / "governance"
 # reviewed implementation compositions explicit so a new ControlPlane MRO stack
 # cannot be introduced silently while compatibility layers are retired.
 _ALLOWED_IMPLEMENTATION_MULTIPLE_INHERITANCE = {
-    ("hardened_automation_api.py", "ControlPlane"): frozenset(
-        {"_AutomationControlPlane", "_RegisteredSearchControlPlane"}
-    ),
     ("workspace_task_management_api.py", "ControlPlane"): frozenset(
         {
             "RepositoryRunProvenanceMixin",
@@ -156,6 +153,20 @@ def test_migrated_compatibility_facades_do_not_own_domain_behavior() -> None:
             f"{filename} compatibility facade regained domain behavior: "
             f"{sorted(methods - allowed_methods)!r}"
         )
+
+
+def test_hardened_automation_is_behavior_free_compatibility_import() -> None:
+    path = CONTROL_PLANE / "hardened_automation_api.py"
+    tree = _tree(path)
+    assert not any(
+        isinstance(node, ast.ClassDef) and node.name == "ControlPlane" for node in tree.body
+    )
+    imports = [node for node in tree.body if isinstance(node, ast.ImportFrom)]
+    assert any(
+        node.module == "automation_explicit_composition"
+        and any(alias.name == "ControlPlane" for alias in node.names)
+        for node in imports
+    )
 
 
 def test_canonical_single_node_portability_composition_has_one_control_plane_base() -> None:
