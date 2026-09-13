@@ -1,4 +1,5 @@
 name: Apply Test Migration 722
+# Current-main baseline after the merged #892 cohorts: 3780 collected tests.
 
 on:
   push:
@@ -129,7 +130,7 @@ jobs:
           python -m pytest --collect-only -q | tee /tmp/collection.txt
           count=$(awk -F': ' '/\.py: [0-9]+$/{sum+=$2} END{print sum+0}' /tmp/collection.txt)
           echo "Collected tests: ${count}"
-          test "${count}" = "3764"
+          test "${count}" = "3780"
       - name: Verify full pytest
         run: python -m pytest
       - name: Remove temporary migration machinery
@@ -140,7 +141,8 @@ jobs:
             scripts/ci/plan_test_migration_722.py \
             scripts/ci/report_test_inventory.py \
             .github/workflows/apply-test-migration-722.yml \
-            .github/workflows/test-migration-audit.yml
+            .github/workflows/test-migration-audit.yml \
+            .github/workflows/test-migration-plan.yml
       - name: Verify Ruff lint
         run: python -m ruff check .
       - name: Verify Ruff formatting
