@@ -6,7 +6,7 @@ import asyncio
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from typing import Protocol
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.capabilities.provider import CapabilityToolProvider
 from ai_multi_agent_platform.capabilities.types import (
@@ -448,7 +448,11 @@ class MCPToolProvider(CapabilityToolProvider):
                                 ErrorCode.CONTRACT_VIOLATION,
                                 "MCP task input handler responded to unknown request keys",
                                 provider_id=self.descriptor.provider_id,
-                                details={"unknown_input_response_keys": sorted(unknown_keys)},
+                                details={
+                                    "unknown_input_response_keys": cast(
+                                        JsonValue, sorted(unknown_keys)
+                                    )
+                                },
                             )
                         await client.update_task(current.external_task_id, responses)
                         current = mark_input_requests_responded(current, tuple(responses))
