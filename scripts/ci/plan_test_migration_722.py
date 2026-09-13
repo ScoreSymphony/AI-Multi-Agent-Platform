@@ -24,7 +24,6 @@ OTHER_HISTORICAL = {
     "test_integration_591_650_651_review_regressions.py": "test_context_egress_review_regressions.py",
 }
 
-# These root modules predate the canonical layout and have stable, obvious ownership.
 ROOT_OVERRIDES: dict[str, tuple[str, str]] = {
     "test_application_distribution.py": ("integration", "application_distribution"),
     "test_automation.py": ("unit", "automation"),
@@ -78,50 +77,15 @@ DOMAIN_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("organizations", ("organization", "ownership", "subject_integrity")),
     (
         "application_distribution",
-        (
-            "application_distribution",
-            "application_build",
-            "remote_build",
-            "build_worker",
-            "placement",
-        ),
+        ("application_distribution", "application_build", "remote_build", "build_worker", "placement"),
     ),
     ("search", ("search",)),
     ("verification", ("verification", "verifier", "reviewer", "repair")),
-    (
-        "security",
-        ("security", "authorization", "approval", "secret", "pipelock", "redaction"),
-    ),
-    (
-        "models",
-        ("model", "provider", "inference", "litellm", "openai", "sglang", "routing_profile"),
-    ),
-    (
-        "distributed",
-        (
-            "distributed",
-            "worker",
-            "message_transport",
-            "failover",
-            "ha_",
-            "node_reboot",
-            "multi_process",
-        ),
-    ),
+    ("security", ("security", "authorization", "approval", "secret", "pipelock", "redaction")),
+    ("models", ("model", "provider", "inference", "litellm", "openai", "sglang", "routing_profile")),
+    ("distributed", ("distributed", "worker", "message_transport", "failover", "ha_", "node_reboot", "multi_process")),
     ("deployment", ("deployment", "single_node", "server_")),
-    (
-        "recovery",
-        (
-            "backup",
-            "restore",
-            "recovery",
-            "restart",
-            "durable",
-            "persistence",
-            "migration",
-            "replacement_machine",
-        ),
-    ),
+    ("recovery", ("backup", "restore", "recovery", "restart", "durable", "persistence", "migration", "replacement_machine")),
     ("planning", ("planning", "plan_")),
     ("goals", ("goal",)),
     ("automation", ("automation",)),
@@ -145,33 +109,11 @@ DOMAIN_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 SUITE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    (
-        "performance",
-        (
-            "benchmark",
-            "pressure",
-            "performance",
-            "scale",
-            "latency",
-            "throughput",
-            "endurance",
-            "stress",
-            "sweep",
-        ),
-    ),
+    ("performance", ("benchmark", "pressure", "performance", "scale", "latency", "throughput", "endurance", "stress", "sweep")),
     ("e2e", ("_e2e", "end_to_end", "public_production")),
-    (
-        "contract",
-        ("contract", "schema", "conformance", "protocol", "invariant", "manifest", "version_constraint"),
-    ),
-    (
-        "release",
-        ("release_maintenance", "upgrade_lifecycle", "upgrade_recovery", "canonical_runtime_assets"),
-    ),
-    (
-        "regression",
-        ("regression", "hardening", "final_", "completion", "review", "reopened", "reaudit", "gaps", "followup", "fixes"),
-    ),
+    ("contract", ("contract", "schema", "conformance", "protocol", "invariant", "manifest", "version_constraint")),
+    ("release", ("release_maintenance", "upgrade_lifecycle", "upgrade_recovery", "canonical_runtime_assets")),
+    ("regression", ("regression", "hardening", "final_", "completion", "review", "reopened", "reaudit", "gaps", "followup", "fixes")),
 )
 
 
@@ -188,8 +130,7 @@ def clean_name(path: Path) -> str:
         return OTHER_HISTORICAL[path.name]
     match = ISSUE_NAME.fullmatch(path.name)
     if match:
-        suffix = match.group("suffix").strip("_")
-        return f"test_{suffix}.py"
+        return f"test_{match.group('suffix').strip('_')}.py"
     return path.name
 
 
@@ -227,11 +168,11 @@ def test_function_names(path: Path) -> list[str]:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError, UnicodeDecodeError):
         return []
-    names: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
-            names.append(node.name)
-    return names
+    return [
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_")
+    ]
 
 
 def function_domain_counts(path: Path) -> Counter[str]:
@@ -244,16 +185,10 @@ def function_domain_counts(path: Path) -> Counter[str]:
 
 def primary_function_domain(path: Path) -> str:
     counts = function_domain_counts(path)
-    if not counts:
-        return "platform"
-    return counts.most_common(1)[0][0]
+    return counts.most_common(1)[0][0] if counts else "platform"
 
 
 def mixed_domains(path: Path) -> list[str]:
-    # A file with a clear domain in its own name is allowed to exercise cross-cutting
-    # security/recovery/storage concerns. We only force a split when the historical
-    # filename itself is generic and multiple responsibilities independently dominate
-    # the contained test functions.
     if path.name in ROOT_OVERRIDES or existing_domain(path) is not None:
         return []
     cleaned_stem = PurePosixPath(clean_name(path)).stem
@@ -277,9 +212,25 @@ def desired_destination(path: Path) -> Path:
     return TESTS / suite / domain / cleaned
 
 
-def main() -> int:
+def _disambiguated_name(destination: Path, occupied_names: set[str]) -> str:
+    relative = destination.relative_to(TESTS)
+    suite = relative.parts[0]
+    domain = relative.parts[1] if len(relative.parts) > 2 else suite
+    stem = destination.stem.removeprefix("test_")
+    candidates = (
+        f"test_{domain}_{stem}.py",
+        f"test_{suite}_{domain}_{stem}.py",
+        f"test_{domain}_{stem}_{suite}.py",
+    )
+    for name in candidates:
+        if name not in occupied_names:
+            return name
+    raise RuntimeError(f"Unable to derive a unique non-historical basename for {destination}")
+
+
+def build_plan() -> tuple[dict[Path, Path], dict[str, str], dict[str, list[str]]]:
     modules = all_modules()
-    candidates = [p for p in modules if is_candidate(p)]
+    candidates = [path for path in modules if is_candidate(path)]
     candidate_set = set(candidates)
     planned: dict[Path, Path] = {}
     residual: dict[str, str] = {}
@@ -295,11 +246,12 @@ def main() -> int:
             continue
         planned[path] = desired_destination(path)
 
-    groups: dict[Path, list[Path]] = defaultdict(list)
+    # Exact destination collisions are semantically ambiguous; keep them for the explicit
+    # residual pass instead of hiding provenance in a generated numeric suffix.
+    destination_groups: dict[Path, list[Path]] = defaultdict(list)
     for source, destination in planned.items():
-        groups[destination].append(source)
-
-    for destination, sources in groups.items():
+        destination_groups[destination].append(source)
+    for destination, sources in destination_groups.items():
         occupied = destination.exists() and destination not in candidate_set
         if len(sources) > 1 or occupied:
             reason = (
@@ -311,11 +263,30 @@ def main() -> int:
                 residual[source.as_posix()] = reason
                 planned.pop(source, None)
 
+    # Pytest currently imports many test modules by basename. A new move must therefore
+    # not introduce a basename already owned by an unmoved module or another destination.
+    unmoved = set(modules) - set(planned)
+    occupied_names = {path.name for path in unmoved}
+    destination_name_counts = Counter(destination.name for destination in planned.values())
+    for source, destination in sorted(planned.items(), key=lambda item: item[0].as_posix()):
+        if destination.name in occupied_names or destination_name_counts[destination.name] > 1:
+            new_name = _disambiguated_name(destination, occupied_names)
+            planned[source] = destination.with_name(new_name)
+            occupied_names.add(new_name)
+        else:
+            occupied_names.add(destination.name)
+
+    return planned, residual, mixed
+
+
+def main() -> int:
+    modules = all_modules()
+    planned, residual, mixed = build_plan()
     suite_counts = Counter(destination.relative_to(TESTS).parts[0] for destination in planned.values())
     domain_counts = Counter(destination.relative_to(TESTS).parts[1] for destination in planned.values())
     report = {
         "baseline_module_count": len(modules),
-        "candidate_count": len(candidates),
+        "candidate_count": sum(1 for path in modules if is_candidate(path)),
         "planned_move_count": len(planned),
         "residual_count": len(residual),
         "mixed_count": len(mixed),
