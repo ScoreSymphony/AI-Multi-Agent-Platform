@@ -108,6 +108,16 @@ class StepBindingKernel(Protocol):
 
     async def get_run(self, task_id: str, run_id: str) -> RunState: ...
 
+    async def refresh_run(
+        self,
+        *,
+        idempotency_key: str,
+        task_id: str,
+        run_id: str,
+        actor_ref: str | None = None,
+        source: str = "platform-kernel",
+    ) -> RunState: ...
+
 
 class PlanCoordinator(Protocol):
     """Existing #384 registration seam; planning does not own progression."""
@@ -141,11 +151,12 @@ class PlanningBindingCoordinator:
     #384 registration is restart-safe. Repeated registration after a fully activated proposal is
     also safe and resolves the proposal through its canonical activation Plan ID.
 
-    The reference local lifecycle can finish a Run synchronously inside ``register_plan``. In that
-    case the canonical #384 coordinator still owns outcome interpretation; this wrapper only feeds
-    already-terminal Step Runs back through its existing ``observe_run`` seam until no newly
-    terminal Run remains. Async/distributed Runs are left untouched for their normal observer or
-    reconciliation path.
+    The reference local lifecycle can finish a backend Run synchronously inside ``register_plan``
+    while the canonical Run remains RUNNING until the ordinary kernel refresh seam observes that
+    snapshot. This wrapper performs that provider-neutral refresh and then feeds terminal Step Runs
+    through #384's existing ``observe_run`` seam until no newly terminal Run remains. Async or
+    distributed Runs that remain nonterminal after refresh are left untouched for their normal
+    observer or reconciliation path.
     """
 
     def __init__(
@@ -242,11 +253,16 @@ class PlanningBindingCoordinator:
                 if run_id in observed_run_ids:
                     continue
                 run = await self._kernel.get_run(plan.task_id, run_id)
-                if (
-                    run.run.subject_type == "step"
-                    and run.run.subject_id in step_ids
-                    and run.status in TERMINAL_RUN_STATUSES
-                ):
+                if run.run.subject_type != "step" or run.run.subject_id not in step_ids:
+                    continue
+                if run.status not in TERMINAL_RUN_STATUSES:
+                    run = await self._kernel.refresh_run(
+                        idempotency_key=f"planning:{plan.id}:{run.run_id}:refresh",
+                        task_id=plan.task_id,
+                        run_id=run.run_id,
+                        source="platform-planning",
+                    )
+                if run.status in TERMINAL_RUN_STATUSES:
                     terminal_runs.append(run)
             if not terminal_runs:
                 return projection
