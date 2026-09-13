@@ -67,6 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           source .venv/bin/activate
+          ruff check --select I001 --fix tests/unit/security tests/unit/authorization tests/contract/security tests/integration/security tests/e2e/security
           ruff format tests/unit/security tests/unit/authorization tests/contract/security tests/integration/security tests/e2e/security
       - name: Verify legacy paths
         shell: bash
