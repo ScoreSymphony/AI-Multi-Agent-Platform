@@ -27,7 +27,7 @@ from ai_multi_agent_platform.goals import (
     dispatch_goal_automation_delivery,
 )
 from ai_multi_agent_platform.goals.reconciliation import reconcile_goal_task_terminal_event
-from ai_multi_agent_platform.governance.control_plane import register_governance_control_plane
+from ai_multi_agent_platform.governance.control_plane_module import governance_control_plane_module
 from ai_multi_agent_platform.governance.repository import (
     GovernanceRepository,
     SqliteGovernanceRepository,
@@ -107,7 +107,10 @@ class ControlPlane(_ApprovalControlPlane):
                 governance_repo = SqliteGovernanceRepository(state_path)
         if governance_repo is not None:
             governance = GovernanceService(governance_repo, self._kernel, gate)
-            register_governance_control_plane(self, governance)
+            install_control_plane_modules(
+                self,
+                (governance_control_plane_module(self, governance),),
+            )
             self.governance = governance
 
         decision_repo = decision_repository
