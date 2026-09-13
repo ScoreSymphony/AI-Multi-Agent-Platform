@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/hermes-v0-21-2-candidate.yml"
+      - "scripts/ci/issue46_external_profile.py"
       - "scripts/ci/issue959_hermes_v0_21_2_candidate.py"
       - "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py"
       - "src/ai_multi_agent_platform/adapters/hermes.py"
@@ -56,3 +57,25 @@ jobs:
           HERMES_UPSTREAM_DIR: ${{ github.workspace }}/.upstream/hermes
           HERMES_UPSTREAM_REVISION: 939e45c91d751fadd94dcd1b873ac3cb44846213
         run: python scripts/ci/issue959_hermes_v0_21_2_candidate.py
+
+      - name: Run #46 Hermes Scenario B against candidate
+        env:
+          HERMES_UPSTREAM_DIR: ${{ github.workspace }}/.upstream/hermes
+          HERMES_UPSTREAM_REVISION: 939e45c91d751fadd94dcd1b873ac3cb44846213
+          HERMES_COMPATIBILITY_CANDIDATE_REVISION: 939e45c91d751fadd94dcd1b873ac3cb44846213
+        run: |
+          platform-conformance \
+            --profile integration \
+            --deployment-profile hermes-v0.21.2-candidate \
+            --enable-optional B \
+            --scenario B \
+            --adapter-version "hermes-agent=$HERMES_UPSTREAM_REVISION" \
+            --json-report conformance-hermes-v0.21.2-candidate.json
+
+      - name: Upload #959 candidate conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-conformance-hermes-v0.21.2-candidate
+          path: conformance-hermes-v0.21.2-candidate.json
+          if-no-files-found: warn
