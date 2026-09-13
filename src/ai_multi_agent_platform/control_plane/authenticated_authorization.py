@@ -14,7 +14,7 @@ from ai_multi_agent_platform.contracts.types import (
 from ai_multi_agent_platform.security.authorization import infer_actor_identity
 
 from .authorization_service import ControlPlaneAuthorization
-from .hardened_automation_api import ControlPlane as _CurrentControlPlane
+from .automation_explicit_composition import ControlPlane as _CurrentControlPlane
 from .models import RequestContext
 
 
