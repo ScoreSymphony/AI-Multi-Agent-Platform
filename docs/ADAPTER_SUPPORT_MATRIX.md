@@ -58,7 +58,7 @@ The complete entry-by-entry inventory, owner, burden, security surface, upstream
 | --- | --- | --- | --- |
 | Planner | `planner.reference` | `planner.model-backed` | — |
 | Orchestrator | `orchestrator.reference` | `orchestrator.hermes` | — |
-| Executor | `executor.reference` | — | `executor.forge` (**deprecated**); `executor.agent-sandbox`, `executor.openshell`, `executor.swe-rex` (experimental) |
+| Executor | `executor.reference` | — | `executor.agent-sandbox`, `executor.openshell`, `executor.swe-rex` (experimental) |
 | Model provider | `model.openai-compatible` | `model.litellm` | dedicated Bifrost/SGLang adapters intentionally absent |
 | Model router | `model.router` | — | — |
 | Capability/tool | `capability.native` | `capability.mcp` | — |
@@ -79,7 +79,7 @@ The complete entry-by-entry inventory, owner, burden, security surface, upstream
 | Security evidence | — | `security-evidence.skillspector` | — |
 | Deployment lifecycle | — | `deployment.distributed-lifecycle` | — |
 
-There is currently **one active `deprecated` entry: `executor.forge`**. Its migration path, guarantee-preservation audit and explicit removal gates are recorded in `docs/integrations/FORGE_RETENTION_DECISION.md` under #991. Demotion does not promote an experimental executor or change the canonical `Executor` contract.
+Forge is no longer an active first-party implementation entry. It was demoted to `deprecated` under #991/ADR 0013, the documented removal gates were then satisfied by the maintained reference/generic evidence, and the executable adapter, transport, sidecar CI lane and compatibility claim were retired. Historical Forge audit/provenance material remains only to explain architecture and reuse history. Removal does not promote any experimental executor or change the canonical `Executor` contract.
 
 ## Consolidation decisions
 
@@ -89,11 +89,11 @@ There is currently **one active `deprecated` entry: `executor.forge`**. Its migr
 
 Bifrost and SGLang do not justify dedicated first-party `ModelProvider` implementations while their supported behavior is expressible through the OpenAI-compatible boundary. A dedicated adapter may be added only when a reviewed, supported capability cannot be represented cleanly through that standard boundary.
 
-### 2. Forge HTTP is transport, not a second executor
+### 2. Forge retirement did not change the Executor contract
 
-`ForgeExecutor` remains the temporary compatibility surface during the #991 deprecation window. `ForgeClient`/HTTP sidecar transport is an implementation detail beneath it. The currently proven sidecar profile validates the real transport boundary but does not establish a non-null Forge CLI executor capability that warrants continued `supported` status.
+The executable Forge adapter and HTTP sidecar transport were removed under #991 after the #889/#46 and generic-guarantee gates in `docs/integrations/FORGE_RETENTION_DECISION.md` passed. `ReferenceExecutor` remains the platform baseline, while specialized executor candidates must earn support independently.
 
-The migration target is `ReferenceExecutor` or another independently supported implementation of the canonical `Executor` contract. Forge-specific code and CI are removed only after the guarantee and #889/#46 gates in `docs/integrations/FORGE_RETENTION_DECISION.md` pass.
+Canonical Task/Run/Step identity, cancellation, timeout, retry ownership, recovery, event history, workspace confinement, path-boundary security and distributed Worker semantics remain platform-owned. Forge removal therefore retired one implementation rather than removing an execution capability from the architecture.
 
 ### 3. MCP has one capability adapter and profile-specific clients
 
@@ -121,7 +121,7 @@ This preserves the architectural rule that logical repository ownership is indep
 
 ### 8. External executor experiments do not inherit production support from contract tests
 
-`AgentSandboxExecutor`, `OpenShellExecutor` and `SwerexExecutor` implement the canonical Executor and have deterministic tests, but that does not make them supported. Agent-Sandbox remains evidence-gated by live isolation evaluation; OpenShell is explicitly `experimental_only` at the pinned alpha revision until one concrete runtime profile has retained isolation/egress/credential/resource evidence; SWE-ReX is explicitly evaluation/experimental-only. None belongs in an unqualified “supported executors” claim, and Forge deprecation does not change those tiers.
+`AgentSandboxExecutor`, `OpenShellExecutor` and `SwerexExecutor` implement the canonical Executor and have deterministic tests, but that does not make them supported. Agent-Sandbox remains evidence-gated by live isolation evaluation; OpenShell is explicitly `experimental_only` at the pinned alpha revision until one concrete runtime profile has retained isolation/egress/credential/resource evidence; SWE-ReX is explicitly evaluation/experimental-only. Forge removal does not change those tiers.
 
 ### 9. SkillSpector is supported only in the evaluated static evidence profile
 
@@ -137,7 +137,7 @@ Most app/composition-root helpers inherit the support tier of the providers they
 
 The following classes/patterns do not get independent product tiers unless they later expose independently selectable compatibility semantics:
 
-- Forge/Hermes HTTP transport helpers;
+- Hermes HTTP transport helpers;
 - `DurableGitHubReleaseConnectorProvider`, which hydrates the supported GitHub Releases connector from canonical persistence;
 - `PlanningOrchestratorAdapter`, which bridges canonical activated plans into the Orchestrator seam;
 - `ExecutorLifecycleBackend` and lower-level distributed transport/lifecycle decorators beneath the listed distributed profile;
@@ -158,7 +158,7 @@ The platform-wide #46 layer remains the aggregator for end-to-end compatibility 
 In particular:
 
 - the reference baseline remains deterministic, local-first and free from mandatory paid services;
-- Hermes support requires its prepared external profile; Forge retains only deprecation/migration evidence until the #991 removal gates pass;
+- Hermes support requires its prepared external profile; Forge has no active compatibility claim after #991 retirement;
 - LiteLLM requires its dedicated compatibility lane;
 - stable MCP claims require protocol and platform evidence for the same profile;
 - SkillSpector support is limited to the pinned static/no-LLM/network-none evidence profile;
@@ -178,7 +178,7 @@ When a future audit moves an entry to `deprecated`, the same change must add:
 
 Only after those conditions are satisfied may the implementation and obsolete CI lane be removed.
 
-For `executor.forge`, #991 and `docs/integrations/FORGE_RETENTION_DECISION.md` provide that deprecation record. The sidecar CI lane remains temporarily as migration/regression evidence and is removed with the executable Forge profile after the documented gates pass.
+Forge is the completed example of this procedure: #991 and `docs/integrations/FORGE_RETENTION_DECISION.md` recorded the migration and removal gates, the generic/reference evidence was established, and the executable adapter/transport plus sidecar CI lane were then removed. Historical provenance remains outside the active support matrix.
 
 ## CI policy
 
@@ -190,7 +190,7 @@ CI follows support policy rather than repository file count:
 - `deprecated`: migration/compatibility evidence only until removal;
 - `external`: core contract conformance tooling, not first-party upstream maintenance.
 
-The Forge sidecar lane is retained only for the #991 deprecation window; it is no longer evidence for a `supported` executor claim. Other required lanes remain unchanged. If a deprecation makes a compatibility lane obsolete, that lane should be removed in the same retirement sequence rather than retained indefinitely.
+The Forge sidecar lane was removed together with the executable Forge profile under #991. Other required lanes remain unchanged. If a future deprecation makes a compatibility lane obsolete, that lane should be removed in the same retirement sequence rather than retained indefinitely.
 
 ## Extension rule
 
