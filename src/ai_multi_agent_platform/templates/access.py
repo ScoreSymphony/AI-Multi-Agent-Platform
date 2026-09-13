@@ -5,9 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, cast
 
-from ai_multi_agent_platform.control_plane.async_scope import AsyncScopeStore
+from ai_multi_agent_platform.control_plane.async_scope import (
+    AsyncScopeStore,
+    AsyncScopeStoreAdapter,
+    ScopePersistenceOffload,
+)
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import RequestContext
+from ai_multi_agent_platform.control_plane.scope_store import ScopeStore
 from ai_multi_agent_platform.domain import OwnerRef, Project
 
 
@@ -44,6 +49,9 @@ class _ScopedControlPlane(Protocol):
     ) -> bool: ...
 
 
+_LEGACY_SCOPE_READ_OFFLOAD = ScopePersistenceOffload()
+
+
 @dataclass(slots=True)
 class TemplateScopeAccess:
     """Reuse composed Control Plane authorization and awaitable canonical Scope access."""
@@ -54,8 +62,12 @@ class TemplateScopeAccess:
         runtime = getattr(self.control_plane, "runtime_scopes", None)
         if runtime is not None:
             return await cast(AsyncScopeStore, runtime).get_project(project_id)
+
         scoped = cast(_ScopedControlPlane, self.control_plane)
-        return scoped.scopes.get_project(project_id)
+        scopes = scoped.scopes
+        if isinstance(scopes, ScopeStore):
+            return await AsyncScopeStoreAdapter(scopes).get_project(project_id)
+        return await _LEGACY_SCOPE_READ_OFFLOAD.run(lambda: scopes.get_project(project_id))
 
     async def authorize(
         self,
