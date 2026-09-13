@@ -4,7 +4,7 @@ Status date: 2026-09-13
 
 Issue: #991 — Executor: Forge retention decision, removal plan, and generic-guarantee audit
 
-Architecture authority: [`ADR 0013`](../adr/0013-deprecate-forge-execution-adapter-pending-removal-gates.md). That ADR records the deprecation decision and removal gates; this document records their completion and the final retirement outcome.
+Architecture authority: [`ADR 0014`](../adr/0014-remove-forge-execution-adapter-after-removal-gates.md) records the final executable removal after the gates were satisfied. [`ADR 0013`](../adr/0013-deprecate-forge-execution-adapter-pending-removal-gates.md) remains the historical record of the bounded deprecation window.
 
 Decision: **remove Forge as a first-party executable execution backend.**
 
@@ -71,7 +71,7 @@ The former #46 Scenario C identifier may remain only as a non-executable histori
 
 The following kinds of material may continue to mention Forge because they explain provenance, rejected architecture choices or historical compatibility behavior rather than exposing an executable backend:
 
-- ADR 0013;
+- ADR 0013 and ADR 0014;
 - `FORGE_REUSE_AUDIT.md`, `FORGE_REUSE_STATUS.md` and transport assessment records;
 - `upstream/forge-ai-agent-vps.yaml`, now marked `removed` and historical;
 - generic portability validation that rejects historical backend-private fields such as old Forge job IDs;
