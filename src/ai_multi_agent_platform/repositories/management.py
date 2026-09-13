@@ -21,6 +21,10 @@ from ai_multi_agent_platform.security import (
     infer_actor_identity,
 )
 
+from .async_catalog import (
+    RepositoryBindingCatalog,
+    ensure_async_repository_binding_catalog,
+)
 from .catalog import RepositoryBindingRecord, SqliteRepositoryBindingCatalog
 from .contracts import RepositoryProvider
 from .local_bootstrap import managed_local_connection_metadata
@@ -41,14 +45,14 @@ class RepositoryManagementService:
     def __init__(
         self,
         registry: RepositoryRegistry,
-        catalog: SqliteRepositoryBindingCatalog,
+        catalog: RepositoryBindingCatalog | SqliteRepositoryBindingCatalog,
         authorization: AuthorizationGate,
         *,
         managed_local_root: str | Path,
         discovery_resolver: RepositoryDiscoveryResolver | None = None,
     ) -> None:
         self._registry = registry
-        self._catalog = catalog
+        self._catalog = ensure_async_repository_binding_catalog(catalog)
         self._authorization = authorization
         self._managed_local_root = Path(managed_local_root).expanduser().resolve()
         self._discovery_resolver = discovery_resolver
@@ -136,7 +140,7 @@ class RepositoryManagementService:
             )
 
         binding = RepositoryBinding(connection, reference, provider)
-        self._register_and_persist(
+        await self._register_and_persist(
             binding,
             adapter_configuration={"root": str(root)},
         )
@@ -209,7 +213,7 @@ class RepositoryManagementService:
                 "provider_id": binding.provider.provider_id,
             },
         )
-        self._register_and_persist(
+        await self._register_and_persist(
             binding,
             adapter_configuration=adapter_configuration or {},
         )
@@ -231,7 +235,7 @@ class RepositoryManagementService:
             side_effect="local_write",
             payload={"delete_provider_content": False},
         )
-        self._catalog.delete(repository_id)
+        await self._catalog.delete(repository_id)
         self._registry.unregister(repository_id)
         return binding.reference
 
@@ -249,9 +253,9 @@ class RepositoryManagementService:
 
         detached: list[RepositoryReference] = []
         persisted_ids: set[str] = set()
-        for record in self._catalog.list(connection_id=connection.id):
+        for record in await self._catalog.list(connection_id=connection.id):
             persisted_ids.add(record.repository_id)
-            self._catalog.delete(record.repository_id)
+            await self._catalog.delete(record.repository_id)
             try:
                 binding = self._registry.unregister(record.repository_id)
             except ContractError as exc:
@@ -293,7 +297,7 @@ class RepositoryManagementService:
             )
         return connection, provider
 
-    def _register_and_persist(
+    async def _register_and_persist(
         self,
         binding: RepositoryBinding,
         *,
@@ -311,7 +315,7 @@ class RepositoryManagementService:
         )
         self._registry.register(binding)
         try:
-            self._catalog.save(record)
+            await self._catalog.save(record)
         except Exception:
             self._registry.unregister(binding.reference.id)
             raise
