@@ -58,8 +58,22 @@ async def _run_to_persistence_boundary[T](operation: Callable[[], T]) -> T:
         raise
 
 
+def map_sqlite_error(exc: sqlite3.Error, message: str) -> ContractError:
+    """Translate raw SQLite failures into canonical Data persistence errors."""
+
+    if isinstance(exc, sqlite3.OperationalError) and any(
+        marker in str(exc).casefold() for marker in _BUSY_MARKERS
+    ):
+        return ContractError(
+            ErrorCode.TRANSIENT_FAILURE,
+            message,
+            retryable=True,
+        )
+    return ContractError(ErrorCode.BACKEND_ERROR, message)
+
+
 def map_contract_sqlite_error(exc: ContractError, message: str) -> ContractError:
-    """Promote SQLite contention to the canonical retryable transient failure contract."""
+    """Promote SQLite contention wrapped by an adapter to a retryable transient failure."""
 
     cause = exc.__cause__
     if (
