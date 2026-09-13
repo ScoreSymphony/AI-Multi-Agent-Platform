@@ -182,6 +182,38 @@ def test_sqlite_kernel_failed_mutation_rolls_back(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
+async def _assert_stale_revision_conflict(repository: EventRepository) -> None:
+    stream_id = new_id("task")
+    await repository.commit(
+        stream_id=stream_id,
+        expected_revision=0,
+        events=(_event(stream_id),),
+    )
+
+    with pytest.raises(ContractError) as raised:
+        await repository.commit(
+            stream_id=stream_id,
+            expected_revision=0,
+            events=(_event(stream_id),),
+        )
+
+    assert raised.value.code is ErrorCode.CONFLICT
+    assert raised.value.retryable is True
+    assert raised.value.details == {
+        "reason": "stale_stream_revision",
+        "expected_revision": 0,
+        "actual_revision": 1,
+    }
+
+
+def test_in_memory_and_sqlite_report_same_retryable_stale_revision(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        await _assert_stale_revision_conflict(InMemoryKernelRepository())
+        await _assert_stale_revision_conflict(SqliteKernelRepository(tmp_path / "stale.sqlite3"))
+
+    asyncio.run(scenario())
+
+
 async def _assert_repository_contract(repository: EventRepository) -> None:
     stream_id = new_id("task")
     event = _event(stream_id)
