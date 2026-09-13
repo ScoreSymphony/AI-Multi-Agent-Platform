@@ -33,7 +33,6 @@ def _external(profile_id: str) -> tuple[str, ...]:
 
 _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
     "B": _external("B"),
-    "C": _external("C"),
     "E": _pytest(
         "tests/integration/distributed/test_distributed_runtime.py::"
         "test_two_node_selection_filters_resources_capabilities_and_model",
