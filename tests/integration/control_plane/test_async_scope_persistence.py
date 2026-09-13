@@ -17,6 +17,7 @@ from ai_multi_agent_platform.control_plane.async_scope import (
     AsyncScopeStoreAdapter,
     ScopePersistenceOffload,
 )
+from ai_multi_agent_platform.control_plane.scope_store import ScopeStore
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 
 
@@ -65,6 +66,18 @@ class _BusyScopeStore(SqliteScopeStore):
         if self.busy:
             raise sqlite3.OperationalError("database is locked")
         return super()._connect()
+
+
+class _FailingProjectInsertScopeStore(SqliteScopeStore):
+    def __init__(self, path: Path) -> None:
+        self.fail_insert = False
+        super().__init__(path)
+        self.fail_insert = True
+
+    def _insert_project(self, *args: object, **kwargs: object) -> None:
+        if self.fail_insert:
+            raise sqlite3.OperationalError("disk I/O error")
+        super()._insert_project(*args, **kwargs)  # type: ignore[arg-type]
 
 
 def test_scope_sqlite_runtime_is_responsive_and_worker_owned(tmp_path: Path) -> None:
@@ -214,6 +227,31 @@ def test_scope_cancellation_waits_for_durable_write(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
+def test_scope_worker_failure_wins_over_pending_cancellation() -> None:
+    async def scenario() -> None:
+        offload = ScopePersistenceOffload(max_concurrency=1)
+        started = threading.Event()
+        release = threading.Event()
+
+        def fail_after_release() -> None:
+            started.set()
+            if not release.wait(timeout=3):
+                raise TimeoutError("test Scope worker release timed out")
+            raise RuntimeError("scope persistence failed")
+
+        pending = asyncio.create_task(offload.run(fail_after_release))
+        assert await asyncio.to_thread(started.wait, 1)
+        pending.cancel()
+        await asyncio.sleep(0)
+        pending.cancel()
+        release.set()
+
+        with pytest.raises(RuntimeError, match="scope persistence failed"):
+            await pending
+
+    asyncio.run(scenario())
+
+
 def test_scope_sqlite_busy_maps_to_retryable_transient_failure(tmp_path: Path) -> None:
     async def scenario() -> None:
         scopes = _BusyScopeStore(tmp_path / "scope.sqlite3")
@@ -230,6 +268,95 @@ def test_scope_sqlite_busy_maps_to_retryable_transient_failure(tmp_path: Path) -
         assert raised.value.code is ErrorCode.TRANSIENT_FAILURE
         assert raised.value.retryable is True
         assert scopes.list_projects() == ()
+
+    asyncio.run(scenario())
+
+
+def test_failed_scope_write_leaves_memory_and_sqlite_unchanged(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        database = tmp_path / "scope.sqlite3"
+        scopes = _FailingProjectInsertScopeStore(database)
+        adapter = AsyncScopeStoreAdapter(scopes)
+
+        with pytest.raises(ContractError) as raised:
+            await adapter.create_project(
+                key="failed-create",
+                name="Failed Project",
+                owner_type="user",
+                owner_id="user:alice",
+                project_id="project_failed",
+            )
+
+        assert raised.value.code is ErrorCode.BACKEND_ERROR
+        assert scopes.list_projects() == ()
+        restarted = SqliteScopeStore(database)
+        assert restarted.list_projects() == ()
+
+    asyncio.run(scenario())
+
+
+async def _exercise_scope_contract(adapter: AsyncScopeStoreAdapter) -> tuple[object, ...]:
+    project = await adapter.create_project(
+        key="project-create",
+        name="Contract Project",
+        owner_type="user",
+        owner_id="user:alice",
+        project_id="project_contract",
+    )
+    replayed_project = await adapter.create_project(
+        key="project-create",
+        name="ignored-on-idempotent-replay",
+        owner_type="service",
+        owner_id="service:ignored",
+        project_id="project_ignored",
+    )
+    workspace = await adapter.create_workspace(
+        key="workspace-create",
+        project_id=project.id,
+        workspace_id="workspace_contract",
+    )
+    replayed_workspace = await adapter.create_workspace(
+        key="workspace-create",
+        project_id=project.id,
+        workspace_id="workspace_ignored",
+    )
+    disposable = await adapter.create_project(
+        key="project-disposable",
+        name="Disposable Project",
+        owner_type="user",
+        owner_id="user:alice",
+        project_id="project_disposable",
+    )
+    compensated = await adapter.compensate_project(
+        disposable.id,
+        external_dependencies=(),
+    )
+    try:
+        await adapter.get_project(disposable.id)
+    except ContractError as exc:
+        compensated_error = exc.code
+    else:
+        compensated_error = None
+
+    return (
+        (project.id, project.name, project.owner_ref.type, project.owner_ref.id),
+        replayed_project == project,
+        (workspace.id, workspace.project_id, workspace.owner_type, workspace.owner_id),
+        replayed_workspace == workspace,
+        tuple(item.id for item in await adapter.list_projects()),
+        tuple(item.id for item in await adapter.list_workspaces()),
+        compensated.id,
+        compensated_error,
+    )
+
+
+def test_scope_in_memory_and_sqlite_contract_parity(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        memory_result = await _exercise_scope_contract(AsyncScopeStoreAdapter(ScopeStore()))
+        sqlite_result = await _exercise_scope_contract(
+            AsyncScopeStoreAdapter(SqliteScopeStore(tmp_path / "scope.sqlite3"))
+        )
+        assert sqlite_result == memory_result
 
     asyncio.run(scenario())
 
@@ -261,5 +388,28 @@ def test_scope_async_sqlite_parity_for_project_and_workspace_restart(tmp_path: P
         restarted = SqliteScopeStore(database)
         assert restarted.get_project(project.id) == project
         assert restarted.get_workspace(workspace.id) == workspace
+
+    asyncio.run(scenario())
+
+
+def test_scope_compensation_is_durable_across_restart(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        database = tmp_path / "scope.sqlite3"
+        scopes = SqliteScopeStore(database)
+        adapter = AsyncScopeStoreAdapter(scopes)
+        project = await adapter.create_project(
+            key="project-create",
+            name="Compensated Project",
+            owner_type="user",
+            owner_id="user:alice",
+            project_id="project_compensated",
+        )
+
+        assert await adapter.compensate_project(project.id, external_dependencies=()) == project
+
+        restarted = SqliteScopeStore(database)
+        with pytest.raises(ContractError) as raised:
+            restarted.get_project(project.id)
+        assert raised.value.code is ErrorCode.NOT_FOUND
 
     asyncio.run(scenario())
