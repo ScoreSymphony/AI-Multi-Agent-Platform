@@ -43,7 +43,7 @@ Use for benchmark, pressure, scale and latency/throughput regression tests. Keep
 
 ### `regression/`
 
-Use for durable reproductions of previously observed defects or cross-cutting regressions that do not fit one narrower suite. Historical issue numbers may remain in filenames for traceability, but **do not create per-issue test directories**.
+Use for durable reproductions of previously observed defects or cross-cutting regressions that do not fit one narrower suite. Preserve historical issue provenance in docstrings, comments, metadata or Git history rather than making the issue number the test module name. **Do not create per-issue test directories.**
 
 ### `release/`
 
@@ -93,6 +93,8 @@ Before moving an existing test, check all of the following:
 
 If a move would require changing production semantics, split that work from the layout refactor.
 
+Existing root-level and issue-numbered modules are temporary migration debt. They may still be modified in place until their migration cohort lands, but a pull request must not introduce a new ordinary `tests/test_*.py` root module or a new/renamed `test_issue<number>*.py` module. `scripts/ci/validate_test_layout.py` enforces that incremental rule from the pull-request diff.
+
 ## Naming
 
-Name tests for the behavior they protect. Existing `test_issue_*` filenames may remain during migration for traceability, but new tests should prefer behavioral names unless an issue-specific regression identifier materially improves diagnostics.
+Name tests for the behavior they protect. New and renamed test modules must use behavior/domain-oriented names. Preserve useful issue or PR provenance in docstrings, comments, test metadata or Git history rather than filenames. A genuinely exceptional fixture that cannot be represented otherwise requires an explicit documented exception instead of silently bypassing the naming rule.

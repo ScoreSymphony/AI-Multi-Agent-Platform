@@ -1,3 +1,5 @@
+"""Context source-adapter regression coverage originating in issues #650/#680."""
+
 from __future__ import annotations
 
 import asyncio
