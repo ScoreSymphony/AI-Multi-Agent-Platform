@@ -8,6 +8,7 @@ northbound ownership no longer depend on a later-domain ``execute_command`` MRO 
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -17,7 +18,7 @@ from ai_multi_agent_platform.organizations import OrganizationService, ResourceO
 from ai_multi_agent_platform.search import SearchResult
 
 from .conversation_current_composition import ControlPlane as _CurrentControlPlane
-from .extensions import ControlPlaneModule
+from .extensions import CommandAuthorizer, ControlPlaneModule, ResourceService
 from .models import OwnerType, RequestContext
 from .module_registry import install_control_plane_modules
 from .organization_api import (
@@ -38,7 +39,7 @@ from .organization_ownership_integration import (
     reject_direct_mirror_owner_mutation,
 )
 from .organization_visibility import AdministrativeOwnershipVisibility
-from .service import _resolve_owner
+from .service import _payload_digest, _resolve_owner
 
 if TYPE_CHECKING:
     from ai_multi_agent_platform.accounting.service import AccountingService
@@ -110,6 +111,7 @@ class ControlPlane(_CurrentControlPlane):
         accounting = self._accounting_service
         if accounting is None:
             return None
+        services: Mapping[str, ResourceService]
         if self._organization_service is None:
             from ai_multi_agent_platform.accounting.control_plane import (
                 accounting_resource_services,
@@ -151,7 +153,7 @@ class ControlPlane(_CurrentControlPlane):
             **organization_management_command_handlers(service),
         }
 
-        def authorizer(command: str) -> Any:
+        def authorizer(command: str) -> CommandAuthorizer:
             async def authorize(
                 context: RequestContext,
                 resource_ref: str,
@@ -167,28 +169,33 @@ class ControlPlane(_CurrentControlPlane):
                         command,
                         resource_ref,
                     )
-                if scope is None:
-                    return
+                if scope is not None:
+                    await self._authorize(
+                        context,
+                        command,
+                        resource_ref,
+                        owner_type=scope[0],
+                        owner_id=scope[1],
+                    )
+                    cross_organization_target = await _cross_organization_share_target(
+                        service,
+                        command,
+                        payload,
+                    )
+                    if cross_organization_target is not None:
+                        await self._authorize(
+                            context,
+                            "resource-share.cross-organization",
+                            cross_organization_target,
+                            owner_type=scope[0],
+                            owner_id=scope[1],
+                        )
                 await self._authorize(
                     context,
                     command,
                     resource_ref,
-                    owner_type=scope[0],
-                    owner_id=scope[1],
+                    request_payload_digest=_payload_digest(payload),
                 )
-                cross_organization_target = await _cross_organization_share_target(
-                    service,
-                    command,
-                    payload,
-                )
-                if cross_organization_target is not None:
-                    await self._authorize(
-                        context,
-                        "resource-share.cross-organization",
-                        cross_organization_target,
-                        owner_type=scope[0],
-                        owner_id=scope[1],
-                    )
 
             return authorize
 
