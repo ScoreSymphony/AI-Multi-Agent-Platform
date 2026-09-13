@@ -238,6 +238,11 @@ class RepositoryManagementService:
             payload={"delete_provider_content": False},
         )
         removed = await self._unregister_and_delete(repository_id)
+        if removed is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "repository binding disappeared during detach",
+            )
         return removed.reference
 
     async def detach_connection(
