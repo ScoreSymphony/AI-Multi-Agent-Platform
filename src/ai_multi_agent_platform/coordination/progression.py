@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from datetime import datetime
 from typing import Literal, Protocol
@@ -21,7 +22,8 @@ from .models import (
     StepCoordinationRecord,
 )
 
-_SUCCESSFUL_PREDECESSORS = frozenset({StepStatus.SUCCEEDED, StepStatus.SKIPPED})
+_STALE_STREAM_RETRY_LIMIT = 32
+_STALE_STREAM_RETRY_DELAY_SECONDS = 0.001
 
 
 class ProgressionRunKernel(Protocol):
@@ -91,16 +93,30 @@ class CoordinationProgression:
     ) -> bool:
         if step.status is not StepStatus.PENDING:
             return False
-        satisfied = tuple(
-            dependency_id
-            for dependency_id in record.dependency_ids
-            if by_id[dependency_id].status in _SUCCESSFUL_PREDECESSORS
-        )
-        failed = tuple(
-            dependency_id
-            for dependency_id in record.dependency_ids
-            if by_id[dependency_id].status in {StepStatus.FAILED, StepStatus.CANCELLED}
-        )
+
+        # A Step may be SKIPPED intentionally after all of its own dependencies were satisfied,
+        # or because its predecessor barrier failed. Only the former is a successful prerequisite.
+        # Preserve that distinction from canonical coordination records so a skipped fan-in caused
+        # by failure propagates transitively instead of incorrectly unblocking downstream work.
+        satisfied_items: list[str] = []
+        failed_items: list[str] = []
+        for dependency_id in record.dependency_ids:
+            dependency = by_id[dependency_id]
+            if dependency.status is StepStatus.SUCCEEDED:
+                satisfied_items.append(dependency_id)
+            elif dependency.status in {StepStatus.FAILED, StepStatus.CANCELLED}:
+                failed_items.append(dependency_id)
+            elif dependency.status is StepStatus.SKIPPED:
+                dependency_record = await self.repository.get_step_record(dependency_id)
+                if set(dependency_record.satisfied_dependency_ids) == set(
+                    dependency_record.dependency_ids
+                ):
+                    satisfied_items.append(dependency_id)
+                else:
+                    failed_items.append(dependency_id)
+        satisfied = tuple(satisfied_items)
+        failed = tuple(failed_items)
+
         if failed:
             step_claim = await claim(step.id, now)
             if step_claim is None:
@@ -238,13 +254,7 @@ class CoordinationProgression:
             ):
                 return False
             attempt = current.current_attempt + 1
-            run = await self.kernel.create_run(
-                idempotency_key=self._attempt_key(current, attempt),
-                task_id=current.task_id,
-                subject_type="step",
-                subject_id=current.step_id,
-                source="platform-coordinator",
-            )
+            run = await self._create_run_with_stale_retry(current, attempt)
             if run.attempt != attempt:
                 raise ContractError(
                     ErrorCode.CONFLICT,
@@ -276,12 +286,7 @@ class CoordinationProgression:
                 claim=step_claim,
                 now=now,
             )
-            await self.kernel.start_run(
-                idempotency_key=self._start_key(current, attempt),
-                task_id=current.task_id,
-                run_id=run.run_id,
-                source="platform-coordinator",
-            )
+            await self._start_run_with_stale_retry(current, attempt, run.run_id)
             emit(
                 "coordination.attempt.dispatched",
                 current.task_id,
@@ -302,6 +307,54 @@ class CoordinationProgression:
         finally:
             await self.repository.release_claim(step_claim)
 
+    async def _create_run_with_stale_retry(
+        self,
+        record: StepCoordinationRecord,
+        attempt: int,
+    ) -> RunState:
+        last_stale_conflict: ContractError | None = None
+        for _ in range(_STALE_STREAM_RETRY_LIMIT):
+            try:
+                return await self.kernel.create_run(
+                    idempotency_key=self._attempt_key(record, attempt),
+                    task_id=record.task_id,
+                    subject_type="step",
+                    subject_id=record.step_id,
+                    source="platform-coordinator",
+                )
+            except ContractError as exc:
+                if not _is_stale_revision_conflict(exc):
+                    raise
+                last_stale_conflict = exc
+                await asyncio.sleep(_STALE_STREAM_RETRY_DELAY_SECONDS)
+        if last_stale_conflict is None:
+            raise RuntimeError("stale-revision create_run retry loop exited without a conflict")
+        raise last_stale_conflict
+
+    async def _start_run_with_stale_retry(
+        self,
+        record: StepCoordinationRecord,
+        attempt: int,
+        run_id: str,
+    ) -> RunState:
+        last_stale_conflict: ContractError | None = None
+        for _ in range(_STALE_STREAM_RETRY_LIMIT):
+            try:
+                return await self.kernel.start_run(
+                    idempotency_key=self._start_key(record, attempt),
+                    task_id=record.task_id,
+                    run_id=run_id,
+                    source="platform-coordinator",
+                )
+            except ContractError as exc:
+                if not _is_stale_revision_conflict(exc):
+                    raise
+                last_stale_conflict = exc
+                await asyncio.sleep(_STALE_STREAM_RETRY_DELAY_SECONDS)
+        if last_stale_conflict is None:
+            raise RuntimeError("stale-revision start_run retry loop exited without a conflict")
+        raise last_stale_conflict
+
     @staticmethod
     def _attempt_key(record: StepCoordinationRecord, attempt: int) -> str:
         return f"coord:{record.plan_id}:{record.step_id}:attempt:{attempt}"
@@ -309,3 +362,11 @@ class CoordinationProgression:
     @staticmethod
     def _start_key(record: StepCoordinationRecord, attempt: int) -> str:
         return f"coord:{record.plan_id}:{record.step_id}:attempt:{attempt}:start"
+
+
+def _is_stale_revision_conflict(exc: ContractError) -> bool:
+    return (
+        exc.code is ErrorCode.CONFLICT
+        and exc.retryable
+        and exc.details.get("reason") == "stale_stream_revision"
+    )

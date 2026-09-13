@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import replace
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
@@ -31,7 +31,7 @@ from ai_multi_agent_platform.contracts import (
     ProviderDescriptor,
 )
 from ai_multi_agent_platform.domain import Plan, Step
-from ai_multi_agent_platform.kernel.models import TaskState
+from ai_multi_agent_platform.kernel.models import TERMINAL_RUN_STATUSES, RunState, TaskState
 from ai_multi_agent_platform.models import ModelRegistry, RoutingRequirements
 from ai_multi_agent_platform.security import ActorIdentity, AuthorizationGate
 
@@ -92,7 +92,7 @@ class PlanningOnlyLifecycleBackend(LifecycleBackend):
 
 
 class StepBindingKernel(Protocol):
-    """Narrow canonical Task mutation seam needed to persist Step execution bindings."""
+    """Narrow canonical Task/Run seam needed by planning activation composition."""
 
     async def update_task(
         self,
@@ -104,11 +104,39 @@ class StepBindingKernel(Protocol):
         source: str = "platform-kernel",
     ) -> object: ...
 
+    async def get_task(self, task_id: str) -> TaskState: ...
+
+    async def get_run(self, task_id: str, run_id: str) -> RunState: ...
+
+    async def refresh_run(
+        self,
+        *,
+        idempotency_key: str,
+        task_id: str,
+        run_id: str,
+        actor_ref: str | None = None,
+        source: str = "platform-kernel",
+    ) -> RunState: ...
+
 
 class PlanCoordinator(Protocol):
     """Existing #384 registration seam; planning does not own progression."""
 
     async def register_plan(self, plan: Plan, steps: tuple[Step, ...]) -> object: ...
+
+
+@runtime_checkable
+class RunObservingPlanCoordinator(PlanCoordinator, Protocol):
+    """Optional #384 outcome-observation seam used after synchronous local dispatch."""
+
+    async def observe_run(
+        self,
+        *,
+        task_id: str,
+        run_id: str,
+        failure_category: str | None = None,
+        observation_key: str | None = None,
+    ) -> object: ...
 
 
 class PlanningBindingCoordinator:
@@ -122,6 +150,13 @@ class PlanningBindingCoordinator:
     The Task update uses a proposal-scoped idempotency key, so a crash after binding but before
     #384 registration is restart-safe. Repeated registration after a fully activated proposal is
     also safe and resolves the proposal through its canonical activation Plan ID.
+
+    The reference local lifecycle can finish a backend Run synchronously inside ``register_plan``
+    while the canonical Run remains RUNNING until the ordinary kernel refresh seam observes that
+    snapshot. This wrapper performs that provider-neutral refresh and then feeds terminal Step Runs
+    through #384's existing ``observe_run`` seam until no newly terminal Run remains. Async or
+    distributed Runs that remain nonterminal after refresh are left untouched for their normal
+    observer or reconciliation path.
     """
 
     def __init__(
@@ -197,7 +232,50 @@ class PlanningBindingCoordinator:
             actor_ref=proposal.planner.planner_id,
             source="platform-planning",
         )
-        return await self._delegate.register_plan(plan, steps)
+        projection = await self._delegate.register_plan(plan, steps)
+        return await self._drain_synchronously_terminal_runs(plan, steps, projection)
+
+    async def _drain_synchronously_terminal_runs(
+        self,
+        plan: Plan,
+        steps: tuple[Step, ...],
+        projection: object,
+    ) -> object:
+        if not isinstance(self._delegate, RunObservingPlanCoordinator):
+            return projection
+
+        step_ids = frozenset(step.id for step in steps)
+        observed_run_ids: set[str] = set()
+        while True:
+            task = await self._kernel.get_task(plan.task_id)
+            terminal_runs: list[RunState] = []
+            for run_id in task.run_ids:
+                if run_id in observed_run_ids:
+                    continue
+                run = await self._kernel.get_run(plan.task_id, run_id)
+                if run.run.subject_type != "step" or run.run.subject_id not in step_ids:
+                    continue
+                if run.status not in TERMINAL_RUN_STATUSES:
+                    run = await self._kernel.refresh_run(
+                        idempotency_key=f"planning:{plan.id}:{run.run_id}:refresh",
+                        task_id=plan.task_id,
+                        run_id=run.run_id,
+                        source="platform-planning",
+                    )
+                if run.status in TERMINAL_RUN_STATUSES:
+                    terminal_runs.append(run)
+            if not terminal_runs:
+                return projection
+
+            for run in terminal_runs:
+                observed_run_ids.add(run.run_id)
+                projection = await self._delegate.observe_run(
+                    task_id=plan.task_id,
+                    run_id=run.run_id,
+                    observation_key=(
+                        f"planning-activation:{plan.id}:{run.run_id}:{run.status.value}"
+                    ),
+                )
 
     def _proposal_for_plan(self, plan: Plan) -> ProposalRecord:
         records = self._repository.list_for_task(plan.task_id)
