@@ -22,16 +22,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Materialize validated workflow path migration
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          BASE_SHA: ${{ github.sha }}
         run: |
           python - <<'PY'
-          import base64
-          import json
-          import os
-          import urllib.request
+          import shutil
           from pathlib import Path
 
           mapping = {
@@ -84,6 +77,11 @@ jobs:
 
           workflow_root = Path(".github/workflows")
           helper = workflow_root / "prepare-722-workflow-tree.yml"
+          staging = Path(".migration722/workflows")
+          if staging.parent.exists():
+              shutil.rmtree(staging.parent)
+          staging.mkdir(parents=True)
+
           changed: list[Path] = []
           for path in sorted(workflow_root.iterdir()):
               if path == helper or path.suffix not in {".yml", ".yaml"}:
@@ -95,6 +93,7 @@ jobs:
               if updated != text:
                   path.write_text(updated, encoding="utf-8")
                   changed.append(path)
+                  (staging / path.name).write_text(updated, encoding="utf-8")
 
           stale: list[str] = []
           for path in sorted(workflow_root.iterdir()):
@@ -109,55 +108,18 @@ jobs:
           if stale:
               raise SystemExit("Stale migrated test paths remain in workflows:\n" + "\n".join(sorted(set(stale))))
 
-          print(f"Workflow files changed: {len(changed)}")
+          (staging.parent / "changed.txt").write_text(
+              "".join(f"{path.as_posix()}\n" for path in changed), encoding="utf-8"
+          )
+          print(f"Workflow files staged: {len(changed)}")
           for path in changed:
               print(path.as_posix())
-
-          token = os.environ["GH_TOKEN"]
-          repo = os.environ["REPOSITORY"]
-          base_sha = os.environ["BASE_SHA"]
-          api = f"https://api.github.com/repos/{repo}"
-          headers = {
-              "Accept": "application/vnd.github+json",
-              "Authorization": f"Bearer {token}",
-              "X-GitHub-Api-Version": "2022-11-28",
-              "Content-Type": "application/json",
-          }
-
-          def request(method: str, url: str, payload=None):
-              data = None if payload is None else json.dumps(payload).encode("utf-8")
-              req = urllib.request.Request(url, data=data, headers=headers, method=method)
-              with urllib.request.urlopen(req) as response:
-                  return json.load(response)
-
-          base_commit = request("GET", f"{api}/git/commits/{base_sha}")
-          tree_entries = []
-          for path in changed:
-              encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-              blob = request(
-                  "POST",
-                  f"{api}/git/blobs",
-                  {"content": encoded, "encoding": "base64"},
-              )
-              tree_entries.append(
-                  {"path": path.as_posix(), "mode": "100644", "type": "blob", "sha": blob["sha"]}
-              )
-          tree_entries.append(
-              {"path": helper.as_posix(), "mode": "100644", "type": "blob", "sha": None}
-          )
-          tree = request(
-              "POST",
-              f"{api}/git/trees",
-              {"base_tree": base_commit["tree"]["sha"], "tree": tree_entries},
-          )
-          commit = request(
-              "POST",
-              f"{api}/git/commits",
-              {
-                  "message": "ci: update test paths after #722 migration",
-                  "tree": tree["sha"],
-                  "parents": [base_sha],
-              },
-          )
-          print(f"PREPARED_COMMIT_SHA={commit['sha']}")
           PY
+      - name: Restore workflow paths and push staged blobs
+        run: |
+          git checkout HEAD -- .github/workflows
+          git config user.name "Score Symphony"
+          git config user.email "scoresymphony@gmail.com"
+          git add .migration722
+          git commit -m "chore: stage #722 workflow migration blobs"
+          git push origin HEAD:test/722-final-rest-migration
