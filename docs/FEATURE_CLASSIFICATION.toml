@@ -16,13 +16,13 @@ user_signaling = "none"
 
 [[feature]]
 id = "control-plane-v1"
-name = "Control Plane API v1"
+name = "Control Plane API v1 foundation"
 owners = ["control_plane"]
 role = "core"
 stability = "stable"
-public_surfaces = ["HTTP /api/v1", "generated OpenAPI 3.1 contract"]
+public_surfaces = ["shared HTTP /api/v1 protocol and foundation conventions", "generated OpenAPI 3.1 foundation conventions"]
 docs = ["docs/runtime/CONTROL_PLANE.md", "docs/adr/0003-versioned-control-plane-api.md"]
-compatibility = "Incompatible HTTP/API changes require a new API major namespace; v1 evolves additively with documented deprecation."
+compatibility = "Stable applies to shared v1 protocol/foundation conventions and separately Stable-classified resources; Beta/Experimental resources composed under /api/v1 keep their own bounded evolution rules and do not inherit Stable compatibility from the namespace."
 user_signaling = "none"
 
 [[feature]]
@@ -144,6 +144,17 @@ stability = "beta"
 public_surfaces = ["documented platform CLI commands and output contracts"]
 docs = ["README.md", "docs/DEVELOPMENT.md"]
 compatibility = "Documented commands are supported; command/output shape may evolve in non-patch releases with migration notes where automation is affected."
+user_signaling = "documentation"
+
+[[feature]]
+id = "onboarding-first-run"
+name = "First-run Onboarding"
+owners = ["onboarding"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["onboarding first-run status and commands", "platform onboarding CLI", "browser /onboarding workflow"]
+docs = ["docs/product/FIRST_RUN_ONBOARDING.md", "docs/product/WEB_FIRST_RUN_ONBOARDING.md"]
+compatibility = "Onboarding is a supported thin composition over canonical Model, Project, Workspace, Agent and Task/Run owners; its public workflow/API details may evolve in bounded non-patch releases with migration guidance and must not redefine those underlying lifecycles."
 user_signaling = "documentation"
 
 [[feature]]
@@ -274,7 +285,7 @@ owners = ["learning", "research"]
 role = "optional_advanced"
 stability = "experimental"
 public_surfaces = ["learning/improvement resources", "research workflow resources"]
-docs = ["docs/product/GOVERNED_LEARNING.md", "docs/PACKAGE_BOUNDARIES.md"]
+docs = ["docs/product/GOVERNED_LEARNING.md", "docs/cli/CLI_LEARNING.md", "docs/PACKAGE_BOUNDARIES.md"]
 compatibility = "Experimental advanced capabilities; public contracts may change incompatibly in non-patch releases without deprecation."
 user_signaling = "documentation_and_ui_contextual"
 
