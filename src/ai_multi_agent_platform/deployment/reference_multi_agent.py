@@ -13,12 +13,14 @@ from typing import Any
 from ai_multi_agent_platform.agents import AgentRevisionRef, AgentRunRecord, AgentRunStatus
 from ai_multi_agent_platform.context import ContextCandidate, ContextSourceRequest
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
+from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
 from ai_multi_agent_platform.handoffs import (
     HandoffContent,
     HandoffSourceKind,
     HandoffSourceRef,
 )
 from ai_multi_agent_platform.handoffs.production import DurableConsumedHandoffContextAdapter
+from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.planning import DeterministicReferencePlanner
 from ai_multi_agent_platform.planning.models import (
     AgentAssignment,
@@ -173,14 +175,20 @@ class ReferenceIncomingHandoffContextAdapter:
 
     adapter_id = "reference-multi-agent-incoming-handoff/v1"
 
-    def __init__(self, handoffs: HandoffDeploymentComposition) -> None:
+    def __init__(
+        self,
+        handoffs: HandoffDeploymentComposition,
+        *,
+        coordinator: CoordinatorRepository,
+        kernel: PlatformKernel,
+    ) -> None:
         self._handoffs = handoffs
-        self._coordinator = handoffs.coordinated._coordinator  # noqa: SLF001 - composition join
+        self._coordinator = coordinator
         self._durable = DurableConsumedHandoffContextAdapter(
             repository=handoffs.repository,
             agents=handoffs.runtime.agents,
         )
-        self._kernel = getattr(handoffs.references.verification, "_kernel", None)
+        self._kernel = kernel
 
     async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
         if request.step_id is None:
@@ -403,15 +411,9 @@ class ReferenceIncomingHandoffContextAdapter:
         kind: HandoffSourceKind,
         resource_id: str,
     ) -> None:
-        kernel = self._kernel
-        if kernel is None:
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                "reference Handoff output publication requires the canonical kernel",
-            )
         try:
-            run = await kernel.get_run(task_id, producer_run.run_id)
-        except (AttributeError, ContractError) as exc:
+            run = await self._kernel.get_run(task_id, producer_run.run_id)
+        except ContractError as exc:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "dependency AgentRun is missing its canonical producer Run",
@@ -427,7 +429,7 @@ class ReferenceIncomingHandoffContextAdapter:
                     "AgentRun Result identity does not match canonical producer Run output",
                     details={"producer_run_id": producer_run.run_id, "result_id": resource_id},
                 )
-            await kernel.attach_result(
+            await self._kernel.attach_result(
                 idempotency_key=(
                     f"reference-multi-agent-output:{producer_run.run_id}:result:{resource_id}"
                 ),
@@ -447,7 +449,7 @@ class ReferenceIncomingHandoffContextAdapter:
                 "AgentRun Artifact identity does not match canonical producer Run output",
                 details={"producer_run_id": producer_run.run_id, "artifact_id": resource_id},
             )
-        await kernel.attach_artifact(
+        await self._kernel.attach_artifact(
             idempotency_key=(
                 f"reference-multi-agent-output:{producer_run.run_id}:artifact:{resource_id}"
             ),
