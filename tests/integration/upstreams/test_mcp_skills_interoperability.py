@@ -289,9 +289,7 @@ def test_dynamic_skill_is_discoverable_but_not_canonicalizable(tmp_path: Path) -
 def test_staging_verifies_digests_and_is_skillspector_compatible(tmp_path: Path) -> None:
     entry, files = _payload(supporting={"references/notes.md": b"safe notes\n"})
     rpc = _FixtureRpc(entry=entry, files=files)
-    candidate = McpSkillsAdapter(rpc, tmp_path / "staging").fetch_and_stage(
-        "skill://demo/SKILL.md"
-    )
+    candidate = McpSkillsAdapter(rpc, tmp_path / "staging").fetch_and_stage("skill://demo/SKILL.md")
 
     assert candidate.staged.snapshot_path.joinpath("SKILL.md").exists()
     assert candidate.staged.snapshot_path.joinpath("references", "notes.md").exists()
