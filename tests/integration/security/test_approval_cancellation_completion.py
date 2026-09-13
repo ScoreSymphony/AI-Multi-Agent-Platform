@@ -24,6 +24,7 @@ from ai_multi_agent_platform.security import (
     SqliteApprovalService,
     SqliteAuthorizationAuditSink,
 )
+from ai_multi_agent_platform.security.approvals import ApprovalRecord
 
 
 class _BlockingApprovalService(SqliteApprovalService):
@@ -90,8 +91,8 @@ def test_cancelled_gate_decision_finishes_required_event_and_audit(tmp_path: Pat
         audit = SqliteAuthorizationAuditSink(audit_path)
         events: list[tuple[str, str]] = []
 
-        async def record_event(event: str, record: object) -> None:
-            events.append((event, getattr(record, "approval_id")))
+        async def record_event(event: str, record: ApprovalRecord) -> None:
+            events.append((event, record.approval_id))
 
         gate = AuthorizationGate(
             _provider(),
@@ -144,8 +145,8 @@ def test_cancelled_approval_resolution_still_emits_resolved_event(tmp_path: Path
         )
         events: list[tuple[str, str]] = []
 
-        async def record_event(event: str, record: object) -> None:
-            events.append((event, getattr(record, "approval_id")))
+        async def record_event(event: str, record: ApprovalRecord) -> None:
+            events.append((event, record.approval_id))
 
         gate = AuthorizationGate(
             _provider(),
