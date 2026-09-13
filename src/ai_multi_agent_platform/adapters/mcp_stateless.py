@@ -3,7 +3,8 @@
 The stable MCP adapter continues to use the official Python SDK. This module is a
 small platform-owned compatibility adapter for the newer stateless wire contract while
 upstream SDK/conformance support is still prerelease. It implements the existing
-``MCPClient`` seam and does not introduce MCP-private types into canonical contracts.
+``MCPClient`` seam and, when explicitly enabled by the provider, the finalized SEP-2663
+Tasks extension without introducing MCP-private types into canonical contracts.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import asyncio
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -20,13 +22,27 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .mcp import MCPClient, MCPServerConfig, MCPTool, MCPToolProvider
+from .mcp_tasks import (
+    MCPImmediateToolResult,
+    MCPTaskSnapshot,
+    MCPTaskStarted,
+    MCPTaskStatus,
+    MCP_TASKS_EXTENSION_ID,
+    MCP_TASKS_PROTOCOL_REVISION,
+    MCPTaskCallResult,
+)
 
 MCP_STATELESS_PROTOCOL_REVISION = "2026-07-28"
 _PROTOCOL_HEADER = "MCP-Protocol-Version"
 _META_PROTOCOL_VERSION = "io.modelcontextprotocol/protocolVersion"
 _META_CLIENT_CAPABILITIES = "io.modelcontextprotocol/clientCapabilities"
 _META_CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
+_MCP_NAME_HEADER = "Mcp-Name"
 _UNSUPPORTED_PROTOCOL_VERSION = -32022
+_MISSING_REQUIRED_CLIENT_CAPABILITY = -32021
+_INVALID_PARAMS = -32602
+_METHOD_NOT_FOUND = -32601
+_TASK_METHODS = frozenset({"tasks/get", "tasks/update", "tasks/cancel"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +76,10 @@ class MCPStatelessHTTPClient(MCPClient):
         self._client_name = client_name
         self._client_version = client_version
         self._request_id = 0
+
+    @property
+    def task_protocol_revision(self) -> str:
+        return MCP_TASKS_PROTOCOL_REVISION
 
     async def list_tools(self) -> tuple[MCPTool, ...]:
         result = await self._request("tools/list", {})
@@ -99,15 +119,88 @@ class MCPStatelessHTTPClient(MCPClient):
                 "arguments": arguments,
             },
         )
-        if result.get("isError") is True:
+        return self._normalize_immediate_tool_result(name, result)
+
+    async def supports_tasks(self) -> bool:
+        """Negotiate the finalized extension through server/discover capabilities."""
+
+        try:
+            result = await self._request("server/discover", {})
+        except ContractError as exc:
+            if exc.details.get("jsonrpc_error_code") == _METHOD_NOT_FOUND:
+                return False
+            raise
+        capabilities = result.get("capabilities")
+        if not isinstance(capabilities, Mapping):
+            return False
+        extensions = capabilities.get("extensions")
+        if not isinstance(extensions, Mapping):
+            return False
+        declaration = extensions.get(MCP_TASKS_EXTENSION_ID)
+        return isinstance(declaration, Mapping)
+
+    async def call_tool_with_tasks(
+        self,
+        name: str,
+        arguments: dict[str, JsonValue],
+    ) -> MCPTaskCallResult:
+        """Advertise SEP-2663 for this request and handle its polymorphic result shape."""
+
+        result = await self._request(
+            "tools/call",
+            {
+                "name": name,
+                "arguments": arguments,
+            },
+            client_extensions=(MCP_TASKS_EXTENSION_ID,),
+        )
+        result_type = result.get("resultType")
+        if result_type == "task":
+            return MCPTaskStarted(_task_snapshot(result, provider_id=self._provider_id))
+        if result_type == "input_required":
             raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                f"MCP tool {name!r} returned an error result",
-                provider_id=f"mcp:{self._config.server_id}",
+                ErrorCode.UNSUPPORTED_CAPABILITY,
+                "synchronous MCP multi-round-trip input is not handled by the Tasks adapter",
+                provider_id=self._provider_id,
             )
-        if "structuredContent" in result:
-            return _json_value(result["structuredContent"])
-        return _json_value(result)
+        return MCPImmediateToolResult(self._normalize_immediate_tool_result(name, result))
+
+    async def get_task(self, task_id: str) -> MCPTaskSnapshot:
+        result = await self._request(
+            "tasks/get",
+            {"taskId": task_id},
+            client_extensions=(MCP_TASKS_EXTENSION_ID,),
+        )
+        if result.get("resultType") != "complete":
+            raise self._invalid_response("tasks/get resultType must be 'complete'")
+        return _task_snapshot(result, provider_id=self._provider_id)
+
+    async def update_task(
+        self,
+        task_id: str,
+        input_responses: dict[str, JsonValue],
+    ) -> None:
+        if not input_responses:
+            raise ValueError("MCP tasks/update requires at least one input response")
+        result = await self._request(
+            "tasks/update",
+            {
+                "taskId": task_id,
+                "inputResponses": input_responses,
+            },
+            client_extensions=(MCP_TASKS_EXTENSION_ID,),
+        )
+        if result.get("resultType") != "complete":
+            raise self._invalid_response("tasks/update resultType must be 'complete'")
+
+    async def cancel_task(self, task_id: str) -> None:
+        result = await self._request(
+            "tasks/cancel",
+            {"taskId": task_id},
+            client_extensions=(MCP_TASKS_EXTENSION_ID,),
+        )
+        if result.get("resultType") != "complete":
+            raise self._invalid_response("tasks/cancel resultType must be 'complete'")
 
     async def ping(self) -> bool:
         try:
@@ -116,12 +209,33 @@ class MCPStatelessHTTPClient(MCPClient):
         except Exception:
             return False
 
+    @property
+    def _provider_id(self) -> str:
+        return f"mcp:{self._config.server_id}"
+
+    def _normalize_immediate_tool_result(
+        self,
+        name: str,
+        result: Mapping[str, Any],
+    ) -> JsonValue:
+        if result.get("isError") is True:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                f"MCP tool {name!r} returned an error result",
+                provider_id=self._provider_id,
+            )
+        if "structuredContent" in result:
+            return _json_value(result["structuredContent"])
+        return _json_value(result)
+
     async def _request(
         self,
         method: str,
         params: dict[str, JsonValue],
+        *,
+        client_extensions: tuple[str, ...] = (),
     ) -> dict[str, Any]:
-        response = await self._send(method, params)
+        response = await self._send(method, params, client_extensions=client_extensions)
         error = response.payload.get("error")
         if isinstance(error, Mapping) and error.get("code") == _UNSUPPORTED_PROTOCOL_VERSION:
             supported = _supported_versions(error)
@@ -129,39 +243,76 @@ class MCPStatelessHTTPClient(MCPClient):
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
                     "MCP server rejected the configured protocol revision without a common version",
-                    provider_id=f"mcp:{self._config.server_id}",
+                    provider_id=self._provider_id,
                     details={
                         "requested_protocol_revision": self._protocol_revision,
                         "supported_protocol_revisions": list(supported),
                     },
                 )
-            response = await self._send(method, params)
+            response = await self._send(method, params, client_extensions=client_extensions)
             error = response.payload.get("error")
 
         if error is not None:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                f"MCP request {method!r} returned a JSON-RPC error",
-                provider_id=f"mcp:{self._config.server_id}",
-                details={"http_status": response.status, "error": _json_value(error)},
-            )
+            self._raise_jsonrpc_error(method, response.status, error)
 
         result = response.payload.get("result")
         if not isinstance(result, Mapping):
             raise self._invalid_response(f"MCP request {method!r} returned no result object")
         return dict(result)
 
+    def _raise_jsonrpc_error(self, method: str, status: int, error: object) -> None:
+        converted = _json_value(error)
+        code: int | None = None
+        if isinstance(error, Mapping):
+            raw_code = error.get("code")
+            if isinstance(raw_code, int) and not isinstance(raw_code, bool):
+                code = raw_code
+        details: dict[str, JsonValue] = {
+            "http_status": status,
+            "error": converted,
+            "jsonrpc_method": method,
+        }
+        if code is not None:
+            details["jsonrpc_error_code"] = code
+
+        if method in _TASK_METHODS and code == _INVALID_PARAMS:
+            details["mcp_task_lost"] = True
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                "MCP task is unknown, expired or otherwise unavailable",
+                provider_id=self._provider_id,
+                details=details,
+            )
+        if method in _TASK_METHODS and code == _MISSING_REQUIRED_CLIENT_CAPABILITY:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "MCP server rejected a negotiated Tasks request as missing the extension capability",
+                provider_id=self._provider_id,
+                details=details,
+            )
+        raise ContractError(
+            ErrorCode.BACKEND_ERROR,
+            f"MCP request {method!r} returned a JSON-RPC error",
+            provider_id=self._provider_id,
+            details=details,
+        )
+
     async def _send(
         self,
         method: str,
         params: dict[str, JsonValue],
+        *,
+        client_extensions: tuple[str, ...] = (),
     ) -> _WireResponse:
         self._request_id += 1
         request_id = self._request_id
         wire_params: dict[str, JsonValue] = dict(params)
+        capabilities: dict[str, JsonValue] = {}
+        if client_extensions:
+            capabilities["extensions"] = {extension: {} for extension in client_extensions}
         wire_params["_meta"] = {
             _META_PROTOCOL_VERSION: self._protocol_revision,
-            _META_CLIENT_CAPABILITIES: {},
+            _META_CLIENT_CAPABILITIES: capabilities,
             _META_CLIENT_INFO: {
                 "name": self._client_name,
                 "version": self._client_version,
@@ -181,11 +332,7 @@ class MCPStatelessHTTPClient(MCPClient):
         request = Request(
             self._config.endpoint,
             data=encoded,
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                _PROTOCOL_HEADER: self._protocol_revision,
-            },
+            headers=self._request_headers(body),
             method="POST",
         )
         timeout = self._config.read_timeout_seconds or 10.0
@@ -199,14 +346,33 @@ class MCPStatelessHTTPClient(MCPClient):
                 ErrorCode.UNAVAILABLE,
                 "stateless MCP HTTP request failed",
                 retryable=True,
-                provider_id=f"mcp:{self._config.server_id}",
+                provider_id=self._provider_id,
             ) from exc
+
+    def _request_headers(self, body: Mapping[str, JsonValue]) -> dict[str, str]:
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            _PROTOCOL_HEADER: self._protocol_revision,
+        }
+        method = body.get("method")
+        params = body.get("params")
+        if method in _TASK_METHODS and isinstance(params, Mapping):
+            task_id = params.get("taskId")
+            if not isinstance(task_id, str) or not task_id.strip():
+                raise ContractError(
+                    ErrorCode.INVALID_REQUEST,
+                    f"MCP {method} requires a non-blank taskId",
+                    provider_id=self._provider_id,
+                )
+            headers[_MCP_NAME_HEADER] = task_id
+        return headers
 
     def _invalid_response(self, message: str) -> ContractError:
         return ContractError(
             ErrorCode.INVALID_PROVIDER_RESPONSE,
             message,
-            provider_id=f"mcp:{self._config.server_id}",
+            provider_id=self._provider_id,
         )
 
 
@@ -221,6 +387,76 @@ def build_mcp_stateless_provider(
         config,
         MCPStatelessHTTPClient(config, protocol_revision=protocol_revision),
     )
+
+
+def _task_snapshot(result: Mapping[str, Any], *, provider_id: str) -> MCPTaskSnapshot:
+    try:
+        task_id = _required_string(result, "taskId")
+        status = MCPTaskStatus(_required_string(result, "status"))
+        created_at = _parse_timestamp(_required_string(result, "createdAt"), "createdAt")
+        updated_at = _parse_timestamp(_required_string(result, "lastUpdatedAt"), "lastUpdatedAt")
+        ttl_ms = _optional_non_negative_int(result.get("ttlMs"), "ttlMs", nullable=True)
+        poll_interval_ms = _optional_non_negative_int(
+            result.get("pollIntervalMs"),
+            "pollIntervalMs",
+            nullable=True,
+        )
+        status_message_value = result.get("statusMessage")
+        status_message = (
+            status_message_value if isinstance(status_message_value, str) else None
+        )
+        task_result: JsonValue = None
+        task_error: JsonValue = None
+        input_requests: dict[str, JsonValue] | None = None
+        if status is MCPTaskStatus.COMPLETED:
+            task_result = _json_object(result.get("result"), field="result")
+        elif status is MCPTaskStatus.FAILED:
+            task_error = _json_object(result.get("error"), field="error")
+        elif status is MCPTaskStatus.INPUT_REQUIRED:
+            input_requests = _json_object(result.get("inputRequests"), field="inputRequests")
+        return MCPTaskSnapshot(
+            task_id=task_id,
+            status=status,
+            created_at=created_at,
+            last_updated_at=updated_at,
+            ttl_ms=ttl_ms,
+            poll_interval_ms=poll_interval_ms,
+            status_message=status_message,
+            result=task_result,
+            error=task_error,
+            input_requests=input_requests,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ContractError(
+            ErrorCode.INVALID_PROVIDER_RESPONSE,
+            "MCP task response does not match the pinned SEP-2663 shape",
+            provider_id=provider_id,
+        ) from exc
+
+
+def _required_string(value: Mapping[str, Any], field: str) -> str:
+    item = value.get(field)
+    if not isinstance(item, str) or not item.strip():
+        raise ValueError(f"{field} must be a non-blank string")
+    return item
+
+
+def _parse_timestamp(value: str, field: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{field} must include a timezone")
+    return parsed.astimezone(UTC)
+
+
+def _optional_non_negative_int(value: object, field: str, *, nullable: bool) -> int | None:
+    if value is None and nullable:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{field} must be a non-negative integer or null")
+    return value
 
 
 def _decode_response(status: int, body: bytes) -> _WireResponse:
