@@ -13,6 +13,7 @@ from ai_multi_agent_platform.coordination import (
 from ai_multi_agent_platform.coordination.plan_step_coordinator import DurablePlanStepCoordinator
 from ai_multi_agent_platform.deployment.reference_multi_agent import ReferenceMultiAgentPlanner
 from ai_multi_agent_platform.domain import OwnerRef, Plan, Step, StepStatus, new_id
+from ai_multi_agent_platform.planning.agent_matching import resolve_planning_steps
 from ai_multi_agent_platform.planning.models import (
     PlanningAgentCandidate,
     PlanningInventory,
@@ -31,9 +32,9 @@ def _candidate(role: str, *, revision: int) -> PlanningAgentCandidate:
 
 def test_reference_multi_agent_planner_builds_exact_parallel_fan_in_dag() -> None:
     async def scenario() -> None:
-        research = _candidate("Research Agent", revision=3)
-        execution = _candidate("Coding Agent", revision=5)
-        review = _candidate("Review Agent", revision=7)
+        research = _candidate("researcher", revision=3)
+        execution = _candidate("developer", revision=5)
+        review = _candidate("reviewer", revision=7)
         reused_step = new_id("step")
         request = PlanningRequest(
             task_id=new_id("task"),
@@ -49,7 +50,7 @@ def test_reference_multi_agent_planner_builds_exact_parallel_fan_in_dag() -> Non
         )
 
         output = await ReferenceMultiAgentPlanner().propose(request)
-        steps = {step.key: step for step in output.draft.steps}
+        draft_steps = {step.key: step for step in output.draft.steps}
 
         assert tuple(step.key for step in output.draft.steps) == (
             "research",
@@ -57,20 +58,28 @@ def test_reference_multi_agent_planner_builds_exact_parallel_fan_in_dag() -> Non
             "execute",
             "review",
         )
-        assert steps["research"].depends_on == ()
-        assert steps["approach"].depends_on == ()
-        assert steps["execute"].depends_on == ("research", "approach")
-        assert steps["review"].depends_on == ("execute",)
-        assert steps["research"].assignment is not None
-        assert steps["research"].assignment.agent_id == research.agent_id
-        assert steps["research"].assignment.agent_revision == 3
-        assert steps["execute"].assignment is not None
-        assert steps["execute"].assignment.agent_id == execution.agent_id
-        assert steps["execute"].assignment.agent_revision == 5
-        assert steps["review"].assignment is not None
-        assert steps["review"].assignment.agent_id == review.agent_id
-        assert steps["review"].assignment.agent_revision == 7
-        assert steps["execute"].reuse_step_ids == (reused_step,)
+        assert draft_steps["research"].depends_on == ()
+        assert draft_steps["approach"].depends_on == ()
+        assert draft_steps["execute"].depends_on == ("research", "approach")
+        assert draft_steps["review"].depends_on == ("execute",)
+        assert draft_steps["research"].assignment is not None
+        assert draft_steps["research"].assignment.role_requirement == "researcher"
+        assert draft_steps["execute"].assignment is not None
+        assert draft_steps["execute"].assignment.role_requirement == "developer"
+        assert draft_steps["review"].assignment is not None
+        assert draft_steps["review"].assignment.role_requirement == "reviewer"
+        assert draft_steps["execute"].reuse_step_ids == (reused_step,)
+
+        resolved_steps = {step.key: step for step in resolve_planning_steps(output.draft.steps, request)}
+        assert resolved_steps["research"].assignment is not None
+        assert resolved_steps["research"].assignment.agent_id == research.agent_id
+        assert resolved_steps["research"].assignment.agent_revision == 3
+        assert resolved_steps["execute"].assignment is not None
+        assert resolved_steps["execute"].assignment.agent_id == execution.agent_id
+        assert resolved_steps["execute"].assignment.agent_revision == 5
+        assert resolved_steps["review"].assignment is not None
+        assert resolved_steps["review"].assignment.agent_id == review.agent_id
+        assert resolved_steps["review"].assignment.agent_revision == 7
 
     asyncio.run(scenario())
 
