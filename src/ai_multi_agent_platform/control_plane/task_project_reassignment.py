@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from copy import deepcopy
-from typing import Any, cast
+from typing import Any
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -15,24 +13,35 @@ from ai_multi_agent_platform.task_reassignment import (
 )
 
 from .approval_decision_composition import (
-    AuthenticatedControlPlaneHTTP as _CurrentAuthenticatedControlPlaneHTTP,
+    AuthenticatedControlPlaneHTTP,
+    ControlPlaneASGI,
+    ControlPlaneHTTP,
 )
 from .approval_decision_composition import ControlPlane as _CurrentControlPlane
-from .approval_decision_composition import ControlPlaneASGI
-from .approval_decision_composition import ControlPlaneHTTP as _CurrentControlPlaneHTTP
 from .approval_decision_composition import build_openapi as _build_current_openapi
-from .extensions import CommandHandler
-from .http import HTTPRequest, HTTPResponse
+from .extensions import ControlPlaneModule
 from .models import API_VERSION, RequestContext
+from .module_registry import install_control_plane_modules
 
 TASK_PROJECT_MOVE_COMMAND = "task.project.move"
 TASK_PROJECT_BULK_MOVE_COMMAND = "task.project.bulk-move"
 TASK_PROJECT_MOVE_COMMANDS = (TASK_PROJECT_MOVE_COMMAND, TASK_PROJECT_BULK_MOVE_COMMAND)
 TASK_PROJECT_MOVE_ACTION = "task:move-project"
+TASK_PROJECT_REASSIGNMENT_MODULE = "task-project-reassignment"
+
+
+async def _handler_owned_authorization(
+    context: RequestContext,
+    resource_ref: str,
+    payload: dict[str, JsonValue],
+) -> None:
+    """Preserve relationship-aware authorization inside the canonical handlers."""
+
+    del context, resource_ref, payload
 
 
 class ControlPlane(_CurrentControlPlane):
-    """Current Control Plane plus canonical Task Project reassignment."""
+    """Compatibility façade installing explicit Task Project reassignment ownership."""
 
     def __init__(
         self,
@@ -40,13 +49,6 @@ class ControlPlane(_CurrentControlPlane):
         task_project_reassignment: TaskProjectReassignmentService | None = None,
         **kwargs: Any,
     ) -> None:
-        supplied_commands = kwargs.get("command_handlers")
-        if isinstance(supplied_commands, Mapping):
-            conflicts = sorted(set(supplied_commands).intersection(TASK_PROJECT_MOVE_COMMANDS))
-            if conflicts:
-                raise ValueError(
-                    f"command_handlers conflict with canonical Task Project commands: {conflicts!r}"
-                )
         super().__init__(*args, **kwargs)
         self._task_project_reassignment = (
             task_project_reassignment
@@ -59,37 +61,27 @@ class ControlPlane(_CurrentControlPlane):
                 compatibility=DefaultTaskProjectCompatibilityPolicy(self.organization_service),
             )
         )
+        install_control_plane_modules(
+            self,
+            (
+                ControlPlaneModule(
+                    name=TASK_PROJECT_REASSIGNMENT_MODULE,
+                    command_handlers={
+                        TASK_PROJECT_MOVE_COMMAND: self._move_task_project_command,
+                        TASK_PROJECT_BULK_MOVE_COMMAND: self._bulk_move_task_project_command,
+                    },
+                    command_authorizers={
+                        TASK_PROJECT_MOVE_COMMAND: _handler_owned_authorization,
+                        TASK_PROJECT_BULK_MOVE_COMMAND: _handler_owned_authorization,
+                    },
+                    openapi_contributors=(_augment_openapi,),
+                ),
+            ),
+        )
 
     @property
     def task_project_reassignment(self) -> TaskProjectReassignmentService:
         return self._task_project_reassignment
-
-    async def execute_command(
-        self,
-        context: RequestContext,
-        command: str,
-        resource_ref: str,
-        payload: dict[str, JsonValue] | None = None,
-    ) -> dict[str, JsonValue]:
-        if command not in TASK_PROJECT_MOVE_COMMANDS:
-            return await super().execute_command(context, command, resource_ref, payload)
-        if context.idempotency_key is None:
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "Idempotency-Key is required for Task Project reassignment",
-                details={"header": "Idempotency-Key"},
-            )
-        body = payload or {}
-        if command == TASK_PROJECT_MOVE_COMMAND:
-            return await self._move_task_project_command(context, resource_ref, body)
-        return await self._bulk_move_task_project_command(context, resource_ref, body)
-
-    def register_command(self, command: str, handler: CommandHandler) -> None:
-        if command in TASK_PROJECT_MOVE_COMMANDS:
-            raise ValueError(
-                f"extension command conflicts with canonical Task Project command: {command}"
-            )
-        super().register_command(command, handler)
 
     async def _move_task_project_command(
         self,
@@ -259,35 +251,6 @@ class ControlPlane(_CurrentControlPlane):
         )
 
 
-class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
-    """Expose #157 as a canonical built-in command contract in OpenAPI."""
-
-    async def handle(self, request: HTTPRequest) -> HTTPResponse:
-        response = await super().handle(request)
-        if (
-            request.method == "GET"
-            and request.path.rstrip("/") == f"/api/{API_VERSION}/openapi.json"
-            and response.status == 200
-            and isinstance(response.body, dict)
-        ):
-            specification = cast(dict[str, Any], deepcopy(response.body))
-            _augment_openapi(specification)
-            return HTTPResponse(
-                status=response.status,
-                body=cast(dict[str, JsonValue], specification),
-                headers=dict(response.headers),
-            )
-        return response
-
-
-class AuthenticatedControlPlaneHTTP(_CurrentAuthenticatedControlPlaneHTTP):
-    """Authenticate first, then route through the #157-aware HTTP surface."""
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._current_http = ControlPlaneHTTP(cast(ControlPlane, self._control_plane))
-
-
 def _move_request(
     task_id: str,
     payload: dict[str, JsonValue],
@@ -407,5 +370,6 @@ __all__ = [
     "TASK_PROJECT_MOVE_ACTION",
     "TASK_PROJECT_MOVE_COMMAND",
     "TASK_PROJECT_MOVE_COMMANDS",
+    "TASK_PROJECT_REASSIGNMENT_MODULE",
     "build_openapi",
 ]
