@@ -86,9 +86,7 @@ def _freeze_json_value(value: JsonValue) -> JsonValue:
 
 
 def _freeze_json_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
-    return MappingProxyType(
-        {key: _freeze_json_value(item) for key, item in value.items()}
-    )
+    return MappingProxyType({key: _freeze_json_value(item) for key, item in value.items()})
 
 
 def _json_mapping(value: object, name: str) -> Mapping[str, JsonValue]:
