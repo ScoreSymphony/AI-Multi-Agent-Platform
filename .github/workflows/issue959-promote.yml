@@ -50,7 +50,9 @@ jobs:
                   )
               write(path, text.replace(old, new))
 
-          # Canonical accepted revision and deployment examples.
+          # Canonical accepted revision and deployment example. The standard CI workflow is
+          # intentionally updated in a separate connector commit because GITHUB_TOKEN cannot
+          # modify workflow files.
           replace_required(
               "src/ai_multi_agent_platform/adapters/hermes.py",
               f'HERMES_PINNED_REVISION = "{OLD}"',
@@ -58,25 +60,27 @@ jobs:
               count=1,
           )
           replace_required("config/hermes.example.json", OLD, NEW, count=1)
-          replace_required(".github/workflows/ci.yml", OLD, NEW, count=2)
 
           # Machine-readable upstream provenance.
           upstream_path = "upstream/hermes-agent.yaml"
           upstream = read(upstream_path)
-          for old_text, new_text in (
+          replacements = (
+              (
+                  "Hermes Agent v0.21.1 compatibility is revalidated through issue #733 before the updated pin is accepted on main.",
+                  "Hermes Agent v0.21.2 compatibility and session/concurrency reliability are validated through issue #959; v0.21.1 evidence remains the rollback baseline.",
+              ),
               (f'pinned_revision: "{OLD}"', f'pinned_revision: "{NEW}"'),
               ('last_review_date: "2026-09-11"', 'last_review_date: "2026-09-13"'),
               ("v0.21.1", "v0.21.2"),
               ("v2026.9.7", "v2026.9.11"),
               (OLD, NEW),
-              (
-                  "Hermes Agent v0.21.1 compatibility is revalidated through issue #733 before the updated pin is accepted on main.",
-                  "Hermes Agent v0.21.2 compatibility and session/concurrency reliability are validated through issue #959; v0.21.1 evidence remains the rollback baseline.",
-              ),
-          ):
+          )
+          for old_text, new_text in replacements:
               upstream = upstream.replace(old_text, new_text)
           if f'pinned_revision: "{NEW}"' not in upstream or "v2026.9.11" not in upstream:
               raise RuntimeError("Hermes upstream provenance did not promote cleanly")
+          if "#733" in upstream:
+              raise RuntimeError("Hermes upstream provenance still claims #733 as current validation")
           write(upstream_path, upstream)
 
           # Repository and packaged compatibility inventories stay byte-identical.
@@ -113,16 +117,16 @@ jobs:
               ("HERMES_AGENT_V0_21_1_VALIDATION.md", "HERMES_AGENT_V0_21_2_VALIDATION.md"),
           ):
               adapter_doc = adapter_doc.replace(old_text, new_text)
-          rollback_sentence = (
-              "The previous v0.21.1 validation evidence remains retained as the exact rollback baseline "
-              f"at `{OLD}`.\n"
-          )
           anchor = (
               "The version-specific compatibility review is recorded in "
               "`docs/upstream/HERMES_AGENT_V0_21_2_VALIDATION.md`.\n"
           )
           if anchor not in adapter_doc:
               raise RuntimeError("Hermes adapter documentation anchor not found")
+          rollback_sentence = (
+              "The previous v0.21.1 validation evidence remains retained as the exact rollback baseline "
+              f"at `{OLD}`.\n"
+          )
           if rollback_sentence not in adapter_doc:
               adapter_doc = adapter_doc.replace(anchor, anchor + "\n" + rollback_sentence)
           write(adapter_doc_path, adapter_doc)
@@ -161,7 +165,10 @@ jobs:
           hermes_section = hermes_section.replace(adoption_old, adoption_new)
           if NEW not in hermes_section or "#959" not in hermes_section:
               raise RuntimeError("Hermes upstream registry did not promote cleanly")
-          write(upstreams_path, prefix + "### NousResearch Hermes Agent\n" + hermes_section + "\n### NVIDIA SkillSpector" + suffix)
+          write(
+              upstreams_path,
+              prefix + "### NousResearch Hermes Agent\n" + hermes_section + "\n### NVIDIA SkillSpector" + suffix,
+          )
 
           # Final decision document bound to the successful pre-adoption evidence.
           validation_path = "docs/upstream/HERMES_AGENT_V0_21_2_VALIDATION.md"
@@ -182,7 +189,7 @@ jobs:
           marker = "## Remaining gates before adoption\n"
           if marker not in validation:
               raise RuntimeError("Hermes validation remaining-gates section not found")
-          validation = validation.split(marker, 1)[0] + f"""## Decision\n\nFinal result: **`PASS_UPDATE`**.\n\nRevision-bound pre-adoption evidence for `{NEW}`:\n\n- dedicated Hermes v0.21.2 candidate workflow `34759634674`: passed, including the\n  exact-upstream malformed-row, WAL/IOERR, competing-writer, reader/writer,\n  SessionDB/profile ownership and restart/dead-owner reliability matrix;\n- #46 Hermes Scenario B in the same candidate workflow: passed against the exact\n  candidate checkout and the non-Hermes reference executor path;\n- repository CI workflow `34759634728`: passed, including the full Pytest suite,\n  deterministic #19 evaluation/regression gate, static checks and package build;\n- CodeQL workflow `34759634698`: passed; repository-governance and test-layout\n  workflows for the same head also passed;\n- canonical ownership remained unchanged: Hermes-native run/session/profile IDs stay\n  namespaced adapter metadata, while Task/Run/Agent/Team/Plan/Step, authorization and\n  approvals remain platform-owned.\n\nThe adapter's explicit profile URL namespace plus the upstream revision-bound\nSessionDB ownership, canonical-profile listing and launch-home isolation regressions\ncover the profile/session isolation claimed by the adapter. No broader multi-profile\nruntime authority is claimed.\n\nThe accepted pin may therefore move to v0.21.2. The rollback target remains Hermes\nAgent v0.21.1 / tag `v2026.9.7` / `{OLD}` with its original validation and evidence\nartifacts retained unchanged.\n\nPromotion updates the governed pin, compatibility metadata, standard pinned Hermes\nconformance workflow and integration documentation atomically with this decision.\n"""
+          validation = validation.split(marker, 1)[0] + f"""## Decision\n\nFinal result: **`PASS_UPDATE`**.\n\nRevision-bound pre-adoption evidence for `{NEW}`:\n\n- dedicated Hermes v0.21.2 candidate workflow `34759634674`: passed, including the\n  exact-upstream malformed-row, WAL/IOERR, competing-writer, reader/writer,\n  SessionDB/profile ownership and restart/dead-owner reliability matrix;\n- #46 Hermes Scenario B in the same candidate workflow: passed against the exact\n  candidate checkout and the non-Hermes reference executor path;\n- repository CI workflow `34759634728`: passed, including the full Pytest suite,\n  deterministic #19 evaluation/regression gate, static checks and package build;\n- CodeQL workflow `34759634698`: passed; repository-governance and test-layout\n  workflows for the same head also passed;\n- canonical ownership remained unchanged: Hermes-native run/session/profile IDs stay\n  namespaced adapter metadata, while Task/Run/Agent/Team/Plan/Step, authorization and\n  approvals remain platform-owned.\n\nThe adapter's explicit profile URL namespace plus the upstream revision-bound\nSessionDB ownership, canonical-profile listing and launch-home isolation regressions\ncover the profile/session isolation claimed by the adapter. No broader multi-profile\nruntime authority is claimed.\n\nThe accepted pin may therefore move to v0.21.2. The rollback target remains Hermes\nAgent v0.21.1 / tag `v2026.9.7` / `{OLD}` with its original validation and evidence\nartifacts retained unchanged.\n\nPromotion updates the governed pin, compatibility metadata, standard pinned Hermes\nconformance profile and integration documentation with this decision.\n"""
           write(validation_path, validation)
 
           # v0.21.2 tests now exercise the accepted verified pin rather than a candidate pin.
@@ -196,11 +203,13 @@ jobs:
               text = read(path)
               if "HermesCompatibilityStatus.UNVERIFIED_PIN" not in text:
                   raise RuntimeError(f"expected pre-adoption status not found in {path}")
-              text = text.replace(
-                  "HermesCompatibilityStatus.UNVERIFIED_PIN",
-                  "HermesCompatibilityStatus.VERIFIED_PIN",
+              write(
+                  path,
+                  text.replace(
+                      "HermesCompatibilityStatus.UNVERIFIED_PIN",
+                      "HermesCompatibilityStatus.VERIFIED_PIN",
+                  ),
               )
-              write(path, text)
 
           candidate_test_path = "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py"
           candidate_test = read(candidate_test_path)
@@ -227,19 +236,14 @@ jobs:
               raise RuntimeError("v0.21.1 rollback regression anchor not found")
           write(rollback_test_path, rollback_test.replace(old_block, new_block))
 
-          # The standard #46 Hermes profile must now execute the accepted v0.21.2 matrix.
+          # The standard #46 Hermes profile must now exercise the accepted v0.21.2 matrix.
           profile_path = "scripts/ci/issue46_external_profile.py"
           profile = read(profile_path)
-          last_return = profile.rfind("    return _run_pytest(")
-          if last_return < 0:
-              raise RuntimeError("accepted Hermes #46 test block not found")
-          return_end = profile.find("\n    )", last_return)
-          if return_end < 0:
-              raise RuntimeError("accepted Hermes #46 test block end not found")
-          return_end += len("\n    )")
-          accepted_block = '''    return _run_pytest(\n        "tests/test_issue_8_hermes_adapter.py::"\n        "test_hermes_agent_mapper_pins_agent_team_model_and_capability_contracts",\n        "tests/integration/upstreams/test_hermes_pinned.py::"\n        "test_pinned_hermes_declares_required_run_lifecycle_surface",\n        "tests/integration/upstreams/test_hermes_pinned.py::"\n        "test_adapter_against_pinned_hermes_runs_api",\n        "tests/integration/upstreams/test_hermes_pinned.py::"\n        "test_kernel_uses_real_pinned_hermes_and_reference_executor",\n        "tests/regression/upstreams/test_hermes_v0_21_2.py",\n        "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py",\n        "tests/integration/upstreams/test_hermes_v0_21_2_concurrency.py",\n        "tests/integration/upstreams/test_hermes_v0_21_2_restart.py",\n    )'''
-          profile = profile[:last_return] + accepted_block + profile[return_end:]
-          write(profile_path, profile)
+          old_profile_block = '''    return _run_pytest(\n        "tests/test_issue_8_hermes_adapter.py::"\n        "test_hermes_agent_mapper_pins_agent_team_model_and_capability_contracts",\n        "tests/regression/upstreams/test_hermes_v0_21_1.py",\n        "tests/regression/upstreams/test_hermes_v0_21_1_completion.py",\n        "tests/integration/upstreams/test_hermes_pinned.py::"\n        "test_pinned_hermes_declares_required_run_lifecycle_surface",\n        "tests/integration/upstreams/test_hermes_pinned.py::"\n        "test_adapter_against_pinned_hermes_runs_api",\n        "tests/integration/upstreams/test_hermes_pinned.py::"\n        "test_kernel_uses_real_pinned_hermes_and_reference_executor",\n        "tests/integration/upstreams/test_hermes_v0_21_1_pinned_completion.py",\n    )'''
+          new_profile_block = '''    return _run_pytest(\n        "tests/test_issue_8_hermes_adapter.py::"\n        "test_hermes_agent_mapper_pins_agent_team_model_and_capability_contracts",\n        "tests/integration/upstreams/test_hermes_pinned.py::"\n        "test_pinned_hermes_declares_required_run_lifecycle_surface",\n        "tests/integration/upstreams/test_hermes_pinned.py::"\n        "test_adapter_against_pinned_hermes_runs_api",\n        "tests/integration/upstreams/test_hermes_pinned.py::"\n        "test_kernel_uses_real_pinned_hermes_and_reference_executor",\n        "tests/regression/upstreams/test_hermes_v0_21_2.py",\n        "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py",\n        "tests/integration/upstreams/test_hermes_v0_21_2_concurrency.py",\n        "tests/integration/upstreams/test_hermes_v0_21_2_restart.py",\n    )'''
+          if profile.count(old_profile_block) != 1:
+              raise RuntimeError("accepted Hermes #46 test block not found exactly once")
+          write(profile_path, profile.replace(old_profile_block, new_profile_block, 1))
 
           # Revision-bound #42-style observation/evidence and reproducible adoption check.
           observation = {
@@ -310,18 +314,18 @@ jobs:
           # Promotion invariants before committing.
           assert NEW in read("src/ai_multi_agent_platform/adapters/hermes.py")
           assert NEW in read("upstream/hermes-agent.yaml")
-          assert NEW in read(".github/workflows/ci.yml")
           assert read("release/compatibility.json") == read(
               "src/ai_multi_agent_platform/release/compatibility.json"
           )
           assert "PASS_UPDATE" in read(validation_path)
           assert OLD in read("release/hermes-v0.21.1-validation-evidence.json")
+          assert "tests/regression/upstreams/test_hermes_v0_21_2.py" in read(profile_path)
+          assert "tests/regression/upstreams/test_hermes_v0_21_1_completion.py" not in read(profile_path)
           PY
 
           git config user.name "Score Symphony"
           git config user.email "scoresymphony@gmail.com"
           git add \
-            .github/workflows/ci.yml \
             config/hermes.example.json \
             docs/UPSTREAMS.md \
             docs/integrations/HERMES_ADAPTER.md \
