@@ -22,11 +22,11 @@ from .http import ControlPlaneASGI as _BaseControlPlaneASGI
 from .models import PageQuery, RequestContext, paginate
 from .module_registry import install_control_plane_modules
 from .terminal_composition import (
+    _TERMINAL_STREAM_CONTEXT,
     TERMINAL_COLLECTION,
     TERMINAL_COMMANDS,
     _AuthorizedStreamSessions,
     _PreparedTerminalStreamASGI,
-    _TERMINAL_STREAM_CONTEXT,
 )
 from .terminal_module import terminal_control_plane_module
 from .terminal_session_contract import TerminalSessionASGI
