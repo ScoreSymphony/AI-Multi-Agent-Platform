@@ -7,6 +7,10 @@ from datetime import datetime, timedelta
 from queue import Empty, SimpleQueue
 from typing import Any, cast
 
+from ai_multi_agent_platform.accounting.async_service import (
+    AsyncAccountingService,
+    runtime_accounting_service,
+)
 from ai_multi_agent_platform.accounting.models import BudgetThresholdEvent
 from ai_multi_agent_platform.accounting.service import AccountingService
 from ai_multi_agent_platform.automation import AutomationEventSink
@@ -54,6 +58,9 @@ class ControlPlane(_BaseControlPlane):
         holder: list[ControlPlane] = []
         self._approval_recipient_resolver = approval_recipient_resolver
         self._accounting_service = accounting_service
+        self._runtime_accounting_service = (
+            None if accounting_service is None else runtime_accounting_service(accounting_service)
+        )
         self._accounting_recovery_complete = accounting_service is None
         self._source_attention_queue: SimpleQueue[NotificationCandidate] = SimpleQueue()
 
@@ -108,7 +115,7 @@ class ControlPlane(_BaseControlPlane):
             if notification is not None:
                 created.append(notification)
 
-        accounting = self._accounting_service
+        accounting = self._runtime_accounting_service
         if accounting is not None and not self._accounting_recovery_complete:
             recovered, complete = await self._recover_persisted_budget_thresholds(
                 accounting,
@@ -138,8 +145,6 @@ class ControlPlane(_BaseControlPlane):
                 if candidate is not None:
                     await self.notification_service.create_once(candidate)
         except Exception:
-            # Approval remains authoritative. Attention projection cannot turn a successful
-            # approval transition into an authorization failure.
             return
 
     def _enqueue_budget_threshold(
@@ -165,41 +170,29 @@ class ControlPlane(_BaseControlPlane):
                 )
             )
         except Exception:
-            # Accounting already owns and committed the budget/usage state. Invalid or missing
-            # recipient metadata must not make accounting ingestion fail.
             return
 
     async def _recover_persisted_budget_thresholds(
         self,
-        accounting: AccountingService,
+        accounting: AsyncAccountingService,
         *,
         now: datetime | None,
     ) -> tuple[tuple[Notification, ...], bool]:
-        """Reconstruct lost #76 attention from durable budget/threshold state after restart.
-
-        Accounting persists threshold level and episode generation before its synchronous observer
-        runs. If a process dies in that gap, no in-memory queue item survives. The first
-        Notification runtime pass therefore projects the currently persisted episode once.
-        Existing historical attention with the same episode identity suppresses restart duplicates,
-        while a later fresh crossing after recovery below threshold has a new generation.
-        Transient projection failures keep recovery pending for the next runtime tick.
-        """
+        """Reconstruct lost #76 attention from durable budget/threshold state after restart."""
 
         created: list[Notification] = []
         retry_required = False
-        for budget in accounting.store.list_budgets():
-            level = accounting.store.get_threshold_level(budget.id)
+        for budget in await accounting.list_budgets():
+            level = await accounting.get_threshold_level(budget.id)
             if level is None:
                 continue
             if budget.owner_type is None or budget.owner_id is None:
                 continue
             try:
-                state = accounting.budget_state(budget.id)
+                state = await accounting.budget_state(budget.id)
                 if state.level != level:
-                    # Rolling/current usage no longer supports the persisted attention state.
-                    # Notifications must not resurrect stale accounting truth.
                     continue
-                generation = accounting.store.get_threshold_generation(budget.id)
+                generation = await accounting.get_threshold_generation(budget.id)
                 if generation < 1:
                     continue
                 recipient = RecipientRef(RecipientType(budget.owner_type), budget.owner_id)
@@ -274,8 +267,6 @@ class ControlPlane(_BaseControlPlane):
                 )
             )
         except Exception:
-            # #44 has already committed the authoritative health transition. A Notification
-            # projection failure must not alter the Connector result.
             return
 
     async def _project_automation_event(self, event: dict[str, JsonValue]) -> None:
@@ -334,8 +325,6 @@ class ControlPlane(_BaseControlPlane):
                 )
             )
         except Exception:
-            # #18 is already authoritative and committed when its event sink runs. Attention
-            # projection is best-effort and must never falsify Automation lifecycle failure.
             return
 
 
