@@ -98,10 +98,27 @@ def test_non_stable_surfaces_have_discoverable_maturity_signaling() -> None:
         )
 
 
-def test_experimental_surfaces_are_not_presented_as_stable_everyday_flows() -> None:
+def test_experimental_surfaces_have_concrete_labeled_entrypoints() -> None:
     for feature in _features():
         if feature["stability"] != "experimental":
             continue
+
+        feature_id = feature["id"]
         assert feature["user_signaling"] == "documentation_and_ui_contextual", (
-            f"{feature['id']}: experimental surfaces require contextual UI/documentation signaling"
+            f"{feature_id}: experimental surfaces require contextual UI/documentation signaling"
         )
+
+        signaling_docs = feature.get("signaling_docs")
+        assert isinstance(signaling_docs, list) and signaling_docs, (
+            f"{feature_id}: experimental surfaces must name concrete signaling_docs"
+        )
+        for document in signaling_docs:
+            assert document in feature["docs"], (
+                f"{feature_id}: signaling doc {document!r} must also be authoritative documentation"
+            )
+            path = ROOT / document
+            assert path.is_file(), f"{feature_id}: missing signaling doc {document!r}"
+            text = path.read_text(encoding="utf-8").casefold()
+            assert "experimental" in text, (
+                f"{feature_id}: signaling doc {document!r} must visibly label the surface Experimental"
+            )
