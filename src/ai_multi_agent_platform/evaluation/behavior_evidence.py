@@ -7,7 +7,8 @@ from typing import Protocol
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed.runtime import DistributedRuntime
-from ai_multi_agent_platform.security.approvals import ApprovalRecord
+from ai_multi_agent_platform.security.approvals import ApprovalRecord, ApprovalService
+from ai_multi_agent_platform.security.async_persistence import AsyncApprovalServiceAdapter
 
 from .context import EvaluationExecutionContext
 from .contracts import EvaluationCaseExecutor
@@ -30,9 +31,17 @@ def _unique(values: tuple[str, ...]) -> tuple[str, ...]:
 class ApprovalEvidenceCaseExecutor:
     """Project canonical approval requests/decisions for the evaluated Task/Run."""
 
-    def __init__(self, executor: EvaluationCaseExecutor, approvals: ApprovalRecordReader) -> None:
+    def __init__(
+        self,
+        executor: EvaluationCaseExecutor,
+        approvals: ApprovalRecordReader | ApprovalService,
+    ) -> None:
         self._executor = executor
-        self._approvals = approvals
+        self._approvals: ApprovalRecordReader = (
+            AsyncApprovalServiceAdapter(approvals)
+            if isinstance(approvals, ApprovalService)
+            else approvals
+        )
 
     async def execute_case(
         self,
