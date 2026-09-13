@@ -8,7 +8,7 @@ on:
       - "scripts/ci/issue859_mock_openai.py"
       - "scripts/ci/issue859_ssrf_sentinel.py"
       - "scripts/ci/issue859_rebinding_dns.py"
-      - "tests/test_issue_859_bifrost_dns_rebinding.py"
+      - "tests/integration/platform/test_bifrost_dns_rebinding.py"
       - "upstream/bifrost.yaml"
 
 permissions:
@@ -219,7 +219,7 @@ jobs:
           BIFROST_EVAL_SSRF_REBINDING_URL: http://issue859-rebind.test:18001/redirect-to-rebound-host
           BIFROST_EVAL_REBINDING_DNS_CONTROL_URL: http://127.0.0.1:18002
           BIFROST_EVAL_SSRF_SENTINEL_CONTROL_URL: http://127.0.0.1:18001/control
-        run: pytest -q tests/test_issue_859_bifrost_dns_rebinding.py -m integration
+        run: pytest -q tests/integration/platform/test_bifrost_dns_rebinding.py -m integration
 
       - name: Record DNS rebinding evidence
         if: always()

@@ -26,15 +26,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/api_pressure.py \
             src/ai_multi_agent_platform/benchmarking/api_pressure_cli.py \
-            tests/performance/test_issue_440_api_pressure.py
+            tests/performance/files/test_api_pressure.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/api_pressure.py \
             src/ai_multi_agent_platform/benchmarking/api_pressure_cli.py \
-            tests/performance/test_issue_440_api_pressure.py
+            tests/performance/files/test_api_pressure.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/api_pressure.py \
             src/ai_multi_agent_platform/benchmarking/api_pressure_cli.py
-          pytest tests/performance/test_issue_440_api_pressure.py
+          pytest tests/performance/files/test_api_pressure.py
           mkdir -p artifacts/benchmarks/pr-api-pressure
           platform-api-pressure \
             --seed-tasks 4 \
@@ -98,15 +98,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/coordination_contention.py \
             src/ai_multi_agent_platform/benchmarking/coordination_contention_cli.py \
-            tests/performance/test_issue_440_coordination_contention.py
+            tests/performance/cli/test_coordination_contention.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/coordination_contention.py \
             src/ai_multi_agent_platform/benchmarking/coordination_contention_cli.py \
-            tests/performance/test_issue_440_coordination_contention.py
+            tests/performance/cli/test_coordination_contention.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/coordination_contention.py \
             src/ai_multi_agent_platform/benchmarking/coordination_contention_cli.py
-          pytest tests/performance/test_issue_440_coordination_contention.py
+          pytest tests/performance/cli/test_coordination_contention.py
           mkdir -p artifacts/benchmarks/pr-coordination-contention
           platform-coordination-contention \
             --scenario multi-plan \
@@ -181,15 +181,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure.py \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure_cli.py \
-            tests/performance/test_issue_440_coordination_pressure.py
+            tests/performance/cli/test_coordination_pressure.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure.py \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure_cli.py \
-            tests/performance/test_issue_440_coordination_pressure.py
+            tests/performance/cli/test_coordination_pressure.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure.py \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure_cli.py
-          pytest tests/performance/test_issue_440_coordination_pressure.py
+          pytest tests/performance/cli/test_coordination_pressure.py
           mkdir -p artifacts/benchmarks/pr-coordination-pressure
           platform-coordination-pressure \
             --scenario retry-burst \
@@ -281,15 +281,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/plan_step.py \
             src/ai_multi_agent_platform/benchmarking/plan_step_cli.py \
-            tests/performance/test_issue_440_plan_step.py
+            tests/performance/planning/test_plan_step.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/plan_step.py \
             src/ai_multi_agent_platform/benchmarking/plan_step_cli.py \
-            tests/performance/test_issue_440_plan_step.py
+            tests/performance/planning/test_plan_step.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/plan_step.py \
             src/ai_multi_agent_platform/benchmarking/plan_step_cli.py
-          pytest tests/performance/test_issue_440_plan_step.py
+          pytest tests/performance/planning/test_plan_step.py
           mkdir -p artifacts/benchmarks/pr-plan-step
           for scenario in linear fan-out fan-in; do
             platform-plan-step \
@@ -345,15 +345,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/planning_pressure.py \
             src/ai_multi_agent_platform/benchmarking/planning_pressure_cli.py \
-            tests/performance/test_issue_440_planning_pressure.py
+            tests/performance/planning/test_planning_pressure.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/planning_pressure.py \
             src/ai_multi_agent_platform/benchmarking/planning_pressure_cli.py \
-            tests/performance/test_issue_440_planning_pressure.py
+            tests/performance/planning/test_planning_pressure.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/planning_pressure.py \
             src/ai_multi_agent_platform/benchmarking/planning_pressure_cli.py
-          pytest tests/performance/test_issue_440_planning_pressure.py
+          pytest tests/performance/planning/test_planning_pressure.py
           mkdir -p artifacts/benchmarks/pr-planning-pressure
           platform-planning-pressure \
             --operations 2 \
@@ -421,15 +421,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
             src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py \
-            tests/performance/test_issue_440_persistence_contention.py
+            tests/performance/recovery/test_persistence_contention.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
             src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py \
-            tests/performance/test_issue_440_persistence_contention.py
+            tests/performance/recovery/test_persistence_contention.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/persistence_contention.py \
             src/ai_multi_agent_platform/benchmarking/persistence_contention_cli.py
-          pytest tests/performance/test_issue_440_persistence_contention.py
+          pytest tests/performance/recovery/test_persistence_contention.py
           mkdir -p artifacts/benchmarks/pr-persistence-contention
           platform-persistence-contention \
             --writers 3 \
@@ -475,15 +475,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/persistence_faults.py \
             src/ai_multi_agent_platform/benchmarking/persistence_fault_cli.py \
-            tests/performance/test_issue_440_persistence_fault_benchmark.py
+            tests/performance/recovery/test_persistence_fault_benchmark.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/persistence_faults.py \
             src/ai_multi_agent_platform/benchmarking/persistence_fault_cli.py \
-            tests/performance/test_issue_440_persistence_fault_benchmark.py
+            tests/performance/recovery/test_persistence_fault_benchmark.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/persistence_faults.py \
             src/ai_multi_agent_platform/benchmarking/persistence_fault_cli.py
-          pytest tests/performance/test_issue_440_persistence_fault_benchmark.py
+          pytest tests/performance/recovery/test_persistence_fault_benchmark.py
           mkdir -p artifacts/benchmarks/pr-persistence-fault
           platform-persistence-fault \
             --task-count 2 \
@@ -551,10 +551,10 @@ jobs:
       - name: Validate operating-envelope catalog smoke
         if: always()
         run: |
-          ruff format --check src/ai_multi_agent_platform/benchmarking/operating_envelope_catalog.py src/ai_multi_agent_platform/benchmarking/operating_envelope_catalog_cli.py tests/performance/test_issue_440_operating_envelope_catalog.py
-          ruff check src/ai_multi_agent_platform/benchmarking/operating_envelope_catalog.py src/ai_multi_agent_platform/benchmarking/operating_envelope_catalog_cli.py tests/performance/test_issue_440_operating_envelope_catalog.py
+          ruff format --check src/ai_multi_agent_platform/benchmarking/operating_envelope_catalog.py src/ai_multi_agent_platform/benchmarking/operating_envelope_catalog_cli.py tests/performance/evaluation/test_operating_envelope_catalog.py
+          ruff check src/ai_multi_agent_platform/benchmarking/operating_envelope_catalog.py src/ai_multi_agent_platform/benchmarking/operating_envelope_catalog_cli.py tests/performance/evaluation/test_operating_envelope_catalog.py
           mypy src/ai_multi_agent_platform/benchmarking/operating_envelope_catalog.py src/ai_multi_agent_platform/benchmarking/operating_envelope_catalog_cli.py
-          pytest tests/performance/test_issue_440_operating_envelope_catalog.py
+          pytest tests/performance/evaluation/test_operating_envelope_catalog.py
           mkdir -p artifacts/benchmarks/catalog-smoke
           platform-benchmark single-node-sweep --concurrency-levels 1,2 --operations-per-level 2 --warmup-operations 0 --repetitions 1 --platform-commit "$GITHUB_SHA" --output-dir artifacts/benchmarks/catalog-smoke/sweep
           platform-operating-envelope --sweep artifacts/benchmarks/catalog-smoke/sweep/summary.json --output artifacts/benchmarks/catalog-smoke/envelope.json
@@ -573,15 +573,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/provider_faults.py \
             src/ai_multi_agent_platform/benchmarking/provider_fault_cli.py \
-            tests/performance/test_issue_440_provider_faults.py
+            tests/performance/models/test_provider_faults.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/provider_faults.py \
             src/ai_multi_agent_platform/benchmarking/provider_fault_cli.py \
-            tests/performance/test_issue_440_provider_faults.py
+            tests/performance/models/test_provider_faults.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/provider_faults.py \
             src/ai_multi_agent_platform/benchmarking/provider_fault_cli.py
-          pytest tests/performance/test_issue_440_provider_faults.py
+          pytest tests/performance/models/test_provider_faults.py
           mkdir -p artifacts/benchmarks/pr-provider-faults
           for scenario in \
             model-latency \

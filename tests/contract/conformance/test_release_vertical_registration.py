@@ -13,7 +13,7 @@ def test_authenticated_full_vertical_slice_is_required_release_evidence() -> Non
     assert scenario.command is not None
 
     command = " ".join(scenario.command)
-    assert "tests/test_issue_46_worker_artifact_verification_vertical.py" in command
+    assert "tests/integration/artifacts/test_worker_artifact_verification_vertical.py" in command
     assert "test_authenticated_worker_artifact_is_exact_verification_evidence_same_run" in command
     assert "Worker/Node" in scenario.criterion
     assert "Verification" in scenario.criterion
