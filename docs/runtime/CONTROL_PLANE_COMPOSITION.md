@@ -16,6 +16,8 @@ ControlPlaneModule(
     name="example-domain",
     resource_services={"widgets": widgets},
     command_handlers={"widget.refresh": refresh_widget},
+    command_authorizers={"widget.refresh": authorize_refresh},
+    command_observers=(audit_refresh,),
     routes=(special_route,),
     openapi_contributors=(augment_openapi,),
     requires=frozenset({"another-domain"}),
@@ -26,6 +28,8 @@ A module can own only northbound contributions:
 
 - canonical resource collections;
 - canonical commands;
+- command-specific authorization adapters;
+- post-success command observers for projections/audit integration;
 - exact special HTTP routes that do not fit the generic collection/command mapping;
 - OpenAPI additions for those special routes;
 - explicit dependencies on other registered modules.
@@ -46,6 +50,21 @@ Composition validates a complete module batch before installing it:
 
 Constructor-supplied legacy resource/command registrations receive the explicit owner `constructor`. Direct compatibility registrations receive `manual`. New platform domains must use named modules instead.
 
+## Command dispatch, authorization and observers
+
+Registered commands use one registry-aware dispatch boundary. The dispatcher:
+
+1. validates the canonical command name and idempotency requirement;
+2. resolves the one registered command owner/handler;
+3. invokes the module-owned authorizer when one is declared, otherwise preserving the exact-payload default authorization binding;
+4. invokes the canonical handler;
+5. validates that the result does not expose private payload state;
+6. invokes registered post-success observers in deterministic module-name order.
+
+This is important for domains whose authorization cannot be represented as a generic command/resource check. Task management, Conversations, Organization collaboration and Task Project reassignment keep their existing relationship- or payload-aware authorization semantics in explicit authorizers/handlers instead of relying on an inherited `execute_command` override.
+
+Observers are projections/integration hooks, not a second dispatch mechanism. Organization ownership mirroring and Organization audit projection use observers after the canonical command has succeeded.
+
 ## HTTP and OpenAPI contributions
 
 Generic collections and commands continue to use the existing `/api/v1` mapping. A module may register an exact route only when that generic mapping is insufficient. Exact routes are keyed by normalized HTTP method and absolute path and are subject to the same duplicate-owner validation.
@@ -65,7 +84,7 @@ A historical `ControlPlane` class may remain temporarily when external or intern
 
 It must not reimplement domain commands, maintain a second resource/command registry, override generic dispatch to accumulate domain behavior, or participate in canonical multiple-inheritance domain composition.
 
-Architecture tests reject every new or changed multiple-inheritance stack on a `ControlPlane` or `ControlPlaneHTTP` façade unless it is an explicitly reviewed implementation-only compatibility path. They also reject new subclasses that claim domain resources or commands through `self.register_*`. The reviewed compatibility lists are exact, so they cannot silently expand.
+Architecture tests reject every new or changed multiple-inheritance stack on a `ControlPlane` or `ControlPlaneHTTP` façade unless it is an explicitly reviewed implementation-only compatibility path. They also reject new subclasses that claim domain resources or commands through `self.register_*`, and they pin completed linear migrations so Organization and Task Project reassignment cannot regain private dispatch/registration overrides.
 
 ## Migration inventory
 
@@ -78,6 +97,9 @@ The #982 ownership audit found several places where independent later domains or
 | `ConversationControlPlane + NotificationControlPlane` | two independently evolving later-domain parents shared registration and command-dispatch state through cooperative MRO | Conversations are an explicit `conversations` module; Notifications publish one explicit `notifications` owner; the current Conversation façade has one Control Plane base |
 | `AutomationControlPlane + progressive Search` | Automation collections/commands entered the canonical path through a domain subclass and a multiple-inheritance hardening layer | canonical authorization imports `automation_explicit_composition`; Automation is an explicit `automation` module above the linear Search checkpoint composition |
 | `RunWorkspaceControlPlane + TaskManagementControlPlane` | independent Workspace/Run and Task-management branches were combined in the canonical Search ancestry; MRO selected command and initialization behavior | the historical `workspace_task_management_api` path is behavior-free; the linear Workspace/Run composition has one domain base and `task-management` explicitly owns its command vocabulary |
+| `organization_runtime_composition.ControlPlane` | Organization commands/resources and optional Accounting projections were registered through a later subclass; Organization authorization and ownership mirroring depended on its `execute_command` override | `organization_runtime_composition` is a behavior-free shim; `organizations` and `accounting` are named modules; Organization scope authorization is module-owned and ownership mirroring is a post-success observer |
+| `task_project_reassignment.ControlPlane.execute_command` | Task Project commands were selected by a later inherited dispatcher and guarded by a private conflict override | `task-project-reassignment` explicitly owns both move commands and their OpenAPI contribution; relationship-aware authorization remains in the handlers |
+| `release_api.ControlPlaneHTTP` special-case route | the release status endpoint and OpenAPI contribution were owned implicitly by an HTTP subclass override | `release-status` explicitly owns `GET /api/v1/release/status` and its OpenAPI contribution; the HTTP façade only preserves root-manifest compatibility and the operator property |
 | Goals, Decision Records and Governance in the product constructor | direct registrations had anonymous/manual ownership rather than domain ownership | named `goals`, `decision-records` and `governance` modules |
 | `portability_api.ControlPlane` | commands/resources and conflict guards lived in a subclass | compatibility façade only; domain behavior lives in `portability_module.py` |
 | `plugin_api.ControlPlane` | lifecycle commands/resources and conflict guards lived in a subclass | compatibility façade only; domain behavior lives in `plugin_module.py` |
@@ -89,7 +111,7 @@ Any later domain that adds a resource, command or special route must register an
 
 ## Current explicit domain examples
 
-### Task management
+### Task management and Task Project reassignment
 
 The historical `workspace_task_management_api` module is a behavior-free compatibility import. Canonical composition uses a linear Workspace/Run implementation path and installs a named `task-management` module that owns:
 
@@ -98,6 +120,28 @@ The historical `workspace_task_management_api` module is a behavior-free compati
 - the Task-management OpenAPI additions.
 
 The `TaskManagementService` remains the behavior owner. The module's explicit command authorizer defers to the existing hardened handlers so exact-payload authorization, per-Task scope checks and idempotency semantics remain unchanged; module registration does not replace those checks with a generic command-name authorization preflight.
+
+`task-project-reassignment` independently owns:
+
+- `task.project.move`;
+- `task.project.bulk-move`;
+- their specialized OpenAPI contract.
+
+The `TaskProjectReassignmentService` remains the lifecycle/relationship owner, and its handlers continue to authorize the Task plus source/destination Project scopes before moving state.
+
+### Organization and Accounting
+
+`organization_explicit_composition.ControlPlane` adapts `OrganizationService` into the `organizations` module. That module owns the Organization, Team, Membership, Invitation, resource-ownership, resource-share and external-group-mapping collections plus the Organization management command vocabulary.
+
+Organization command authorizers preserve the existing organization/team scope checks and explicit cross-organization share permission. `CanonicalOwnershipMirror` remains an integration service; it observes successful commands and mirrors canonical owners without becoming a second command bus.
+
+Optional Accounting projections are installed through the independent `accounting` module. The same `AccountingService` instance continues to serve the existing threshold/evaluation integrations; #982 changes only northbound ownership, not accounting authority.
+
+`organization-audit` declares an explicit dependency on `organizations`, owns `organization-audit-events`, and records successful Organization mutations as a post-success projection.
+
+### Release status
+
+`release-status` owns the exact special route `GET /api/v1/release/status` and the associated OpenAPI policy contribution. The mutable `ReleaseOperatorService` remains the behavior/state owner. Authentication stays outside the module at the existing authenticated HTTP boundary.
 
 ### Automation
 
