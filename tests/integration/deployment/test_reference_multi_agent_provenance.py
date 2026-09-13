@@ -249,8 +249,7 @@ def test_reference_multi_agent_golden_path_persists_complete_canonical_provenanc
             assert producer.selected_model_config_id == _MODEL_ID
             assert producer.selected_provider_id == provider.descriptor.provider_id
             assert (
-                producer.orchestrator_adapter_id
-                == ReferenceContextOrchestratorAdapter.adapter_id
+                producer.orchestrator_adapter_id == ReferenceContextOrchestratorAdapter.adapter_id
             )
             assert run.backend_ref == f"agent-run:{producer.agent_run_id}"
             assert len(producer.result_ids) == 1
