@@ -56,8 +56,7 @@ def test_package_research_service_is_runtime_safe_composition(tmp_path: Path) ->
         item = await create
         assert repository.runtime_connection_threads
         assert all(
-            thread_id != event_loop_thread
-            for thread_id in repository.runtime_connection_threads
+            thread_id != event_loop_thread for thread_id in repository.runtime_connection_threads
         )
 
         restarted = SqliteResearchRepository(database)
