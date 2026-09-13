@@ -252,7 +252,10 @@ class ReferenceIncomingHandoffContextAdapter:
             if len(producer_runs) != 1:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    "dependency output does not resolve to exactly one successful producer AgentRun",
+                    (
+                        "dependency output does not resolve to exactly one successful "
+                        "producer AgentRun"
+                    ),
                     details={
                         "producer_step_id": producer_step_id,
                         "producer_run_id": producer_run_id,
