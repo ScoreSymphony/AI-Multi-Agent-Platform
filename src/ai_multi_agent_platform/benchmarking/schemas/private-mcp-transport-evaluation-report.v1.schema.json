@@ -80,10 +80,15 @@
     },
     "secret_handling": {
       "type": "object",
-      "required": ["secret_references_only", "plaintext_secret_leak_detected"],
+      "required": [
+        "secret_references_only",
+        "plaintext_secret_leak_detected",
+        "process_argv_secret_exposure_detected"
+      ],
       "properties": {
         "secret_references_only": {"type": "boolean"},
-        "plaintext_secret_leak_detected": {"type": "boolean"}
+        "plaintext_secret_leak_detected": {"type": "boolean"},
+        "process_argv_secret_exposure_detected": {"type": "boolean"}
       },
       "additionalProperties": false
     },
