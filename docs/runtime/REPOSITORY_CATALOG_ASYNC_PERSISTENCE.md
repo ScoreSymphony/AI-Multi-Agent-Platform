@@ -44,9 +44,12 @@ metadata remains owned by the `repositories` package.
 ## Runtime call sites
 
 `RepositoryManagementService` adapts a supplied synchronous SQLite catalog once in its constructor
-and awaits catalog persistence for attach, detach and Connection cleanup. Registry mutation remains
-paired with durable persistence: if saving a binding fails, the just-added in-memory registry entry
-is rolled back as before.
+and awaits catalog persistence for attach, detach and Connection cleanup. Service-owned catalog
+mutations are serialized. An attached binding is published into the in-memory registry only after
+its durable save succeeds, so an awaitable SQLite write cannot expose uncommitted routing state.
+Detach hides the route before awaiting durable deletion and restores it if deletion fails. If an
+unexpected registry-registration failure happens after persistence, the previous catalog record is
+restored (or the new record is removed) before the error is propagated.
 
 `restore_connector_repositories()` likewise uses the async catalog boundary for durable list/delete
 operations while it awaits canonical Connector state. Missing Connector Connections still remove
@@ -66,4 +69,5 @@ The integration suite verifies:
 - bounded concurrent worker operations;
 - repeated cancellation that does not release the write boundary before persistence settles;
 - restart-visible persistence after a cancelled caller;
-- canonical retryable mapping for SQLite busy/locked failures.
+- canonical retryable mapping for SQLite busy/locked failures;
+- failed attach persistence never publishes an uncommitted repository binding.
