@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Protocol
+from dataclasses import dataclass
 
 from ai_multi_agent_platform.agents import (
     AgentCapabilityTurn,
     AgentRevision,
+    AgentRunRecord,
     AgentRunStatus,
     AgentRuntime,
 )
@@ -51,6 +53,38 @@ _PREFLIGHT_TASK_ID = "task_00000000-0000-4000-8000-000000000250"
 _PREFLIGHT_RUN_ID = "run_00000000-0000-4000-8000-000000000250"
 
 
+@dataclass(frozen=True, slots=True)
+class ContextualStepAgentStart:
+    """Canonical AgentRun plus rendered Context input prepared for one Step Run."""
+
+    agent_run: AgentRunRecord
+    instruction: str
+    objective: str
+
+    def __post_init__(self) -> None:
+        if not self.instruction.strip():
+            raise ValueError("contextual Step instruction must not be blank")
+        if not self.objective.strip():
+            raise ValueError("contextual Step objective must not be blank")
+
+
+class StepContextAgentStarter(Protocol):
+    """Optional composition seam for context-bound execution of an exact Step binding."""
+
+    async def start_contextual_agent(
+        self,
+        *,
+        request: ExecutionRequest,
+        binding: AgentExecutionBinding,
+        task_id: str,
+        project_id: str | None,
+        task_model_override: RoutingRequirements | None,
+        requested_capability_ids: tuple[str, ...],
+        available_capability_ids: frozenset[str],
+        verification_context: dict[str, JsonValue],
+    ) -> ContextualStepAgentStart | None: ...
+
+
 def preflight_first_run_agent(
     agents: AgentRuntime,
     agent_id: str,
@@ -87,7 +121,9 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
 
     A Step binding takes precedence over a Task-wide binding for that exact canonical Step.
     The binding may carry model requirements, capability IDs, Workspace scope and safe Step
-    execution context. Unmarked Runs are delegated unchanged.
+    execution context. Unmarked Runs are delegated unchanged. A deployment may additionally
+    provide a ``StepContextAgentStarter`` so a bound Step consumes canonical Context/Handoff
+    evidence before the ordinary model/capability turn without creating another Run lifecycle.
     """
 
     def __init__(
@@ -98,12 +134,14 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         agents: AgentRuntime,
         models: ModelRuntime,
         capability_turn: AgentCapabilityTurn | None = None,
+        step_context_starter: StepContextAgentStarter | None = None,
     ) -> None:
         self._delegate = delegate
         self._tasks = tasks
         self._agents = agents
         self._models = models
         self._capability_turn = capability_turn
+        self._step_context_starter = step_context_starter
         self._snapshots: dict[str, ExecutionSnapshot] = {}
         self._backend_refs: dict[str, str] = {}
 
@@ -117,6 +155,14 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
             available=True,
             resources={"delegate_provider_id": self._delegate.descriptor.provider_id},
         )
+
+    def configure_step_context_starter(
+        self,
+        starter: StepContextAgentStarter | None,
+    ) -> None:
+        """Install the deployment-owned canonical Context/Handoff bridge."""
+
+        self._step_context_starter = starter
 
     async def start(self, request: ExecutionRequest) -> ExecutionHandle:
         task = await self._tasks.get_task(request.context.correlation_id)
@@ -198,37 +244,67 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
             }
             self_hosted_only = False
 
-        agent_run = await self._agents.start_agent(
-            task_id=task.task_id,
-            run_id=request.run_id,
-            agent_id=agent_id,
-            revision=agent_revision,
-            task_model_override=task_model_override,
-            requested_capability_ids=requested_capability_ids,
-            available_capability_ids=available_capability_ids,
-            task_context=task_context,
-            project_context={
-                "project_id": task.task.project_id,
-                "workspace_id": workspace_id,
-            },
-            verification_context=verification_context,
-        )
+        contextual_start: ContextualStepAgentStart | None = None
+        if step_binding is not None and self._step_context_starter is not None:
+            contextual_start = await self._step_context_starter.start_contextual_agent(
+                request=request,
+                binding=step_binding,
+                task_id=task.task_id,
+                project_id=task.task.project_id,
+                task_model_override=task_model_override,
+                requested_capability_ids=requested_capability_ids,
+                available_capability_ids=available_capability_ids,
+                verification_context=verification_context,
+            )
+
+        if contextual_start is None:
+            agent_run = await self._agents.start_agent(
+                task_id=task.task_id,
+                run_id=request.run_id,
+                agent_id=agent_id,
+                revision=agent_revision,
+                task_model_override=task_model_override,
+                requested_capability_ids=requested_capability_ids,
+                available_capability_ids=available_capability_ids,
+                task_context=task_context,
+                project_context={
+                    "project_id": task.task.project_id,
+                    "workspace_id": workspace_id,
+                },
+                verification_context=verification_context,
+            )
+        else:
+            agent_run = contextual_start.agent_run
+            objective = contextual_start.objective
+
+        if agent_run.agent.agent_id != agent_id or (
+            agent_revision is not None and agent_run.agent.revision != agent_revision
+        ):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "context-bound AgentRun does not match the exact Step Agent revision",
+            )
+
         backend_ref = f"agent-run:{agent_run.agent_run_id}"
         self._backend_refs[request.run_id] = backend_ref
         result_id = new_id("result")
 
         try:
-            resolved_revision = self._agents.service.get_agent_revision(
-                agent_run.agent.agent_id,
-                agent_run.agent.revision,
-            )
-            instruction = resolved_revision.profile.instructions.role.content
-            if instruction is None:
-                raise ContractError(
-                    ErrorCode.UNSUPPORTED_CAPABILITY,
-                    "Agent execution requires inline role instructions in the reference "
-                    "execution profile",
+            if contextual_start is None:
+                resolved_revision = self._agents.service.get_agent_revision(
+                    agent_run.agent.agent_id,
+                    agent_run.agent.revision,
                 )
+                instruction = resolved_revision.profile.instructions.role.content
+                if instruction is None:
+                    raise ContractError(
+                        ErrorCode.UNSUPPORTED_CAPABILITY,
+                        "Agent execution requires inline role instructions in the reference "
+                        "execution profile",
+                    )
+            else:
+                instruction = contextual_start.instruction
+
             if agent_run.selected_model_config_id is None:
                 raise ContractError(
                     ErrorCode.NO_COMPATIBLE_ROUTE,
