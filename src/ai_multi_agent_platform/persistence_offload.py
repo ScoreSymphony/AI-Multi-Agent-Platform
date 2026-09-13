@@ -22,6 +22,11 @@ class SharedPersistenceOffloadRegistry[OffloadT]:
     weak-referencing the repository itself. Every live adapter owns the repository strongly, so
     an identity cannot be reused while an entry has a live owner. Once the final adapter is
     collected, the entry and its offload are released as well.
+
+    Owner weakrefs are never dereferenced while the registry lock is held. A weakref callback may
+    run synchronously in the thread that drops the final strong owner reference; dereferencing a
+    sibling owner under a non-reentrant lock could otherwise make that callback re-enter the same
+    lock and deadlock. Callbacks instead remove their own weakref by identity.
     """
 
     def __init__(self) -> None:
@@ -40,13 +45,10 @@ class SharedPersistenceOffloadRegistry[OffloadT]:
         with self._lock:
             entry = self._entries.get(repository_id)
             if entry is not None:
-                entry.owners = [reference for reference in entry.owners if reference() is not None]
-                if entry.owners:
-                    entry.owners.append(self._owner_reference(repository_id, owner))
-                    return entry.offload
-                self._entries.pop(repository_id, None)
+                entry.owners.append(self._owner_reference(repository_id, owner))
+                return entry.offload
 
-            resolved = requested or factory()
+            resolved = requested if requested is not None else factory()
             self._entries[repository_id] = _SharedOffloadEntry(
                 offload=resolved,
                 owners=[self._owner_reference(repository_id, owner)],
@@ -60,15 +62,21 @@ class SharedPersistenceOffloadRegistry[OffloadT]:
     ) -> weakref.ReferenceType[object]:
         return weakref.ref(
             owner,
-            lambda _reference: self._release_owner(repository_id),
+            lambda reference: self._release_owner(repository_id, reference),
         )
 
-    def _release_owner(self, repository_id: int) -> None:
+    def _release_owner(
+        self,
+        repository_id: int,
+        released_reference: weakref.ReferenceType[object],
+    ) -> None:
         with self._lock:
             entry = self._entries.get(repository_id)
             if entry is None:
                 return
-            entry.owners = [reference for reference in entry.owners if reference() is not None]
+            entry.owners = [
+                reference for reference in entry.owners if reference is not released_reference
+            ]
             if not entry.owners:
                 self._entries.pop(repository_id, None)
 

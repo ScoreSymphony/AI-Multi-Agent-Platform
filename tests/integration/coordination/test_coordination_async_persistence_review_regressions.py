@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import threading
 import weakref
 from dataclasses import replace
@@ -20,6 +21,7 @@ from ai_multi_agent_platform.coordination.plan_step_coordinator import (
 )
 from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
 from ai_multi_agent_platform.domain import OwnerRef, Plan, Step, new_id
+from ai_multi_agent_platform.persistence_offload import SharedPersistenceOffloadRegistry
 
 OWNER = OwnerRef(type="user", id="coordination-review-regression-user")
 
@@ -80,6 +82,14 @@ class _SnapshotOnlyAdapter(AsyncCoordinatorRepositoryAdapter):
         raise AssertionError(f"split list_step_records read used for {plan_id}")
 
 
+class _RegistryOwner:
+    pass
+
+
+class _OffloadToken:
+    pass
+
+
 def test_unhashable_nonweakrefable_repository_can_share_one_offload() -> None:
     repository = _OpaqueRepository()
     with pytest.raises(TypeError):
@@ -99,6 +109,41 @@ def test_unhashable_nonweakrefable_repository_can_share_one_offload() -> None:
         assert (await second.get_plan(plan.id)).plan == plan
 
     asyncio.run(scenario())
+
+
+def test_shared_registry_releases_offload_after_final_owner_only() -> None:
+    repository = object()
+    registry = SharedPersistenceOffloadRegistry[_OffloadToken]()
+    first_owner = _RegistryOwner()
+    first_offload = registry.resolve(
+        repository,
+        owner=first_owner,
+        requested=None,
+        factory=_OffloadToken,
+    )
+    offload_reference = weakref.ref(first_offload)
+
+    second_owner = _RegistryOwner()
+    second_offload = registry.resolve(
+        repository,
+        owner=second_owner,
+        requested=None,
+        factory=_OffloadToken,
+    )
+    assert second_offload is first_offload
+
+    del first_owner
+    gc.collect()
+    assert offload_reference() is first_offload
+
+    del first_offload
+    del second_offload
+    gc.collect()
+    assert offload_reference() is not None
+
+    del second_owner
+    gc.collect()
+    assert offload_reference() is None
 
 
 def test_plan_snapshot_holds_serialization_boundary_across_all_reads() -> None:
