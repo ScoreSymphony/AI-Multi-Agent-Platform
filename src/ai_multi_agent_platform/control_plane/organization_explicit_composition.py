@@ -150,9 +150,47 @@ class ControlPlane(_CurrentControlPlane):
             **organization_command_handlers(service),
             **organization_management_command_handlers(service),
         }
-        authorizers = {
-            command: _organization_authorizer(service, mirror, command) for command in handlers
-        }
+
+        def authorizer(command: str) -> Any:
+            async def authorize(
+                context: RequestContext,
+                resource_ref: str,
+                payload: dict[str, JsonValue],
+            ) -> None:
+                reject_direct_mirror_owner_mutation(command, payload)
+                scope: tuple[OwnerType, str] | None = None
+                if command in ORGANIZATION_COMMANDS:
+                    scope = await _command_scope(service, command, resource_ref, payload)
+                elif command in ORGANIZATION_MANAGEMENT_COMMANDS:
+                    scope = await organization_management_command_scope(
+                        service,
+                        command,
+                        resource_ref,
+                    )
+                if scope is None:
+                    return
+                await self._authorize(
+                    context,
+                    command,
+                    resource_ref,
+                    owner_type=scope[0],
+                    owner_id=scope[1],
+                )
+                cross_organization_target = await _cross_organization_share_target(
+                    service,
+                    command,
+                    payload,
+                )
+                if cross_organization_target is not None:
+                    await self._authorize(
+                        context,
+                        "resource-share.cross-organization",
+                        cross_organization_target,
+                        owner_type=scope[0],
+                        owner_id=scope[1],
+                    )
+
+            return authorize
 
         async def mirror_command(
             context: RequestContext,
@@ -167,7 +205,7 @@ class ControlPlane(_CurrentControlPlane):
             name=ORGANIZATION_MODULE,
             resource_services=resources,
             command_handlers=handlers,
-            command_authorizers=authorizers,
+            command_authorizers={command: authorizer(command) for command in handlers},
             command_observers=(mirror_command,),
         )
 
@@ -246,52 +284,6 @@ class ControlPlane(_CurrentControlPlane):
             actor_ref=context.actor.principal_ref,
         )
         return resource
-
-
-def _organization_authorizer(
-    service: OrganizationService,
-    mirror: CanonicalOwnershipMirror,
-    command: str,
-) -> Any:
-    async def authorize(
-        context: RequestContext,
-        resource_ref: str,
-        payload: dict[str, JsonValue],
-    ) -> None:
-        reject_direct_mirror_owner_mutation(command, payload)
-        scope: tuple[OwnerType, str] | None = None
-        if command in ORGANIZATION_COMMANDS:
-            scope = await _command_scope(service, command, resource_ref, payload)
-        elif command in ORGANIZATION_MANAGEMENT_COMMANDS:
-            scope = await organization_management_command_scope(service, command, resource_ref)
-        if scope is None:
-            return
-        control_plane = cast(Any, mirror)
-        del control_plane
-        # Authorization stays on the composed façade. The closure receives it through
-        # the RequestContext-independent binding installed below.
-        await _authorize_organization_scope(
-            service,
-            context,
-            command,
-            resource_ref,
-            payload,
-            scope,
-        )
-
-    return authorize
-
-
-async def _authorize_organization_scope(
-    service: OrganizationService,
-    context: RequestContext,
-    command: str,
-    resource_ref: str,
-    payload: dict[str, JsonValue],
-    scope: tuple[OwnerType, str],
-) -> None:
-    # Replaced at module construction with the bound façade authorizer.
-    raise RuntimeError("organization authorizer must be bound to a Control Plane")
 
 
 def _search_result_organization_id(result: SearchResult) -> str | None:
