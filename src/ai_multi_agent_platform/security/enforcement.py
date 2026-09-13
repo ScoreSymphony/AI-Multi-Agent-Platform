@@ -17,6 +17,12 @@ from ai_multi_agent_platform.contracts import (
 )
 
 from .approvals import ApprovalRecord, ApprovalService
+from .async_persistence import (
+    AsyncApprovalService,
+    AsyncApprovalServiceAdapter,
+    AsyncAuthorizationAuditSink,
+    AsyncAuthorizationAuditSinkAdapter,
+)
 from .authorization import (
     ActorIdentity,
     AuthorizationAction,
@@ -41,10 +47,26 @@ class AuthorizationGate:
         approvals: ApprovalService | None = None,
         audit_sink: AuthorizationAuditSink | None = None,
         approval_event_sink: ApprovalEventSink | None = None,
+        runtime_approvals: AsyncApprovalService | None = None,
+        runtime_audit_sink: AsyncAuthorizationAuditSink | None = None,
     ) -> None:
         self.provider = provider
         self.approvals = approvals or ApprovalService()
+        approval_adapter: AsyncApprovalServiceAdapter | None = None
+        if runtime_approvals is None:
+            approval_adapter = AsyncApprovalServiceAdapter(self.approvals)
+            self.runtime_approvals: AsyncApprovalService = approval_adapter
+        else:
+            self.runtime_approvals = runtime_approvals
         self._audit_sink = audit_sink
+        self._runtime_audit_sink = runtime_audit_sink or (
+            None
+            if audit_sink is None
+            else AsyncAuthorizationAuditSinkAdapter(
+                audit_sink,
+                offload=None if approval_adapter is None else approval_adapter.offload,
+            )
+        )
         self._approval_event_sinks: list[ApprovalEventSink] = []
         if approval_event_sink is not None:
             self._approval_event_sinks.append(approval_event_sink)
@@ -75,10 +97,10 @@ class AuthorizationGate:
         resolved_approval: ApprovalRecord | None = None
 
         if decision.outcome is AuthorizationOutcome.REQUIRE_APPROVAL:
-            if approval_id is not None and self.approvals.valid_for(approval_id, action):
-                resolved_approval = self.approvals.get(approval_id)
-            elif approval_id is None:
-                resolved_approval = self.approvals.find_valid_for(action)
+            resolved_approval = await self.runtime_approvals.resolve_valid_for(
+                action,
+                approval_id=approval_id,
+            )
 
             if resolved_approval is not None:
                 allowed = AuthorizationDecision(
@@ -89,18 +111,15 @@ class AuthorizationGate:
                     audit_metadata=decision.audit_metadata,
                     adapter_metadata=decision.adapter_metadata,
                 )
-                self._audit(action, allowed, resolved_approval.approval_id)
+                await self._audit(action, allowed, resolved_approval.approval_id)
                 return allowed
 
-            pending = self.approvals.pending_for(action)
-            created = pending is None
-            if pending is None:
-                pending = self.approvals.request(
-                    action,
-                    reason=decision.reason or "authorization policy requires approval",
-                    policy_id=decision.policy_id or "authorization:unspecified",
-                    risk=risk,
-                )
+            pending, created = await self.runtime_approvals.ensure_pending(
+                action,
+                reason=decision.reason or "authorization policy requires approval",
+                policy_id=decision.policy_id or "authorization:unspecified",
+                risk=risk,
+            )
             if created:
                 await self._emit_approval("required", pending)
             gated = AuthorizationDecision(
@@ -115,10 +134,10 @@ class AuthorizationGate:
                 audit_metadata=decision.audit_metadata,
                 adapter_metadata=decision.adapter_metadata,
             )
-            self._audit(action, gated, pending.approval_id)
+            await self._audit(action, gated, pending.approval_id)
             return gated
 
-        self._audit(action, decision, approval_id)
+        await self._audit(action, decision, approval_id)
         return decision
 
     async def enforce(
@@ -160,7 +179,7 @@ class AuthorizationGate:
         supply correlation/owner/control metadata but cannot substitute another project.
         """
 
-        record = self.approvals.get(approval_id)
+        record = await self.runtime_approvals.get(approval_id)
         scoped_operation = _approval_operation(record, operation)
         resource_type = _resource_type(record.resource_type)
         action = ProposedAction(
@@ -186,7 +205,7 @@ class AuthorizationGate:
                 action.context.to_request(requested_action_digest=action.digest)
             )
         )
-        self._audit(action, decision, approval_id)
+        await self._audit(action, decision, approval_id)
         if decision.outcome is not AuthorizationOutcome.ALLOW:
             raise ContractError(
                 ErrorCode.FORBIDDEN,
@@ -198,7 +217,7 @@ class AuthorizationGate:
                     "approval_id": approval_id,
                 },
             )
-        updated = self.approvals._decide_authorized(
+        updated = await self.runtime_approvals.decide_authorized(
             approval_id,
             approver_ref=approver.actor_id,
             approve=approve,
@@ -216,7 +235,7 @@ class AuthorizationGate:
     ) -> ApprovalRecord:
         """Cancel a pending request as requester or as an authorized approver."""
 
-        record = self.approvals.get(approval_id)
+        record = await self.runtime_approvals.get(approval_id)
         scoped_operation = _approval_operation(record, operation)
         resource_type = _resource_type(record.resource_type)
         action = ProposedAction(
@@ -249,7 +268,7 @@ class AuthorizationGate:
                     action.context.to_request(requested_action_digest=action.digest)
                 )
             )
-        self._audit(action, decision, approval_id)
+        await self._audit(action, decision, approval_id)
         if decision.outcome is not AuthorizationOutcome.ALLOW:
             raise ContractError(
                 ErrorCode.FORBIDDEN,
@@ -257,7 +276,10 @@ class AuthorizationGate:
                 provider_id=self.provider.descriptor.provider_id,
                 details={"approval_id": approval_id},
             )
-        updated = self.approvals._cancel_authorized(approval_id, actor_ref=actor.actor_id)
+        updated = await self.runtime_approvals.cancel_authorized(
+            approval_id,
+            actor_ref=actor.actor_id,
+        )
         await self._emit_approval("resolved", updated)
         return updated
 
@@ -269,6 +291,8 @@ class AuthorizationGate:
         policy_id: str,
         risk: RiskClassification = RiskClassification.ELEVATED,
     ) -> ApprovalRecord:
+        """Synchronous setup/offline compatibility seam; async callers use the runtime facade."""
+
         return self.approvals.request(
             action,
             reason=reason,
@@ -286,16 +310,14 @@ class AuthorizationGate:
     ) -> ApprovalRecord:
         """Create a pending Approval and publish its best-effort required-attention event."""
 
-        existing = self.approvals.pending_for(action)
-        if existing is not None:
-            return existing
-        record = self.ensure_pending_approval(
+        record, created = await self.runtime_approvals.ensure_pending(
             action,
             reason=reason,
             policy_id=policy_id,
             risk=risk,
         )
-        await self._emit_approval("required", record)
+        if created:
+            await self._emit_approval("required", record)
         return record
 
     async def _emit_approval(self, event: str, record: ApprovalRecord) -> None:
@@ -308,7 +330,7 @@ class AuthorizationGate:
                 # false authorization/approval failure.
                 continue
 
-    def _audit(
+    async def _audit(
         self,
         action: ProposedAction,
         decision: AuthorizationDecision,
@@ -333,8 +355,8 @@ class AuthorizationGate:
             requested_action_digest=action.digest,
         )
         self._audit_records.append(record)
-        if self._audit_sink is not None:
-            self._audit_sink(record)
+        if self._runtime_audit_sink is not None:
+            await self._runtime_audit_sink.append(record)
 
 
 def _approval_operation(record: ApprovalRecord, supplied: OperationContext) -> OperationContext:

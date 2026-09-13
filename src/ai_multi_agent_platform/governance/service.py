@@ -401,12 +401,11 @@ class GovernanceService:
         approval_id = context.approval_id
 
         if specification.approval_required:
-            if approval_id is None:
-                valid = self.approval_gate.approvals.find_valid_for(action)
-                approval_id = valid.approval_id if valid is not None else None
-            if approval_id is None or not self.approval_gate.approvals.valid_for(
-                approval_id, action
-            ):
+            resolved = await self.approval_gate.runtime_approvals.resolve_valid_for(
+                action,
+                approval_id=approval_id,
+            )
+            if resolved is None:
                 if approval_id is not None:
                     self._audit_spec(
                         "specification.stale-approval-rejected",
@@ -430,6 +429,7 @@ class GovernanceService:
                         "content_digest": specification.content_digest,
                     },
                 )
+            approval_id = resolved.approval_id
             self._audit_spec(
                 "specification.approval-resolved",
                 specification,

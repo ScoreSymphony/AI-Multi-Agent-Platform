@@ -61,7 +61,7 @@ class CapabilityAuthorizationBridge:
         if action is None:
             action = self._proposed_action(request, capability)
             self._actions[request.invocation_id] = action
-        if self._gate.approvals.find_valid_for(action) is not None:
+        if await self._gate.runtime_approvals.resolve_valid_for(action) is not None:
             return True
         await self._gate.ensure_pending_approval_with_event(
             action,
