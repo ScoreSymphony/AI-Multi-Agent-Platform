@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import sqlite3
 import threading
 import time
+import weakref
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -84,6 +86,16 @@ class _BlockingApprovalService(SqliteApprovalService):
             if not self.release.wait(timeout=3):
                 raise TimeoutError("test Security persistence worker release timed out")
         return super()._connect()
+
+
+class _VisibilityApprovalService(_BlockingApprovalService):
+    def __init__(self, path: Path) -> None:
+        self.read_entered = threading.Event()
+        super().__init__(path)
+
+    def all(self) -> tuple[Any, ...]:
+        self.read_entered.set()
+        return super().all()
 
 
 class _BusyApprovalService(SqliteApprovalService):
@@ -264,6 +276,108 @@ def test_authorization_gate_shares_one_security_offload_for_runtime_stores(
     approval_adapter = cast(AsyncApprovalServiceAdapter, gate.runtime_approvals)
     audit_adapter = cast(AsyncAuthorizationAuditSinkAdapter, gate._runtime_audit_sink)
     assert approval_adapter._offload is audit_adapter._offload
+
+
+def test_independent_approval_adapters_share_runtime_serialization(tmp_path: Path) -> None:
+    approvals = SqliteApprovalService(tmp_path / "approvals.sqlite3")
+    first = AsyncApprovalServiceAdapter(approvals)
+    second = AsyncApprovalServiceAdapter(approvals)
+
+    assert first.offload is second.offload
+
+
+def test_multiple_gates_share_runtime_serialization_for_one_approval_service(
+    tmp_path: Path,
+) -> None:
+    approvals = SqliteApprovalService(tmp_path / "approvals.sqlite3")
+    first = cast(
+        AsyncApprovalServiceAdapter,
+        AuthorizationGate(_provider(), approvals=approvals).runtime_approvals,
+    )
+    second = cast(
+        AsyncApprovalServiceAdapter,
+        AuthorizationGate(_provider(), approvals=approvals).runtime_approvals,
+    )
+
+    assert first.offload is second.offload
+
+
+def test_shared_approval_runtime_is_weakly_owned(tmp_path: Path) -> None:
+    approvals = SqliteApprovalService(tmp_path / "approvals.sqlite3")
+    adapter = AsyncApprovalServiceAdapter(approvals)
+    approval_ref = weakref.ref(approvals)
+    offload_ref = weakref.ref(adapter.offload)
+
+    del adapter
+    del approvals
+    gc.collect()
+
+    assert approval_ref() is None
+    assert offload_ref() is None
+
+
+def test_gate_and_control_plane_do_not_observe_uncommitted_approval_state(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        approvals = _VisibilityApprovalService(tmp_path / "approvals.sqlite3")
+        gate = AuthorizationGate(_provider(), approvals=approvals)
+        resources = ApprovalResourceService(approvals)
+        action = _action()
+
+        write = asyncio.create_task(
+            gate.runtime_approvals.ensure_pending(
+                action,
+                reason="review required",
+                policy_id="policy:test",
+            )
+        )
+        assert await asyncio.to_thread(approvals.started.wait, 1)
+
+        read = asyncio.create_task(
+            resources.list_resources(cast(RequestContext, object()), cast(Any, object()))
+        )
+        await asyncio.sleep(0.02)
+        assert not read.done()
+        assert not approvals.read_entered.is_set()
+
+        approvals.release.set()
+        record, created = await write
+        listed = await read
+
+        assert created is True
+        assert approvals.read_entered.is_set()
+        assert listed[0]["id"] == record.approval_id
+        assert SqliteApprovalService(approvals.database_path).get(record.approval_id) == record
+
+    asyncio.run(scenario())
+
+
+def test_approval_and_audit_serialization_domains_are_independent() -> None:
+    async def scenario() -> None:
+        offload = SecurityPersistenceOffload(max_concurrency=2)
+        approval_started = threading.Event()
+        release = threading.Event()
+
+        def blocked_approval() -> None:
+            approval_started.set()
+            if not release.wait(timeout=3):
+                raise TimeoutError("test Security approval release timed out")
+
+        approval = asyncio.create_task(offload.run(blocked_approval, serialization="approvals"))
+        assert await asyncio.to_thread(approval_started.wait, 1)
+
+        audit_thread = await asyncio.wait_for(
+            offload.run(threading.get_ident, serialization="audit"),
+            timeout=0.5,
+        )
+        assert audit_thread != threading.get_ident()
+        assert not approval.done()
+
+        release.set()
+        await approval
+
+    asyncio.run(scenario())
 
 
 def test_security_runtime_survives_multiple_event_loop_lifetimes(tmp_path: Path) -> None:
