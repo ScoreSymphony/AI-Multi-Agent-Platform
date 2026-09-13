@@ -14,6 +14,7 @@ REMOVED_RUNTIME_PATHS = (
     "tests/contract/forge/test_forge_optionality.py",
     "tests/integration/forge/test_forge_http.py",
     "tests/integration/forge/test_sidecar.py",
+    "tests/regression/forge/test_forge_kernel_regressions.py",
 )
 
 
@@ -24,13 +25,22 @@ def test_forge_executable_surface_is_absent() -> None:
 
 def test_forge_has_no_active_ci_or_external_conformance_lane() -> None:
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    guard = (ROOT / ".github/workflows/forge-removal-guard.yml").read_text(encoding="utf-8")
     external = (ROOT / "scripts/ci/issue46_external_profile.py").read_text(encoding="utf-8")
 
     assert "forge-sidecar-integration" not in ci
     assert "FORGE_SIDECAR_" not in ci
     assert "ScoreSymphony/AI-Agent-VPS" not in ci
+    assert "executor-sidecar" not in ci
     assert "FORGE_SIDECAR_" not in external
     assert "def _forge" not in external
+
+    # main still requires the historical check context. The dedicated guard may
+    # preserve that name, but must never recreate a Forge runtime/sidecar lane.
+    assert "forge-sidecar-integration" in guard
+    assert "ScoreSymphony/AI-Agent-VPS" not in guard
+    assert "FORGE_SIDECAR_" not in guard
+    assert "executor-sidecar" not in guard
 
 
 def test_forge_is_not_a_first_party_or_release_compatibility_claim() -> None:
