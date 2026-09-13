@@ -54,11 +54,11 @@ The matrix does **not** create separate compatibility claims for helpers that me
 
 The complete entry-by-entry inventory, owner, burden, security surface, upstream state, usage and evidence mapping is in the TOML file.
 
-| Boundary | Reference baseline | Supported optional | Experimental / non-claiming |
+| Boundary | Reference baseline | Supported optional | Experimental / deprecated / non-claiming |
 | --- | --- | --- | --- |
 | Planner | `planner.reference` | `planner.model-backed` | — |
 | Orchestrator | `orchestrator.reference` | `orchestrator.hermes` | — |
-| Executor | `executor.reference` | `executor.forge` | `executor.agent-sandbox`, `executor.openshell`, `executor.swe-rex` |
+| Executor | `executor.reference` | — | `executor.forge` (**deprecated**); `executor.agent-sandbox`, `executor.openshell`, `executor.swe-rex` (experimental) |
 | Model provider | `model.openai-compatible` | `model.litellm` | dedicated Bifrost/SGLang adapters intentionally absent |
 | Model router | `model.router` | — | — |
 | Capability/tool | `capability.native` | `capability.mcp` | — |
@@ -79,7 +79,7 @@ The complete entry-by-entry inventory, owner, burden, security surface, upstream
 | Security evidence | — | `security-evidence.skillspector` | — |
 | Deployment lifecycle | — | `deployment.distributed-lifecycle` | — |
 
-There are currently **no active `deprecated` entries**. #904 does not require deleting an implementation to hit a count target. It requires every overlap either to have unique value or to be consolidated/demoted. The audit found several places where the correct reduction is to narrow compatibility claims or prevent a duplicate adapter from being introduced, not to delete working code.
+There is currently **one active `deprecated` entry: `executor.forge`**. Its migration path, guarantee-preservation audit and explicit removal gates are recorded in `docs/integrations/FORGE_RETENTION_DECISION.md` under #991. Demotion does not promote an experimental executor or change the canonical `Executor` contract.
 
 ## Consolidation decisions
 
@@ -91,7 +91,9 @@ Bifrost and SGLang do not justify dedicated first-party `ModelProvider` implemen
 
 ### 2. Forge HTTP is transport, not a second executor
 
-`ForgeExecutor` is the compatibility surface. `ForgeClient`/HTTP sidecar transport is an implementation detail beneath it. Documentation and CI claims must talk about the Forge executor profile rather than counting its HTTP client as another Executor.
+`ForgeExecutor` remains the temporary compatibility surface during the #991 deprecation window. `ForgeClient`/HTTP sidecar transport is an implementation detail beneath it. The currently proven sidecar profile validates the real transport boundary but does not establish a non-null Forge CLI executor capability that warrants continued `supported` status.
+
+The migration target is `ReferenceExecutor` or another independently supported implementation of the canonical `Executor` contract. Forge-specific code and CI are removed only after the guarantee and #889/#46 gates in `docs/integrations/FORGE_RETENTION_DECISION.md` pass.
 
 ### 3. MCP has one capability adapter and profile-specific clients
 
@@ -119,7 +121,7 @@ This preserves the architectural rule that logical repository ownership is indep
 
 ### 8. External executor experiments do not inherit production support from contract tests
 
-`AgentSandboxExecutor`, `OpenShellExecutor` and `SwerexExecutor` implement the canonical Executor and have deterministic tests, but that does not make them supported. Agent-Sandbox remains evidence-gated by live isolation evaluation; OpenShell is explicitly `experimental_only` at the pinned alpha revision until one concrete runtime profile has retained isolation/egress/credential/resource evidence; SWE-ReX is explicitly evaluation/experimental-only. None belongs in an unqualified “supported executors” claim.
+`AgentSandboxExecutor`, `OpenShellExecutor` and `SwerexExecutor` implement the canonical Executor and have deterministic tests, but that does not make them supported. Agent-Sandbox remains evidence-gated by live isolation evaluation; OpenShell is explicitly `experimental_only` at the pinned alpha revision until one concrete runtime profile has retained isolation/egress/credential/resource evidence; SWE-ReX is explicitly evaluation/experimental-only. None belongs in an unqualified “supported executors” claim, and Forge deprecation does not change those tiers.
 
 ### 9. SkillSpector is supported only in the evaluated static evidence profile
 
@@ -156,7 +158,7 @@ The platform-wide #46 layer remains the aggregator for end-to-end compatibility 
 In particular:
 
 - the reference baseline remains deterministic, local-first and free from mandatory paid services;
-- Hermes/Forge claims require their prepared external profiles;
+- Hermes support requires its prepared external profile; Forge retains only deprecation/migration evidence until the #991 removal gates pass;
 - LiteLLM requires its dedicated compatibility lane;
 - stable MCP claims require protocol and platform evidence for the same profile;
 - SkillSpector support is limited to the pinned static/no-LLM/network-none evidence profile;
@@ -176,6 +178,8 @@ When a future audit moves an entry to `deprecated`, the same change must add:
 
 Only after those conditions are satisfied may the implementation and obsolete CI lane be removed.
 
+For `executor.forge`, #991 and `docs/integrations/FORGE_RETENTION_DECISION.md` provide that deprecation record. The sidecar CI lane remains temporarily as migration/regression evidence and is removed with the executable Forge profile after the documented gates pass.
+
 ## CI policy
 
 CI follows support policy rather than repository file count:
@@ -186,7 +190,7 @@ CI follows support policy rather than repository file count:
 - `deprecated`: migration/compatibility evidence only until removal;
 - `external`: core contract conformance tooling, not first-party upstream maintenance.
 
-No required lane is removed by this audit because the overlapping implementations that remain supported have distinct product value. The reduction delivered here is the removal of ambiguous equal-support claims and the explicit prevention of redundant dedicated adapters where a broader supported boundary already covers the use case. If a later deprecation makes a compatibility lane obsolete, that lane should be removed in the same retirement sequence rather than retained indefinitely.
+The Forge sidecar lane is retained only for the #991 deprecation window; it is no longer evidence for a `supported` executor claim. Other required lanes remain unchanged. If a deprecation makes a compatibility lane obsolete, that lane should be removed in the same retirement sequence rather than retained indefinitely.
 
 ## Extension rule
 

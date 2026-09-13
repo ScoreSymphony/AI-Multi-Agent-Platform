@@ -127,6 +127,15 @@ def test_blocked_compatibility_blocks_release() -> None:
     assert any("is blocked" in blocker for blocker in report.blockers)
 
 
+def test_deprecated_compatibility_warns_without_blocking_release() -> None:
+    manifest = _manifest()
+    deprecated = replace(manifest.compatibility[0], status=CompatibilityStatus.DEPRECATED)
+    report = evaluate_release(replace(manifest, compatibility=(deprecated,)))
+    assert report.ready is True
+    assert report.blockers == ()
+    assert "upstream 'example-runtime' is deprecated" in report.warnings
+
+
 def test_release_metadata_exposes_operator_status() -> None:
     payload = release_metadata(_manifest())
     assert payload["release_version"] == "1.2.3"
