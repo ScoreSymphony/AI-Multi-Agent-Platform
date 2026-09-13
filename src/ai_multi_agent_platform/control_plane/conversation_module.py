@@ -223,7 +223,11 @@ def conversation_control_plane_module(
         "conversation.delete": retention.delete_conversation,
     }
     expected = frozenset(
-        (*CONVERSATION_COMMANDS, CONVERSATION_RESUME_TASK_COMMAND, *CONVERSATION_RETENTION_COMMANDS)
+        (
+            *CONVERSATION_COMMANDS,
+            CONVERSATION_RESUME_TASK_COMMAND,
+            *CONVERSATION_RETENTION_COMMANDS,
+        )
     )
     if frozenset(handlers) != expected:
         raise RuntimeError("explicit Conversation module command inventory is incomplete")
