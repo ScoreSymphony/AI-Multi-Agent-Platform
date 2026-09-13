@@ -76,6 +76,28 @@ def test_duplicate_module_ownership_is_rejected_before_installation() -> None:
         _control_plane(second, first)
 
 
+def test_failed_module_batch_is_atomic() -> None:
+    control_plane = _control_plane()
+    alpha = ControlPlaneModule(
+        name="domain.alpha",
+        resource_services={"widgets": InMemoryResourceService()},
+        command_handlers={"widget.refresh": _command},
+    )
+    beta = ControlPlaneModule(
+        name="domain.beta",
+        resource_services={"widgets": InMemoryResourceService()},
+    )
+
+    with pytest.raises(ValueError, match="duplicate Control Plane resource ownership"):
+        control_plane.register_modules((alpha, beta))
+
+    assert control_plane.registered_modules == ()
+    assert control_plane.registered_collections == ()
+    assert control_plane.registered_commands == ()
+    assert control_plane.resource_owner("widgets") is None
+    assert control_plane.command_owner("widget.refresh") is None
+
+
 def test_duplicate_manual_registration_does_not_silently_replace_owner() -> None:
     control_plane = _control_plane()
     control_plane.register_command("widget.refresh", _command, owner="domain.alpha")
@@ -94,6 +116,24 @@ def test_missing_module_dependency_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="requires missing modules"):
         _control_plane(module)
+
+
+def test_normalized_special_route_ownership_conflict_is_rejected() -> None:
+    async def status(request: HTTPRequest) -> HTTPResponse:
+        del request
+        return HTTPResponse(status=200, body={"status": "ok"})
+
+    alpha = ControlPlaneModule(
+        name="domain.alpha",
+        routes=(ControlPlaneRoute("get", "/api/v1/module-status/", status),),
+    )
+    beta = ControlPlaneModule(
+        name="domain.beta",
+        routes=(ControlPlaneRoute("GET", "/api/v1/module-status", status),),
+    )
+
+    with pytest.raises(ValueError, match="duplicate Control Plane route ownership"):
+        _control_plane(alpha, beta)
 
 
 def test_special_route_and_openapi_contribution_have_explicit_owner() -> None:
@@ -136,3 +176,30 @@ def test_special_route_and_openapi_contribution_have_explicit_owner() -> None:
         assert "/api/v1/module-status" in paths
 
     asyncio.run(scenario())
+
+
+def test_openapi_contributors_run_in_deterministic_module_order() -> None:
+    def contribute(name: str):
+        def apply(specification: dict[str, Any]) -> None:
+            order = specification.setdefault("x-module-order", [])
+            assert isinstance(order, list)
+            order.append(name)
+
+        return apply
+
+    alpha = ControlPlaneModule(
+        name="domain.alpha",
+        openapi_contributors=(contribute("alpha"),),
+    )
+    beta = ControlPlaneModule(
+        name="domain.beta",
+        openapi_contributors=(contribute("beta"),),
+    )
+
+    first = _control_plane(beta, alpha)
+    second = _control_plane(alpha, beta)
+    first_spec = first.apply_openapi_contributions({})
+    second_spec = second.apply_openapi_contributions({})
+
+    assert first_spec["x-module-order"] == ["alpha", "beta"]
+    assert second_spec["x-module-order"] == ["alpha", "beta"]
