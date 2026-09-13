@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from ai_multi_agent_platform.accounting.async_service import (
+    AsyncAccountingService,
+    runtime_accounting_service,
+)
 from ai_multi_agent_platform.accounting.control_plane import (
     _aggregate_resources,
-    _budget_resource,
+    _budget_resource_runtime,
     _record_resource,
 )
 from ai_multi_agent_platform.accounting.models import (
@@ -25,6 +29,7 @@ from .models import Membership, MembershipStatus, OrganizationStatus, TeamStatus
 from .service import OrganizationService
 
 DEFAULT_ACCOUNTING_AGGREGATE_POLICY_REF = "accounting.aggregate.read"
+AccountingRuntime = AccountingService | AsyncAccountingService
 
 
 class OrganizationAccountingVisibility:
@@ -84,9 +89,6 @@ class OrganizationAccountingVisibility:
         ):
             return True
         memberships = await self._active_memberships(principal, organization_id)
-        # A Team-scoped grant is intentionally not an Organization-wide grant. Without
-        # this distinction, a user allowed to inspect one Team's aggregate usage could
-        # silently gain aggregate visibility over every other Team/member in the Organization.
         return any(
             item.team_id is None and self.aggregate_policy_ref in item.policy_refs
             for item in memberships
@@ -161,10 +163,10 @@ class OrganizationUsageRecordResourceService:
 
     def __init__(
         self,
-        accounting: AccountingService,
+        accounting: AccountingRuntime,
         visibility: OrganizationAccountingVisibility,
     ) -> None:
-        self._accounting = accounting
+        self._accounting = runtime_accounting_service(accounting)
         self._visibility = visibility
 
     async def list_resources(
@@ -174,7 +176,7 @@ class OrganizationUsageRecordResourceService:
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
         resources: list[dict[str, JsonValue]] = []
-        for record in self._accounting.query(UsageQuery()):
+        for record in await self._accounting.query(UsageQuery()):
             if await self._visibility.raw_record_visible(context, record):
                 resources.append(_record_resource(record))
         return tuple(resources)
@@ -184,7 +186,7 @@ class OrganizationUsageRecordResourceService:
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        for record in self._accounting.query(UsageQuery()):
+        for record in await self._accounting.query(UsageQuery()):
             if record.id == resource_id and await self._visibility.raw_record_visible(
                 context, record
             ):
@@ -197,7 +199,7 @@ class OrganizationUsageAggregateResourceService:
 
     def __init__(
         self,
-        accounting: AccountingService,
+        accounting: AccountingRuntime,
         visibility: OrganizationAccountingVisibility,
         *,
         trend_window_seconds: int = 24 * 60 * 60,
@@ -205,7 +207,7 @@ class OrganizationUsageAggregateResourceService:
     ) -> None:
         if trend_window_seconds <= 0 or trend_bucket_seconds <= 0:
             raise ValueError("trend window and bucket must be greater than zero")
-        self._accounting = accounting
+        self._accounting = runtime_accounting_service(accounting)
         self._visibility = visibility
         self._trend_window_seconds = trend_window_seconds
         self._trend_bucket_seconds = trend_bucket_seconds
@@ -216,7 +218,7 @@ class OrganizationUsageAggregateResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
-        all_records = self._accounting.query(UsageQuery())
+        all_records = await self._accounting.query(UsageQuery())
         resources: list[dict[str, JsonValue]] = []
 
         personal = tuple(record for record in all_records if _exact_owner(context, record.scope))
@@ -284,10 +286,10 @@ class OrganizationUsageBudgetResourceService:
 
     def __init__(
         self,
-        accounting: AccountingService,
+        accounting: AccountingRuntime,
         visibility: OrganizationAccountingVisibility,
     ) -> None:
-        self._accounting = accounting
+        self._accounting = runtime_accounting_service(accounting)
         self._visibility = visibility
 
     async def list_resources(
@@ -297,9 +299,9 @@ class OrganizationUsageBudgetResourceService:
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
         resources: list[dict[str, JsonValue]] = []
-        for budget in self._accounting.store.list_budgets():
+        for budget in await self._accounting.list_budgets():
             if await self._visibility.budget_visible(context, budget):
-                resources.append(_budget_resource(self._accounting, budget))
+                resources.append(await _budget_resource_runtime(self._accounting, budget))
         return tuple(resources)
 
     async def get_resource(
@@ -307,14 +309,14 @@ class OrganizationUsageBudgetResourceService:
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        budget = self._accounting.store.get_budget(resource_id)
+        budget = await self._accounting.get_budget(resource_id)
         if budget is None or not await self._visibility.budget_visible(context, budget):
             raise ContractError(ErrorCode.NOT_FOUND, f"usage budget not found: {resource_id}")
-        return _budget_resource(self._accounting, budget)
+        return await _budget_resource_runtime(self._accounting, budget)
 
 
 def organization_accounting_resource_services(
-    accounting: AccountingService,
+    accounting: AccountingRuntime,
     organizations: OrganizationService,
     *,
     aggregate_policy_ref: str = DEFAULT_ACCOUNTING_AGGREGATE_POLICY_REF,
@@ -325,10 +327,11 @@ def organization_accounting_resource_services(
         organizations,
         aggregate_policy_ref=aggregate_policy_ref,
     )
+    runtime = runtime_accounting_service(accounting)
     return {
-        "usage-records": OrganizationUsageRecordResourceService(accounting, visibility),
-        "usage-aggregates": OrganizationUsageAggregateResourceService(accounting, visibility),
-        "usage-budgets": OrganizationUsageBudgetResourceService(accounting, visibility),
+        "usage-records": OrganizationUsageRecordResourceService(runtime, visibility),
+        "usage-aggregates": OrganizationUsageAggregateResourceService(runtime, visibility),
+        "usage-budgets": OrganizationUsageBudgetResourceService(runtime, visibility),
     }
 
 
@@ -359,12 +362,7 @@ def _record_in_team(record: UsageRecord, team_id: str) -> bool:
 
 
 def _sanitize_for_organization(record: UsageRecord, organization_id: str) -> UsageRecord:
-    """Remove person-level execution dimensions before Organization aggregation.
-
-    Aggregate readers may need resource dimensions (Workspace/Worker/Node/etc.) so point-in-time
-    gauges remain mathematically correct, but they do not receive Task/Run/Agent identifiers that
-    would turn an aggregate view into an indirect per-user activity feed.
-    """
+    """Remove person-level execution dimensions before Organization aggregation."""
 
     return replace(
         record,
