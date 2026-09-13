@@ -26,7 +26,8 @@ class SharedPersistenceOffloadRegistry[OffloadT]:
     Weakref callbacks can run synchronously while ``resolve`` already holds the registry lock,
     for example when allocation or a factory call makes an otherwise unreachable owner collectible.
     The lock is therefore reentrant. Callbacks also remove only their own weakref by identity and
-    never dereference sibling owners while the registry lock is held.
+    never dereference sibling owners while the registry lock is held. Existing entries are written
+    back after adding the new owner so callback re-entry cannot remove the entry being resolved.
     """
 
     def __init__(self) -> None:
@@ -46,6 +47,7 @@ class SharedPersistenceOffloadRegistry[OffloadT]:
             entry = self._entries.get(repository_id)
             if entry is not None:
                 entry.owners.append(self._owner_reference(repository_id, owner))
+                self._entries[repository_id] = entry
                 return entry.offload
 
             resolved = requested if requested is not None else factory()
