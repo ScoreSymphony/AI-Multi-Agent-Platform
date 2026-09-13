@@ -81,7 +81,7 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
                 "reference multi-agent planning requires every canonical golden-path role",
-                details={"missing_roles": missing_roles},
+                details={"missing_roles": ",".join(missing_roles)},
             )
 
         reused: tuple[str, ...] = ()
