@@ -15,6 +15,12 @@ from ai_multi_agent_platform.handoffs import (
     ProductionHandoffRuntime,
     SQLiteHandoffRepository,
 )
+from ai_multi_agent_platform.learning import (
+    LEARNING_CANDIDATE_COLLECTION,
+    LEARNING_COMMANDS,
+    LEARNING_FEEDBACK_COLLECTION,
+    LEARNING_POST_PROMOTION_COLLECTION,
+)
 
 
 def test_public_single_node_deployment_owns_durable_handoff_runtime(tmp_path: Path) -> None:
@@ -48,6 +54,20 @@ def test_public_single_node_deployment_owns_durable_handoff_runtime(tmp_path: Pa
     assert required_collections.issubset(deployment.control_plane.registered_collections)
     assert not any(
         command.startswith("handoff") for command in deployment.control_plane.registered_commands
+    )
+
+    learning_collections = (
+        LEARNING_CANDIDATE_COLLECTION,
+        LEARNING_FEEDBACK_COLLECTION,
+        LEARNING_POST_PROMOTION_COLLECTION,
+    )
+    assert all(
+        deployment.control_plane.resource_owner(collection) == "learning"
+        for collection in learning_collections
+    )
+    assert all(
+        deployment.control_plane.command_owner(command) == "learning"
+        for command in LEARNING_COMMANDS
     )
 
 
