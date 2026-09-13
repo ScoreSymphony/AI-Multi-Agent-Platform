@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from dataclasses import replace
-from typing import Protocol
+from inspect import isawaitable, iscoroutinefunction
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed.runtime import DistributedRuntime
-from ai_multi_agent_platform.security.approvals import ApprovalRecord
+from ai_multi_agent_platform.security.approvals import ApprovalRecord, ApprovalService
+from ai_multi_agent_platform.security.async_persistence import (
+    AsyncApprovalServiceAdapter,
+    SecurityPersistenceOffload,
+)
 
 from .context import EvaluationExecutionContext
 from .contracts import EvaluationCaseExecutor
@@ -18,9 +24,34 @@ _DISTRIBUTED_KEY = "distributed_behavior"
 
 
 class ApprovalRecordReader(Protocol):
-    """Minimal approval read boundary consumed by Evaluation evidence projection."""
+    """Minimal awaitable Approval read boundary consumed by Evaluation evidence projection."""
 
-    def all(self) -> tuple[ApprovalRecord, ...]: ...
+    async def all(self) -> tuple[ApprovalRecord, ...]: ...
+
+
+class _CompatibleApprovalRecordReader(Protocol):
+    """Legacy structural reader whose regular callable may also return an awaitable."""
+
+    def all(
+        self,
+    ) -> tuple[ApprovalRecord, ...] | Awaitable[tuple[ApprovalRecord, ...]]: ...
+
+
+_LEGACY_APPROVAL_READER_OFFLOAD = SecurityPersistenceOffload()
+
+
+class _CompatibleApprovalRecordReaderAdapter:
+    def __init__(self, reader: _CompatibleApprovalRecordReader) -> None:
+        self._reader = reader
+
+    async def all(self) -> tuple[ApprovalRecord, ...]:
+        result = await _LEGACY_APPROVAL_READER_OFFLOAD.run(
+            self._reader.all,
+            serialization="approvals",
+        )
+        if isawaitable(result):
+            return await result
+        return result
 
 
 def _unique(values: tuple[str, ...]) -> tuple[str, ...]:
@@ -30,9 +61,18 @@ def _unique(values: tuple[str, ...]) -> tuple[str, ...]:
 class ApprovalEvidenceCaseExecutor:
     """Project canonical approval requests/decisions for the evaluated Task/Run."""
 
-    def __init__(self, executor: EvaluationCaseExecutor, approvals: ApprovalRecordReader) -> None:
+    def __init__(
+        self,
+        executor: EvaluationCaseExecutor,
+        approvals: ApprovalRecordReader | _CompatibleApprovalRecordReader | ApprovalService,
+    ) -> None:
         self._executor = executor
-        self._approvals = approvals
+        if isinstance(approvals, ApprovalService):
+            self._approvals: ApprovalRecordReader = AsyncApprovalServiceAdapter(approvals)
+        elif iscoroutinefunction(approvals.all):
+            self._approvals = cast(ApprovalRecordReader, approvals)
+        else:
+            self._approvals = _CompatibleApprovalRecordReaderAdapter(approvals)
 
     async def execute_case(
         self,
@@ -52,7 +92,7 @@ class ApprovalEvidenceCaseExecutor:
             )
         records = tuple(
             record
-            for record in self._approvals.all()
+            for record in await self._approvals.all()
             if (observation.task_id is not None and record.task_id == observation.task_id)
             or (observation.run_id is not None and record.run_id == observation.run_id)
         )

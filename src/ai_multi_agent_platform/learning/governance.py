@@ -214,9 +214,15 @@ class GovernedObservedLearningService(ObservedLearningService):
             and self.platform_policy.requires_approval(current)
         ):
             action = _promotion_action(current, actor=actor, operation=operation)
-            if approval_id is None or not self.authorization_gate.approvals.valid_for(
-                approval_id, action
-            ):
+            resolved = (
+                None
+                if approval_id is None
+                else await self.authorization_gate.runtime_approvals.resolve_valid_for(
+                    action,
+                    approval_id=approval_id,
+                )
+            )
+            if resolved is None:
                 approval = await self.authorization_gate.ensure_pending_approval_with_event(
                     action,
                     reason=(

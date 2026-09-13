@@ -7,6 +7,13 @@
 from ai_multi_agent_platform.contracts import AuthorizationOutcome
 
 from .approvals import ApprovalRecord, ApprovalService
+from .async_persistence import (
+    AsyncApprovalService,
+    AsyncApprovalServiceAdapter,
+    AsyncAuthorizationAuditSink,
+    AsyncAuthorizationAuditSinkAdapter,
+    SecurityPersistenceOffload,
+)
 from .authentication import (
     AuthenticatedActor,
     AuthenticationAuditRecord,
@@ -141,6 +148,10 @@ __all__ = [
     "ActorType",
     "ApprovalRecord",
     "ApprovalService",
+    "AsyncApprovalService",
+    "AsyncApprovalServiceAdapter",
+    "AsyncAuthorizationAuditSink",
+    "AsyncAuthorizationAuditSinkAdapter",
     "AuthenticatedActor",
     "AuthenticationAuditRecord",
     "AuthenticationError",
@@ -218,6 +229,7 @@ __all__ = [
     "SecurityAuditEvent",
     "SecurityContext",
     "SecurityDecision",
+    "SecurityPersistenceOffload",
     "SessionGrant",
     "SqliteApprovalService",
     "SqliteAuthorizationAuditSink",

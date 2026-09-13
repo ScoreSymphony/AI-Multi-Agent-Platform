@@ -54,7 +54,10 @@ class ControlPlane(_CurrentControlPlane):
         if approval_gate is not None and "approvals" not in self.registered_collections:
             self.register_resource_service(
                 "approvals",
-                ApprovalResourceService(approval_gate.approvals),
+                ApprovalResourceService(
+                    approval_gate.approvals,
+                    runtime_approvals=approval_gate.runtime_approvals,
+                ),
             )
 
     @property
@@ -119,7 +122,7 @@ class ControlPlane(_CurrentControlPlane):
             )
         comment = comment_value if isinstance(comment_value, str) else None
 
-        record = gate.approvals.get(approval_id)
+        record = await gate.runtime_approvals.get(approval_id)
         if requested_digest != record.requested_action_digest:
             raise ContractError(
                 ErrorCode.CONFLICT,
@@ -154,7 +157,10 @@ class ControlPlane(_CurrentControlPlane):
             operation=operation,
             comment=comment,
         )
-        result = await ApprovalResourceService(gate.approvals).get_resource(context, approval_id)
+        result = await ApprovalResourceService(
+            gate.approvals,
+            runtime_approvals=gate.runtime_approvals,
+        ).get_resource(context, approval_id)
         self._approval_decision_results[key] = (signature, dict(result))
         return result
 
