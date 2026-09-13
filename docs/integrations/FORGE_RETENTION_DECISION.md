@@ -64,6 +64,19 @@ Removing Forge must not remove any platform guarantee that happened to be tested
 | Path-boundary security | Platform security/workspace policy | Backend-neutral security tests cover artifact/evidence escape rejection and canonical path validation. |
 | Remote execution | Node/worker/runtime architecture | Forge is not retained merely as a nominal remote-execution owner; any required remote profile must be proven independently behind the canonical executor/runtime boundary. |
 
+## Current removal-gate evidence
+
+The deprecation decision was originally made before the two high-level validation consumers had both completed. That has now changed:
+
+- #889 is complete and its maintained reference multi-agent golden path explicitly requires Hermes/Forge-disabled baseline operation;
+- #46 is complete and contains the reference/local conformance path plus backend-neutral failure/retry, restart/recovery, distributed-runtime identity/reconciliation and architecture-invariant coverage;
+- `tests/integration/kernel/test_executor_kernel_integration.py` now proves canonical Task/Run/Step/correlation identity plus namespaced executor metadata and backend references survive canonical SQLite persistence/replay without Forge types;
+- `tests/contract/execution/executor_contract_suite.py` provides backend-neutral success/failure, timeout, pre-cancellation, workspace confinement and artifact-boundary assertions;
+- `tests/contract/execution/test_reference_executor.py` additionally proves in-flight cancellation is acknowledged through canonical `ExecutionStatus.CANCELLED` while preserving Task/Run/Step/correlation identity;
+- Forge remains `deprecated`, and no supported baseline profile is justified by a Forge-only capability.
+
+This evidence means the next #991 slice may attempt executable Forge retirement directly, provided the removal patch itself proves repository/package/import/CI cleanup and re-runs the relevant #889/#46/reference coverage without loading or configuring Forge.
+
 ## Backend comparison
 
 | Backend | Current role | Evidence relevant to #991 | Decision here |
