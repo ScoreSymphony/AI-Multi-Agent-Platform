@@ -302,7 +302,9 @@ class SqliteAutomationRepository(AutomationRepository):
                 ).fetchone()
                 if row is not None:
                     return _delivery_from_json(cast(str, row["payload"]))
-                raise ContractError(ErrorCode.CONFLICT, "trigger delivery dedupe conflict") from None
+                raise ContractError(
+                    ErrorCode.CONFLICT, "trigger delivery dedupe conflict"
+                ) from None
         return delivery
 
     async def get_delivery(self, delivery_id: str) -> TriggerDelivery:
