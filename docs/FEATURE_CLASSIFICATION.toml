@@ -33,7 +33,7 @@ role = "core"
 stability = "stable"
 public_surfaces = ["shared HTTP /api/v1 protocol and foundation conventions", "generated OpenAPI 3.1 foundation conventions"]
 docs = ["docs/runtime/CONTROL_PLANE.md", "docs/adr/0003-versioned-control-plane-api.md"]
-compatibility = "Stable applies to shared v1 protocol/foundation conventions and separately Stable-classified resources; Beta/Experimental resources composed under /api/v1 keep their own bounded evolution rules and do not inherit Stable compatibility from the namespace."
+compatibility = "Stable applies to shared v1 protocol/foundation conventions and does not promote later-domain maturity; ADR 0003 still requires a new Control Plane major for every breaking canonical northbound contract change, including Beta or Experimental resources composed under /api/v1."
 user_signaling = "none"
 
 [[feature]]
@@ -100,6 +100,17 @@ stability = "beta"
 public_surfaces = ["executor boundaries", "reference execution behavior"]
 docs = ["docs/CONTRACTS.md", "docs/KERNEL.md"]
 compatibility = "Execution implementations remain replaceable; supported public execution contracts may evolve in non-patch releases."
+user_signaling = "documentation"
+
+[[feature]]
+id = "message-transport"
+name = "Internal messaging and event transport"
+owners = ["messaging"]
+role = "core"
+stability = "beta"
+public_surfaces = ["MessageTransport provider boundary", "TransportEnvelope 1.0 wire contract and delivery semantics"]
+docs = ["docs/runtime/MESSAGING.md", "docs/adr/0005-separate-message-transport-from-canonical-event-history.md"]
+compatibility = "The platform-owned transport boundary is supported as Beta; TransportEnvelope 1.x wire compatibility is preserved within its envelope major, and incompatible envelope changes require a new envelope major while provider/service evolution receives documented migration guidance."
 user_signaling = "documentation"
 
 [[feature]]
@@ -342,6 +353,17 @@ stability = "beta"
 public_surfaces = ["application build/distribution state and release integration"]
 docs = ["docs/product/APPLICATION_DISTRIBUTION.md", "docs/PACKAGE_BOUNDARIES.md", "docs/RELEASE_PROCESS.md"]
 compatibility = "Application distribution is a supported advanced canonical domain; its public build/release contracts may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "backup-restore"
+name = "Backup, restore and disaster recovery"
+owners = ["repository"]
+role = "optional_advanced"
+stability = "beta"
+public_surfaces = ["platform-backup operator CLI", "backup manifest v1 and restore compatibility contract"]
+docs = ["docs/operations/BACKUP_RESTORE.md", "docs/adr/0012-retain-domain-separated-sqlite-for-single-node-v1.md"]
+compatibility = "Backup/restore is a supported advanced operational surface; manifest and durable-store format changes require explicit versioned migration, v1 readability and exact-release/build restore rules remain documented, and CLI workflow changes follow Beta migration guidance."
 user_signaling = "documentation"
 
 [[feature]]
