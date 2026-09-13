@@ -4,9 +4,10 @@
 
 - `0.1.0` is the first usable single-node prototype and requires the M2 acceptance gate in #252.
 - `1.0.0` is the operational baseline and requires the full conformance gate in #46.
-- Patch versions contain backward-compatible fixes.
-- Minor versions add backward-compatible capabilities.
-- Major versions may change public or canonical contracts and require migration guidance.
+- Patch versions contain backward-compatible fixes and must not intentionally break documented public surfaces except for unavoidable security/correctness remediation.
+- While the repository remains `0.x`, a minor version may contain a documented incompatible change to an explicitly Beta or Experimental surface under [`FEATURE_CLASSIFICATION.md`](FEATURE_CLASSIFICATION.md); Stable surfaces remain protected by their own major-version/deprecation rules.
+- At and after `1.0.0`, minor versions remain backward-compatible for the Stable public compatibility set. Beta/Experimental surfaces remain outside that Stable compatibility set and may evolve only under their explicitly documented maturity rules.
+- A repository/package major version may change Stable public or canonical contracts and requires migration guidance unless the affected Stable surface has its own independent major-version mechanism (for example `/api/v2` or a new schema/contract major).
 
 Repository/release versioning and per-surface compatibility are separate. [`FEATURE_CLASSIFICATION.md`](FEATURE_CLASSIFICATION.md) defines the authoritative **architectural role + stability** vocabulary for public platform surfaces. In particular, repository `0.x` does not make every surface Experimental: a surface classified Stable must follow its own major-version/deprecation rules even before repository `1.0.0`, while Beta/Experimental surfaces may evolve under the bounded rules documented there. Release notes must identify user-visible maturity changes, deprecations and incompatible Beta/Experimental changes.
 
