@@ -1,0 +1,157 @@
+name: Temporary auth security validation
+
+on:
+  push:
+    branches:
+      - test/722-auth-security
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: test/722-auth-security
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Configure Git and fetch main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          echo "BASE_MAIN_SHA=$(git rev-parse origin/main)" >> "$GITHUB_ENV"
+      - name: Collect baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add /tmp/722-baseline origin/main
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e "/tmp/722-baseline[dev]"
+          (cd /tmp/722-baseline && pytest --collect-only -q | tee /tmp/722-baseline-collect.txt)
+          BASELINE_COUNT=$(python - <<'PY'
+          import re
+          text = open('/tmp/722-baseline-collect.txt', encoding='utf-8').read()
+          counts = [int(value) for value in re.findall(r'^tests/.*?: (\d+)\s*$', text, re.MULTILINE)]
+          if not counts:
+              raise SystemExit('Could not parse baseline collection')
+          print(sum(counts))
+          PY
+          )
+          echo "BASELINE_COUNT=$BASELINE_COUNT" >> "$GITHUB_ENV"
+          echo "Baseline collection: $BASELINE_COUNT"
+      - name: Merge main and apply migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge --no-edit origin/main
+          python scripts/tmp_722_auth_security_finalize.py
+          git status --short
+      - name: Install candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          python -m pip install -e ".[dev]"
+      - name: Verify legacy paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          legacy_paths=(
+            tests/test_security_baseline.py
+            tests/test_issue_14_authorization_vocabulary.py
+            tests/test_issue_15_hardening.py
+            tests/test_issue75_authorization.py
+            tests/test_issue_241_authorization_vocabulary.py
+            tests/test_issue_384_control_plane_authorization.py
+            tests/test_issue_87_cross_org_authorization.py
+            tests/test_issue_36_authentication.py
+            tests/test_issue_36_authentication_hardening.py
+            tests/test_issue_15_team_scope.py
+            tests/test_issue_15_exact_binding.py
+            tests/test_issue_15_final_boundaries.py
+            tests/test_issue_364_authorization.py
+            tests/test_issue_310_policy_scope_bounds.py
+            tests/test_issue_251_non_disclosure.py
+            tests/test_issue_14_worker_protocol_security.py
+            tests/test_issue_14_worker_secrets.py
+            tests/test_issue34_completion.py
+            tests/test_issue_872_authorization.py
+            tests/test_policy_profile_state_probing_authorization.py
+            tests/test_issue73_run_cancel_authorization.py
+            tests/test_issue171_team_authorization_evidence.py
+            tests/test_issue_591_egress_approvals.py
+            tests/test_issue_310_policy_profiles.py
+            tests/test_issue_310_policy_lifecycle_authorization.py
+            tests/test_issue_310_policy_management_scope_authority.py
+            tests/test_issue_310_policy_mutation_approval_binding.py
+            tests/test_issue_310_policy_import_approval_binding.py
+            tests/test_issue_310_policy_lifecycle_revision_binding.py
+          )
+          for path in "${legacy_paths[@]}"; do
+            if [[ -e "$path" ]]; then
+              echo "Legacy file still present: $path" >&2
+              exit 1
+            fi
+            matches=$(git grep -n -F "$path" -- ':!*.egg-info/*' ':!.github/workflows/tmp-722-auth-security-validate-v4.yml' ':!scripts/tmp_722_auth_security_finalize.py' || true)
+            non_provenance=$(printf '%s\n' "$matches" | grep -v -E 'Migrated from|original coverage tracked' || true)
+            if [[ -n "$non_provenance" ]]; then
+              printf '%s\n' "$non_provenance"
+              echo "Tracked consumer reference to legacy path remains: $path" >&2
+              exit 1
+            fi
+          done
+      - name: Compare migrated collection
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          pytest --collect-only -q | tee /tmp/722-migrated-collect.txt
+          MIGRATED_COUNT=$(python - <<'PY'
+          import re
+          text = open('/tmp/722-migrated-collect.txt', encoding='utf-8').read()
+          counts = [int(value) for value in re.findall(r'^tests/.*?: (\d+)\s*$', text, re.MULTILINE)]
+          if not counts:
+              raise SystemExit('Could not parse migrated collection')
+          print(sum(counts))
+          PY
+          )
+          echo "MIGRATED_COUNT=$MIGRATED_COUNT" >> "$GITHUB_ENV"
+          echo "Migrated collection: $MIGRATED_COUNT"
+          test "$MIGRATED_COUNT" = "$BASELINE_COUNT"
+      - name: Ruff migrated suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          ruff format --check tests/unit/security tests/unit/authorization tests/contract/security tests/integration/security tests/e2e/security
+          ruff check tests/unit/security tests/unit/authorization tests/contract/security tests/integration/security tests/e2e/security
+      - name: Targeted pytest
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          pytest -q tests/unit/security tests/unit/authorization tests/contract/security tests/integration/security tests/e2e/security
+      - name: Full pytest
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          pytest -q
+      - name: Commit validated candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git commit -m "test: complete authentication authorization and security migration"
+          git push origin HEAD:test/722-auth-security
+          echo "Validated $BASELINE_COUNT -> $MIGRATED_COUNT tests on main $BASE_MAIN_SHA"
