@@ -10,6 +10,7 @@ Tasks extension without introducing MCP-private types into canonical contracts.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -44,6 +45,16 @@ _MISSING_REQUIRED_CLIENT_CAPABILITY = -32021
 _INVALID_PARAMS = -32602
 _METHOD_NOT_FOUND = -32601
 _TASK_METHODS = frozenset({"tasks/get", "tasks/update", "tasks/cancel"})
+_NAME_PARAM_BY_METHOD = {
+    "tools/call": "name",
+    "resources/read": "uri",
+    "prompts/get": "name",
+    "tasks/get": "taskId",
+    "tasks/update": "taskId",
+    "tasks/cancel": "taskId",
+}
+_BASE64_SENTINEL_PREFIX = "=?base64?"
+_BASE64_SENTINEL_SUFFIX = "?="
 
 
 @dataclass(frozen=True, slots=True)
@@ -375,17 +386,33 @@ class MCPStatelessHTTPClient(MCPClient):
             _PROTOCOL_HEADER: self._protocol_revision,
         }
         method = body.get("method")
+        if not isinstance(method, str) or not method.strip():
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "MCP request requires a non-blank JSON-RPC method",
+                provider_id=self._provider_id,
+            )
+        # 2026-07-28 requires Mcp-Method on every Streamable HTTP request.
+        headers[_MCP_METHOD_HEADER] = method
+
+        name_field = _NAME_PARAM_BY_METHOD.get(method)
+        if name_field is None:
+            return headers
         params = body.get("params")
-        if isinstance(method, str) and method in _TASK_METHODS and isinstance(params, Mapping):
-            task_id = params.get("taskId")
-            if not isinstance(task_id, str) or not task_id.strip():
-                raise ContractError(
-                    ErrorCode.INVALID_REQUEST,
-                    f"MCP {method} requires a non-blank taskId",
-                    provider_id=self._provider_id,
-                )
-            headers[_MCP_NAME_HEADER] = task_id
-            headers[_MCP_METHOD_HEADER] = method
+        if not isinstance(params, Mapping):
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                f"MCP {method} requires request params for routing metadata",
+                provider_id=self._provider_id,
+            )
+        name = params.get(name_field)
+        if not isinstance(name, str) or not name.strip():
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                f"MCP {method} requires a non-blank {name_field}",
+                provider_id=self._provider_id,
+            )
+        headers[_MCP_NAME_HEADER] = _encode_header_value(name)
         return headers
 
     def _invalid_response(self, message: str) -> ContractError:
@@ -475,6 +502,23 @@ def _optional_non_negative_int(value: object, field: str, *, nullable: bool) -> 
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ValueError(f"{field} must be a non-negative integer or null")
     return value
+
+
+def _encode_header_value(value: str) -> str:
+    """Encode Mcp-Name values using the 2026-07-28 Base64 sentinel rules."""
+
+    matches_sentinel = value.startswith(_BASE64_SENTINEL_PREFIX) and value.endswith(
+        _BASE64_SENTINEL_SUFFIX
+    )
+    safe_ascii = (
+        value == value.strip(" \t")
+        and not matches_sentinel
+        and all(char in {" ", "\t"} or 0x21 <= ord(char) <= 0x7E for char in value)
+    )
+    if safe_ascii:
+        return value
+    encoded = base64.b64encode(value.encode("utf-8")).decode("ascii")
+    return f"{_BASE64_SENTINEL_PREFIX}{encoded}{_BASE64_SENTINEL_SUFFIX}"
 
 
 def _decode_response(status: int, body: bytes) -> _WireResponse:
