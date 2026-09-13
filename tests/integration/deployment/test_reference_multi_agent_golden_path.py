@@ -369,9 +369,7 @@ def test_public_single_node_runs_reference_multi_agent_golden_path_to_completion
         review_consumptions = deployment.handoffs.repository.list_consumptions_for_run(
             step_runs[review_step.id]
         )
-        assert {item.handoff_id for item in review_consumptions} == {
-            review_handoffs[0].handoff_id
-        }
+        assert {item.handoff_id for item in review_consumptions} == {review_handoffs[0].handoff_id}
 
         assert len(model_provider.calls) == 4
         assert all(run_id.startswith("run_") for run_id in step_runs.values())
