@@ -1,18 +1,17 @@
-"""Reference multi-agent composition over the existing platform runtime authorities (#889).
+"""Reference multi-agent composition over existing platform runtime authorities (#889).
 
-This module intentionally owns no Task/Run, Plan/Step, Handoff, Context or verification state.
-It supplies a deterministic reference planner implementation behind #439 and a narrow bridge that
-lets an exact Step-bound Agent consume already-persisted #651 Handoffs through #590 ContextBundles
-before the existing Agent lifecycle performs its ordinary model/capability turn.
+The code here deliberately owns no Task/Run, Plan/Step, Handoff, Context or verification state.
+It supplies a deterministic reference planner behind #439 and a source adapter that binds incoming
+#651 Handoffs to the exact consuming Run immediately before the existing #590 Context resolver
+assembles that Run's immutable ContextBundle.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from ai_multi_agent_platform.agents import AgentRevisionRef
-from ai_multi_agent_platform.context import ContextBudget, rendered_context_model_input
+from ai_multi_agent_platform.context import ContextCandidate, ContextSourceRequest
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
+from ai_multi_agent_platform.handoffs.production import DurableConsumedHandoffContextAdapter
 from ai_multi_agent_platform.planning import DeterministicReferencePlanner
 from ai_multi_agent_platform.planning.models import (
     AgentAssignment,
@@ -23,14 +22,8 @@ from ai_multi_agent_platform.planning.models import (
     PlanningStepDraft,
 )
 from ai_multi_agent_platform.security import ActorIdentity, ActorType
-from ai_multi_agent_platform.onboarding.agent_lifecycle import (
-    ContextualStepAgentStart,
-    StepContextAgentStarter,
-)
 
 from .handoff_composition import HandoffDeploymentComposition
-
-_REFERENCE_CONTEXT_TOKEN_BUDGET = 16_384
 
 
 def _normalized_role(role: str) -> str:
@@ -54,9 +47,9 @@ def _select_role_candidate(
 class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
     """Deterministic #439 planner for the built-in multi-agent golden path.
 
-    The planner activates only when the authorized planning inventory exposes distinct canonical
-    Research, Execution and Review roles. Otherwise it deliberately falls back to the existing
-    single-Agent deterministic reference plan, preserving ordinary deployments and tests.
+    It activates only when the authorized planning inventory contains three distinct canonical
+    Research, Execution and Review Agents. Otherwise the ordinary single-Agent deterministic
+    reference plan remains unchanged.
     """
 
     _RESEARCH_ROLES = frozenset({"research", "researcher", "research agent"})
@@ -113,7 +106,7 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
                     title="Gather authoritative evidence",
                     objective=(
                         "Research the task objective and produce evidence that downstream work can "
-                        "consume through canonical handoff/context state. " + request.objective
+                        "consume through canonical Handoff/Context state. " + request.objective
                     ),
                     assignment=research_assignment,
                     model_requirements=research.model_requirements,
@@ -135,7 +128,7 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
                     title="Produce the requested result",
                     objective=(
                         "Produce the task result using the completed research and execution-approach "
-                        "handoffs as canonical context. " + request.objective
+                        "Handoffs as canonical Context. " + request.objective
                     ),
                     depends_on=("research", "approach"),
                     assignment=execution_assignment,
@@ -161,56 +154,47 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
         return PlannerOutput(draft=draft, planner=self.descriptor)
 
 
-class ReferenceHandoffStepContextStarter(StepContextAgentStarter):
-    """Consume incoming canonical Handoffs and start the exact Step Agent through #590."""
+class ReferenceIncomingHandoffContextAdapter:
+    """Bind all incoming Handoffs, then project them through the existing durable #590 adapter.
 
-    def __init__(
-        self,
-        handoffs: HandoffDeploymentComposition,
-        *,
-        max_context_tokens: int = _REFERENCE_CONTEXT_TOKEN_BUDGET,
-    ) -> None:
-        if max_context_tokens < 1:
-            raise ValueError("max_context_tokens must be >= 1")
+    Consumption remains owned by ``ProductionHandoffRuntime``. This adapter only performs that
+    owner operation at the one safe boundary where #384 has already created the consumer Run and
+    #590 has not yet assembled its ContextBundle. Replaying collection is idempotent because the
+    canonical Handoff repository owns the durable consumption binding.
+    """
+
+    adapter_id = "reference-multi-agent-incoming-handoff/v1"
+
+    def __init__(self, handoffs: HandoffDeploymentComposition) -> None:
         self._handoffs = handoffs
-        self._budget = ContextBudget(max_tokens=max_context_tokens)
-
-    async def start_contextual_agent(
-        self,
-        *,
-        request,
-        binding,
-        task_id: str,
-        project_id: str | None,
-        task_model_override,
-        requested_capability_ids: tuple[str, ...],
-        available_capability_ids: frozenset[str],
-        verification_context,
-    ) -> ContextualStepAgentStart | None:
-        del task_model_override
-        incoming = tuple(
-            handoff
-            for handoff in self._handoffs.service.list_handoffs_for_step(request.subject_id)
-            if handoff.content.consumer_step_id == request.subject_id
-            and handoff.content.task_id == task_id
+        self._durable = DurableConsumedHandoffContextAdapter(
+            repository=handoffs.repository,
+            agents=handoffs.context_runtime.runtime.repository,
         )
-        if not incoming:
-            return None
-        if binding.agent_revision is None:
+
+    async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
+        if request.step_id is None:
+            return ()
+        operation = getattr(request, "operation", None)
+        if not isinstance(operation, OperationContext):
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                "reference multi-agent Context execution requires an exact Agent revision",
+                "reference Handoff Context adapter requires the operational Context request",
             )
 
-        consumer = AgentRevisionRef(binding.agent_id, binding.agent_revision)
-        consumer_actor = ActorIdentity(binding.agent_id, ActorType.AGENT)
-        operation = replace(request.context, project_id=project_id)
-        ordered = tuple(sorted(incoming, key=lambda item: (item.handoff_id, item.revision)))
+        incoming = tuple(
+            handoff
+            for handoff in self._handoffs.service.list_handoffs_for_step(request.step_id)
+            if handoff.content.consumer_step_id == request.step_id
+            and handoff.content.task_id == request.task_id
+            and (request.plan_id is None or handoff.content.plan_id == request.plan_id)
+        )
+        if not incoming:
+            return ()
 
-        # Bind every predecessor Handoff to this exact consuming Run before assembling Context.
-        # The final call uses the existing production Handoff runtime to assemble one Bundle and
-        # start exactly one AgentRun. The durable adapter then includes all bound fan-in Handoffs.
-        for handoff in ordered[:-1]:
+        consumer = AgentRevisionRef(request.agent_id, request.agent_revision)
+        consumer_actor = ActorIdentity(request.agent_id, ActorType.AGENT)
+        for handoff in sorted(incoming, key=lambda item: (item.handoff_id, item.revision)):
             await self._handoffs.runtime.consume_handoff(
                 handoff.handoff_id,
                 handoff.revision,
@@ -219,49 +203,7 @@ class ReferenceHandoffStepContextStarter(StepContextAgentStarter):
                 consumer_actor=consumer_actor,
                 operation=operation,
             )
-        final = ordered[-1]
-        execution = await self._handoffs.runtime.start_consumer(
-            final.handoff_id,
-            final.revision,
-            consuming_run_id=request.run_id,
-            consumer=consumer,
-            consumer_actor=consumer_actor,
-            operation=operation,
-            budget=self._budget,
-            consumer_agent=consumer,
-            workspace_id=binding.workspace_id,
-            requested_capability_ids=requested_capability_ids,
-            available_capability_ids=available_capability_ids,
-        )
-
-        rendered = await self._handoffs.context_runtime.renderer.render(execution.context_bundle)
-        model_input = rendered_context_model_input(rendered)
-        revision = self._handoffs.context_runtime.runtime.service.get_agent_revision(
-            binding.agent_id,
-            binding.agent_revision,
-        )
-        role_instruction = revision.profile.instructions.role.content
-        if role_instruction is None:
-            raise ContractError(
-                ErrorCode.UNSUPPORTED_CAPABILITY,
-                "reference multi-agent Context execution requires inline Agent role instructions",
-            )
-        instruction = "\n\n".join(
-            part for part in (role_instruction, model_input.system_instruction) if part.strip()
-        )
-        objective = "\n\n".join(
-            part
-            for part in (
-                binding.objective or "Continue the assigned canonical Step.",
-                model_input.user_message,
-            )
-            if part.strip()
-        )
-        return ContextualStepAgentStart(
-            agent_run=execution.agent_run,
-            instruction=instruction,
-            objective=objective,
-        )
+        return await self._durable.collect(request)
 
 
-__all__ = ["ReferenceHandoffStepContextStarter", "ReferenceMultiAgentPlanner"]
+__all__ = ["ReferenceIncomingHandoffContextAdapter", "ReferenceMultiAgentPlanner"]
