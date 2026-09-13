@@ -371,6 +371,8 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
                 ErrorCode.UNSUPPORTED_CAPABILITY,
                 f"local knowledge provider does not support {request.mode.value} search",
             )
+        for source_id in request.source_ids:
+            validate_id(source_id, "knowledge_source")
         terms = tuple(term.casefold() for term in request.query.split() if term.strip())
         if not terms:
             return ()
@@ -517,7 +519,9 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
         content: str,
         context: OperationContext,
     ) -> StoredObject:
-        return await self._complete_knowledge_mutation(self._index_impl(source_ref, content, context))
+        return await self._complete_knowledge_mutation(
+            self._index_impl(source_ref, content, context)
+        )
 
     async def _index_impl(
         self,
