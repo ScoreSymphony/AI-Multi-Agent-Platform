@@ -403,6 +403,7 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
         return await self._run_blocking(
             lambda: self._detect_orphans_sync(context),
             message="failed to inspect file orphans",
+            write=True,
         )
 
     def _detect_orphans_sync(self, context: DataAccessContext) -> OrphanReport:
