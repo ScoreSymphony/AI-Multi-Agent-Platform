@@ -1,0 +1,12 @@
+import notification_control_plane_cases as cases
+
+
+test_authenticated_http_ignores_spoofed_owner_headers_for_notification_inbox = (
+    cases.test_authenticated_http_ignores_spoofed_owner_headers_for_notification_inbox
+)
+test_control_plane_inbox_is_recipient_scoped_and_commands_are_idempotent = (
+    cases.test_control_plane_inbox_is_recipient_scoped_and_commands_are_idempotent
+)
+test_control_plane_preference_update_cannot_target_another_recipient = (
+    cases.test_control_plane_preference_update_cannot_target_another_recipient
+)

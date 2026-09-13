@@ -1,0 +1,15 @@
+import control_plane_extension_cases as cases
+
+
+test_extension_operations_are_authorized_and_private_fields_are_rejected = (
+    cases.test_extension_operations_are_authorized_and_private_fields_are_rejected
+)
+test_registered_command_receives_actor_correlation_and_idempotency_context = (
+    cases.test_registered_command_receives_actor_correlation_and_idempotency_context
+)
+test_registered_extension_resource_updates_manifest_openapi_and_routes = (
+    cases.test_registered_extension_resource_updates_manifest_openapi_and_routes
+)
+test_unregistered_future_domains_are_not_predeclared = (
+    cases.test_unregistered_future_domains_are_not_predeclared
+)

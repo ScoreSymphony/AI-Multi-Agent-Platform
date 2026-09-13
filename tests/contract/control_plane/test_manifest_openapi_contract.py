@@ -1,0 +1,6 @@
+import control_plane_extension_cases as cases
+
+
+test_manifest_and_openapi_include_current_domains_without_speculation = (
+    cases.test_manifest_and_openapi_include_current_domains_without_speculation
+)

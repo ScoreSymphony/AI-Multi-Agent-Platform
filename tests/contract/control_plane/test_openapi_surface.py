@@ -1,0 +1,6 @@
+import control_plane_api_cases as cases
+
+
+test_openapi_documents_current_scope_without_speculative_future_domains = (
+    cases.test_openapi_documents_current_scope_without_speculative_future_domains
+)

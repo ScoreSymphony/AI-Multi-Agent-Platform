@@ -1,0 +1,6 @@
+import search_checkpoint_cases as cases
+
+
+test_local_provider_checkpoint_tracks_generation_freshness_and_document_count = (
+    cases.test_local_provider_checkpoint_tracks_generation_freshness_and_document_count
+)
