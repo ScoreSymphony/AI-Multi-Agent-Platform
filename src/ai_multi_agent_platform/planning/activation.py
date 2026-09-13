@@ -170,9 +170,15 @@ class PlanningProposalActivation:
                     "authority is configured",
                     details={"proposal_id": proposal_id},
                 )
-            if approval_id is None or not self.authorization.approvals.valid_for(
-                approval_id, action
-            ):
+            resolved_approval = (
+                None
+                if approval_id is None
+                else await self.authorization.runtime_approvals.resolve_valid_for(
+                    action,
+                    approval_id=approval_id,
+                )
+            )
+            if resolved_approval is None:
                 pending = await self.authorization.ensure_pending_approval_with_event(
                     action,
                     reason="planning proposal introduces approval-gated capability requirements",
