@@ -43,7 +43,7 @@ class MCPTaskStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class MCPTaskSnapshot:
-    """One untrusted observation of an external MCP task."""
+    """One untrusted detailed observation of an external MCP task."""
 
     task_id: str
     status: MCPTaskStatus
@@ -137,6 +137,8 @@ class MCPTaskBinding:
     owner_id: str
     project_id: str | None
     causation_id: str | None
+    correlation_id: str
+    idempotency_key: str | None
     external_task_id: str
     external_created_at: datetime
     latest_status: MCPTaskStatus
@@ -144,6 +146,7 @@ class MCPTaskBinding:
     protocol_revision: str
     extension_id: str = MCP_TASKS_EXTENSION_ID
     poll_interval_ms: int | None = None
+    responded_input_keys: tuple[str, ...] = ()
     cancellation_requested_at: datetime | None = None
     cancellation_acknowledged: bool = False
     cancellation_error_code: str | None = None
@@ -158,6 +161,7 @@ class MCPTaskBinding:
             "canonical_run_id",
             "owner_type",
             "owner_id",
+            "correlation_id",
             "external_task_id",
             "protocol_revision",
             "extension_id",
@@ -165,6 +169,12 @@ class MCPTaskBinding:
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{field_name} must not be blank")
+        if self.idempotency_key is not None and not self.idempotency_key.strip():
+            raise ValueError("idempotency_key must not be blank")
+        if any(not key.strip() for key in self.responded_input_keys):
+            raise ValueError("responded_input_keys must not contain blank keys")
+        if len(set(self.responded_input_keys)) != len(self.responded_input_keys):
+            raise ValueError("responded_input_keys must not contain duplicates")
         for timestamp_name in (
             "external_created_at",
             "latest_observed_at",
@@ -382,6 +392,12 @@ def binding_for_snapshot(
             "MCP Tasks require canonical task_id and run_id trace context",
             provider_id=provider_id,
         )
+    if invocation.context.owner_type is None or invocation.context.owner_id is None:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "MCP Tasks require an authenticated canonical owner context",
+            provider_id=provider_id,
+        )
     return MCPTaskBinding(
         provider_id=provider_id,
         server_id=server_id,
@@ -392,6 +408,8 @@ def binding_for_snapshot(
         owner_id=invocation.context.owner_id,
         project_id=invocation.context.project_id,
         causation_id=invocation.context.causation_id,
+        correlation_id=invocation.context.correlation_id,
+        idempotency_key=invocation.context.control.idempotency_key,
         external_task_id=snapshot.task_id,
         external_created_at=snapshot.created_at,
         latest_status=snapshot.status,
@@ -431,6 +449,8 @@ def validate_binding_for_invocation(binding: MCPTaskBinding, invocation: ToolInv
         invocation.context.owner_id,
         invocation.context.project_id,
         invocation.context.causation_id,
+        invocation.context.correlation_id,
+        invocation.context.control.idempotency_key,
     )
     actual = (
         binding.invocation_id,
@@ -440,6 +460,8 @@ def validate_binding_for_invocation(binding: MCPTaskBinding, invocation: ToolInv
         binding.owner_id,
         binding.project_id,
         binding.causation_id,
+        binding.correlation_id,
+        binding.idempotency_key,
     )
     if expected != actual:
         raise ContractError(
@@ -461,12 +483,28 @@ def binding_adapter_metadata(binding: MCPTaskBinding) -> tuple[AdapterMetadata, 
                 "protocol_revision": binding.protocol_revision,
                 "external_task_id_sha256": binding.external_task_id_digest,
                 "external_status": binding.latest_status.value,
+                "correlation_id": binding.correlation_id,
+                "responded_input_request_count": len(binding.responded_input_keys),
                 "cancellation_requested": binding.cancellation_requested_at is not None,
                 "cancellation_acknowledged": binding.cancellation_acknowledged,
                 "cancellation_error_code": binding.cancellation_error_code,
             },
         ),
     )
+
+
+def mark_input_requests_responded(
+    binding: MCPTaskBinding,
+    keys: tuple[str, ...],
+) -> MCPTaskBinding:
+    """Persist input-request deduplication only after tasks/update succeeds."""
+
+    if not keys:
+        return binding
+    if any(not key.strip() for key in keys):
+        raise ValueError("MCP input response keys must not be blank")
+    merged = tuple(dict.fromkeys((*binding.responded_input_keys, *keys)))
+    return replace(binding, responded_input_keys=merged)
 
 
 def mark_cancellation_requested(binding: MCPTaskBinding) -> MCPTaskBinding:
@@ -509,6 +547,8 @@ def _assert_same_binding_identity(existing: MCPTaskBinding, candidate: MCPTaskBi
         "owner_id",
         "project_id",
         "causation_id",
+        "correlation_id",
+        "idempotency_key",
         "external_task_id",
         "protocol_revision",
         "extension_id",
@@ -539,6 +579,9 @@ def _merge_binding_observation(
         return existing
     return replace(
         candidate,
+        responded_input_keys=tuple(
+            dict.fromkeys((*existing.responded_input_keys, *candidate.responded_input_keys))
+        ),
         cancellation_requested_at=(
             existing.cancellation_requested_at or candidate.cancellation_requested_at
         ),
@@ -570,6 +613,11 @@ def _decode_binding(payload: str) -> MCPTaskBinding:
         if not isinstance(data, dict):
             raise TypeError("binding payload must be an object")
         cancellation = data.get("cancellation_requested_at")
+        responded_input_keys_value = data.get("responded_input_keys", [])
+        if not isinstance(responded_input_keys_value, list) or not all(
+            isinstance(item, str) for item in responded_input_keys_value
+        ):
+            raise TypeError("responded_input_keys must be a string array")
         return MCPTaskBinding(
             provider_id=str(data["provider_id"]),
             server_id=str(data["server_id"]),
@@ -580,6 +628,10 @@ def _decode_binding(payload: str) -> MCPTaskBinding:
             owner_id=str(data["owner_id"]),
             project_id=(None if data.get("project_id") is None else str(data["project_id"])),
             causation_id=(None if data.get("causation_id") is None else str(data["causation_id"])),
+            correlation_id=str(data["correlation_id"]),
+            idempotency_key=(
+                None if data.get("idempotency_key") is None else str(data["idempotency_key"])
+            ),
             external_task_id=str(data["external_task_id"]),
             external_created_at=datetime.fromisoformat(str(data["external_created_at"])),
             latest_status=MCPTaskStatus(str(data["latest_status"])),
@@ -589,6 +641,7 @@ def _decode_binding(payload: str) -> MCPTaskBinding:
             poll_interval_ms=(
                 None if data.get("poll_interval_ms") is None else int(data["poll_interval_ms"])
             ),
+            responded_input_keys=tuple(responded_input_keys_value),
             cancellation_requested_at=(
                 None if cancellation is None else datetime.fromisoformat(str(cancellation))
             ),
