@@ -31,18 +31,56 @@ jobs:
           import base64
           import json
           import os
-          import re
           import urllib.request
           from pathlib import Path
 
-          manifest = Path("docs/TEST_MIGRATION_722_FINAL.md").read_text(encoding="utf-8")
-          mapping: dict[str, str] = {}
-          for line in manifest.splitlines():
-              match = re.fullmatch(r"- `([^`]+)` → `([^`]+)`", line)
-              if match:
-                  source, destination = match.groups()
-                  if source.startswith("tests/") and destination.startswith("tests/"):
-                      mapping[source] = destination
+          mapping = {
+              "tests/performance/test_issue_440_api_pressure.py": "tests/performance/files/test_api_pressure.py",
+              "tests/performance/test_issue_440_benchmarking.py": "tests/performance/deployment/test_benchmarking.py",
+              "tests/performance/test_issue_440_coordination_contention.py": "tests/performance/cli/test_coordination_contention.py",
+              "tests/performance/test_issue_440_coordination_pressure.py": "tests/performance/cli/test_coordination_pressure.py",
+              "tests/performance/test_issue_440_distributed_faults.py": "tests/performance/distributed/test_distributed_faults.py",
+              "tests/performance/test_issue_440_distributed_scale.py": "tests/performance/distributed/test_distributed_scale.py",
+              "tests/performance/test_issue_440_endurance.py": "tests/performance/context/test_endurance.py",
+              "tests/performance/test_issue_440_ha_failover_benchmark.py": "tests/performance/distributed/test_ha_failover_benchmark.py",
+              "tests/performance/test_issue_440_heterogeneous_placement.py": "tests/performance/application_distribution/test_heterogeneous_placement.py",
+              "tests/performance/test_issue_440_host_pressure_observer.py": "tests/performance/deployment/test_host_pressure_observer.py",
+              "tests/performance/test_issue_440_host_pressure_observer_timing.py": "tests/performance/deployment/test_host_pressure_observer_timing.py",
+              "tests/performance/test_issue_440_operating_envelope.py": "tests/performance/evaluation/test_operating_envelope.py",
+              "tests/performance/test_issue_440_operating_envelope_catalog.py": "tests/performance/evaluation/test_operating_envelope_catalog.py",
+              "tests/performance/test_issue_440_persistence.py": "tests/performance/recovery/test_persistence.py",
+              "tests/performance/test_issue_440_persistence_contention.py": "tests/performance/recovery/test_persistence_contention.py",
+              "tests/performance/test_issue_440_persistence_fault_benchmark.py": "tests/performance/recovery/test_persistence_fault_benchmark.py",
+              "tests/performance/test_issue_440_plan_step.py": "tests/performance/planning/test_plan_step.py",
+              "tests/performance/test_issue_440_planning_graph_scale.py": "tests/performance/planning/test_planning_graph_scale.py",
+              "tests/performance/test_issue_440_planning_pressure.py": "tests/performance/planning/test_planning_pressure.py",
+              "tests/performance/test_issue_440_provider_faults.py": "tests/performance/models/test_provider_faults.py",
+              "tests/performance/test_issue_440_reference_host_absolute_budget.py": "tests/performance/evaluation/test_reference_host_absolute_budget.py",
+              "tests/performance/test_issue_440_reference_host_campaign.py": "tests/performance/evaluation/test_reference_host_campaign.py",
+              "tests/performance/test_issue_440_reference_host_regression.py": "tests/performance/evaluation/test_reference_host_regression.py",
+              "tests/performance/test_issue_440_reference_host_reproducibility.py": "tests/performance/cli/test_reference_host_reproducibility.py",
+              "tests/performance/test_issue_440_stress_fault.py": "tests/performance/deployment/test_stress_fault.py",
+              "tests/performance/test_issue_440_sweep.py": "tests/performance/deployment/test_sweep.py",
+              "tests/performance/test_issue_440_transport_faults.py": "tests/performance/context/test_transport_faults.py",
+              "tests/performance/test_issue_440_workloads.py": "tests/performance/files/test_workloads.py",
+              "tests/test_issue_859_bifrost_live_conformance.py": "tests/contract/models/test_bifrost_live_conformance.py",
+              "tests/test_issue_859_bifrost_evaluation.py": "tests/integration/evaluation/test_bifrost_evaluation.py",
+              "tests/test_issue_859_bifrost_dns_rebinding.py": "tests/integration/platform/test_bifrost_dns_rebinding.py",
+              "tests/test_issue_859_bifrost_ssrf.py": "tests/integration/configuration/test_bifrost_ssrf.py",
+              "tests/test_issue_862_storage_evidence.py": "tests/integration/storage/test_storage_evidence.py",
+              "tests/test_issue_730_pipelock_evaluation.py": "tests/integration/security/test_pipelock_evaluation.py",
+              "tests/test_issue_730_pipelock_transports.py": "tests/integration/security/test_pipelock_transports.py",
+              "tests/test_issue_730_pipelock_security_corpus.py": "tests/integration/security/test_pipelock_security_corpus.py",
+              "tests/test_issue_730_pipelock_containment.py": "tests/integration/security/test_pipelock_containment.py",
+              "tests/test_issue_730_pipelock_mcp_adversarial.py": "tests/integration/security/test_pipelock_mcp_adversarial.py",
+              "tests/test_issue_730_pipelock_network_exfiltration.py": "tests/integration/security/test_pipelock_network_exfiltration.py",
+              "tests/test_issue_730_pipelock_outage_recovery.py": "tests/integration/security/test_pipelock_outage_recovery.py",
+              "tests/test_issue_730_pipelock_profile_bypass.py": "tests/integration/files/test_pipelock_profile_bypass.py",
+              "tests/test_skillspector_evaluation.py": "tests/integration/skills/test_skillspector_evaluation.py",
+              "tests/test_skillspector_container_command.py": "tests/integration/skills/test_skillspector_container_command.py",
+              "tests/test_skillspector_benchmark_semantics.py": "tests/performance/skills/test_skillspector_benchmark_semantics.py",
+              "tests/test_issue_868_skillspector_security_evidence.py": "tests/integration/security/test_skillspector_security_evidence.py",
+          }
 
           workflow_root = Path(".github/workflows")
           helper = workflow_root / "prepare-722-workflow-tree.yml"
