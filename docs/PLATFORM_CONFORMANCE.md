@@ -64,7 +64,7 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | J-cli — client consistency | CLI reads shared canonical Task/Run/Result fixtures through versioned Control Plane routes | #17 / #46 |
 | J-web — client consistency | Web reads the same canonical Task/Run/Result fixtures through the same versioned API routes | #17 / #395 |
 | U — runtime verification | Verification gates completion, binds exact revisions, works deterministically without an LLM, enforces reviewer independence and keeps repair loops bounded and auditable | #86 |
-| ARCH — architecture invariants | optional-backend import/dependency isolation, backend-private public-type guard and platform-owned canonical identity | #46 |
+| ARCH — architecture invariants | canonical/backend isolation, AST-resolved northbound Python client backend isolation, backend-private public-type guard and platform-owned Task/Run identity preserved through distributed restart/failover | #46 |
 
 The fast tier is intentionally local/reference-only and deterministic. It requires no paid AI/API service and no Hermes, Forge, LiteLLM, Registry, remote distributed deployment or HA service. D-vertical does instantiate an in-process local Worker/Node fixture so the canonical Executor/Worker boundary is continuously exercised without claiming the optional distributed deployment profile.
 
@@ -179,12 +179,16 @@ Scenarios may emit a structured runtime-evidence envelope after their maintained
 
 ## Architecture invariants
 
-`tests/contract/portability/test_architecture_invariants.py` currently automates four platform-boundary invariant families plus a focused self-test of the annotation guard:
+`tests/contract/portability/test_architecture_invariants.py` currently automates six platform-boundary invariant families plus focused guard self-tests:
 
 1. canonical `contracts`, `domain` and `kernel` source must not import platform adapter implementations or Hermes/Forge/LiteLLM/MCP runtime packages;
-2. public canonical type annotations, including quoted/forward-reference annotations, must not expose backend-private Hermes/Forge/LiteLLM/MCP classes;
-3. even canonical-shaped backend Task/Run IDs remain namespaced `ExternalRef` metadata while the platform generates its own canonical Task/Run identities;
-4. optional backend packages such as LiteLLM/MCP/provider SDKs must not become mandatory platform runtime dependencies.
+2. CLI, Chat/conversation and Terminal Python client-domain code must not import platform adapter implementations or Hermes/Forge/LiteLLM/MCP runtime packages directly; imports are resolved from the AST so relative and package-level spellings cannot bypass the guard;
+3. public canonical type annotations, including quoted/forward-reference annotations, must not expose backend-private Hermes/Forge/LiteLLM/MCP classes;
+4. even canonical-shaped backend Task/Run IDs remain namespaced `ExternalRef` metadata while the platform generates its own canonical Task/Run identities;
+5. the real distributed lost-owner -> fence -> persisted restart -> alternate-Worker redispatch path must preserve the same platform-owned canonical Task/Run identity and correlation/causation context;
+6. optional backend packages such as LiteLLM/MCP/provider SDKs must not become mandatory platform runtime dependencies.
+
+The Python client-domain check complements the maintained Control Plane parity scenarios; the Web client remains covered by its own API-facing integration/acceptance evidence rather than by this Python import scanner. Control Plane HA identity remains owned by optional scenario X instead of being inferred from the focused distributed-runtime invariant.
 
 Additional #46 invariants should be added as they can be checked reliably without encoding brittle implementation details.
 
