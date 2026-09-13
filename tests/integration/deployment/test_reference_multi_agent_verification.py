@@ -31,6 +31,7 @@ from ai_multi_agent_platform.security import (
 )
 from ai_multi_agent_platform.testing import FakeModelProvider
 from ai_multi_agent_platform.verification import (
+    CompletionState,
     ReviewerIndependence,
     VerificationOutcome,
     VerificationPolicy,
@@ -138,6 +139,7 @@ def _register_verification_policy(
     reviewer: AgentRevisionRef,
     *,
     max_repair_attempts: int = 0,
+    automatic_subject_types: tuple[str, ...] = ("result",),
 ):
     return deployment.verification.register_policy(
         VerificationPolicy(
@@ -148,7 +150,7 @@ def _register_verification_policy(
             metadata={
                 "automatic_reviewer": {
                     "enabled": True,
-                    "subject_types": ["result"],
+                    "subject_types": list(automatic_subject_types),
                     "stages": {
                         _STAGE_ID: {
                             "agent_id": reviewer.agent_id,
@@ -168,6 +170,7 @@ async def _run_reference_task(
     reviewer: AgentRevisionRef,
     suffix: str,
     max_repair_attempts: int = 0,
+    automatic_subject_types: tuple[str, ...] = ("result",),
 ):
     task = await deployment.kernel.create_task(
         idempotency_key=f"issue-889:{suffix}:create",
@@ -184,6 +187,7 @@ async def _run_reference_task(
         deployment,
         reviewer,
         max_repair_attempts=max_repair_attempts,
+        automatic_subject_types=automatic_subject_types,
     )
     deployment.verification_runtime.require_task(
         task_id=task.task_id,
@@ -370,12 +374,7 @@ def test_reference_golden_path_repairs_needs_changes_and_reverifies_exact_new_re
             SingleNodeConfig(data_dir=tmp_path / "repair", secure_cookie=False)
         )
         provider = _ReviewAwareFakeModelProvider(
-            (
-                VerificationOutcome.PASS,
-                VerificationOutcome.PASS,
-                VerificationOutcome.NEEDS_CHANGES,
-                VerificationOutcome.PASS,
-            )
+            (VerificationOutcome.NEEDS_CHANGES, VerificationOutcome.PASS)
         )
         _install_local_model(deployment, provider)
         admin = deployment.bootstrap_admin("issue-889-verification-repair", _PASSWORD)
@@ -387,15 +386,38 @@ def test_reference_golden_path_repairs_needs_changes_and_reverifies_exact_new_re
             reviewer=refs["reviewer"],
             suffix="verification-repair",
             max_repair_attempts=1,
+            automatic_subject_types=(),
         )
-        completed = await deployment.kernel.get_task(task.task_id)
-        assert completed.status is TaskStatus.SUCCEEDED
+        blocked = await deployment.kernel.get_task(task.task_id)
+        assert blocked.status is TaskStatus.WAITING
+        assert blocked.blocked is True
 
         _execute_step, execute_run_id, producer, result_a_id = _execute_lineage(
             deployment,
             activated.activation_plan_id,
         )
         assert producer.agent == refs["developer"]
+
+        workflow_result = await deployment.automatic_reviewer.request_and_run(
+            task_id=task.task_id,
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+            stage_id=_STAGE_ID,
+            subject_type="result",
+            subject_id=result_a_id,
+            correlation_id=task.task_id,
+            causation_id="issue-889:verification-repair:review-exact-result",
+        )
+        assert workflow_result.completion.state is CompletionState.ACCEPTED
+        await deployment.kernel.complete_task(
+            idempotency_key="issue-889:verification-repair:accept",
+            task_id=task.task_id,
+            actor_ref="service:automatic-reviewer-workflow",
+            source="automatic-reviewer-output-workflow",
+        )
+        completed = await deployment.kernel.get_task(task.task_id)
+        assert completed.status is TaskStatus.SUCCEEDED
+
         history = [
             (request, result)
             for request, result in deployment.verification.history(task_id=task.task_id)
@@ -403,14 +425,9 @@ def test_reference_golden_path_repairs_needs_changes_and_reverifies_exact_new_re
             and request.policy_version == policy.version
             and request.stage_id == _STAGE_ID
         ]
-        repair_lineage = [
-            pair
-            for pair in history
-            if pair[0].subject.subject_id == result_a_id or pair[0].repair_attempt > 0
-        ]
-        assert len(repair_lineage) == 2
-        first_request, first_result = repair_lineage[0]
-        second_request, second_result = repair_lineage[1]
+        assert len(history) == 2
+        first_request, first_result = history[0]
+        second_request, second_result = history[1]
         assert first_result is not None
         assert second_result is not None
         assert first_request.run_id == execute_run_id
@@ -443,6 +460,6 @@ def test_reference_golden_path_repairs_needs_changes_and_reverifies_exact_new_re
         ]
         assert len(repair_created) == 1
         assert repair_created[0].subject_id == second_request.run_id
-        assert len(provider.review_calls) == 4
+        assert len(provider.review_calls) == 2
 
     asyncio.run(scenario())
