@@ -15,7 +15,7 @@ The machine-readable audit lives in [`FEATURE_CLASSIFICATION.toml`](FEATURE_CLAS
 
 A canonical platform foundation or lifecycle/control-plane capability that belongs to the baseline architecture. Core identifies architectural responsibility, not operational maturity.
 
-Typical Core responsibilities include canonical lifecycle/domain contracts, the Control Plane, durable coordination, provider contracts, Agents, Models, Capabilities/Tools, execution, Workspaces, security, verification, evaluation, the provider-neutral repository-intelligence baseline and cross-cutting observability/accounting foundations.
+Typical Core responsibilities include canonical lifecycle/domain contracts, the Control Plane, durable coordination, Agent/Team handoffs, provider contracts, Agents, Models, Capabilities/Tools, execution, Workspaces, security, verification, evaluation, the provider-neutral repository-intelligence baseline and cross-cutting observability/accounting foundations.
 
 A concrete optional adapter can implement a Core boundary without becoming Core architecture itself.
 
@@ -23,7 +23,7 @@ A concrete optional adapter can implement a Core boundary without becoming Core 
 
 A first-class optional capability that extends the platform through canonical platform-owned boundaries and is expected to compose with the baseline without redefining its lifecycle authority.
 
-Examples include Memory/Knowledge/Search, Automations, Notifications, Templates, reusable Workflows, Connectors, collaboration/product entrypoints and repository integrations.
+Examples include Memory/Knowledge/Search, Automations, Notifications, Templates, reusable Workflows, Connectors, Proposal/Specification governance, collaboration/product entrypoints and repository integrations.
 
 An extension can be Stable, Beta or Experimental.
 
@@ -128,6 +128,7 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `control-plane-v1` | shared HTTP `/api/v1` protocol/foundation + generated OpenAPI conventions | `control_plane` | Core | Stable |
 | `provider-contracts-v2` | provider/adapter contracts `2.0` | `contracts` | Core | Stable |
 | `agents-teams` | Agent and Agent Team public resources/behavior | `agents` | Core | Beta |
+| `agent-handoffs` | explicit Agent/AgentTeam work-transfer resources and commands | `handoffs` | Core | Beta |
 | `models-routing` | model/provider registry, routing and assignments | `models` | Core | Beta |
 | `capabilities-tools` | capability/tool declaration, discovery and invocation | `capabilities` | Core | Beta |
 | `execution-runtime` | executor/reference execution public contracts | `execution` | Core | Beta |
@@ -139,13 +140,14 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `observability-accounting` | public telemetry/health/usage/accounting views | `observability`, `accounting` | Core | Beta |
 | `cli-surface` | shared `platform` CLI framework/global conventions | `control_plane` | Core | Beta |
 | `onboarding-first-run` | first-run status/commands plus CLI and browser onboarding workflow | `onboarding` | Platform Extension | Beta |
-| `memory-knowledge-search` | Memory, Knowledge, Context and Search capabilities | `data`, `context`, `search` | Platform Extension | Beta |
+| `memory-knowledge-search` | Memory, Knowledge, ContextBundle/context assembly and Search | `data`, `context`, `search` | Platform Extension | Beta |
 | `conversations-browser-terminal` | conversational, browser and terminal product capabilities | `conversations`, `browser`, `terminal` | Platform Extension | Beta |
 | `automation-notifications` | schedules/triggers and notification delivery surfaces | `automation`, `notifications` | Platform Extension | Beta |
 | `templates-workflows-portability` | Templates, reusable Workflows and import/export | `templates`, `workflows`, `portability` | Platform Extension | Beta |
 | `repositories-connectors` | Repository/Git and external connector integration | `repositories`, `repository` | Platform Extension | Beta |
 | `organizations-collaboration` | Organizations, Teams, Memberships and sharing | `organizations` | Platform Extension | Beta |
 | `goals-task-management` | Goals plus priority/deadline/dependency/assignment work management | `goals`, `task_management` | Platform Extension | Beta |
+| `proposal-specification-governance` | Proposal/Specification resources and governed conversion workflows | `governance` | Platform Extension | Beta |
 | `plugin-skill-ecosystem` | plugin/skill discovery and loading extension points | `repository`, `skills` | Platform Extension | Beta |
 | `distributed-workers` | multi-node Node/Worker scheduling and distributed execution profile | `distributed` | Optional / Advanced | Beta |
 | `registry-marketplace` | component registry/catalog/marketplace distribution | `distribution` | Optional / Advanced | Beta |
