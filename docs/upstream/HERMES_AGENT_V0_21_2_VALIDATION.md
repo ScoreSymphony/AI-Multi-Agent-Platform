@@ -8,13 +8,13 @@ Validation is complete. The final adoption decision is `PASS_UPDATE`. Hermes Age
 v0.21.2 at exact commit `939e45c91d751fadd94dcd1b873ac3cb44846213` is the accepted production/default revision. The
 previous v0.21.1 revision remains retained as the rollback baseline.
 
-## Accepted baseline
+## Retained rollback baseline
 
 - release: Hermes Agent v0.21.1
 - tag: `v2026.9.7`
-- exact accepted commit: `2237be355906fbe6065ce1815711eee52b2d646e`
+- exact rollback commit: `2237be355906fbe6065ce1815711eee52b2d646e`
 - retained evidence: `docs/upstream/HERMES_AGENT_V0_21_1_VALIDATION.md`
-- rollback target if v0.21.2 is later adopted: the exact v0.21.1 commit above
+- rollback target after v0.21.2 adoption: the exact v0.21.1 commit above
 
 ## Candidate provenance
 
@@ -68,27 +68,32 @@ Relevant upstream release PRs reviewed for the targeted matrix include #108067,
 
 ## Platform candidate gate
 
-The pre-adoption gate is intentionally separate from `hermes-pinned-compat`:
+The pre-adoption gate was intentionally separate from `hermes-pinned-compat`:
 
 - workflow: `.github/workflows/hermes-v0-21-2-candidate.yml`
 - runner: `scripts/ci/issue959_hermes_v0_21_2_candidate.py`
 - platform integration test:
   `tests/integration/upstreams/test_hermes_v0_21_2_candidate.py`
 
-This separation enforces the #959 adoption rule: candidate validation cannot silently
-turn an unverified revision into `HERMES_PINNED_REVISION` just to make the compatibility
+This separation enforced the #959 adoption rule: candidate validation could not silently
+turn an unverified revision into `HERMES_PINNED_REVISION` merely to make the compatibility
 job pass.
 
-The platform-side candidate tests currently prove:
+The revision-bound pre-adoption run recorded below established, before promotion, that:
 
-- the repository's accepted pin remains the exact v0.21.1 baseline during validation;
-- the candidate is configured explicitly as `UNVERIFIED_PIN`;
-- profile selection remains namespaced in the Hermes URL boundary;
-- two real `/v1/runs` execute concurrently through the candidate API server using a
-  deterministic barrier, return distinct external run IDs, preserve their canonical
-  task IDs and do not cross-contaminate planner output;
-- cancelled/interrupted/waiting-for-approval/unknown statuses remain fail-closed under
+- the repository's accepted production pin remained the exact v0.21.1 baseline while
+  v0.21.2 was evaluated separately;
+- the candidate was exercised explicitly as `UNVERIFIED_PIN` before the adoption
+  decision;
+- profile selection remained namespaced in the Hermes URL boundary;
+- two real `/v1/runs` executed concurrently through the candidate API server using a
+  deterministic barrier, returned distinct external run IDs, preserved their canonical
+  task IDs and did not cross-contaminate planner output;
+- cancelled/interrupted/waiting-for-approval/unknown statuses remained fail-closed under
   canonical platform error mapping.
+
+After `PASS_UPDATE`, the same v0.21.2 regression matrix is retained in the repository and
+runs against the now-verified accepted pin.
 
 ## Boundary assessment
 
