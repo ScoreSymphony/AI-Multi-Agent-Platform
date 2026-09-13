@@ -63,15 +63,20 @@ current composed Control Plane
 
 This prevents the foundation from guessing future schemas while allowing the API to grow additively.
 
-## API versioning
+## API versioning and stability
 
 The first stable major is `/api/v1`.
+
+The repository-wide role/stability vocabulary is defined in [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). The Control Plane `v1` foundation is classified **Core + Stable**. This means the existing documented `v1` behavior carries the compatibility rules below even while the repository package itself remains `0.x`.
+
+A later domain can expose a Beta or Experimental resource through the same composed `/api/v1` Control Plane without downgrading the stability of already Stable `v1` behavior. That resource's own public contract must be classified and signaled according to the feature registry. API-major stability and feature maturity are therefore related but not identical concepts.
 
 - Additive endpoints, optional fields and optional query parameters may be introduced within `v1`.
 - Removing or renaming fields, changing their meaning/type incompatibly, changing command semantics incompatibly, or making optional input mandatory requires a new major namespace such as `/api/v2`.
 - Deprecations must be documented before removal and overlap with the replacement for a migration window.
 - Unsupported versions return `unsupported_api_version` with the supported versions.
 - Adapter or upstream version changes do not change the northbound API major unless a canonical platform contract changes.
+- Generated frontend DTOs inherit the role/stability metadata of the canonical resource they represent; generation does not promote Beta/Experimental resources to Stable.
 
 ## Foundation commands
 
@@ -111,6 +116,8 @@ A registered collection receives the common Control Plane read conventions:
 
 The collection name comes from the owning canonical domain. An unregistered future collection is neither advertised nor treated as a #32 resource.
 
+A new public registered resource or command must also declare its canonical owner, architectural role and stability under [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). Registration proves composition into the Control Plane; it does not by itself create a Stable compatibility promise.
+
 ### Command registration
 
 A later domain can register a canonical command handler:
@@ -149,6 +156,8 @@ The owning later-domain issue may also implement dedicated canonical routes once
 - the live-update mechanism.
 
 `GET /api/v1/openapi.json` generates OpenAPI 3.1 for the same current API. Future domains that have not been implemented or registered are absent. The specification documents the error statuses that the Control Plane can intentionally emit, including authentication, payload-size, media-type and semantic-validation failures.
+
+Role/stability metadata may be emitted by generated documentation/DTO tooling where useful, but it remains descriptive metadata. It must never be interpreted as authorization, health, enablement or conformance state.
 
 ## Query conventions
 
