@@ -17,6 +17,7 @@ from ai_multi_agent_platform.kernel import PlatformKernel, RunState, TaskState
 from ai_multi_agent_platform.kernel.repository import EventRepository
 from ai_multi_agent_platform.models import ModelConfiguration, ModelRegistry
 
+from .async_scope import AsyncScopeStore, AsyncScopeStoreAdapter
 from .authorization_service import ControlPlaneAuthorization
 from .health import ControlPlaneHealth
 from .model_registry_service import ControlPlaneModelRegistry
@@ -65,6 +66,7 @@ class ControlPlane:
         kernel: PlatformKernel,
         events: EventRepository,
         scopes: ScopeStore | None = None,
+        runtime_scopes: AsyncScopeStore | None = None,
         authorization: AuthorizationProvider | None = None,
         live_events: EventProvider | None = None,
         health_providers: tuple[ProviderContract, ...] = (),
@@ -73,19 +75,20 @@ class ControlPlane:
         self._kernel = kernel
         self._events = events
         self._scopes = scopes or ScopeStore()
+        self._runtime_scopes = runtime_scopes or AsyncScopeStoreAdapter(self._scopes)
         self._authorization_service = ControlPlaneAuthorization(authorization)
         self._live_events = live_events
         self._health = ControlPlaneHealth(health_providers)
         self._model_registry = model_registry
         self._models = ControlPlaneModelRegistry(model_registry)
         self._scope_resources = ControlPlaneScopeService(
-            scopes=self._scopes,
+            scopes=self._runtime_scopes,
             authorization=self._authorization_service,
         )
         self._task_runs = ControlPlaneTaskRunService(
             kernel=kernel,
             events=events,
-            scopes=self._scopes,
+            scopes=self._runtime_scopes,
             authorization=self._authorization_service,
         )
         self._reference_events = ControlPlaneReferenceEventService(
@@ -108,7 +111,15 @@ class ControlPlane:
 
     @property
     def scopes(self) -> ScopeStore:
+        """Synchronous setup/offline compatibility view of canonical Scope state."""
+
         return self._scopes
+
+    @property
+    def runtime_scopes(self) -> AsyncScopeStore:
+        """Awaitable Scope persistence used by async production runtime paths."""
+
+        return self._runtime_scopes
 
     async def health(self) -> dict[str, JsonValue]:
         return await self._health.health()
