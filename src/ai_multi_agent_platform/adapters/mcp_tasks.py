@@ -6,14 +6,18 @@ Run or ToolInvocation identities that authorize and explain one capability attem
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import sqlite3
+import threading
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Protocol, TypeVar, runtime_checkable
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue, ToolInvocation
@@ -21,6 +25,14 @@ from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue, 
 MCP_TASKS_EXTENSION_ID = "io.modelcontextprotocol/tasks"
 MCP_TASKS_PROTOCOL_REVISION = "2026-07-28"
 MCP_TASKS_SEP = "SEP-2663"
+
+_T = TypeVar("_T")
+_BUSY_MARKERS = (
+    "database is locked",
+    "database table is locked",
+    "database schema is locked",
+    "database is busy",
+)
 
 
 class MCPTaskStatus(StrEnum):
@@ -254,19 +266,45 @@ class InMemoryMCPTaskBindingStore:
 
 
 class SqliteMCPTaskBindingStore:
-    """Restart-safe stdlib SQLite reference store for external MCP task bindings."""
+    """Restart-safe SQLite task binding store with dedicated bounded persistence offload.
+
+    Every connection is created, used and closed on the store-owned worker. A single worker
+    serializes operations for this backing-store instance, so SQLite never runs on the asyncio
+    event-loop thread and no default executor is used. Cancellation is delayed until an already
+    started persistence operation has reached its transaction boundary.
+    """
 
     def __init__(self, db_path: str | Path) -> None:
         self._db_path = Path(db_path)
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._initialize()
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mcp-task-sqlite")
+        self._state_lock = threading.Lock()
+        self._initialized = False
+        self._closed = False
+
+    def close(self) -> None:
+        """Stop accepting persistence work and release the dedicated worker."""
+
+        with self._state_lock:
+            if self._closed:
+                return
+            self._closed = True
+        self._executor.shutdown(wait=False, cancel_futures=False)
+
+    def __del__(self) -> None:  # pragma: no cover - best-effort fallback for abandoned stores
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._db_path)
         connection.row_factory = sqlite3.Row
         return connection
 
-    def _initialize(self) -> None:
+    def _ensure_initialized_sync(self) -> None:
+        if self._initialized:
+            return
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with self._connect() as connection:
                 connection.execute(
@@ -282,12 +320,40 @@ class SqliteMCPTaskBindingStore:
                     """
                 )
         except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
+            raise _map_sqlite_error(
+                exc,
                 "failed to initialize MCP task binding storage",
             ) from exc
+        self._initialized = True
+
+    async def _run(self, operation: Callable[[], _T]) -> _T:
+        with self._state_lock:
+            if self._closed:
+                raise ContractError(
+                    ErrorCode.UNAVAILABLE,
+                    "MCP task binding storage is closed",
+                )
+            executor = self._executor
+        loop = asyncio.get_running_loop()
+        worker = loop.run_in_executor(executor, operation)
+        try:
+            return await asyncio.shield(worker)
+        except asyncio.CancelledError:
+            while not worker.done():
+                try:
+                    await asyncio.shield(worker)
+                except asyncio.CancelledError:
+                    continue
+            failure = worker.exception()
+            if failure is not None:
+                raise failure from None
+            raise
 
     async def get(self, provider_id: str, invocation_id: str) -> MCPTaskBinding | None:
+        return await self._run(lambda: self._get_sync(provider_id, invocation_id))
+
+    def _get_sync(self, provider_id: str, invocation_id: str) -> MCPTaskBinding | None:
+        self._ensure_initialized_sync()
         try:
             with self._connect() as connection:
                 row = connection.execute(
@@ -298,8 +364,8 @@ class SqliteMCPTaskBindingStore:
                     (provider_id, invocation_id),
                 ).fetchone()
         except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
+            raise _map_sqlite_error(
+                exc,
                 "failed to read MCP task binding",
                 provider_id=provider_id,
             ) from exc
@@ -308,12 +374,23 @@ class SqliteMCPTaskBindingStore:
         return _decode_binding(str(row["payload"]))
 
     async def bind(self, binding: MCPTaskBinding) -> MCPTaskBinding:
-        existing = await self.get(binding.provider_id, binding.invocation_id)
-        if existing is not None:
-            _assert_same_binding_identity(existing, binding)
-            return existing
+        return await self._run(lambda: self._bind_sync(binding))
+
+    def _bind_sync(self, binding: MCPTaskBinding) -> MCPTaskBinding:
+        self._ensure_initialized_sync()
         try:
             with self._connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT payload FROM mcp_task_bindings
+                    WHERE provider_id = ? AND invocation_id = ?
+                    """,
+                    (binding.provider_id, binding.invocation_id),
+                ).fetchone()
+                if row is not None:
+                    existing = _decode_binding(str(row["payload"]))
+                    _assert_same_binding_identity(existing, binding)
+                    return existing
                 connection.execute(
                     """
                     INSERT INTO mcp_task_bindings(
@@ -328,7 +405,7 @@ class SqliteMCPTaskBindingStore:
                     ),
                 )
         except sqlite3.IntegrityError as exc:
-            existing = await self.get(binding.provider_id, binding.invocation_id)
+            existing = self._get_sync(binding.provider_id, binding.invocation_id)
             if existing is not None:
                 _assert_same_binding_identity(existing, binding)
                 return existing
@@ -338,24 +415,35 @@ class SqliteMCPTaskBindingStore:
                 provider_id=binding.provider_id,
             ) from exc
         except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
+            raise _map_sqlite_error(
+                exc,
                 "failed to persist MCP task binding",
                 provider_id=binding.provider_id,
             ) from exc
         return binding
 
     async def save(self, binding: MCPTaskBinding) -> MCPTaskBinding:
-        existing = await self.get(binding.provider_id, binding.invocation_id)
-        if existing is None:
-            raise ContractError(
-                ErrorCode.NOT_FOUND,
-                "MCP task binding does not exist",
-                provider_id=binding.provider_id,
-            )
-        merged = _merge_binding_observation(existing, binding)
+        return await self._run(lambda: self._save_sync(binding))
+
+    def _save_sync(self, binding: MCPTaskBinding) -> MCPTaskBinding:
+        self._ensure_initialized_sync()
         try:
             with self._connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT payload FROM mcp_task_bindings
+                    WHERE provider_id = ? AND invocation_id = ?
+                    """,
+                    (binding.provider_id, binding.invocation_id),
+                ).fetchone()
+                if row is None:
+                    raise ContractError(
+                        ErrorCode.NOT_FOUND,
+                        "MCP task binding does not exist",
+                        provider_id=binding.provider_id,
+                    )
+                existing = _decode_binding(str(row["payload"]))
+                merged = _merge_binding_observation(existing, binding)
                 connection.execute(
                     """
                     UPDATE mcp_task_bindings SET payload = ?
@@ -367,13 +455,37 @@ class SqliteMCPTaskBindingStore:
                         merged.invocation_id,
                     ),
                 )
+        except ContractError:
+            raise
         except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
+            raise _map_sqlite_error(
+                exc,
                 "failed to update MCP task binding",
                 provider_id=binding.provider_id,
             ) from exc
         return merged
+
+
+def _map_sqlite_error(
+    exc: sqlite3.Error,
+    message: str,
+    *,
+    provider_id: str | None = None,
+) -> ContractError:
+    if isinstance(exc, sqlite3.OperationalError):
+        normalized = str(exc).casefold()
+        if any(marker in normalized for marker in _BUSY_MARKERS):
+            return ContractError(
+                ErrorCode.TRANSIENT_FAILURE,
+                message,
+                provider_id=provider_id,
+                retryable=True,
+            )
+    return ContractError(
+        ErrorCode.BACKEND_ERROR,
+        message,
+        provider_id=provider_id,
+    )
 
 
 def binding_for_snapshot(
