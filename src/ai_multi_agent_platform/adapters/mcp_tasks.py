@@ -28,9 +28,7 @@ MCP_TASK_INPUT_REQUIRED = "input_required"
 MCP_TASK_COMPLETED = "completed"
 MCP_TASK_CANCELLED = "cancelled"
 MCP_TASK_FAILED = "failed"
-MCP_TASK_TERMINAL_STATUSES = frozenset(
-    {MCP_TASK_COMPLETED, MCP_TASK_CANCELLED, MCP_TASK_FAILED}
-)
+MCP_TASK_TERMINAL_STATUSES = frozenset({MCP_TASK_COMPLETED, MCP_TASK_CANCELLED, MCP_TASK_FAILED})
 MCP_TASK_KNOWN_STATUSES = frozenset(
     {
         MCP_TASK_WORKING,
@@ -83,7 +81,10 @@ class MCPTaskBinding:
                 raise ValueError(f"{field_name} must not be blank")
         if self.last_observed_at.tzinfo is None:
             raise ValueError("last_observed_at must be timezone-aware")
-        if self.cancellation_requested_at is not None and self.cancellation_requested_at.tzinfo is None:
+        if (
+            self.cancellation_requested_at is not None
+            and self.cancellation_requested_at.tzinfo is None
+        ):
             raise ValueError("cancellation_requested_at must be timezone-aware")
 
 
@@ -99,7 +100,9 @@ class MCPInvocationOutcome:
 class MCPInvocationClient(Protocol):
     """Optional richer MCP client seam for invocation-scoped asynchronous execution."""
 
-    async def call_tool_for_invocation(self, invocation: ToolInvocation) -> MCPInvocationOutcome: ...
+    async def call_tool_for_invocation(
+        self, invocation: ToolInvocation
+    ) -> MCPInvocationOutcome: ...
 
 
 @runtime_checkable
@@ -469,9 +472,7 @@ def _binding_from_row(row: sqlite3.Row) -> MCPTaskBinding:
         task_id=None if row["task_id"] is None else str(row["task_id"]),
         run_id=None if row["run_id"] is None else str(row["run_id"]),
         agent_id=None if row["agent_id"] is None else str(row["agent_id"]),
-        idempotency_key=(
-            None if row["idempotency_key"] is None else str(row["idempotency_key"])
-        ),
+        idempotency_key=(None if row["idempotency_key"] is None else str(row["idempotency_key"])),
         external_created_at=(
             None if row["external_created_at"] is None else str(row["external_created_at"])
         ),
