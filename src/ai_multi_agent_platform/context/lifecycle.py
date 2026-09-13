@@ -135,6 +135,23 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
             resources={"delegate_provider_id": self._delegate.descriptor.provider_id},
         )
 
+    def register_source_binding_factory(self, factory: ContextBindingFactory) -> None:
+        """Extend #590 source composition without replacing Context lifecycle authority.
+
+        Deployment integrations may contribute additional canonical source bindings at the normal
+        assembly boundary. Existing bindings stay intact and the lifecycle remains the sole owner
+        of ContextBundle assembly and Agent execution.
+        """
+
+        previous = self._binding_factory
+
+        def combined(
+            source: ContextLifecycleSourceRequest,
+        ) -> Sequence[ContextSourceAdapterBinding]:
+            return (*previous(source), *factory(source))
+
+        self._binding_factory = combined
+
     async def start(self, request: ExecutionRequest) -> ExecutionHandle:
         task = await self._tasks.get_task(request.context.correlation_id)
         request = replace(
