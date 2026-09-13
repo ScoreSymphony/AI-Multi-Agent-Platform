@@ -2,7 +2,7 @@
 
 Issue: #32
 
-The Control Plane is the stable northbound boundary for web, CLI, automations and external clients. It exposes platform-owned canonical resources and explicit commands only. Hermes, Forge, model-provider SDKs, MCP servers, worker runtimes and other backend-private APIs are never client contracts.
+The Control Plane is the stable northbound transport and foundation boundary for web, CLI, automations and external clients. It exposes platform-owned canonical resources and explicit commands only. The stability of each domain/resource contract composed behind that boundary is classified separately. Hermes, Forge, model-provider SDKs, MCP servers, worker runtimes and other backend-private APIs are never client contracts.
 
 ## Ownership boundary
 
@@ -63,15 +63,21 @@ current composed Control Plane
 
 This prevents the foundation from guessing future schemas while allowing the API to grow additively.
 
-## API versioning
+## API versioning and stability
 
-The first stable major is `/api/v1`.
+The first stable major for the shared Control Plane foundation/protocol is `/api/v1`.
 
-- Additive endpoints, optional fields and optional query parameters may be introduced within `v1`.
-- Removing or renaming fields, changing their meaning/type incompatibly, changing command semantics incompatibly, or making optional input mandatory requires a new major namespace such as `/api/v2`.
-- Deprecations must be documented before removal and overlap with the replacement for a migration window.
-- Unsupported versions return `unsupported_api_version` with the supported versions.
-- Adapter or upstream version changes do not change the northbound API major unless a canonical platform contract changes.
+The repository-wide role/stability vocabulary is defined in [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). The `control-plane-v1` classification is **Core + Stable**, but that classification covers the shared `v1` protocol/foundation conventions and #32-owned stable behavior rather than automatically promoting every registered domain resource to Stable. Each later-domain public contract keeps the stability level declared for its own feature entry.
+
+A later domain can therefore expose a Beta or Experimental resource through the same composed `/api/v1` Control Plane without downgrading the Stable foundation and without acquiring Stable compatibility by namespace inheritance. API-major stability and feature maturity are related but non-overlapping concepts. ADR 0003 still governs the northbound wire contract: a breaking canonical Control Plane contract change requires a new major namespace regardless of the feature's maturity label.
+
+- Additive endpoints, optional fields and optional query parameters may be introduced within `v1` when they preserve existing canonical contracts.
+- Removing or renaming a `v1` field/command/resource, changing its meaning or type incompatibly, or making previously optional canonical input mandatory is a breaking northbound contract change and requires a new Control Plane major such as `/api/v2`, regardless of whether the affected feature is Stable, Beta or Experimental.
+- Beta and Experimental resources composed under `/api/v1` retain their own maturity labels and do not inherit Stable compatibility merely from the namespace. Their bounded evolution must still use the Control Plane's versioned replacement mechanism for incompatible wire-contract changes; maturity governs the support/deprecation promise around that versioned transition rather than permitting in-place reinterpretation of `v1`.
+- Control Plane deprecations overlap with their versioned replacement for a documented migration window as required by ADR 0003. Feature maturity may impose additional compatibility guidance but does not relax that northbound versioning rule.
+- Unsupported Control Plane majors return `unsupported_api_version` with the supported versions.
+- Adapter or upstream version changes do not change the northbound API major unless they require a breaking canonical Control Plane contract change.
+- Generated frontend DTOs inherit the role/stability metadata of the canonical resource they represent; generation does not promote Beta/Experimental resources to Stable.
 
 ## Foundation commands
 
@@ -111,6 +117,8 @@ A registered collection receives the common Control Plane read conventions:
 
 The collection name comes from the owning canonical domain. An unregistered future collection is neither advertised nor treated as a #32 resource.
 
+A new public registered resource or command must also declare its canonical owner, architectural role and stability under [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). Registration proves composition into the Control Plane; it does not by itself create a Stable compatibility promise.
+
 ### Command registration
 
 A later domain can register a canonical command handler:
@@ -149,6 +157,8 @@ The owning later-domain issue may also implement dedicated canonical routes once
 - the live-update mechanism.
 
 `GET /api/v1/openapi.json` generates OpenAPI 3.1 for the same current API. Future domains that have not been implemented or registered are absent. The specification documents the error statuses that the Control Plane can intentionally emit, including authentication, payload-size, media-type and semantic-validation failures.
+
+Role/stability metadata may be emitted by generated documentation/DTO tooling where useful, but it remains descriptive metadata. It must never be interpreted as authorization, health, enablement or conformance state.
 
 ## Query conventions
 

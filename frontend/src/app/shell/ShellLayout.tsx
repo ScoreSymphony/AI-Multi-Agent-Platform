@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { APImanifest } from "../../api/types";
 import { OnboardingCallout } from "../../components/OnboardingCallout";
 import { PermissionHintsProvider } from "../../security/permissions";
-import { navigation } from "../navigation";
+import { navigation, navigationMaturity } from "../navigation";
 import { AppLink } from "../router";
 import type { ShellClients } from "./clients";
 import { apiStatusLabel, type ManifestState } from "./manifest";
@@ -40,7 +40,22 @@ export function ShellLayout({
                 <span>{group}</span>
                 {navigation.filter((item) => item.group === group).map((item) => {
                   const active = item.path === path;
-                  return <AppLink aria-current={active ? "page" : undefined} className={active ? "active" : undefined} href={item.path} key={item.path}>{item.label}</AppLink>;
+                  const maturity = navigationMaturity[item.path];
+                  const maturityLabel = maturity === "experimental"
+                    ? "Experimental"
+                    : maturity === "beta"
+                      ? "Beta"
+                      : null;
+                  return (
+                    <AppLink
+                      aria-current={active ? "page" : undefined}
+                      className={active ? "active" : undefined}
+                      href={item.path}
+                      key={item.path}
+                    >
+                      {item.label}{maturityLabel ? ` · ${maturityLabel}` : ""}
+                    </AppLink>
+                  );
                 })}
               </div>
             ))}
