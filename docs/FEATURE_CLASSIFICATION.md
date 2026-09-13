@@ -15,7 +15,7 @@ The machine-readable audit lives in [`FEATURE_CLASSIFICATION.toml`](FEATURE_CLAS
 
 A canonical platform foundation or lifecycle/control-plane capability that belongs to the baseline architecture. Core identifies architectural responsibility, not operational maturity.
 
-Typical Core responsibilities include canonical lifecycle/domain contracts, the Control Plane, durable coordination, Agent/Team handoffs, provider contracts, Agents, Models, Capabilities/Tools, execution, Workspaces, security, verification, evaluation, the provider-neutral repository-intelligence baseline and cross-cutting observability/accounting foundations.
+Typical Core responsibilities include canonical lifecycle/domain contracts, the Control Plane, durable coordination, Agent/Team handoffs, provider contracts, Agents, Models, Capabilities/Tools, execution, Projects/Workspaces, security, verification, evaluation, the provider-neutral repository-intelligence baseline and cross-cutting observability/accounting foundations.
 
 A concrete optional adapter can implement a Core boundary without becoming Core architecture itself.
 
@@ -132,7 +132,7 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `models-routing` | model/provider registry, routing and assignments | `models` | Core | Beta |
 | `capabilities-tools` | capability/tool declaration, discovery and invocation | `capabilities` | Core | Beta |
 | `execution-runtime` | executor/reference execution public contracts | `execution` | Core | Beta |
-| `workspaces-data` | Workspaces plus canonical file/data boundaries | `workspaces`, `data` | Core | Beta |
+| `workspaces-data` | Projects, Workspaces plus canonical file/data boundaries | `domain`, `workspaces`, `data` | Core | Beta |
 | `security-governance` | authentication, authorization, approvals and governed actions | `security`, `governance` | Core | Beta |
 | `verification-review` | verification/review records and completion gates | `verification` | Core | Beta |
 | `evaluation-regression` | Evaluation suites/runs plus regression CLI/browser workflows | `evaluation` | Core | Beta |
