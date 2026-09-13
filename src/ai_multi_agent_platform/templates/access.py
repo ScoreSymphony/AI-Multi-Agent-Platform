@@ -11,9 +11,13 @@ from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.domain import OwnerRef, Project
 
 
+class _ProjectScopeReader(Protocol):
+    def get_project(self, project_id: str) -> Project: ...
+
+
 class _ScopedControlPlane(Protocol):
     @property
-    def runtime_scopes(self) -> AsyncScopeStore: ...
+    def scopes(self) -> _ProjectScopeReader: ...
 
     async def _authorize(
         self,
@@ -47,8 +51,11 @@ class TemplateScopeAccess:
     control_plane: ControlPlane
 
     async def get_project(self, project_id: str) -> Project:
+        runtime = getattr(self.control_plane, "runtime_scopes", None)
+        if runtime is not None:
+            return await cast(AsyncScopeStore, runtime).get_project(project_id)
         scoped = cast(_ScopedControlPlane, self.control_plane)
-        return await scoped.runtime_scopes.get_project(project_id)
+        return scoped.scopes.get_project(project_id)
 
     async def authorize(
         self,
