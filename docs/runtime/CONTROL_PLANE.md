@@ -2,7 +2,7 @@
 
 Issue: #32
 
-The Control Plane is the stable northbound boundary for web, CLI, automations and external clients. It exposes platform-owned canonical resources and explicit commands only. Hermes, Forge, model-provider SDKs, MCP servers, worker runtimes and other backend-private APIs are never client contracts.
+The Control Plane is the stable northbound transport and foundation boundary for web, CLI, automations and external clients. It exposes platform-owned canonical resources and explicit commands only. The stability of each domain/resource contract composed behind that boundary is classified separately. Hermes, Forge, model-provider SDKs, MCP servers, worker runtimes and other backend-private APIs are never client contracts.
 
 ## Ownership boundary
 
@@ -65,17 +65,18 @@ This prevents the foundation from guessing future schemas while allowing the API
 
 ## API versioning and stability
 
-The first stable major is `/api/v1`.
+The first stable major for the shared Control Plane foundation/protocol is `/api/v1`.
 
-The repository-wide role/stability vocabulary is defined in [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). The Control Plane `v1` foundation is classified **Core + Stable**. This means the existing documented `v1` behavior carries the compatibility rules below even while the repository package itself remains `0.x`.
+The repository-wide role/stability vocabulary is defined in [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). The `control-plane-v1` classification is **Core + Stable**, but that classification covers the shared `v1` protocol/foundation conventions and #32-owned stable behavior rather than automatically promoting every registered domain resource to Stable. Each later-domain public contract keeps the stability level declared for its own feature entry.
 
-A later domain can expose a Beta or Experimental resource through the same composed `/api/v1` Control Plane without downgrading the stability of already Stable `v1` behavior. That resource's own public contract must be classified and signaled according to the feature registry. API-major stability and feature maturity are therefore related but not identical concepts.
+A later domain can therefore expose a Beta or Experimental resource through the same composed `/api/v1` Control Plane without downgrading the Stable foundation and without acquiring Stable compatibility by namespace inheritance. API-major stability and feature maturity are related but non-overlapping concepts.
 
-- Additive endpoints, optional fields and optional query parameters may be introduced within `v1`.
-- Removing or renaming fields, changing their meaning/type incompatibly, changing command semantics incompatibly, or making optional input mandatory requires a new major namespace such as `/api/v2`.
-- Deprecations must be documented before removal and overlap with the replacement for a migration window.
-- Unsupported versions return `unsupported_api_version` with the supported versions.
-- Adapter or upstream version changes do not change the northbound API major unless a canonical platform contract changes.
+- Additive endpoints, optional fields and optional query parameters may be introduced within `v1` when they preserve every existing Stable promise.
+- Removing or renaming a shared `v1` foundation field/convention, changing its meaning/type incompatibly, changing a Stable command/resource semantic incompatibly, or making Stable optional input mandatory requires the applicable versioned replacement, normally a new Control Plane major such as `/api/v2` or another explicit major/version mechanism owned by that Stable surface.
+- Beta and Experimental resources composed under `/api/v1` follow their own feature-classification rules. A bounded incompatible non-patch change to such a resource does not by itself require renaming the entire Control Plane namespace, provided the change does not break shared Stable `v1` protocol/foundation conventions or any separately Stable resource contract.
+- Stable deprecations must be documented before removal and overlap with the replacement for a migration window. Beta/Experimental migration requirements follow their declared maturity policy.
+- Unsupported Control Plane majors return `unsupported_api_version` with the supported versions.
+- Adapter or upstream version changes do not change the northbound API major unless a Stable canonical platform contract requires that change.
 - Generated frontend DTOs inherit the role/stability metadata of the canonical resource they represent; generation does not promote Beta/Experimental resources to Stable.
 
 ## Foundation commands
