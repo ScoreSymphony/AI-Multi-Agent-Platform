@@ -125,10 +125,10 @@ jobs:
           PY
       - name: Install project test dependencies
         run: python -m pip install -e ".[dev]"
-      - name: Normalize generated split modules
+      - name: Normalize generated migration changes
         run: |
           python -m ruff check tests --fix
-          python -m ruff format tests
+          python -m ruff format tests src/ai_multi_agent_platform/acceptance/gate.py
       - name: Post-move inventory
         run: python scripts/ci/report_test_inventory.py
       - name: Verify active exact-path references
