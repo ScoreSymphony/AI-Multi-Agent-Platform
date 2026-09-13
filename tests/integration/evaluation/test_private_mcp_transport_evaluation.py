@@ -223,7 +223,7 @@ def test_hard_security_failure_rejects_experimental_only_recommendation() -> Non
         "service_removal_reconfiguration_fails_closed",
     ],
 )
-def test_hard_recovery_failure_rejects_experimental_only_recommendation(case_id: str) -> None:
+def test_hard_recovery_failure_requires_negative_recommendation(case_id: str) -> None:
     report = _report(recommendation="experimental_only")
     _replace_result(report, "failure_recovery_results", case_id, "fail")
 
