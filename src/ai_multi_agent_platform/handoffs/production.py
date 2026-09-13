@@ -1,8 +1,8 @@
 """Production composition for canonical Agent Handoffs (#651).
 
-This module bridges the synchronous #592 domain service to the asynchronous platform
-boundaries used by production authorization, Artifact/Result resolution and canonical
-ContextBundle execution. It deliberately does not introduce new Task/Plan/Step/Run or
+This module bridges the stable synchronous #592 domain contract to the asynchronous platform
+boundaries used by production authorization, persistence, Artifact/Result resolution and
+canonical ContextBundle execution. It deliberately does not introduce new Task/Plan/Step/Run or
 messaging authority.
 """
 
@@ -58,6 +58,7 @@ from ai_multi_agent_platform.security import (
 from ai_multi_agent_platform.skills import SkillRepository
 from ai_multi_agent_platform.verification import VerificationEvidenceResolver
 
+from .async_repository import runtime_handoff_repository
 from .context import handoff_context_candidate
 from .coordination import CoordinatedHandoffService
 from .models import (
@@ -104,11 +105,11 @@ class _PreparedReads:
 class CanonicalHandoffReferenceGateway(HandoffReferenceGateway):
     """Production source gateway backed by canonical owning domains and #15.
 
-    ``HandoffService`` intentionally remains synchronous for the stable #592 contract.
-    Production callers therefore prepare exact source checks asynchronously first. The
-    resulting authorization evidence is stored in a task-local ``ContextVar`` and the
-    synchronous ``exists``/``can_read`` methods fail closed unless the exact reference
-    and participant were prepared in the same runtime operation.
+    ``HandoffService`` intentionally retains synchronous methods for the stable #592 contract.
+    Production callers prepare exact source checks asynchronously first. The resulting
+    authorization evidence is stored in a task-local ``ContextVar`` and the synchronous
+    ``exists``/``can_read`` methods fail closed unless the exact reference and participant were
+    prepared in the same runtime operation.
     """
 
     def __init__(
@@ -411,9 +412,11 @@ class DurableConsumedHandoffContextAdapter(ContextSourceAdapter):
     adapter_id: str = "canonical-agent-handoff-durable"
 
     async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
+        runtime_repository = runtime_handoff_repository(self.repository)
         candidates: list[ContextCandidate] = []
-        for consumption in self.repository.list_consumptions_for_run(request.run_id):
-            handoff = self.repository.get_handoff(
+        consumptions = await runtime_repository.list_consumptions_for_run(request.run_id)
+        for consumption in consumptions:
+            handoff = await runtime_repository.get_handoff(
                 consumption.handoff_id,
                 consumption.handoff_revision,
             )
@@ -477,6 +480,7 @@ class ProductionHandoffRuntime:
         self.service = service
         self.coordinated = coordinated
         self.repository = repository
+        self.runtime_repository = service.runtime_repository
         self.references = references
         self.agents = agents
         self.context_assembly = context_assembly
@@ -533,7 +537,7 @@ class ProductionHandoffRuntime:
                         actor=consumer_actor,
                         operation=operation,
                     )
-            return self.coordinated.create_handoff(
+            return await self.coordinated.async_create_handoff(
                 hardened,
                 idempotency_key=idempotency_key,
                 handoff_id=handoff_id,
@@ -554,7 +558,7 @@ class ProductionHandoffRuntime:
         context_bundle_ref: HandoffSourceRef | None = None,
     ) -> HandoffRuntimeContext:
         self._require_actor_represents(consumer, consumer_actor)
-        handoff = self.service.get_handoff(handoff_id, revision)
+        handoff = await self.service.async_get_handoff(handoff_id, revision)
         self._require_run_participant(consuming_run_id, consumer, required=False)
 
         token = self.references.begin()
@@ -577,7 +581,7 @@ class ProductionHandoffRuntime:
                     actor=consumer_actor,
                     operation=operation,
                 )
-            return self.coordinated.consume_handoff(
+            return await self.coordinated.async_consume_handoff(
                 handoff_id,
                 revision,
                 consuming_run_id=consuming_run_id,
