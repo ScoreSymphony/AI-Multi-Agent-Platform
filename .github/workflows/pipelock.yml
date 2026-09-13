@@ -4,26 +4,26 @@ on:
   pull_request:
     paths:
       - ".github/workflows/pipelock.yml"
-      - "tests/test_issue_730_pipelock_security_corpus.py"
+      - "tests/integration/security/test_pipelock_security_corpus.py"
       - "tests/fixtures/pipelock_adversarial_cases.json"
       - "tests/fixtures/pipelock_websocket_audit.yaml"
       - "docs/upstream/PIPELOCK_CORE_*.md"
-      - "tests/test_issue_730_pipelock_containment.py"
+      - "tests/integration/security/test_pipelock_containment.py"
       - "tests/fixtures/mcp_stdio_network_probe_server.py"
       - "scripts/ci/issue730_inet_socket_deny_exec.py"
-      - "tests/test_issue_730_pipelock_mcp_adversarial.py"
+      - "tests/integration/security/test_pipelock_mcp_adversarial.py"
       - "tests/fixtures/mcp_adversarial_http_server.py"
       - "tests/fixtures/pipelock_mcp_adversarial.yaml"
-      - "tests/test_issue_730_pipelock_network_exfiltration.py"
+      - "tests/integration/security/test_pipelock_network_exfiltration.py"
       - "tests/fixtures/pipelock_network_boundary_audit.yaml"
       - "tests/fixtures/pipelock_network_boundary_target.py"
-      - "tests/test_issue_730_pipelock_outage_recovery.py"
+      - "tests/integration/security/test_pipelock_outage_recovery.py"
       - "tests/fixtures/pipelock_outage_enforced.yaml"
       - "tests/fixtures/pipelock_outage_target_server.py"
       - "scripts/benchmarks/issue730_pipelock_benchmark.py"
       - "tests/fixtures/mcp_stdio_server.py"
       - "tests/fixtures/websocket_echo_server.py"
-      - "tests/test_issue_730_pipelock_profile_bypass.py"
+      - "tests/integration/files/test_pipelock_profile_bypass.py"
       - "tests/fixtures/pipelock_profile_bypass_target.py"
       - "tests/fixtures/websocket_adversarial_server.py"
       - "src/ai_multi_agent_platform/adapters/hermes.py"
@@ -78,7 +78,7 @@ jobs:
         env:
           PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
         run: |
-          pytest -q tests/test_issue_730_pipelock_security_corpus.py \
+          pytest -q tests/integration/security/test_pipelock_security_corpus.py \
             --basetemp="$RUNNER_TEMP/pipelock-security" \
             --junitxml="$RUNNER_TEMP/pipelock-security-junit.xml"
       - name: Upload synthetic adversarial evidence
@@ -150,7 +150,7 @@ jobs:
           PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
           PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-audit.yaml
         run: |
-          pytest -q tests/test_issue_730_pipelock_containment.py \
+          pytest -q tests/integration/security/test_pipelock_containment.py \
             --junitxml="$RUNNER_TEMP/pipelock-containment-junit.xml"
       - name: Upload containment evidence
         if: always()
@@ -206,7 +206,7 @@ jobs:
         env:
           PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
         run: |
-          pytest -q tests/test_issue_730_pipelock_mcp_adversarial.py \
+          pytest -q tests/integration/security/test_pipelock_mcp_adversarial.py \
             --basetemp="$RUNNER_TEMP/pipelock-mcp-adversarial" \
             --junitxml="$RUNNER_TEMP/pipelock-mcp-adversarial-junit.xml"
       - name: Upload synthetic MCP adversarial evidence
@@ -267,7 +267,7 @@ jobs:
           PIPELOCK_730_ALLOW_HOSTS_MUTATION: "1"
           PIPELOCK_730_TEST_NET_IP: "192.0.2.123"
         run: |
-          pytest -q tests/test_issue_730_pipelock_network_exfiltration.py \
+          pytest -q tests/integration/security/test_pipelock_network_exfiltration.py \
             --basetemp="$RUNNER_TEMP/pipelock-network" \
             --junitxml="$RUNNER_TEMP/pipelock-network-junit.xml"
       - name: Remove deterministic TEST-NET target address
@@ -328,7 +328,7 @@ jobs:
         env:
           PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
         run: |
-          pytest -q tests/test_issue_730_pipelock_outage_recovery.py \
+          pytest -q tests/integration/security/test_pipelock_outage_recovery.py \
             --basetemp="$RUNNER_TEMP/pipelock-outage" \
             --junitxml="$RUNNER_TEMP/pipelock-outage-junit.xml"
       - name: Upload outage and recovery evidence
@@ -480,7 +480,7 @@ jobs:
         env:
           PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
         run: |
-          pytest -q tests/test_issue_730_pipelock_profile_bypass.py \
+          pytest -q tests/integration/files/test_pipelock_profile_bypass.py \
             --basetemp="$RUNNER_TEMP/pipelock-profile-bypass" \
             --junitxml="$RUNNER_TEMP/pipelock-profile-bypass-junit.xml"
       - name: Upload profile-bypass evidence

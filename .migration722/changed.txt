@@ -1,9 +1,0 @@
-.github/workflows/benchmark-smoke.yml
-.github/workflows/ci.yml
-.github/workflows/issue-862-storage-evidence.yml
-.github/workflows/issue859-bifrost-dns-rebinding.yml
-.github/workflows/issue859-bifrost-security.yml
-.github/workflows/performance-extended-smoke.yml
-.github/workflows/pipelock-candidate-compat.yml
-.github/workflows/pipelock.yml
-.github/workflows/skillspector-evaluation.yml
