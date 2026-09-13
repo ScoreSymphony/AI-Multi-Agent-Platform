@@ -70,7 +70,9 @@ def test_reference_multi_agent_planner_builds_exact_parallel_fan_in_dag() -> Non
         assert draft_steps["review"].assignment.role_requirement == "reviewer"
         assert draft_steps["execute"].reuse_step_ids == (reused_step,)
 
-        resolved_steps = {step.key: step for step in resolve_planning_steps(output.draft.steps, request)}
+        resolved_steps = {
+            step.key: step for step in resolve_planning_steps(output.draft.steps, request)
+        }
         assert resolved_steps["research"].assignment is not None
         assert resolved_steps["research"].assignment.agent_id == research.agent_id
         assert resolved_steps["research"].assignment.agent_revision == 3
