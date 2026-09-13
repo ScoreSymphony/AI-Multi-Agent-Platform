@@ -432,34 +432,31 @@ def build_single_node_deployment(
         model_runtime=base.model_runtime,
     )
 
-    # #889 adds no second Context lifecycle. It extends the already-installed #590 source factory
-    # with one adapter that asks the canonical #651 owner to bind incoming Handoffs to the exact
-    # consuming Run before Context assembly. Root Steps simply contribute no Handoff candidates.
+    # #889 adds no second Context lifecycle. It contributes one additional #590 source factory
+    # through the public Context composition seam. Root Steps simply contribute no Handoff source.
     incoming_handoffs = ReferenceIncomingHandoffContextAdapter(
         handoffs,
         coordinator=base.coordination_repository,
         kernel=base.kernel,
     )
-    canonical_binding_factory = context.lifecycle._binding_factory  # noqa: SLF001
 
     def reference_binding_factory(
         source: ContextLifecycleSourceRequest,
     ) -> tuple[ContextSourceAdapterBinding, ...]:
-        bindings = list(canonical_binding_factory(source))
-        if source.step_id is not None:
-            bindings.append(
-                ContextSourceAdapterBinding(
-                    adapter=incoming_handoffs,
-                    source_type=ContextSourceType.AGENT_HANDOFF,
-                    source_id=f"run:{source.run_id}:incoming-handoffs",
-                    role=ContextEntryRole.CONTEXT,
-                    project_id=source.project_id,
-                    workspace_id=source.workspace_id,
-                )
-            )
-        return tuple(bindings)
+        if source.step_id is None:
+            return ()
+        return (
+            ContextSourceAdapterBinding(
+                adapter=incoming_handoffs,
+                source_type=ContextSourceType.AGENT_HANDOFF,
+                source_id=f"run:{source.run_id}:incoming-handoffs",
+                role=ContextEntryRole.CONTEXT,
+                project_id=source.project_id,
+                workspace_id=source.workspace_id,
+            ),
+        )
 
-    context.lifecycle._binding_factory = reference_binding_factory  # noqa: SLF001
+    context.lifecycle.register_source_binding_factory(reference_binding_factory)
 
     template_environment = PlatformTemplateEnvironmentResolver(
         workspaces=base.workspaces,
