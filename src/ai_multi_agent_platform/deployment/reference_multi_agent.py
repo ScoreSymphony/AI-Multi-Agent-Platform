@@ -13,6 +13,7 @@ from typing import Any
 from ai_multi_agent_platform.agents import AgentRevisionRef, AgentRunRecord, AgentRunStatus
 from ai_multi_agent_platform.context import ContextCandidate, ContextSourceRequest
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
+from ai_multi_agent_platform.coordination.async_repository import runtime_coordinator_repository
 from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
 from ai_multi_agent_platform.handoffs import (
     HandoffContent,
@@ -163,8 +164,10 @@ class ReferenceIncomingHandoffContextAdapter:
 
     #384 remains the dependency/Run authority and #651 remains the Handoff authority. The adapter
     only turns already-durable predecessor AgentRun outputs into idempotent Handoffs at the safe
-    consumer Context boundary. This makes a producer -> process restart -> consumer path equivalent
-    to the uninterrupted path without reserving a second kernel output-observer slot.
+    consumer Context boundary. Coordination reads use #384's awaitable runtime repository seam, so
+    SQLite persistence is not performed inline on the Context/Agent event loop. This makes a
+    producer -> process restart -> consumer path equivalent to the uninterrupted path without
+    reserving a second kernel output-observer slot.
 
     A context transfer also needs the predecessor output to be a canonical Result/Artifact
     reference. Reference Agent execution records the immutable output identity on the AgentRun and
@@ -183,7 +186,7 @@ class ReferenceIncomingHandoffContextAdapter:
         kernel: PlatformKernel,
     ) -> None:
         self._handoffs = handoffs
-        self._coordinator = coordinator
+        self._coordinator = runtime_coordinator_repository(coordinator)
         self._durable = DurableConsumedHandoffContextAdapter(
             repository=handoffs.repository,
             agents=handoffs.runtime.agents,
@@ -243,7 +246,7 @@ class ReferenceIncomingHandoffContextAdapter:
         operation: OperationContext,
     ) -> bool:
         assert request.step_id is not None
-        consumer_record = self._coordinator.get_step_record(request.step_id)
+        consumer_record = await self._coordinator.get_step_record(request.step_id)
         if consumer_record.task_id != request.task_id:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
@@ -254,7 +257,7 @@ class ReferenceIncomingHandoffContextAdapter:
                 ErrorCode.CONTRACT_VIOLATION,
                 "consumer Context Plan does not match canonical coordination state",
             )
-        state = self._coordinator.get_plan(consumer_record.plan_id)
+        state = await self._coordinator.get_plan(consumer_record.plan_id)
         consumer_step = state.step(request.step_id)
         if not consumer_step.depends_on:
             return False
@@ -262,7 +265,7 @@ class ReferenceIncomingHandoffContextAdapter:
         consumer = AgentRevisionRef(request.agent_id, request.agent_revision)
         consumer_actor = _agent_actor(consumer)
         for producer_step_id in sorted(consumer_step.depends_on):
-            producer_record = self._coordinator.get_step_record(producer_step_id)
+            producer_record = await self._coordinator.get_step_record(producer_step_id)
             producer_run_id = producer_record.latest_run_id
             if producer_run_id is None:
                 raise ContractError(
