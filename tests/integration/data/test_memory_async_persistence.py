@@ -134,7 +134,9 @@ def test_memory_backlog_does_not_consume_shared_default_executor(tmp_path: Path)
         loop.set_default_executor(
             ThreadPoolExecutor(max_workers=2, thread_name_prefix="test-default")
         )
-        provider = BlockingMemoryProvider(tmp_path / "executor-isolation.sqlite3", max_concurrency=2)
+        provider = BlockingMemoryProvider(
+            tmp_path / "executor-isolation.sqlite3", max_concurrency=2
+        )
         writes = [
             asyncio.create_task(provider.write_entry(_entry(value=f"queued-{index}"), _context()))
             for index in range(8)
