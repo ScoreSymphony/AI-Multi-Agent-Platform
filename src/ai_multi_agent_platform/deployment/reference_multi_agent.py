@@ -39,6 +39,13 @@ def _has_reference_roles(request: PlanningRequest) -> bool:
     return _REFERENCE_ROLES.issubset(enabled_roles)
 
 
+def _agent_actor(agent: AgentRevisionRef) -> ActorIdentity:
+    return ActorIdentity(
+        f"agent:{agent.agent_id}@{agent.revision}",
+        ActorType.AGENT,
+    )
+
+
 class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
     """Deterministic #439 planner for the built-in multi-agent golden path.
 
@@ -168,7 +175,7 @@ class ReferenceIncomingHandoffContextAdapter:
             return ()
 
         consumer = AgentRevisionRef(request.agent_id, request.agent_revision)
-        consumer_actor = ActorIdentity(request.agent_id, ActorType.AGENT)
+        consumer_actor = _agent_actor(consumer)
         for handoff in sorted(incoming, key=lambda item: (item.handoff_id, item.revision)):
             await self._handoffs.runtime.consume_handoff(
                 handoff.handoff_id,
@@ -203,7 +210,7 @@ class ReferenceIncomingHandoffContextAdapter:
             return
 
         consumer = AgentRevisionRef(request.agent_id, request.agent_revision)
-        consumer_actor = ActorIdentity(consumer.agent_id, ActorType.AGENT)
+        consumer_actor = _agent_actor(consumer)
         for producer_step_id in sorted(consumer_step.depends_on):
             producer_record = self._coordinator.get_step_record(producer_step_id)
             producer_run_id = producer_record.latest_run_id
@@ -265,7 +272,7 @@ class ReferenceIncomingHandoffContextAdapter:
                     "reference-multi-agent-handoff:"
                     f"{producer_step_id}:{request.step_id}:{producer_run_id}:{source_identity}"
                 ),
-                producer_actor=ActorIdentity(producer_run.agent.agent_id, ActorType.AGENT),
+                producer_actor=_agent_actor(producer_run.agent),
                 intended_consumer_actor=consumer_actor,
                 operation=operation,
             )
