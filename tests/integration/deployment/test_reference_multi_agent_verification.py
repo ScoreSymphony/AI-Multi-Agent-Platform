@@ -19,7 +19,7 @@ from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_no
 from ai_multi_agent_platform.deployment.reference_multi_agent import (
     REFERENCE_MULTI_AGENT_CONSTRAINT,
 )
-from ai_multi_agent_platform.domain import OwnerRef, TaskStatus
+from ai_multi_agent_platform.domain import OwnerRef, RunStatus, TaskStatus
 from ai_multi_agent_platform.models import ModelCapabilities, ModelConfiguration, ModelLocation
 from ai_multi_agent_platform.planning import ProposalStatus
 from ai_multi_agent_platform.security import (
@@ -37,6 +37,7 @@ from ai_multi_agent_platform.verification import (
     VerificationStage,
     VerifierKind,
 )
+from ai_multi_agent_platform.verification.repair import VERIFICATION_REPAIR_SOURCE
 
 _PASSWORD = "correct horse battery staple for issue 889"
 _MODEL_ID = "model-issue-889-reference-verification"
@@ -132,12 +133,18 @@ def _create_agents(deployment: Any, owner: OwnerRef) -> dict[str, AgentRevisionR
     return refs
 
 
-def _register_verification_policy(deployment: Any, reviewer: AgentRevisionRef):
+def _register_verification_policy(
+    deployment: Any,
+    reviewer: AgentRevisionRef,
+    *,
+    max_repair_attempts: int = 0,
+):
     return deployment.verification.register_policy(
         VerificationPolicy(
             name="Issue 889 exact reference result review",
             stages=(VerificationStage(stage_id=_STAGE_ID, verifier_kind=VerifierKind.AGENT),),
             independence=ReviewerIndependence(producer_agent_must_differ=True),
+            max_repair_attempts=max_repair_attempts,
             metadata={
                 "automatic_reviewer": {
                     "enabled": True,
@@ -160,6 +167,7 @@ async def _run_reference_task(
     owner_id: str,
     reviewer: AgentRevisionRef,
     suffix: str,
+    max_repair_attempts: int = 0,
 ):
     task = await deployment.kernel.create_task(
         idempotency_key=f"issue-889:{suffix}:create",
@@ -172,7 +180,11 @@ async def _run_reference_task(
         idempotency_key=f"issue-889:{suffix}:ready",
         task_id=task.task_id,
     )
-    policy = _register_verification_policy(deployment, reviewer)
+    policy = _register_verification_policy(
+        deployment,
+        reviewer,
+        max_repair_attempts=max_repair_attempts,
+    )
     deployment.verification_runtime.require_task(
         task_id=task.task_id,
         policy_id=policy.policy_id,
@@ -346,5 +358,91 @@ def test_reference_golden_path_non_pass_verification_cannot_complete_task(
         history = await deployment.kernel.history(task.task_id)
         assert "task.succeeded" not in [event.event_type for event in history]
         assert len(provider.review_calls) == 3
+
+    asyncio.run(scenario())
+
+
+def test_reference_golden_path_repairs_needs_changes_and_reverifies_exact_new_revision(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        deployment = build_single_node_deployment(
+            SingleNodeConfig(data_dir=tmp_path / "repair", secure_cookie=False)
+        )
+        provider = _ReviewAwareFakeModelProvider(
+            (
+                VerificationOutcome.PASS,
+                VerificationOutcome.PASS,
+                VerificationOutcome.NEEDS_CHANGES,
+                VerificationOutcome.PASS,
+            )
+        )
+        _install_local_model(deployment, provider)
+        admin = deployment.bootstrap_admin("issue-889-verification-repair", _PASSWORD)
+        refs = _create_agents(deployment, OwnerRef(type="user", id=admin.user_id))
+
+        task, policy, _proposal, activated = await _run_reference_task(
+            deployment,
+            owner_id=admin.user_id,
+            reviewer=refs["reviewer"],
+            suffix="verification-repair",
+            max_repair_attempts=1,
+        )
+        completed = await deployment.kernel.get_task(task.task_id)
+        assert completed.status is TaskStatus.SUCCEEDED
+
+        _execute_step, execute_run_id, producer, result_a_id = _execute_lineage(
+            deployment,
+            activated.activation_plan_id,
+        )
+        assert producer.agent == refs["developer"]
+        history = [
+            (request, result)
+            for request, result in deployment.verification.history(task_id=task.task_id)
+            if request.policy_id == policy.policy_id
+            and request.policy_version == policy.version
+            and request.stage_id == _STAGE_ID
+        ]
+        repair_lineage = [
+            pair
+            for pair in history
+            if pair[0].subject.subject_id == result_a_id or pair[0].repair_attempt > 0
+        ]
+        assert len(repair_lineage) == 2
+        first_request, first_result = repair_lineage[0]
+        second_request, second_result = repair_lineage[1]
+        assert first_result is not None
+        assert second_result is not None
+        assert first_request.run_id == execute_run_id
+        assert first_request.repair_attempt == 0
+        assert first_result.outcome is VerificationOutcome.NEEDS_CHANGES
+        assert second_request.repair_attempt == 1
+        assert second_result.outcome is VerificationOutcome.PASS
+
+        subject_a = first_request.subject
+        subject_b = second_request.subject
+        assert subject_a.subject_id == result_a_id
+        assert subject_b.subject_id != subject_a.subject_id
+        assert subject_b.revision != subject_a.revision
+        assert subject_b.digest != subject_a.digest
+        assert second_result.subject == subject_b
+        assert second_request.run_id is not None
+        assert second_request.run_id != execute_run_id
+
+        repair_run = await deployment.kernel.get_run(task.task_id, second_request.run_id)
+        assert repair_run.status is RunStatus.SUCCEEDED
+        assert repair_run.run.subject_type == "step"
+        assert subject_b.subject_id in repair_run.result_ids
+
+        repair_created = [
+            event
+            for event in await deployment.kernel.history(task.task_id)
+            if event.event_type == "run.created"
+            and event.provenance is not None
+            and event.provenance.source == VERIFICATION_REPAIR_SOURCE
+        ]
+        assert len(repair_created) == 1
+        assert repair_created[0].subject_id == second_request.run_id
+        assert len(provider.review_calls) == 4
 
     asyncio.run(scenario())
