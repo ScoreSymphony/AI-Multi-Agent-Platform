@@ -10,6 +10,7 @@ from ai_multi_agent_platform.adapters.mcp_tasks import (
     MCP_TASKS_PROTOCOL_REVISION,
     InMemoryMCPTaskBindingStore,
     MCPImmediateToolResult,
+    MCPTaskBinding,
     MCPTaskCallResult,
     MCPTaskSnapshot,
     MCPTaskStarted,
@@ -158,10 +159,10 @@ class _SettlingBindStore(InMemoryMCPTaskBindingStore):
         super().__init__()
         self.bind_started = asyncio.Event()
 
-    async def bind(self, binding):  # type: ignore[no-untyped-def]
+    async def bind(self, binding: MCPTaskBinding) -> MCPTaskBinding:
         stored = await super().bind(binding)
         self.bind_started.set()
-        await asyncio.Future()
+        await asyncio.Future[None]()
         return stored
 
 
