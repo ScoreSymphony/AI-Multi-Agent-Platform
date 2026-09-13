@@ -244,6 +244,8 @@ Exercise and retain redacted evidence for:
 
 - share/service credential rotation where the chosen profile supports it;
 - overlay identity/environment revocation;
+- revocation while an already-established transport/session exists, including an invocation attempt
+  after revocation has become effective so stale-session access is measured rather than assumed;
 - restart persistence for the chosen persistent-share lifecycle;
 - absence of credentials in Connection serialization, canonical state, logs and evidence;
 - process-argv exposure of the resolved share token or the exact mitigation that removes it.
@@ -259,6 +261,12 @@ Run all mandatory cases:
 - `backend_restart`
 - `client_restart`
 - `network_partition_reconnect`
+- `established_session_revocation_fails_closed`: revoke the relevant transport identity/share while
+  the transport/session is established; after the provider's documented effective-revocation point,
+  prove the stale session can no longer invoke the backend and record any accepted propagation window;
+- `service_removal_reconfiguration_fails_closed`: remove or reconfigure the exposed service while a
+  client path exists; prove the old path fails closed and capture the recovery behavior after the
+  intended service configuration is restored/replaced;
 - `node_b_unavailable_before_invocation`
 - `node_b_lost_during_invocation`
 - `no_duplicate_side_effect_after_retry`
