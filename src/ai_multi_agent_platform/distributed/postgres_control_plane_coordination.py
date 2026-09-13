@@ -110,9 +110,9 @@ class PostgresCoordinationProvider:
             failure = worker.exception()
             if failure is not None:
                 if isinstance(failure, (LeadershipConflict, StaleFencingToken)):
-                    raise failure
+                    raise failure from None
                 if isinstance(failure, CoordinationUnavailable):
-                    raise failure
+                    raise failure from None
                 raise CoordinationUnavailable(
                     "PostgreSQL coordination backend is unavailable"
                 ) from None
@@ -296,7 +296,12 @@ def _load_psycopg_connect() -> ConnectionFactory:
         raise RuntimeError(
             "PostgreSQL HA coordination requires the optional 'ha-postgres' dependency"
         ) from None
-    return cast(ConnectionFactory, module.connect)
+    connection_factory = getattr(module, "connect", None)
+    if not callable(connection_factory):
+        raise RuntimeError(
+            "PostgreSQL HA coordination requires a compatible Psycopg installation"
+        ) from None
+    return cast(ConnectionFactory, connection_factory)
 
 
 def _validate_instance_id(instance_id: str) -> None:
