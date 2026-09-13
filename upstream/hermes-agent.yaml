@@ -35,4 +35,4 @@ recurring_paid_service_required: false
 update_review_method: "Compare proposed Hermes revision with the pinned commit; re-review license, programmatic API, /v1/runs status/cancel/approval semantics, auth/profile/security changes; update provenance/docs; run adapter, real-Hermes integration and full repository CI."
 exit_replacement_strategy: "Disable/remove the Hermes adapter and service, then select another Orchestrator/AgentOrchestratorMapper. Canonical Task/Run/Agent/Team/Plan/model/capability state requires no migration."
 adr: "None required while Hermes remains an optional subordinate adapter. Any move of canonical lifecycle/domain ownership into Hermes requires an ADR."
-notes: "Integrated through issue #8; Hermes Agent v0.21.2 compatibility and session/concurrency reliability are validated through issue #959; v0.21.2 evidence remains the rollback baseline."
+notes: "Integrated through issue #8; Hermes Agent v0.21.2 compatibility and session/concurrency reliability are validated through issue #959; v0.21.1 evidence remains the rollback baseline."
