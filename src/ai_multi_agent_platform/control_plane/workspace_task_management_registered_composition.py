@@ -8,7 +8,7 @@ and provides the one registry-aware command dispatch boundary used by later modu
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -124,7 +124,7 @@ class ControlPlane(_LinearControlPlane):
 
         result = await handler(context, resource_ref, effective_payload)
         _reject_private_payload(result)
-        normalized = cast(dict[str, JsonValue], result)
+        normalized = result
         for _, observer in self._command_observers:
             await observer(context, command, resource_ref, normalized)
         return normalized

@@ -480,7 +480,7 @@ class ControlPlane(_SearchCheckpointControlPlane):
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        return await handler(self, context, resource_ref, payload)
+        return cast(dict[str, JsonValue], await handler(self, context, resource_ref, payload))
 
     async def _authorize_automation_target(
         self,

@@ -190,7 +190,9 @@ class ControlPlaneASGI:
         if isinstance(control_plane, ControlPlane) and control_plane.terminal_sessions is not None:
             stream_sessions = cast(
                 TerminalSessionService,
-                _AuthorizedStreamSessions(control_plane, control_plane.terminal_sessions),
+                _AuthorizedStreamSessions(
+                    cast(Any, control_plane), control_plane.terminal_sessions
+                ),
             )
             terminal = TerminalSessionASGI(
                 base,

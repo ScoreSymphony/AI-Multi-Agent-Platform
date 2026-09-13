@@ -130,15 +130,27 @@ class ControlPlane(_NotificationControlPlane):
             project_id=notification.project_id,
         )
 
-    def register_resource_service(self, collection: str, service: ResourceService) -> None:
+    def register_resource_service(
+        self,
+        collection: str,
+        service: ResourceService,
+        *,
+        owner: str = "manual",
+    ) -> None:
         if self._notification_routes_locked and collection in _NOTIFICATION_COLLECTIONS:
             raise ValueError(f"cannot override canonical notification collection: {collection}")
-        super().register_resource_service(collection, service)
+        super().register_resource_service(collection, service, owner=owner)
 
-    def register_command(self, command: str, handler: CommandHandler) -> None:
+    def register_command(
+        self,
+        command: str,
+        handler: CommandHandler,
+        *,
+        owner: str = "manual",
+    ) -> None:
         if self._notification_routes_locked and command in _NOTIFICATION_COMMAND_SET:
             raise ValueError(f"cannot override canonical notification command: {command}")
-        super().register_command(command, handler)
+        super().register_command(command, handler, owner=owner)
 
 
 class ControlPlaneHTTP(_NotificationControlPlaneHTTP):

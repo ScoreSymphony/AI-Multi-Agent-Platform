@@ -97,17 +97,29 @@ class ControlPlane(_NotificationImplementationControlPlane):
             ),
         )
 
-    def register_resource_service(self, collection: str, service: ResourceService) -> None:
+    def register_resource_service(
+        self,
+        collection: str,
+        service: ResourceService,
+        *,
+        owner: str = "manual",
+    ) -> None:
         if self._capturing_notification_composition and collection in _NOTIFICATION_COLLECTIONS:
             self._captured_notification_resources[collection] = service
             return
-        super().register_resource_service(collection, service)
+        super().register_resource_service(collection, service, owner=owner)
 
-    def register_command(self, command: str, handler: CommandHandler) -> None:
+    def register_command(
+        self,
+        command: str,
+        handler: CommandHandler,
+        *,
+        owner: str = "manual",
+    ) -> None:
         if self._capturing_notification_composition and command in _NOTIFICATION_COMMANDS:
             self._captured_notification_commands[command] = handler
             return
-        super().register_command(command, handler)
+        super().register_command(command, handler, owner=owner)
 
 
 __all__ = [

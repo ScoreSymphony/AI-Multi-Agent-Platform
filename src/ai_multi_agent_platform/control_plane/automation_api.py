@@ -185,19 +185,31 @@ class ControlPlane(_BaseControlPlane):
     def automation_scheduler(self) -> ReferenceScheduler:
         return self._automation_scheduler
 
-    def register_resource_service(self, collection: str, service: ResourceService) -> None:
+    def register_resource_service(
+        self,
+        collection: str,
+        service: ResourceService,
+        *,
+        owner: str = "manual",
+    ) -> None:
         if collection in {AUTOMATION_COLLECTION, DELIVERY_COLLECTION}:
             raise ValueError(
                 f"extension collection conflicts with canonical automation route: {collection}"
             )
-        super().register_resource_service(collection, service)
+        super().register_resource_service(collection, service, owner=owner)
 
-    def register_command(self, command: str, handler: CommandHandler) -> None:
+    def register_command(
+        self,
+        command: str,
+        handler: CommandHandler,
+        *,
+        owner: str = "manual",
+    ) -> None:
         if command in AUTOMATION_COMMANDS:
             raise ValueError(
                 f"extension command conflicts with canonical automation command: {command}"
             )
-        super().register_command(command, handler)
+        super().register_command(command, handler, owner=owner)
 
     async def _create_task_from_automation(
         self,

@@ -291,19 +291,31 @@ class ControlPlane(_CurrentControlPlane):
             resource["metadata"] = cast(JsonValue, dict(state.task.metadata))
         return resource
 
-    def register_resource_service(self, collection: str, service: ResourceService) -> None:
+    def register_resource_service(
+        self,
+        collection: str,
+        service: ResourceService,
+        *,
+        owner: str = "manual",
+    ) -> None:
         if collection in CONVERSATION_COLLECTIONS and not self._installing_conversations:
             raise ValueError(
                 f"extension collection conflicts with canonical conversation route: {collection}"
             )
-        super().register_resource_service(collection, service)
+        super().register_resource_service(collection, service, owner=owner)
 
-    def register_command(self, command: str, handler: CommandHandler) -> None:
+    def register_command(
+        self,
+        command: str,
+        handler: CommandHandler,
+        *,
+        owner: str = "manual",
+    ) -> None:
         if command in _ALL_CONVERSATION_COMMANDS and not self._installing_conversations:
             raise ValueError(
                 f"extension command conflicts with canonical conversation command: {command}"
             )
-        super().register_command(command, handler)
+        super().register_command(command, handler, owner=owner)
 
 
 class ControlPlaneHTTP(_CurrentControlPlaneHTTP):

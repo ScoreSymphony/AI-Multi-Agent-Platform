@@ -277,8 +277,8 @@ class ControlPlane(
         self,
         handler: Any,
         *args: Any,
-    ) -> Any:
-        return await handler(self, *args)
+    ) -> dict[str, JsonValue]:
+        return cast(dict[str, JsonValue], await handler(self, *args))
 
     @staticmethod
     def _paginate_task_management(
