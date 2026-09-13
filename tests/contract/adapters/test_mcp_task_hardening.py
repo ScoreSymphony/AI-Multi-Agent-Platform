@@ -12,11 +12,11 @@ from ai_multi_agent_platform.adapters.mcp import (
     MCPToolProvider,
 )
 from ai_multi_agent_platform.adapters.mcp_tasks import (
+    InMemoryMCPTaskBindingStore,
     MCPTaskCallResult,
     MCPTaskSnapshot,
     MCPTaskStarted,
     MCPTaskStatus,
-    InMemoryMCPTaskBindingStore,
 )
 from ai_multi_agent_platform.capabilities import (
     CapabilityInvocation,
