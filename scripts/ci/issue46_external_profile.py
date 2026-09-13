@@ -19,6 +19,20 @@ def _run_pytest(*nodes: str) -> int:
     ).returncode
 
 
+def _checkout_revision(upstream: Path) -> str | None:
+    try:
+        completed = subprocess.run(
+            ("git", "rev-parse", "HEAD"),
+            cwd=upstream,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return completed.stdout.strip() or None
+
+
 def _hermes() -> int:
     upstream_value = os.getenv("HERMES_UPSTREAM_DIR")
     revision = os.getenv("HERMES_UPSTREAM_REVISION")
@@ -36,6 +50,14 @@ def _hermes() -> int:
             print(
                 "Hermes candidate profile requires HERMES_UPSTREAM_REVISION to match "
                 f"{_HERMES_CANDIDATE_ENV} exactly; expected {candidate_revision}, got {revision!r}",
+                file=sys.stderr,
+            )
+            return 2
+        actual_revision = _checkout_revision(upstream)
+        if actual_revision != candidate_revision:
+            print(
+                "Hermes candidate profile requires the source checkout HEAD to match the "
+                f"declared candidate exactly; expected {candidate_revision}, got {actual_revision!r}",
                 file=sys.stderr,
             )
             return 2
