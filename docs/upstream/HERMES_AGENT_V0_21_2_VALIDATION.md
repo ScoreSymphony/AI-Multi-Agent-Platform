@@ -4,9 +4,9 @@ Issue: #959
 
 ## Status
 
-Validation is in progress. The accepted production/default Hermes revision remains
-v0.21.1 until every required compatibility, reliability, regression and conformance
-gate has passed. No adoption decision has been issued yet.
+Validation is complete. The final adoption decision is `PASS_UPDATE`. Hermes Agent
+v0.21.2 at exact commit `939e45c91d751fadd94dcd1b873ac3cb44846213` is the accepted production/default revision. The
+previous v0.21.1 revision remains retained as the rollback baseline.
 
 ## Accepted baseline
 
@@ -106,17 +106,33 @@ therefore combines platform URL-namespace coverage with upstream's revision-boun
 profile/session database-ownership tests; it does not promote any Hermes profile state
 into canonical platform state.
 
-## Remaining gates before adoption
+## Decision
 
-The following evidence must still be green before `PASS_UPDATE` can be issued:
+Final result: **`PASS_UPDATE`**.
 
-1. the dedicated v0.21.2 candidate workflow;
-2. standard adapter/unit/static/package tests on the candidate branch;
-3. #19 deterministic evaluation/regression gate;
-4. #46 Hermes Scenario B against the exact candidate revision;
-5. required repository CI and security/dependency checks;
-6. final review of the candidate results and an explicit `PASS_UPDATE`, `DEFER` or
-   `REJECT` decision.
+Revision-bound pre-adoption evidence for `939e45c91d751fadd94dcd1b873ac3cb44846213`:
 
-Only after `PASS_UPDATE` may the canonical Hermes inventory, adapter pin, compatibility
-inventories and standard pinned-conformance workflow move from v0.21.1 to v0.21.2.
+- dedicated Hermes v0.21.2 candidate workflow `34759634674`: passed, including the
+  exact-upstream malformed-row, WAL/IOERR, competing-writer, reader/writer,
+  SessionDB/profile ownership and restart/dead-owner reliability matrix;
+- #46 Hermes Scenario B in the same candidate workflow: passed against the exact
+  candidate checkout and the non-Hermes reference executor path;
+- repository CI workflow `34759634728`: passed, including the full Pytest suite,
+  deterministic #19 evaluation/regression gate, static checks and package build;
+- CodeQL workflow `34759634698`: passed; repository-governance and test-layout
+  workflows for the same head also passed;
+- canonical ownership remained unchanged: Hermes-native run/session/profile IDs stay
+  namespaced adapter metadata, while Task/Run/Agent/Team/Plan/Step, authorization and
+  approvals remain platform-owned.
+
+The adapter's explicit profile URL namespace plus the upstream revision-bound
+SessionDB ownership, canonical-profile listing and launch-home isolation regressions
+cover the profile/session isolation claimed by the adapter. No broader multi-profile
+runtime authority is claimed.
+
+The accepted pin may therefore move to v0.21.2. The rollback target remains Hermes
+Agent v0.21.1 / tag `v2026.9.7` / `2237be355906fbe6065ce1815711eee52b2d646e` with its original validation and evidence
+artifacts retained unchanged.
+
+Promotion updates the governed pin, compatibility metadata, standard pinned Hermes
+conformance profile and integration documentation with this decision.

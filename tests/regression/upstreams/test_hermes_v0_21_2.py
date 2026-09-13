@@ -72,7 +72,7 @@ def _candidate_config(**overrides: object) -> HermesAdapterConfig:
     values: dict[str, object] = {
         "enabled": True,
         "pinned_revision": HERMES_V0_21_2_REVISION,
-        "compatibility_status": HermesCompatibilityStatus.UNVERIFIED_PIN,
+        "compatibility_status": HermesCompatibilityStatus.VERIFIED_PIN,
         "poll_interval_seconds": 0.001,
     }
     values.update(overrides)

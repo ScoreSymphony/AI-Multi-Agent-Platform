@@ -81,15 +81,16 @@ def _hermes() -> int:
     return _run_pytest(
         "tests/test_issue_8_hermes_adapter.py::"
         "test_hermes_agent_mapper_pins_agent_team_model_and_capability_contracts",
-        "tests/regression/upstreams/test_hermes_v0_21_1.py",
-        "tests/regression/upstreams/test_hermes_v0_21_1_completion.py",
         "tests/integration/upstreams/test_hermes_pinned.py::"
         "test_pinned_hermes_declares_required_run_lifecycle_surface",
         "tests/integration/upstreams/test_hermes_pinned.py::"
         "test_adapter_against_pinned_hermes_runs_api",
         "tests/integration/upstreams/test_hermes_pinned.py::"
         "test_kernel_uses_real_pinned_hermes_and_reference_executor",
-        "tests/integration/upstreams/test_hermes_v0_21_1_pinned_completion.py",
+        "tests/regression/upstreams/test_hermes_v0_21_2.py",
+        "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py",
+        "tests/integration/upstreams/test_hermes_v0_21_2_concurrency.py",
+        "tests/integration/upstreams/test_hermes_v0_21_2_restart.py",
     )
 
 

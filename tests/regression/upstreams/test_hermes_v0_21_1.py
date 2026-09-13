@@ -98,11 +98,10 @@ def _completed_output() -> str:
     )
 
 
-def test_repository_pin_is_exact_hermes_v0_21_1_commit() -> None:
-    assert HERMES_PINNED_REVISION == HERMES_V0_21_1_REVISION
-    config = HermesAdapterConfig(enabled=True)
-    assert config.pinned_revision == HERMES_V0_21_1_REVISION
-    assert config.compatibility_status.value == "verified_pin"
+def test_v0_21_1_revision_remains_distinct_rollback_baseline() -> None:
+    assert HERMES_PINNED_REVISION == "939e45c91d751fadd94dcd1b873ac3cb44846213"
+    assert HERMES_V0_21_1_REVISION == "2237be355906fbe6065ce1815711eee52b2d646e"
+    assert HERMES_V0_21_1_REVISION != HERMES_PINNED_REVISION
 
 
 @pytest.mark.parametrize(

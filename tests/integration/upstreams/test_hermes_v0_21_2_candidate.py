@@ -29,7 +29,6 @@ from ai_multi_agent_platform.domain import RunStatus, TaskStatus, new_id
 from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, ReferenceExecutor
 from ai_multi_agent_platform.kernel import PlatformKernel
 
-HERMES_V0_21_1_REVISION = "2237be355906fbe6065ce1815711eee52b2d646e"
 HERMES_V0_21_2_TAG = "v2026.9.11"
 HERMES_V0_21_2_REVISION = "939e45c91d751fadd94dcd1b873ac3cb44846213"
 
@@ -75,7 +74,7 @@ def _candidate_config(base_url: str) -> HermesAdapterConfig:
         enabled=True,
         base_url=base_url,
         pinned_revision=HERMES_V0_21_2_REVISION,
-        compatibility_status=HermesCompatibilityStatus.UNVERIFIED_PIN,
+        compatibility_status=HermesCompatibilityStatus.VERIFIED_PIN,
         request_timeout_seconds=5.0,
         plan_timeout_seconds=15.0,
         poll_interval_seconds=0.01,
@@ -124,16 +123,16 @@ class BarrierPlannerAgent:
         return {"final_response": _planner_output(user_message)}
 
 
-def test_candidate_is_exact_and_does_not_preemptively_replace_accepted_pin() -> None:
+def test_accepted_v0_21_2_revision_is_exact_and_verified() -> None:
     _candidate_upstream()
-    assert HERMES_PINNED_REVISION == HERMES_V0_21_1_REVISION
+    assert HERMES_PINNED_REVISION == HERMES_V0_21_2_REVISION
     candidate = HermesAdapterConfig(
         enabled=True,
         pinned_revision=HERMES_V0_21_2_REVISION,
-        compatibility_status=HermesCompatibilityStatus.UNVERIFIED_PIN,
+        compatibility_status=HermesCompatibilityStatus.VERIFIED_PIN,
     )
     assert candidate.pinned_revision == HERMES_V0_21_2_REVISION
-    assert candidate.compatibility_status is HermesCompatibilityStatus.UNVERIFIED_PIN
+    assert candidate.compatibility_status is HermesCompatibilityStatus.VERIFIED_PIN
 
 
 def test_candidate_profile_prefix_stays_namespaced_external_routing() -> None:
@@ -143,7 +142,7 @@ def test_candidate_profile_prefix_stays_namespaced_external_routing() -> None:
             base_url="http://127.0.0.1:8642",
             profile="profile with/slash",
             pinned_revision=HERMES_V0_21_2_REVISION,
-            compatibility_status=HermesCompatibilityStatus.UNVERIFIED_PIN,
+            compatibility_status=HermesCompatibilityStatus.VERIFIED_PIN,
         ),
         secret_resolver=lambda _: None,
     )
@@ -485,7 +484,7 @@ def test_candidate_status_mapping_remains_fail_closed(
             HermesAdapterConfig(
                 enabled=True,
                 pinned_revision=HERMES_V0_21_2_REVISION,
-                compatibility_status=HermesCompatibilityStatus.UNVERIFIED_PIN,
+                compatibility_status=HermesCompatibilityStatus.VERIFIED_PIN,
                 poll_interval_seconds=0.001,
             ),
             transport=Transport(),

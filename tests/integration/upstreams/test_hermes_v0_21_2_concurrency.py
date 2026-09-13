@@ -64,7 +64,7 @@ def _config(base_url: str) -> HermesAdapterConfig:
         enabled=True,
         base_url=base_url,
         pinned_revision=HERMES_V0_21_2_REVISION,
-        compatibility_status=HermesCompatibilityStatus.UNVERIFIED_PIN,
+        compatibility_status=HermesCompatibilityStatus.VERIFIED_PIN,
         request_timeout_seconds=5.0,
         plan_timeout_seconds=15.0,
         poll_interval_seconds=0.01,
