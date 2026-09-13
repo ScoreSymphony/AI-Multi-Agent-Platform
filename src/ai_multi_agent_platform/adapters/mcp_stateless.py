@@ -315,7 +315,11 @@ class MCPStatelessHTTPClient(MCPClient):
             response = await self._send(method, params, client_extensions=client_extensions)
             error = response.payload.get("error")
 
-        if isinstance(error, Mapping) and error.get("code") == _HEADER_MISMATCH and method == "tools/call":
+        if (
+            isinstance(error, Mapping)
+            and error.get("code") == _HEADER_MISMATCH
+            and method == "tools/call"
+        ):
             # The modern transport recommends refreshing tools/list because x-mcp-header metadata
             # can change independently of an already-cached tool definition. Retry exactly once
             # after that authoritative schema refresh.
@@ -489,8 +493,8 @@ class MCPStatelessHTTPClient(MCPClient):
                             "expected_type": parameter.value_type,
                         },
                     ) from exc
-                headers[f"{_MCP_PARAM_HEADER_PREFIX}{parameter.header_name}"] = _encode_header_value(
-                    text
+                headers[f"{_MCP_PARAM_HEADER_PREFIX}{parameter.header_name}"] = (
+                    _encode_header_value(text)
                 )
         return headers
 
