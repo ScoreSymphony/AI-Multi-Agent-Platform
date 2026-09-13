@@ -21,7 +21,7 @@ from ai_multi_agent_platform.deployment.reference_multi_agent import (
 )
 from ai_multi_agent_platform.domain import OwnerRef, RunStatus, TaskStatus
 from ai_multi_agent_platform.models import ModelCapabilities, ModelConfiguration, ModelLocation
-from ai_multi_agent_platform.planning import ProposalStatus
+from ai_multi_agent_platform.planning import PlanningTrigger, ProposalStatus
 from ai_multi_agent_platform.security import (
     ActorIdentity,
     ActorType,
@@ -33,6 +33,7 @@ from ai_multi_agent_platform.testing import FakeModelProvider
 from ai_multi_agent_platform.verification import (
     CompletionState,
     ReviewerIndependence,
+    VerificationAuditEventType,
     VerificationOutcome,
     VerificationPolicy,
     VerificationStage,
@@ -362,6 +363,26 @@ def test_reference_golden_path_non_pass_verification_cannot_complete_task(
         history = await deployment.kernel.history(task.task_id)
         assert "task.succeeded" not in [event.event_type for event in history]
         assert len(provider.review_calls) == 3
+
+        verification_event = next(
+            event
+            for event in deployment.verification.audit_history(
+                task_id=task.task_id,
+                verification_id=request.verification_id,
+            )
+            if event.event_type is VerificationAuditEventType.RESULT_RECORDED
+        )
+        replacement = await deployment.replanning.from_verification(verification_event)
+        expected_trigger = (
+            PlanningTrigger.VERIFICATION_FAILED
+            if outcome is VerificationOutcome.FAIL
+            else PlanningTrigger.VERIFICATION_INCONCLUSIVE
+        )
+        assert replacement.status is ProposalStatus.VALIDATED
+        assert replacement.proposal.trigger is expected_trigger
+        assert replacement.proposal.base_plan_id == activated.activation_plan_id
+        assert verification_event.event_id in replacement.proposal.evidence_refs
+        assert replacement.proposal.plan_revision > 1
 
     asyncio.run(scenario())
 
