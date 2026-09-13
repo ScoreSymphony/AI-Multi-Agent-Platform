@@ -62,7 +62,7 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
         if not _has_reference_roles(request):
             return await super().propose(request)
 
-        reused = ()
+        reused: tuple[str, ...] = ()
         if request.prior_plan is not None:
             reused = request.prior_plan.completed_step_ids
 
