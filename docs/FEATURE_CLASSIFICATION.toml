@@ -104,13 +104,13 @@ user_signaling = "documentation"
 
 [[feature]]
 id = "workspaces-data"
-name = "Workspaces, files and data boundaries"
-owners = ["workspaces", "data"]
+name = "Projects, Workspaces, files and data boundaries"
+owners = ["domain", "workspaces", "data"]
 role = "core"
 stability = "beta"
-public_surfaces = ["Workspace resources", "file/data provider contracts", "Artifact/Result data boundaries"]
+public_surfaces = ["Project resources", "Workspace resources", "file/data provider contracts", "Artifact/Result data boundaries"]
 docs = ["docs/DOMAIN_MODEL.md", "docs/CONTRACTS.md"]
-compatibility = "Canonical identity and ownership are preserved; public resource/provider details may evolve with migration guidance."
+compatibility = "Canonical Project/Workspace identity and ownership are preserved; public resource/provider details may evolve with migration guidance."
 user_signaling = "documentation"
 
 [[feature]]
