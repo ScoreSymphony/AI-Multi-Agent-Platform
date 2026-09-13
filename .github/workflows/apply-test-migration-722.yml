@@ -138,6 +138,8 @@ jobs:
           roots = (Path(".github"), Path("src"), Path("scripts"), Path("docs"))
           excluded = {
               Path("docs/TEST_MIGRATION_722_FINAL.md"),
+              Path(".github/workflows/apply-test-migration-722.yml"),
+              Path("scripts/ci/apply_test_migration_722_residual.py"),
           }
           stale = []
           for root in roots:
