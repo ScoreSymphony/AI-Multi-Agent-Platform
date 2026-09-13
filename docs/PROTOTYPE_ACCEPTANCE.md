@@ -47,7 +47,7 @@ Reconstructs the single-node/reference services against durable state and checks
 | usable local/self-hosted model without paid service | `local-ai` loopback OpenAI-compatible check + #250 model onboarding | #10 / #250 |
 | bounded canonical Task/Run/Result execution | reference single-node smoke | #39 / #6 |
 | observable capability/tool evidence | reference single-node smoke | #12 / #16 |
-| high-risk action requires exact approval | `test_issue_15_final_boundaries.py` | #15 |
+| high-risk action requires exact approval | `tests/integration/security/test_authorization_final_boundaries.py` + `tests/unit/authorization/test_approval_project_scope.py` + `tests/contract/security/test_control_plane_authorization_vocabulary.py` | #15 |
 | verification independently gates concrete completion | `test_issue_86_kernel_gate.py` | #86 |
 | Memory create/retrieve/provenance/delete/not-found lifecycle | #252 exact Memory acceptance test | #251 / #252 |
 | Knowledge registration/update/ingest/reindex/removal lifecycle | `test_issue_251_lifecycle_commands.py` | #251 |

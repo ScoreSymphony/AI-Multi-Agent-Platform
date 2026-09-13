@@ -205,7 +205,11 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             "F",
             "#15 authorization/approval",
             "approval is exact-action bound and changed-payload reuse is rejected",
-            _pytest("tests/test_issue_15_final_boundaries.py"),
+            _pytest(
+                "tests/integration/security/test_authorization_final_boundaries.py",
+                "tests/unit/authorization/test_approval_project_scope.py",
+                "tests/contract/security/test_control_plane_authorization_vocabulary.py",
+            ),
         ),
         ConformanceScenario(
             "H",
