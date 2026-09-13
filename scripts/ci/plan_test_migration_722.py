@@ -78,15 +78,50 @@ DOMAIN_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("organizations", ("organization", "ownership", "subject_integrity")),
     (
         "application_distribution",
-        ("application_distribution", "application_build", "remote_build", "build_worker", "placement"),
+        (
+            "application_distribution",
+            "application_build",
+            "remote_build",
+            "build_worker",
+            "placement",
+        ),
     ),
     ("search", ("search",)),
     ("verification", ("verification", "verifier", "reviewer", "repair")),
-    ("security", ("security", "authorization", "approval", "secret", "pipelock", "redaction")),
-    ("models", ("model", "provider", "inference", "litellm", "openai", "sglang", "routing_profile")),
-    ("distributed", ("distributed", "worker", "message_transport", "failover", "ha_", "node_reboot", "multi_process")),
+    (
+        "security",
+        ("security", "authorization", "approval", "secret", "pipelock", "redaction"),
+    ),
+    (
+        "models",
+        ("model", "provider", "inference", "litellm", "openai", "sglang", "routing_profile"),
+    ),
+    (
+        "distributed",
+        (
+            "distributed",
+            "worker",
+            "message_transport",
+            "failover",
+            "ha_",
+            "node_reboot",
+            "multi_process",
+        ),
+    ),
     ("deployment", ("deployment", "single_node", "server_")),
-    ("recovery", ("backup", "restore", "recovery", "restart", "durable", "persistence", "migration", "replacement_machine")),
+    (
+        "recovery",
+        (
+            "backup",
+            "restore",
+            "recovery",
+            "restart",
+            "durable",
+            "persistence",
+            "migration",
+            "replacement_machine",
+        ),
+    ),
     ("planning", ("planning", "plan_")),
     ("goals", ("goal",)),
     ("automation", ("automation",)),
@@ -110,11 +145,33 @@ DOMAIN_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 SUITE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("performance", ("benchmark", "pressure", "performance", "scale", "latency", "throughput", "endurance", "stress", "sweep")),
+    (
+        "performance",
+        (
+            "benchmark",
+            "pressure",
+            "performance",
+            "scale",
+            "latency",
+            "throughput",
+            "endurance",
+            "stress",
+            "sweep",
+        ),
+    ),
     ("e2e", ("_e2e", "end_to_end", "public_production")),
-    ("contract", ("contract", "schema", "conformance", "protocol", "invariant", "manifest", "version_constraint")),
-    ("release", ("release_maintenance", "upgrade_lifecycle", "upgrade_recovery", "canonical_runtime_assets")),
-    ("regression", ("regression", "hardening", "final_", "completion", "review", "reopened", "reaudit", "gaps", "followup", "fixes")),
+    (
+        "contract",
+        ("contract", "schema", "conformance", "protocol", "invariant", "manifest", "version_constraint"),
+    ),
+    (
+        "release",
+        ("release_maintenance", "upgrade_lifecycle", "upgrade_recovery", "canonical_runtime_assets"),
+    ),
+    (
+        "regression",
+        ("regression", "hardening", "final_", "completion", "review", "reopened", "reaudit", "gaps", "followup", "fixes"),
+    ),
 )
 
 
@@ -123,11 +180,7 @@ def all_modules() -> list[Path]:
 
 
 def is_candidate(path: Path) -> bool:
-    return (
-        path.parent == TESTS
-        or ISSUE_NAME.fullmatch(path.name) is not None
-        or path.parent == TESTS and path.name in OTHER_HISTORICAL
-    )
+    return path.parent == TESTS or ISSUE_NAME.fullmatch(path.name) is not None
 
 
 def clean_name(path: Path) -> str:
@@ -181,15 +234,34 @@ def test_function_names(path: Path) -> list[str]:
     return names
 
 
-def mixed_domains(path: Path) -> list[str]:
-    domains = {
-        infer_domain(name)
+def function_domain_counts(path: Path) -> Counter[str]:
+    return Counter(
+        domain
         for name in test_function_names(path)
-        if infer_domain(name) != "platform"
-    }
-    # Only flag clearly cross-domain modules. Two domains often reflect an intentional
-    # integration boundary; three or more is a strong signal that splitting is warranted.
-    return sorted(domains) if len(domains) >= 3 else []
+        if (domain := infer_domain(name)) != "platform"
+    )
+
+
+def primary_function_domain(path: Path) -> str:
+    counts = function_domain_counts(path)
+    if not counts:
+        return "platform"
+    return counts.most_common(1)[0][0]
+
+
+def mixed_domains(path: Path) -> list[str]:
+    # A file with a clear domain in its own name is allowed to exercise cross-cutting
+    # security/recovery/storage concerns. We only force a split when the historical
+    # filename itself is generic and multiple responsibilities independently dominate
+    # the contained test functions.
+    if path.name in ROOT_OVERRIDES or existing_domain(path) is not None:
+        return []
+    cleaned_stem = PurePosixPath(clean_name(path)).stem
+    if infer_domain(cleaned_stem) != "platform":
+        return []
+    counts = function_domain_counts(path)
+    substantial = sorted(domain for domain, count in counts.items() if count >= 2)
+    return substantial if len(substantial) >= 2 else []
 
 
 def desired_destination(path: Path) -> Path:
@@ -200,6 +272,8 @@ def desired_destination(path: Path) -> Path:
     if domain is None:
         override = ROOT_OVERRIDES.get(path.name)
         domain = override[1] if override else infer_domain(stem)
+    if domain == "platform":
+        domain = primary_function_domain(path)
     return TESTS / suite / domain / cleaned
 
 
@@ -215,7 +289,9 @@ def main() -> int:
         domains = mixed_domains(path)
         if domains:
             mixed[path.as_posix()] = domains
-            residual[path.as_posix()] = "mixed test functions span 3+ detectable domains; split required"
+            residual[path.as_posix()] = (
+                "generic historical module has 2+ substantial test-function domains; split required"
+            )
             continue
         planned[path] = desired_destination(path)
 
