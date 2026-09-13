@@ -314,7 +314,9 @@ def test_connector_repository_contract_parity_and_restart_durability(tmp_path: P
     resource = _resource(connection.id, "alpha")
     checkpoint = _checkpoint(connection.id)
 
-    async def exercise(repository: InMemoryConnectorRepository | SqliteConnectorRepository) -> tuple[
+    async def exercise(
+        repository: InMemoryConnectorRepository | SqliteConnectorRepository,
+    ) -> tuple[
         tuple[ConnectorDefinition, ...],
         tuple[Connection, ...],
         tuple[ExternalResourceReference, ...],
