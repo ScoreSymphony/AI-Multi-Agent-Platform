@@ -70,6 +70,7 @@ def _report(*, complete: bool = True) -> dict[str, Any]:
         "secret_handling": {
             "secret_references_only": True,
             "plaintext_secret_leak_detected": False,
+            "process_argv_secret_exposure_detected": False,
         },
         "identity_authorization_results": [
             _result(case_id) for case_id in sorted(IDENTITY_AUTHORIZATION_CASES)
@@ -172,6 +173,16 @@ def test_plaintext_secret_leak_blocks_decision() -> None:
 
     assert readiness.decision_ready is False
     assert "plaintext credential material leaked into retained evidence" in readiness.blockers
+
+
+def test_process_argv_secret_exposure_blocks_decision() -> None:
+    report = _report(complete=False)
+    report["secret_handling"]["process_argv_secret_exposure_detected"] = True
+
+    readiness = assess_private_mcp_transport_evaluation(report)
+
+    assert readiness.decision_ready is False
+    assert "credential material is exposed through process argv" in readiness.blockers
 
 
 def test_latency_requires_repeatable_sample_count() -> None:
