@@ -8,7 +8,7 @@ from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from typing import Protocol, Self, TypeVar, cast
 
-from ai_multi_agent_platform.high_availability.contracts import (
+from .control_plane_ha import (
     CoordinationLease,
     CoordinationState,
     CoordinationUnavailable,
@@ -23,21 +23,15 @@ _T = TypeVar("_T")
 
 class _Cursor(Protocol):
     def execute(self, query: str, params: Sequence[object] | None = None) -> Self: ...
-
     def fetchone(self) -> Sequence[object] | None: ...
-
     def __enter__(self) -> Self: ...
-
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None: ...
 
 
 class _Connection(Protocol):
     def cursor(self) -> _Cursor: ...
-
     def commit(self) -> None: ...
-
     def rollback(self) -> None: ...
-
     def close(self) -> None: ...
 
 
@@ -45,13 +39,7 @@ ConnectionFactory = Callable[[str], _Connection]
 
 
 class PostgresCoordinationProvider:
-    """Self-hostable PostgreSQL implementation of the existing HA coordination contract.
-
-    PostgreSQL is an optional adapter, not canonical HA architecture. Every authority decision is
-    serialized by a transactional row lock and uses PostgreSQL's server clock for lease expiry.
-    The DSN is retained only as private adapter configuration and is never included in canonical
-    state or translated error messages.
-    """
+    """Replaceable PostgreSQL implementation of the Control Plane fencing contract."""
 
     def __init__(
         self,
@@ -69,33 +57,25 @@ class PostgresCoordinationProvider:
         self._connect = connect or _load_psycopg_connect()
 
     async def initialize(self) -> None:
-        """Create the adapter-owned coordination table and singleton lease row.
-
-        Production deployments may run this once with a bootstrap/migration identity and then use a
-        narrower runtime database identity for ordinary coordination operations.
-        """
-
         await self._run(self._initialize_schema)
 
     async def acquire(self, instance_id: str, *, ttl: timedelta) -> CoordinationLease:
         _validate_instance_id(instance_id)
         ttl_seconds = _ttl_seconds(ttl)
-        return await self._run(
-            lambda connection: self._acquire(connection, instance_id, ttl_seconds)
-        )
+        return await self._run(lambda conn: self._acquire(conn, instance_id, ttl_seconds))
 
     async def renew(self, token: FencingToken, *, ttl: timedelta) -> CoordinationLease:
         ttl_seconds = _ttl_seconds(ttl)
-        return await self._run(lambda connection: self._renew(connection, token, ttl_seconds))
+        return await self._run(lambda conn: self._renew(conn, token, ttl_seconds))
 
     async def release(self, token: FencingToken) -> None:
-        await self._run(lambda connection: self._release(connection, token))
+        await self._run(lambda conn: self._release(conn, token))
 
     async def inspect(self) -> CoordinationState:
         return await self._run(self._inspect)
 
     async def assert_fence(self, token: FencingToken) -> None:
-        await self._run(lambda connection: self._assert_fence(connection, token))
+        await self._run(lambda conn: self._assert_fence(conn, token))
 
     async def _run(self, operation: Callable[[_Connection], _T]) -> _T:
         worker = asyncio.create_task(asyncio.to_thread(self._run_sync, operation))
@@ -109,17 +89,16 @@ class PostgresCoordinationProvider:
                     continue
             failure = worker.exception()
             if failure is not None:
-                if isinstance(failure, (LeadershipConflict, StaleFencingToken)):
-                    raise failure from None
-                if isinstance(failure, CoordinationUnavailable):
+                if isinstance(
+                    failure,
+                    (LeadershipConflict, StaleFencingToken, CoordinationUnavailable),
+                ):
                     raise failure from None
                 raise CoordinationUnavailable(
                     "PostgreSQL coordination backend is unavailable"
                 ) from None
             raise
-        except (LeadershipConflict, StaleFencingToken):
-            raise
-        except CoordinationUnavailable:
+        except (LeadershipConflict, StaleFencingToken, CoordinationUnavailable):
             raise
         except Exception:
             raise CoordinationUnavailable(
@@ -149,12 +128,9 @@ class PostgresCoordinationProvider:
                     acquired_at TIMESTAMPTZ NULL,
                     expires_at TIMESTAMPTZ NULL,
                     CHECK (
-                        (owner_instance_id IS NULL
-                         AND acquired_at IS NULL
-                         AND expires_at IS NULL)
+                        (owner_instance_id IS NULL AND acquired_at IS NULL AND expires_at IS NULL)
                         OR
-                        (owner_instance_id IS NOT NULL
-                         AND acquired_at IS NOT NULL
+                        (owner_instance_id IS NOT NULL AND acquired_at IS NOT NULL
                          AND expires_at IS NOT NULL)
                     )
                 )
@@ -186,10 +162,7 @@ class PostgresCoordinationProvider:
             return _decode_state_row(cursor.fetchone())
 
     def _acquire(
-        self,
-        connection: _Connection,
-        instance_id: str,
-        ttl_seconds: float,
+        self, connection: _Connection, instance_id: str, ttl_seconds: float
     ) -> CoordinationLease:
         epoch, owner, acquired_at, expires_at, now = self._locked_state(connection)
         if owner is not None and expires_at is not None and now < expires_at:
@@ -201,7 +174,6 @@ class PostgresCoordinationProvider:
                 raise CoordinationUnavailable("PostgreSQL coordination state is inconsistent")
             return _lease(owner, epoch, acquired_at, expires_at)
 
-        new_epoch = epoch + 1
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -213,15 +185,12 @@ class PostgresCoordinationProvider:
                 WHERE lease_name = %s
                 RETURNING epoch, owner_instance_id, acquired_at, expires_at
                 """,
-                (new_epoch, instance_id, ttl_seconds, self._lease_name),
+                (epoch + 1, instance_id, ttl_seconds, self._lease_name),
             )
             return _decode_lease_row(cursor.fetchone())
 
     def _renew(
-        self,
-        connection: _Connection,
-        token: FencingToken,
-        ttl_seconds: float,
+        self, connection: _Connection, token: FencingToken, ttl_seconds: float
     ) -> CoordinationLease:
         epoch, owner, acquired_at, expires_at, now = self._locked_state(connection)
         _require_current(token, epoch, owner, expires_at, now)
@@ -246,9 +215,7 @@ class PostgresCoordinationProvider:
             cursor.execute(
                 """
                 UPDATE ai_map_control_plane_coordination
-                SET owner_instance_id = NULL,
-                    acquired_at = NULL,
-                    expires_at = NULL
+                SET owner_instance_id = NULL, acquired_at = NULL, expires_at = NULL
                 WHERE lease_name = %s
                 """,
                 (self._lease_name,),
@@ -296,12 +263,12 @@ def _load_psycopg_connect() -> ConnectionFactory:
         raise RuntimeError(
             "PostgreSQL HA coordination requires the optional 'ha-postgres' dependency"
         ) from None
-    connection_factory = getattr(module, "connect", None)
-    if not callable(connection_factory):
+    connect = getattr(module, "connect", None)
+    if not callable(connect):
         raise RuntimeError(
             "PostgreSQL HA coordination requires a compatible Psycopg installation"
         ) from None
-    return cast(ConnectionFactory, connection_factory)
+    return cast(ConnectionFactory, connect)
 
 
 def _validate_instance_id(instance_id: str) -> None:
@@ -320,12 +287,13 @@ def _decode_state_row(
 ) -> tuple[int, str | None, datetime | None, datetime | None, datetime]:
     if row is None or len(row) != 5:
         raise CoordinationUnavailable("PostgreSQL coordination state is missing")
-    epoch = _as_int(row[0])
-    owner = _as_optional_str(row[1])
-    acquired_at = _as_optional_datetime(row[2])
-    expires_at = _as_optional_datetime(row[3])
-    now = _as_datetime(row[4])
-    return epoch, owner, acquired_at, expires_at, now
+    return (
+        _as_int(row[0]),
+        _as_optional_str(row[1]),
+        _as_optional_datetime(row[2]),
+        _as_optional_datetime(row[3]),
+        _as_datetime(row[4]),
+    )
 
 
 def _decode_lease_row(row: Sequence[object] | None) -> CoordinationLease:
@@ -357,12 +325,7 @@ def _require_current(
     expires_at: datetime | None,
     now: datetime,
 ) -> None:
-    if (
-        owner != token.instance_id
-        or epoch != token.epoch
-        or expires_at is None
-        or now >= expires_at
-    ):
+    if owner != token.instance_id or epoch != token.epoch or expires_at is None or now >= expires_at:
         raise StaleFencingToken(
             "leadership fencing token is stale or belongs to another Control Plane instance"
         )
