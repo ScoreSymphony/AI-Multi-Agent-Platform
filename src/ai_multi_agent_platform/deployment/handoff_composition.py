@@ -102,7 +102,7 @@ class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):
         granted_permissions: frozenset[str] = frozenset(),
         available_worker_capabilities: frozenset[str] = frozenset(),
     ) -> HandoffConsumerExecution:
-        handoff = self.service.get_handoff(handoff_id, revision)
+        handoff = await self.service.async_get_handoff(handoff_id, revision)
         task = await self.tasks.get_task(handoff.task_id)
         operation = _bind_handoff_task_project_scope(operation, task.task.project_id)
         runtime_context = await self.consume_handoff(
@@ -115,7 +115,10 @@ class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):
         )
         execution_agent, team_revision = self._execution_identity(consumer, consumer_agent)
         handoff = runtime_context.handoff
-        durable_adapter = DurableConsumedHandoffContextAdapter(self.repository, self.agents)
+        durable_adapter = DurableConsumedHandoffContextAdapter(
+            self.runtime_repository,
+            self.agents,
+        )
         bundle = await self.context_assembly.assemble(
             ContextAssemblyRequest(
                 task_id=handoff.task_id,
