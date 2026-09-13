@@ -37,11 +37,14 @@ from ai_multi_agent_platform.portability.workflow import PortabilityWorkflowServ
 from ai_multi_agent_platform.security import AuthorizationGate
 
 from .approval_decision_composition import ControlPlane as _ApprovalControlPlane
-from .extensions import _singular, _validate_resources
+from .extensions import ControlPlaneModule, _singular, _validate_resources
 from .goal_contract import goal_command_handlers, goal_resource_services
 from .models import PageQuery, RequestContext, paginate
 from .module_registry import install_control_plane_modules
 from .portability_module import portability_control_plane_module
+
+GOAL_MODULE = "goals"
+DECISION_RECORD_MODULE = "decision-records"
 
 
 class ControlPlane(_ApprovalControlPlane):
@@ -75,10 +78,16 @@ class ControlPlane(_ApprovalControlPlane):
             EventSourcedGoalRepository(self._events),
             task_creator=KernelGoalTaskCreator(self._kernel),
         )
-        for collection, service in goal_resource_services(self.goals).items():
-            self.register_resource_service(collection, service)
-        for command, handler in goal_command_handlers(self.goals).items():
-            self.register_command(command, handler)
+        install_control_plane_modules(
+            self,
+            (
+                ControlPlaneModule(
+                    name=GOAL_MODULE,
+                    resource_services=goal_resource_services(self.goals),
+                    command_handlers=goal_command_handlers(self.goals),
+                ),
+            ),
+        )
 
         async def reconcile_goal_task_event(event: PlatformEvent) -> None:
             await reconcile_goal_task_terminal_event(self.goals, event)
@@ -108,10 +117,16 @@ class ControlPlane(_ApprovalControlPlane):
                 decision_repo = SqliteDecisionRepository(state_path)
         if decision_repo is not None:
             decisions = DecisionService(decision_repo)
-            for collection, service in decision_record_resource_services(decisions).items():
-                self.register_resource_service(collection, service)
-            for command, handler in decision_record_command_handlers(decisions).items():
-                self.register_command(command, handler)
+            install_control_plane_modules(
+                self,
+                (
+                    ControlPlaneModule(
+                        name=DECISION_RECORD_MODULE,
+                        resource_services=decision_record_resource_services(decisions),
+                        command_handlers=decision_record_command_handlers(decisions),
+                    ),
+                ),
+            )
             self.decisions = decisions
 
     @property
@@ -184,4 +199,4 @@ def _default_decision_state_path(gate: AuthorizationGate) -> Path | None:
     return Path(database_path).with_name("decisions.sqlite3")
 
 
-__all__ = ["ControlPlane"]
+__all__ = ["ControlPlane", "DECISION_RECORD_MODULE", "GOAL_MODULE"]
