@@ -1,11 +1,16 @@
 # Real two-VPS private-tunnel distributed acceptance
 
-Issue: #562
+Repository preparation: #562  
+Real reference-host execution and retained live evidence: #829
 
-> Dependency status: #562 declares #46 as a hard dependency. This runbook and its reusable evidence
-> harness may be prepared before #46 closes, but a repository-only run or this document alone does
-> **not** complete #562. Final acceptance requires execution on two independent operator-controlled
-> VPS hosts after the dependency is resolved (or the issue dependency is explicitly revised).
+> Ownership: #562 owns this credential-free runbook, the reusable acceptance harness, evidence
+> schemas/validation and the #46 conformance bridge. #829 owns executing this procedure on two
+> independent operator-controlled VPS/reference hosts, including the real tunnel, network failure
+> and recovery exercises, security-negative checks and retention of the finalized sanitized report.
+
+The `issue562-*` report/schema names remain stable because they identify the repository contract
+introduced by #562. They are compatibility/provenance identifiers and do **not** mean that physical
+host execution is still owned by #562.
 
 This runbook validates the already implemented #14/#240 distributed architecture across a real
 network boundary. It does not define a new Node/Worker model, scheduler, transport, authentication
@@ -249,7 +254,7 @@ CLI is API-first and uses the same Task/Run lifecycle regardless of local or rem
 
 ```bash
 platform task create \
-  --title "Issue 562 remote reference job" \
+  --title "Issue 829 two-VPS reference job" \
   --objective "Execute the deterministic reference path on the eligible remote Worker" \
   --owner-type user \
   --owner-id operator
@@ -412,7 +417,7 @@ Do not retain a rejected bearer token or Authorization header as evidence.
 
 ## Final sanitized report
 
-After all real-host phases pass, produce the compact report:
+After all real-host phases pass under #829, produce the compact report:
 
 ```bash
 python scripts/acceptance/two_vps_private_tunnel.py finalize \
@@ -451,9 +456,11 @@ claim this real-two-VPS profile only when the real report exists and passes. Abs
 evidence must remain explicit `not-run`/unsupported evidence rather than being inferred from the
 simulated two-node suite.
 
-Because #562 currently declares #46 as a hard dependency, integrating the real report into a final
-#46 pre-closure audit requires the dependency relationship to be explicitly revised first. Do not
-create an implicit cycle by treating this runbook as an exception.
+#562 owns the repository-side bridge that validates and promotes this evidence into #46.
+#829 owns producing and retaining the real-host report consumed by that bridge. The two issues are
+therefore complementary rather than a close-order dependency cycle: completing the repository-side
+#562 preparation does not claim that #829 live acceptance has run, and #829 cannot claim the
+real-infrastructure profile without producing evidence that the #562 bridge accepts fail-closed.
 
 ## Evidence retention checklist
 
@@ -477,7 +484,11 @@ addresses, provider account identifiers or raw sensitive payloads merely for con
 
 ## Completion boundary
 
-Repository tests can prove that this harness is deterministic, fail-closed and secret-minimizing,
-but they cannot prove real two-VPS behavior. #562 is complete only after the runbook has actually
-passed on two independent operator-controlled VPS hosts and the dependency state allows the issue to
-close.
+Repository tests can prove that this runbook/harness is deterministic, fail-closed and
+secret-minimizing. That repository-side preparation, together with the #46 bridge, is the completion
+boundary for #562.
+
+Only #829 can complete the physical-host acceptance claim. #829 must execute this procedure on two
+independent operator-controlled VPS/reference hosts, retain the sanitized report and demonstrate
+that the resulting evidence passes the #562-defined validation before `ENV-DISTRIBUTED-REAL` is
+claimed as compatible.
