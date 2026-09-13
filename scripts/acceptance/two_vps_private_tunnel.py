@@ -340,8 +340,7 @@ def _phase_passed(command: str, values: Mapping[str, object]) -> bool:
         )
     if command == "record-restart":
         return bool(
-            values["first_process_evidence_ref"]
-            != values["second_process_evidence_ref"]
+            values["first_process_evidence_ref"] != values["second_process_evidence_ref"]
             and values["re_registered"]
             and values["heartbeat_recovered"]
             and values["post_restart_status"] == "succeeded"
@@ -368,8 +367,7 @@ def _record_phase(args: argparse.Namespace) -> dict[str, object]:
         values["trace_preserved"] = values["trace_id"] == values["returned_trace_id"]
     if args.command == "record-restart":
         values["worker_process_restarted"] = (
-            values["first_process_evidence_ref"]
-            != values["second_process_evidence_ref"]
+            values["first_process_evidence_ref"] != values["second_process_evidence_ref"]
         )
 
     passed = _phase_passed(str(args.command), values)
@@ -419,11 +417,7 @@ def _validate_probes(
         observed[(label, scope)] = report
         safe_reports.append(dict(report))
 
-    required = {
-        (label, scope)
-        for label in _ENDPOINT_LABELS
-        for scope in ("private", "public")
-    }
+    required = {(label, scope) for label in _ENDPOINT_LABELS for scope in ("private", "public")}
     missing = sorted(required - observed.keys())
     if missing:
         raise AcceptanceError(f"missing required network probes: {missing}")
@@ -435,10 +429,7 @@ def _validate_probes(
             or private_report.get("reachable") is not True
         ):
             raise AcceptanceError(f"{label} must be reachable through the private tunnel")
-        if (
-            public_report.get("expected") != "closed"
-            or public_report.get("reachable") is not False
-        ):
+        if public_report.get("expected") != "closed" or public_report.get("reachable") is not False:
             raise AcceptanceError(f"{label} must be closed on the tested public path")
     return safe_reports
 
@@ -511,7 +502,9 @@ def _validate_platform_phases(
     if _required_int(dispatch, "duplicate_run_count") != 0:
         raise AcceptanceError("normal remote dispatch created duplicate canonical Runs")
     if not _required_bool(dispatch, "selected_by_capability_policy"):
-        raise AcceptanceError("Host B was not selected through canonical capability/resource policy")
+        raise AcceptanceError(
+            "Host B was not selected through canonical capability/resource policy"
+        )
     if not _required_bool(dispatch, "correlation_preserved"):
         raise AcceptanceError("correlation context did not survive remote dispatch")
     if not _required_bool(dispatch, "trace_preserved"):
