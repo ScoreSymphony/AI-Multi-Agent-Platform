@@ -28,10 +28,11 @@ class CoordinatorPlanResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(
-            self._resource(self._coordinator.projection(state.plan.id))
-            for state in self._coordinator.repository.list_active_plans()
-        )
+        resources: list[dict[str, JsonValue]] = []
+        for state in await self._coordinator.runtime_repository.list_active_plans():
+            projection = await self._coordinator.async_projection(state.plan.id)
+            resources.append(await self._resource(projection))
+        return tuple(resources)
 
     async def get_resource(
         self,
@@ -39,12 +40,12 @@ class CoordinatorPlanResourceService:
         resource_id: str,
     ) -> dict[str, JsonValue]:
         del context
-        return self._resource(self._coordinator.projection(resource_id))
+        return await self._resource(await self._coordinator.async_projection(resource_id))
 
-    def _resource(self, projection: PlanCoordinationProjection) -> dict[str, JsonValue]:
+    async def _resource(self, projection: PlanCoordinationProjection) -> dict[str, JsonValue]:
         return _projection_resource(
             projection,
-            records=_record_map(self._coordinator, projection.plan_id),
+            records=await _record_map(self._coordinator, projection.plan_id),
         )
 
 
@@ -62,7 +63,7 @@ class CoordinatorCommandHandlers:
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         del context, payload
-        return self._resource(await self._coordinator.reconcile_plan(resource_ref))
+        return await self._resource(await self._coordinator.reconcile_plan(resource_ref))
 
     async def cancel(
         self,
@@ -73,7 +74,7 @@ class CoordinatorCommandHandlers:
         del payload
         if context.idempotency_key is None:
             raise ContractError(ErrorCode.INVALID_REQUEST, "idempotency key is required")
-        return self._resource(
+        return await self._resource(
             await self._coordinator.cancel_plan(
                 resource_ref,
                 idempotency_key=context.idempotency_key,
@@ -107,7 +108,7 @@ class CoordinatorCommandHandlers:
                 ErrorCode.INVALID_REQUEST,
                 f"unsupported coordinator repair action: {action_raw}",
             ) from exc
-        return self._resource(
+        return await self._resource(
             await self._repair.repair_step(
                 plan_id=resource_ref,
                 step_id=step_id,
@@ -117,10 +118,10 @@ class CoordinatorCommandHandlers:
             )
         )
 
-    def _resource(self, projection: PlanCoordinationProjection) -> dict[str, JsonValue]:
+    async def _resource(self, projection: PlanCoordinationProjection) -> dict[str, JsonValue]:
         return _projection_resource(
             projection,
-            records=_record_map(self._coordinator, projection.plan_id),
+            records=await _record_map(self._coordinator, projection.plan_id),
         )
 
 
@@ -141,11 +142,14 @@ def coordination_command_handlers(
     }
 
 
-def _record_map(
+async def _record_map(
     coordinator: DurablePlanStepCoordinator,
     plan_id: str,
 ) -> dict[str, StepCoordinationRecord]:
-    return {record.step_id: record for record in coordinator.repository.list_step_records(plan_id)}
+    return {
+        record.step_id: record
+        for record in await coordinator.runtime_repository.list_step_records(plan_id)
+    }
 
 
 def _projection_resource(
