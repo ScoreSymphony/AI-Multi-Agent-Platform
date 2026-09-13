@@ -41,7 +41,8 @@ def test_new_issue_numbered_test_is_rejected_in_suite_directory() -> None:
     )
 
     assert violations == (
-        "tests/integration/runtime/test_issue_123_regression.py: new test filenames must describe behavior, not an issue number",
+        "tests/integration/runtime/test_issue_123_regression.py: new test filenames must "
+        "describe behavior, not an issue number",
     )
 
 
