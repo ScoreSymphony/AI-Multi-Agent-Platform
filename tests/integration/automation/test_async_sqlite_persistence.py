@@ -38,7 +38,10 @@ def _automation(name: str = "async sqlite") -> Automation:
             owner_id="automation-test",
         ),
         trigger=TriggerDefinition(type=TriggerType.MANUAL),
-        task_template=TaskTemplate(title="Automation task", objective="Exercise persistence"),
+        task_template=TaskTemplate(
+            title="Automation task",
+            objective="Exercise persistence",
+        ),
         now=now,
     )
 
@@ -126,7 +129,9 @@ def test_automation_sqlite_read_does_not_block_event_loop(tmp_path: Path) -> Non
     asyncio.run(scenario())
 
 
-def test_automation_sqlite_repeated_cancellation_waits_for_write_boundary(tmp_path: Path) -> None:
+def test_automation_sqlite_repeated_cancellation_waits_for_write_boundary(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         database = tmp_path / "automation.sqlite3"
         repository = _BlockingWriteRepository(database)
@@ -175,7 +180,9 @@ def test_automation_sqlite_waiting_writers_do_not_starve_reads(tmp_path: Path) -
     asyncio.run(scenario())
 
 
-def test_automation_sqlite_maps_busy_to_retryable_transient_failure(tmp_path: Path) -> None:
+def test_automation_sqlite_maps_busy_to_retryable_transient_failure(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         repository = _BusyRepository(tmp_path / "automation.sqlite3")
 
@@ -188,7 +195,9 @@ def test_automation_sqlite_maps_busy_to_retryable_transient_failure(tmp_path: Pa
     asyncio.run(scenario())
 
 
-def test_automation_sqlite_connections_are_opened_in_worker_threads(tmp_path: Path) -> None:
+def test_automation_sqlite_connections_are_opened_in_worker_threads(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         repository = _RecordingRepository(tmp_path / "automation.sqlite3")
         event_loop_thread = threading.get_ident()
@@ -196,7 +205,9 @@ def test_automation_sqlite_connections_are_opened_in_worker_threads(tmp_path: Pa
         assert await repository.list_automations() == ()
 
         assert repository.connection_threads
-        assert all(thread_id != event_loop_thread for thread_id in repository.connection_threads)
+        assert all(
+            thread_id != event_loop_thread for thread_id in repository.connection_threads
+        )
 
     asyncio.run(scenario())
 
@@ -208,7 +219,9 @@ def test_automation_sqlite_offload_concurrency_is_bounded(tmp_path: Path) -> Non
             max_concurrency=3,
         )
 
-        results = await asyncio.gather(*(repository.list_automations() for _ in range(12)))
+        results = await asyncio.gather(
+            *(repository.list_automations() for _ in range(12))
+        )
 
         assert results == [()] * 12
         assert 1 < repository.max_active_reads <= 3
@@ -216,7 +229,9 @@ def test_automation_sqlite_offload_concurrency_is_bounded(tmp_path: Path) -> Non
     asyncio.run(scenario())
 
 
-def test_automation_repository_preserves_restart_and_dedupe_semantics(tmp_path: Path) -> None:
+def test_automation_repository_preserves_restart_and_dedupe_semantics(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         database = tmp_path / "automation.sqlite3"
         automation = _automation()
@@ -233,7 +248,13 @@ def test_automation_repository_preserves_restart_and_dedupe_semantics(tmp_path: 
         recovered = SqliteAutomationRepository(database)
         assert await recovered.get_automation(automation.id) == automation
         assert await recovered.get_delivery(first_delivery.id) == first_delivery
-        assert await recovered.find_delivery_by_dedupe(automation.id, first_delivery.dedupe_key) == first_delivery
+        assert (
+            await recovered.find_delivery_by_dedupe(
+                automation.id,
+                first_delivery.dedupe_key,
+            )
+            == first_delivery
+        )
         assert await recovered.list_automations() == (automation,)
         assert await recovered.list_deliveries(automation.id) == (first_delivery,)
 
@@ -250,10 +271,14 @@ async def _assert_runtime_state_contract(state: AutomationRuntimeState) -> None:
         result={"status": "paused"},
     )
 
-    assert await state.get_command(record.principal_ref, record.idempotency_key) is None
+    assert (
+        await state.get_command(record.principal_ref, record.idempotency_key) is None
+    )
     assert await state.save_command(record) == record
     assert await state.save_command(record) == record
-    assert await state.get_command(record.principal_ref, record.idempotency_key) == record
+    assert (
+        await state.get_command(record.principal_ref, record.idempotency_key) == record
+    )
     assert await state.has_processed_event("event-1") is False
     await state.mark_processed_event("event-1")
     assert await state.has_processed_event("event-1") is True
@@ -261,7 +286,9 @@ async def _assert_runtime_state_contract(state: AutomationRuntimeState) -> None:
     assert await state.list_audit_events() == ({"type": "test", "sequence": 1},)
 
 
-def test_automation_runtime_state_in_memory_and_sqlite_share_contract(tmp_path: Path) -> None:
+def test_automation_runtime_state_in_memory_and_sqlite_share_contract(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         await _assert_runtime_state_contract(InMemoryAutomationRuntimeState())
         await _assert_runtime_state_contract(
@@ -271,7 +298,9 @@ def test_automation_runtime_state_in_memory_and_sqlite_share_contract(tmp_path: 
     asyncio.run(scenario())
 
 
-def test_automation_runtime_state_maps_busy_to_retryable_transient_failure(tmp_path: Path) -> None:
+def test_automation_runtime_state_maps_busy_to_retryable_transient_failure(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         state = _BusyRuntimeState(tmp_path / "runtime.sqlite3")
 
