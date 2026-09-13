@@ -27,47 +27,51 @@ jobs:
 
           search = Path('src/ai_multi_agent_platform/research/search.py')
           text = search.read_text()
-          needle = 'from __future__ import annotations\n\n'
-          replacement = 'from __future__ import annotations\n\nfrom typing import cast\n\n'
           if 'from typing import cast' not in text:
-              if needle not in text:
+              anchor = 'from __future__ import annotations\n\n'
+              if anchor not in text:
                   raise SystemExit('research import anchor not found')
-              text = text.replace(needle, replacement, 1)
+              text = text.replace(anchor, anchor + 'from typing import cast\n\n', 1)
               search.write_text(text)
 
           extensions = Path('src/ai_multi_agent_platform/control_plane/extensions.py')
           text = extensions.read_text()
-          old_install = '''        # Commit only after all claims have been validated. Explicit base-class
-          # dispatch prevents a legacy compatibility subclass from turning module
-          # installation back into MRO-sensitive behavior during the migration.
-          for name in sorted(by_name):
-          '''
-          new_install = '''        # Commit only after all claims have been validated. Dependencies determine
-          # the only meaningful ordering; independent modules retain lexical order.
-          installation_order = _module_dependency_order(by_name)
-          for name in installation_order:
-          '''
-          if old_install not in text:
-              raise SystemExit('module installation anchor not found')
-          text = text.replace(old_install, new_install, 1)
 
-          old_sort = '''        self._command_observers.sort(key=lambda item: item[0])
-          self._openapi_contributors.sort(key=lambda item: item[0])
-          '''
-          new_sort = '''        dependency_order = {
-              name: index
-              for index, name in enumerate(_module_dependency_order(self._registered_modules))
-          }
-          self._command_observers.sort(key=lambda item: dependency_order[item[0]])
-          self._openapi_contributors.sort(key=lambda item: dependency_order[item[0]])
-          '''
+          loop = '        for name in sorted(by_name):'
+          positions = []
+          start = 0
+          while True:
+              position = text.find(loop, start)
+              if position < 0:
+                  break
+              positions.append(position)
+              start = position + len(loop)
+          if len(positions) < 2:
+              raise SystemExit(f'expected two module loops, found {len(positions)}')
+          position = positions[1]
+          replacement = (
+              '        installation_order = _module_dependency_order(by_name)\n'
+              '        for name in installation_order:'
+          )
+          text = text[:position] + replacement + text[position + len(loop):]
+
+          old_sort = (
+              '        self._command_observers.sort(key=lambda item: item[0])\n'
+              '        self._openapi_contributors.sort(key=lambda item: item[0])'
+          )
+          new_sort = (
+              '        dependency_order = {\n'
+              '            name: index\n'
+              '            for index, name in enumerate(_module_dependency_order(self._registered_modules))\n'
+              '        }\n'
+              '        self._command_observers.sort(key=lambda item: dependency_order[item[0]])\n'
+              '        self._openapi_contributors.sort(key=lambda item: dependency_order[item[0]])'
+          )
           if old_sort not in text:
               raise SystemExit('observer ordering anchor not found')
           text = text.replace(old_sort, new_sort, 1)
 
-          helper_anchor = '''def _claim(
-              claims: dict[Any, str],
-          '''
+          helper_anchor = 'def _claim(\n    claims: dict[Any, str],'
           helper = '''def _module_dependency_order(
               modules: Mapping[str, ControlPlaneModule],
           ) -> tuple[str, ...]:
@@ -92,8 +96,7 @@ jobs:
 
 
           def _claim(
-              claims: dict[Any, str],
-          '''
+              claims: dict[Any, str],'''
           if helper_anchor not in text:
               raise SystemExit('module dependency helper anchor not found')
           text = text.replace(helper_anchor, helper, 1)
