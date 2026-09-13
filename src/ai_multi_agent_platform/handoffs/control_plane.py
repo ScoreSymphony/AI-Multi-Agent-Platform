@@ -27,7 +27,7 @@ class HandoffViewAuthorizer(Protocol):
 
 
 class HandoffControlPlaneProjection:
-    """Permission-aware direct projection used outside the registered Control Plane path."""
+    """Permission-aware synchronous projection for compatibility/offline callers."""
 
     def __init__(self, service: HandoffService, *, authorization: HandoffViewAuthorizer) -> None:
         self._service = service
@@ -81,9 +81,9 @@ class HandoffResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         projected: list[dict[str, JsonValue]] = []
-        for handoff in self._filtered(query):
+        for handoff in await self._filtered(query):
             if await self._can_view(context, handoff, action="agent-handoff:list"):
-                projected.append(handoff_projection(self.service, handoff))
+                projected.append(await async_handoff_projection(self.service, handoff))
         return tuple(projected)
 
     async def get_resource(
@@ -92,11 +92,11 @@ class HandoffResourceService:
         resource_id: str,
     ) -> dict[str, JsonValue]:
         handoff_id, revision = _parse_handoff_resource_id(resource_id)
-        handoff = self.service.get_handoff(handoff_id, revision)
+        handoff = await self.service.async_get_handoff(handoff_id, revision)
         await self._require_view(context, handoff, action="agent-handoff:read")
-        return handoff_projection(self.service, handoff)
+        return await async_handoff_projection(self.service, handoff)
 
-    def _filtered(self, query: PageQuery) -> tuple[AgentHandoff, ...]:
+    async def _filtered(self, query: PageQuery) -> tuple[AgentHandoff, ...]:
         filters = query.filters or {}
         task_id = filters.get("task_id")
         step_id = filters.get("step_id")
@@ -106,10 +106,10 @@ class HandoffResourceService:
                 "handoff history accepts task_id or step_id, not both",
             )
         if task_id is not None:
-            return self.service.list_handoffs_for_task(task_id)
+            return await self.service.async_list_handoffs_for_task(task_id)
         if step_id is not None:
-            return self.service.list_handoffs_for_step(step_id)
-        return self.service.list_handoffs()
+            return await self.service.async_list_handoffs_for_step(step_id)
+        return await self.service.async_list_handoffs()
 
     async def _can_view(
         self,
@@ -166,30 +166,32 @@ class HandoffConsumptionResourceService:
                     ErrorCode.INVALID_REQUEST,
                     "invalid Handoff consumption revision filter",
                 ) from exc
-            handoff = self.service.get_handoff(handoff_id, revision)
+            handoff = await self.service.async_get_handoff(handoff_id, revision)
             if not await self.handoffs._can_view(
                 context,
                 handoff,
                 action="agent-handoff-consumption:list",
             ):
                 return ()
-            return tuple(
-                consumption_projection(item)
-                for item in self.service.list_consumptions(handoff.handoff_id, handoff.revision)
+            consumptions = await self.service.async_list_consumptions(
+                handoff.handoff_id,
+                handoff.revision,
             )
+            return tuple(consumption_projection(item) for item in consumptions)
 
         resources: list[dict[str, JsonValue]] = []
-        for handoff in self.handoffs._filtered(query):
+        for handoff in await self.handoffs._filtered(query):
             if not await self.handoffs._can_view(
                 context,
                 handoff,
                 action="agent-handoff-consumption:list",
             ):
                 continue
-            resources.extend(
-                consumption_projection(item)
-                for item in self.service.list_consumptions(handoff.handoff_id, handoff.revision)
+            consumptions = await self.service.async_list_consumptions(
+                handoff.handoff_id,
+                handoff.revision,
             )
+            resources.extend(consumption_projection(item) for item in consumptions)
         return tuple(resources)
 
     async def get_resource(
@@ -198,13 +200,14 @@ class HandoffConsumptionResourceService:
         resource_id: str,
     ) -> dict[str, JsonValue]:
         handoff_id, revision, run_id = _parse_consumption_resource_id(resource_id)
-        handoff = self.service.get_handoff(handoff_id, revision)
+        handoff = await self.service.async_get_handoff(handoff_id, revision)
         await self.handoffs._require_view(
             context,
             handoff,
             action="agent-handoff-consumption:read",
         )
-        for consumption in self.service.list_consumptions(handoff_id, revision):
+        consumptions = await self.service.async_list_consumptions(handoff_id, revision)
+        for consumption in consumptions:
             if consumption.consuming_run_id == run_id:
                 return consumption_projection(consumption)
         raise ContractError(ErrorCode.NOT_FOUND, "Handoff consumption was not found")
@@ -224,8 +227,27 @@ def register_handoff_control_plane(control_plane: ControlPlane, service: Handoff
 
 
 def handoff_projection(service: HandoffService, handoff: AgentHandoff) -> dict[str, JsonValue]:
-    content = handoff.content
+    """Synchronous compatibility projection for offline/direct callers."""
+
     consumptions = service.list_consumptions(handoff.handoff_id, handoff.revision)
+    return _handoff_projection(handoff, consumptions)
+
+
+async def async_handoff_projection(
+    service: HandoffService,
+    handoff: AgentHandoff,
+) -> dict[str, JsonValue]:
+    """Runtime projection using awaitable Handoff persistence."""
+
+    consumptions = await service.async_list_consumptions(handoff.handoff_id, handoff.revision)
+    return _handoff_projection(handoff, consumptions)
+
+
+def _handoff_projection(
+    handoff: AgentHandoff,
+    consumptions: tuple[HandoffConsumption, ...],
+) -> dict[str, JsonValue]:
+    content = handoff.content
     projected: dict[str, JsonValue] = {
         "id": _handoff_resource_id(handoff),
         "type": "agent_handoff",

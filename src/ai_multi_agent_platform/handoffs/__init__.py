@@ -1,5 +1,11 @@
 """Canonical structured work-transfer contracts for Agents and Agent Teams."""
 
+from .async_repository import (
+    AsyncHandoffRepository,
+    AsyncHandoffRepositoryAdapter,
+    HandoffPersistenceOffload,
+    runtime_handoff_repository,
+)
 from .composition import build_production_handoff_runtime
 from .context import ConsumedHandoffContextAdapter, handoff_context_candidate
 from .control_plane import (
@@ -58,6 +64,8 @@ __all__ = [
     "HANDOFF_CONSUMPTION_COLLECTION",
     "HANDOFF_SCHEMA_VERSION",
     "AgentHandoff",
+    "AsyncHandoffRepository",
+    "AsyncHandoffRepositoryAdapter",
     "CanonicalConsumerRequirementEvaluator",
     "CanonicalHandoffReferenceGateway",
     "ConsumedHandoffContextAdapter",
@@ -73,6 +81,7 @@ __all__ = [
     "HandoffContent",
     "HandoffContextSource",
     "HandoffControlPlaneProjection",
+    "HandoffPersistenceOffload",
     "HandoffReferenceGateway",
     "HandoffRepository",
     "HandoffResourceService",
@@ -101,4 +110,5 @@ __all__ = [
     "new_handoff_id",
     "participant_key",
     "register_handoff_control_plane",
+    "runtime_handoff_repository",
 ]

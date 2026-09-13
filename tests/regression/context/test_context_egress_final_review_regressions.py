@@ -208,11 +208,15 @@ class _TaskRepository:
 class _HandoffService:
     def __init__(self, handoff: Any) -> None:
         self.handoff = handoff
+        self.runtime_repository = object()
 
     def get_handoff(self, handoff_id: str, revision: int) -> Any:
         assert handoff_id == self.handoff.handoff_id
         assert revision == self.handoff.revision
         return self.handoff
+
+    async def async_get_handoff(self, handoff_id: str, revision: int) -> Any:
+        return self.get_handoff(handoff_id, revision)
 
 
 class _CapturingAssembly:
