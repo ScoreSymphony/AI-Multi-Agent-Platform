@@ -144,12 +144,20 @@ def organization_audit_control_plane_module(
 ) -> ControlPlaneModule:
     """Build the explicitly owned Organization audit projection and observer."""
 
+    async def observe(
+        context: RequestContext,
+        command: str,
+        resource_ref: str,
+        result: dict[str, JsonValue],
+    ) -> None:
+        await audit.record_command(context, command, resource_ref, result)
+
     return ControlPlaneModule(
         name=ORGANIZATION_AUDIT_MODULE,
         resource_services={
             ORGANIZATION_AUDIT_COLLECTION: _OrganizationAuditResources(service, audit),
         },
-        command_observers=(audit.record_command,),
+        command_observers=(observe,),
     )
 
 
