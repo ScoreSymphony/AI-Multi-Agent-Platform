@@ -1,0 +1,9 @@
+import repository_catalog_cases as cases  # noqa: I001
+
+
+test_repository_binding_catalog_restores_local_provider_after_restart = (
+    cases.test_repository_binding_catalog_restores_local_provider_after_restart
+)
+test_repository_bootstrap_fails_closed_when_provider_factory_is_unavailable = (
+    cases.test_repository_bootstrap_fails_closed_when_provider_factory_is_unavailable
+)

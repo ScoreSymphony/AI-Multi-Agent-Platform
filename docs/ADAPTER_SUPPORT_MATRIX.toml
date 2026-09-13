@@ -1,0 +1,863 @@
+schema_version = 1
+issue = 904
+policy_document = "docs/ADAPTER_SUPPORT_MATRIX.md"
+conformance_document = "docs/PLATFORM_CONFORMANCE.md"
+allowed_tiers = ["reference", "supported", "experimental", "deprecated", "external"]
+audited_boundaries = [
+  "planner",
+  "orchestrator",
+  "executor",
+  "model-provider",
+  "model-router",
+  "capability-provider",
+  "mcp-client",
+  "browser-provider",
+  "file-provider",
+  "memory-provider",
+  "knowledge-provider",
+  "persistence-repository",
+  "message-transport",
+  "connector-provider",
+  "repository-provider",
+  "observability-exporter",
+  "verification-provider",
+  "evaluation-provider",
+  "security-evidence-provider",
+  "deployment-adapter",
+]
+
+[[implementation]]
+id = "planner.reference"
+boundary = "planner"
+kind = "provider"
+symbol = "DeterministicReferencePlanner"
+source = "src/ai_multi_agent_platform/planning/providers.py"
+tier = "reference"
+owner = "platform/planning"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Deterministic no-model planning baseline and contract fixture."
+overlap = "ModelBackedPlanner emits the same canonical plan shape but adds model-assisted behavior."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "local canonical inventory only"
+upstream_health = "platform-owned"
+compatibility = "Required deterministic planning baseline."
+usage = "Local/reference planning and deterministic evaluation."
+evidence = ["tests/architecture/test_planning_responsibility_boundaries.py"]
+docs = ["docs/PLATFORM_CONFORMANCE.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "planner.model-backed"
+boundary = "planner"
+kind = "provider"
+symbol = "ModelBackedPlanner"
+source = "src/ai_multi_agent_platform/planning/providers.py"
+tier = "supported"
+owner = "platform/planning"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Model-assisted planning through platform-owned model contracts."
+overlap = "Retained beside the deterministic planner because model-assisted planning is distinct behavior."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "inherits selected model-provider egress and prompt/data policy"
+upstream_health = "platform-owned; selected model provider is evaluated separately"
+compatibility = "Supported when the selected model provider has a valid support claim."
+usage = "Model-assisted planning profiles."
+evidence = ["tests/architecture/test_planning_responsibility_boundaries.py"]
+docs = ["docs/PLATFORM_CONFORMANCE.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "orchestrator.reference"
+boundary = "orchestrator"
+kind = "provider"
+symbol = "ReferenceOrchestrator"
+source = "src/ai_multi_agent_platform/orchestration/reference.py"
+tier = "reference"
+owner = "platform/orchestration"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Deterministic external-service-free orchestration baseline."
+overlap = "HermesOrchestrator implements the same contract for the external Hermes profile."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "local in-process orchestration"
+upstream_health = "platform-owned"
+compatibility = "Required by the reference single-node and evaluation baseline."
+usage = "Single-node and reference conformance."
+evidence = ["docs/PLATFORM_CONFORMANCE.md"]
+docs = ["docs/runtime/AGENT_RUNTIME.md", "docs/PLATFORM_CONFORMANCE.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "orchestrator.hermes"
+boundary = "orchestrator"
+kind = "adapter"
+symbol = "HermesOrchestrator"
+source = "src/ai_multi_agent_platform/adapters/hermes.py"
+tier = "supported"
+owner = "platform/adapters"
+local_first = false
+mandatory_paid_service = false
+unique_value = "Optional real Hermes orchestration compatibility profile."
+overlap = "ReferenceOrchestrator covers baseline semantics without Hermes."
+test_burden = "high"
+doc_burden = "high"
+security_surface = "network boundary, lifecycle reconciliation and upstream compatibility"
+upstream_health = "pinned/reviewed upstream; compatibility is evidence-bound"
+compatibility = "Supported only for the pinned Hermes profile whose conformance evidence passes."
+usage = "Optional #46 Hermes scenario."
+evidence = ["tests/integration/upstreams/test_hermes_pinned.py", "tests/regression/upstreams/test_hermes_v0_21_1.py"]
+docs = ["docs/integrations/HERMES_ADAPTER.md", "docs/PLATFORM_CONFORMANCE.md"]
+migration = "Repoint orchestration to ReferenceOrchestrator or another Orchestrator implementation."
+
+[[implementation]]
+id = "executor.reference"
+boundary = "executor"
+kind = "provider"
+symbol = "ReferenceExecutor"
+source = "src/ai_multi_agent_platform/execution/reference.py"
+tier = "reference"
+owner = "platform/execution"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Allow-listed deterministic local execution baseline."
+overlap = "Forge, Agent-Sandbox and SWE-ReX target the same contract with external runtime behavior."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "allow-listed actions and workspace path enforcement"
+upstream_health = "platform-owned"
+compatibility = "Required by reference and vertical conformance paths."
+usage = "Single-node, Worker reference and release vertical paths."
+evidence = ["docs/PLATFORM_CONFORMANCE.md", "tests/test_security_baseline.py"]
+docs = ["docs/runtime/EXECUTION.md", "docs/PLATFORM_CONFORMANCE.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "executor.forge"
+boundary = "executor"
+kind = "adapter"
+symbol = "ForgeExecutor"
+source = "src/ai_multi_agent_platform/adapters/forge.py"
+tier = "supported"
+owner = "platform/adapters"
+local_first = false
+mandatory_paid_service = false
+unique_value = "Execution-only Forge sidecar compatibility without Forge lifecycle authority."
+overlap = "ReferenceExecutor is the local baseline; Forge HTTP is a transport detail, not another Executor."
+test_burden = "high"
+doc_burden = "high"
+security_surface = "sidecar network boundary, workspace mapping and result translation"
+upstream_health = "reviewed/pinned integration surface"
+compatibility = "Supported where the Forge sidecar integration profile passes."
+usage = "Optional #46 Forge scenario."
+evidence = ["tests/contract/execution/test_forge_executor.py", "tests/integration/forge/test_sidecar.py"]
+docs = ["docs/integrations/FORGE_ADAPTER.md", "docs/PLATFORM_CONFORMANCE.md"]
+migration = "Switch to ReferenceExecutor or another Executor while preserving canonical identities."
+
+[[implementation]]
+id = "executor.agent-sandbox"
+boundary = "executor"
+kind = "adapter"
+symbol = "AgentSandboxExecutor"
+source = "src/ai_multi_agent_platform/adapters/agent_sandbox.py"
+tier = "experimental"
+owner = "platform/adapters"
+local_first = false
+mandatory_paid_service = false
+unique_value = "Candidate Kubernetes sandbox profile for higher-isolation workloads."
+overlap = "Overlaps Executor semantics but targets a distinct isolation/runtime profile."
+test_burden = "high"
+doc_burden = "high"
+security_surface = "Kubernetes isolation, egress, credentials, resources and cleanup"
+upstream_health = "source-reviewed; promotion remains live-evidence-gated"
+compatibility = "No production compatibility claim until the live validation decision is complete."
+usage = "Evaluation/live-validation only."
+evidence = ["tests/contract/execution/test_agent_sandbox_executor.py"]
+docs = ["docs/upstream/AGENT_SANDBOX_EVALUATION.md"]
+migration = "Use a reference/supported Executor for supported deployments until promotion."
+
+[[implementation]]
+id = "executor.swe-rex"
+boundary = "executor"
+kind = "adapter"
+symbol = "SwerexExecutor"
+source = "src/ai_multi_agent_platform/adapters/swe_rex.py"
+tier = "experimental"
+owner = "platform/adapters"
+local_first = false
+mandatory_paid_service = false
+unique_value = "SWE-ReX execution semantics retained for comparative evaluation."
+overlap = "Substantial overlap with supported Executors; retained only as experimental evidence."
+test_burden = "high"
+doc_burden = "high"
+security_surface = "remote/local command execution, filesystem reach and transport protection"
+upstream_health = "pinned evaluation upstream"
+compatibility = "No supported production claim."
+usage = "Evaluation and benchmark paths only."
+evidence = ["tests/contract/execution/test_swe_rex_executor.py"]
+docs = ["docs/upstream/SWE_REX_EVALUATION.md", "docs/upstream/SWE_REX_COMPARISON.md"]
+migration = "Use ReferenceExecutor, ForgeExecutor or another supported Executor."
+
+[[implementation]]
+id = "model.openai-compatible"
+boundary = "model-provider"
+kind = "adapter"
+symbol = "OpenAICompatibleModelProvider"
+source = "src/ai_multi_agent_platform/adapters/openai_compatible_streaming.py"
+tier = "reference"
+owner = "platform/models"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Broad local/self-hosted OpenAI-compatible HTTP model boundary with streaming."
+overlap = "LiteLLM reuses this stack; Bifrost/SGLang use it unless unique provider behavior requires more."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "model HTTP egress, credentials, streamed content and tool calls"
+upstream_health = "protocol-compatible rather than tied to one upstream"
+compatibility = "Reference model-provider path for local/self-hosted #46 scenarios."
+usage = "Local model baseline and evaluated compatible gateways/runtimes."
+evidence = ["tests/integration/models/test_model_streaming.py", "docs/PLATFORM_CONFORMANCE.md"]
+docs = ["docs/PLATFORM_CONFORMANCE.md", "docs/integrations/BIFROST_EVALUATION.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "model.litellm"
+boundary = "model-provider"
+kind = "adapter"
+symbol = "LiteLLMModelProvider"
+source = "src/ai_multi_agent_platform/adapters/litellm.py"
+tier = "supported"
+owner = "platform/models"
+local_first = false
+mandatory_paid_service = false
+unique_value = "Optional LiteLLM gateway configuration/identity semantics."
+overlap = "HTTP protocol handling is intentionally consolidated through OpenAICompatibleModelProvider."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "gateway egress, credentials and upstream model routing"
+upstream_health = "pinned optional integration profile"
+compatibility = "Supported only when the dedicated LiteLLM compatibility lane passes."
+usage = "Optional model gateway."
+evidence = ["workflow:litellm-compat"]
+docs = ["docs/integrations/LITELLM_ADAPTER.md"]
+migration = "Point model configuration at the OpenAI-compatible provider or another ModelProvider."
+
+[[implementation]]
+id = "model.router"
+boundary = "model-router"
+kind = "provider"
+symbol = "DeterministicModelRouter"
+source = "src/ai_multi_agent_platform/models/router.py"
+tier = "reference"
+owner = "platform/models"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Explainable platform-owned deterministic routing over canonical inventory."
+overlap = "No competing first-party router is maintained."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "routing metadata only"
+upstream_health = "platform-owned"
+compatibility = "Reference router used by canonical model runtime."
+usage = "Reference and model-backed runtime composition."
+evidence = ["tests/unit/models/test_registry_router.py"]
+docs = ["docs/PLATFORM_CONFORMANCE.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "capability.native"
+boundary = "capability-provider"
+kind = "provider"
+symbol = "NativeEchoProvider"
+source = "src/ai_multi_agent_platform/capabilities/native.py"
+tier = "reference"
+owner = "platform/capabilities"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Deterministic native discovery/invocation baseline."
+overlap = "MCP exposes external tools through the same canonical capability pipeline."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "local canonical invocation pipeline"
+upstream_health = "platform-owned"
+compatibility = "Required capability reference path."
+usage = "Reference tool.echo capability and #46 capability vertical."
+evidence = ["docs/PLATFORM_CONFORMANCE.md"]
+docs = ["docs/runtime/CAPABILITIES.md", "docs/PLATFORM_CONFORMANCE.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "capability.mcp"
+boundary = "capability-provider"
+kind = "adapter"
+symbol = "MCPToolProvider"
+source = "src/ai_multi_agent_platform/adapters/mcp.py"
+tier = "supported"
+owner = "platform/capabilities"
+local_first = false
+mandatory_paid_service = false
+unique_value = "Projects MCP tools into canonical capability discovery/invocation."
+overlap = "Native capabilities remain local baseline; concrete MCP clients are transport/profile choices."
+test_burden = "high"
+doc_burden = "high"
+security_surface = "tool egress, process/network transport and server trust"
+upstream_health = "stable claim is revision/profile-specific"
+compatibility = "Supported for the stable claimed MCP client profile only."
+usage = "Optional MCP tool servers."
+evidence = ["docs/conformance/MCP_PROTOCOL_CONFORMANCE.md"]
+docs = ["docs/runtime/CAPABILITIES.md", "docs/conformance/MCP_PROTOCOL_CONFORMANCE.md"]
+migration = "Use native/other CapabilityToolProvider implementations without changing canonical invocation records."
+
+[[implementation]]
+id = "mcp.python-sdk"
+boundary = "mcp-client"
+kind = "transport-adapter"
+symbol = "MCPPythonSDKClient"
+source = "src/ai_multi_agent_platform/adapters/mcp_sdk.py"
+tier = "supported"
+owner = "platform/adapters"
+local_first = false
+mandatory_paid_service = false
+unique_value = "Official SDK transport for stable stdio and Streamable HTTP profiles."
+overlap = "Stateless client targets a newer prerelease protocol family and is not an equal production claim."
+test_burden = "high"
+doc_burden = "high"
+security_surface = "subprocess/network transport plus optional environment/credentials"
+upstream_health = "official SDK pinned and reviewed"
+compatibility = "Stable claimed MCP profile is gating."
+usage = "Default MCP builder."
+evidence = ["docs/conformance/MCP_PROTOCOL_CONFORMANCE.md"]
+docs = ["docs/upstream/MCP_PYTHON_SDK_ADOPTION.md", "docs/conformance/MCP_PROTOCOL_CONFORMANCE.md"]
+migration = "Replace MCPClient implementation without changing MCPToolProvider contracts."
+
+[[implementation]]
+id = "mcp.stateless-http"
+boundary = "mcp-client"
+kind = "transport-adapter"
+symbol = "MCPStatelessHTTPClient"
+source = "src/ai_multi_agent_platform/adapters/mcp_stateless.py"
+tier = "experimental"
+owner = "platform/adapters"
+local_first = false
+mandatory_paid_service = false
+unique_value = "Explicit newer stateless MCP HTTP protocol implementation."
+overlap = "Overlaps MCP client transport but targets prerelease protocol semantics."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "network transport and version negotiation"
+upstream_health = "official conformance line prerelease/informational"
+compatibility = "Implemented and tested but no production compatibility claim."
+usage = "Opt-in protocol evaluation only."
+evidence = ["tests/contract/adapters/test_mcp_stateless.py"]
+docs = ["docs/conformance/MCP_PROTOCOL_CONFORMANCE.md"]
+migration = "Use MCPPythonSDKClient stable profile until explicit promotion."
+
+[[implementation]]
+id = "browser.stdlib"
+boundary = "browser-provider"
+kind = "provider"
+symbol = "StdlibBrowserProvider"
+source = "src/ai_multi_agent_platform/browser/reference.py"
+tier = "reference"
+owner = "platform/browser"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Self-hosted dependency-free browser/web baseline with canonical File integration."
+overlap = "No second first-party production BrowserProvider is maintained."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "network egress, redirects, transfers, forms and content trust"
+upstream_health = "platform-owned Python stdlib implementation"
+compatibility = "Reference browser scenario in #46."
+usage = "Single-node reference browser capability."
+evidence = ["tests/test_browser_capability.py", "docs/PLATFORM_CONFORMANCE.md"]
+docs = ["docs/product/BROWSER_CAPABILITY.md", "docs/PLATFORM_CONFORMANCE.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "data.file.local"
+boundary = "file-provider"
+kind = "provider"
+symbol = "LocalFileProvider"
+source = "src/ai_multi_agent_platform/data/reference_file.py"
+tier = "reference"
+owner = "platform/data"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Filesystem bytes plus SQLite metadata for canonical File identity."
+overlap = "No competing first-party FileProvider is maintained."
+test_burden = "medium"
+doc_burden = "low"
+security_surface = "filesystem isolation, retention and export"
+upstream_health = "platform-owned/stdlib"
+compatibility = "Required local data/reference path."
+usage = "Single-node files, browser downloads and import/export."
+evidence = ["tests/unit/cli/test_cli_data_providers.py"]
+docs = ["docs/runtime/DATA_PERSISTENCE.md"]
+migration = "Future providers must preserve canonical File IDs and access semantics."
+
+[[implementation]]
+id = "data.memory.local"
+boundary = "memory-provider"
+kind = "provider"
+symbol = "LocalMemoryProvider"
+source = "src/ai_multi_agent_platform/data/reference_memory.py"
+tier = "reference"
+owner = "platform/data"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Local durable scoped-memory baseline."
+overlap = "No competing first-party MemoryProvider is maintained."
+test_burden = "medium"
+doc_burden = "low"
+security_surface = "scope isolation, retention and sensitive content"
+upstream_health = "platform-owned/stdlib"
+compatibility = "Required local data/reference path."
+usage = "Single-node memory and recovery."
+evidence = ["tests/unit/cli/test_cli_data_providers.py"]
+docs = ["docs/runtime/DATA_PERSISTENCE.md"]
+migration = "Future providers must preserve canonical memory scope/access semantics."
+
+[[implementation]]
+id = "data.knowledge.local"
+boundary = "knowledge-provider"
+kind = "provider"
+symbol = "LocalKnowledgeProvider"
+source = "src/ai_multi_agent_platform/data/reference_knowledge.py"
+tier = "reference"
+owner = "platform/data"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Local knowledge indexing/search baseline with canonical source identity."
+overlap = "No competing first-party KnowledgeProvider is maintained."
+test_burden = "medium"
+doc_burden = "low"
+security_surface = "indexed content, scope isolation and rebuild semantics"
+upstream_health = "platform-owned/stdlib"
+compatibility = "Required local data/reference path."
+usage = "Single-node knowledge and rebuild flows."
+evidence = ["tests/unit/cli/test_cli_data_providers.py"]
+docs = ["docs/runtime/DATA_PERSISTENCE.md"]
+migration = "Future providers must preserve canonical source/document/index semantics."
+
+[[implementation]]
+id = "persistence.single-node-topology"
+boundary = "persistence-repository"
+kind = "deployment-family"
+symbol = "SINGLE_NODE_DURABLE_STORES"
+source = "src/ai_multi_agent_platform/backup/inventory.py"
+tier = "reference"
+owner = "platform/deployment"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Authoritative inventory for the supported domain-separated SQLite/JSON single-node durable topology."
+overlap = "Individual domain repositories remain separate logical authorities; this family records the supported physical reference topology rather than pretending they are one interchangeable repository."
+test_burden = "high"
+doc_burden = "medium"
+security_surface = "all local durable stores, backup/restore and migration boundaries"
+upstream_health = "platform-owned/stdlib"
+compatibility = "Supported single-node v1 persistence topology under the durable-store contract."
+usage = "Single-node deployment, backup/restore and upgrades."
+evidence = ["docs/runtime/PERSISTENCE_TOPOLOGY.md", "docs/PLATFORM_CONFORMANCE.md"]
+docs = ["docs/runtime/PERSISTENCE_TOPOLOGY.md"]
+migration = "Any topology change is an explicit upgrade/backup contract migration; domain contracts stay provider-neutral."
+
+[[implementation]]
+id = "persistence.kernel.in-memory"
+boundary = "persistence-repository"
+kind = "repository"
+symbol = "InMemoryKernelRepository"
+source = "src/ai_multi_agent_platform/kernel/repository.py"
+tier = "reference"
+owner = "platform/kernel"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Deterministic in-memory EventRepository baseline."
+overlap = "SQLite adds durability/restart semantics."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "process-local state only"
+upstream_health = "platform-owned"
+compatibility = "Reference contract/test persistence."
+usage = "Unit, contract and evaluation fixtures."
+evidence = ["docs/KERNEL.md"]
+docs = ["docs/KERNEL.md", "docs/runtime/PERSISTENCE_TOPOLOGY.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "persistence.kernel.sqlite"
+boundary = "persistence-repository"
+kind = "repository"
+symbol = "SqliteKernelRepository"
+source = "src/ai_multi_agent_platform/kernel/sqlite_repository.py"
+tier = "reference"
+owner = "platform/kernel"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Durable stdlib EventRepository proving restart/recovery semantics."
+overlap = "In-memory repository is deterministic but intentionally non-durable."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "local DB, transactions, concurrency and backup/restore"
+upstream_health = "Python stdlib SQLite"
+compatibility = "Reference durable kernel persistence."
+usage = "Single-node deployment, recovery and persistence benchmarks."
+evidence = ["docs/PLATFORM_CONFORMANCE.md", "docs/KERNEL.md"]
+docs = ["docs/KERNEL.md", "docs/adr/0012-retain-domain-separated-sqlite-for-single-node-v1.md"]
+migration = "Future implementations must preserve EventRepository transaction/idempotency semantics."
+
+[[implementation]]
+id = "persistence.agent.in-memory"
+boundary = "persistence-repository"
+kind = "repository"
+symbol = "InMemoryAgentRepository"
+source = "src/ai_multi_agent_platform/agents/repository.py"
+tier = "reference"
+owner = "platform/agents"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Deterministic AgentRepository baseline preserving immutable revision history."
+overlap = "JsonAgentRepository adds durable restart persistence while sharing validation semantics."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "process-local Agent/Team/AgentRun state"
+upstream_health = "platform-owned"
+compatibility = "Reference ephemeral AgentRepository."
+usage = "Tests, evaluation and ephemeral compositions."
+evidence = ["tests/unit/agents/test_service_runtime.py"]
+docs = ["docs/runtime/AGENT_RUNTIME.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "persistence.agent.json"
+boundary = "persistence-repository"
+kind = "repository"
+symbol = "JsonAgentRepository"
+source = "src/ai_multi_agent_platform/agents/persistence.py"
+tier = "reference"
+owner = "platform/agents"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Durable JSON AgentRepository reference with atomic replacement and schema migration."
+overlap = "InMemoryAgentRepository supplies the non-durable deterministic baseline."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "durable Agent/Team definitions, revisions and run records"
+upstream_health = "platform-owned/stdlib"
+compatibility = "Reference durable bootstrap AgentRepository."
+usage = "Durable bootstrap/reference deployments."
+evidence = ["docs/runtime/AGENT_RUNTIME.md"]
+docs = ["docs/runtime/AGENT_RUNTIME.md", "docs/runtime/PERSISTENCE_TOPOLOGY.md"]
+migration = "Future AgentRepository implementations must preserve stable IDs, immutable revisions and schema compatibility."
+
+[[implementation]]
+id = "messaging.in-process"
+boundary = "message-transport"
+kind = "transport"
+symbol = "InProcessMessageTransport"
+source = "src/ai_multi_agent_platform/messaging/reference.py"
+tier = "reference"
+owner = "platform/messaging"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Deterministic no-network message transport baseline."
+overlap = "TCP serves the same envelope contract across processes."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "process-local delivery only"
+upstream_health = "platform-owned"
+compatibility = "Reference MessageTransport contract profile."
+usage = "Single-process/reference flows."
+evidence = ["src/ai_multi_agent_platform/messaging/conformance.py"]
+docs = ["docs/runtime/MESSAGING.md", "docs/runtime/DISTRIBUTED_RUNTIME.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "messaging.tcp"
+boundary = "message-transport"
+kind = "transport"
+symbol = "TcpMessageTransport"
+source = "src/ai_multi_agent_platform/messaging/network.py"
+tier = "supported"
+owner = "platform/messaging"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Self-hosted cross-process transport for distributed Worker/control-plane topology."
+overlap = "In-process covers same-process topology only."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "network listener/client, framing and auth context propagation"
+upstream_health = "platform-owned/stdlib"
+compatibility = "Supported distributed transport when distributed conformance passes."
+usage = "Distributed Worker deployment."
+evidence = ["docs/PLATFORM_CONFORMANCE.md"]
+docs = ["docs/runtime/NETWORK_MESSAGE_TRANSPORT.md", "docs/runtime/DISTRIBUTED_RUNTIME.md"]
+migration = "Replace MessageTransport without changing canonical envelopes or Task/Run identity."
+
+[[implementation]]
+id = "connector.reference"
+boundary = "connector-provider"
+kind = "provider"
+symbol = "ReferenceConnectorProvider"
+source = "src/ai_multi_agent_platform/connectors/reference.py"
+tier = "reference"
+owner = "platform/connectors"
+local_first = true
+mandatory_paid_service = false
+unique_value = "No-network connector baseline for credentials, resources, actions, events and sync."
+overlap = "Concrete connectors add external-service behavior."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "synthetic secret resolution and connector policy"
+upstream_health = "platform-owned"
+compatibility = "Reference ConnectorProvider contract profile."
+usage = "Connector contract tests and local baseline."
+evidence = ["tests/contract/connectors/test_contract_hardening.py", "tests/contract/connectors/test_definition_contract.py"]
+docs = ["docs/PLATFORM_CONFORMANCE.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "connector.github-releases"
+boundary = "connector-provider"
+kind = "adapter"
+symbol = "GitHubReleaseConnectorProvider"
+source = "src/ai_multi_agent_platform/connectors/github_releases.py"
+tier = "supported"
+owner = "platform/connectors"
+local_first = false
+mandatory_paid_service = false
+unique_value = "GitHub Releases publication for release metadata and canonical File assets."
+overlap = "Reference connector is no-network; DurableGitHubReleaseConnectorProvider is a hydration wrapper, not a separate compatibility claim."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "GitHub credentials, network egress, release mutation and uploads"
+upstream_health = "public GitHub REST API with explicit API-version contract"
+compatibility = "Supported subject to connector/release integration evidence."
+usage = "Release publication integration."
+evidence = ["tests/integration/application_distribution/test_github_release_publish.py"]
+docs = ["docs/operations/RELEASE_AND_UPSTREAM_POLICY.md"]
+migration = "Switch release connector; canonical release/File state remains platform-owned."
+
+[[implementation]]
+id = "repository.local-git"
+boundary = "repository-provider"
+kind = "provider"
+symbol = "LocalGitRepositoryProvider"
+source = "src/ai_multi_agent_platform/repositories/local_git.py"
+tier = "reference"
+owner = "platform/repositories"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Local Git operations with canonical revision/provenance semantics."
+overlap = "ConnectorRepositoryProvider serves hosted/self-hosted repositories through ConnectorProvider."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "filesystem/Git process, revision validation and workspace mutation"
+upstream_health = "local Git executable/platform-owned adapter"
+compatibility = "Reference repository/Git path."
+usage = "Local repository workspace and provenance flows."
+evidence = ["docs/PLATFORM_CONFORMANCE.md"]
+docs = ["docs/integrations/REPOSITORY_INTEGRATION.md", "docs/PLATFORM_CONFORMANCE.md"]
+migration = "RepositoryProvider replacement preserves canonical repository/revision provenance."
+
+[[implementation]]
+id = "repository.connector"
+boundary = "repository-provider"
+kind = "bridge"
+symbol = "ConnectorRepositoryProvider"
+source = "src/ai_multi_agent_platform/repositories/connector_repository.py"
+tier = "supported"
+owner = "platform/repositories"
+local_first = false
+mandatory_paid_service = false
+unique_value = "Projects supported ConnectorProvider repository operations into RepositoryProvider semantics."
+overlap = "LocalGit is direct local execution; connector-backed repositories add remote collaboration."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "inherits connector credentials/network side effects plus repository policy"
+upstream_health = "depends on selected connector"
+compatibility = "Supported only with a supported underlying connector/profile."
+usage = "Remote repository collaboration."
+evidence = ["tests/contract/connectors/test_repository_connector_provider.py"]
+docs = ["docs/integrations/REPOSITORY_INTEGRATION.md"]
+migration = "Rebind to LocalGit or another RepositoryProvider; canonical provenance remains stable."
+
+[[implementation]]
+id = "observability.noop"
+boundary = "observability-exporter"
+kind = "exporter"
+symbol = "NoOpExporter"
+source = "src/ai_multi_agent_platform/observability/exporters.py"
+tier = "reference"
+owner = "platform/observability"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Zero-backend default proving telemetry is optional and non-authoritative."
+overlap = "InMemoryExporter retains records."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "drops normalized telemetry"
+upstream_health = "platform-owned"
+compatibility = "Reference no-backend mode."
+usage = "Deployments without telemetry retention."
+evidence = ["docs/operations/OBSERVABILITY.md"]
+docs = ["docs/operations/OBSERVABILITY.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "observability.in-memory"
+boundary = "observability-exporter"
+kind = "exporter"
+symbol = "InMemoryExporter"
+source = "src/ai_multi_agent_platform/observability/exporters.py"
+tier = "reference"
+owner = "platform/observability"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Deterministic local/test telemetry retention."
+overlap = "NoOp retains nothing; accounting bridge forwards metric semantics."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "in-process normalized telemetry retention"
+upstream_health = "platform-owned"
+compatibility = "Reference retained-telemetry mode."
+usage = "Tests, local timeline and conformance evidence."
+evidence = ["docs/operations/OBSERVABILITY.md"]
+docs = ["docs/operations/OBSERVABILITY.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "observability.accounting-bridge"
+boundary = "observability-exporter"
+kind = "bridge"
+symbol = "AccountingBridgeExporter"
+source = "src/ai_multi_agent_platform/observability/integrations.py"
+tier = "supported"
+owner = "platform/observability"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Forwards normalized metric measurements into durable accounting."
+overlap = "Semantic accounting handoff, not another general telemetry backend."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "normalized usage measurements"
+upstream_health = "platform-owned"
+compatibility = "Supported internal integration when accounting is enabled."
+usage = "Usage/accounting integration."
+evidence = ["docs/operations/OBSERVABILITY.md"]
+docs = ["docs/operations/OBSERVABILITY.md"]
+migration = "Disable bridge or replace MeasurementSink; observability contracts remain unchanged."
+
+[[implementation]]
+id = "verification.completion"
+boundary = "verification-provider"
+kind = "provider"
+symbol = "VerificationCompletionAuthority"
+source = "src/ai_multi_agent_platform/verification/gate.py"
+tier = "reference"
+owner = "platform/verification"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Reference completion authority backed by canonical verification evidence."
+overlap = "No competing first-party completion authority is maintained."
+test_burden = "medium"
+doc_burden = "medium"
+security_surface = "task completion authority, reviewer independence and evidence binding"
+upstream_health = "platform-owned"
+compatibility = "Required #46 verification/release path."
+usage = "Canonical Task completion gate."
+evidence = ["docs/PLATFORM_CONFORMANCE.md"]
+docs = ["docs/quality/VERIFICATION.md", "docs/PLATFORM_CONFORMANCE.md"]
+migration = "Replacement must preserve CompletionAuthority and canonical evidence/audit semantics."
+
+[[implementation]]
+id = "evaluation.deterministic-assertions"
+boundary = "evaluation-provider"
+kind = "provider"
+symbol = "DeterministicAssertionEvaluator"
+source = "src/ai_multi_agent_platform/evaluation/evaluators.py"
+tier = "reference"
+owner = "platform/evaluation"
+local_first = true
+mandatory_paid_service = false
+unique_value = "LLM-free structured assertion evaluation."
+overlap = "MetricThresholdEvaluator handles quantitative metric rules."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "canonical evaluation evidence only"
+upstream_health = "platform-owned"
+compatibility = "Required deterministic evaluation/regression gate."
+usage = "Reference CI regression and release evaluation."
+evidence = ["tests/unit/evaluation/test_runner.py", "docs/PLATFORM_CONFORMANCE.md"]
+docs = ["docs/quality/EVALUATION.md", "docs/PLATFORM_CONFORMANCE.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "evaluation.metric-threshold"
+boundary = "evaluation-provider"
+kind = "provider"
+symbol = "MetricThresholdEvaluator"
+source = "src/ai_multi_agent_platform/evaluation/evaluators.py"
+tier = "reference"
+owner = "platform/evaluation"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Deterministic numeric threshold evaluation over normalized metrics."
+overlap = "Assertion evaluator handles structured state/equality rules."
+test_burden = "low"
+doc_burden = "low"
+security_surface = "normalized metrics/evidence only"
+upstream_health = "platform-owned"
+compatibility = "Required deterministic evaluation/regression gate."
+usage = "Performance/quality policy evaluation."
+evidence = ["tests/unit/evaluation/test_runner.py", "docs/PLATFORM_CONFORMANCE.md"]
+docs = ["docs/quality/EVALUATION.md", "docs/PLATFORM_CONFORMANCE.md"]
+migration = "n/a"
+
+[[implementation]]
+id = "security-evidence.skillspector"
+boundary = "security-evidence-provider"
+kind = "adapter"
+symbol = "SkillSpectorSecurityEvidenceProvider"
+source = "src/ai_multi_agent_platform/adapters/skillspector.py"
+tier = "supported"
+owner = "platform/security"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Pinned container-only advisory Skill scanner for immutable pre-install SecurityEvidence."
+overlap = "No alternate first-party external scanner is maintained; canonical Skill trust/Approval remain platform-owned."
+test_burden = "high"
+doc_burden = "medium"
+security_surface = "isolated container execution, untrusted Skill content and raw report retention"
+upstream_health = "pinned/reviewed upstream with retained regression evidence"
+compatibility = "Supported only for the evaluated static_no_llm_network_none provider profile; scanner verdicts are advisory."
+usage = "Optional production pre-install SecurityEvidence enrichment."
+evidence = ["tests/test_issue_868_skillspector_security_evidence.py", "upstream/skillspector.yaml"]
+docs = ["docs/UPSTREAMS.md"]
+migration = "Disable/remove provider without changing canonical Skill identity, trust history or Approval state."
+
+[[implementation]]
+id = "deployment.distributed-lifecycle"
+boundary = "deployment-adapter"
+kind = "bridge"
+symbol = "DistributedLifecycleBackend"
+source = "src/ai_multi_agent_platform/distributed/lifecycle.py"
+tier = "supported"
+owner = "platform/distributed"
+local_first = true
+mandatory_paid_service = false
+unique_value = "Routes canonical Run lifecycle through the self-hosted distributed Worker runtime without moving lifecycle authority."
+overlap = "Single-node lifecycle backend covers local execution; this bridge adds the multi-process/Worker topology."
+test_burden = "high"
+doc_burden = "high"
+security_surface = "Worker/Node authorization, dispatch/reconciliation, remote workspace and message transport"
+upstream_health = "platform-owned"
+compatibility = "Supported advanced deployment profile when distributed #46/conformance evidence passes."
+usage = "Advanced self-hosted distributed control-plane/Worker deployment."
+evidence = ["docs/PLATFORM_CONFORMANCE.md", "tests/test_issue_384_distributed_worker_integration.py"]
+docs = ["docs/runtime/DISTRIBUTED_RUNTIME.md", "docs/operations/ADVANCED_DEPLOYMENT.md"]
+migration = "Return to single-node lifecycle composition or replace the LifecycleBackend without changing canonical Run identity."

@@ -1,25 +1,18 @@
+"""Skill service, resolution, rendering, and trust lifecycle unit coverage.
+
+Migrated from the historical Issue #588 root-level suite as part of #722.
+"""
+
 from __future__ import annotations
 
-import asyncio
 from dataclasses import replace
 
 import pytest
 
-from ai_multi_agent_platform.agents import AgentRevisionRef, AgentRunRecord, AgentRunStatus
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import OwnerRef, Provenance, new_id
-from ai_multi_agent_platform.portability.registry import ImportContext, ResourceSerializerRegistry
-from ai_multi_agent_platform.portability.skill_codecs import (
-    SKILL_BUNDLE_RESOURCE_TYPE,
-    SKILL_RESOURCE_TYPE,
-    SkillPortableSnapshot,
-    register_skill_portability_codecs,
-    snapshot_skill,
-)
-from ai_multi_agent_platform.portability.skill_import import SkillImportMutationHandler
 from ai_multi_agent_platform.skills import (
     InMemorySkillRepository,
-    JsonSkillRepository,
     MarkdownSkillRenderer,
     ReferenceSkillRenderer,
     SkillCapabilityRequirement,
@@ -342,87 +335,3 @@ def test_third_party_skill_requires_explicit_review_evaluation_and_activation() 
     assert active.profile.enabled is True
     assert active.profile.trust_status is SkillTrustStatus.ADOPTED
     assert active.profile.evaluation_metadata["suite"] == "issue-588"
-
-
-def test_restart_persistence_retains_exact_agent_run_bundle_binding(tmp_path) -> None:
-    path = tmp_path / "skills.json"
-    repository = JsonSkillRepository(path)
-    service = SkillService(repository)
-    skill = service.create_skill(_profile("Persisted", "method"), owner_ref=OWNER)
-    coordinator = SkillExecutionCoordinator(SkillResolver(repository))
-    agent_id = new_id("agent")
-    run_id = new_id("run")
-    task_id = new_id("task")
-    bundle, binding = coordinator.prepare(
-        _request(
-            agent_id=agent_id,
-            run_id=run_id,
-            task_id=task_id,
-            explicit=(skill.ref,),
-        )
-    )
-    record = AgentRunRecord(
-        agent_run_id=new_id("agent_run"),
-        run_id=run_id,
-        task_id=task_id,
-        agent=AgentRevisionRef(agent_id=agent_id, revision=1),
-        status=AgentRunStatus.RUNNING,
-    )
-    bound = coordinator.bind_agent_run(binding.binding_id, record)
-
-    restored = JsonSkillRepository(path)
-    restored_binding = restored.get_binding(binding.binding_id)
-    restored_bundle = restored.get_bundle(bundle.skill_bundle_id)
-
-    assert restored_binding == bound
-    assert restored_binding.agent_run_id == record.agent_run_id
-    assert restored_bundle.digest == bundle.digest == restored_binding.skill_bundle_hash
-    assert restored_bundle.entries[0].ref == skill.ref
-
-
-def test_portability_preserves_skill_revision_history_and_provenance() -> None:
-    source_repository = InMemorySkillRepository()
-    source_service = SkillService(source_repository)
-    first = source_service.create_skill(
-        _profile("Portable", "one"),
-        owner_ref=OWNER,
-        provenance=Provenance(source="source-create", details={"origin": "fixture"}),
-    )
-    second = source_service.update_skill(
-        first.skill_id,
-        replace(first.profile, content=SkillContent(content="two")),
-        expected_revision=1,
-        provenance=Provenance(source="source-update", details={"origin": "fixture"}),
-    )
-    serializers = ResourceSerializerRegistry()
-    register_skill_portability_codecs(serializers)
-    resource = serializers.serialize(
-        SKILL_RESOURCE_TYPE, snapshot_skill(source_repository, first.skill_id)
-    )
-    decoded = serializers.deserialize(resource)
-
-    assert isinstance(decoded, SkillPortableSnapshot)
-    assert decoded.definition.current_revision == 2
-    assert tuple(item.revision for item in decoded.revisions) == (1, 2)
-    assert decoded.revisions[0].provenance == first.provenance
-    assert decoded.revisions[1].provenance == second.provenance
-
-    destination = InMemorySkillRepository()
-    handler = SkillImportMutationHandler(destination)
-    context = ImportContext()
-    asyncio.run(handler.preflight(resource, decoded, context))
-    token = asyncio.run(handler.apply(resource, decoded, context))
-    assert token == first.skill_id
-    assert destination.list_skill_revisions(first.skill_id) == decoded.revisions
-
-    bundle = SkillResolver(source_repository).resolve(
-        _request(
-            agent_id=new_id("agent"),
-            run_id=new_id("run"),
-            task_id=new_id("task"),
-            explicit=(second.ref,),
-        )
-    )
-    bundle_resource = serializers.serialize(SKILL_BUNDLE_RESOURCE_TYPE, bundle)
-    restored_bundle = serializers.deserialize(bundle_resource)
-    assert restored_bundle == bundle

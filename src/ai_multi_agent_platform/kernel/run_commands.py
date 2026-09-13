@@ -7,6 +7,7 @@ canonical commit primitives stay behind narrow internal kernel capabilities.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Literal, Protocol
 
 from ai_multi_agent_platform.contracts import (
@@ -39,6 +40,8 @@ EventSpec = tuple[
 ]
 
 _KERNEL_SOURCE = "platform-kernel"
+_OUTCOME_LOCK_STRIPES = 64
+_STALE_REVISION_RETRY_LIMIT = 8
 
 
 class RunCommandKernelHost(Protocol):
@@ -172,6 +175,7 @@ class KernelRunCommands:
 
     def __init__(self, host: RunCommandKernelHost) -> None:
         self._host = host
+        self._outcome_locks = tuple(asyncio.Lock() for _ in range(_OUTCOME_LOCK_STRIPES))
 
     async def create_run(
         self,
@@ -484,6 +488,42 @@ class KernelRunCommands:
                 ErrorCode.INVALID_REQUEST,
                 "record_run_outcome requires terminal status",
             )
+
+        lock = self._outcome_locks[hash(task_id) % len(self._outcome_locks)]
+        async with lock:
+            last_stale_conflict: ContractError | None = None
+            for _ in range(_STALE_REVISION_RETRY_LIMIT):
+                try:
+                    return await self._record_run_outcome_once(
+                        idempotency_key=idempotency_key,
+                        task_id=task_id,
+                        run_id=run_id,
+                        status=status,
+                        output=output,
+                        actor_ref=actor_ref,
+                        source=source,
+                        adapter_metadata=adapter_metadata,
+                    )
+                except ContractError as exc:
+                    if not _is_stale_revision_conflict(exc):
+                        raise
+                    last_stale_conflict = exc
+            if last_stale_conflict is None:
+                raise RuntimeError("stale-revision retry loop exited without a conflict")
+            raise last_stale_conflict
+
+    async def _record_run_outcome_once(
+        self,
+        *,
+        idempotency_key: str,
+        task_id: str,
+        run_id: str,
+        status: RunStatus,
+        output: dict[str, JsonValue] | None,
+        actor_ref: str | None,
+        source: str,
+        adapter_metadata: tuple[AdapterMetadata, ...],
+    ) -> RunState:
         task = await self._host.get_task(task_id)
         run = await self._host.get_run(task_id, run_id)
         duplicate = await self._host._task_command(task_id, idempotency_key, "record_run_outcome")
@@ -680,6 +720,14 @@ class KernelRunCommands:
             source=source,
         )
         return await self._host.get_task(task_id)
+
+
+def _is_stale_revision_conflict(exc: ContractError) -> bool:
+    return (
+        exc.code is ErrorCode.CONFLICT
+        and exc.retryable
+        and exc.details.get("reason") == "stale_stream_revision"
+    )
 
 
 __all__ = ["KernelRunCommands"]

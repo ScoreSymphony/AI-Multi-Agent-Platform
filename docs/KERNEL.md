@@ -19,6 +19,20 @@ PlatformKernel
 
 `InMemoryKernelRepository` is the deterministic baseline. `SqliteKernelRepository` is a durable stdlib reference implementation used to prove process restart and recovery semantics. Neither selects the final production database.
 
+### Async SQLite execution boundary
+
+`EventRepository`, `TaskRepository` and `RunRepository` are application-semantic async boundaries. Callers await them without knowing whether persistence is SQLite, in-memory or a future Postgres implementation.
+
+The stdlib `sqlite3` driver remains synchronous, so `SqliteKernelRepository` never performs runtime database I/O inline on the asyncio event-loop thread. Each complete SQLite operation is offloaded with bounded concurrency. A connection is opened, used and closed inside that worker operation; connection objects are never passed between the event-loop thread and worker threads.
+
+Writes are serialized per repository instance before `BEGIN IMMEDIATE`. Independent repository/process instances still coordinate through SQLite/WAL and canonical optimistic revision checks. SQLite `busy`/`locked` failures are exposed as retryable `ContractError(TRANSIENT_FAILURE)` rather than leaking driver-specific exceptions. Integrity conflicts retain canonical `CONFLICT` semantics and other SQLite failures map to `BACKEND_ERROR`.
+
+A stale optimistic stream revision remains a canonical `CONFLICT`, but both the in-memory and SQLite repositories mark that specific conflict as retryable and expose structured `reason=stale_stream_revision`, expected-revision and actual-revision details. The kernel does not treat arbitrary conflicts as retryable. Concurrent executor terminal callbacks use a fixed 64-stripe per-Task lock set and, only for this explicit stale-revision reason, rebuild the semantic operation from current canonical Task/Run state for at most eight attempts. Contradictory terminal outcomes and other lifecycle conflicts therefore remain immediate failures rather than being blindly rebased onto a newer event stream.
+
+Cancellation is deferred until the in-flight worker reaches its transaction boundary. The awaiting coroutine therefore receives `CancelledError` only after the SQLite operation has either committed or rolled back; cancellation never abandons a half-finished transaction. A cancellation can still arrive after a mutation has committed, so callers that need the final outcome must reconcile through the normal idempotency key, stream revision and read model rather than assuming that cancellation implies rollback.
+
+The constructor's schema initialization is a synchronous startup/composition action, not an async runtime repository call. Future durable backends implement the same repository contracts without inheriting SQLite thread, locking or connection policy.
+
 ## Canonical lifecycle
 
 The kernel reuses the canonical state machines from `ai_multi_agent_platform.domain`; it does not introduce parallel Task or Run status definitions.

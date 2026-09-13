@@ -9,7 +9,7 @@ This audit records both the original #12 delivery and the remediation required a
 - [x] **Canonical Capability and Tool Invocation contracts exist.** `capabilities/types.py` owns backend-neutral capability/invocation/result/audit types; the provider-neutral `ToolInvocation` / `ToolResult` boundary remains under `contracts/types.py`.
 - [x] **Capability registry can discover/list/resolve providers.** `CapabilityRegistry` supports provider registration/removal, static inventory, policy-aware discovery, health refresh, exact/compatible version resolution, permissions, worker capability filtering and explicit conflicts.
 - [x] **At least one native deterministic tool uses the canonical invocation path.** `NativeEchoProvider` exposes `tool.echo` through `CapabilityInvoker`.
-- [x] **At least one MCP tool uses the same canonical invocation path.** Fake-backed contract coverage remains, and `test_mcp_sdk_transport.py` launches a real MCP stdio server using the official SDK and invokes it through the same registry/invoker path.
+- [x] **At least one MCP tool uses the same canonical invocation path.** Fake-backed contract coverage remains, and `tests/integration/mcp/test_sdk_transports.py` launches a real MCP stdio server using the official SDK and invokes it through the same registry/invoker path.
 - [x] **Input validation occurs before provider execution.** Draft 2020-12 validation runs before provider invocation; malformed input is rejected and audited.
 - [x] **Permission/approval hooks are present.** Registry permission checks and policy/governance/approval hooks are implemented. Approval-required calls bind to canonical `tool_invocation_*` identity and are revalidated before execution.
 - [x] **Tool calls are traceable to task/run/agent IDs.** `InvocationTrace` requires canonical Task, Run and Agent IDs; persistent invocation events retain those IDs plus project/correlation/causation metadata.
@@ -52,9 +52,9 @@ The canonical compatibility baseline intentionally supports one-to-three-part do
 
 ## Required regression tests
 
-Original required coverage remains in `tests/test_capabilities.py`, `tests/test_mcp_sdk_transport.py` and `tests/test_capability_observability.py`.
+Original required coverage remains in `tests/unit/capabilities/test_capabilities.py`, `tests/integration/mcp/test_sdk_transports.py` and `tests/unit/capabilities/test_capability_observability.py`.
 
-The reopened requirements are covered by `tests/test_issue_12_reopen.py`:
+The reopened requirements are covered by `tests/unit/capabilities/test_registry_discovery_and_compatibility.py`:
 
 - [x] policy-denied capability is excluded while allowed/approval-gated capabilities remain visible;
 - [x] policy-aware discovery works without a concrete #15 backend;
