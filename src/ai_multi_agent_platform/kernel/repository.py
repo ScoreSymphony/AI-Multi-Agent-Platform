@@ -132,10 +132,17 @@ class InMemoryKernelRepository(EventRepository):
 
             stream = self._streams.setdefault(stream_id, [])
             if len(stream) != expected_revision:
+                actual_revision = len(stream)
                 raise ContractError(
                     ErrorCode.CONFLICT,
                     f"stale stream revision for {stream_id}: "
-                    f"expected {expected_revision}, actual {len(stream)}",
+                    f"expected {expected_revision}, actual {actual_revision}",
+                    retryable=True,
+                    details={
+                        "reason": "stale_stream_revision",
+                        "expected_revision": expected_revision,
+                        "actual_revision": actual_revision,
+                    },
                 )
 
             existing_event_ids = {event.id for item in self._streams.values() for event in item}
