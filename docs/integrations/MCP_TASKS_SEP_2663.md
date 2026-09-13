@@ -39,6 +39,7 @@ experimental Tasks surface.
 Normative/evaluation sources:
 
 - <https://tasks.extensions.modelcontextprotocol.io/seps/2663-tasks-extension>
+- <https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http>
 - <https://github.com/modelcontextprotocol/python-sdk/blob/main/ROADMAP.md>
 
 The `2025-11-25` experimental Tasks feature is explicitly **not** treated as wire-compatible with
@@ -82,10 +83,20 @@ For task lifecycle requests the client implements:
 - `tasks/update` for governed responses to `input_required` requests;
 - `tasks/cancel` as a cooperative, acknowledgement-only cancellation signal.
 
-For Streamable HTTP, `tasks/get`, `tasks/update` and `tasks/cancel` set `Mcp-Name` to the exact MCP
-task ID as required by the pinned extension profile. The reference implementation uses polling;
-optional `notifications/tasks` subscriptions are not required for lifecycle correctness and are not
-yet claimed as supported.
+The experimental stateless transport follows the `2026-07-28` Streamable HTTP routing envelope for
+this profile. Every POST sends `MCP-Protocol-Version`, mirrors the JSON-RPC method into `Mcp-Method`,
+and advertises both `application/json` and `text/event-stream` response types. `tools/call` mirrors
+its tool name into `Mcp-Name`; `tasks/get`, `tasks/update` and `tasks/cancel` mirror the exact MCP task
+ID there as required by SEP-2663. Values that are not safe plain-ASCII header values, including
+leading/trailing whitespace or literal Base64-sentinel-shaped values, use the protocol's
+`=?base64?...?=` UTF-8 encoding rather than being inserted raw.
+
+Request-scoped SSE responses are accepted: progress/log notifications preceding the final JSON-RPC
+response are validated as notification-shaped messages and do not become canonical lifecycle
+transitions. The current compatibility path does not project those transient SSE notification
+payloads into a separate platform progress stream; durable external status/observability for #964 is
+provided by task polling and binding evidence. Optional `notifications/tasks` subscriptions are not
+required for lifecycle correctness and are not yet claimed as supported.
 
 `CreateTaskResult` is `Result & Task`, not `DetailedTask`. Its embedded seed may therefore already
 report `completed`, `failed` or `input_required` without the status-specific payload that is required
@@ -265,8 +276,9 @@ The #964 profile enforces these boundaries:
 
 The architecture and wire path are implemented and contract-tested against the finalized SEP-2663
 shape, including negotiation, asynchronous completion, update/cancel, missing-task handling,
-recovery, stale/duplicate observation handling and synchronous fallback. It should remain an
-explicit experimental adapter profile until at least one maintained upstream client SDK/conformance
-line supports the same finalized extension and a real external implementation is included in
-repeatable interoperability evidence. Promoting it earlier would overstate upstream compatibility
-even though the platform-side authority boundary is already correct.
+recovery, stale/duplicate observation handling, required modern routing headers, request-scoped SSE
+final responses and synchronous fallback. It should remain an explicit experimental adapter profile
+until at least one maintained upstream client SDK/conformance line supports the same finalized
+extension and a real external implementation is included in repeatable interoperability evidence.
+Promoting it earlier would overstate upstream compatibility even though the platform-side authority
+boundary is already correct.
