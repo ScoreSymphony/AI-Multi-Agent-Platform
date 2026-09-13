@@ -38,6 +38,7 @@ _META_PROTOCOL_VERSION = "io.modelcontextprotocol/protocolVersion"
 _META_CLIENT_CAPABILITIES = "io.modelcontextprotocol/clientCapabilities"
 _META_CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
 _MCP_NAME_HEADER = "Mcp-Name"
+_MCP_METHOD_HEADER = "Mcp-Method"
 _UNSUPPORTED_PROTOCOL_VERSION = -32022
 _MISSING_REQUIRED_CLIENT_CAPABILITY = -32021
 _INVALID_PARAMS = -32602
@@ -384,6 +385,7 @@ class MCPStatelessHTTPClient(MCPClient):
                     provider_id=self._provider_id,
                 )
             headers[_MCP_NAME_HEADER] = task_id
+            headers[_MCP_METHOD_HEADER] = method
         return headers
 
     def _invalid_response(self, message: str) -> ContractError:
