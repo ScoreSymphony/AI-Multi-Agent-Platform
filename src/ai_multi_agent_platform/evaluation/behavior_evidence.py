@@ -51,7 +51,7 @@ class _CompatibleApprovalRecordReaderAdapter:
         )
         if isawaitable(result):
             return await result
-        return cast(tuple[ApprovalRecord, ...], result)
+        return result
 
 
 def _unique(values: tuple[str, ...]) -> tuple[str, ...]:
@@ -72,9 +72,7 @@ class ApprovalEvidenceCaseExecutor:
         elif iscoroutinefunction(approvals.all):
             self._approvals = cast(ApprovalRecordReader, approvals)
         else:
-            self._approvals = _CompatibleApprovalRecordReaderAdapter(
-                cast(_CompatibleApprovalRecordReader, approvals)
-            )
+            self._approvals = _CompatibleApprovalRecordReaderAdapter(approvals)
 
     async def execute_case(
         self,
