@@ -115,10 +115,7 @@ class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):
         )
         execution_agent, team_revision = self._execution_identity(consumer, consumer_agent)
         handoff = runtime_context.handoff
-        durable_adapter = DurableConsumedHandoffContextAdapter(
-            self.runtime_repository,
-            self.agents,
-        )
+        durable_adapter = DurableConsumedHandoffContextAdapter(self.repository, self.agents)
         bundle = await self.context_assembly.assemble(
             ContextAssemblyRequest(
                 task_id=handoff.task_id,
