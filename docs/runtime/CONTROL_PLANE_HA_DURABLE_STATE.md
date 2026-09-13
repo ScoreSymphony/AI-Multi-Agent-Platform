@@ -17,12 +17,13 @@ Every state source is classified as exactly one of:
 
 ## Baseline inventory
 
-The current `SINGLE_NODE_DURABLE_STORES` contract contains **37** database/JSON stores. The HA audit adds one currently unregistered persisted store discovered in `build_single_node_deployment` (`db/model-routing-profiles.json`) plus provider/volatile state that is outside the backup store list.
+The current `SINGLE_NODE_DURABLE_STORES` contract contains **37** database/JSON stores. Auditing the production-shaped durable composition also identifies two persisted stores that are currently outside that backup inventory: `db/planning.json` and `db/model-routing-profiles.json`. The HA map additionally records provider/volatile state that is outside the backup store list.
 
-The resulting capability map contains **44 state sources**:
+The resulting capability map contains **45 state sources**:
 
 - 37 entries from the current single-node backup inventory;
-- `model-routing-profiles`, which is persisted by the production-shaped single-node composition but is currently absent from `SINGLE_NODE_DURABLE_STORES`;
+- `planning`, persisted as `db/planning.json` by the durable planning composition but currently absent from `SINGLE_NODE_DURABLE_STORES`;
+- `model-routing-profiles`, persisted by the production-shaped single-node composition but currently absent from `SINGLE_NODE_DURABLE_STORES`;
 - shared file content;
 - shared workspace content;
 - managed repository working-tree content;
@@ -30,13 +31,14 @@ The resulting capability map contains **44 state sources**:
 - live Worker heartbeat/registration state;
 - shared HA schema/migration compatibility metadata.
 
-The `model-routing-profiles` mismatch is intentionally recorded rather than silently normalised. It is a pre-existing backup/recovery inventory gap and must be resolved at the #40/#41/#891 boundary; #956 still classifies it because HA promotion cannot ignore execution-routing state merely because the backup inventory omitted it.
+The `planning` and `model-routing-profiles` mismatches are intentionally recorded rather than silently normalised. They are pre-existing backup/recovery inventory gaps. #956 still classifies both because HA promotion cannot ignore canonical Plan/Step binding or execution-routing state merely because the backup inventory omitted the corresponding files.
 
 ## Minimum shared state for the #566 baseline
 
 The first supported active/passive profile requires shared persistence for:
 
 - kernel Task/Run/Event history, revisions and idempotency;
+- durable planning proposals, replanning state and exact Step bindings;
 - durable plan/step coordination;
 - Control Plane scopes;
 - File metadata;
@@ -56,7 +58,7 @@ Two state classes are explicitly safe to rebuild for the initial profile:
 - volatile observability/export buffers, because they do not own canonical authority;
 - live Worker heartbeat/registration state, because Workers re-register after promotion while durable reservations and dispatch/reconciliation records remain shared.
 
-Reconstruction must not be used as a shortcut for canonical idempotency, authorization, approval, Automation or dispatch ownership state.
+Reconstruction must not be used as a shortcut for canonical idempotency, planning/binding, authorization, approval, Automation or dispatch ownership state.
 
 ## Explicitly gated initial capabilities
 
@@ -84,13 +86,14 @@ The promoted process must fail closed when this proof cannot be made.
 The capability map implies the following implementation order for #956:
 
 1. shared PostgreSQL kernel repository, including event/idempotency/revision semantics;
-2. shared security repositories needed for authentication/session/revocation, authorization and approvals;
-3. shared Automation persistence;
-4. shared distributed runtime persistence for reservations/dispatch reconciliation;
-5. shared scopes/File/Workspace metadata and Run/Workspace bindings;
-6. HA schema/bootstrap/readiness compatibility state;
-7. shared File/Workspace content provider composition or explicit capability gating;
-8. conditional feature adapters only when they are promoted into the supported HA capability set.
+2. shared planning persistence for proposals, replanning and exact Step bindings, together with durable coordination semantics;
+3. shared security repositories needed for authentication/session/revocation, authorization and approvals;
+4. shared Automation persistence;
+5. shared distributed runtime persistence for reservations/dispatch reconciliation;
+6. shared scopes/File/Workspace metadata and Run/Workspace bindings;
+7. HA schema/bootstrap/readiness compatibility state;
+8. shared File/Workspace content provider composition or explicit capability gating;
+9. conditional feature adapters only when they are promoted into the supported HA capability set.
 
 This order is narrower than porting every SQLite/JSON store and directly follows the #566 acceptance scenarios.
 
@@ -105,10 +108,11 @@ That readiness proof belongs to the HA composition; individual domain services c
 `tests/architecture/test_ha_durable_state_capability_map.py` enforces that:
 
 - every `SINGLE_NODE_DURABLE_STORES` entry is classified;
+- each inventory-backed map row keeps the inventory's canonical path and owner, so stable IDs cannot mask path/ownership drift;
 - duplicate capability-map IDs are rejected;
 - required HA state cannot be classified as unsupported/reconstructable;
 - unsupported state always names a fail-closed gate;
-- the known `model-routing-profiles` inventory mismatch stays explicit until the underlying backup inventory is corrected;
+- the known `planning` and `model-routing-profiles` inventory mismatches stay explicit until the underlying backup inventory is corrected;
 - provider/volatile pseudo-state additions are intentional rather than accidental inventory drift.
 
-When the single-node persistence topology grows, CI therefore forces a deliberate HA classification instead of allowing new host-local durable state to enter unnoticed.
+When the single-node persistence topology grows or an existing store moves, CI therefore forces a deliberate HA classification update instead of allowing new or stale host-local durable state to enter unnoticed.
