@@ -4,14 +4,14 @@ Issue #892 requires async runtime services to avoid executing synchronous `sqlit
 
 ## Runtime contract
 
-`NotificationPreferenceRepository` represents backend-neutral application semantics:
+`AsyncNotificationPreferenceRepository` is the backend-neutral persistence seam used by async application/runtime services:
 
 - `get(recipient)` returns the persisted preference or the canonical default for that recipient;
 - `save(preference)` persists and returns the canonical preference.
 
 Both operations are awaitable. `NotificationService` and the Notification Control Plane therefore do not know whether the implementation is in-memory, SQLite-backed, or a future remote database adapter.
 
-The existing synchronous SQLite preference repository remains an internal schema/bootstrap implementation. The public runtime `SqliteNotificationPreferenceRepository` is the awaitable adapter used by the service composition.
+The pre-existing synchronous `NotificationPreferenceRepository` seam remains available for legacy/non-runtime adapters. The existing synchronous SQLite preference implementation is used internally for schema/bootstrap setup, while the public runtime `SqliteNotificationPreferenceRepository` exported by the Notifications package is the awaitable adapter used by service composition.
 
 ## SQLite runtime boundary
 
@@ -25,7 +25,7 @@ Preference serialization/deserialization remains part of the persistence operati
 
 Notification SQLite offload uses thread-based synchronization rather than asyncio-bound locks. A repository instance is therefore reusable across separate `asyncio.run(...)` lifetimes, matching existing test and embedding behavior.
 
-`max_concurrency` bounds active persistence operations per adapter. Reads may execute concurrently up to that bound. Durable writes additionally acquire the shared Notification mutation gate before consuming a slot, keeping writes serialized without allowing queued writers to consume read capacity.
+`max_concurrency` bounds active persistence operations per adapter. Reads may execute concurrently up to that bound. Durable writes additionally acquire the adapter's mutation gate before consuming a slot, keeping writes serialized without allowing queued writers to consume read capacity.
 
 The worker itself is scheduled through `asyncio.to_thread`; the provider-level bounded semaphore limits active Notification persistence work even when multiple callers arrive concurrently.
 
@@ -56,7 +56,7 @@ No async handler needs to know whether preference persistence is SQLite-backed.
 
 ## Conformance and regressions
 
-The in-memory preference repository implements the same awaitable contract as SQLite. #892 regression coverage verifies:
+The in-memory preference repository implements the same `AsyncNotificationPreferenceRepository` contract as SQLite. #892 regression coverage verifies:
 
 - event-loop heartbeat responsiveness during intentionally slow SQLite preference work;
 - worker-thread SQLite connection ownership;
