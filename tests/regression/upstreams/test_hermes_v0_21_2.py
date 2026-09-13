@@ -189,8 +189,7 @@ def test_candidate_terminal_and_unknown_status_mapping_is_explicit(
             await orchestrator.plan(_request(f"status-{status}"))
         assert error.value.code is expected_code
         assert (
-            error.value.adapter_metadata[0].values["upstream_revision"]
-            == HERMES_V0_21_2_REVISION
+            error.value.adapter_metadata[0].values["upstream_revision"] == HERMES_V0_21_2_REVISION
         )
 
     asyncio.run(scenario())
@@ -223,8 +222,7 @@ def test_candidate_failed_status_maps_to_canonical_backend_error() -> None:
         assert error.value.code is ErrorCode.BACKEND_ERROR
         assert "candidate planner failed" in error.value.message
         assert (
-            error.value.adapter_metadata[0].values["upstream_revision"]
-            == HERMES_V0_21_2_REVISION
+            error.value.adapter_metadata[0].values["upstream_revision"] == HERMES_V0_21_2_REVISION
         )
 
     asyncio.run(scenario())
