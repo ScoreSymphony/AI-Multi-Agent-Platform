@@ -19,6 +19,7 @@ from ._sqlite_async import AsyncSqliteOffload, map_sqlite_error
 from .delivery import DeliveryAttempt
 from .delivery_sqlite import SqliteDeliveryAttemptRepository as _SyncDeliveryAttemptRepository
 from .models import Notification, NotificationQuery, NotificationState, RecipientRef
+from .repository import merge_active_aggregate
 from .runtime import SqliteNotificationRuntimeState as _SyncNotificationRuntimeState
 from .sqlite import SqliteNotificationRepository as _SyncNotificationRepository
 
@@ -44,33 +45,91 @@ class SqliteNotificationRepository(_SyncNotificationRepository):
         except sqlite3.Error as exc:
             raise map_sqlite_error(exc, message) from exc
 
-    async def save(self, notification: Notification) -> Notification:
+    def _save_with_connection(
+        self,
+        connection: sqlite3.Connection,
+        notification: Notification,
+    ) -> None:
         encoded = _legacy_notifications._encode_notification(notification)
+        connection.execute(
+            """
+            INSERT INTO notifications(
+                id, recipient_type, recipient_id, aggregation_key,
+                state, expires_at, updated_at, payload
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                recipient_type = excluded.recipient_type,
+                recipient_id = excluded.recipient_id,
+                aggregation_key = excluded.aggregation_key,
+                state = excluded.state,
+                expires_at = excluded.expires_at,
+                updated_at = excluded.updated_at,
+                payload = excluded.payload
+            """,
+            _legacy_notifications._row_values(notification, encoded),
+        )
 
+    async def save(self, notification: Notification) -> Notification:
         def operation() -> Notification:
             with self._connect() as connection:
-                connection.execute(
-                    """
-                    INSERT INTO notifications(
-                        id, recipient_type, recipient_id, aggregation_key,
-                        state, expires_at, updated_at, payload
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        recipient_type = excluded.recipient_type,
-                        recipient_id = excluded.recipient_id,
-                        aggregation_key = excluded.aggregation_key,
-                        state = excluded.state,
-                        expires_at = excluded.expires_at,
-                        updated_at = excluded.updated_at,
-                        payload = excluded.payload
-                    """,
-                    _legacy_notifications._row_values(notification, encoded),
-                )
+                self._save_with_connection(connection, notification)
             return notification
 
         return await self._run_sqlite(
             operation,
             message="failed to persist notification",
+            write=True,
+        )
+
+    async def save_active_aggregate(
+        self,
+        notification: Notification,
+        *,
+        increment_existing: bool,
+    ) -> tuple[Notification, bool]:
+        aggregation_key = notification.aggregation_key
+        if aggregation_key is None or not aggregation_key.strip():
+            raise ValueError("notification aggregation_key must not be blank")
+
+        def operation() -> tuple[Notification, bool]:
+            with self._connect() as connection:
+                # BEGIN IMMEDIATE serializes the lookup+insert/update across repository instances,
+                # not only within this adapter object's asyncio write lock.
+                connection.execute("BEGIN IMMEDIATE")
+                rows = connection.execute(
+                    """
+                    SELECT payload FROM notifications
+                    WHERE recipient_type = ? AND recipient_id = ? AND aggregation_key = ?
+                    ORDER BY updated_at DESC, id DESC
+                    """,
+                    (
+                        notification.recipient.type.value,
+                        notification.recipient.id,
+                        aggregation_key,
+                    ),
+                ).fetchall()
+                now = datetime.now(UTC)
+                existing: Notification | None = None
+                for row in rows:
+                    item = _legacy_notifications._decode_notification(cast(str, row["payload"]))
+                    if item.state in {NotificationState.DISMISSED, NotificationState.ARCHIVED}:
+                        continue
+                    if item.expires_at is not None and item.expires_at <= now:
+                        continue
+                    existing = item
+                    break
+                if existing is not None:
+                    if not increment_existing:
+                        return existing, True
+                    merged = merge_active_aggregate(existing, notification)
+                    self._save_with_connection(connection, merged)
+                    return merged, True
+                self._save_with_connection(connection, notification)
+                return notification, False
+
+        return await self._run_sqlite(
+            operation,
+            message="failed to persist notification aggregation",
             write=True,
         )
 
