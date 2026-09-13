@@ -32,14 +32,12 @@ _RESULT_FIELDS = (
 class PrivateMCPEvidenceVerification:
     """Summary of one successful retained-evidence integrity verification."""
 
-    evidence_root: str
     files_verified: int
     referenced_files: int
     verified_paths: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "evidence_root": self.evidence_root,
             "files_verified": self.files_verified,
             "referenced_files": self.referenced_files,
             "verified_paths": list(self.verified_paths),
@@ -107,7 +105,6 @@ def verify_private_mcp_transport_evidence_files(
                     )
 
     return PrivateMCPEvidenceVerification(
-        evidence_root=str(root),
         files_verified=len(manifest),
         referenced_files=len(referenced),
         verified_paths=tuple(sorted(manifest)),
@@ -118,7 +115,8 @@ def _resolve_evidence_path(root: Path, path_text: str) -> Path:
     if "\\" in path_text:
         raise ValueError(f"raw_evidence path must use canonical forward slashes: {path_text!r}")
     posix_path = PurePosixPath(path_text)
-    if posix_path.is_absolute() or PureWindowsPath(path_text).is_absolute():
+    windows_path = PureWindowsPath(path_text)
+    if posix_path.is_absolute() or windows_path.is_absolute() or windows_path.drive:
         raise ValueError(f"raw_evidence path must be relative: {path_text!r}")
     if ".." in posix_path.parts:
         raise ValueError(
