@@ -101,7 +101,8 @@ def verify_private_mcp_transport_evidence_files(
                 referenced.add(ref)
                 if ref not in manifest:
                     raise ValueError(
-                        f"{field}[{index}] references evidence {ref!r} that is absent from raw_evidence"
+                        f"{field}[{index}] references evidence {ref!r} "
+                        "that is absent from raw_evidence"
                     )
 
     return PrivateMCPEvidenceVerification(
