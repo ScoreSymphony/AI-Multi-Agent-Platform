@@ -11,7 +11,7 @@ import argparse
 import json
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from ai_multi_agent_platform.conformance import (
@@ -24,6 +24,7 @@ from ai_multi_agent_platform.conformance import (
 from ai_multi_agent_platform.conformance.evidence import emit_runtime_evidence
 
 ISSUE562_REPORT_SCHEMA = "ai-multi-agent-platform/issue-562-two-vps-private-tunnel/v1"
+ISSUE388_TRANSPORT_SCHEMA = "ai-multi-agent-platform/issue-388-two-host-transport/v1"
 DEPLOYMENT_PROFILE = "real-two-vps-private-tunnel"
 SCENARIO_ID = "ENV-DISTRIBUTED-REAL"
 _REQUIRED_PHASES = {
@@ -50,6 +51,15 @@ _REQUIRED_PROBES = {
     ("message-broker", "private"),
     ("message-broker", "public"),
 }
+_FORBIDDEN_KEY_PARTS = (
+    "password",
+    "passwd",
+    "private_key",
+    "secret_value",
+    "token_value",
+    "bearer",
+    "credential_value",
+)
 
 
 class EvidenceError(ValueError):
@@ -83,6 +93,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _reject_sensitive_keys(value: object, *, path: str) -> None:
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            lowered = str(key).lower()
+            if any(part in lowered for part in _FORBIDDEN_KEY_PARTS):
+                raise EvidenceError(f"unsafe evidence key is not allowed: {path}.{key}")
+            _reject_sensitive_keys(child, path=f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_sensitive_keys(child, path=f"{path}[{index}]")
+
+
 def _load_json(path: Path) -> dict[str, object]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -90,6 +112,7 @@ def _load_json(path: Path) -> dict[str, object]:
         raise EvidenceError(f"unable to load #562 acceptance evidence: {exc}") from exc
     if not isinstance(payload, dict):
         raise EvidenceError("#562 acceptance evidence must be a JSON object")
+    _reject_sensitive_keys(payload, path="issue562-report")
     return payload
 
 
@@ -124,7 +147,12 @@ def _current_commit(repository_root: Path) -> str:
     return commit
 
 
-def _validate_network(network: Mapping[str, object]) -> None:
+def _validate_network(
+    network: Mapping[str, object],
+    *,
+    platform_commit: str,
+    worker_host_label: str,
+) -> None:
     if network.get("status") != "pass":
         raise EvidenceError("#562 network acceptance did not pass")
     if network.get("addresses_recorded") is not False:
@@ -133,24 +161,96 @@ def _validate_network(network: Mapping[str, object]) -> None:
     if not isinstance(probes, list):
         raise EvidenceError("#562 network evidence is missing probe results")
 
-    observed: set[tuple[str, str]] = set()
+    observed: dict[tuple[str, str], Mapping[str, object]] = {}
     for raw_probe in probes:
         if not isinstance(raw_probe, Mapping):
             raise EvidenceError("#562 network probe evidence must contain objects")
         label = raw_probe.get("endpoint_label")
         scope = raw_probe.get("scope")
-        if isinstance(label, str) and isinstance(scope, str):
-            observed.add((label, scope))
+        if not isinstance(label, str) or not isinstance(scope, str):
+            raise EvidenceError("#562 network probe is missing endpoint label/scope")
+        key = (label, scope)
+        if key not in _REQUIRED_PROBES:
+            raise EvidenceError(f"#562 network probe has unsupported endpoint/scope: {key}")
+        if key in observed:
+            raise EvidenceError(f"#562 network evidence contains duplicate probe: {key}")
         if raw_probe.get("status") != "pass":
             raise EvidenceError("#562 network evidence contains a non-passing probe")
+        if raw_probe.get("platform_commit") != platform_commit:
+            raise EvidenceError("#562 network probe uses a different platform commit")
+        if raw_probe.get("source_host_label") != worker_host_label:
+            raise EvidenceError("#562 network probe was not recorded from the Worker host")
         if raw_probe.get("target_address_recorded") is not False:
             raise EvidenceError("#562 network probe retained a tested address")
         if raw_probe.get("credential_material_recorded") is not False:
             raise EvidenceError("#562 network probe retained credential material")
+        observed[key] = raw_probe
 
-    missing = sorted(_REQUIRED_PROBES - observed)
+    missing = sorted(_REQUIRED_PROBES - observed.keys())
     if missing:
         raise EvidenceError(f"#562 network evidence is missing required probes: {missing}")
+
+    for label in ("worker-protocol", "message-broker"):
+        private_probe = observed[(label, "private")]
+        public_probe = observed[(label, "public")]
+        private_port = private_probe.get("port")
+        public_port = public_probe.get("port")
+        if (
+            isinstance(private_port, bool)
+            or not isinstance(private_port, int)
+            or private_port <= 0
+            or private_port > 65535
+        ):
+            raise EvidenceError(f"#562 private {label} probe has an invalid service port")
+        if public_port != private_port:
+            raise EvidenceError(f"#562 public/private {label} probes use different ports")
+        if (
+            private_probe.get("expected") != "reachable"
+            or private_probe.get("reachable") is not True
+            or private_probe.get("outcome") != "connected"
+        ):
+            raise EvidenceError(f"#562 private {label} probe did not prove tunnel reachability")
+        if (
+            public_probe.get("expected") != "closed"
+            or public_probe.get("reachable") is not False
+            or public_probe.get("outcome") not in {"refused", "timeout"}
+        ):
+            raise EvidenceError(f"#562 public {label} probe did not prove non-exposure")
+
+
+def _validate_canonical_ids(canonical: Mapping[str, object]) -> None:
+    values = {key: _non_empty_string(canonical, key) for key in _REQUIRED_CANONICAL_IDS}
+    run_ids = {
+        values["run_id"],
+        values["post_recovery_run_id"],
+        values["post_restart_run_id"],
+    }
+    if len(run_ids) != 3:
+        raise EvidenceError("#562 dispatch/recovery/restart evidence reuses a canonical Run ID")
+    if values["worker_job_id"] == values["post_recovery_worker_job_id"]:
+        raise EvidenceError("#562 recovery evidence reuses the original canonical WorkerJob ID")
+
+
+def _validate_transport(
+    payload: Mapping[str, object],
+    *,
+    worker_id: str,
+) -> bool:
+    transport = payload.get("transport_evidence")
+    if transport is None:
+        return False
+    if not isinstance(transport, Mapping):
+        raise EvidenceError("#562 transport evidence must be an object when present")
+    if transport.get("status") != "pass" or transport.get("schema") != ISSUE388_TRANSPORT_SCHEMA:
+        raise EvidenceError("#562 transport evidence is not a passing supported #388 report")
+    if transport.get("worker_id") != worker_id:
+        raise EvidenceError("#562 transport evidence uses a different canonical Worker")
+    if transport.get("tls") is not True:
+        raise EvidenceError("#562 transport evidence did not retain encrypted-transport proof")
+    authentication = transport.get("authentication")
+    if not isinstance(authentication, str) or not authentication.strip():
+        raise EvidenceError("#562 transport evidence is missing service authentication")
+    return True
 
 
 def _validate_evidence(path: Path, *, repository_root: Path) -> dict[str, object]:
@@ -186,8 +286,7 @@ def _validate_evidence(path: Path, *, repository_root: Path) -> dict[str, object
         raise EvidenceError("#562 evidence contains a non-passing required phase")
 
     canonical = _mapping(payload, "canonical")
-    for key in _REQUIRED_CANONICAL_IDS:
-        _non_empty_string(canonical, key)
+    _validate_canonical_ids(canonical)
 
     capabilities = payload.get("advertised_capability_refs")
     if (
@@ -197,18 +296,26 @@ def _validate_evidence(path: Path, *, repository_root: Path) -> dict[str, object
     ):
         raise EvidenceError("#562 evidence is missing advertised Worker capabilities")
 
-    _validate_network(_mapping(payload, "network"))
+    _validate_network(
+        _mapping(payload, "network"),
+        platform_commit=evidence_commit,
+        worker_host_label=worker_host,
+    )
 
     conformance = _mapping(payload, "conformance")
     if conformance.get("scenario_id") != "E":
         raise EvidenceError("#562 evidence is not bound to distributed Scenario E")
     if conformance.get("profile") != DEPLOYMENT_PROFILE:
-        raise EvidenceError("#562 conformance evidence uses a different real-infrastructure profile")
+        raise EvidenceError(
+            "#562 conformance evidence uses a different real-infrastructure profile"
+        )
     if conformance.get("status") != "pass":
         raise EvidenceError("#562 conformance evidence did not pass")
     if conformance.get("optional_real_infrastructure") is not True:
         raise EvidenceError("#562 evidence is not marked as optional real infrastructure")
 
+    worker_id = _non_empty_string(canonical, "worker_id")
+    _validate_transport(payload, worker_id=worker_id)
     return payload
 
 
@@ -230,7 +337,7 @@ def _probe(acceptance_evidence: Path, *, repository_root: Path) -> int:
         "issue562:worker-restart-reregistration",
         "issue562:security-negative-paths",
     ]
-    if payload.get("transport_evidence") is not None:
+    if _validate_transport(payload, worker_id=_non_empty_string(canonical, "worker_id")):
         evidence_refs.append("issue562:transport-artifact-evidence-round-trip")
 
     emit_runtime_evidence(
@@ -292,7 +399,7 @@ def run_profile(
     )
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     repository_root = args.repository_root.resolve()
     if args.probe:
