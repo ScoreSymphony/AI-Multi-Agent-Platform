@@ -54,7 +54,7 @@ async def _run_to_transaction_boundary[T](operation: Callable[[], T]) -> T:
         # Cancellation remains authoritative only after a successful transaction boundary.
         failure = worker.exception()
         if failure is not None:
-            raise failure
+            raise failure from None
         raise
 
 
