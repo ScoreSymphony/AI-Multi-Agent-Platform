@@ -10,6 +10,7 @@ import pytest
 from ai_multi_agent_platform.adapters.hermes import (
     HERMES_PINNED_REVISION,
     HermesAdapterConfig,
+    HermesCompatibilityStatus,
     HermesHttpResponse,
     HermesOrchestrator,
 )
@@ -68,6 +69,16 @@ class TimeoutTransport:
         raise TimeoutError("candidate timeout")
 
 
+def _v0_21_1_config(**overrides: object) -> HermesAdapterConfig:
+    values: dict[str, object] = {
+        "enabled": True,
+        "pinned_revision": HERMES_V0_21_1_REVISION,
+        "compatibility_status": HermesCompatibilityStatus.UNVERIFIED_PIN,
+    }
+    values.update(overrides)
+    return HermesAdapterConfig(**values)  # type: ignore[arg-type]
+
+
 def _request() -> PlanRequest:
     return PlanRequest(
         task_id=new_id("task"),
@@ -98,11 +109,13 @@ def _completed_output() -> str:
     )
 
 
-def test_repository_pin_is_exact_hermes_v0_21_1_commit() -> None:
-    assert HERMES_PINNED_REVISION == HERMES_V0_21_1_REVISION
-    config = HermesAdapterConfig(enabled=True)
-    assert config.pinned_revision == HERMES_V0_21_1_REVISION
-    assert config.compatibility_status.value == "verified_pin"
+def test_v0_21_1_revision_remains_distinct_rollback_baseline() -> None:
+    assert HERMES_PINNED_REVISION == "939e45c91d751fadd94dcd1b873ac3cb44846213"
+    assert HERMES_V0_21_1_REVISION == "2237be355906fbe6065ce1815711eee52b2d646e"
+    assert HERMES_V0_21_1_REVISION != HERMES_PINNED_REVISION
+    rollback_config = _v0_21_1_config()
+    assert rollback_config.pinned_revision == HERMES_V0_21_1_REVISION
+    assert rollback_config.compatibility_status is HermesCompatibilityStatus.UNVERIFIED_PIN
 
 
 @pytest.mark.parametrize(
@@ -141,7 +154,7 @@ def test_v0_21_1_completed_status_preserves_canonical_plan_contract() -> None:
             ]
         )
         response = await HermesOrchestrator(
-            HermesAdapterConfig(enabled=True, poll_interval_seconds=0.001),
+            _v0_21_1_config(poll_interval_seconds=0.001),
             transport=transport,
             secret_resolver=lambda _: None,
         ).plan(_request())
@@ -175,7 +188,7 @@ def test_v0_21_1_terminal_and_unknown_status_mapping_is_explicit(
             ]
         )
         orchestrator = HermesOrchestrator(
-            HermesAdapterConfig(enabled=True, poll_interval_seconds=0.001),
+            _v0_21_1_config(poll_interval_seconds=0.001),
             transport=transport,
             secret_resolver=lambda _: None,
         )
@@ -190,7 +203,7 @@ def test_v0_21_1_terminal_and_unknown_status_mapping_is_explicit(
 def test_v0_21_1_timeout_and_disabled_paths_remain_canonical() -> None:
     async def scenario() -> None:
         timed = HermesOrchestrator(
-            HermesAdapterConfig(enabled=True),
+            _v0_21_1_config(),
             transport=TimeoutTransport(),
             secret_resolver=lambda _: None,
         )
@@ -200,7 +213,7 @@ def test_v0_21_1_timeout_and_disabled_paths_remain_canonical() -> None:
         assert timeout_error.value.retryable is True
 
         disabled = HermesOrchestrator(
-            HermesAdapterConfig(enabled=False),
+            _v0_21_1_config(enabled=False),
             transport=FakeHermesTransport([]),
             secret_resolver=lambda _: None,
         )
