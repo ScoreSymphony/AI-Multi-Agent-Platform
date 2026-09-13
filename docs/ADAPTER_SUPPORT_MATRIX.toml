@@ -638,7 +638,7 @@ security_surface = "GitHub credentials, network egress, release mutation and upl
 upstream_health = "public GitHub REST API with explicit API-version contract"
 compatibility = "Supported subject to connector/release integration evidence."
 usage = "Release publication integration."
-evidence = ["src/ai_multi_agent_platform/connectors/github_releases.py"]
+evidence = ["tests/integration/application_distribution/test_github_release_publish.py"]
 docs = ["docs/operations/RELEASE_AND_UPSTREAM_POLICY.md"]
 migration = "Switch release connector; canonical release/File state remains platform-owned."
 
