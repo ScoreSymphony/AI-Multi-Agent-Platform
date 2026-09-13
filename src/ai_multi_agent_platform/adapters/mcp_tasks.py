@@ -761,8 +761,31 @@ def _merge_binding_observation(
     candidate: MCPTaskBinding,
 ) -> MCPTaskBinding:
     _assert_same_binding_identity(existing, candidate)
+    responded_input_keys = tuple(
+        dict.fromkeys((*existing.responded_input_keys, *candidate.responded_input_keys))
+    )
+    cancellation_requested_at = (
+        existing.cancellation_requested_at or candidate.cancellation_requested_at
+    )
+    cancellation_acknowledged = (
+        existing.cancellation_acknowledged or candidate.cancellation_acknowledged
+    )
+    cancellation_error_code = (
+        candidate.cancellation_error_code or existing.cancellation_error_code
+    )
+
+    # Provider lifecycle observations are monotonic, but governance/input/cancellation evidence is
+    # orthogonal to provider time. A stale poller may still have successfully answered an input
+    # request or delivered canonical cancellation after another process stored a newer task poll.
+    # Preserve that evidence while keeping the newer provider status/timestamps authoritative.
     if candidate.latest_observed_at < existing.latest_observed_at:
-        return existing
+        return replace(
+            existing,
+            responded_input_keys=responded_input_keys,
+            cancellation_requested_at=cancellation_requested_at,
+            cancellation_acknowledged=cancellation_acknowledged,
+            cancellation_error_code=cancellation_error_code,
+        )
     if candidate.latest_observed_at == existing.latest_observed_at:
         if candidate.latest_status is not existing.latest_status:
             raise ContractError(
@@ -771,21 +794,19 @@ def _merge_binding_observation(
                 provider_id=existing.provider_id,
             )
     if existing.latest_status.terminal and candidate.latest_status is not existing.latest_status:
-        return existing
+        return replace(
+            existing,
+            responded_input_keys=responded_input_keys,
+            cancellation_requested_at=cancellation_requested_at,
+            cancellation_acknowledged=cancellation_acknowledged,
+            cancellation_error_code=cancellation_error_code,
+        )
     return replace(
         candidate,
-        responded_input_keys=tuple(
-            dict.fromkeys((*existing.responded_input_keys, *candidate.responded_input_keys))
-        ),
-        cancellation_requested_at=(
-            existing.cancellation_requested_at or candidate.cancellation_requested_at
-        ),
-        cancellation_acknowledged=(
-            existing.cancellation_acknowledged or candidate.cancellation_acknowledged
-        ),
-        cancellation_error_code=(
-            candidate.cancellation_error_code or existing.cancellation_error_code
-        ),
+        responded_input_keys=responded_input_keys,
+        cancellation_requested_at=cancellation_requested_at,
+        cancellation_acknowledged=cancellation_acknowledged,
+        cancellation_error_code=cancellation_error_code,
         terminal_payload_digest=(
             candidate.terminal_payload_digest or existing.terminal_payload_digest
         ),
