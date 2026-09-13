@@ -368,9 +368,17 @@ class MCPStatelessHTTPClient(MCPClient):
         timeout = self._config.read_timeout_seconds or 10.0
         try:
             with urlopen(request, timeout=timeout) as raw:
-                return _decode_response(raw.status, raw.read())
+                return _decode_response(
+                    raw.status,
+                    raw.read(),
+                    content_type=raw.headers.get("Content-Type"),
+                )
         except HTTPError as exc:
-            return _decode_response(exc.code, exc.read())
+            return _decode_response(
+                exc.code,
+                exc.read(),
+                content_type=exc.headers.get("Content-Type"),
+            )
         except (TimeoutError, URLError) as exc:
             raise ContractError(
                 ErrorCode.UNAVAILABLE,
@@ -381,7 +389,7 @@ class MCPStatelessHTTPClient(MCPClient):
 
     def _request_headers(self, body: Mapping[str, JsonValue]) -> dict[str, str]:
         headers = {
-            "Accept": "application/json",
+            "Accept": "application/json, text/event-stream",
             "Content-Type": "application/json",
             _PROTOCOL_HEADER: self._protocol_revision,
         }
@@ -521,7 +529,15 @@ def _encode_header_value(value: str) -> str:
     return f"{_BASE64_SENTINEL_PREFIX}{encoded}{_BASE64_SENTINEL_SUFFIX}"
 
 
-def _decode_response(status: int, body: bytes) -> _WireResponse:
+def _decode_response(
+    status: int,
+    body: bytes,
+    *,
+    content_type: str | None = None,
+) -> _WireResponse:
+    media_type = None if content_type is None else content_type.split(";", 1)[0].strip().lower()
+    if media_type == "text/event-stream":
+        return _decode_sse_response(status, body)
     try:
         decoded = json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -537,6 +553,72 @@ def _decode_response(status: int, body: bytes) -> _WireResponse:
             details={"http_status": status},
         )
     return _WireResponse(status=status, payload=decoded)
+
+
+def _decode_sse_response(status: int, body: bytes) -> _WireResponse:
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_PROVIDER_RESPONSE,
+            "MCP server returned a non-UTF-8 SSE response",
+            details={"http_status": status},
+        ) from exc
+
+    final_response: dict[str, Any] | None = None
+    data_lines: list[str] = []
+    for line in (*text.splitlines(), ""):
+        if line == "":
+            if not data_lines:
+                continue
+            event_data = "\n".join(data_lines)
+            data_lines = []
+            try:
+                decoded = json.loads(event_data)
+            except json.JSONDecodeError as exc:
+                raise ContractError(
+                    ErrorCode.INVALID_PROVIDER_RESPONSE,
+                    "MCP SSE event contained invalid JSON",
+                    details={"http_status": status},
+                ) from exc
+            if not isinstance(decoded, dict):
+                raise ContractError(
+                    ErrorCode.INVALID_PROVIDER_RESPONSE,
+                    "MCP SSE event contained a non-object JSON-RPC message",
+                    details={"http_status": status},
+                )
+            if "id" in decoded and ("result" in decoded or "error" in decoded):
+                if final_response is not None:
+                    raise ContractError(
+                        ErrorCode.INVALID_PROVIDER_RESPONSE,
+                        "MCP SSE response contained multiple final JSON-RPC responses",
+                        details={"http_status": status},
+                    )
+                final_response = decoded
+                continue
+            if decoded.get("jsonrpc") == "2.0" and isinstance(decoded.get("method"), str):
+                # Request-scoped progress/log notifications are evidence only; the stateless
+                # compatibility client waits for the final response and leaves canonical lifecycle
+                # authority to the platform provider/invoker.
+                continue
+            raise ContractError(
+                ErrorCode.INVALID_PROVIDER_RESPONSE,
+                "MCP SSE stream contained an unsupported JSON-RPC message",
+                details={"http_status": status},
+            )
+        if line.startswith(":"):
+            continue
+        field, separator, value = line.partition(":")
+        if separator and field == "data":
+            data_lines.append(value[1:] if value.startswith(" ") else value)
+
+    if final_response is None:
+        raise ContractError(
+            ErrorCode.INVALID_PROVIDER_RESPONSE,
+            "MCP SSE response ended without a final JSON-RPC response",
+            details={"http_status": status},
+        )
+    return _WireResponse(status=status, payload=final_response)
 
 
 def _supported_versions(error: Mapping[str, Any]) -> tuple[str, ...]:
