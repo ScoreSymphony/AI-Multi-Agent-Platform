@@ -149,15 +149,18 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `plugin-skill-ecosystem` | plugin/skill discovery and loading extension points | `repository`, `skills` | Platform Extension | Beta |
 | `distributed-workers` | multi-node Node/Worker scheduling and distributed execution profile | `distributed` | Optional / Advanced | Beta |
 | `registry-marketplace` | component registry/catalog/marketplace distribution | `distribution` | Optional / Advanced | Beta |
+| `research-evidence` | Research Item/Source/Claim/Evidence resources and research workflow | `research` | Optional / Advanced | Beta |
+| `decision-compensation` | advanced decision and compensation/rollback workflows | `decisions`, `compensation` | Optional / Advanced | Beta |
+| `application-distribution` | application build/distribution state and release integration | `application_distribution` | Optional / Advanced | Beta |
 | `high-availability` | Control Plane leadership/fencing/failover profile | `distributed` | Optional / Advanced | Experimental |
-| `learning-research` | learning/improvement and research subsystems | `learning`, `research` | Optional / Advanced | Experimental |
+| `learning` | governed learning/improvement resources and workflows | `learning` | Optional / Advanced | Experimental |
 | `repository-intelligence-enhanced-providers` | named enhanced repository-intelligence provider integrations | `repositories` | Optional / Advanced | Experimental |
-| `decision-compensation` | advanced decision and compensation/rollback workflows | `decisions`, `compensation` | Optional / Advanced | Experimental |
-| `application-distribution` | application build/distribution state and release integration | `application_distribution` | Optional / Advanced | Experimental |
 
 The registry carries the compatibility note, canonical documentation links and user-signaling expectation for each entry. Experimental entries additionally declare `signaling_docs`: concrete public documentation entrypoints that must visibly state the Experimental maturity. New public capabilities should be added at the same granularity.
 
 Repository Intelligence is deliberately split across role boundaries per ADR 0011: the provider-neutral layer and deterministic local baseline are Core, while named enhanced providers remain optional integrations. Classifying a provider as Experimental does not downgrade the canonical baseline.
+
+The same independence applies to other advanced capabilities: Research, Decision/Compensation and Application Distribution are Optional / Advanced because the reference baseline does not require them, but their current canonical public contracts are supported as Beta rather than being labelled Experimental merely because they are advanced. Governed Learning, HA and named enhanced repository-intelligence providers retain explicit Experimental status where current compatibility commitments are intentionally weaker.
 
 ## API, schema and DTO policy
 
