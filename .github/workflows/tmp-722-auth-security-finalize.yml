@@ -1,0 +1,147 @@
+name: Temporary #722 auth/security final validation
+
+on:
+  push:
+    branches:
+      - test/722-auth-security
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: test/722-auth-security
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Configure Git and fetch current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          echo "BASE_MAIN_SHA=$(git rev-parse origin/main)" >> "$GITHUB_ENV"
+      - name: Collect baseline from current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add /tmp/722-baseline origin/main
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e "/tmp/722-baseline[dev]"
+          (
+            cd /tmp/722-baseline
+            pytest --collect-only -q | tee /tmp/722-baseline-collect.txt
+          )
+          BASELINE_COUNT=$(python - <<'PY'
+          import re
+          text = open('/tmp/722-baseline-collect.txt', encoding='utf-8').read()
+          matches = re.findall(r'(\d+) tests? collected', text)
+          if not matches:
+              raise SystemExit('Could not parse baseline collection count')
+          print(matches[-1])
+          PY
+          )
+          echo "BASELINE_COUNT=$BASELINE_COUNT" >> "$GITHUB_ENV"
+          echo "Baseline collection: $BASELINE_COUNT"
+      - name: Merge current main into migration candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge --no-edit origin/main
+      - name: Install merged candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          python -m pip install -e ".[dev]"
+      - name: Inventory remaining root-level security/auth-looking tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Remaining root-level filenames matching cohort vocabulary:"
+          find tests -maxdepth 1 -type f -name 'test_*.py' -print | sort | grep -Ei '(auth|secur|policy|approval|secret|session|permission)' || true
+      - name: Verify migrated legacy paths and tracked references are gone
+        shell: bash
+        run: |
+          set -euo pipefail
+          legacy_paths=(
+            tests/test_issue_36_authentication.py
+            tests/test_issue_36_authentication_hardening.py
+            tests/test_issue_15_team_scope.py
+            tests/test_issue_15_exact_binding.py
+            tests/test_issue_15_final_boundaries.py
+            tests/test_issue_364_authorization.py
+            tests/test_issue_310_policy_scope_bounds.py
+            tests/test_issue_251_non_disclosure.py
+            tests/test_issue_14_worker_protocol_security.py
+            tests/test_issue_14_worker_secrets.py
+            tests/test_issue34_completion.py
+            tests/test_issue_872_authorization.py
+            tests/test_policy_profile_state_probing_authorization.py
+            tests/test_issue73_run_cancel_authorization.py
+            tests/test_issue171_team_authorization_evidence.py
+            tests/test_issue_591_egress_approvals.py
+            tests/test_issue_310_policy_profiles.py
+            tests/test_issue_310_policy_lifecycle_authorization.py
+            tests/test_issue_310_policy_management_scope_authority.py
+            tests/test_issue_310_policy_mutation_approval_binding.py
+            tests/test_issue_310_policy_import_approval_binding.py
+            tests/test_issue_310_policy_lifecycle_revision_binding.py
+          )
+          for path in "${legacy_paths[@]}"; do
+            if git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
+              echo "Legacy file still tracked: $path" >&2
+              exit 1
+            fi
+            if git grep -n -F "$path" -- ':!*.egg-info/*' ':!.github/workflows/tmp-722-auth-security-finalize.yml'; then
+              echo "Tracked reference to legacy path remains: $path" >&2
+              exit 1
+            fi
+          done
+      - name: Compare post-migration collection
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          pytest --collect-only -q | tee /tmp/722-migrated-collect.txt
+          MIGRATED_COUNT=$(python - <<'PY'
+          import re
+          text = open('/tmp/722-migrated-collect.txt', encoding='utf-8').read()
+          matches = re.findall(r'(\d+) tests? collected', text)
+          if not matches:
+              raise SystemExit('Could not parse migrated collection count')
+          print(matches[-1])
+          PY
+          )
+          echo "MIGRATED_COUNT=$MIGRATED_COUNT" >> "$GITHUB_ENV"
+          echo "Migrated collection: $MIGRATED_COUNT"
+          test "$MIGRATED_COUNT" = "$BASELINE_COUNT"
+      - name: Run targeted authentication authorization and security suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          pytest -q tests/unit/security tests/unit/authorization tests/contract/security tests/integration/security tests/e2e/security
+      - name: Run full pytest suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          pytest -q
+      - name: Remove temporary workflow and push validated candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/tmp-722-auth-security-finalize.yml
+          git commit -m "chore: remove temporary #722 auth security validation"
+          git push origin HEAD:test/722-auth-security
+          echo "Validated $BASELINE_COUNT -> $MIGRATED_COUNT tests on main $BASE_MAIN_SHA"
