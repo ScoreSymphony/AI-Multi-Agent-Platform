@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
@@ -43,6 +45,37 @@ class SqliteWorkspaceProvider(_SyncWorkspaceProvider):
     ) -> None:
         super().__init__(root, files, db_path)
         self._async_sqlite = AsyncSqliteOffload(max_concurrency=max_concurrency)
+        self._persistence_owner: asyncio.Task[Any] | None = None
+
+    @asynccontextmanager
+    async def _persistence_boundary(self) -> AsyncIterator[None]:
+        """Keep canonical reads behind a mutation until its checkpoint settles."""
+
+        async with self._persistence_lock:
+            previous_owner = self._persistence_owner
+            self._persistence_owner = asyncio.current_task()
+            try:
+                yield
+            finally:
+                self._persistence_owner = previous_owner
+
+    async def _wait_for_persistence(self) -> None:
+        if asyncio.current_task() is self._persistence_owner:
+            return
+        async with self._persistence_lock:
+            return
+
+    async def get_workspace(self, workspace_id: str) -> Workspace:
+        await self._wait_for_persistence()
+        return await super().get_workspace(workspace_id)
+
+    async def list_workspaces(self, *, project_id: str | None = None) -> tuple[Workspace, ...]:
+        await self._wait_for_persistence()
+        return await super().list_workspaces(project_id=project_id)
+
+    async def get_snapshot(self, snapshot_id: str) -> WorkspaceSnapshot:
+        await self._wait_for_persistence()
+        return await super().get_snapshot(snapshot_id)
 
     async def create_workspace(
         self,
@@ -57,7 +90,7 @@ class SqliteWorkspaceProvider(_SyncWorkspaceProvider):
         files: tuple[WorkspaceFile, ...] = (),
         workspace_id: str | None = None,
     ) -> Workspace:
-        async with self._persistence_lock:
+        async with self._persistence_boundary():
             checkpoint = self._checkpoint()
             workspace = await super(_SyncWorkspaceProvider, self).create_workspace(
                 project_id=project_id,
@@ -74,7 +107,7 @@ class SqliteWorkspaceProvider(_SyncWorkspaceProvider):
             return workspace
 
     async def create_snapshot(self, workspace_id: str) -> WorkspaceSnapshot:
-        async with self._persistence_lock:
+        async with self._persistence_boundary():
             checkpoint = self._checkpoint()
             snapshot = await super(_SyncWorkspaceProvider, self).create_snapshot(workspace_id)
             await self._persist_or_restore_async(checkpoint)
@@ -89,7 +122,7 @@ class SqliteWorkspaceProvider(_SyncWorkspaceProvider):
         task_id: str | None = None,
         run_id: str | None = None,
     ) -> WorkspaceMaterialization:
-        async with self._persistence_lock:
+        async with self._persistence_boundary():
             checkpoint = self._checkpoint()
             materialization = await super(_SyncWorkspaceProvider, self).materialize(
                 workspace_id,
@@ -108,7 +141,7 @@ class SqliteWorkspaceProvider(_SyncWorkspaceProvider):
         *,
         expected_revision: int,
     ) -> WorkspaceSnapshot:
-        async with self._persistence_lock:
+        async with self._persistence_boundary():
             checkpoint = self._checkpoint()
             snapshot = await super(_SyncWorkspaceProvider, self).commit_changes(
                 materialization_id,
@@ -123,7 +156,7 @@ class SqliteWorkspaceProvider(_SyncWorkspaceProvider):
         materialization_id: str,
         outcome: MaterializationOutcome,
     ) -> None:
-        async with self._persistence_lock:
+        async with self._persistence_boundary():
             checkpoint = self._checkpoint()
             await super(_SyncWorkspaceProvider, self).release_materialization(
                 materialization_id,
