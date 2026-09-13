@@ -13,6 +13,8 @@ Security keeps the existing synchronous `ApprovalService`, `SqliteApprovalServic
 
 Northbound Approval resource reads, Approval decision composition, Learning/Governance/Planning/Capability runtime checks, Learning Control Plane projections, egress/evaluation consumers, and policy-profile Approval lookups use the awaitable Approval facade rather than calling the synchronous service directly. The synchronous Approval API remains an explicit offline/setup/test/compatibility seam; it is not the persistence surface for async production runtime paths.
 
+Evaluation also retains compatibility with older structural Approval readers whose `all()` method is synchronous. Those readers are detected before invocation and adapted through one shared bounded `SecurityPersistenceOffload`, so compatibility does not reintroduce inline event-loop work or use asyncio's default executor. A real `ApprovalService` is still routed through `AsyncApprovalServiceAdapter` and therefore keeps the per-backing-service serialization ownership described below.
+
 ## Executor and connection ownership
 
 `SecurityPersistenceOffload` owns a bounded `ThreadPoolExecutor`. It does not use asyncio's process-wide default executor, so a Security persistence backlog cannot consume worker capacity needed by unrelated runtime work.
@@ -59,4 +61,5 @@ The #892 Security persistence regression suite covers:
 - retryable busy/locked mapping;
 - rollback of in-memory state after failed durable Approval writes;
 - durable expiration-on-read behavior after restart;
-- awaitable Control Plane Approval reads and async production consumer routing.
+- awaitable Control Plane Approval reads and async production consumer routing;
+- synchronous structural Evaluation Approval readers remaining compatible while executing through the bounded Security offload.
