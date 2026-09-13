@@ -61,6 +61,8 @@ FAILURE_RECOVERY_CASES = frozenset(
         "backend_restart",
         "client_restart",
         "network_partition_reconnect",
+        "established_session_revocation_fails_closed",
+        "service_removal_reconfiguration_fails_closed",
         "node_b_unavailable_before_invocation",
         "node_b_lost_during_invocation",
         "gateway_reachable_backend_unavailable",
@@ -136,6 +138,8 @@ _HARD_RESULT_FIELDS = frozenset(
 )
 _HARD_FAILURE_CASES = frozenset(
     {
+        "failure_recovery_results:established_session_revocation_fails_closed",
+        "failure_recovery_results:service_removal_reconfiguration_fails_closed",
         "failure_recovery_results:no_duplicate_side_effect_after_retry",
     }
 )
