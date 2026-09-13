@@ -205,9 +205,7 @@ def test_automation_sqlite_connections_are_opened_in_worker_threads(
         assert await repository.list_automations() == ()
 
         assert repository.connection_threads
-        assert all(
-            thread_id != event_loop_thread for thread_id in repository.connection_threads
-        )
+        assert all(thread_id != event_loop_thread for thread_id in repository.connection_threads)
 
     asyncio.run(scenario())
 
@@ -219,9 +217,7 @@ def test_automation_sqlite_offload_concurrency_is_bounded(tmp_path: Path) -> Non
             max_concurrency=3,
         )
 
-        results = await asyncio.gather(
-            *(repository.list_automations() for _ in range(12))
-        )
+        results = await asyncio.gather(*(repository.list_automations() for _ in range(12)))
 
         assert results == [()] * 12
         assert 1 < repository.max_active_reads <= 3
@@ -271,14 +267,10 @@ async def _assert_runtime_state_contract(state: AutomationRuntimeState) -> None:
         result={"status": "paused"},
     )
 
-    assert (
-        await state.get_command(record.principal_ref, record.idempotency_key) is None
-    )
+    assert await state.get_command(record.principal_ref, record.idempotency_key) is None
     assert await state.save_command(record) == record
     assert await state.save_command(record) == record
-    assert (
-        await state.get_command(record.principal_ref, record.idempotency_key) == record
-    )
+    assert await state.get_command(record.principal_ref, record.idempotency_key) == record
     assert await state.has_processed_event("event-1") is False
     await state.mark_processed_event("event-1")
     assert await state.has_processed_event("event-1") is True
