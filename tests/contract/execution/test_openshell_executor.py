@@ -344,6 +344,46 @@ def test_timeout_and_cancellation_are_forwarded_by_private_request_ref(tmp_path:
     assert cancel_client.cancelled == [cancel_client.requests[0].request_ref]
 
 
+def test_hanging_provider_cancel_cannot_block_canonical_timeout_result(tmp_path: Path) -> None:
+    class HangingCancelClient(FakeOpenShellClient):
+        async def cancel(self, request_ref: str) -> None:
+            self.cancelled.append(request_ref)
+            await asyncio.Event().wait()
+
+    workspace = tmp_path / "workspaces" / "run-1"
+    workspace.mkdir(parents=True)
+    client = HangingCancelClient()
+    executor = OpenShellExecutor(
+        client,
+        tmp_path / "workspaces",
+        capabilities=("sleep",),
+        cancel_timeout_seconds=0.01,
+    )
+    request = ExecutionRequest(
+        task_id="task-timeout",
+        run_id="run-1",
+        correlation_id="corr-timeout",
+        action="sleep",
+        workspace="run-1",
+        arguments={"seconds": 1.0},
+        timeout_seconds=0.001,
+    )
+
+    async def scenario() -> ExecutionResult | None:
+        execution = asyncio.create_task(executor.execute(request))
+        done, _ = await asyncio.wait({execution}, timeout=0.2)
+        if not done:
+            execution.cancel()
+            await asyncio.gather(execution, return_exceptions=True)
+            return None
+        return execution.result()
+
+    result = asyncio.run(scenario())
+    assert result is not None
+    assert result.status is ExecutionStatus.TIMED_OUT
+    assert client.cancelled == [client.requests[0].request_ref]
+
+
 def test_infrastructure_failures_are_redacted_and_not_retried_by_adapter(tmp_path: Path) -> None:
     class UnavailableClient(FakeOpenShellClient):
         async def execute(self, request: OpenShellClientRequest) -> OpenShellClientResult:
