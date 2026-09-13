@@ -20,6 +20,7 @@ _ALLOWED_SUPPORT = {
     "single_node_only",
 }
 _EXPECTED_NON_INVENTORY = {
+    "planning",
     "model-routing-profiles",
     "file-content",
     "workspace-content",
@@ -54,11 +55,16 @@ def test_ha_capability_map_has_expected_schema_and_profile() -> None:
 
 def test_every_single_node_durable_store_has_an_explicit_ha_classification() -> None:
     rows = _rows()
-    map_ids = {row["id"] for row in rows}
+    rows_by_id = {row["id"]: row for row in rows}
     inventory_ids = {store.store_id for store in SINGLE_NODE_DURABLE_STORES}
 
-    assert inventory_ids <= map_ids
-    assert map_ids - inventory_ids == _EXPECTED_NON_INVENTORY
+    assert inventory_ids <= rows_by_id.keys()
+    assert rows_by_id.keys() - inventory_ids == _EXPECTED_NON_INVENTORY
+
+    for store in SINGLE_NODE_DURABLE_STORES:
+        row = rows_by_id[store.store_id]
+        assert row["source"] == store.path
+        assert row["owner"] == store.owner
 
 
 def test_ha_capability_map_ids_are_unique_and_rows_are_complete() -> None:
@@ -87,9 +93,16 @@ def test_ha_capability_map_ids_are_unique_and_rows_are_complete() -> None:
             assert disposition == "unsupported"
 
 
-def test_model_routing_profile_inventory_gap_stays_explicit_until_fixed() -> None:
+def test_known_production_composition_inventory_gaps_stay_explicit_until_fixed() -> None:
     rows = {row["id"]: row for row in _rows()}
-    routing_profiles = rows["model-routing-profiles"]
 
+    planning = rows["planning"]
+    assert planning["source"] == "db/planning.json"
+    assert planning["owner"] == "planning"
+    assert planning["disposition"] == "shared_sql"
+    assert planning["initial_support"] == "required"
+    assert planning["current_single_node_inventory"] is False
+
+    routing_profiles = rows["model-routing-profiles"]
     assert routing_profiles["source"] == "db/model-routing-profiles.json"
     assert routing_profiles["current_single_node_inventory"] is False
