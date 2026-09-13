@@ -137,13 +137,13 @@ user_signaling = "documentation"
 
 [[feature]]
 id = "cli-surface"
-name = "Platform CLI"
+name = "Platform CLI framework"
 owners = ["control_plane"]
 role = "core"
 stability = "beta"
-public_surfaces = ["documented platform CLI commands and output contracts"]
+public_surfaces = ["shared platform CLI invocation, profile/authentication, rendering and global-option conventions"]
 docs = ["README.md", "docs/DEVELOPMENT.md"]
-compatibility = "Documented commands are supported; command/output shape may evolve in non-patch releases with migration notes where automation is affected."
+compatibility = "Shared CLI framework conventions are Beta; feature-specific CLI commands keep the stability declared by their owning feature and do not inherit Beta compatibility from this entry."
 user_signaling = "documentation"
 
 [[feature]]
