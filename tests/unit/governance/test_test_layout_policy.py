@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from scripts.ci.validate_test_layout import ChangedPath, changed_targets, layout_violations
+from scripts.ci.validate_test_layout import (
+    ChangedPath,
+    changed_targets,
+    layout_violations,
+)
 
 
 def test_changed_targets_selects_only_added_copied_and_renamed_destinations() -> None:
