@@ -1,0 +1,31 @@
+name: Forge removal guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# main still requires the historical `forge-sidecar-integration` check context.
+# Keep that context green without checking out, building, starting, or claiming
+# compatibility with the removed Forge runtime. Once branch protection drops
+# the legacy context, this workflow can be removed.
+jobs:
+  forge-sidecar-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify Forge executable integration remains retired
+        shell: bash
+        run: |
+          test ! -e src/ai_multi_agent_platform/adapters/forge.py
+          test ! -e src/ai_multi_agent_platform/adapters/forge_http.py
+          test ! -e tests/contract/execution/test_forge_executor.py
+          test ! -e tests/contract/forge/test_forge_optionality.py
+          test ! -e tests/integration/forge/test_forge_http.py
+          test ! -e tests/integration/forge/test_sidecar.py
+          test ! -e tests/regression/forge/test_forge_kernel_regressions.py
+
+          ! grep -Fq "ScoreSymphony/AI-Agent-VPS" .github/workflows/ci.yml
+          ! grep -Fq "FORGE_SIDECAR_" .github/workflows/ci.yml
+          ! grep -Fq "executor-sidecar" .github/workflows/ci.yml
+          ! grep -Fq "FORGE_SIDECAR_" scripts/ci/issue46_external_profile.py
