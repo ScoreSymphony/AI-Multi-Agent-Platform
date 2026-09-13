@@ -9,6 +9,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
+from .async_service import AsyncAccountingService, runtime_accounting_service
 from .models import (
     AggregationMode,
     UsageAggregate,
@@ -20,14 +21,16 @@ from .models import (
 )
 from .service import AccountingService, aggregate_usage_records, trend_usage_records
 
+AccountingRuntime = AccountingService | AsyncAccountingService
+
 
 class UsageRecordResourceService:
     """Read-only canonical usage records with explicit owner isolation."""
 
     search_indexable = False
 
-    def __init__(self, accounting: AccountingService) -> None:
-        self._accounting = accounting
+    def __init__(self, accounting: AccountingRuntime) -> None:
+        self._accounting = runtime_accounting_service(accounting)
 
     async def list_resources(
         self,
@@ -35,7 +38,7 @@ class UsageRecordResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
-        records = self._accounting.query(_owner_query(context))
+        records = await self._accounting.query(_owner_query(context))
         return tuple(_record_resource(record) for record in records if _visible(record, context))
 
     async def get_resource(
@@ -43,7 +46,7 @@ class UsageRecordResourceService:
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        for record in self._accounting.query(_owner_query(context)):
+        for record in await self._accounting.query(_owner_query(context)):
             if record.id == resource_id and _visible(record, context):
                 return _record_resource(record)
         raise ContractError(ErrorCode.NOT_FOUND, f"usage record not found: {resource_id}")
@@ -54,14 +57,14 @@ class UsageAggregateResourceService:
 
     def __init__(
         self,
-        accounting: AccountingService,
+        accounting: AccountingRuntime,
         *,
         trend_window_seconds: int = 24 * 60 * 60,
         trend_bucket_seconds: int = 60 * 60,
     ) -> None:
         if trend_window_seconds <= 0 or trend_bucket_seconds <= 0:
             raise ValueError("trend window and bucket must be greater than zero")
-        self._accounting = accounting
+        self._accounting = runtime_accounting_service(accounting)
         self._trend_window_seconds = trend_window_seconds
         self._trend_bucket_seconds = trend_bucket_seconds
 
@@ -73,7 +76,7 @@ class UsageAggregateResourceService:
         del query
         records = tuple(
             record
-            for record in self._accounting.query(_owner_query(context))
+            for record in await self._accounting.query(_owner_query(context))
             if _visible(record, context)
         )
         return _aggregate_resources(
@@ -87,10 +90,11 @@ class UsageAggregateResourceService:
         """Enumerate canonical aggregate projections across owners for Search rebuild."""
 
         resources: list[dict[str, JsonValue]] = []
-        for owner_scope, records in _owner_groups(tuple(self._accounting.query(UsageQuery()))):
+        records = await self._accounting.query(UsageQuery())
+        for owner_scope, grouped_records in _owner_groups(records):
             resources.extend(
                 _aggregate_resources(
-                    records,
+                    grouped_records,
                     owner_scope,
                     trend_window_seconds=self._trend_window_seconds,
                     trend_bucket_seconds=self._trend_bucket_seconds,
@@ -112,8 +116,8 @@ class UsageAggregateResourceService:
 class UsageBudgetResourceService:
     """Read-only budget state; mutations remain explicit domain commands."""
 
-    def __init__(self, accounting: AccountingService) -> None:
-        self._accounting = accounting
+    def __init__(self, accounting: AccountingRuntime) -> None:
+        self._accounting = runtime_accounting_service(accounting)
 
     async def list_resources(
         self,
@@ -122,42 +126,43 @@ class UsageBudgetResourceService:
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
         resources: list[dict[str, JsonValue]] = []
-        for budget in self._accounting.store.list_budgets():
+        for budget in await self._accounting.list_budgets():
             if _budget_visible(budget, context):
-                resources.append(_budget_resource(self._accounting, budget))
+                resources.append(await _budget_resource_runtime(self._accounting, budget))
         return tuple(resources)
 
     async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
         """Enumerate canonical budget projections across owners for Search rebuild."""
 
-        return tuple(
-            _budget_resource(self._accounting, budget)
-            for budget in self._accounting.store.list_budgets()
-        )
+        resources: list[dict[str, JsonValue]] = []
+        for budget in await self._accounting.list_budgets():
+            resources.append(await _budget_resource_runtime(self._accounting, budget))
+        return tuple(resources)
 
     async def get_resource(
         self,
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        budget = self._accounting.store.get_budget(resource_id)
+        budget = await self._accounting.get_budget(resource_id)
         if budget is None or not _budget_visible(budget, context):
             raise ContractError(ErrorCode.NOT_FOUND, f"usage budget not found: {resource_id}")
-        return _budget_resource(self._accounting, budget)
+        return await _budget_resource_runtime(self._accounting, budget)
 
 
 def accounting_resource_services(
-    accounting: AccountingService,
+    accounting: AccountingRuntime,
 ) -> dict[
     str,
     UsageRecordResourceService | UsageAggregateResourceService | UsageBudgetResourceService,
 ]:
     """Registrations for #32 without making the Control Plane own accounting state."""
 
+    runtime = runtime_accounting_service(accounting)
     return {
-        "usage-records": UsageRecordResourceService(accounting),
-        "usage-aggregates": UsageAggregateResourceService(accounting),
-        "usage-budgets": UsageBudgetResourceService(accounting),
+        "usage-records": UsageRecordResourceService(runtime),
+        "usage-aggregates": UsageAggregateResourceService(runtime),
+        "usage-budgets": UsageBudgetResourceService(runtime),
     }
 
 
@@ -362,7 +367,27 @@ def _aggregate_resource(
 
 
 def _budget_resource(accounting: AccountingService, budget: UsageBudget) -> dict[str, JsonValue]:
-    state = accounting.budget_state(budget.id)
+    """Synchronous compatibility projection for setup/offline callers."""
+
+    return _budget_resource_from_state(budget, accounting.budget_state(budget.id))
+
+
+async def _budget_resource_runtime(
+    accounting: AsyncAccountingService,
+    budget: UsageBudget,
+) -> dict[str, JsonValue]:
+    return _budget_resource_from_state(budget, await accounting.budget_state(budget.id))
+
+
+def _budget_resource_from_state(
+    budget: UsageBudget,
+    state: object,
+) -> dict[str, JsonValue]:
+    # BudgetState is kept structurally local so this projection remains pure after persistence.
+    from .models import BudgetState
+
+    if not isinstance(state, BudgetState):
+        raise TypeError("budget state must be a BudgetState")
     return {
         "id": budget.id,
         "type": "usage-budget",
