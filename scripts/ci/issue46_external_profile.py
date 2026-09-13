@@ -9,6 +9,8 @@ from pathlib import Path
 
 from ai_multi_agent_platform.adapters.hermes import HERMES_PINNED_REVISION
 
+_HERMES_CANDIDATE_ENV = "HERMES_COMPATIBILITY_CANDIDATE_REVISION"
+
 
 def _run_pytest(*nodes: str) -> int:
     return subprocess.run(
@@ -20,6 +22,7 @@ def _run_pytest(*nodes: str) -> int:
 def _hermes() -> int:
     upstream_value = os.getenv("HERMES_UPSTREAM_DIR")
     revision = os.getenv("HERMES_UPSTREAM_REVISION")
+    candidate_revision = os.getenv(_HERMES_CANDIDATE_ENV)
     if not upstream_value:
         print("Hermes profile requires HERMES_UPSTREAM_DIR", file=sys.stderr)
         return 2
@@ -27,6 +30,21 @@ def _hermes() -> int:
     if not (upstream / "gateway" / "platforms" / "api_server.py").is_file():
         print(f"HERMES_UPSTREAM_DIR is not a Hermes source checkout: {upstream}", file=sys.stderr)
         return 2
+
+    if candidate_revision:
+        if revision != candidate_revision:
+            print(
+                "Hermes candidate profile requires HERMES_UPSTREAM_REVISION to match "
+                f"{_HERMES_CANDIDATE_ENV} exactly; expected {candidate_revision}, got {revision!r}",
+                file=sys.stderr,
+            )
+            return 2
+        return _run_pytest(
+            "tests/test_issue_8_hermes_adapter.py::"
+            "test_hermes_agent_mapper_pins_agent_team_model_and_capability_contracts",
+            "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py",
+        )
+
     if revision != HERMES_PINNED_REVISION:
         print(
             "Hermes profile requires the exact pinned revision "
