@@ -1,0 +1,31 @@
+{
+  "schema_version": "1",
+  "component": "Hermes Agent",
+  "candidate_revision": "939e45c91d751fadd94dcd1b873ac3cb44846213",
+  "gates": {
+    "adapter_contract_tests": {
+      "status": "passed",
+      "kind": "workflow_run",
+      "ref": "workflow:34759634674#hermes-v0-21-2-candidate",
+      "digest": null
+    },
+    "eval_regression": {
+      "status": "passed",
+      "kind": "workflow_run",
+      "ref": "workflow:34759634728#test",
+      "digest": null
+    },
+    "security": {
+      "status": "passed",
+      "kind": "workflow_run",
+      "ref": "workflow:34759634698#codeql",
+      "digest": null
+    },
+    "compatibility_review": {
+      "status": "passed",
+      "kind": "review",
+      "ref": "review:docs/upstream/HERMES_AGENT_V0_21_2_VALIDATION.md#decision",
+      "digest": null
+    }
+  }
+}
