@@ -123,7 +123,11 @@ def validate_private_mcp_transport_evaluation_report(report: Mapping[str, Any]) 
     if errors:
         first = errors[0]
         location = ".".join(str(part) for part in first.absolute_path) or "<root>"
-        raise ValueError(f"invalid private MCP transport evaluation report at {location}: {first.message}")
+        message = (
+            "invalid private MCP transport evaluation report at "
+            f"{location}: {first.message}"
+        )
+        raise ValueError(message)
 
     started_at = _parse_timestamp(_require_str(report, "started_at"), "started_at")
     completed_at = _parse_timestamp(_require_str(report, "completed_at"), "completed_at")
@@ -188,6 +192,8 @@ def assess_private_mcp_transport_evaluation(
         evidence_blockers.append("credentials are not confined to secret references")
     if secrets.get("plaintext_secret_leak_detected") is not False:
         evidence_blockers.append("plaintext credential material leaked into retained evidence")
+    if secrets.get("process_argv_secret_exposure_detected") is not False:
+        evidence_blockers.append("credential material is exposed through process argv")
 
     latency = _require_mapping(report.get("latency"), "latency")
     for field in _LATENCY_FIELDS:
