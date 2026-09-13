@@ -6,6 +6,7 @@ on:
       - ".github/workflows/hermes-v0-21-2-candidate.yml"
       - "scripts/ci/issue46_external_profile.py"
       - "scripts/ci/issue959_hermes_v0_21_2_candidate.py"
+      - "tests/regression/upstreams/test_hermes_v0_21_2.py"
       - "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py"
       - "src/ai_multi_agent_platform/adapters/hermes.py"
       - "upstream/hermes-agent.yaml"
