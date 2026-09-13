@@ -15,7 +15,7 @@ The machine-readable audit lives in [`FEATURE_CLASSIFICATION.toml`](FEATURE_CLAS
 
 A canonical platform foundation or lifecycle/control-plane capability that belongs to the baseline architecture. Core identifies architectural responsibility, not operational maturity.
 
-Typical Core responsibilities include canonical lifecycle/domain contracts, the Control Plane, provider contracts, Agents, Models, Capabilities/Tools, execution, Workspaces, security, verification, evaluation and cross-cutting observability/accounting foundations.
+Typical Core responsibilities include canonical lifecycle/domain contracts, the Control Plane, durable coordination, provider contracts, Agents, Models, Capabilities/Tools, execution, Workspaces, security, verification, evaluation, the provider-neutral repository-intelligence baseline and cross-cutting observability/accounting foundations.
 
 A concrete optional adapter can implement a Core boundary without becoming Core architecture itself.
 
@@ -31,7 +31,7 @@ An extension can be Stable, Beta or Experimental.
 
 A capability that is not required for the ordinary reference single-node baseline and usually represents an advanced deployment, ecosystem, learning/improvement or specialized operational/product subsystem.
 
-Examples include distributed/HA profiles, Registry/Marketplace functionality and advanced learning/research/governance subsystems.
+Examples include distributed/HA profiles, Registry/Marketplace functionality, named enhanced repository-intelligence providers and advanced learning/research/governance subsystems.
 
 Optional / Advanced is a role classification only. It does not mean unsupported, immature or Experimental.
 
@@ -124,6 +124,7 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | ID | Capability / public surface | Canonical owner(s) | Role | Stability |
 | --- | --- | --- | --- | --- |
 | `task-run-lifecycle` | canonical Task/Run/Plan/Step lifecycle schemas and kernel behavior | `domain`, `kernel`, `planning` | Core | Stable |
+| `durable-coordination` | `plan-coordination`, reconcile/cancel/repair and workflow progress | `coordination` | Core | Beta |
 | `control-plane-v1` | shared HTTP `/api/v1` protocol/foundation + generated OpenAPI conventions | `control_plane` | Core | Stable |
 | `provider-contracts-v2` | provider/adapter contracts `2.0` | `contracts` | Core | Stable |
 | `agents-teams` | Agent and Agent Team public resources/behavior | `agents` | Core | Beta |
@@ -134,6 +135,7 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `security-governance` | authentication, authorization, approvals and governed actions | `security`, `governance` | Core | Beta |
 | `verification-review` | verification/review records and completion gates | `verification` | Core | Beta |
 | `evaluation-regression` | Evaluation suites/runs plus regression CLI/browser workflows | `evaluation` | Core | Beta |
+| `repository-intelligence-core` | provider-neutral repository intelligence + deterministic local baseline | `repositories` | Core | Beta |
 | `observability-accounting` | public telemetry/health/usage/accounting views | `observability`, `accounting` | Core | Beta |
 | `cli-surface` | shared `platform` CLI framework/global conventions | `control_plane` | Core | Beta |
 | `onboarding-first-run` | first-run status/commands plus CLI and browser onboarding workflow | `onboarding` | Platform Extension | Beta |
@@ -149,11 +151,13 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `registry-marketplace` | component registry/catalog/marketplace distribution | `distribution` | Optional / Advanced | Beta |
 | `high-availability` | Control Plane leadership/fencing/failover profile | `distributed` | Optional / Advanced | Experimental |
 | `learning-research` | learning/improvement and research subsystems | `learning`, `research` | Optional / Advanced | Experimental |
-| `repository-intelligence` | repository-intelligence analysis/search enhancements | `repositories` | Optional / Advanced | Experimental |
+| `repository-intelligence-enhanced-providers` | named enhanced repository-intelligence provider integrations | `repositories` | Optional / Advanced | Experimental |
 | `decision-compensation` | advanced decision and compensation/rollback workflows | `decisions`, `compensation` | Optional / Advanced | Experimental |
 | `application-distribution` | application build/distribution state and release integration | `application_distribution` | Optional / Advanced | Experimental |
 
-The registry carries the compatibility note, canonical documentation links and user-signaling expectation for each entry. New public capabilities should be added there at the same granularity.
+The registry carries the compatibility note, canonical documentation links and user-signaling expectation for each entry. Experimental entries additionally declare `signaling_docs`: concrete public documentation entrypoints that must visibly state the Experimental maturity. New public capabilities should be added at the same granularity.
+
+Repository Intelligence is deliberately split across role boundaries per ADR 0011: the provider-neutral layer and deterministic local baseline are Core, while named enhanced providers remain optional integrations. Classifying a provider as Experimental does not downgrade the canonical baseline.
 
 ## API, schema and DTO policy
 
@@ -191,7 +195,9 @@ Use maturity labels where they prevent a wrong compatibility inference, not as g
 - Navigation grouping may reflect architectural/product role for clarity, but navigation is never the source of truth for role or stability.
 - Availability, health, permissions and conformance status must remain separate from maturity labels.
 
-The machine-readable registry field `user_signaling` documents the minimum expected signaling for each major surface. The current browser shell uses this policy to mark the Learning route as Experimental while leaving ordinary Stable/Beta navigation uncluttered. The first-class Learning CLI and its dedicated documentation also mark that surface Experimental.
+The machine-readable registry field `user_signaling` documents the minimum expected signaling for each major surface. Experimental registry entries additionally name one or more concrete `signaling_docs`; architecture tests require those files to contain an explicit `Experimental` marker rather than trusting registry metadata alone. UI/CLI-specific Experimental entrypoints still need their own contextual marker when documentation alone would not be encountered first.
+
+The current browser shell marks the Learning route as Experimental while leaving ordinary Stable/Beta navigation uncluttered. The first-class Learning CLI and its dedicated documentation likewise mark that surface Experimental.
 
 ## Contributor and review guard
 
@@ -202,7 +208,8 @@ Every new **public platform capability** or newly public surface must declare, i
 - stability (`stable`, `beta`, or `experimental`);
 - the concrete public surface being promised;
 - its compatibility/breaking-change expectation;
-- authoritative documentation.
+- authoritative documentation;
+- for Experimental surfaces, concrete labeled entrypoint documentation and any required UI/CLI contextual marker.
 
 Prefer extending an existing registry entry when the new surface is part of an existing capability. Add a new entry only when the capability has a distinct public compatibility boundary.
 
