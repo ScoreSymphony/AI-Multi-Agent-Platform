@@ -320,7 +320,7 @@ def test_reference_multi_agent_golden_path_persists_complete_canonical_provenanc
                     subject_id=source.resource_id,
                 )
                 assert source.revision == subject.revision
-                assert source.digest == subject.digest
+                assert source.digest == subject.digest.removeprefix("sha256:")
 
                 consumption = consumption_by_id[handoff.handoff_id]
                 assert consumption.handoff_revision == handoff.revision
