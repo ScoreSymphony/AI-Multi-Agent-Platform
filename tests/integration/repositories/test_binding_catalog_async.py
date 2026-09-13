@@ -42,7 +42,11 @@ from ai_multi_agent_platform.security import (
 )
 
 
-def _record(*, connection_id: str | None = None, native_id: str = "fixture") -> RepositoryBindingRecord:
+def _record(
+    *,
+    connection_id: str | None = None,
+    native_id: str = "fixture",
+) -> RepositoryBindingRecord:
     resolved_connection_id = connection_id or new_id("connection")
     reference = RepositoryReference(
         external_resource=ExternalResourceReference(
@@ -217,9 +221,7 @@ def test_sqlite_catalog_maps_busy_errors_to_retryable_transient_failure(tmp_path
                 raise ContractError(ErrorCode.BACKEND_ERROR, "catalog read failed") from exc
 
     async def scenario() -> None:
-        catalog = AsyncSqliteRepositoryBindingCatalog(
-            LockedCatalog(tmp_path / "locked.sqlite3")
-        )
+        catalog = AsyncSqliteRepositoryBindingCatalog(LockedCatalog(tmp_path / "locked.sqlite3"))
         with pytest.raises(ContractError) as failure:
             await catalog.list()
         assert failure.value.code is ErrorCode.TRANSIENT_FAILURE
