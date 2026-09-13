@@ -68,6 +68,7 @@ def _hermes() -> int:
             "tests/regression/upstreams/test_hermes_v0_21_2.py",
             "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py",
             "tests/integration/upstreams/test_hermes_v0_21_2_concurrency.py",
+            "tests/integration/upstreams/test_hermes_v0_21_2_restart.py",
         )
 
     if revision != HERMES_PINNED_REVISION:
