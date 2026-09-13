@@ -37,7 +37,7 @@ class EvaluationSuiteImportMutationHandler:
         suite = _require_suite(value)
         reference = evaluation_suite_ref(suite)
         try:
-            self._evaluation.get_suite(reference)
+            await self._evaluation.get_suite_async(reference)
         except ContractError as exc:
             if exc.code is ErrorCode.NOT_FOUND:
                 return
@@ -56,7 +56,7 @@ class EvaluationSuiteImportMutationHandler:
     ) -> object:
         del resource, context
         suite = _require_suite(value)
-        checksum = self._evaluation.create_suite(suite)
+        checksum = await self._evaluation.create_suite_async(suite)
         return EvaluationSuiteImportToken(
             suite_ref=evaluation_suite_ref(suite),
             checksum=checksum,
@@ -75,7 +75,7 @@ class EvaluationSuiteImportMutationHandler:
                 ErrorCode.CONTRACT_VIOLATION,
                 "portable EvaluationSuite rollback token is invalid",
             )
-        self._evaluation.delete_suite(
+        await self._evaluation.delete_suite_async(
             token.suite_ref,
             expected_checksum=token.checksum,
         )
