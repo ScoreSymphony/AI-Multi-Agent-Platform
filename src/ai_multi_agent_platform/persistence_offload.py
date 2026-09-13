@@ -9,12 +9,12 @@ from dataclasses import dataclass
 
 
 @dataclass(slots=True)
-class _SharedOffloadEntry[_OffloadT]:
-    offload: _OffloadT
+class _SharedOffloadEntry[OffloadT]:
+    offload: OffloadT
     owners: list[weakref.ReferenceType[object]]
 
 
-class SharedPersistenceOffloadRegistry[_OffloadT]:
+class SharedPersistenceOffloadRegistry[OffloadT]:
     """Share one offload per live repository identity without retaining repositories.
 
     Repository protocols do not require hashability or weak-reference support. The registry
@@ -25,7 +25,7 @@ class SharedPersistenceOffloadRegistry[_OffloadT]:
     """
 
     def __init__(self) -> None:
-        self._entries: dict[int, _SharedOffloadEntry[_OffloadT]] = {}
+        self._entries: dict[int, _SharedOffloadEntry[OffloadT]] = {}
         self._lock = threading.Lock()
 
     def resolve(
@@ -33,9 +33,9 @@ class SharedPersistenceOffloadRegistry[_OffloadT]:
         repository: object,
         *,
         owner: object,
-        requested: _OffloadT | None,
-        factory: Callable[[], _OffloadT],
-    ) -> _OffloadT:
+        requested: OffloadT | None,
+        factory: Callable[[], OffloadT],
+    ) -> OffloadT:
         repository_id = id(repository)
         with self._lock:
             entry = self._entries.get(repository_id)
