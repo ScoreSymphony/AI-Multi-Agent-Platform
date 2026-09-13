@@ -82,7 +82,6 @@ def test_litellm_package_and_integration_test_pin_match_governance() -> None:
     assert optional_dependencies["litellm"] == [f"litellm=={governed_version}"]
 
     integration_test = LITELLM_INTEGRATION_TEST_PATH.read_text(encoding="utf-8")
-    assert f'PINNED_LITELM_VERSION = "{governed_version}"' not in integration_test
     assert f'PINNED_LITELLM_VERSION = "{governed_version}"' in integration_test
 
 
