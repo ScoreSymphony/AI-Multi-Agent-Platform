@@ -701,3 +701,18 @@ def _string_tuple(value: object, context: str) -> tuple[str, ...]:
     if len(parsed) != len(set(parsed)):
         raise ValueError(f"{context} must contain unique values")
     return tuple(parsed)
+
+
+__all__ = [
+    "AgentEvaluationTarget",
+    "AgentTargetValidatingCaseExecutor",
+    "DirectoryEvaluationFixtureResolver",
+    "EVALUATION_TARGET_KEY",
+    "EvaluationAssetBundle",
+    "EvaluationModelJudgeConfiguration",
+    "EvaluationTargetSnapshotEnricher",
+    "TargetAwareEvaluationService",
+    "evaluation_task_metadata",
+    "load_evaluation_assets",
+    "parse_agent_evaluation_target",
+]
