@@ -23,15 +23,15 @@ class SharedPersistenceOffloadRegistry[OffloadT]:
     an identity cannot be reused while an entry has a live owner. Once the final adapter is
     collected, the entry and its offload are released as well.
 
-    Owner weakrefs are never dereferenced while the registry lock is held. A weakref callback may
-    run synchronously in the thread that drops the final strong owner reference; dereferencing a
-    sibling owner under a non-reentrant lock could otherwise make that callback re-enter the same
-    lock and deadlock. Callbacks instead remove their own weakref by identity.
+    Weakref callbacks can run synchronously while ``resolve`` already holds the registry lock,
+    for example when allocation or a factory call makes an otherwise unreachable owner collectible.
+    The lock is therefore reentrant. Callbacks also remove only their own weakref by identity and
+    never dereference sibling owners while the registry lock is held.
     """
 
     def __init__(self) -> None:
         self._entries: dict[int, _SharedOffloadEntry[OffloadT]] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def resolve(
         self,
