@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import sqlite3
 import threading
+from collections import deque
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -91,6 +92,51 @@ class _KnowledgeSqliteOffload:
         return operation()
 
 
+class _KnowledgeSourceSerializers:
+    """Serialize logical mutations per source without binding the provider to one event loop."""
+
+    def __init__(self) -> None:
+        self._guard = threading.Lock()
+        self._held: set[str] = set()
+        self._waiters: dict[str, deque[asyncio.Future[None]]] = {}
+
+    async def acquire(self, source_id: str) -> None:
+        loop = asyncio.get_running_loop()
+        with self._guard:
+            if source_id not in self._held:
+                self._held.add(source_id)
+                return
+            waiter = loop.create_future()
+            self._waiters.setdefault(source_id, deque()).append(waiter)
+        await waiter
+
+    def release(self, source_id: str) -> None:
+        while True:
+            with self._guard:
+                waiters = self._waiters.get(source_id)
+                if not waiters:
+                    self._held.discard(source_id)
+                    self._waiters.pop(source_id, None)
+                    return
+                waiter = waiters.popleft()
+                if not waiters:
+                    self._waiters.pop(source_id, None)
+
+            loop = waiter.get_loop()
+            if waiter.cancelled() or loop.is_closed():
+                continue
+            try:
+                loop.call_soon_threadsafe(_settle_source_waiter, waiter)
+                return
+            except RuntimeError:
+                continue
+
+
+def _settle_source_waiter(waiter: asyncio.Future[None]) -> None:
+    if not waiter.done():
+        waiter.set_result(None)
+
+
 class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
     """SQLite source registry with non-blocking deterministic keyword retrieval."""
 
@@ -99,6 +145,7 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
         self._knowledge_offload = _KnowledgeSqliteOffload(max_concurrency=max_concurrency)
+        self._source_serializers = _KnowledgeSourceSerializers()
         capability = Capability(
             name="local-keyword-knowledge",
             kind=CapabilityKind.KNOWLEDGE,
@@ -200,6 +247,17 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
             if failure is not None:
                 raise failure from None
             raise
+
+    async def _serialize_source_mutation[T](
+        self,
+        source_id: str,
+        operation: Callable[[], Awaitable[T]],
+    ) -> T:
+        await self._source_serializers.acquire(source_id)
+        try:
+            return await operation()
+        finally:
+            self._source_serializers.release(source_id)
 
     async def register_source(
         self,
@@ -451,8 +509,20 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
         location: str,
         context: DataAccessContext,
     ) -> KnowledgeDocument:
+        validate_id(source_id, "knowledge_source")
+        if not revision.strip():
+            raise ContractError(ErrorCode.INVALID_REQUEST, "knowledge revision must not be blank")
         return await self._complete_knowledge_mutation(
-            self._reindex_source_impl(source_id, revision, content, location, context)
+            self._serialize_source_mutation(
+                source_id,
+                lambda: self._reindex_source_impl(
+                    source_id,
+                    revision,
+                    content,
+                    location,
+                    context,
+                ),
+            )
         )
 
     async def _reindex_source_impl(
