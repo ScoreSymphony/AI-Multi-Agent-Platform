@@ -17,6 +17,14 @@ def _documented_scenario_ids(documentation: str, expected: set[str]) -> set[str]
         scenario_id = first_cell.split(" — ", 1)[0].strip()
         if scenario_id in expected:
             documented.add(scenario_id)
+
+    # Active scenarios are catalogued in tables. Retired stable IDs may instead
+    # remain as explicit prose tombstones so they stay documented without being
+    # presented as maintained compatibility evidence.
+    for scenario_id in expected - documented:
+        if f"Scenario ID {scenario_id} " in documentation:
+            documented.add(scenario_id)
+
     return documented
 
 
