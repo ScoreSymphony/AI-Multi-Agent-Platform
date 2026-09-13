@@ -181,17 +181,16 @@ async def _run_to_transaction_boundary[T](operation: Callable[[], T]) -> T:
         return await asyncio.shield(worker)
     except asyncio.CancelledError:
         # Repeated cancellation must not release the catalog guard while the worker may still
-        # be committing or rolling back. Cancellation remains authoritative once the operation
-        # has settled.
+        # be committing or rolling back. Cancellation remains authoritative only when the
+        # settled worker has not produced a failure of its own.
         while not worker.done():
             try:
                 await asyncio.shield(worker)
             except asyncio.CancelledError:
                 continue
-        try:
-            worker.result()
-        except Exception:
-            pass
+        failure = worker.exception()
+        if failure is not None:
+            raise failure from None
         raise
 
 
