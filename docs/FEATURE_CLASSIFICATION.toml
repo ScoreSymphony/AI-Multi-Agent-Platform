@@ -290,6 +290,39 @@ compatibility = "Optional ecosystem profile; compatibility is evidence-based for
 user_signaling = "documentation_and_ui_contextual"
 
 [[feature]]
+id = "research-evidence"
+name = "Research Evidence"
+owners = ["research"]
+role = "optional_advanced"
+stability = "beta"
+public_surfaces = ["Research Item/Source/Claim/Evidence resources", "research semantic mutation commands and governed research-to-action workflow"]
+docs = ["docs/research/RESEARCH_EVIDENCE.md", "docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Research is a supported canonical evidence/workflow capability composed over existing Task/Run, Search, Browser, Verification and authorization owners; its public contracts may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "decision-compensation"
+name = "Decision and compensation workflows"
+owners = ["decisions", "compensation"]
+role = "optional_advanced"
+stability = "beta"
+public_surfaces = ["Decision resources", "compensation/rollback workflow resources"]
+docs = ["docs/product/DECISION_RECORDS.md", "docs/runtime/COMPENSATION.md", "docs/PACKAGE_BOUNDARIES.md"]
+compatibility = "Decision and compensation are supported advanced canonical workflows; their public contracts may receive bounded non-patch changes with migration guidance while retaining existing owner-domain and lifecycle authorities."
+user_signaling = "documentation"
+
+[[feature]]
+id = "application-distribution"
+name = "Application distribution"
+owners = ["application_distribution"]
+role = "optional_advanced"
+stability = "beta"
+public_surfaces = ["application build/distribution state and release integration"]
+docs = ["docs/product/APPLICATION_DISTRIBUTION.md", "docs/PACKAGE_BOUNDARIES.md", "docs/RELEASE_PROCESS.md"]
+compatibility = "Application distribution is a supported advanced canonical domain; its public build/release contracts may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
 id = "high-availability"
 name = "High Availability"
 owners = ["distributed"]
@@ -302,15 +335,15 @@ compatibility = "Experimental optional profile; exact-revision conformance evide
 user_signaling = "documentation_and_ui_contextual"
 
 [[feature]]
-id = "learning-research"
-name = "Learning and Research"
-owners = ["learning", "research"]
+id = "learning"
+name = "Governed Learning"
+owners = ["learning"]
 role = "optional_advanced"
 stability = "experimental"
-public_surfaces = ["learning/improvement resources", "research workflow resources"]
-docs = ["docs/product/GOVERNED_LEARNING.md", "docs/cli/CLI_LEARNING.md", "docs/research/RESEARCH_EVIDENCE.md", "docs/PACKAGE_BOUNDARIES.md"]
-signaling_docs = ["docs/cli/CLI_LEARNING.md", "docs/research/RESEARCH_EVIDENCE.md"]
-compatibility = "Experimental advanced capabilities; public contracts may change incompatibly in non-patch releases without deprecation."
+public_surfaces = ["learning/improvement resources", "governed Learning CLI and browser workflows"]
+docs = ["docs/product/GOVERNED_LEARNING.md", "docs/cli/CLI_LEARNING.md", "docs/PACKAGE_BOUNDARIES.md"]
+signaling_docs = ["docs/cli/CLI_LEARNING.md"]
+compatibility = "Experimental advanced Learning capability; public contracts may change incompatibly in non-patch releases without deprecation while canonical governance and owner-domain boundaries remain mandatory."
 user_signaling = "documentation_and_ui_contextual"
 
 [[feature]]
@@ -323,28 +356,4 @@ public_surfaces = ["optional enhanced repository-intelligence provider integrati
 docs = ["docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md"]
 signaling_docs = ["docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md"]
 compatibility = "Named enhanced providers remain optional and Experimental; provider-specific integrations may change incompatibly in non-patch releases and must not redefine the canonical repository-intelligence baseline."
-user_signaling = "documentation_and_ui_contextual"
-
-[[feature]]
-id = "decision-compensation"
-name = "Decision and compensation workflows"
-owners = ["decisions", "compensation"]
-role = "optional_advanced"
-stability = "experimental"
-public_surfaces = ["Decision resources", "compensation/rollback workflow resources"]
-docs = ["docs/product/DECISION_RECORDS.md", "docs/runtime/COMPENSATION.md", "docs/PACKAGE_BOUNDARIES.md"]
-signaling_docs = ["docs/product/DECISION_RECORDS.md", "docs/runtime/COMPENSATION.md"]
-compatibility = "Experimental advanced workflow capabilities; no forward compatibility promise beyond exact documented/released revisions."
-user_signaling = "documentation_and_ui_contextual"
-
-[[feature]]
-id = "application-distribution"
-name = "Application distribution"
-owners = ["application_distribution"]
-role = "optional_advanced"
-stability = "experimental"
-public_surfaces = ["application build/distribution state and release integration"]
-docs = ["docs/product/APPLICATION_DISTRIBUTION.md", "docs/PACKAGE_BOUNDARIES.md", "docs/RELEASE_PROCESS.md"]
-signaling_docs = ["docs/product/APPLICATION_DISTRIBUTION.md"]
-compatibility = "Experimental advanced distribution surface; incompatible non-patch evolution may occur without a deprecation window."
 user_signaling = "documentation_and_ui_contextual"
