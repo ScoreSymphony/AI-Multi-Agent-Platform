@@ -107,6 +107,36 @@ class CommandHandler(Protocol):
     ) -> Awaitable[dict[str, JsonValue]]: ...
 
 
+class CommandAuthorizer(Protocol):
+    """Explicit replacement for the generic command authorization preflight.
+
+    Most modules should omit this and inherit the canonical
+    ``_authorize(context, command, resource_ref)`` policy. A domain whose existing
+    contract authorizes a richer relationship (for example source + destination
+    scopes) can declare that policy explicitly without retaining an ``execute_command``
+    subclass override solely to control MRO dispatch.
+    """
+
+    def __call__(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> Awaitable[None]: ...
+
+
+class CommandObserver(Protocol):
+    """Post-success projection hook owned by an explicitly registered module."""
+
+    def __call__(
+        self,
+        context: RequestContext,
+        command: str,
+        resource_ref: str,
+        result: dict[str, JsonValue],
+    ) -> Awaitable[None]: ...
+
+
 RouteHandler = Callable[[HTTPRequest], Awaitable[HTTPResponse]]
 OpenAPIContributor = Callable[[dict[str, Any]], None]
 
@@ -138,11 +168,18 @@ class ControlPlaneModule:
     services are exposed through the canonical Control Plane. Module batches are
     validated before installation, making conflicts deterministic and independent
     of registration order.
+
+    ``command_authorizers`` is intentionally narrow: it can customize authorization
+    only for commands owned by the same module. ``command_observers`` run after a
+    successful, privacy-validated command result and are intended for derived audit or
+    projection side effects, not for command ownership or dispatch.
     """
 
     name: str
     resource_services: Mapping[str, ResourceService] = field(default_factory=dict)
     command_handlers: Mapping[str, CommandHandler] = field(default_factory=dict)
+    command_authorizers: Mapping[str, CommandAuthorizer] = field(default_factory=dict)
+    command_observers: tuple[CommandObserver, ...] = ()
     routes: tuple[ControlPlaneRoute, ...] = ()
     openapi_contributors: tuple[OpenAPIContributor, ...] = ()
     requires: frozenset[str] = frozenset()
@@ -154,6 +191,14 @@ class ControlPlaneModule:
             )
         if self.name in self.requires:
             raise ValueError("Control Plane module cannot require itself")
+        orphan_authorizers = sorted(
+            set(self.command_authorizers).difference(self.command_handlers)
+        )
+        if orphan_authorizers:
+            raise ValueError(
+                "Control Plane module command authorizers must belong to commands "
+                f"owned by the same module: {orphan_authorizers!r}"
+            )
 
 
 class InMemoryResourceService:
@@ -220,6 +265,8 @@ class ControlPlane(BaseControlPlane):
         self._command_handlers: dict[str, CommandHandler] = {}
         self._resource_owners: dict[str, str] = {}
         self._command_owners: dict[str, str] = {}
+        self._command_authorizers: dict[str, CommandAuthorizer] = {}
+        self._command_observers: list[tuple[str, CommandObserver]] = []
         self._route_handlers: dict[tuple[str, str], RouteHandler] = {}
         self._route_owners: dict[tuple[str, str], str] = {}
         self._openapi_contributors: list[tuple[str, OpenAPIContributor]] = []
@@ -353,6 +400,10 @@ class ControlPlane(BaseControlPlane):
                     handler,
                     owner=name,
                 )
+            for command, authorizer in sorted(module.command_authorizers.items()):
+                self._command_authorizers[command] = authorizer
+            for observer in module.command_observers:
+                self._command_observers.append((name, observer))
             for route in sorted(module.routes, key=lambda item: (item.method, item.path)):
                 key = _route_key(route.method, route.path)
                 self._route_handlers[key] = route.handler
@@ -360,6 +411,7 @@ class ControlPlane(BaseControlPlane):
             for contributor in module.openapi_contributors:
                 self._openapi_contributors.append((name, contributor))
             self._registered_modules[name] = module
+        self._command_observers.sort(key=lambda item: item[0])
         self._openapi_contributors.sort(key=lambda item: item[0])
 
     def apply_openapi_contributions(self, specification: dict[str, Any]) -> dict[str, Any]:
@@ -418,9 +470,16 @@ class ControlPlane(BaseControlPlane):
                 "Idempotency-Key is required for mutating commands",
                 details={"header": "Idempotency-Key"},
             )
-        await self._authorize(context, command, resource_ref)
-        result = await handler(context, resource_ref, payload or {})
+        effective_payload = payload or {}
+        authorizer = self._command_authorizers.get(command)
+        if authorizer is None:
+            await self._authorize(context, command, resource_ref)
+        else:
+            await authorizer(context, resource_ref, effective_payload)
+        result = await handler(context, resource_ref, effective_payload)
         _reject_private_payload(result)
+        for _, observer in self._command_observers:
+            await observer(context, command, resource_ref, result)
         return result
 
     def _registered_resource_service(self, collection: str) -> ResourceService:
