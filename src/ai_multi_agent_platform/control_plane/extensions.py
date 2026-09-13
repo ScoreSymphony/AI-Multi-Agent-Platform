@@ -380,7 +380,8 @@ class ControlPlane(BaseControlPlane):
         # Commit only after all claims have been validated. Explicit base-class
         # dispatch prevents a legacy compatibility subclass from turning module
         # installation back into MRO-sensitive behavior during the migration.
-        for name in sorted(by_name):
+        installation_order = _module_dependency_order(by_name)
+        for name in installation_order:
             module = by_name[name]
             for collection, service in sorted(module.resource_services.items()):
                 ControlPlane.register_resource_service(
@@ -407,8 +408,12 @@ class ControlPlane(BaseControlPlane):
             for contributor in module.openapi_contributors:
                 self._openapi_contributors.append((name, contributor))
             self._registered_modules[name] = module
-        self._command_observers.sort(key=lambda item: item[0])
-        self._openapi_contributors.sort(key=lambda item: item[0])
+        dependency_order = {
+            name: index
+            for index, name in enumerate(_module_dependency_order(self._registered_modules))
+        }
+        self._command_observers.sort(key=lambda item: dependency_order[item[0]])
+        self._openapi_contributors.sort(key=lambda item: dependency_order[item[0]])
 
     def apply_openapi_contributions(self, specification: dict[str, Any]) -> dict[str, Any]:
         for _, contributor in self._openapi_contributors:
@@ -778,6 +783,22 @@ def _validate_command_name(command: str) -> None:
 def _validate_owner(owner: str) -> None:
     if not owner.strip():
         raise ValueError("Control Plane ownership label must be non-blank")
+
+
+def _module_dependency_order(
+    modules: Mapping[str, ControlPlaneModule],
+) -> tuple[str, ...]:
+    """Return deterministic dependency-first module order or reject a cycle."""
+
+    remaining = set(modules)
+    ordered: list[str] = []
+    while remaining:
+        ready = sorted(name for name in remaining if modules[name].requires.isdisjoint(remaining))
+        if not ready:
+            raise ValueError(f"Control Plane module dependency cycle: {sorted(remaining)!r}")
+        ordered.extend(ready)
+        remaining.difference_update(ready)
+    return tuple(ordered)
 
 
 def _claim(
