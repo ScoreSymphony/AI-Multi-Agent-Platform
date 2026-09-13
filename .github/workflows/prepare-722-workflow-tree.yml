@@ -1,0 +1,125 @@
+name: Prepare 722 workflow tree
+
+on:
+  push:
+    branches:
+      - test/722-final-rest-migration
+    paths:
+      - .github/workflows/prepare-722-workflow-tree.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Materialize validated workflow path migration
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BASE_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import base64
+          import json
+          import os
+          import re
+          import urllib.request
+          from pathlib import Path
+
+          manifest = Path("docs/TEST_MIGRATION_722_FINAL.md").read_text(encoding="utf-8")
+          mapping: dict[str, str] = {}
+          for line in manifest.splitlines():
+              match = re.fullmatch(r"- `([^`]+)` → `([^`]+)`", line)
+              if match:
+                  source, destination = match.groups()
+                  if source.startswith("tests/") and destination.startswith("tests/"):
+                      mapping[source] = destination
+
+          workflow_root = Path(".github/workflows")
+          helper = workflow_root / "prepare-722-workflow-tree.yml"
+          changed: list[Path] = []
+          for path in sorted(workflow_root.iterdir()):
+              if path == helper or path.suffix not in {".yml", ".yaml"}:
+                  continue
+              text = path.read_text(encoding="utf-8")
+              updated = text
+              for source, destination in mapping.items():
+                  updated = updated.replace(source, destination)
+              if updated != text:
+                  path.write_text(updated, encoding="utf-8")
+                  changed.append(path)
+
+          stale: list[str] = []
+          for path in sorted(workflow_root.iterdir()):
+              if path == helper or path.suffix not in {".yml", ".yaml"}:
+                  continue
+              text = path.read_text(encoding="utf-8")
+              if "tests/test_issue" in text or "tests/performance/test_issue" in text:
+                  stale.append(path.as_posix())
+              for source in mapping:
+                  if source in text:
+                      stale.append(f"{path.as_posix()}: {source}")
+          if stale:
+              raise SystemExit("Stale migrated test paths remain in workflows:\n" + "\n".join(sorted(set(stale))))
+
+          print(f"Workflow files changed: {len(changed)}")
+          for path in changed:
+              print(path.as_posix())
+
+          token = os.environ["GH_TOKEN"]
+          repo = os.environ["REPOSITORY"]
+          base_sha = os.environ["BASE_SHA"]
+          api = f"https://api.github.com/repos/{repo}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {token}",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "Content-Type": "application/json",
+          }
+
+          def request(method: str, url: str, payload=None):
+              data = None if payload is None else json.dumps(payload).encode("utf-8")
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              with urllib.request.urlopen(req) as response:
+                  return json.load(response)
+
+          base_commit = request("GET", f"{api}/git/commits/{base_sha}")
+          tree_entries = []
+          for path in changed:
+              encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+              blob = request(
+                  "POST",
+                  f"{api}/git/blobs",
+                  {"content": encoded, "encoding": "base64"},
+              )
+              tree_entries.append(
+                  {"path": path.as_posix(), "mode": "100644", "type": "blob", "sha": blob["sha"]}
+              )
+          tree_entries.append(
+              {"path": helper.as_posix(), "mode": "100644", "type": "blob", "sha": None}
+          )
+          tree = request(
+              "POST",
+              f"{api}/git/trees",
+              {"base_tree": base_commit["tree"]["sha"], "tree": tree_entries},
+          )
+          commit = request(
+              "POST",
+              f"{api}/git/commits",
+              {
+                  "message": "ci: update test paths after #722 migration",
+                  "tree": tree["sha"],
+                  "parents": [base_sha],
+              },
+          )
+          print(f"PREPARED_COMMIT_SHA={commit['sha']}")
+          PY
