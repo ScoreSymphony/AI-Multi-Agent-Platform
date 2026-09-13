@@ -245,12 +245,11 @@ async def test_async_task_stays_one_canonical_invocation_and_redacts_external_ha
     assert binding.canonical_task_id == request.trace.task_id
     assert binding.canonical_run_id == request.trace.run_id
     assert binding.external_task_id == "external-task-secret"
-    task_metadata = next(
-        item for item in result.adapter_metadata if item.namespace == "mcp.tasks"
+    task_metadata = next(item for item in result.adapter_metadata if item.namespace == "mcp.tasks")
+    assert (
+        task_metadata.values["external_task_id_sha256"]
+        == hashlib.sha256(b"external-task-secret").hexdigest()
     )
-    assert task_metadata.values["external_task_id_sha256"] == hashlib.sha256(
-        b"external-task-secret"
-    ).hexdigest()
     assert "external-task-secret" not in repr(result.adapter_metadata)
 
 
