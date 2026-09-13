@@ -13,6 +13,7 @@ from ai_multi_agent_platform.domain import Step, StepStatus
 from ai_multi_agent_platform.kernel.models import RunState
 from ai_multi_agent_platform.observability import TelemetryOutcome
 
+from .async_repository import AsyncCoordinatorRepository
 from .models import (
     CoordinationPhase,
     CoordinatorClaim,
@@ -20,7 +21,6 @@ from .models import (
     ReconciliationDisposition,
     StepCoordinationRecord,
 )
-from .repository import CoordinatorRepository
 
 _STALE_STREAM_RETRY_LIMIT = 32
 _STALE_STREAM_RETRY_DELAY_SECONDS = 0.001
@@ -52,7 +52,7 @@ class ProgressionRunKernel(Protocol):
 
 
 class ClaimProvider(Protocol):
-    def __call__(self, step_id: str, now: datetime) -> CoordinatorClaim | None: ...
+    async def __call__(self, step_id: str, now: datetime) -> CoordinatorClaim | None: ...
 
 
 class CoordinationEmitter(Protocol):
@@ -75,7 +75,7 @@ class CoordinationProgression:
     def __init__(
         self,
         *,
-        repository: CoordinatorRepository,
+        repository: AsyncCoordinatorRepository,
         kernel: ProgressionRunKernel,
     ) -> None:
         self.repository = repository
@@ -118,12 +118,12 @@ class CoordinationProgression:
         failed = tuple(failed_items)
 
         if failed:
-            step_claim = claim(step.id, now)
+            step_claim = await claim(step.id, now)
             if step_claim is None:
                 return False
             try:
-                current = self.repository.get_step_record(step.id)
-                current_step = self.repository.get_plan(step.plan_id).step(step.id)
+                current = await self.repository.get_step_record(step.id)
+                current_step = (await self.repository.get_plan(step.plan_id)).step(step.id)
                 if current_step.status is not StepStatus.PENDING:
                     return False
                 terminal = current_step.transition_to(
@@ -138,7 +138,7 @@ class CoordinationProgression:
                     satisfied_dependency_ids=satisfied,
                     reconciliation_detail="predecessor failed or cancelled",
                 )
-                self.repository.save_step(
+                await self.repository.save_step(
                     step=terminal,
                     record=updated,
                     expected_revision=current.revision,
@@ -155,20 +155,20 @@ class CoordinationProgression:
                 )
                 return True
             finally:
-                self.repository.release_claim(step_claim)
+                await self.repository.release_claim(step_claim)
 
         if set(satisfied) != set(record.satisfied_dependency_ids):
-            step_claim = claim(step.id, now)
+            step_claim = await claim(step.id, now)
             if step_claim is None:
                 return False
             try:
-                current = self.repository.get_step_record(step.id)
-                current_step = self.repository.get_plan(step.plan_id).step(step.id)
+                current = await self.repository.get_step_record(step.id)
+                current_step = (await self.repository.get_plan(step.plan_id)).step(step.id)
                 updated = replace(current, satisfied_dependency_ids=satisfied)
                 if set(satisfied) == set(current.dependency_ids):
                     current_step = current_step.transition_to(StepStatus.READY)
                     updated = replace(updated, phase=CoordinationPhase.READY)
-                self.repository.save_step(
+                await self.repository.save_step(
                     step=current_step,
                     record=updated,
                     expected_revision=current.revision,
@@ -202,20 +202,20 @@ class CoordinationProgression:
                     )
                 return True
             finally:
-                self.repository.release_claim(step_claim)
+                await self.repository.release_claim(step_claim)
 
         if not record.dependency_ids:
-            step_claim = claim(step.id, now)
+            step_claim = await claim(step.id, now)
             if step_claim is None:
                 return False
             try:
-                current = self.repository.get_step_record(step.id)
-                current_step = self.repository.get_plan(step.plan_id).step(step.id)
+                current = await self.repository.get_step_record(step.id)
+                current_step = (await self.repository.get_plan(step.plan_id)).step(step.id)
                 if current_step.status is not StepStatus.PENDING:
                     return False
                 ready = current_step.transition_to(StepStatus.READY)
                 updated = replace(current, phase=CoordinationPhase.READY)
-                self.repository.save_step(
+                await self.repository.save_step(
                     step=ready,
                     record=updated,
                     expected_revision=current.revision,
@@ -230,7 +230,7 @@ class CoordinationProgression:
                 )
                 return True
             finally:
-                self.repository.release_claim(step_claim)
+                await self.repository.release_claim(step_claim)
         return False
 
     async def start_attempt(
@@ -242,12 +242,12 @@ class CoordinationProgression:
         claim: ClaimProvider,
         emit: CoordinationEmitter,
     ) -> bool:
-        step_claim = claim(step.id, now)
+        step_claim = await claim(step.id, now)
         if step_claim is None:
             return False
         try:
-            current = self.repository.get_step_record(step.id)
-            current_step = self.repository.get_plan(step.plan_id).step(step.id)
+            current = await self.repository.get_step_record(step.id)
+            current_step = (await self.repository.get_plan(step.plan_id)).step(step.id)
             if (
                 current.phase is not CoordinationPhase.READY
                 or current_step.status is not StepStatus.READY
@@ -279,7 +279,7 @@ class CoordinationProgression:
                 reconciliation=ReconciliationDisposition.CONSISTENT,
                 reconciliation_detail=None,
             )
-            self.repository.save_step(
+            await self.repository.save_step(
                 step=running,
                 record=updated,
                 expected_revision=current.revision,
@@ -305,7 +305,7 @@ class CoordinationProgression:
             )
             return True
         finally:
-            self.repository.release_claim(step_claim)
+            await self.repository.release_claim(step_claim)
 
     async def _create_run_with_stale_retry(
         self,

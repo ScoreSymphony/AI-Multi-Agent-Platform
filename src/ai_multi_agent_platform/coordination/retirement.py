@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Protocol, cast
+from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import Plan, RunStatus, Step, StepStatus, validate_id
@@ -137,8 +137,6 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         retry_policies: dict[str, StepRetryPolicy] | None = None,
         predecessor_failure_policy: PredecessorFailurePolicy = PredecessorFailurePolicy.FAIL_FAST,
     ) -> PlanCoordinationProjection:
-        # Retirement is a destructive coordination transition. Repeat the base contract checks
-        # first so an invalid replacement can never retire a valid predecessor as a side effect.
         self._validate_graph(plan, steps)
         task = await self.kernel.get_task(plan.task_id)
         if task.plan_ref != plan.id:
@@ -179,15 +177,13 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         now: datetime | None = None,
     ) -> PlanCoordinationProjection:
         current_time = self._now(now)
-        state = self.repository.get_plan(plan_id)
+        state = await self.runtime_repository.get_plan(plan_id)
         if await self._retire_if_superseded(state, current_time):
-            return self.projection(plan_id)
+            return await self.async_projection(plan_id)
         result = await super().advance(plan_id, now=current_time)
-        # Close the narrow race where canonical planning wins after the first authority check but
-        # before a READY Step reaches ``create_run``.
-        state = self.repository.get_plan(plan_id)
+        state = await self.runtime_repository.get_plan(plan_id)
         if await self._retire_if_superseded(state, current_time):
-            return self.projection(plan_id)
+            return await self.async_projection(plan_id)
         return result
 
     async def process_due(
@@ -196,7 +192,7 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         now: datetime | None = None,
     ) -> tuple[PlanCoordinationProjection, ...]:
         current_time = self._now(now)
-        for state in self.repository.list_active_plans():
+        for state in await self.runtime_repository.list_active_plans():
             await self._retire_if_superseded(state, current_time)
         return await super().process_due(now=current_time)
 
@@ -207,9 +203,9 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         now: datetime | None = None,
     ) -> PlanCoordinationProjection:
         current_time = self._now(now)
-        state = self.repository.get_plan(plan_id)
+        state = await self.runtime_repository.get_plan(plan_id)
         if await self._retire_if_superseded(state, current_time):
-            return self.projection(plan_id)
+            return await self.async_projection(plan_id)
         return await super().reconcile_plan(plan_id, now=current_time)
 
     async def _start_attempt(
@@ -221,7 +217,7 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         task = await self.kernel.get_task(record.task_id)
         if task.plan_ref != record.plan_id:
             await self._retire_plan(
-                self.repository.get_plan(record.plan_id),
+                await self.runtime_repository.get_plan(record.plan_id),
                 superseded_by_plan_id=task.plan_ref,
                 now=now,
             )
@@ -235,7 +231,7 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
             if refreshed.plan_ref == record.plan_id:
                 raise
             await self._retire_plan(
-                self.repository.get_plan(record.plan_id),
+                await self.runtime_repository.get_plan(record.plan_id),
                 superseded_by_plan_id=refreshed.plan_ref,
                 now=now,
             )
@@ -248,8 +244,8 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         resolution_key: str,
         now: datetime,
     ) -> PlanCoordinationProjection:
-        record = self.repository.get_step_record(step_id)
-        state = self.repository.get_plan(record.plan_id)
+        record = await self.runtime_repository.get_step_record(step_id)
+        state = await self.runtime_repository.get_plan(record.plan_id)
         if await self._retire_if_superseded(state, now):
             raise ContractError(
                 ErrorCode.CONFLICT,
@@ -265,7 +261,7 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         active_plan_id: str,
         now: datetime,
     ) -> None:
-        for state in self.repository.list_active_plans():
+        for state in await self.runtime_repository.list_active_plans():
             if state.plan.task_id != task_id or state.plan.id == active_plan_id:
                 continue
             await self._retire_plan(
@@ -296,15 +292,14 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         superseded_by_plan_id: str | None,
         now: datetime,
     ) -> PlanRetirement:
-        repository = cast(PlanRetirementRepository, self.repository)
-        existing = repository.plan_retirement(state.plan.id)
+        existing = await self.runtime_repository.plan_retirement(state.plan.id)
         if existing is not None:
             return existing
 
-        for record in self.repository.list_step_records(state.plan.id):
+        for record in await self.runtime_repository.list_step_records(state.plan.id):
             if record.phase is CoordinationPhase.TERMINAL:
                 continue
-            claim = self._claim(record.step_id, now)
+            claim = await self._claim(record.step_id, now)
             if claim is None:
                 raise ContractError(
                     ErrorCode.CONFLICT,
@@ -312,8 +307,10 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
                     details={"plan_id": state.plan.id, "step_id": record.step_id},
                 )
             try:
-                current = self.repository.get_step_record(record.step_id)
-                current_step = self.repository.get_plan(state.plan.id).step(record.step_id)
+                current = await self.runtime_repository.get_step_record(record.step_id)
+                current_step = (await self.runtime_repository.get_plan(state.plan.id)).step(
+                    record.step_id
+                )
                 if current.phase is CoordinationPhase.TERMINAL:
                     continue
                 retired_step, retired_record = await self._retired_step_state(
@@ -322,7 +319,7 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
                     superseded_by_plan_id=superseded_by_plan_id,
                     now=now,
                 )
-                self.repository.save_step(
+                await self.runtime_repository.save_step(
                     step=retired_step,
                     record=retired_record,
                     expected_revision=current.revision,
@@ -342,9 +339,9 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
                     },
                 )
             finally:
-                self.repository.release_claim(claim)
+                await self.runtime_repository.release_claim(claim)
 
-        retirement = repository.retire_plan(
+        retirement = await self.runtime_repository.retire_plan(
             state.plan.id,
             superseded_by_plan_id=superseded_by_plan_id,
             reason=_RETIREMENT_REASON,
@@ -409,13 +406,11 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
                     if retry_state is RetryState.ACTIVE:
                         retry_state = RetryState.CANCELLED
         elif record.phase is CoordinationPhase.RETRY_SCHEDULED:
-            # Preserve the already-observed FAILED attempt while cancelling only the future retry.
             retry_state = RetryState.CANCELLED
         else:
             if step.status in {StepStatus.PENDING, StepStatus.READY, StepStatus.WAITING}:
                 step = step.transition_to(StepStatus.CANCELLED)
             elif step.status is StepStatus.RUNNING:
-                # Missing Run identity is inconsistent, but supersession still forbids future work.
                 step = step.transition_to(StepStatus.CANCELLED)
             if retry_state in {RetryState.SCHEDULED, RetryState.ACTIVE}:
                 retry_state = RetryState.CANCELLED

@@ -37,6 +37,9 @@ class _PlanCoordination:
     def projection(self, plan_id: str) -> PlanCoordinationProjection:
         return self.projections[plan_id]
 
+    async def async_projection(self, plan_id: str) -> PlanCoordinationProjection:
+        return self.projection(plan_id)
+
 
 class _AgentRuns:
     def __init__(self) -> None:

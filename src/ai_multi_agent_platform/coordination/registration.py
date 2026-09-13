@@ -9,13 +9,13 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import Plan, Step, StepStatus
 from ai_multi_agent_platform.kernel.models import TaskState
 
+from .async_repository import AsyncCoordinatorRepository
 from .models import (
     CoordinationPhase,
     PredecessorFailurePolicy,
     StepCoordinationRecord,
     StepRetryPolicy,
 )
-from .repository import CoordinatorRepository
 
 
 class CanonicalTaskReader(Protocol):
@@ -30,7 +30,7 @@ class CoordinationRegistration:
     def __init__(
         self,
         *,
-        repository: CoordinatorRepository,
+        repository: AsyncCoordinatorRepository,
         kernel: CanonicalTaskReader,
     ) -> None:
         self.repository = repository
@@ -82,7 +82,7 @@ class CoordinationRegistration:
             )
             for step in steps
         )
-        self.repository.create_plan(plan, steps, records)
+        await self.repository.create_plan(plan, steps, records)
 
     @staticmethod
     def validate_graph(plan: Plan, steps: tuple[Step, ...]) -> None:

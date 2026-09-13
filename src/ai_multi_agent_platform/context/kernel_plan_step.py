@@ -15,6 +15,7 @@ from hashlib import sha256
 
 from ai_multi_agent_platform.agents.execution_profile import decode_agent_step_execution_binding
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.coordination.async_repository import runtime_coordinator_repository
 from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
 from ai_multi_agent_platform.kernel.repository import EventRepository, RunRepository, TaskRepository
 
@@ -35,7 +36,7 @@ class KernelFallbackPlanStepContextSourceAdapter(PlanStepContextSourceAdapter):
 
     The fallback is deliberately narrow: only ``CoordinatorRepository.get_plan`` returning
     ``NOT_FOUND`` enables kernel resolution. If a Coordination Plan exists but its Step projection
-    is missing or inconsistent, the base adapter still fails closed.
+    is missing or inconsistent, the adapter still fails closed.
     """
 
     adapter_id = "platform.kernel-fallback-plan-step-context/v1"
@@ -49,6 +50,7 @@ class KernelFallbackPlanStepContextSourceAdapter(PlanStepContextSourceAdapter):
         runs: RunRepository | None = None,
     ) -> None:
         super().__init__(coordinator, runs=runs)
+        self._runtime_coordinator = runtime_coordinator_repository(coordinator)
         self._tasks = tasks
         self._events = events
 
@@ -56,12 +58,100 @@ class KernelFallbackPlanStepContextSourceAdapter(PlanStepContextSourceAdapter):
         if request.plan_id is None or request.step_id is None:
             return ()
         try:
-            self.coordinator.get_plan(request.plan_id)
+            await self._runtime_coordinator.get_plan(request.plan_id)
         except ContractError as exc:
             if exc.code is not ErrorCode.NOT_FOUND:
                 raise
             return await self._collect_kernel_plan_step(request)
-        return await super().collect(request)
+        return await self._collect_coordination_plan_step(request)
+
+    async def _collect_coordination_plan_step(
+        self,
+        request: ContextSourceRequest,
+    ) -> tuple[ContextCandidate, ...]:
+        assert request.plan_id is not None
+        assert request.step_id is not None
+        state = await self._runtime_coordinator.get_plan(request.plan_id)
+        record = await self._runtime_coordinator.get_step_record(request.step_id)
+        step = next((item for item in state.steps if item.id == request.step_id), None)
+        if step is None:
+            raise ContractError(ErrorCode.NOT_FOUND, "canonical Step is not in requested Plan")
+        content = _canonical_json(
+            {
+                "plan_id": state.plan.id,
+                "plan_revision": state.plan.revision,
+                "plan_store_revision": state.store_revision,
+                "step_id": step.id,
+                "step_title": step.title,
+                "step_status": step.status.value,
+                "dependencies": list(step.depends_on),
+                "coordination_revision": record.revision,
+                "coordination_phase": record.phase.value,
+            }
+        )
+        digest = _digest(content)
+        candidates: list[ContextCandidate] = [
+            ContextCandidate(
+                source=ContextSourceRef(
+                    ContextSourceType.PLAN_STEP,
+                    step.id,
+                    revision=(
+                        f"plan:{state.plan.revision};store:{state.store_revision};"
+                        f"step:{record.revision}"
+                    ),
+                    digest=digest,
+                ),
+                role=ContextEntryRole.CONTEXT,
+                selection_reason="current canonical Plan/Step purpose and dependency state",
+                inline_content=content,
+                content_digest=digest,
+                trust=ContextTrust.TRUSTED,
+                data_classification=ContextDataClassification.INTERNAL,
+                priority=80,
+                relevance=1.0,
+                project_id=step.project_id,
+                conflict_key=f"step:{step.id}",
+            )
+        ]
+        if self.runs is None:
+            return tuple(candidates)
+        for dependency_id in sorted(step.depends_on):
+            dependency = await self._runtime_coordinator.get_step_record(dependency_id)
+            if dependency.latest_run_id is None:
+                continue
+            prior = await self.runs.get_run(request.task_id, dependency.latest_run_id)
+            prior_content = _canonical_json(
+                {
+                    "run_id": prior.run_id,
+                    "step_id": dependency_id,
+                    "status": prior.status.value,
+                    "output": prior.output,
+                    "result_ids": list(prior.result_ids),
+                    "artifact_ids": list(prior.artifact_ids),
+                    "revision": prior.revision,
+                }
+            )
+            prior_digest = _digest(prior_content)
+            candidates.append(
+                ContextCandidate(
+                    source=ContextSourceRef(
+                        ContextSourceType.PRIOR_RUN,
+                        prior.run_id,
+                        revision=str(prior.revision),
+                        digest=prior_digest,
+                    ),
+                    role=ContextEntryRole.EVIDENCE,
+                    selection_reason="completed predecessor Run output for current Step",
+                    inline_content=prior_content,
+                    content_digest=prior_digest,
+                    trust=ContextTrust.TRUSTED,
+                    data_classification=ContextDataClassification.INTERNAL,
+                    priority=70,
+                    relevance=0.9,
+                    project_id=request.project_id,
+                )
+            )
+        return tuple(candidates)
 
     async def _collect_kernel_plan_step(
         self,
@@ -147,10 +237,6 @@ class KernelFallbackPlanStepContextSourceAdapter(PlanStepContextSourceAdapter):
             "projection": "kernel_event",
         }
         if execution_binding is not None and execution_binding.objective is not None:
-            # The immutable plan event remains the source of Plan/Step purpose. A later exact
-            # Step-scoped AgentExecutionBinding may legitimately refine the execution objective
-            # before the Run starts (for example bounded Verification repair context). Surface
-            # that canonical binding as additional Context rather than replacing plan history.
             content_payload["execution_objective"] = execution_binding.objective
 
         content = _canonical_json(content_payload)

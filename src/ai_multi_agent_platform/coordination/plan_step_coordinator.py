@@ -18,6 +18,7 @@ from ai_multi_agent_platform.observability import (
 )
 
 from .aggregation import CoordinationAggregation
+from .async_repository import AsyncCoordinatorRepository, runtime_coordinator_repository
 from .attempt_outcomes import CoordinationAttemptOutcomes
 from .cancellation import CoordinationCancellation
 from .models import (
@@ -25,6 +26,7 @@ from .models import (
     CoordinationPhase,
     CoordinatorClaim,
     PlanCoordinationProjection,
+    PlanRuntimeState,
     PredecessorFailurePolicy,
     ReconciliationDisposition,
     StepCoordinationProjection,
@@ -119,23 +121,46 @@ class DurablePlanStepCoordinator:
         coordinator_id: str,
         telemetry: Telemetry | None = None,
         claim_ttl: timedelta = timedelta(seconds=30),
+        runtime_repository: AsyncCoordinatorRepository | None = None,
     ) -> None:
         if not coordinator_id.strip():
             raise ValueError("coordinator_id must not be blank")
         if claim_ttl.total_seconds() <= 0:
             raise ValueError("claim_ttl must be positive")
         self.repository = repository
+        self.runtime_repository = runtime_coordinator_repository(
+            repository,
+            runtime_repository=runtime_repository,
+        )
         self.kernel = kernel
         self.coordinator_id = coordinator_id
         self.telemetry = telemetry or Telemetry()
         self.claim_ttl = claim_ttl
-        self._registration = CoordinationRegistration(repository=repository, kernel=kernel)
-        self._progression = CoordinationProgression(repository=repository, kernel=kernel)
-        self._waits = CoordinationWaits(repository=repository, kernel=kernel)
-        self._attempt_outcomes = CoordinationAttemptOutcomes(repository=repository, kernel=kernel)
-        self._cancellation = CoordinationCancellation(repository=repository, kernel=kernel)
-        self._aggregation = CoordinationAggregation(repository=repository, kernel=kernel)
-        self._reconciliation = CoordinationReconciliation(repository=repository, kernel=kernel)
+        self._registration = CoordinationRegistration(
+            repository=self.runtime_repository,
+            kernel=kernel,
+        )
+        self._progression = CoordinationProgression(
+            repository=self.runtime_repository,
+            kernel=kernel,
+        )
+        self._waits = CoordinationWaits(repository=self.runtime_repository, kernel=kernel)
+        self._attempt_outcomes = CoordinationAttemptOutcomes(
+            repository=self.runtime_repository,
+            kernel=kernel,
+        )
+        self._cancellation = CoordinationCancellation(
+            repository=self.runtime_repository,
+            kernel=kernel,
+        )
+        self._aggregation = CoordinationAggregation(
+            repository=self.runtime_repository,
+            kernel=kernel,
+        )
+        self._reconciliation = CoordinationReconciliation(
+            repository=self.runtime_repository,
+            kernel=kernel,
+        )
 
     async def register_plan(
         self,
@@ -155,7 +180,7 @@ class DurablePlanStepCoordinator:
         )
         self._emit("coordination.plan.registered", plan.task_id, plan.id, None)
         await self.advance(plan.id)
-        return self.projection(plan.id)
+        return await self.async_projection(plan.id)
 
     async def advance(
         self,
@@ -175,9 +200,9 @@ class DurablePlanStepCoordinator:
         made_progress = True
         while made_progress:
             made_progress = False
-            state = self.repository.get_plan(plan_id)
+            state = await self.runtime_repository.get_plan(plan_id)
             by_id = {step.id: step for step in state.steps}
-            for record in self.repository.list_step_records(plan_id):
+            for record in await self.runtime_repository.list_step_records(plan_id):
                 step = by_id[record.step_id]
                 if record.phase is CoordinationPhase.RETRY_SCHEDULED:
                     if record.retry_due_at is not None and record.retry_due_at <= current_time:
@@ -210,7 +235,7 @@ class DurablePlanStepCoordinator:
                 )
                 made_progress = any(started) or made_progress
         await self._aggregate_task(plan_id)
-        return self.projection(plan_id)
+        return await self.async_projection(plan_id)
 
     async def observe_run(
         self,
@@ -236,7 +261,7 @@ class DurablePlanStepCoordinator:
         )
         if result.changed:
             await self.advance(result.plan_id, now=current_time)
-        return self.projection(result.plan_id)
+        return await self.async_projection(result.plan_id)
 
     async def wait_step(
         self,
@@ -253,7 +278,7 @@ class DurablePlanStepCoordinator:
             required_claim=self._required_claim,
             emit=self._emit,
         )
-        return self.projection(result.plan_id)
+        return await self.async_projection(result.plan_id)
 
     async def resolve_approval(
         self,
@@ -287,7 +312,7 @@ class DurablePlanStepCoordinator:
         )
         if result.changed:
             await self.advance(result.plan_id, now=current_time)
-        return self.projection(result.plan_id)
+        return await self.async_projection(result.plan_id)
 
     async def resolve_event(
         self,
@@ -317,7 +342,7 @@ class DurablePlanStepCoordinator:
         )
         if result.changed:
             await self.advance(result.plan_id, now=current_time)
-        return self.projection(result.plan_id)
+        return await self.async_projection(result.plan_id)
 
     async def resolve_external_job(
         self,
@@ -347,7 +372,7 @@ class DurablePlanStepCoordinator:
         )
         if result.changed:
             await self.advance(result.plan_id, now=current_time)
-        return self.projection(result.plan_id)
+        return await self.async_projection(result.plan_id)
 
     async def process_due(
         self,
@@ -358,8 +383,8 @@ class DurablePlanStepCoordinator:
 
         current_time = self._now(now)
         changed: set[str] = set()
-        for plan in self.repository.list_active_plans():
-            for record in self.repository.list_step_records(plan.plan.id):
+        for plan in await self.runtime_repository.list_active_plans():
+            for record in await self.runtime_repository.list_step_records(plan.plan.id):
                 wait = record.wait
                 if (
                     record.phase is CoordinationPhase.WAITING
@@ -382,7 +407,10 @@ class DurablePlanStepCoordinator:
                 ):
                     await self.advance(plan.plan.id, now=current_time)
                     changed.add(plan.plan.id)
-        return tuple(self.projection(plan_id) for plan_id in sorted(changed))
+        projections: list[PlanCoordinationProjection] = []
+        for plan_id in sorted(changed):
+            projections.append(await self.async_projection(plan_id))
+        return tuple(projections)
 
     async def cancel_plan(
         self,
@@ -402,7 +430,7 @@ class DurablePlanStepCoordinator:
             close_wait=self._close_wait,
             emit=self._emit,
         )
-        return self.projection(result_plan_id)
+        return await self.async_projection(result_plan_id)
 
     async def reconcile_plan(
         self,
@@ -422,7 +450,7 @@ class DurablePlanStepCoordinator:
             claim=self._claim,
             emit=self._emit,
         )
-        return self.projection(result_plan_id)
+        return await self.async_projection(result_plan_id)
 
     async def reconcile_all(
         self,
@@ -430,13 +458,31 @@ class DurablePlanStepCoordinator:
         now: datetime | None = None,
     ) -> tuple[PlanCoordinationProjection, ...]:
         projections: list[PlanCoordinationProjection] = []
-        for state in self.repository.list_active_plans():
+        for state in await self.runtime_repository.list_active_plans():
             projections.append(await self.reconcile_plan(state.plan.id, now=now))
         return tuple(projections)
 
     def projection(self, plan_id: str) -> PlanCoordinationProjection:
+        """Synchronous compatibility projection for setup/tests and offline tooling."""
+
         state = self.repository.get_plan(plan_id)
         records = {item.step_id: item for item in self.repository.list_step_records(plan_id)}
+        return self._projection_from_state(state, records)
+
+    async def async_projection(self, plan_id: str) -> PlanCoordinationProjection:
+        """Runtime-safe projection that never performs blocking persistence inline."""
+
+        state = await self.runtime_repository.get_plan(plan_id)
+        records = {
+            item.step_id: item for item in await self.runtime_repository.list_step_records(plan_id)
+        }
+        return self._projection_from_state(state, records)
+
+    @staticmethod
+    def _projection_from_state(
+        state: PlanRuntimeState,
+        records: dict[str, StepCoordinationRecord],
+    ) -> PlanCoordinationProjection:
         return PlanCoordinationProjection(
             task_id=state.plan.task_id,
             plan_id=state.plan.id,
@@ -529,7 +575,7 @@ class DurablePlanStepCoordinator:
         )
         if result.changed:
             await self.advance(result.plan_id, now=now)
-        return self.projection(result.plan_id)
+        return await self.async_projection(result.plan_id)
 
     async def _cancel_active_run(self, record: StepCoordinationRecord, key: str) -> None:
         await self._cancellation.cancel_active_run(record, key)
@@ -553,15 +599,15 @@ class DurablePlanStepCoordinator:
     async def _aggregate_task(self, plan_id: str) -> None:
         await self._aggregation.aggregate_task(plan_id)
 
-    def _claim(self, step_id: str, now: datetime) -> CoordinatorClaim | None:
-        claim = self.repository.acquire_claim(
+    async def _claim(self, step_id: str, now: datetime) -> CoordinatorClaim | None:
+        claim = await self.runtime_repository.acquire_claim(
             step_id=step_id,
             owner_id=self.coordinator_id,
             ttl=self.claim_ttl,
             now=now,
         )
         if claim is None:
-            record = self.repository.get_step_record(step_id)
+            record = await self.runtime_repository.get_step_record(step_id)
             self._emit(
                 "coordination.claim.conflict",
                 record.task_id,
@@ -572,8 +618,8 @@ class DurablePlanStepCoordinator:
             )
         return claim
 
-    def _required_claim(self, step_id: str, now: datetime) -> CoordinatorClaim:
-        claim = self._claim(step_id, now)
+    async def _required_claim(self, step_id: str, now: datetime) -> CoordinatorClaim:
+        claim = await self._claim(step_id, now)
         if claim is None:
             raise ContractError(
                 ErrorCode.CONFLICT,

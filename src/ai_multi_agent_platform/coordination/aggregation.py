@@ -7,8 +7,8 @@ from typing import Protocol
 from ai_multi_agent_platform.domain import StepStatus, TaskStatus
 from ai_multi_agent_platform.kernel.models import TaskState
 
+from .async_repository import AsyncCoordinatorRepository
 from .models import CoordinationPhase
-from .repository import CoordinatorRepository
 
 _TERMINAL_STEPS = frozenset(
     {StepStatus.SUCCEEDED, StepStatus.FAILED, StepStatus.SKIPPED, StepStatus.CANCELLED}
@@ -53,15 +53,15 @@ class CoordinationAggregation:
     def __init__(
         self,
         *,
-        repository: CoordinatorRepository,
+        repository: AsyncCoordinatorRepository,
         kernel: AggregationKernel,
     ) -> None:
         self.repository = repository
         self.kernel = kernel
 
     async def aggregate_task(self, plan_id: str) -> None:
-        state = self.repository.get_plan(plan_id)
-        records = self.repository.list_step_records(plan_id)
+        state = await self.repository.get_plan(plan_id)
+        records = await self.repository.list_step_records(plan_id)
         if len(records) != len(state.steps) or any(
             record.phase is not CoordinationPhase.TERMINAL for record in records
         ):
