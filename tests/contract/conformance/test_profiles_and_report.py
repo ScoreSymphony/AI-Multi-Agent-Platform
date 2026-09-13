@@ -36,6 +36,7 @@ def test_fast_profile_owns_the_reference_security_verification_and_client_slice(
         "A",
         "D-model",
         "D-capability",
+        "D-vertical",
         "F",
         "H",
         "J-cli",
@@ -137,6 +138,7 @@ def test_operational_release_paths_are_bound_to_owning_acceptance_evidence() -> 
         "O": "test_task_run_executor_accounting_is_idempotent_and_aggregated",
         "P": "test_standard_catalog_lifecycle_uses_real_control_plane_http_command_path",
         "W": "test_dependency_satisfaction_cycle_cross_project_and_blocked_reason",
+        "Z": "test_parallel_coding_batch_uses_384_fanout_fanin_and_authorized_merge",
     }
 
     for scenario_id, marker in expected_evidence.items():
@@ -154,6 +156,11 @@ def test_operational_release_paths_are_bound_to_owning_acceptance_evidence() -> 
     assert (
         "test_responsibility_reassignment_and_agent_assignment_are_permission_neutral"
         in task_management_command
+    )
+    parallel_coding_command = " ".join(scenarios["Z"].command or ())
+    assert (
+        "test_conflicting_valid_workstreams_require_canonical_repair_and_fresh_combined_validation"
+        in parallel_coding_command
     )
 
 
