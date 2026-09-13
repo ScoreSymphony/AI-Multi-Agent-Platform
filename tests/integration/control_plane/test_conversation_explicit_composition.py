@@ -31,6 +31,19 @@ CONVERSATION_COMMANDS = (
     "conversation.retention.set",
     "conversation.delete",
 )
+NOTIFICATION_RESOURCES = (
+    "notifications",
+    "notification-preferences",
+)
+NOTIFICATION_COMMANDS = (
+    "notification.mark-read",
+    "notification.mark-all-read",
+    "notification.acknowledge",
+    "notification.dismiss",
+    "notification.archive",
+    "notification.preference.update",
+    "notification.delivery.retry",
+)
 
 
 def _control_plane(tmp_path: Path) -> ControlPlane:
@@ -57,6 +70,19 @@ def test_conversation_resources_and_commands_have_one_explicit_owner(tmp_path: P
         assert control_plane.resource_owner(resource) == "conversations"
     for command in CONVERSATION_COMMANDS:
         assert control_plane.command_owner(command) == "conversations"
+
+
+def test_notification_surface_has_one_explicit_owner(tmp_path: Path) -> None:
+    control_plane = _control_plane(tmp_path)
+
+    assert "notifications" in control_plane.registered_modules
+    for resource in NOTIFICATION_RESOURCES:
+        assert control_plane.resource_owner(resource) == "notifications"
+    for command in NOTIFICATION_COMMANDS:
+        assert control_plane.command_owner(command) == "notifications"
+    assert (
+        control_plane.route_owner("GET", "/api/v1/notifications/stream") == "notifications"
+    )
 
 
 def test_explicit_conversation_module_preserves_ergonomic_http_creation(tmp_path: Path) -> None:
