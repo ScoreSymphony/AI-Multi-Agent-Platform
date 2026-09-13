@@ -1,3 +1,7 @@
+"""Migrated under #722; original coverage tracked issue #15."""
+
+# ruff: noqa: F401
+
 from __future__ import annotations
 
 import asyncio
@@ -292,14 +296,3 @@ def test_control_plane_create_approval_cannot_be_reused_for_changed_payload() ->
     approvals = gate.approvals.all()
     assert len(approvals) == 2
     assert approvals[0].requested_action_digest != approvals[1].requested_action_digest
-
-
-def test_control_plane_vocabulary_mapping_is_platform_owned() -> None:
-    assert canonical_control_plane_vocabulary("project:create") == (
-        AuthorizationAction.CREATE,
-        ResourceType.PROJECT,
-    )
-    assert canonical_control_plane_vocabulary("model-provider:disable") == (
-        AuthorizationAction.ADMINISTER,
-        ResourceType.PROVIDER_CONFIGURATION,
-    )

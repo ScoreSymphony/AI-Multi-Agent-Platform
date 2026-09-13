@@ -1,3 +1,5 @@
+"""Migrated under #722; original coverage tracked issue #241."""
+
 from ai_multi_agent_platform.security.authorization import AuthorizationAction, ResourceType
 from ai_multi_agent_platform.security.control_plane_bridge import canonical_control_plane_vocabulary
 

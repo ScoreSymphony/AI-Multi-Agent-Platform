@@ -126,7 +126,7 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "test_suspend_remove_and_role_changes_feed_scope_without_becoming_authorization",
         "tests/test_issue_87_organization_domain.py::"
         "test_resource_ownership_sharing_revoke_and_cross_org_isolation",
-        "tests/test_issue_87_cross_org_authorization.py::"
+        "tests/integration/security/test_cross_organization_authorization.py::"
         "test_cross_org_share_flag_is_not_a_substitute_for_authorization",
         "tests/test_issue_87_historical_provenance.py::"
         "test_historical_task_and_event_identity_survive_membership_removal",
@@ -164,7 +164,7 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "test_plan_cancellation_reaches_worker_and_late_worker_success_cannot_revive_state",
         "tests/test_issue_384_orchestrator_replacement.py::"
         "test_orchestrator_replacement_does_not_change_durable_step_identity_or_state",
-        "tests/test_issue_384_control_plane_authorization.py::"
+        "tests/integration/security/test_coordination_control_plane_authorization.py::"
         "test_coordination_repair_commands_are_authorized_before_handler_execution",
         "tests/test_issue_421_reference_coordinator_cli.py::"
         "test_cli_reads_real_reference_coordinator_projection_through_control_plane",

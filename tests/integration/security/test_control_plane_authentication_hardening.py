@@ -3,41 +3,23 @@
 
 # ruff: noqa: F401
 
-
 from __future__ import annotations
 
-
 import asyncio
-
-
 from dataclasses import replace
-
-
 from datetime import UTC, datetime, timedelta
-
-
 from typing import Any
-
 
 import pytest
 
-
 from ai_multi_agent_platform.contracts.types import JsonValue
-
-
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
     ControlPlane,
     HTTPRequest,
 )
-
-
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
-
-
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
-
-
 from ai_multi_agent_platform.security import (
     ActorType,
     AuthenticationAuditRecord,
@@ -58,10 +40,7 @@ from ai_multi_agent_platform.security import (
     ScryptPasswordHasher,
     VerifiedExternalIdentity,
 )
-
-
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
-
 
 NOW = datetime(2026, 9, 3, 18, 30, tzinfo=UTC)
 

@@ -3,32 +3,20 @@
 
 # ruff: noqa: F401
 
-
 from __future__ import annotations
-
 
 from datetime import UTC, datetime, timedelta
 
-
 import pytest
 
-
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-
-
 from ai_multi_agent_platform.contracts.types import JsonValue
-
-
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
     ControlPlaneASGI,
     HTTPRequest,
 )
-
-
 from ai_multi_agent_platform.control_plane.models import APIException, PageQuery, RequestContext
-
-
 from ai_multi_agent_platform.security import (
     ActorType,
     AuthenticationAuditRecord,
@@ -42,10 +30,7 @@ from ai_multi_agent_platform.security import (
     ScryptPasswordHasher,
     VerifiedExternalIdentity,
 )
-
-
 from ai_multi_agent_platform.security.control_plane_bridge import canonical_control_plane_vocabulary
-
 
 NOW = datetime(2026, 9, 3, 3, 30, tzinfo=UTC)
 

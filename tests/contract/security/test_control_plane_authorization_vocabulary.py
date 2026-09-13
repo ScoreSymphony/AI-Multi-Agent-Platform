@@ -3,39 +3,21 @@
 
 # ruff: noqa: F401
 
-
 from __future__ import annotations
 
-
 import asyncio
-
-
 from pathlib import Path
-
 
 import pytest
 
-
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
-
-
 from ai_multi_agent_platform.control_plane import ActorContext, ControlPlane, RequestContext
-
-
 from ai_multi_agent_platform.control_plane.task_management_contract import (
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
-
-
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
-
-
 from ai_multi_agent_platform.domain import ApprovalStatus, OwnerRef, new_id
-
-
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
-
-
 from ai_multi_agent_platform.security import (
     ActorIdentity,
     ActorType,
@@ -49,11 +31,7 @@ from ai_multi_agent_platform.security import (
     ResourceType,
     canonical_control_plane_vocabulary,
 )
-
-
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
-
-
 from ai_multi_agent_platform.workspaces import (
     InMemoryRunWorkspaceBindingRepository,
     SqliteWorkspaceProvider,

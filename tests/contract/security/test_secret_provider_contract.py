@@ -3,21 +3,13 @@
 
 # ruff: noqa: F401
 
-
 from __future__ import annotations
 
-
 import asyncio
-
-
 import json
-
-
 from collections.abc import Mapping
 
-
 import pytest
-
 
 from ai_multi_agent_platform.configuration import (
     LocalSecretProvider,
@@ -28,8 +20,6 @@ from ai_multi_agent_platform.configuration import (
     redact_sensitive,
     redact_text,
 )
-
-
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 
 

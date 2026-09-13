@@ -3,28 +3,16 @@
 
 # ruff: noqa: F401
 
-
 from __future__ import annotations
 
-
 import asyncio
-
-
 import json
-
-
 from pathlib import Path
-
 
 import pytest
 
-
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
-
-
 from ai_multi_agent_platform.domain import OwnerRef, new_id
-
-
 from ai_multi_agent_platform.security import (
     ActorIdentity,
     ActorType,
@@ -36,14 +24,10 @@ from ai_multi_agent_platform.security import (
     ProposedAction,
     ResourceType,
 )
-
-
 from ai_multi_agent_platform.security.policy_profile_persistence import (
     JsonAuthorizationPolicyProfileRepository,
     policy_profile_revision_to_json,
 )
-
-
 from ai_multi_agent_platform.security.policy_profiles import (
     AuthorizationPolicyConditions,
     AuthorizationPolicyProfileCallContext,
