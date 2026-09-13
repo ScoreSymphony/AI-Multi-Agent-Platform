@@ -102,7 +102,7 @@ class EgressApprovalBridge:
             return decision
 
         action = egress_proposed_action(request, decision, actor=actor)
-        approved_ref = self._valid_approval_ref(action, approval_id)
+        approved_ref = await self._valid_approval_ref(action, approval_id)
         if approved_ref is not None:
             return replace(
                 decision,
@@ -138,21 +138,20 @@ class EgressApprovalBridge:
             },
         )
 
-    def _valid_approval_ref(
+    async def _valid_approval_ref(
         self,
         action: ProposedAction,
         approval_id: str | None,
     ) -> str | None:
-        approvals = self.authorization_gate.approvals
-        if approval_id is not None:
-            try:
-                if approvals.valid_for(approval_id, action):
-                    return approval_id
-            except ContractError as exc:
-                if exc.code is not ErrorCode.NOT_FOUND:
-                    raise
-            return None
-        record = approvals.find_valid_for(action)
+        try:
+            record = await self.authorization_gate.runtime_approvals.resolve_valid_for(
+                action,
+                approval_id=approval_id,
+            )
+        except ContractError as exc:
+            if approval_id is not None and exc.code is ErrorCode.NOT_FOUND:
+                return None
+            raise
         return None if record is None else record.approval_id
 
 

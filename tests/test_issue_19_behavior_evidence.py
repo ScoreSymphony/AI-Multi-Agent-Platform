@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable
 from datetime import UTC, datetime, timedelta
 
 from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
@@ -56,6 +57,17 @@ class ApprovalRecords:
 
     def all(self) -> tuple[ApprovalRecord, ...]:
         return self.records
+
+
+class WrappedAsyncApprovalRecords:
+    def __init__(self, records: tuple[ApprovalRecord, ...]) -> None:
+        self.records = records
+
+    def all(self) -> Awaitable[tuple[ApprovalRecord, ...]]:
+        async def read() -> tuple[ApprovalRecord, ...]:
+            return self.records
+
+        return read()
 
 
 def _attempt(case: EvaluationCase) -> EvaluationAttempt:
@@ -135,6 +147,31 @@ def test_approval_evidence_is_assertable_from_canonical_records() -> None:
 
         assert result.outcome is EvaluationOutcome.PASSED
         assert all(assertion.passed for assertion in result.assertions)
+
+    asyncio.run(scenario())
+
+
+def test_approval_evidence_supports_regular_callable_returning_awaitable() -> None:
+    async def scenario() -> None:
+        case = EvaluationCase(
+            case_id="case.wrapped-approval-reader",
+            name="wrapped approval reader",
+            version="1",
+        )
+        attempt = _attempt(case)
+        baseline = EvaluationObservation(task_id=new_id("task"), run_id=new_id("run"))
+        executor = ApprovalEvidenceCaseExecutor(
+            StaticExecutor(baseline),
+            WrappedAsyncApprovalRecords(()),
+        )
+
+        observation = await executor.execute_case(
+            case=case,
+            attempt=attempt,
+            execution_context=EvaluationExecutionContext(attempt_id=attempt.attempt_id),
+        )
+
+        assert observation == baseline
 
     asyncio.run(scenario())
 

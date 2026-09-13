@@ -45,6 +45,7 @@ class SqliteApprovalService(ApprovalService):
         risk: RiskClassification = RiskClassification.ELEVATED,
         expires_at: datetime | None = None,
     ) -> ApprovalRecord:
+        existing_ids = frozenset(self._records)
         record = super().request(
             action,
             reason=reason,
@@ -52,12 +53,28 @@ class SqliteApprovalService(ApprovalService):
             risk=risk,
             expires_at=expires_at,
         )
-        self._persist(record)
+        if record.approval_id in existing_ids:
+            return record
+        try:
+            self._persist(record)
+        except Exception:
+            self._records.pop(record.approval_id, None)
+            raise
         return record
 
     def get(self, approval_id: str) -> ApprovalRecord:
+        previous = self._records.get(approval_id)
         record = super().get(approval_id)
-        self._persist(record)
+        if record == previous:
+            return record
+        try:
+            self._persist(record)
+        except Exception:
+            if previous is None:
+                self._records.pop(approval_id, None)
+            else:
+                self._records[approval_id] = previous
+            raise
         return record
 
     def _decide_authorized(
@@ -68,18 +85,34 @@ class SqliteApprovalService(ApprovalService):
         approve: bool,
         comment: str | None = None,
     ) -> ApprovalRecord:
+        previous = self._records.get(approval_id)
         record = super()._decide_authorized(
             approval_id,
             approver_ref=approver_ref,
             approve=approve,
             comment=comment,
         )
-        self._persist(record)
+        try:
+            self._persist(record)
+        except Exception:
+            if previous is None:
+                self._records.pop(approval_id, None)
+            else:
+                self._records[approval_id] = previous
+            raise
         return record
 
     def _cancel_authorized(self, approval_id: str, *, actor_ref: str) -> ApprovalRecord:
+        previous = self._records.get(approval_id)
         record = super()._cancel_authorized(approval_id, actor_ref=actor_ref)
-        self._persist(record)
+        try:
+            self._persist(record)
+        except Exception:
+            if previous is None:
+                self._records.pop(approval_id, None)
+            else:
+                self._records[approval_id] = previous
+            raise
         return record
 
     def _connect(self) -> sqlite3.Connection:

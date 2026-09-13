@@ -168,7 +168,7 @@ class ScopedRuntimeAwareLearningCandidateResourceService(
                 project_id=candidate.project_id,
             ):
                 continue
-            resource = _candidate_resource(self._observed_learning, candidate)
+            resource = await _candidate_resource(self._observed_learning, candidate)
             resources.append(self._with_post_promotion_status(resource))
         return tuple(resources)
 
@@ -186,7 +186,7 @@ class ScopedRuntimeAwareLearningCandidateResourceService(
         ):
             _not_found("Learning Candidate")
         return self._with_post_promotion_status(
-            _candidate_resource(self._observed_learning, candidate)
+            await _candidate_resource(self._observed_learning, candidate)
         )
 
 
