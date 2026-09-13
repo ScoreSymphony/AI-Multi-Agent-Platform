@@ -139,9 +139,7 @@ _HARD_FAILURE_CASES = frozenset(
         "failure_recovery_results:no_duplicate_side_effect_after_retry",
     }
 )
-_NEGATIVE_ONLY_RECOMMENDATIONS = frozenset(
-    {"prefer_simpler_private_networking", "reject/defer"}
-)
+_NEGATIVE_ONLY_RECOMMENDATIONS = frozenset({"prefer_simpler_private_networking", "reject/defer"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,10 +194,7 @@ def validate_private_mcp_transport_evaluation_report(report: Mapping[str, Any]) 
     if errors:
         first = errors[0]
         location = ".".join(str(part) for part in first.absolute_path) or "<root>"
-        message = (
-            "invalid private MCP transport evaluation report at "
-            f"{location}: {first.message}"
-        )
+        message = f"invalid private MCP transport evaluation report at {location}: {first.message}"
         raise ValueError(message)
 
     started_at = _parse_timestamp(_require_str(report, "started_at"), "started_at")
@@ -269,9 +264,7 @@ def assess_private_mcp_transport_evaluation(
 
     comparison_statuses = _case_statuses(report, "comparison_results")
     incomplete_comparisons = sorted(
-        case_id
-        for case_id in COMPARISON_CASES
-        if comparison_statuses.get(case_id) != "pass"
+        case_id for case_id in COMPARISON_CASES if comparison_statuses.get(case_id) != "pass"
     )
     if incomplete_comparisons:
         decision_blockers.append("required comparison baseline evidence is incomplete")
