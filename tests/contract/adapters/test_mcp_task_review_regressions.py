@@ -236,7 +236,7 @@ async def test_cancellation_during_binding_cancels_the_new_external_task() -> No
             )
         ]
     )
-    _, registry = await _register(client, store=store)
+    provider, registry = await _register(client, store=store)
     request = _request("invoke-review-cancel-during-bind")
     operation = asyncio.create_task(CapabilityInvoker(registry).invoke(request))
     await store.bind_started.wait()
@@ -251,6 +251,7 @@ async def test_cancellation_during_binding_cancels_the_new_external_task() -> No
     assert binding is not None
     assert binding.cancellation_requested_at is not None
     assert binding.cancellation_acknowledged is True
+    assert provider._active_task_bindings == {}
 
 
 @pytest.mark.asyncio
@@ -267,3 +268,31 @@ async def test_completed_invocations_release_per_invocation_task_locks() -> None
 
     assert provider._task_locks == {}
     assert provider._task_lock_users == {}
+
+
+@pytest.mark.asyncio
+async def test_completed_async_invocations_release_active_task_bindings() -> None:
+    client = _ReviewTaskClient(
+        outcomes=[
+            MCPTaskStarted(
+                _snapshot(
+                    MCPTaskStatus.WORKING,
+                    task_id="completed-cache-task",
+                )
+            )
+        ],
+        polls=[
+            _snapshot(
+                MCPTaskStatus.COMPLETED,
+                task_id="completed-cache-task",
+                offset=1,
+                result={"structuredContent": {"answer": 42}, "isError": False},
+            )
+        ],
+    )
+    provider, registry = await _register(client)
+
+    result = await CapabilityInvoker(registry).invoke(_request("invoke-review-completed-cache"))
+
+    assert result.output == {"answer": 42}
+    assert provider._active_task_bindings == {}
