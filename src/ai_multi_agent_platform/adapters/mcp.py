@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from typing import Protocol, cast
 
@@ -145,6 +146,7 @@ class MCPToolProvider(CapabilityToolProvider):
         self._task_binding_store = task_binding_store or InMemoryMCPTaskBindingStore()
         self._task_input_handler = task_input_handler
         self._task_locks: dict[str, asyncio.Lock] = {}
+        self._task_lock_users: dict[str, int] = {}
         self._active_task_bindings: dict[str, MCPTaskBinding] = {}
 
     @property
@@ -275,13 +277,7 @@ class MCPToolProvider(CapabilityToolProvider):
                 },
             )
 
-        if not await client.supports_tasks():
-            # A server without the extension stays on the ordinary MCP path. No task capability is
-            # declared on tools/call, so the server cannot legitimately return CreateTaskResult.
-            return await self._invoke_synchronous(invocation)
-
-        lock = self._task_locks.setdefault(invocation.invocation_id, asyncio.Lock())
-        async with lock:
+        async with self._task_invocation_lock(invocation.invocation_id):
             binding = await self._task_binding_store.get(
                 self.descriptor.provider_id,
                 invocation.invocation_id,
@@ -290,6 +286,11 @@ class MCPToolProvider(CapabilityToolProvider):
                 validate_binding_for_invocation(binding, invocation)
                 self._active_task_bindings[invocation.invocation_id] = binding
                 return await self._poll_bound_task(client, invocation, binding, initial=None)
+
+            if not await client.supports_tasks():
+                # A server without the extension stays on the ordinary MCP path only when this
+                # canonical attempt has no durable external-task binding to reconcile.
+                return await self._invoke_synchronous(invocation)
 
             # Deliberately no transport-level retry here. If delivery becomes ambiguous before a
             # task handle is received, this canonical attempt fails rather than risking a duplicate
@@ -328,10 +329,35 @@ class MCPToolProvider(CapabilityToolProvider):
                 protocol_revision=client.task_protocol_revision,
                 snapshot=outcome.task,
             )
-            binding = await self._task_binding_store.bind(candidate)
+            try:
+                binding = await self._task_binding_store.bind(candidate)
+            except asyncio.CancelledError:
+                # The durable store contract settles an already-started bind before cancellation
+                # crosses the persistence boundary. At this point the exact external handle is
+                # known and durably associated with this attempt, so cancellation must target it.
+                await asyncio.shield(self._cancel_bound_task(client, invocation, candidate))
+                raise
             validate_binding_for_invocation(binding, invocation)
             self._active_task_bindings[invocation.invocation_id] = binding
             return await self._poll_bound_task(client, invocation, binding, initial=outcome.task)
+
+    @asynccontextmanager
+    async def _task_invocation_lock(self, invocation_id: str) -> AsyncIterator[None]:
+        """Serialize one canonical invocation without retaining historical lock entries."""
+
+        lock = self._task_locks.setdefault(invocation_id, asyncio.Lock())
+        self._task_lock_users[invocation_id] = self._task_lock_users.get(invocation_id, 0) + 1
+        try:
+            async with lock:
+                yield
+        finally:
+            remaining = self._task_lock_users[invocation_id] - 1
+            if remaining == 0:
+                self._task_lock_users.pop(invocation_id, None)
+                if self._task_locks.get(invocation_id) is lock:
+                    self._task_locks.pop(invocation_id, None)
+            else:
+                self._task_lock_users[invocation_id] = remaining
 
     async def _poll_bound_task(
         self,
