@@ -74,7 +74,9 @@ class ControlPlane(_LinearControlPlane):
                     name=TASK_MANAGEMENT_MODULE,
                     command_handlers={
                         TASK_MANAGEMENT_UPDATE_COMMAND: self._execute_task_management_update,
-                        TASK_MANAGEMENT_BULK_UPDATE_COMMAND: self._execute_task_management_bulk_update,
+                        TASK_MANAGEMENT_BULK_UPDATE_COMMAND: (
+                            self._execute_task_management_bulk_update
+                        ),
                     },
                     command_authorizers={
                         TASK_MANAGEMENT_UPDATE_COMMAND: _task_management_authorizer,
