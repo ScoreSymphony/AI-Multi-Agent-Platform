@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -15,6 +16,20 @@ from .models import Notification, NotificationQuery, NotificationState, Recipien
 class NotificationRepository(ABC):
     @abstractmethod
     async def save(self, notification: Notification) -> Notification: ...
+
+    @abstractmethod
+    async def save_active_aggregate(
+        self,
+        notification: Notification,
+        *,
+        increment_existing: bool,
+    ) -> tuple[Notification, bool]:
+        """Atomically insert or resolve one active notification aggregation key.
+
+        The boolean is true when an active aggregate already existed. Implementations must keep
+        lookup and any resulting update/insert inside one serialization boundary.
+        """
+        ...
 
     @abstractmethod
     async def get(self, notification_id: str) -> Notification: ...
@@ -52,10 +67,35 @@ class InMemoryNotificationRepository(NotificationRepository):
 
     def __init__(self) -> None:
         self._items: dict[str, Notification] = {}
+        self._aggregate_lock = asyncio.Lock()
 
     async def save(self, notification: Notification) -> Notification:
         self._items[notification.id] = notification
         return notification
+
+    async def save_active_aggregate(
+        self,
+        notification: Notification,
+        *,
+        increment_existing: bool,
+    ) -> tuple[Notification, bool]:
+        aggregation_key = notification.aggregation_key
+        if aggregation_key is None or not aggregation_key.strip():
+            raise ValueError("notification aggregation_key must not be blank")
+        async with self._aggregate_lock:
+            existing = self._find_active_aggregate(
+                recipient=notification.recipient,
+                aggregation_key=aggregation_key,
+                now=datetime.now(UTC),
+            )
+            if existing is not None:
+                if not increment_existing:
+                    return existing, True
+                merged = merge_active_aggregate(existing, notification)
+                self._items[merged.id] = merged
+                return merged, True
+            self._items[notification.id] = notification
+            return notification, False
 
     async def get(self, notification_id: str) -> Notification:
         validate_id(notification_id, "notification")
@@ -98,7 +138,19 @@ class InMemoryNotificationRepository(NotificationRepository):
     ) -> Notification | None:
         if not aggregation_key.strip():
             raise ValueError("aggregation_key must not be blank")
-        now = datetime.now(UTC)
+        return self._find_active_aggregate(
+            recipient=recipient,
+            aggregation_key=aggregation_key,
+            now=datetime.now(UTC),
+        )
+
+    def _find_active_aggregate(
+        self,
+        *,
+        recipient: RecipientRef,
+        aggregation_key: str,
+        now: datetime,
+    ) -> Notification | None:
         candidates = [
             item
             for item in self._items.values()
@@ -143,3 +195,20 @@ class InMemoryNotificationRepository(NotificationRepository):
             self._items[notification_id] = next_item
             updated.append(next_item)
         return tuple(updated)
+
+
+def merge_active_aggregate(existing: Notification, incoming: Notification) -> Notification:
+    """Apply the canonical duplicate-aggregation mutation to an existing active row."""
+
+    return replace(
+        existing,
+        title=incoming.title,
+        summary=incoming.summary,
+        severity=incoming.severity,
+        state=NotificationState.UNREAD,
+        occurrence_count=existing.occurrence_count + 1,
+        updated_at=max(existing.updated_at, incoming.updated_at),
+        read_at=None,
+        correlation_id=incoming.correlation_id or existing.correlation_id,
+        causation_id=incoming.causation_id or existing.causation_id,
+    )

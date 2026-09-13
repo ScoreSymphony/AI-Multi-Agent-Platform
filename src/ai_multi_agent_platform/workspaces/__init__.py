@@ -1,5 +1,6 @@
 """Canonical workspace lifecycle, snapshots, and local materialization support."""
 
+from .async_sqlite import SqliteRunWorkspaceBindingRepository, SqliteWorkspaceProvider
 from .contracts import WorkspaceProvider
 from .models import (
     CleanupReport,
@@ -38,7 +39,6 @@ from .run_bindings import (
     InMemoryRunWorkspaceBindingRepository,
     RunWorkspaceBinding,
     RunWorkspaceBindingRepository,
-    SqliteRunWorkspaceBindingRepository,
 )
 from .sources import (
     EmptyWorkspaceSourceResolver,
@@ -47,7 +47,6 @@ from .sources import (
     WorkspaceSourceResolver,
     WorkspaceSourceResolverRegistry,
 )
-from .sqlite import SqliteWorkspaceProvider
 
 __all__ = [
     "CleanupReport",

@@ -187,7 +187,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             "D-capability",
             "#12 capability boundary",
             "capability discovery and invocation remain contract-driven and replaceable",
-            _pytest("tests/test_issue_12_reopen.py"),
+            _pytest("tests/unit/capabilities/test_registry_discovery_and_compatibility.py"),
         ),
         ConformanceScenario(
             "D-vertical",
@@ -205,7 +205,11 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             "F",
             "#15 authorization/approval",
             "approval is exact-action bound and changed-payload reuse is rejected",
-            _pytest("tests/test_issue_15_final_boundaries.py"),
+            _pytest(
+                "tests/integration/security/test_authorization_final_boundaries.py",
+                "tests/unit/authorization/test_approval_project_scope.py",
+                "tests/contract/security/test_control_plane_authorization_vocabulary.py",
+            ),
         ),
         ConformanceScenario(
             "H",

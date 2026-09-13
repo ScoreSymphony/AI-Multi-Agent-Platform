@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
+import threading
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -42,14 +46,57 @@ from .reference_support import not_found as _not_found
 from .reference_support import optional_time as _optional_time
 from .reference_support import parse_time as _parse_time
 
+_BUSY_MARKERS = (
+    "database is locked",
+    "database table is locked",
+    "database schema is locked",
+    "database is busy",
+)
+
+
+class _MemorySqliteOffload:
+    """Bound blocking Memory SQLite operations without using the shared executor."""
+
+    def __init__(self, *, max_concurrency: int = 4) -> None:
+        if max_concurrency < 1:
+            raise ValueError("max_concurrency must be >= 1")
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_concurrency,
+            thread_name_prefix="memory-sqlite",
+        )
+        self._write_lock = threading.Lock()
+
+    async def run[T](self, operation: Callable[[], T], *, write: bool = False) -> T:
+        loop = asyncio.get_running_loop()
+        worker = loop.run_in_executor(self._executor, self._run_sync, operation, write)
+        try:
+            return await asyncio.shield(worker)
+        except asyncio.CancelledError:
+            while not worker.done():
+                try:
+                    await asyncio.shield(worker)
+                except asyncio.CancelledError:
+                    continue
+            failure = worker.exception()
+            if failure is not None:
+                raise failure from None
+            raise
+
+    def _run_sync[T](self, operation: Callable[[], T], write: bool) -> T:
+        if write:
+            with self._write_lock:
+                return operation()
+        return operation()
+
 
 class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
-    """SQLite scoped-memory provider with no vector/embedding requirement."""
+    """SQLite scoped-memory provider with non-blocking runtime persistence."""
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, *, max_concurrency: int = 4) -> None:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
+        self._memory_offload = _MemorySqliteOffload(max_concurrency=max_concurrency)
         capability = Capability(
             name="local-scoped-memory",
             kind=CapabilityKind.MEMORY,
@@ -103,33 +150,57 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
                 "CREATE INDEX IF NOT EXISTS data_memory_scope_idx ON data_memory(scope, scope_id)"
             )
 
+    async def _run_memory_sqlite[T](
+        self,
+        operation: Callable[[], T],
+        *,
+        message: str,
+        write: bool = False,
+    ) -> T:
+        try:
+            return await self._memory_offload.run(operation, write=write)
+        except ContractError:
+            raise
+        except sqlite3.Error as exc:
+            raise _map_memory_sqlite_error(exc, message) from exc
+
     async def write_entry(self, entry: MemoryEntry, context: DataAccessContext) -> MemoryEntry:
         self._check_scope(entry.scope, entry.scope_id, context)
-        try:
-            with self._connect() as connection:
-                self._insert_entry(connection, entry)
-        except sqlite3.IntegrityError as exc:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"memory entry already exists: {entry.memory_id}",
-            ) from exc
-        except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to persist memory entry") from exc
-        return entry
+
+        def operation() -> MemoryEntry:
+            try:
+                with self._connect() as connection:
+                    self._insert_entry(connection, entry)
+            except sqlite3.IntegrityError as exc:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    f"memory entry already exists: {entry.memory_id}",
+                ) from exc
+            return entry
+
+        return await self._run_memory_sqlite(
+            operation,
+            message="failed to persist memory entry",
+            write=True,
+        )
 
     async def get_entry(self, memory_id: str, context: DataAccessContext) -> MemoryEntry:
         validate_id(memory_id, "memory")
-        try:
+
+        def operation() -> MemoryEntry | None:
             with self._connect() as connection:
                 row = connection.execute(
                     "SELECT * FROM data_memory WHERE memory_id = ? AND deleted = 0",
                     (memory_id,),
                 ).fetchone()
-        except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to read memory entry") from exc
-        if row is None:
+            return None if row is None else self._memory_from_row(row)
+
+        entry = await self._run_memory_sqlite(
+            operation,
+            message="failed to read memory entry",
+        )
+        if entry is None:
             raise _not_found("memory", memory_id)
-        entry = self._memory_from_row(row)
         self._check_scope(entry.scope, entry.scope_id, context)
         if entry.expired:
             raise _not_found("memory", memory_id)
@@ -141,7 +212,8 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
         context: DataAccessContext,
     ) -> tuple[MemoryEntry, ...]:
         self._check_scope(query.scope, query.scope_id, context)
-        try:
+
+        def operation() -> tuple[MemoryEntry, ...]:
             with self._connect() as connection:
                 rows = connection.execute(
                     """
@@ -151,12 +223,15 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
                     """,
                     (query.scope.value, query.scope_id),
                 ).fetchall()
-        except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to query memory entries") from exc
+            return tuple(self._memory_from_row(row) for row in rows)
+
+        stored = await self._run_memory_sqlite(
+            operation,
+            message="failed to query memory entries",
+        )
         now = datetime.now(UTC)
         entries: list[MemoryEntry] = []
-        for row in rows:
-            entry = self._memory_from_row(row)
+        for entry in stored:
             if query.owner_ref is not None and entry.owner_ref != query.owner_ref:
                 continue
             if (
@@ -195,56 +270,89 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
         replacement: MemoryEntry,
         context: DataAccessContext,
     ) -> MemoryEntry:
-        current = await self.get_entry(memory_id, context)
-        if replacement.scope is not current.scope or replacement.scope_id != current.scope_id:
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "replacement memory must remain in the same scope",
-            )
-        if replacement.owner_ref != current.owner_ref:
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "replacement memory must preserve owner_ref",
-            )
-        if replacement.supersedes_memory_id not in (None, memory_id):
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "replacement supersedes a different memory entry",
-            )
-        linked = replace(replacement, supersedes_memory_id=memory_id)
-        self._check_scope(linked.scope, linked.scope_id, context)
-        try:
-            with self._connect() as connection:
-                self._insert_entry(connection, linked)
-                connection.execute(
-                    "UPDATE data_memory SET superseded_by_memory_id = ? WHERE memory_id = ?",
-                    (linked.memory_id, memory_id),
-                )
-        except sqlite3.IntegrityError as exc:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"memory entry already exists: {linked.memory_id}",
-            ) from exc
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR, "failed to supersede memory entry"
-            ) from exc
-        return linked
+        validate_id(memory_id, "memory")
+
+        def operation() -> MemoryEntry:
+            try:
+                with self._connect() as connection:
+                    row = connection.execute(
+                        "SELECT * FROM data_memory WHERE memory_id = ? AND deleted = 0",
+                        (memory_id,),
+                    ).fetchone()
+                    if row is None:
+                        raise _not_found("memory", memory_id)
+                    current = self._memory_from_row(row)
+                    self._check_scope(current.scope, current.scope_id, context)
+                    if current.expired:
+                        raise _not_found("memory", memory_id)
+                    if (
+                        replacement.scope is not current.scope
+                        or replacement.scope_id != current.scope_id
+                    ):
+                        raise ContractError(
+                            ErrorCode.INVALID_REQUEST,
+                            "replacement memory must remain in the same scope",
+                        )
+                    if replacement.owner_ref != current.owner_ref:
+                        raise ContractError(
+                            ErrorCode.INVALID_REQUEST,
+                            "replacement memory must preserve owner_ref",
+                        )
+                    if replacement.supersedes_memory_id not in (None, memory_id):
+                        raise ContractError(
+                            ErrorCode.INVALID_REQUEST,
+                            "replacement supersedes a different memory entry",
+                        )
+                    linked = replace(replacement, supersedes_memory_id=memory_id)
+                    self._check_scope(linked.scope, linked.scope_id, context)
+                    self._insert_entry(connection, linked)
+                    connection.execute(
+                        "UPDATE data_memory SET superseded_by_memory_id = ? WHERE memory_id = ?",
+                        (linked.memory_id, memory_id),
+                    )
+            except sqlite3.IntegrityError as exc:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    f"memory entry already exists: {replacement.memory_id}",
+                ) from exc
+            return linked
+
+        return await self._run_memory_sqlite(
+            operation,
+            message="failed to supersede memory entry",
+            write=True,
+        )
 
     async def delete_entry(self, memory_id: str, context: DataAccessContext) -> None:
-        await self.get_entry(memory_id, context)
-        try:
+        validate_id(memory_id, "memory")
+
+        def operation() -> None:
             with self._connect() as connection:
+                row = connection.execute(
+                    "SELECT * FROM data_memory WHERE memory_id = ? AND deleted = 0",
+                    (memory_id,),
+                ).fetchone()
+                if row is None:
+                    raise _not_found("memory", memory_id)
+                entry = self._memory_from_row(row)
+                self._check_scope(entry.scope, entry.scope_id, context)
+                if entry.expired:
+                    raise _not_found("memory", memory_id)
                 connection.execute(
                     "UPDATE data_memory SET deleted = 1 WHERE memory_id = ?",
                     (memory_id,),
                 )
-        except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to delete memory entry") from exc
+
+        await self._run_memory_sqlite(
+            operation,
+            message="failed to delete memory entry",
+            write=True,
+        )
 
     async def expire_entries(self, context: DataAccessContext) -> tuple[str, ...]:
         now = datetime.now(UTC)
-        try:
+
+        def operation() -> tuple[str, ...]:
             with self._connect() as connection:
                 rows = connection.execute(
                     """
@@ -269,9 +377,13 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
                         f"UPDATE data_memory SET deleted = 1 WHERE memory_id IN ({placeholders})",
                         expired,
                     )
-        except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to expire memory entries") from exc
-        return tuple(expired)
+            return tuple(expired)
+
+        return await self._run_memory_sqlite(
+            operation,
+            message="failed to expire memory entries",
+            write=True,
+        )
 
     async def put(
         self,
@@ -415,3 +527,15 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
             classification=cast(str | None, row["classification"]),
             metadata=_json_dict(cast(str, row["metadata_json"])),
         )
+
+
+def _map_memory_sqlite_error(exc: sqlite3.Error, message: str) -> ContractError:
+    if isinstance(exc, sqlite3.OperationalError) and any(
+        marker in str(exc).casefold() for marker in _BUSY_MARKERS
+    ):
+        return ContractError(
+            ErrorCode.TRANSIENT_FAILURE,
+            message,
+            retryable=True,
+        )
+    return ContractError(ErrorCode.BACKEND_ERROR, message)

@@ -82,7 +82,7 @@ Contract tests cover exact success plus incompatible older, newer and malformed 
 
 ## STDIO versus claimed HTTP compatibility
 
-The platform continues to exercise a real MCP STDIO server through the official Python SDK in `tests/test_mcp_sdk_transport.py`. That remains valuable platform/transport integration evidence.
+The platform continues to exercise a real MCP STDIO server through the official Python SDK in `tests/integration/mcp/test_sdk_transports.py`. That remains valuable platform/transport integration evidence.
 
 It is **not** combined with the stable official Streamable-HTTP protocol evidence. The compatibility matrix exposes STDIO as `not_claimed`, rather than treating HTTP protocol evidence plus STDIO platform evidence as one compatibility result.
 

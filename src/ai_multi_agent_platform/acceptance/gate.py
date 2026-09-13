@@ -91,7 +91,11 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
                 "approval-boundary",
                 "#15 authorization/approval",
                 "high-risk approval is exact-action bound and cannot authorize a modified action",
-                _pytest("tests/test_issue_15_final_boundaries.py"),
+                _pytest(
+                    "tests/integration/security/test_authorization_final_boundaries.py",
+                    "tests/unit/authorization/test_approval_project_scope.py",
+                    "tests/contract/security/test_control_plane_authorization_vocabulary.py",
+                ),
             ),
             AcceptanceCheck(
                 "verification-boundary",
@@ -165,7 +169,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
                     "first-run local/self-hosted model configuration remains provider-neutral "
                     "and secret-safe"
                 ),
-                _pytest("tests/test_issue_250_first_run_onboarding.py"),
+                _pytest("tests/integration/onboarding/test_model_setup.py"),
             ),
         )
     if profile is AcceptanceProfile.DEGRADED:
@@ -177,13 +181,13 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
                     "missing configured provider-native model fails closed and can recover by "
                     "canonical health refresh"
                 ),
-                _pytest("tests/test_issue_250_restart_inventory_revalidation.py"),
+                _pytest("tests/integration/onboarding/test_provider_inventory_revalidation.py"),
             ),
             AcceptanceCheck(
                 "readiness-hardening",
                 "#250/#397 first-run readiness",
                 "unavailable or non-executable optional paths never produce false readiness",
-                _pytest("tests/test_issue_250_readiness_hardening.py"),
+                _pytest("tests/integration/onboarding/test_readiness.py"),
             ),
         )
     return (
@@ -215,7 +219,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             "first-task-restart",
             "#250 first-run onboarding",
             "first-run Task/Run/Result state and explicit selection survive restart",
-            _pytest("tests/test_issue_250_first_task_golden_path.py"),
+            _pytest("tests/e2e/onboarding/test_first_task_restart.py"),
         ),
     )
 
