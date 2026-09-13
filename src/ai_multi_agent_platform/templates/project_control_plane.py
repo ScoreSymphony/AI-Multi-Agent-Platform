@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.control_plane.async_scope import AsyncScopeStoreAdapter
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import RequestContext
 
@@ -37,7 +38,8 @@ class ProjectTemplateCommandHandler:
     ) -> dict[str, JsonValue]:
         _require_collection(resource_ref, TEMPLATE_COLLECTION)
         project_id = _required_string(payload, "project_id")
-        source = self.exporter.scopes.get_project(project_id)
+        runtime = self.exporter.runtime_scopes or AsyncScopeStoreAdapter(self.exporter.scopes)
+        source = await runtime.get_project(project_id)
         await self.scope_access.authorize(
             context,
             PROJECT_TEMPLATE_EXPORT_COMMAND,
@@ -45,7 +47,7 @@ class ProjectTemplateCommandHandler:
             owner_ref=source.owner_ref,
             project_id=source.id,
         )
-        revision = self.exporter.create_from_project(
+        revision = await self.exporter.create_from_project_async(
             project_id,
             owner_ref=_actor_owner(context),
             author=context.actor.principal_ref,
