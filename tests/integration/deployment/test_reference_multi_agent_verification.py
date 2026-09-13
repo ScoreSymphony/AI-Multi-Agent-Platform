@@ -200,9 +200,13 @@ def _execute_lineage(deployment: Any, plan_id: str):
     )
     record = deployment.coordination_repository.get_step_record(execute_step.id)
     assert record.latest_run_id is not None
-    agent_runs = deployment.agents.repository.list_agent_runs(record.latest_run_id)
-    assert len(agent_runs) == 1
-    producer = agent_runs[0]
+    producer_runs = [
+        item
+        for item in deployment.agents.repository.list_agent_runs(record.latest_run_id)
+        if "verification_id" not in item.verification_context
+    ]
+    assert len(producer_runs) == 1
+    producer = producer_runs[0]
     assert len(producer.result_ids) == 1
     return execute_step, record.latest_run_id, producer, producer.result_ids[0]
 
@@ -309,7 +313,12 @@ def test_reference_golden_path_non_pass_verification_cannot_complete_task(
         blocked = await deployment.kernel.get_task(task.task_id)
         assert blocked.status is TaskStatus.WAITING
         assert blocked.blocked is True
-        assert blocked.wait_reason == "verification:rejected"
+        expected_wait_reason = (
+            "verification:rejected"
+            if outcome is VerificationOutcome.FAIL
+            else "verification:waiting"
+        )
+        assert blocked.wait_reason == expected_wait_reason
 
         _execute_step, execute_run_id, _producer, result_id = _execute_lineage(
             deployment,
