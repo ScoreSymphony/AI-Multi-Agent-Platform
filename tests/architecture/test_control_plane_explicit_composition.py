@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTROL_PLANE = ROOT / "src" / "ai_multi_agent_platform" / "control_plane"
+GOVERNANCE = ROOT / "src" / "ai_multi_agent_platform" / "governance"
 
 # #982 removes inheritance as a *domain ownership/composition* mechanism. It does
 # not outlaw every use of implementation inheritance (the issue explicitly keeps
@@ -28,6 +29,18 @@ _ALLOWED_IMPLEMENTATION_MULTIPLE_INHERITANCE = {
     ),
 }
 
+# Historical same-domain/implementation layers that still contain direct registration
+# internally. None of these is the canonical ownership boundary after #982. Keeping
+# this list exact makes a *new* ControlPlane subclass with self.register_* fail CI.
+_LEGACY_DIRECT_REGISTRATION_SUBCLASSES = {
+    "extensions.py",
+    "notifications_composition.py",
+    "notifications_authorized_composition.py",
+    "notifications_runtime_composition.py",
+    "task_management_contract.py",
+    "terminal_composition.py",
+}
+
 
 def _tree(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -42,6 +55,19 @@ def _class(path: Path, name: str) -> ast.ClassDef:
 
 def _base_name(base: ast.expr) -> str:
     return ast.unparse(base)
+
+
+def _direct_registration_calls(node: ast.ClassDef) -> tuple[str, ...]:
+    calls: list[str] = []
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call) or not isinstance(child.func, ast.Attribute):
+            continue
+        if child.func.attr not in {"register_resource_service", "register_command"}:
+            continue
+        if not isinstance(child.func.value, ast.Name) or child.func.value.id != "self":
+            continue
+        calls.append(f"{child.func.attr}:{child.lineno}")
+    return tuple(sorted(calls))
 
 
 def test_control_plane_domain_facades_do_not_add_unreviewed_multiple_inheritance() -> None:
@@ -81,6 +107,33 @@ def test_control_plane_domain_facades_do_not_add_unreviewed_multiple_inheritance
             "stale Control Plane multiple-inheritance allow-list entries: "
             f"{missing!r}"
         )
+    assert violations == []
+
+
+def test_new_control_plane_subclasses_cannot_claim_domain_ownership_directly() -> None:
+    """New subclass layers must use ControlPlaneModule instead of self.register_* ownership."""
+
+    violations: list[str] = []
+    seen_legacy: set[str] = set()
+    for path in sorted(CONTROL_PLANE.glob("*.py")):
+        try:
+            facade = _class(path, "ControlPlane")
+        except AssertionError:
+            continue
+        calls = _direct_registration_calls(facade)
+        if not calls:
+            continue
+        if path.name in _LEGACY_DIRECT_REGISTRATION_SUBCLASSES:
+            seen_legacy.add(path.name)
+            continue
+        violations.append(
+            f"{path.relative_to(ROOT)} directly claims resources/commands from a "
+            f"ControlPlane subclass: {calls!r}"
+        )
+
+    stale = sorted(_LEGACY_DIRECT_REGISTRATION_SUBCLASSES - seen_legacy)
+    if stale:
+        violations.append(f"stale direct-registration compatibility entries: {stale!r}")
     assert violations == []
 
 
@@ -126,8 +179,13 @@ def test_plugin_terminal_composition_has_one_control_plane_base() -> None:
 
     imports = [node for node in _tree(path).body if isinstance(node, ast.ImportFrom)]
     assert not any(
-        node.module == "plugin_api"
+        node.module in {"plugin_api", "terminal_composition"}
         and any(alias.name == "ControlPlane" for alias in node.names)
+        for node in imports
+    )
+    assert any(
+        node.module == "terminal_explicit_composition"
+        and any(alias.asname == "_TerminalControlPlane" for alias in node.names)
         for node in imports
     )
 
@@ -140,11 +198,16 @@ def test_current_conversation_composition_has_one_control_plane_base() -> None:
 
     imports = [node for node in _tree(path).body if isinstance(node, ast.ImportFrom)]
     assert not any(
-        node.module == "conversation_composition"
+        node.module in {"conversation_composition", "notifications_plugin_composition"}
         and any(
             alias.name == "ControlPlane" or alias.asname == "_ConversationControlPlane"
             for alias in node.names
         )
+        for node in imports
+    )
+    assert any(
+        node.module == "notifications_explicit_composition"
+        and any(alias.asname == "_NotificationControlPlane" for alias in node.names)
         for node in imports
     )
 
@@ -159,14 +222,35 @@ def test_migrated_domains_declare_explicit_module_owners() -> None:
         encoding="utf-8"
     )
     conversations = (CONTROL_PLANE / "conversation_module.py").read_text(encoding="utf-8")
+    notifications = (CONTROL_PLANE / "notifications_explicit_composition.py").read_text(
+        encoding="utf-8"
+    )
+    terminal = (CONTROL_PLANE / "terminal_module.py").read_text(encoding="utf-8")
+    product = (CONTROL_PLANE / "approval_portability_composition.py").read_text(
+        encoding="utf-8"
+    )
+    governance = (GOVERNANCE / "control_plane_module.py").read_text(encoding="utf-8")
 
     assert 'PORTABILITY_MODULE = "portability"' in portability
     assert 'PLUGIN_MODULE = "plugins"' in plugins
     assert 'ORGANIZATION_AUDIT_MODULE = "organization-audit"' in organization_audit
     assert 'APPROVAL_DECISION_MODULE = "approval-decisions"' in approval_decisions
     assert 'CONVERSATION_MODULE = "conversations"' in conversations
-    assert "ControlPlaneModule(" in portability
-    assert "ControlPlaneModule(" in plugins
-    assert "ControlPlaneModule(" in organization_audit
-    assert "ControlPlaneModule(" in approval_decisions
-    assert "ControlPlaneModule(" in conversations
+    assert 'NOTIFICATION_MODULE = "notifications"' in notifications
+    assert 'TERMINAL_MODULE = "terminal"' in terminal
+    assert 'GOAL_MODULE = "goals"' in product
+    assert 'DECISION_RECORD_MODULE = "decision-records"' in product
+    assert 'GOVERNANCE_MODULE = "governance"' in governance
+
+    for source in (
+        portability,
+        plugins,
+        organization_audit,
+        approval_decisions,
+        conversations,
+        notifications,
+        terminal,
+        product,
+        governance,
+    ):
+        assert "ControlPlaneModule(" in source
