@@ -28,7 +28,41 @@ jobs:
       - name: Apply safe migration plan
         run: python scripts/ci/apply_test_migration_722.py
       - name: Apply explicit residual migration
-        run: python scripts/ci/apply_test_migration_722_residual.py
+        run: |
+          python - <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, "scripts/ci")
+          import apply_test_migration_722_residual as residual
+
+          mapping = residual.apply_whole_moves()
+          residual.rewrite_exact_paths(mapping)
+          residual.apply_splits()
+
+          issue_named = sorted(Path("tests").rglob("test_issue*.py"))
+          root_tests = sorted(Path("tests").glob("test_*.py"))
+          historical_suffix = re.compile(r"_(?:568|650|651|653|654|655|656|657|658|722)$")
+          historical_other = sorted(
+              path
+              for path in Path("tests").rglob("test_*.py")
+              if re.match(r"^test_pr[_-]?\d+", path.stem)
+              or historical_suffix.search(path.stem)
+          )
+          if issue_named or root_tests or historical_other:
+              problems = [
+                  *(f"issue-name: {path.as_posix()}" for path in issue_named),
+                  *(f"root-level: {path.as_posix()}" for path in root_tests),
+                  *(f"historical-name: {path.as_posix()}" for path in historical_other),
+              ]
+              raise SystemExit("Historical test-layout residuals remain:\n" + "\n".join(problems))
+
+          print(f"Moved {len(mapping)} residual whole modules")
+          print(f"Split {len(residual.SPLITS)} mixed historical modules")
+          print("Historical issue/PR test naming residual: 0")
+          print("Root-level test modules: 0")
+          PY
       - name: Reconcile split exact-path references
         run: |
           python - <<'PY'
