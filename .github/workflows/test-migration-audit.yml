@@ -23,4 +23,7 @@ jobs:
       - name: Exact test inventory
         run: python scripts/ci/report_test_inventory.py
       - name: Full pytest collection
-        run: python -m pytest --collect-only -q
+        run: |
+          python -m pytest --collect-only -q | tee /tmp/collection.txt
+          count=$(awk -F': ' '/\.py: [0-9]+$/{sum+=$2} END{print sum+0}' /tmp/collection.txt)
+          echo "Collected test items: ${count}"
