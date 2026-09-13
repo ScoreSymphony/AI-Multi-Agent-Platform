@@ -61,9 +61,7 @@ class EvaluationSuiteResourceService(ResourceService):
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(
-            _suite_resource(suite) for suite in await self._service.list_suites_async()
-        )
+        return tuple(_suite_resource(suite) for suite in await self._service.list_suites_async())
 
     async def get_resource(
         self,
@@ -86,9 +84,7 @@ class EvaluationRunResourceService(ResourceService):
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(
-            _run_resource(run) for run in await self._service.list_runs_async(limit=None)
-        )
+        return tuple(_run_resource(run) for run in await self._service.list_runs_async(limit=None))
 
     async def get_resource(
         self,
@@ -145,9 +141,7 @@ def evaluation_command_handlers(service: EvaluationService) -> dict[str, Command
                 _optional_bool(payload, "performance_sensitive") or False
             ),
         )
-        resource = _run_detail_resource(
-            await service.get_run_detail_async(summary.run.run_id)
-        )
+        resource = _run_detail_resource(await service.get_run_detail_async(summary.run.run_id))
         if summary.manifest is not None:
             resource["manifest"] = cast(
                 JsonValue,
