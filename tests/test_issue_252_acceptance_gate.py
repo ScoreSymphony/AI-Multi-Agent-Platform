@@ -333,4 +333,7 @@ def test_acceptance_registry_uses_only_public_repo_surfaces() -> None:
     assert "canonicalstateparity.test.ts" in rendered
     assert "test_cli_and_web_share_canonical_task_fixture_and_route" in rendered
     assert "test_memory_acceptance_create_retrieve_provenance_delete_not_found" in rendered
-    assert Path("tests/test_issue_250_restart_inventory_revalidation.py").as_posix() in rendered
+    assert (
+        Path("tests/integration/onboarding/test_provider_inventory_revalidation.py").as_posix()
+        in rendered
+    )
