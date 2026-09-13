@@ -46,9 +46,7 @@ def test_new_issue_numbered_test_is_rejected_in_suite_directory() -> None:
 
 
 def test_issue_number_without_separator_is_also_rejected() -> None:
-    violations = layout_violations(
-        (ChangedPath("A", "tests/regression/test_issue45_boundary.py"),)
-    )
+    violations = layout_violations((ChangedPath("A", "tests/regression/test_issue45_boundary.py"),))
 
     assert len(violations) == 1
     assert "issue number" in violations[0]
