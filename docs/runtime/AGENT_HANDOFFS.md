@@ -220,7 +220,7 @@ recovery does not depend on which orchestrator adapter was active before the pro
 ## Authorization and source dereferencing
 
 `CanonicalHandoffReferenceGateway` is the production implementation of the narrow
-`HandoffReferenceGateway` seam. Because #592's stable service API is synchronous while canonical
+`HandoffReferenceGateway` seam. Because #592's `HandoffService` API is synchronous while canonical
 source resolution and authorization are asynchronous, the gateway uses an operation-local
 prepared-read scope:
 

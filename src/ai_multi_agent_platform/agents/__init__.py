@@ -56,9 +56,10 @@ from .routing_profile_runtime import DurableRoutingProfileAgentRuntime
 from .service import AgentService
 from .capability_turn import AgentCapabilityTurn, AgentCapabilityTurnResult
 
-# AgentService must be initialized before control_plane imports. Real Forge/Hermes
-# compatibility exercises import this package through execution adapters and otherwise
-# expose a package-level cycle while control_plane resolves AgentService.
+# AgentService must be initialized before control_plane imports. External adapter
+# compatibility exercises can import this package through execution/orchestration
+# boundaries and otherwise expose a package-level cycle while control_plane resolves
+# AgentService.
 from .control_plane import (
     AGENT_COLLECTION,
     AGENT_COMMANDS,

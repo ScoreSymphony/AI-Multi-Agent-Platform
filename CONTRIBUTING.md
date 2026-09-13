@@ -70,6 +70,30 @@ Changes to canonical domain entities, lifecycle semantics, public contracts, ada
 
 Concrete systems such as orchestrators, execution backends, model gateways, tool protocols, memory systems and storage products must integrate through platform-owned contracts rather than redefine them.
 
+## Public feature role and stability
+
+[`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md) defines two separate classifications for public platform capabilities: **architectural role** (`core`, `platform_extension`, `optional_advanced`) and **stability** (`stable`, `beta`, `experimental`). [`docs/FEATURE_CLASSIFICATION.toml`](docs/FEATURE_CLASSIFICATION.toml) is the machine-readable audit of current major public surfaces.
+
+A pull request that introduces a new public platform capability or makes an internal surface public must declare in the same change:
+
+- its canonical owner/domain;
+- its architectural role;
+- its stability level;
+- the concrete HTTP/schema/CLI/Python/product surface being promised;
+- the expected compatibility/breaking-change behavior;
+- authoritative documentation.
+
+Prefer extending an existing feature-classification entry when the surface belongs to an existing capability. Do not create a new classification merely because a new source package/file exists.
+
+When changing an existing public surface:
+
+- **Stable:** show that the change is backward compatible, or introduce the required new major/versioned replacement plus deprecation/migration path;
+- **Beta:** document incompatible non-patch changes and provide migration guidance;
+- **Experimental:** preserve discoverable Experimental labeling; exact conformance evidence does not silently promote maturity;
+- record user-visible stability promotions/downgrades, deprecations and migrations in release notes/changelog as required by the release policy.
+
+Role/stability changes do not authorize package ownership changes. Package ownership remains governed independently by `PACKAGE_BOUNDARIES.toml` and the rules below.
+
 ## Python package boundaries
 
 The checked top-level package inventory is [`docs/PACKAGE_BOUNDARIES.toml`](docs/PACKAGE_BOUNDARIES.toml); its design rules and migration policy are in [`docs/PACKAGE_BOUNDARIES.md`](docs/PACKAGE_BOUNDARIES.md).

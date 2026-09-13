@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { navigation } from "./navigation";
+import { navigation, navigationMaturity } from "./navigation";
 
 describe("#17 stable navigation baseline", () => {
   it("keeps the major canonical product routes stable", () => {
@@ -48,6 +48,11 @@ describe("#17 stable navigation baseline", () => {
     expect(marketplace?.apiResource).toBe("registry-items");
     expect(compute?.apiResource).toBe("nodes");
     expect(plugins?.apiResource).toBe("plugins");
+  });
+
+  it("marks the Experimental Learning surface contextually", () => {
+    expect(navigationMaturity["/learning"]).toBe("experimental");
+    expect(navigationMaturity["/tasks"]).toBeUndefined();
   });
 
   it("keeps Marketplace availability manifest-gated and HA routes out of the baseline shell", () => {

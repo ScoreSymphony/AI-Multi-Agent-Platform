@@ -124,6 +124,8 @@ This is deliberately a stable capability summary rather than an issue-by-issue p
 
 The usable single-node prototype acceptance gate has passed, and the repository now concentrates on convergence, conformance, hardening, measured operating envelopes and release readiness rather than basic platform construction.
 
+Architectural role and public compatibility maturity are tracked separately. The authoritative taxonomy and current major-surface audit live in [`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md); in particular, `Core` does not automatically mean `Stable`, and optional/advanced capabilities are not automatically `Experimental`.
+
 No formal GitHub release has been published yet. Release claims are therefore intentionally conservative: merged functionality is real, but operational-version acceptance still depends on the repository's release and conformance gates. See [`CHANGELOG.md`](CHANGELOG.md), [`docs/STATUS.md`](docs/STATUS.md), [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md) and [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md) for the corresponding evidence and process.
 
 ## Quickstart for development
@@ -202,6 +204,7 @@ The canonical single-node prototype profiles are documented in [`docs/PROTOTYPE_
 | Architecture invariants | [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md) |
 | Domain model | [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md) |
 | Replaceable contracts | [`docs/CONTRACTS.md`](docs/CONTRACTS.md) |
+| Feature role and API stability taxonomy | [`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md) |
 | Kernel lifecycle and recovery | [`docs/KERNEL.md`](docs/KERNEL.md) |
 | Top-level package ownership | [`docs/PACKAGE_BOUNDARIES.md`](docs/PACKAGE_BOUNDARIES.md) |
 | Current project status | [`docs/STATUS.md`](docs/STATUS.md) |

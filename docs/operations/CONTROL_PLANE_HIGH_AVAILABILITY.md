@@ -1,6 +1,9 @@
 # Control Plane high availability
 
 Issue #89 adds optional Control Plane failover without changing the canonical Task/Run architecture.
+
+> **Maturity:** **Optional / Advanced + Experimental** under [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). The #89 fencing, promotion and reconciliation semantics are accepted architecture, but the production-shaped independent-process/host profile remains owned by #566. Deterministic or exact-revision conformance evidence does not by itself create a forward compatibility guarantee for this Experimental public surface.
+
 The governing invariant is:
 
 > Canonical durable state is not one Control Plane process.

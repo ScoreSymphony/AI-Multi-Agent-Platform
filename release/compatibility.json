@@ -38,26 +38,6 @@
       ]
     },
     {
-      "component": "Forge executor sidecar",
-      "source_url": "https://github.com/ScoreSymphony/AI-Agent-VPS",
-      "revision": "00b821bc94767865457814bf282982ca242a2e10",
-      "status": "deprecated",
-      "integration_mode": "deprecated optional external execution sidecar plus platform-owned adapter",
-      "boundary": "Executor adapter using forge-executor-sidecar/v1",
-      "license": "MIT",
-      "last_checked_at": "2026-09-13T00:00:00Z",
-      "latest_known_revision": "00b821bc94767865457814bf282982ca242a2e10",
-      "update_risk": "high",
-      "local_modifications": false,
-      "patches": [],
-      "notes": [
-        "Deprecated by #991 / ADR 0013; retained temporarily only as compatibility and removal-gate evidence.",
-        "Optional execution-only runtime; canonical Task/Run/Event state remains platform-owned.",
-        "The proven real sidecar profile uses the deterministic null executor and does not establish a non-null Forge CLI capability advantage.",
-        "Update requires the real pinned sidecar integration test until executable removal gates pass."
-      ]
-    },
-    {
       "component": "LiteLLM",
       "source_url": "https://github.com/BerriAI/litellm",
       "revision": "v1.99.0 / fa647f742d7baefe8eb1181899d9c81b41559772",
