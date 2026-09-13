@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.control_plane.async_scope import AsyncScopeStore, AsyncScopeStoreAdapter
 from ai_multi_agent_platform.control_plane.service import ScopeStore
-from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.domain import OwnerRef, Project
 
 from .application import ContextualTemplateHandlerRegistry, TemplateInstantiationContext
 from .models import (
@@ -31,6 +32,7 @@ class ProjectTemplateHandler:
     """Instantiate an ordinary canonical Project through the platform ScopeStore."""
 
     scopes: ScopeStore
+    runtime_scopes: AsyncScopeStore | None = None
     template_type = TemplateType.PROJECT
 
     def preview(self, revision: TemplateRevision) -> tuple[TemplateResourceChange, ...]:
@@ -54,7 +56,8 @@ class ProjectTemplateHandler:
     ) -> tuple[TemplateResourceRef, ...]:
         payload = _payload(revision)
         owner = provenance.applied_by
-        project = self.scopes.create_project(
+        runtime = self.runtime_scopes or AsyncScopeStoreAdapter(self.scopes)
+        project = await runtime.create_project(
             key=f"template:{context.instance_id}:{revision.template_id}:{revision.revision}:project",
             name=_required_string(payload, "name"),
             owner_type=owner.type,
@@ -69,6 +72,7 @@ class ProjectTemplateExporter:
 
     scopes: ScopeStore
     templates: TemplateService
+    runtime_scopes: AsyncScopeStore | None = None
 
     def create_from_project(
         self,
@@ -78,7 +82,35 @@ class ProjectTemplateExporter:
         author: str,
         name: str | None = None,
     ) -> TemplateRevision:
-        source = self.scopes.get_project(project_id)
+        """Synchronous setup/offline compatibility seam."""
+
+        return self._create_revision(
+            self.scopes.get_project(project_id),
+            owner_ref=owner_ref,
+            author=author,
+            name=name,
+        )
+
+    async def create_from_project_async(
+        self,
+        project_id: str,
+        *,
+        owner_ref: OwnerRef,
+        author: str,
+        name: str | None = None,
+    ) -> TemplateRevision:
+        runtime = self.runtime_scopes or AsyncScopeStoreAdapter(self.scopes)
+        source = await runtime.get_project(project_id)
+        return self._create_revision(source, owner_ref=owner_ref, author=author, name=name)
+
+    def _create_revision(
+        self,
+        source: Project,
+        *,
+        owner_ref: OwnerRef,
+        author: str,
+        name: str | None,
+    ) -> TemplateRevision:
         content = TemplateContent(
             name=name or source.name,
             description=f"Template exported from Project {source.id}",
