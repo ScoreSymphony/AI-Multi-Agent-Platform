@@ -770,9 +770,7 @@ def _merge_binding_observation(
     cancellation_acknowledged = (
         existing.cancellation_acknowledged or candidate.cancellation_acknowledged
     )
-    cancellation_error_code = (
-        candidate.cancellation_error_code or existing.cancellation_error_code
-    )
+    cancellation_error_code = candidate.cancellation_error_code or existing.cancellation_error_code
 
     # Provider lifecycle observations are monotonic, but governance/input/cancellation evidence is
     # orthogonal to provider time. A stale poller may still have successfully answered an input
