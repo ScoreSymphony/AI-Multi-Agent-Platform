@@ -6,11 +6,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CONTROL_PLANE = ROOT / "src" / "ai_multi_agent_platform" / "control_plane"
 
-# #982 removes inheritance as a *domain ownership/composition* mechanism.  It does
+# #982 removes inheritance as a *domain ownership/composition* mechanism. It does
 # not outlaw every use of implementation inheritance (the issue explicitly keeps
-# ordinary implementation inheritance out of scope).  Keep the few pre-existing,
+# ordinary implementation inheritance out of scope). Keep the few pre-existing,
 # reviewed implementation compositions explicit so a new ControlPlane MRO stack
-# cannot be introduced silently.
+# cannot be introduced silently while the remaining domain layers are migrated.
 _ALLOWED_IMPLEMENTATION_MULTIPLE_INHERITANCE = {
     ("hardened_automation_api.py", "ControlPlane"): frozenset(
         {"_AutomationControlPlane", "_RegisteredSearchControlPlane"}
@@ -84,12 +84,13 @@ def test_control_plane_domain_facades_do_not_add_unreviewed_multiple_inheritance
     assert violations == []
 
 
-def test_migrated_compatibility_facades_do_not_own_domain_commands() -> None:
+def test_migrated_compatibility_facades_do_not_own_domain_behavior() -> None:
     """Compatibility classes may install modules but may not reimplement domain behavior."""
 
     allowed = {
         "portability_api.py": {"__init__", "portability_workflow"},
         "plugin_api.py": {"__init__", "plugin_registry", "plugin_catalog", "attach_plugin_runtime"},
+        "organization_audit_api.py": {"__init__", "organization_audit"},
     }
     for filename, allowed_methods in allowed.items():
         facade = _class(CONTROL_PLANE / filename, "ControlPlane")
@@ -133,8 +134,13 @@ def test_plugin_terminal_composition_has_one_control_plane_base() -> None:
 def test_migrated_domains_declare_explicit_module_owners() -> None:
     portability = (CONTROL_PLANE / "portability_module.py").read_text(encoding="utf-8")
     plugins = (CONTROL_PLANE / "plugin_module.py").read_text(encoding="utf-8")
+    organization_audit = (CONTROL_PLANE / "organization_audit_api.py").read_text(
+        encoding="utf-8"
+    )
 
     assert 'PORTABILITY_MODULE = "portability"' in portability
     assert 'PLUGIN_MODULE = "plugins"' in plugins
+    assert 'ORGANIZATION_AUDIT_MODULE = "organization-audit"' in organization_audit
     assert "ControlPlaneModule(" in portability
     assert "ControlPlaneModule(" in plugins
+    assert "ControlPlaneModule(" in organization_audit
