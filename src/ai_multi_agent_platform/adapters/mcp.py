@@ -406,6 +406,7 @@ class MCPToolProvider(CapabilityToolProvider):
     ) -> ToolResult:
         snapshot = initial
         current = binding
+        preserve_failure_metadata = False
         try:
             while True:
                 if snapshot is None:
@@ -530,8 +531,12 @@ class MCPToolProvider(CapabilityToolProvider):
                 await asyncio.sleep(interval_ms / 1000)
                 snapshot = None
         except asyncio.CancelledError:
+            preserve_failure_metadata = True
             await asyncio.shield(self._cancel_bound_task(client, invocation, current))
             raise
+        finally:
+            if not preserve_failure_metadata:
+                self._active_task_bindings.pop(invocation.invocation_id, None)
 
     async def _cancel_bound_task(
         self,
@@ -573,9 +578,9 @@ class MCPToolProvider(CapabilityToolProvider):
         error_code: str,
         duration_ms: float,
     ) -> tuple[AdapterMetadata, ...]:
-        """Expose redacted task evidence when the canonical invoker owns timeout/cancellation."""
+        """Consume redacted task evidence for invoker-owned timeout/cancellation."""
 
-        binding = self._active_task_bindings.get(invocation.invocation_id)
+        binding = self._active_task_bindings.pop(invocation.invocation_id, None)
         if binding is None:
             return ()
         return (
