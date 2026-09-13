@@ -172,9 +172,7 @@ async def test_task_capability_negotiation_polls_to_ordinary_tool_result() -> No
         "tasks/get",
     ]
     for request in client.requests:
-        assert _client_capabilities(request)["extensions"] == {
-            MCP_TASKS_EXTENSION_ID: {}
-        }
+        assert _client_capabilities(request)["extensions"] == {MCP_TASKS_EXTENSION_ID: {}}
     metadata = outcome.adapter_metadata[0]
     assert metadata.namespace == "mcp.task"
     assert metadata.values["external_task_id"] == "external-task-1"
@@ -205,9 +203,7 @@ async def test_server_without_tasks_uses_synchronous_tool_fallback() -> None:
         "server/discover",
         "tools/call",
     ]
-    assert _client_capabilities(client.requests[0])["extensions"] == {
-        MCP_TASKS_EXTENSION_ID: {}
-    }
+    assert _client_capabilities(client.requests[0])["extensions"] == {MCP_TASKS_EXTENSION_ID: {}}
     assert _client_capabilities(client.requests[1]) == {}
 
 
@@ -489,9 +485,7 @@ async def test_capability_invoker_keeps_canonical_ids_while_mcp_task_is_external
     assert result.output == {"value": 11}
     assert result.invocation_id == request.invocation_id
     assert result.status.value == "succeeded"
-    task_metadata = next(
-        item for item in result.adapter_metadata if item.namespace == "mcp.task"
-    )
+    task_metadata = next(item for item in result.adapter_metadata if item.namespace == "mcp.task")
     assert task_metadata.values["external_task_id"] == "external-task-1"
     assert task_id != task_metadata.values["external_task_id"]
     assert run_id != task_metadata.values["external_task_id"]
