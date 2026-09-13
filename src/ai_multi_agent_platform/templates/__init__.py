@@ -104,6 +104,9 @@ def register_template_control_plane(
     second service graph solely for Template export.
     """
 
+    already_registered = (
+        getattr(application, "_control_plane_template_control_plane", None) is control_plane
+    )
     _register_template_control_plane(
         control_plane,
         application,
@@ -111,6 +114,8 @@ def register_template_control_plane(
         agent_exporter=agent_exporter,
         automation_exporter=automation_exporter,
     )
+    if already_registered:
+        return
 
     capability_handler = application.handlers.get(TemplateType.CAPABILITY_ASSIGNMENT)
     if isinstance(capability_handler, CapabilityAssignmentTemplateHandler):
