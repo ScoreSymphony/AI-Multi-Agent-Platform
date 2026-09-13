@@ -3,9 +3,7 @@ from ai_multi_agent_platform.conformance import ConformanceProfile, profile_scen
 
 def test_reference_multi_agent_conformance_reuses_maintained_golden_path() -> None:
     scenario = next(
-        item
-        for item in profile_scenarios(ConformanceProfile.FAST)
-        if item.scenario_id == "MA"
+        item for item in profile_scenarios(ConformanceProfile.FAST) if item.scenario_id == "MA"
     )
 
     assert scenario.required is True
