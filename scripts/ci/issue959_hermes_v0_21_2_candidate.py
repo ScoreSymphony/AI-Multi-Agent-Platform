@@ -1,6 +1,6 @@
 """Revision-bound Hermes Agent v0.21.2 candidate validation for issue #959.
 
-This runner intentionally does not mutate or depend on the accepted Hermes pin.  It
+This runner intentionally does not mutate or depend on the accepted Hermes pin. It
 validates the candidate first; promotion of HERMES_PINNED_REVISION happens only after
 this gate and the repository-wide gates pass.
 """
@@ -17,7 +17,11 @@ HERMES_V0_21_2_REVISION = "939e45c91d751fadd94dcd1b873ac3cb44846213"
 
 
 def _run(*args: str, cwd: Path | None = None) -> int:
-    return subprocess.run((sys.executable, "-m", "pytest", "-q", *args), cwd=cwd, check=False).returncode
+    return subprocess.run(
+        (sys.executable, "-m", "pytest", "-q", *args),
+        cwd=cwd,
+        check=False,
+    ).returncode
 
 
 def _candidate_checkout() -> Path:
@@ -33,7 +37,9 @@ def _candidate_checkout() -> Path:
 
     upstream = Path(upstream_value).resolve()
     if not (upstream / "gateway" / "platforms" / "api_server.py").is_file():
-        raise RuntimeError(f"HERMES_UPSTREAM_DIR is not a Hermes source checkout: {upstream}")
+        raise RuntimeError(
+            f"HERMES_UPSTREAM_DIR is not a Hermes source checkout: {upstream}"
+        )
 
     completed = subprocess.run(
         ("git", "rev-parse", "HEAD"),
@@ -63,7 +69,7 @@ def main() -> int:
     if platform_status:
         return platform_status
 
-    # Upstream's own release-specific state.db regressions.  These are run from the
+    # Upstream's own release-specific state.db regressions. These are run from the
     # exact source checkout so the evidence is tied to the tagged implementation,
     # not merely to release-note claims.
     upstream_status = _run(
@@ -82,7 +88,10 @@ def main() -> int:
     reader_writer_status = _run(
         "tests/test_hermes_state.py",
         "-k",
-        "test_settled_open_issues_no_main_db_writes or test_open_completes_while_sibling_holds_write_lock",
+        (
+            "test_settled_open_issues_no_main_db_writes or "
+            "test_open_completes_while_sibling_holds_write_lock"
+        ),
         cwd=upstream,
     )
     if reader_writer_status:
