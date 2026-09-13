@@ -70,8 +70,7 @@ def _payload(
     return (
         {
             "uri": uri,
-            "frontmatter": frontmatter
-            or {"name": "demo", "description": "Demo", "license": "MIT"},
+            "frontmatter": frontmatter or {"name": "demo", "description": "Demo", "license": "MIT"},
             "resources": [
                 {
                     "uri": uri,
