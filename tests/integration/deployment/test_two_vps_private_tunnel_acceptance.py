@@ -6,10 +6,7 @@ import sys
 from pathlib import Path
 
 _SCRIPT = (
-    Path(__file__).resolve().parents[3]
-    / "scripts"
-    / "acceptance"
-    / "two_vps_private_tunnel.py"
+    Path(__file__).resolve().parents[3] / "scripts" / "acceptance" / "two_vps_private_tunnel.py"
 )
 _COMMIT = "0123456789abcdef0123456789abcdef01234567"
 _NODE_ID = "node_00000000-0000-4000-8000-000000000562"
