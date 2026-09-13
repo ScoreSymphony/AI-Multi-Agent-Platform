@@ -57,7 +57,8 @@ def _hermes() -> int:
         if actual_revision != candidate_revision:
             print(
                 "Hermes candidate profile requires the source checkout HEAD to match the "
-                f"declared candidate exactly; expected {candidate_revision}, got {actual_revision!r}",
+                "declared candidate exactly; "
+                f"expected {candidate_revision}, got {actual_revision!r}",
                 file=sys.stderr,
             )
             return 2
