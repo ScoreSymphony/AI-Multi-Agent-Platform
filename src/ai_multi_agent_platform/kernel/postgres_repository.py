@@ -398,9 +398,7 @@ class PostgresKernelRepository(EventRepository):
                     )
                     revision_row = cursor.fetchone()
                     revision = (
-                        0
-                        if revision_row is None
-                        else _as_int(revision_row[0], "kernel revision")
+                        0 if revision_row is None else _as_int(revision_row[0], "kernel revision")
                     )
                     return CommitResult(
                         applied=False,
@@ -533,7 +531,9 @@ def _encode_event(event: PlatformEvent) -> str:
         "schema_version": event.schema_version,
         "project_id": event.project_id,
         "owner_ref": (
-            None if event.owner_ref is None else {"type": event.owner_ref.type, "id": event.owner_ref.id}
+            None
+            if event.owner_ref is None
+            else {"type": event.owner_ref.type, "id": event.owner_ref.id}
         ),
         "payload": _jsonable(event.payload),
         "provenance": (
