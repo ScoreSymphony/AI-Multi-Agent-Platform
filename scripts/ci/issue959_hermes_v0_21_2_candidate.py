@@ -90,6 +90,14 @@ def main() -> int:
     if upstream_status:
         return upstream_status
 
+    profile_reader_status = _run(
+        "tests/tui_gateway/test_profiles_list_canonical_session.py::"
+        "test_profiles_list_does_not_wait_out_write_lock",
+        cwd=upstream,
+    )
+    if profile_reader_status:
+        return profile_reader_status
+
     reader_writer_status = _run(
         "tests/test_hermes_state.py",
         "-k",
