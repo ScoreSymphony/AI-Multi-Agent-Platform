@@ -1,6 +1,12 @@
 """Canonical usage/resource accounting domain for Issue #76."""
 
 from .agent_attribution import AgentRunReader, AgentRunUsageAttributor
+from .async_service import (
+    AccountingPersistenceOffload,
+    AsyncAccountingService,
+    AsyncAccountingServiceAdapter,
+    runtime_accounting_service,
+)
 from .control_plane import (
     UsageAggregateResourceService,
     UsageBudgetResourceService,
@@ -39,10 +45,13 @@ from .workspaces import (
 )
 
 __all__ = [
+    "AccountingPersistenceOffload",
     "AccountingService",
     "AgentRunReader",
     "AgentRunUsageAttributor",
     "AggregationMode",
+    "AsyncAccountingService",
+    "AsyncAccountingServiceAdapter",
     "BudgetAction",
     "BudgetKind",
     "BudgetState",
@@ -70,5 +79,6 @@ __all__ = [
     "WorkspaceSnapshotMeasurementError",
     "accounting_resource_services",
     "aggregate_usage_records",
+    "runtime_accounting_service",
     "usage_from_metric",
 ]
