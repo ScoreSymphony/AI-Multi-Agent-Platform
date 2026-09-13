@@ -20,7 +20,6 @@ from .models import (
 from .repository import _external_resource_identity
 from .sqlite_repository import (
     _SCHEMA_VERSION,
-    SqliteConnectorRepository as _SyncSqliteConnectorRepository,
     _checkpoint_from_json,
     _checkpoint_to_json,
     _connection_from_json,
@@ -32,6 +31,9 @@ from .sqlite_repository import (
     _resource_columns,
     _resource_from_json,
     _resource_to_json,
+)
+from .sqlite_repository import (
+    SqliteConnectorRepository as _SyncSqliteConnectorRepository,
 )
 
 
