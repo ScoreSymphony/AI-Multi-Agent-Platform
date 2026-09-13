@@ -24,6 +24,7 @@ from ai_multi_agent_platform.conformance import (
 from ai_multi_agent_platform.conformance.evidence import emit_runtime_evidence
 
 ISSUE562_REPORT_SCHEMA = "ai-multi-agent-platform/issue-562-two-vps-private-tunnel/v1"
+ISSUE562_PROBE_SCHEMA = "ai-multi-agent-platform/issue-562-network-probe/v1"
 ISSUE388_TRANSPORT_SCHEMA = "ai-multi-agent-platform/issue-388-two-host-transport/v1"
 DEPLOYMENT_PROFILE = "real-two-vps-private-tunnel"
 SCENARIO_ID = "ENV-DISTRIBUTED-REAL"
@@ -50,6 +51,15 @@ _REQUIRED_PROBES = {
     ("worker-protocol", "public"),
     ("message-broker", "private"),
     ("message-broker", "public"),
+}
+_TRANSPORT_KEYS = {
+    "status",
+    "schema",
+    "worker_id",
+    "authentication",
+    "tls",
+    "artifact_refs",
+    "evidence_refs",
 }
 _FORBIDDEN_KEY_PARTS = (
     "password",
@@ -165,6 +175,8 @@ def _validate_network(
     for raw_probe in probes:
         if not isinstance(raw_probe, Mapping):
             raise EvidenceError("#562 network probe evidence must contain objects")
+        if raw_probe.get("schema") != ISSUE562_PROBE_SCHEMA:
+            raise EvidenceError("#562 network probe uses an unsupported schema")
         label = raw_probe.get("endpoint_label")
         scope = raw_probe.get("scope")
         if not isinstance(label, str) or not isinstance(scope, str):
@@ -231,6 +243,25 @@ def _validate_canonical_ids(canonical: Mapping[str, object]) -> None:
         raise EvidenceError("#562 recovery evidence reuses the original canonical WorkerJob ID")
 
 
+def _string_list(
+    payload: Mapping[str, object],
+    key: str,
+    *,
+    minimum: int = 1,
+) -> list[str]:
+    value = payload.get(key)
+    if (
+        not isinstance(value, list)
+        or len(value) < minimum
+        or not all(isinstance(item, str) and item.strip() for item in value)
+    ):
+        raise EvidenceError(f"#562 transport evidence field {key} is incomplete")
+    normalized = [item.strip() for item in value]
+    if len(set(normalized)) != len(normalized):
+        raise EvidenceError(f"#562 transport evidence field {key} contains duplicate references")
+    return normalized
+
+
 def _validate_transport(
     payload: Mapping[str, object],
     *,
@@ -241,6 +272,8 @@ def _validate_transport(
         return False
     if not isinstance(transport, Mapping):
         raise EvidenceError("#562 transport evidence must be an object when present")
+    if set(transport.keys()) != _TRANSPORT_KEYS:
+        raise EvidenceError("#562 transport evidence does not match the compact #388 schema")
     if transport.get("status") != "pass" or transport.get("schema") != ISSUE388_TRANSPORT_SCHEMA:
         raise EvidenceError("#562 transport evidence is not a passing supported #388 report")
     if transport.get("worker_id") != worker_id:
@@ -250,6 +283,8 @@ def _validate_transport(
     authentication = transport.get("authentication")
     if not isinstance(authentication, str) or not authentication.strip():
         raise EvidenceError("#562 transport evidence is missing service authentication")
+    _string_list(transport, "artifact_refs", minimum=2)
+    _string_list(transport, "evidence_refs")
     return True
 
 
