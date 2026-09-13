@@ -35,8 +35,8 @@ from .reference import LocalMemoryProvider as _BaseLocalMemoryProvider
 class LocalMemoryProvider(_BaseLocalMemoryProvider):
     """Local Memory provider with lifecycle metadata and canonical Memory Types."""
 
-    def __init__(self, db_path: str | Path) -> None:
-        super().__init__(db_path)
+    def __init__(self, db_path: str | Path, *, max_concurrency: int = 4) -> None:
+        super().__init__(db_path, max_concurrency=max_concurrency)
         added_operations = ("expire_entry", "list_entries_for_discovery")
         capabilities = tuple(
             replace(
@@ -181,16 +181,19 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
         statement = (
             "SELECT * FROM data_memory WHERE " + " AND ".join(clauses) + " ORDER BY created_at DESC"
         )
-        try:
+
+        def operation() -> tuple[MemoryEntry, ...]:
             with self._connect() as connection:
                 rows = connection.execute(statement, tuple(parameters)).fetchall()
-        except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to query memory entries") from exc
+            return tuple(self._memory_from_row(row) for row in rows)
 
+        stored = await self._run_memory_sqlite(
+            operation,
+            message="failed to query memory entries",
+        )
         now = datetime.now(UTC)
         entries: list[MemoryEntry] = []
-        for row in rows:
-            entry = self._memory_from_row(row)
+        for entry in stored:
             if query.owner_ref is not None and entry.owner_ref != query.owner_ref:
                 continue
             if (
@@ -228,7 +231,8 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
 
         validate_id(memory_id, "memory")
         self._check_scope(query.scope, query.scope_id, context)
-        try:
+
+        def operation() -> MemoryEntry:
             with self._connect() as connection:
                 row = connection.execute(
                     "SELECT * FROM data_memory WHERE memory_id = ? AND deleted = 0",
@@ -256,38 +260,35 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
                     "UPDATE data_memory SET deleted = 1 WHERE memory_id = ?",
                     (memory_id,),
                 )
-        except ContractError:
-            raise
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to expire memory entry",
-            ) from exc
-        return entry
+            return entry
+
+        return await self._run_memory_sqlite(
+            operation,
+            message="failed to expire memory entry",
+            write=True,
+        )
 
     async def list_entries_for_discovery(self) -> tuple[MemoryEntry, ...]:
         """Return current canonical entries without exposing SQLite/provider identity."""
 
-        try:
+        def operation() -> tuple[MemoryEntry, ...]:
             with self._connect() as connection:
                 rows = connection.execute(
                     "SELECT * FROM data_memory WHERE deleted = 0 ORDER BY created_at, memory_id"
                 ).fetchall()
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to enumerate memory discovery snapshot",
-            ) from exc
+            return tuple(self._memory_from_row(row) for row in rows)
+
+        stored = await self._run_memory_sqlite(
+            operation,
+            message="failed to enumerate memory discovery snapshot",
+        )
         now = datetime.now(UTC)
-        entries: list[MemoryEntry] = []
-        for row in rows:
-            entry = self._memory_from_row(row)
-            if entry.expires_at is not None and entry.expires_at <= now:
-                continue
-            if entry.superseded_by_memory_id is not None:
-                continue
-            entries.append(entry)
-        return tuple(entries)
+        return tuple(
+            entry
+            for entry in stored
+            if (entry.expires_at is None or entry.expires_at > now)
+            and entry.superseded_by_memory_id is None
+        )
 
 
 class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
