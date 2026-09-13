@@ -130,11 +130,7 @@ class RecordingTransport:
             headers=headers,
             timeout_seconds=timeout_seconds,
         )
-        if (
-            method == "POST"
-            and url.endswith("/v1/runs")
-            and isinstance(response.payload, Mapping)
-        ):
+        if method == "POST" and url.endswith("/v1/runs") and isinstance(response.payload, Mapping):
             run_id = response.payload.get("run_id")
             if isinstance(run_id, str):
                 self.external_run_id = run_id
