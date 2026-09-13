@@ -114,11 +114,11 @@ def test_autonomous_reference_scheduler_fires_and_durable_state_survives_restart
         try:
             for _ in range(100):
                 deliveries = await control_plane.automation_service.list_deliveries(automation.id)
-                if deliveries:
+                if deliveries and deliveries[0].status is DeliveryStatus.SUCCEEDED:
                     break
                 await asyncio.sleep(0.01)
             else:
-                raise AssertionError("autonomous scheduler did not fire the due Automation")
+                raise AssertionError("autonomous scheduler did not complete the due Automation")
         finally:
             await control_plane.stop_automation_runtime()
 
