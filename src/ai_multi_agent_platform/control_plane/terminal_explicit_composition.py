@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any, cast
 
@@ -112,7 +111,7 @@ class ControlPlane(_BaseControlPlane):
     def _terminal_scope(self, session_id: str) -> SessionContext:
         if self._terminal_sessions is None:
             raise ContractError(ErrorCode.NOT_FOUND, "terminal session service is not configured")
-        return self._terminal_sessions._session(session_id)
+        return self._terminal_sessions._session(session_id).context
 
     async def _authorize_terminal(
         self,
