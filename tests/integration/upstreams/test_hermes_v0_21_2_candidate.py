@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import sys
 import threading
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -164,7 +164,9 @@ def test_candidate_declares_required_run_lifecycle_surface(
     upstream_adapter = APIServerAdapter(
         PlatformConfig(enabled=True, extra={"host": "127.0.0.1", "port": 0})
     )
-    routes = {(method, path) for method, path, _handler in upstream_adapter._http_route_table()}
+    routes = {
+        (method, path) for method, path, _handler in upstream_adapter._http_route_table()
+    }
 
     assert {
         ("POST", "/v1/runs"),
@@ -175,7 +177,6 @@ def test_candidate_declares_required_run_lifecycle_surface(
         ("POST", "/v1/runs/{run_id}/stop"),
     }.issubset(routes)
     assert set(TERMINAL_STATUSES) == {"completed", "failed", "cancelled", "interrupted"}
-    upstream_adapter._close_run_state()
 
 
 def test_candidate_startup_auth_and_health_contract(
@@ -222,7 +223,9 @@ def test_candidate_startup_auth_and_health_contract(
         assert auth_error is not None
         assert auth_error.status == 401
 
-        routes = {(method, path) for method, path, _handler in upstream_adapter._http_route_table()}
+        routes = {
+            (method, path) for method, path, _handler in upstream_adapter._http_route_table()
+        }
         assert ("GET", "/health") in routes
         assert ("GET", "/health/detailed") in routes
 
@@ -239,8 +242,6 @@ def test_candidate_startup_auth_and_health_contract(
             assert await platform_adapter.health() is HealthStatus.HEALTHY
         finally:
             await server.close()
-            upstream_adapter._close_run_state()
-            weak_key_adapter._close_run_state()
 
     asyncio.run(scenario())
 
@@ -305,7 +306,6 @@ def test_candidate_adapter_and_recreation_reconcile_same_external_run(
             assert reconciled.status == "completed"
         finally:
             await server.close()
-            upstream_adapter._close_run_state()
 
     asyncio.run(scenario())
 
@@ -363,7 +363,10 @@ def test_candidate_kernel_keeps_execution_and_canonical_identity_platform_owned(
                     owner_id="issue-959",
                 )
                 await kernel.ready_task(idempotency_key="issue-959:ready", task_id=task_id)
-                run = await kernel.start_task(idempotency_key="issue-959:start", task_id=task_id)
+                run = await kernel.start_task(
+                    idempotency_key="issue-959:start",
+                    task_id=task_id,
+                )
                 run = await kernel.refresh_run(
                     idempotency_key="issue-959:refresh",
                     task_id=task_id,
@@ -374,9 +377,9 @@ def test_candidate_kernel_keeps_execution_and_canonical_identity_platform_owned(
             history = await kernel.history(task_id)
             plan_event = next(event for event in history if event.event_type == "plan.created")
             adapter_metadata = plan_event.payload["adapter_metadata"]
-            assert isinstance(adapter_metadata, dict)
+            assert isinstance(adapter_metadata, Mapping)
             hermes_metadata = adapter_metadata["hermes"]
-            assert isinstance(hermes_metadata, dict)
+            assert isinstance(hermes_metadata, Mapping)
             external_run_id = hermes_metadata["external_run_id"]
 
             assert run.status is RunStatus.SUCCEEDED
@@ -389,7 +392,6 @@ def test_candidate_kernel_keeps_execution_and_canonical_identity_platform_owned(
             assert run.run_id != external_run_id
         finally:
             await server.close()
-            upstream_adapter._close_run_state()
 
     asyncio.run(scenario())
 
@@ -421,7 +423,10 @@ def test_parallel_candidate_runs_keep_results_and_external_ids_isolated(
             barrier = threading.Barrier(2)
 
             def make_agent(**kwargs: Any) -> BarrierPlannerAgent:
-                return BarrierPlannerAgent(str(kwargs.get("session_id") or "missing"), barrier)
+                return BarrierPlannerAgent(
+                    str(kwargs.get("session_id") or "missing"),
+                    barrier,
+                )
 
             config = _candidate_config(str(server.make_url("")).rstrip("/"))
             first_request = _request("parallel-alpha")
@@ -429,8 +434,12 @@ def test_parallel_candidate_runs_keep_results_and_external_ids_isolated(
 
             with patch.object(upstream_adapter, "_create_agent", side_effect=make_agent):
                 first, second = await asyncio.gather(
-                    HermesOrchestrator(config, secret_resolver=lambda _: None).plan(first_request),
-                    HermesOrchestrator(config, secret_resolver=lambda _: None).plan(second_request),
+                    HermesOrchestrator(config, secret_resolver=lambda _: None).plan(
+                        first_request
+                    ),
+                    HermesOrchestrator(config, secret_resolver=lambda _: None).plan(
+                        second_request
+                    ),
                 )
 
             assert "parallel-alpha" in first.summary
@@ -445,7 +454,6 @@ def test_parallel_candidate_runs_keep_results_and_external_ids_isolated(
             assert second_meta.values["upstream_revision"] == HERMES_V0_21_2_REVISION
         finally:
             await server.close()
-            upstream_adapter._close_run_state()
 
     asyncio.run(scenario())
 
@@ -459,7 +467,10 @@ def test_parallel_candidate_runs_keep_results_and_external_ids_isolated(
         ("future_unknown_status", ErrorCode.BACKEND_ERROR),
     ],
 )
-def test_candidate_status_mapping_remains_fail_closed(status: str, expected_code: ErrorCode) -> None:
+def test_candidate_status_mapping_remains_fail_closed(
+    status: str,
+    expected_code: ErrorCode,
+) -> None:
     class Transport:
         async def request_json(
             self,
@@ -491,6 +502,9 @@ def test_candidate_status_mapping_remains_fail_closed(status: str, expected_code
         with pytest.raises(ContractError) as error:
             await orchestrator.plan(_request(f"status-{status}"))
         assert error.value.code is expected_code
-        assert error.value.adapter_metadata[0].values["upstream_revision"] == HERMES_V0_21_2_REVISION
+        assert (
+            error.value.adapter_metadata[0].values["upstream_revision"]
+            == HERMES_V0_21_2_REVISION
+        )
 
     asyncio.run(scenario())
