@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+import threading
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -22,28 +23,33 @@ _BUSY_MARKERS = (
 class AsyncDataOffload:
     """Run complete blocking Data persistence operations away from the event loop.
 
-    Writes queue before consuming shared capacity so a backlog of reads cannot indefinitely
-    starve durable mutations. Cancellation is deferred until the worker reaches its persistence
-    boundary; a worker failure remains authoritative so adapter cleanup/rollback is observable.
+    The worker-side gates are deliberately thread-based rather than asyncio-bound so one local
+    provider remains valid when callers reuse it across multiple event-loop lifetimes. The
+    process' default executor bounds actual threads, while ``_slots`` explicitly bounds active
+    provider operations. Writers queue before consuming a shared slot, preserving read capacity
+    while one durable mutation is active.
     """
 
     def __init__(self, *, max_concurrency: int = 4) -> None:
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be >= 1")
-        self._slots = asyncio.Semaphore(max_concurrency)
-        self._write_lock = asyncio.Lock()
+        self._slots = threading.BoundedSemaphore(max_concurrency)
+        self._write_lock = threading.Lock()
 
     async def run(self, operation: Callable[[], _T], *, write: bool = False) -> _T:
+        worker = asyncio.create_task(asyncio.to_thread(self._run_sync, operation, write))
+        return await _await_persistence_boundary(worker)
+
+    def _run_sync(self, operation: Callable[[], _T], write: bool) -> _T:
         if write:
-            async with self._write_lock:
-                async with self._slots:
-                    return await _run_to_persistence_boundary(operation)
-        async with self._slots:
-            return await _run_to_persistence_boundary(operation)
+            with self._write_lock:
+                with self._slots:
+                    return operation()
+        with self._slots:
+            return operation()
 
 
-async def _run_to_persistence_boundary[T](operation: Callable[[], T]) -> T:
-    worker = asyncio.create_task(asyncio.to_thread(operation))
+async def _await_persistence_boundary[T](worker: asyncio.Task[T]) -> T:
     try:
         return await asyncio.shield(worker)
     except asyncio.CancelledError:
