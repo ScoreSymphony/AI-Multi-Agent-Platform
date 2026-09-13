@@ -119,7 +119,9 @@ class ResearchPersistenceOffload:
             return operation()
 
 
-_SHARED_RESEARCH_OFFLOADS: WeakKeyDictionary[object, ResearchPersistenceOffload] = WeakKeyDictionary()
+_SHARED_RESEARCH_OFFLOADS: WeakKeyDictionary[object, ResearchPersistenceOffload] = (
+    WeakKeyDictionary()
+)
 _SHARED_RESEARCH_OFFLOADS_LOCK = threading.Lock()
 
 
@@ -169,10 +171,7 @@ def _map_sqlite_error(exc: sqlite3.Error, message: str) -> ContractError:
 
 
 def _snapshot_state(repository: InMemoryResearchRepository) -> dict[str, dict[str, Any]]:
-    return {
-        attribute: dict(getattr(repository, attribute))
-        for attribute in _STATE_ATTRIBUTES
-    }
+    return {attribute: dict(getattr(repository, attribute)) for attribute in _STATE_ATTRIBUTES}
 
 
 def _restore_state(
@@ -199,9 +198,7 @@ class AsyncResearchRepositoryAdapter:
     def offload(self) -> ResearchPersistenceOffload:
         return self._offload
 
-    async def _run[
-        T
-    ](
+    async def _run[T](
         self,
         operation: Callable[[], T],
         *,
