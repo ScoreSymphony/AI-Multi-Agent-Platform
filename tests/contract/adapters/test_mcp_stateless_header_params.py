@@ -107,9 +107,7 @@ async def test_x_mcp_header_omits_missing_and_null_values() -> None:
     )
     await client.list_tools()
 
-    headers = client._request_headers(
-        _tools_call_body("lookup", {"tenant": None})
-    )
+    headers = client._request_headers(_tools_call_body("lookup", {"tenant": None}))
 
     assert "Mcp-Param-Tenant" not in headers
     assert "Mcp-Param-Region" not in headers
@@ -123,9 +121,7 @@ async def test_x_mcp_header_uses_base64_sentinel_for_unsafe_values() -> None:
                 "name": "lookup",
                 "inputSchema": {
                     "type": "object",
-                    "properties": {
-                        "greeting": {"type": "string", "x-mcp-header": "Greeting"}
-                    },
+                    "properties": {"greeting": {"type": "string", "x-mcp-header": "Greeting"}},
                 },
             }
         ]
@@ -147,9 +143,7 @@ async def test_x_mcp_header_uses_base64_sentinel_for_empty_string() -> None:
                 "name": "lookup",
                 "inputSchema": {
                     "type": "object",
-                    "properties": {
-                        "label": {"type": "string", "x-mcp-header": "Label"}
-                    },
+                    "properties": {"label": {"type": "string", "x-mcp-header": "Label"}},
                 },
             }
         ]
@@ -186,9 +180,7 @@ async def test_invalid_x_mcp_header_excludes_only_the_malformed_tool(
                 "name": "valid",
                 "inputSchema": {
                     "type": "object",
-                    "properties": {
-                        "value": {"type": "string", "x-mcp-header": "Valid"}
-                    },
+                    "properties": {"value": {"type": "string", "x-mcp-header": "Valid"}},
                 },
             },
         ]
@@ -230,9 +222,7 @@ async def test_x_mcp_header_rejects_annotation_outside_properties_chain() -> Non
                     "properties": {
                         "value": {
                             "type": "string",
-                            "oneOf": [
-                                {"type": "string", "x-mcp-header": "Nested"}
-                            ],
+                            "oneOf": [{"type": "string", "x-mcp-header": "Nested"}],
                         }
                     },
                 },
@@ -251,9 +241,7 @@ async def test_x_mcp_header_rejects_out_of_range_integer_at_call_time() -> None:
                 "name": "lookup",
                 "inputSchema": {
                     "type": "object",
-                    "properties": {
-                        "tenant": {"type": "integer", "x-mcp-header": "Tenant"}
-                    },
+                    "properties": {"tenant": {"type": "integer", "x-mcp-header": "Tenant"}},
                 },
             }
         ]
@@ -261,9 +249,7 @@ async def test_x_mcp_header_rejects_out_of_range_integer_at_call_time() -> None:
     await client.list_tools()
 
     with pytest.raises(ContractError) as caught:
-        client._request_headers(
-            _tools_call_body("lookup", {"tenant": (2**53)})
-        )
+        client._request_headers(_tools_call_body("lookup", {"tenant": (2**53)}))
 
     assert caught.value.code is ErrorCode.INVALID_REQUEST
     assert caught.value.details["argument_path"] == "tenant"
