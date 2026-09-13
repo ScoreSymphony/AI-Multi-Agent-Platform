@@ -61,7 +61,9 @@ class EvaluationSuiteResourceService(ResourceService):
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(_suite_resource(suite) for suite in self._service.list_suites())
+        return tuple(
+            _suite_resource(suite) for suite in await self._service.list_suites_async()
+        )
 
     async def get_resource(
         self,
@@ -69,7 +71,7 @@ class EvaluationSuiteResourceService(ResourceService):
         resource_id: str,
     ) -> dict[str, JsonValue]:
         del context
-        return _suite_resource(self._service.get_suite(resource_id))
+        return _suite_resource(await self._service.get_suite_async(resource_id))
 
 
 class EvaluationRunResourceService(ResourceService):
@@ -84,7 +86,9 @@ class EvaluationRunResourceService(ResourceService):
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(_run_resource(run) for run in self._service.list_runs(limit=None))
+        return tuple(
+            _run_resource(run) for run in await self._service.list_runs_async(limit=None)
+        )
 
     async def get_resource(
         self,
@@ -92,7 +96,7 @@ class EvaluationRunResourceService(ResourceService):
         resource_id: str,
     ) -> dict[str, JsonValue]:
         del context
-        return _run_detail_resource(self._service.get_run_detail(resource_id))
+        return _run_detail_resource(await self._service.get_run_detail_async(resource_id))
 
 
 def evaluation_resource_services(service: EvaluationService) -> dict[str, ResourceService]:
@@ -141,7 +145,9 @@ def evaluation_command_handlers(service: EvaluationService) -> dict[str, Command
                 _optional_bool(payload, "performance_sensitive") or False
             ),
         )
-        resource = _run_detail_resource(service.get_run_detail(summary.run.run_id))
+        resource = _run_detail_resource(
+            await service.get_run_detail_async(summary.run.run_id)
+        )
         if summary.manifest is not None:
             resource["manifest"] = cast(
                 JsonValue,
@@ -165,7 +171,7 @@ def evaluation_command_handlers(service: EvaluationService) -> dict[str, Command
             "candidate_reference_kinds",
         )
         performance_sensitive = _optional_bool(payload, "performance_sensitive") or False
-        comparison = service.compare_runs(
+        comparison = await service.compare_runs_async(
             current_run_id=resource_ref,
             baseline_run_id=baseline_run_id,
             regression_policy_ref_value=_required_string(payload, "regression_policy_ref"),
@@ -173,7 +179,7 @@ def evaluation_command_handlers(service: EvaluationService) -> dict[str, Command
             candidate_reference_kinds=candidate_reference_kinds,
             performance_sensitive=performance_sensitive,
         )
-        manifest_comparison = service.compare_manifests(
+        manifest_comparison = await service.compare_manifests_async(
             current_run_id=resource_ref,
             baseline_run_id=baseline_run_id,
             candidate_reference_kinds=candidate_reference_kinds,

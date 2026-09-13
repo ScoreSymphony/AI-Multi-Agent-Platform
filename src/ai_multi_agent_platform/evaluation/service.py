@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import cast
 
@@ -13,6 +14,12 @@ from .aggregation import (
     AggregationPolicy,
     ComparableEvaluationResult,
     ResultAggregator,
+)
+from .async_persistence import (
+    AsyncEvaluationHistoryRepository,
+    AsyncEvaluationHistoryRepositoryAdapter,
+    AsyncEvaluationSuiteAssetRepository,
+    AsyncEvaluationSuiteAssetRepositoryAdapter,
 )
 from .contracts import EvaluationHistoryRepository
 from .models import (
@@ -75,6 +82,10 @@ class EvaluationService:
     must mutate them through this service instead of writing Evaluation-private files.
     Execution remains owned by ``EvaluationRunner`` and run/result persistence remains
     owned by ``EvaluationHistoryRepository``.
+
+    Synchronous methods are retained for setup, offline and CI callers. Async runtime paths
+    use backend-neutral awaitable persistence facades so SQLite work is never performed on
+    the event-loop thread.
     """
 
     def __init__(
@@ -88,8 +99,15 @@ class EvaluationService:
         regression_engine: RegressionEngine | None = None,
         result_aggregator: ResultAggregator | None = None,
         suite_assets: EvaluationSuiteAssetRepository | None = None,
+        async_repository: AsyncEvaluationHistoryRepository | None = None,
+        async_suite_assets: AsyncEvaluationSuiteAssetRepository | None = None,
     ) -> None:
+        if async_suite_assets is not None and suite_assets is None:
+            raise ValueError("async_suite_assets requires the matching synchronous suite_assets")
         self._repository = repository
+        self._async_repository = async_repository or AsyncEvaluationHistoryRepositoryAdapter(
+            repository
+        )
         self._runner = runner
         self._regression_engine = regression_engine or RegressionEngine()
         self._result_aggregator = result_aggregator or ResultAggregator()
@@ -97,9 +115,23 @@ class EvaluationService:
         self._policies = self._index_policies(policies)
         self._aggregation_policies = self._index_aggregation_policies(aggregation_policies)
         self._suite_assets = suite_assets
+        self._async_suite_assets = (
+            async_suite_assets
+            if async_suite_assets is not None
+            else (
+                None
+                if suite_assets is None
+                else AsyncEvaluationSuiteAssetRepositoryAdapter(suite_assets)
+            )
+        )
         self._validate_suite_asset_collisions()
 
-    def attach_suite_assets(self, repository: EvaluationSuiteAssetRepository) -> None:
+    def attach_suite_assets(
+        self,
+        repository: EvaluationSuiteAssetRepository,
+        *,
+        async_repository: AsyncEvaluationSuiteAssetRepository | None = None,
+    ) -> None:
         """Bind the owning durable Suite store before the service is exposed northbound."""
 
         if self._suite_assets is not None and self._suite_assets is not repository:
@@ -107,7 +139,20 @@ class EvaluationService:
                 ErrorCode.CONFLICT,
                 "evaluation suite asset repository is already configured",
             )
+        if (
+            self._async_suite_assets is not None
+            and async_repository is not None
+            and self._async_suite_assets is not async_repository
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "evaluation async suite asset repository is already configured",
+            )
         self._suite_assets = repository
+        if self._async_suite_assets is None:
+            self._async_suite_assets = async_repository or AsyncEvaluationSuiteAssetRepositoryAdapter(
+                repository
+            )
         self._validate_suite_asset_collisions()
 
     @staticmethod
@@ -172,12 +217,38 @@ class EvaluationService:
                 indexed[ref] = suite
         return tuple(indexed[key] for key in sorted(indexed))
 
+    async def list_suites_async(self) -> tuple[EvaluationSuite, ...]:
+        indexed = dict(self._suites)
+        if self._async_suite_assets is not None:
+            for suite in await self._async_suite_assets.list_suites():
+                ref = evaluation_suite_ref(suite)
+                if ref in indexed:
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        f"durable evaluation suite shadows configured suite: {ref}",
+                    )
+                indexed[ref] = suite
+        return tuple(indexed[key] for key in sorted(indexed))
+
     def get_suite(self, suite_ref: str) -> EvaluationSuite:
         configured = self._suites.get(suite_ref)
         if configured is not None:
             return configured
         if self._suite_assets is not None:
             durable = self._suite_assets.get_suite(suite_ref)
+            if durable is not None:
+                return durable
+        raise ContractError(
+            ErrorCode.NOT_FOUND,
+            f"evaluation suite not found: {suite_ref}",
+        )
+
+    async def get_suite_async(self, suite_ref: str) -> EvaluationSuite:
+        configured = self._suites.get(suite_ref)
+        if configured is not None:
+            return configured
+        if self._async_suite_assets is not None:
+            durable = await self._async_suite_assets.get_suite(suite_ref)
             if durable is not None:
                 return durable
         raise ContractError(
@@ -202,6 +273,23 @@ class EvaluationService:
             )
         return self._suite_assets.create_suite(suite)
 
+    async def create_suite_async(self, suite: EvaluationSuite) -> str:
+        """Awaitably create one immutable durable Suite version."""
+
+        ref = evaluation_suite_ref(suite)
+        if ref in self._suites:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"configured evaluation suite version already exists: {ref}",
+                details={"suite_ref": ref},
+            )
+        if self._async_suite_assets is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "durable evaluation suite mutation is not configured",
+            )
+        return await self._async_suite_assets.create_suite(suite)
+
     def delete_suite(self, suite_ref: str, *, expected_checksum: str | None = None) -> None:
         """Compensate a durable Suite version without deleting configured or referenced state."""
 
@@ -216,6 +304,29 @@ class EvaluationService:
                 "durable evaluation suite mutation is not configured",
             )
         self._suite_assets.delete_suite(suite_ref, expected_checksum=expected_checksum)
+
+    async def delete_suite_async(
+        self,
+        suite_ref: str,
+        *,
+        expected_checksum: str | None = None,
+    ) -> None:
+        """Awaitably compensate a durable Suite version."""
+
+        if suite_ref in self._suites:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                f"configured evaluation suite cannot be deleted: {suite_ref}",
+            )
+        if self._async_suite_assets is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "durable evaluation suite mutation is not configured",
+            )
+        await self._async_suite_assets.delete_suite(
+            suite_ref,
+            expected_checksum=expected_checksum,
+        )
 
     def get_policy(self, policy_ref: str) -> RegressionPolicy:
         try:
@@ -237,6 +348,9 @@ class EvaluationService:
 
     def list_runs(self, *, limit: int | None = 100) -> tuple[EvaluationRun, ...]:
         return self._repository.list_runs(limit=limit)
+
+    async def list_runs_async(self, *, limit: int | None = 100) -> tuple[EvaluationRun, ...]:
+        return await self._async_repository.list_runs(limit=limit)
 
     def get_run_detail(self, run_id: str) -> EvaluationRunDetail:
         run = self._repository.get_run(run_id)
@@ -263,6 +377,36 @@ class EvaluationService:
             manifest_comparison=manifest_comparison,
         )
 
+    async def get_run_detail_async(self, run_id: str) -> EvaluationRunDetail:
+        run = await self._async_repository.get_run(run_id)
+        if run is None:
+            raise ContractError(ErrorCode.NOT_FOUND, f"evaluation run not found: {run_id}")
+        comparison, results, aggregates, manifest = await asyncio.gather(
+            self._async_repository.get_comparison(run_id),
+            self._async_repository.list_results(run_id),
+            self._async_repository.list_aggregates(run_id),
+            self._runner.get_manifest_async(run_id),
+        )
+        manifest_comparison = None
+        if comparison is not None:
+            lens = await self._async_repository.get_comparison_lens(run_id)
+            if lens is not None:
+                candidate_reference_kinds, performance_sensitive = lens
+                manifest_comparison = await self.compare_manifests_async(
+                    current_run_id=run_id,
+                    baseline_run_id=comparison.baseline_run_id,
+                    candidate_reference_kinds=candidate_reference_kinds,
+                    performance_sensitive=performance_sensitive,
+                )
+        return EvaluationRunDetail(
+            run=run,
+            results=results,
+            comparison=comparison,
+            aggregates=aggregates,
+            manifest=manifest,
+            manifest_comparison=manifest_comparison,
+        )
+
     def compare_manifests(
         self,
         *,
@@ -272,6 +416,21 @@ class EvaluationService:
         performance_sensitive: bool = False,
     ) -> ManifestComparison:
         return self._runner.compare_manifests(
+            baseline_run_id=baseline_run_id,
+            current_run_id=current_run_id,
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive=performance_sensitive,
+        )
+
+    async def compare_manifests_async(
+        self,
+        *,
+        current_run_id: str,
+        baseline_run_id: str,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive: bool = False,
+    ) -> ManifestComparison:
+        return await self._runner.compare_manifests_async(
             baseline_run_id=baseline_run_id,
             current_run_id=current_run_id,
             candidate_reference_kinds=candidate_reference_kinds,
@@ -294,7 +453,38 @@ class EvaluationService:
         candidate_reference_kinds: frozenset[str] = frozenset(),
         performance_sensitive_comparison: bool = False,
     ) -> EvaluationRunSummary:
-        suite = self.get_suite(suite_ref)
+        suite = await self.get_suite_async(suite_ref)
+        return await self._run_suite_for_suite(
+            suite=suite,
+            snapshot=snapshot,
+            repetitions=repetitions,
+            seed=seed,
+            baseline_run_id=baseline_run_id,
+            regression_policy_ref_value=regression_policy_ref_value,
+            aggregation_policy_ref_value=aggregation_policy_ref_value,
+            repeat_policy=repeat_policy,
+            seed_policy=seed_policy,
+            manifest_context=manifest_context,
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive_comparison=performance_sensitive_comparison,
+        )
+
+    async def _run_suite_for_suite(
+        self,
+        *,
+        suite: EvaluationSuite,
+        snapshot: ConfigurationSnapshot,
+        repetitions: int = 1,
+        seed: int | None = None,
+        baseline_run_id: str | None = None,
+        regression_policy_ref_value: str | None = None,
+        aggregation_policy_ref_value: str | None = None,
+        repeat_policy: RepeatPolicy | None = None,
+        seed_policy: SeedPolicy | None = None,
+        manifest_context: EvalManifestContext | None = None,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive_comparison: bool = False,
+    ) -> EvaluationRunSummary:
         policy = (
             None
             if regression_policy_ref_value is None
@@ -342,15 +532,7 @@ class EvaluationService:
                 ErrorCode.NOT_FOUND,
                 f"baseline evaluation run not found: {baseline_run_id}",
             )
-        if current.status is not EvaluationRunStatus.COMPLETED:
-            raise ValueError("current evaluation run must be completed")
-        if baseline.status is not EvaluationRunStatus.COMPLETED:
-            raise ValueError("baseline evaluation run must be completed")
-        if (current.suite_id, current.suite_version) != (
-            baseline.suite_id,
-            baseline.suite_version,
-        ):
-            raise ValueError("evaluation runs must use the same suite identity/version")
+        self._validate_comparison_runs(current=current, baseline=baseline)
 
         manifest_comparison = self.compare_manifests(
             current_run_id=current_run_id,
@@ -358,30 +540,18 @@ class EvaluationService:
             candidate_reference_kinds=candidate_reference_kinds,
             performance_sensitive=performance_sensitive,
         )
-        if manifest_comparison.status is Comparability.UNKNOWN:
-            raise ValueError("evaluation comparison requires canonical EvalManifests for both runs")
-        if manifest_comparison.status is Comparability.INCOMPARABLE:
-            changed = ", ".join(item.path for item in manifest_comparison.blocking_differences)
-            raise ValueError(f"evaluation manifests are incomparable: {changed}")
+        self._validate_manifest_comparison(manifest_comparison)
 
         aggregation_policy = (
             None
             if aggregation_policy_ref_value is None
             else self.get_aggregation_policy(aggregation_policy_ref_value)
         )
-        if (current.repetitions != 1 or baseline.repetitions != 1) and aggregation_policy is None:
-            raise ValueError(
-                "comparison of repeated evaluation runs requires an aggregation policy"
-            )
-        if (
-            aggregation_policy is not None
-            and aggregation_policy.require_equal_sample_count
-            and current.repetitions != baseline.repetitions
-        ):
-            raise ValueError(
-                "aggregation policy requires baseline and current runs to use the same "
-                "repetition count"
-            )
+        self._validate_aggregation_compatibility(
+            current=current,
+            baseline=baseline,
+            aggregation_policy=aggregation_policy,
+        )
 
         baseline_comparable: tuple[ComparableEvaluationResult, ...]
         current_comparable: tuple[ComparableEvaluationResult, ...]
@@ -407,6 +577,124 @@ class EvaluationService:
         )
         return comparison
 
+    async def compare_runs_async(
+        self,
+        *,
+        current_run_id: str,
+        baseline_run_id: str,
+        regression_policy_ref_value: str,
+        aggregation_policy_ref_value: str | None = None,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive: bool = False,
+    ) -> ComparisonReport:
+        current, baseline = await asyncio.gather(
+            self._async_repository.get_run(current_run_id),
+            self._async_repository.get_run(baseline_run_id),
+        )
+        if current is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"current evaluation run not found: {current_run_id}",
+            )
+        if baseline is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"baseline evaluation run not found: {baseline_run_id}",
+            )
+        self._validate_comparison_runs(current=current, baseline=baseline)
+
+        manifest_comparison = await self.compare_manifests_async(
+            current_run_id=current_run_id,
+            baseline_run_id=baseline_run_id,
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive=performance_sensitive,
+        )
+        self._validate_manifest_comparison(manifest_comparison)
+
+        aggregation_policy = (
+            None
+            if aggregation_policy_ref_value is None
+            else self.get_aggregation_policy(aggregation_policy_ref_value)
+        )
+        self._validate_aggregation_compatibility(
+            current=current,
+            baseline=baseline,
+            aggregation_policy=aggregation_policy,
+        )
+
+        baseline_comparable: tuple[ComparableEvaluationResult, ...]
+        current_comparable: tuple[ComparableEvaluationResult, ...]
+        if aggregation_policy is None:
+            baseline_comparable, current_comparable = await asyncio.gather(
+                self._async_repository.list_results(baseline_run_id),
+                self._async_repository.list_results(current_run_id),
+            )
+        else:
+            baseline_comparable = await self._aggregates_for_run_async(
+                baseline,
+                aggregation_policy,
+            )
+            current_comparable = await self._aggregates_for_run_async(
+                current,
+                aggregation_policy,
+            )
+
+        policy = self.get_policy(regression_policy_ref_value)
+        comparison = self._regression_engine.compare(
+            baseline_run_id=baseline_run_id,
+            current_run_id=current_run_id,
+            baseline_results=baseline_comparable,
+            current_results=current_comparable,
+            policy=policy,
+        )
+        await self._async_repository.save_comparison(
+            comparison,
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive=performance_sensitive,
+        )
+        return comparison
+
+    @staticmethod
+    def _validate_comparison_runs(*, current: EvaluationRun, baseline: EvaluationRun) -> None:
+        if current.status is not EvaluationRunStatus.COMPLETED:
+            raise ValueError("current evaluation run must be completed")
+        if baseline.status is not EvaluationRunStatus.COMPLETED:
+            raise ValueError("baseline evaluation run must be completed")
+        if (current.suite_id, current.suite_version) != (
+            baseline.suite_id,
+            baseline.suite_version,
+        ):
+            raise ValueError("evaluation runs must use the same suite identity/version")
+
+    @staticmethod
+    def _validate_manifest_comparison(manifest_comparison: ManifestComparison) -> None:
+        if manifest_comparison.status is Comparability.UNKNOWN:
+            raise ValueError("evaluation comparison requires canonical EvalManifests for both runs")
+        if manifest_comparison.status is Comparability.INCOMPARABLE:
+            changed = ", ".join(item.path for item in manifest_comparison.blocking_differences)
+            raise ValueError(f"evaluation manifests are incomparable: {changed}")
+
+    @staticmethod
+    def _validate_aggregation_compatibility(
+        *,
+        current: EvaluationRun,
+        baseline: EvaluationRun,
+        aggregation_policy: AggregationPolicy | None,
+    ) -> None:
+        if (current.repetitions != 1 or baseline.repetitions != 1) and aggregation_policy is None:
+            raise ValueError(
+                "comparison of repeated evaluation runs requires an aggregation policy"
+            )
+        if (
+            aggregation_policy is not None
+            and aggregation_policy.require_equal_sample_count
+            and current.repetitions != baseline.repetitions
+        ):
+            raise ValueError(
+                "aggregation policy requires baseline and current runs to use the same "
+                "repetition count"
+            )
+
     def _aggregates_for_run(
         self,
         run: EvaluationRun,
@@ -419,4 +707,18 @@ class EvaluationService:
         )
         for aggregate in aggregates:
             self._repository.save_aggregate(aggregate)
+        return aggregates
+
+    async def _aggregates_for_run_async(
+        self,
+        run: EvaluationRun,
+        policy: AggregationPolicy,
+    ) -> tuple[AggregatedEvaluationResult, ...]:
+        aggregates = self._result_aggregator.aggregate(
+            results=await self._async_repository.list_results(run.run_id),
+            policy=policy,
+            expected_repetitions=run.repetitions,
+        )
+        for aggregate in aggregates:
+            await self._async_repository.save_aggregate(aggregate)
         return aggregates

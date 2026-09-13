@@ -12,6 +12,12 @@ from .aggregation import (
     ComparableEvaluationResult,
     ResultAggregator,
 )
+from .async_persistence import (
+    AsyncEvalManifestRepository,
+    AsyncEvalManifestRepositoryAdapter,
+    AsyncEvaluationRepository,
+    AsyncEvaluationRepositoryAdapter,
+)
 from .context import EvaluationExecutionContext
 from .contracts import (
     EvaluationCaseExecutor,
@@ -109,6 +115,8 @@ class EvaluationRunner:
         required_snapshot_kinds: tuple[str, ...] = (),
         resource_limit_evaluator: ResourceLimitEvaluator | None = None,
         manifest_repository: EvalManifestRepository | None = None,
+        async_repository: AsyncEvaluationRepository | None = None,
+        async_manifest_repository: AsyncEvalManifestRepository | None = None,
         manifest_builder: EvalManifestBuilder | None = None,
         manifest_comparator: ManifestComparator | None = None,
     ) -> None:
@@ -126,6 +134,7 @@ class EvaluationRunner:
         if len(normalized_required) != len(set(normalized_required)):
             raise ValueError("required snapshot reference kinds must be unique")
         self._repository = repository
+        self._async_repository = async_repository or AsyncEvaluationRepositoryAdapter(repository)
         self._executor = executor
         self._evaluators = evaluators
         self._isolation = isolation or NoopEvaluationIsolation()
@@ -135,6 +144,10 @@ class EvaluationRunner:
         self._required_snapshot_kinds = normalized_required
         self._resource_limit_evaluator = resource_limit_evaluator or ResourceLimitEvaluator()
         self._manifest_repository = manifest_repository or InMemoryEvalManifestRepository()
+        self._async_manifest_repository = (
+            async_manifest_repository
+            or AsyncEvalManifestRepositoryAdapter(self._manifest_repository)
+        )
         self._manifest_builder = manifest_builder or EvalManifestBuilder()
         self._manifest_comparator = manifest_comparator or ManifestComparator()
 
@@ -144,6 +157,9 @@ class EvaluationRunner:
 
     def get_manifest(self, evaluation_run_id: str) -> EvalManifest | None:
         return self._manifest_repository.get_manifest(evaluation_run_id)
+
+    async def get_manifest_async(self, evaluation_run_id: str) -> EvalManifest | None:
+        return await self._async_manifest_repository.get_manifest(evaluation_run_id)
 
     def compare_manifests(
         self,
@@ -156,6 +172,25 @@ class EvaluationRunner:
         return self._manifest_comparator.compare(
             self.get_manifest(baseline_run_id),
             self.get_manifest(current_run_id),
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive=performance_sensitive,
+        )
+
+    async def compare_manifests_async(
+        self,
+        *,
+        baseline_run_id: str,
+        current_run_id: str,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive: bool = False,
+    ) -> ManifestComparison:
+        baseline, current = await asyncio.gather(
+            self.get_manifest_async(baseline_run_id),
+            self.get_manifest_async(current_run_id),
+        )
+        return self._manifest_comparator.compare(
+            baseline,
+            current,
             candidate_reference_kinds=candidate_reference_kinds,
             performance_sensitive=performance_sensitive,
         )
@@ -206,7 +241,7 @@ class EvaluationRunner:
             aggregation_policy=aggregation_policy,
         )
         validate_snapshot_reference_kinds(snapshot, self._required_snapshot_kinds)
-        baseline = self._validate_baseline(
+        baseline = await self._validate_baseline(
             suite=suite,
             baseline_run_id=baseline_run_id,
             regression_policy=regression_policy,
@@ -244,7 +279,7 @@ class EvaluationRunner:
         manifest_comparison: ManifestComparison | None = None
         if baseline is not None:
             manifest_comparison = self._manifest_comparator.compare(
-                self._manifest_repository.get_manifest(baseline.run_id),
+                await self._async_manifest_repository.get_manifest(baseline.run_id),
                 manifest,
                 candidate_reference_kinds=candidate_reference_kinds,
                 performance_sensitive=performance_sensitive_comparison,
@@ -257,8 +292,8 @@ class EvaluationRunner:
             # The manifest is immutable reproducibility evidence. Persist it before exposing a
             # RUNNING run so a crash can leave at most an orphan manifest, never a run whose
             # configuration would need to be reconstructed from a later runtime state.
-            self._manifest_repository.save_manifest(manifest)
-            self._repository.save_run(run)
+            await self._async_manifest_repository.save_manifest(manifest)
+            await self._async_repository.save_run(run)
             run_persisted = True
             for repetition_index in range(repetitions):
                 repetition_seed = self._seed_for_repetition(
@@ -276,7 +311,7 @@ class EvaluationRunner:
                     )
                     await self._run_attempt(run, case, attempt)
                 executed_repetitions = repetition_index + 1
-                if self._stability_reached(
+                if await self._stability_reached(
                     suite=suite,
                     run_id=run.run_id,
                     policy=effective_repeat_policy,
@@ -288,10 +323,10 @@ class EvaluationRunner:
                 run,
                 repetitions=executed_repetitions or run.repetitions,
             )
-            results = self._repository.list_results(derived_run.run_id)
+            results = await self._async_repository.list_results(derived_run.run_id)
             aggregates: tuple[AggregatedEvaluationResult, ...] = ()
             if aggregation_policy is not None:
-                aggregates = self._aggregate_and_persist(
+                aggregates = await self._aggregate_and_persist(
                     run=derived_run,
                     results=results,
                     policy=aggregation_policy,
@@ -311,12 +346,15 @@ class EvaluationRunner:
                 baseline_comparable: tuple[ComparableEvaluationResult, ...]
                 current_comparable: tuple[ComparableEvaluationResult, ...]
                 if aggregation_policy is None:
-                    baseline_comparable = self._repository.list_results(baseline.run_id)
+                    baseline_comparable = await self._async_repository.list_results(
+                        baseline.run_id
+                    )
                     current_comparable = results
                 else:
-                    baseline_comparable = self._aggregate_and_persist(
+                    baseline_results = await self._async_repository.list_results(baseline.run_id)
+                    baseline_comparable = await self._aggregate_and_persist(
                         run=baseline,
-                        results=self._repository.list_results(baseline.run_id),
+                        results=baseline_results,
                         policy=aggregation_policy,
                     )
                     current_comparable = aggregates
@@ -327,7 +365,7 @@ class EvaluationRunner:
                     current_results=current_comparable,
                     policy=regression_policy,
                 )
-                self._repository.save_comparison(
+                await self._async_repository.save_comparison(
                     comparison,
                     candidate_reference_kinds=candidate_reference_kinds,
                     performance_sensitive=performance_sensitive_comparison,
@@ -340,7 +378,7 @@ class EvaluationRunner:
                 status=EvaluationRunStatus.COMPLETED,
                 completed_at=utc_now(),
             )
-            self._repository.save_run(completed)
+            await self._async_repository.save_run(completed)
         except Exception:
             if run_persisted:
                 failed = replace(
@@ -349,7 +387,7 @@ class EvaluationRunner:
                     repetitions=executed_repetitions or run.repetitions,
                     completed_at=utc_now(),
                 )
-                self._repository.save_run(failed)
+                await self._async_repository.save_run(failed)
             raise
 
         return EvaluationRunSummary(
@@ -400,7 +438,7 @@ class EvaluationRunner:
         changed = ", ".join(item.path for item in comparison.blocking_differences)
         raise ValueError(f"evaluation manifests are incomparable: {changed}")
 
-    def _stability_reached(
+    async def _stability_reached(
         self,
         *,
         suite: EvaluationSuite,
@@ -416,7 +454,7 @@ class EvaluationRunner:
         if completed_repetitions < required:
             return False
 
-        results = self._repository.list_results(run_id)
+        results = await self._async_repository.list_results(run_id)
         grouped: dict[tuple[str, str, str], list[EvaluationResult]] = {}
         for result in results:
             identity = (result.case_id, result.case_version, result.evaluator.evaluator_id)
@@ -507,7 +545,7 @@ class EvaluationRunner:
             )
         return merge_snapshot_references(snapshot, tuple(runtime_references))
 
-    def _validate_baseline(
+    async def _validate_baseline(
         self,
         *,
         suite: EvaluationSuite,
@@ -517,7 +555,7 @@ class EvaluationRunner:
     ) -> EvaluationRun | None:
         if baseline_run_id is None or regression_policy is None:
             return None
-        baseline = self._repository.get_run(baseline_run_id)
+        baseline = await self._async_repository.get_run(baseline_run_id)
         if baseline is None:
             raise ValueError(f"evaluation baseline run not found: {baseline_run_id}")
         if baseline.status is not EvaluationRunStatus.COMPLETED:
@@ -531,7 +569,7 @@ class EvaluationRunner:
             )
         return baseline
 
-    def _aggregate_and_persist(
+    async def _aggregate_and_persist(
         self,
         *,
         run: EvaluationRun,
@@ -544,7 +582,7 @@ class EvaluationRunner:
             expected_repetitions=run.repetitions,
         )
         for aggregate in aggregates:
-            self._repository.save_aggregate(aggregate)
+            await self._async_repository.save_aggregate(aggregate)
         return aggregates
 
     async def _run_attempt(
@@ -598,7 +636,13 @@ class EvaluationRunner:
                         error_category = "case_teardown_failure"
 
         if execution_error is not None:
-            self._save_execution_errors(run, case, attempt, execution_error, error_category)
+            await self._save_execution_errors(
+                run,
+                case,
+                attempt,
+                execution_error,
+                error_category,
+            )
             return
 
         assert observation is not None
@@ -609,7 +653,7 @@ class EvaluationRunner:
                 case=case,
                 observation=observation,
             )
-            self._repository.save_result(
+            await self._async_repository.save_result(
                 replace(
                     resource_result,
                     attempt_id=attempt.attempt_id,
@@ -625,7 +669,7 @@ class EvaluationRunner:
                 case=case,
                 observation=observation,
             )
-            self._repository.save_result(
+            await self._async_repository.save_result(
                 replace(
                     result,
                     attempt_id=attempt.attempt_id,
@@ -634,7 +678,7 @@ class EvaluationRunner:
                 )
             )
 
-    def _save_execution_errors(
+    async def _save_execution_errors(
         self,
         run: EvaluationRun,
         case: EvaluationCase,
@@ -648,7 +692,7 @@ class EvaluationRunner:
         else:
             evaluators = self._evaluators
         for evaluator in evaluators:
-            self._repository.save_result(
+            await self._async_repository.save_result(
                 EvaluationResult(
                     evaluation_run_id=run.run_id,
                     case_id=case.case_id,
