@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, PlatformEvent
 from ai_multi_agent_platform.domain import Event, ExternalRef, OwnerRef, Provenance
 
+from ._sqlite_async import AsyncSqliteOffload, map_sqlite_error
 from .repository import CommandRecord, CommitResult, EventRepository
+
+_T = TypeVar("_T")
 
 
 class SqliteKernelRepository(EventRepository):
@@ -22,6 +25,7 @@ class SqliteKernelRepository(EventRepository):
     def __init__(self, path: str | Path) -> None:
         self._path = str(path)
         self._initialize()
+        self._offload = AsyncSqliteOffload(max_concurrency=4)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._path, timeout=30)
@@ -61,6 +65,12 @@ class SqliteKernelRepository(EventRepository):
             )
 
     async def read_events(self, stream_id: str) -> tuple[PlatformEvent, ...]:
+        return await self._run_sqlite(
+            lambda: self._read_events_sync(stream_id),
+            message="failed to read kernel events",
+        )
+
+    def _read_events_sync(self, stream_id: str) -> tuple[PlatformEvent, ...]:
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT event_json FROM kernel_events WHERE stream_id = ? ORDER BY sequence ASC",
@@ -69,6 +79,12 @@ class SqliteKernelRepository(EventRepository):
         return tuple(self._decode_event(str(row["event_json"])) for row in rows)
 
     async def revision(self, stream_id: str) -> int:
+        return await self._run_sqlite(
+            lambda: self._revision_sync(stream_id),
+            message="failed to read kernel revision",
+        )
+
+    def _revision_sync(self, stream_id: str) -> int:
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT COUNT(*) AS revision FROM kernel_events WHERE stream_id = ?",
@@ -77,6 +93,12 @@ class SqliteKernelRepository(EventRepository):
         return 0 if row is None else int(row["revision"])
 
     async def find_command(self, scope: str, idempotency_key: str) -> CommandRecord | None:
+        return await self._run_sqlite(
+            lambda: self._find_command_sync(scope, idempotency_key),
+            message="failed to read kernel command",
+        )
+
+    def _find_command_sync(self, scope: str, idempotency_key: str) -> CommandRecord | None:
         with self._connect() as connection:
             row = connection.execute(
                 """
@@ -88,6 +110,12 @@ class SqliteKernelRepository(EventRepository):
         return None if row is None else self._command_from_row(row)
 
     async def list_stream_ids(self) -> tuple[str, ...]:
+        return await self._run_sqlite(
+            self._list_stream_ids_sync,
+            message="failed to list kernel streams",
+        )
+
+    def _list_stream_ids_sync(self) -> tuple[str, ...]:
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT DISTINCT stream_id FROM kernel_events ORDER BY stream_id"
@@ -107,6 +135,25 @@ class SqliteKernelRepository(EventRepository):
         if not events:
             raise ValueError("kernel commits must contain at least one event")
 
+        return await self._run_sqlite(
+            lambda: self._commit_sync(
+                stream_id=stream_id,
+                expected_revision=expected_revision,
+                events=events,
+                command=command,
+            ),
+            message="kernel persistence operation failed",
+            write=True,
+        )
+
+    def _commit_sync(
+        self,
+        *,
+        stream_id: str,
+        expected_revision: int,
+        events: tuple[PlatformEvent, ...],
+        command: CommandRecord | None,
+    ) -> CommitResult:
         connection = self._connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
@@ -187,8 +234,23 @@ class SqliteKernelRepository(EventRepository):
         except sqlite3.IntegrityError as exc:
             connection.rollback()
             raise ContractError(ErrorCode.CONFLICT, f"kernel persistence conflict: {exc}") from exc
+        except Exception:
+            connection.rollback()
+            raise
         finally:
             connection.close()
+
+    async def _run_sqlite(
+        self,
+        operation: Callable[[], _T],
+        *,
+        message: str,
+        write: bool = False,
+    ) -> _T:
+        try:
+            return await self._offload.run(operation, write=write)
+        except sqlite3.Error as exc:
+            raise map_sqlite_error(exc, message) from exc
 
     @staticmethod
     def _command_from_row(row: sqlite3.Row) -> CommandRecord:
