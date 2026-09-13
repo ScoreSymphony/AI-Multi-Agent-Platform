@@ -15,6 +15,17 @@ compatibility = "Canonical schema majors and lifecycle semantics use explicit ve
 user_signaling = "none"
 
 [[feature]]
+id = "durable-coordination"
+name = "Durable Plan/Step coordination"
+owners = ["coordination"]
+role = "core"
+stability = "beta"
+public_surfaces = ["plan-coordination resource", "coordination reconcile/cancel/repair commands", "Task workflow coordination progress projection"]
+docs = ["docs/PLANNING.md", "docs/PLATFORM_CONFORMANCE.md", "docs/SECURITY_THREAT_MODEL.md"]
+compatibility = "The canonical coordinator remains the supported dependency/readiness/fan-out/fan-in/reconciliation authority; its public resource and repair-command contracts may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
 id = "control-plane-v1"
 name = "Control Plane API v1 foundation"
 owners = ["control_plane"]
@@ -122,6 +133,17 @@ stability = "beta"
 public_surfaces = ["Evaluation Suite resources", "Evaluation Run resources", "evaluation/regression CLI and browser workflows"]
 docs = ["docs/quality/EVALUATION.md", "docs/cli/CLI.md"]
 compatibility = "Evaluation is a canonical platform quality boundary and public product surface; its resource/workflow contracts are supported but may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "repository-intelligence-core"
+name = "Repository intelligence provider-neutral baseline"
+owners = ["repositories"]
+role = "core"
+stability = "beta"
+public_surfaces = ["provider-neutral repository intelligence contracts", "deterministic local repository-intelligence baseline"]
+docs = ["docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md", "docs/STATUS.md"]
+compatibility = "The provider-neutral v1 layer and deterministic local baseline are canonical operational core; their public contracts are supported as Beta and may receive bounded non-patch changes with migration guidance."
 user_signaling = "documentation"
 
 [[feature]]
@@ -274,7 +296,8 @@ owners = ["distributed"]
 role = "optional_advanced"
 stability = "experimental"
 public_surfaces = ["Control Plane leadership/fencing/failover profile"]
-docs = ["docs/PLATFORM_CONFORMANCE.md", "docs/PACKAGE_BOUNDARIES.md"]
+docs = ["docs/operations/CONTROL_PLANE_HIGH_AVAILABILITY.md", "docs/PLATFORM_CONFORMANCE.md", "docs/PACKAGE_BOUNDARIES.md"]
+signaling_docs = ["docs/operations/CONTROL_PLANE_HIGH_AVAILABILITY.md"]
 compatibility = "Experimental optional profile; exact-revision conformance evidence does not create forward compatibility guarantees."
 user_signaling = "documentation_and_ui_contextual"
 
@@ -285,19 +308,21 @@ owners = ["learning", "research"]
 role = "optional_advanced"
 stability = "experimental"
 public_surfaces = ["learning/improvement resources", "research workflow resources"]
-docs = ["docs/product/GOVERNED_LEARNING.md", "docs/cli/CLI_LEARNING.md", "docs/PACKAGE_BOUNDARIES.md"]
+docs = ["docs/product/GOVERNED_LEARNING.md", "docs/cli/CLI_LEARNING.md", "docs/research/RESEARCH_EVIDENCE.md", "docs/PACKAGE_BOUNDARIES.md"]
+signaling_docs = ["docs/cli/CLI_LEARNING.md", "docs/research/RESEARCH_EVIDENCE.md"]
 compatibility = "Experimental advanced capabilities; public contracts may change incompatibly in non-patch releases without deprecation."
 user_signaling = "documentation_and_ui_contextual"
 
 [[feature]]
-id = "repository-intelligence"
-name = "Repository intelligence"
+id = "repository-intelligence-enhanced-providers"
+name = "Repository intelligence enhanced providers"
 owners = ["repositories"]
 role = "optional_advanced"
 stability = "experimental"
-public_surfaces = ["repository analysis/search intelligence enhancements"]
-docs = ["docs/PACKAGE_BOUNDARIES.md", "docs/STATUS.md"]
-compatibility = "Experimental advanced repository capability; public contract details may change incompatibly in non-patch releases."
+public_surfaces = ["optional enhanced repository-intelligence provider integrations and provider-specific capability activation"]
+docs = ["docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md"]
+signaling_docs = ["docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md"]
+compatibility = "Named enhanced providers remain optional and Experimental; provider-specific integrations may change incompatibly in non-patch releases and must not redefine the canonical repository-intelligence baseline."
 user_signaling = "documentation_and_ui_contextual"
 
 [[feature]]
@@ -307,7 +332,8 @@ owners = ["decisions", "compensation"]
 role = "optional_advanced"
 stability = "experimental"
 public_surfaces = ["Decision resources", "compensation/rollback workflow resources"]
-docs = ["docs/PACKAGE_BOUNDARIES.md"]
+docs = ["docs/product/DECISION_RECORDS.md", "docs/runtime/COMPENSATION.md", "docs/PACKAGE_BOUNDARIES.md"]
+signaling_docs = ["docs/product/DECISION_RECORDS.md", "docs/runtime/COMPENSATION.md"]
 compatibility = "Experimental advanced workflow capabilities; no forward compatibility promise beyond exact documented/released revisions."
 user_signaling = "documentation_and_ui_contextual"
 
@@ -318,6 +344,7 @@ owners = ["application_distribution"]
 role = "optional_advanced"
 stability = "experimental"
 public_surfaces = ["application build/distribution state and release integration"]
-docs = ["docs/PACKAGE_BOUNDARIES.md", "docs/RELEASE_PROCESS.md"]
+docs = ["docs/product/APPLICATION_DISTRIBUTION.md", "docs/PACKAGE_BOUNDARIES.md", "docs/RELEASE_PROCESS.md"]
+signaling_docs = ["docs/product/APPLICATION_DISTRIBUTION.md"]
 compatibility = "Experimental advanced distribution surface; incompatible non-patch evolution may occur without a deprecation window."
 user_signaling = "documentation_and_ui_contextual"
