@@ -8,6 +8,7 @@ The project uses semantic versioning once a public prototype is released. Until 
 
 ### Added
 
+- Repository-wide feature classification with orthogonal architectural-role (`Core`, `Platform Extension`, `Optional / Advanced`) and public-surface stability (`Stable`, `Beta`, `Experimental`) levels, including a machine-readable registry and explicit compatibility/deprecation rules.
 - Canonical platform foundations for Tasks, Plans, Steps, Runs, Events, Agents, Agent Teams, models, capabilities/tools, Projects, Workspaces, Files, Artifacts and Results.
 - Versioned Control Plane with Web and CLI client paths.
 - Authentication, authorization, approvals, secret-reference handling and platform security boundaries.
