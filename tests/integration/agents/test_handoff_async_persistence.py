@@ -325,13 +325,14 @@ def test_in_memory_and_sqlite_async_contracts_have_matching_basic_semantics(tmp_
         replay, replay_created = await adapter.bind_consumption(consumption)
         listed = await adapter.list_handoffs_for_task(handoff.task_id)
         return (
-            stored.content_digest,
+            stored.revision,
             created,
-            bound.handoff_digest,
+            bound.handoff_revision,
             bound_created,
             replay == bound,
             replay_created,
-            tuple(item.content_digest for item in listed),
+            len(listed),
+            listed[0].revision,
         )
 
     async def scenario() -> None:
@@ -339,8 +340,7 @@ def test_in_memory_and_sqlite_async_contracts_have_matching_basic_semantics(tmp_
         sqlite = await exercise(
             AsyncHandoffRepositoryAdapter(SQLiteHandoffRepository(tmp_path / "handoffs.sqlite3"))
         )
-        # IDs and digests are intentionally fixture-specific, so compare semantic shape/flags.
-        assert memory[1:] == sqlite[1:]
+        assert memory == sqlite
 
     asyncio.run(scenario())
 
