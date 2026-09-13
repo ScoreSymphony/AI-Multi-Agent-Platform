@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 import time
 import tracemalloc
 from dataclasses import asdict, dataclass
@@ -202,6 +203,11 @@ class PlanStepBenchmarkHarness:
         planned = await _plan_task(kernel, orchestrator, spec.timeout_seconds)
         plan, steps = _materialize_plan(planned, orchestrator.proposals)
 
+        # Normalize transient WAL state before measuring durable storage growth. Planning can
+        # leave WAL pages that are checkpointed during the measured coordination lifecycle;
+        # counting those pages only in the baseline can otherwise report negative "growth".
+        _checkpoint_sqlite_storage(db_dir / "kernel.sqlite3")
+        _checkpoint_sqlite_storage(db_dir / "coordination.sqlite3")
         storage_before = _directory_size(self._data_dir)
         tracing_was_active = tracemalloc.is_tracing()
         if not tracing_was_active:
@@ -273,6 +279,9 @@ class PlanStepBenchmarkHarness:
         traced_current, traced_peak = tracemalloc.get_traced_memory()
         if not tracing_was_active:
             tracemalloc.stop()
+        # Compare like-for-like durable SQLite footprints instead of transient WAL state.
+        _checkpoint_sqlite_storage(db_dir / "kernel.sqlite3")
+        _checkpoint_sqlite_storage(db_dir / "coordination.sqlite3")
         storage_after = _directory_size(self._data_dir)
 
         final_projection = coordinator.projection(plan.id)
@@ -337,6 +346,21 @@ class PlanStepBenchmarkHarness:
             run_ids=run_ids,
             errors=tuple(errors),
         )
+
+
+def _checkpoint_sqlite_storage(path: Path) -> None:
+    """Normalize SQLite WAL state so byte-growth snapshots are comparable."""
+
+    if not path.exists():
+        return
+    with sqlite3.connect(path) as connection:
+        mode_row = connection.execute("PRAGMA journal_mode").fetchone()
+        mode = str(mode_row[0]).casefold() if mode_row is not None else ""
+        if mode != "wal":
+            return
+        checkpoint = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        if checkpoint is None or int(checkpoint[0]) != 0:
+            raise RuntimeError(f"SQLite WAL checkpoint could not complete for {path}")
 
 
 async def _plan_task(
