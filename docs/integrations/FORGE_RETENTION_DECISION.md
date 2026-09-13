@@ -4,6 +4,8 @@ Status date: 2026-09-13
 
 Issue: #991 — Executor: Forge retention decision, removal plan, and generic-guarantee audit
 
+Architecture authority: [`ADR 0013`](../adr/0013-deprecate-forge-execution-adapter-pending-removal-gates.md). This document is the detailed inventory, evidence and removal-gate companion to that accepted decision.
+
 Decision: **deprecate the active Forge execution backend; do not remove it yet.**
 
 Forge is no longer treated as a preferred or reference execution backend. The current integration remains temporarily available as a compatibility path while the platform proves that all generic executor guarantees and the reference golden path remain independent of Forge. Removal is gated by the conditions below.
