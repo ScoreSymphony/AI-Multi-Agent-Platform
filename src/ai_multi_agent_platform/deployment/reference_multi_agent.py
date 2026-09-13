@@ -11,13 +11,7 @@ from __future__ import annotations
 from ai_multi_agent_platform.agents import AgentRevisionRef
 from ai_multi_agent_platform.agents.execution_profile import decode_agent_step_execution_binding
 from ai_multi_agent_platform.context import ContextCandidate, ContextSourceRequest
-from ai_multi_agent_platform.contracts import (
-    ContractError,
-    ErrorCode,
-    OperationContext,
-    OutputAttachmentObserver,
-    PlatformEvent,
-)
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext, PlatformEvent
 from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
 from ai_multi_agent_platform.handoffs import (
     HandoffContent,
@@ -25,7 +19,7 @@ from ai_multi_agent_platform.handoffs import (
     HandoffSourceRef,
 )
 from ai_multi_agent_platform.handoffs.production import DurableConsumedHandoffContextAdapter
-from ai_multi_agent_platform.kernel import PlatformKernel
+from ai_multi_agent_platform.kernel import OutputAttachmentObserver, PlatformKernel
 from ai_multi_agent_platform.planning import DeterministicReferencePlanner
 from ai_multi_agent_platform.planning.models import (
     AgentAssignment,
@@ -189,9 +183,7 @@ class ReferenceMultiAgentOutputObserver:
         if record.task_id != task.task_id or record.latest_run_id != run.run_id:
             return
         plan = self._coordinator.get_plan(record.plan_id)
-        consumers = tuple(
-            step for step in plan.steps if producer_step_id in step.depends_on
-        )
+        consumers = tuple(step for step in plan.steps if producer_step_id in step.depends_on)
         if not consumers:
             return
 
