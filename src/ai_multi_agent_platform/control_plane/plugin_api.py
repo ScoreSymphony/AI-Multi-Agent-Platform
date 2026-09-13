@@ -79,4 +79,5 @@ __all__ = [
     "PLUGIN_MODULE",
     "ControlPlane",
     "PluginPermissionResolver",
+    "_manifest_document",
 ]
