@@ -11,7 +11,7 @@ GOVERNANCE = ROOT / "src" / "ai_multi_agent_platform" / "governance"
 # not outlaw every use of implementation inheritance (the issue explicitly keeps
 # ordinary implementation inheritance out of scope). Keep the few pre-existing,
 # reviewed implementation compositions explicit so a new ControlPlane MRO stack
-# cannot be introduced silently while the remaining domain layers are migrated.
+# cannot be introduced silently while compatibility layers are retired.
 _ALLOWED_IMPLEMENTATION_MULTIPLE_INHERITANCE = {
     ("hardened_automation_api.py", "ControlPlane"): frozenset(
         {"_AutomationControlPlane", "_RegisteredSearchControlPlane"}
@@ -171,6 +171,22 @@ def test_canonical_single_node_portability_composition_has_one_control_plane_bas
     )
 
 
+def test_canonical_authorization_uses_explicit_automation_composition() -> None:
+    path = CONTROL_PLANE / "authenticated_authorization.py"
+    imports = [node for node in _tree(path).body if isinstance(node, ast.ImportFrom)]
+
+    assert not any(
+        node.module == "hardened_automation_api"
+        and any(alias.name == "ControlPlane" for alias in node.names)
+        for node in imports
+    )
+    assert any(
+        node.module == "automation_explicit_composition"
+        and any(alias.asname == "_CurrentControlPlane" for alias in node.names)
+        for node in imports
+    )
+
+
 def test_plugin_terminal_composition_has_one_control_plane_base() -> None:
     path = CONTROL_PLANE / "plugin_terminal_composition.py"
     facade = _class(path, "ControlPlane")
@@ -220,6 +236,9 @@ def test_migrated_domains_declare_explicit_module_owners() -> None:
     approval_decisions = (CONTROL_PLANE / "approval_decision_module.py").read_text(
         encoding="utf-8"
     )
+    automation = (CONTROL_PLANE / "automation_explicit_composition.py").read_text(
+        encoding="utf-8"
+    )
     conversations = (CONTROL_PLANE / "conversation_module.py").read_text(encoding="utf-8")
     notifications = (CONTROL_PLANE / "notifications_explicit_composition.py").read_text(
         encoding="utf-8"
@@ -234,6 +253,7 @@ def test_migrated_domains_declare_explicit_module_owners() -> None:
     assert 'PLUGIN_MODULE = "plugins"' in plugins
     assert 'ORGANIZATION_AUDIT_MODULE = "organization-audit"' in organization_audit
     assert 'APPROVAL_DECISION_MODULE = "approval-decisions"' in approval_decisions
+    assert 'AUTOMATION_MODULE = "automation"' in automation
     assert 'CONVERSATION_MODULE = "conversations"' in conversations
     assert 'NOTIFICATION_MODULE = "notifications"' in notifications
     assert 'TERMINAL_MODULE = "terminal"' in terminal
@@ -246,6 +266,7 @@ def test_migrated_domains_declare_explicit_module_owners() -> None:
         plugins,
         organization_audit,
         approval_decisions,
+        automation,
         conversations,
         notifications,
         terminal,
