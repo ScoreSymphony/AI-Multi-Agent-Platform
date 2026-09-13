@@ -11,6 +11,7 @@ from ai_multi_agent_platform.coordination import (
     StepCoordinationRecord,
 )
 from ai_multi_agent_platform.coordination.plan_step_coordinator import DurablePlanStepCoordinator
+from ai_multi_agent_platform.deployment.reference_multi_agent import ReferenceMultiAgentPlanner
 from ai_multi_agent_platform.domain import OwnerRef, Plan, Step, StepStatus, new_id
 from ai_multi_agent_platform.planning.models import (
     PlanningAgentCandidate,
@@ -18,7 +19,6 @@ from ai_multi_agent_platform.planning.models import (
     PlanningRequest,
     PriorPlanSnapshot,
 )
-from ai_multi_agent_platform.deployment.reference_multi_agent import ReferenceMultiAgentPlanner
 
 
 def _candidate(role: str, *, revision: int) -> PlanningAgentCandidate:
