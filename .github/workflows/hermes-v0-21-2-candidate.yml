@@ -8,6 +8,7 @@ on:
       - "scripts/ci/issue959_hermes_v0_21_2_candidate.py"
       - "tests/regression/upstreams/test_hermes_v0_21_2.py"
       - "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py"
+      - "tests/integration/upstreams/test_hermes_v0_21_2_concurrency.py"
       - "src/ai_multi_agent_platform/adapters/hermes.py"
       - "upstream/hermes-agent.yaml"
       - "release/compatibility.json"
