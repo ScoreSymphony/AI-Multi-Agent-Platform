@@ -119,7 +119,7 @@ Compatibility must never be inferred from a role label alone. #46-style evidence
 
 The table below is a human-readable view of the canonical machine-readable registry. It intentionally classifies major user/integrator surfaces rather than every package or source file. `Canonical owner(s)` records the authoritative `owner` values from [`PACKAGE_BOUNDARIES.toml`](PACKAGE_BOUNDARIES.toml), not necessarily the names of the packages that implement or expose the surface.
 
-The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation conventions. It does **not** automatically make every later-domain resource registered below `/api/v1` Stable; the resource-family rows below retain their own declared stability.
+The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation conventions. It does **not** automatically make every later-domain resource registered below `/api/v1` Stable; the resource-family rows below retain their own declared stability. Likewise, the generic CLI row covers shared CLI framework conventions rather than overriding a more specific feature classification such as Experimental Learning commands.
 
 | ID | Capability / public surface | Canonical owner(s) | Role | Stability |
 | --- | --- | --- | --- | --- |
@@ -135,7 +135,7 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `verification-review` | verification/review records and completion gates | `verification` | Core | Beta |
 | `evaluation-regression` | Evaluation suites/runs plus regression CLI/browser workflows | `evaluation` | Core | Beta |
 | `observability-accounting` | public telemetry/health/usage/accounting views | `observability`, `accounting` | Core | Beta |
-| `cli-surface` | documented `platform` CLI user surface | `control_plane` | Core | Beta |
+| `cli-surface` | shared `platform` CLI framework/global conventions | `control_plane` | Core | Beta |
 | `onboarding-first-run` | first-run status/commands plus CLI and browser onboarding workflow | `onboarding` | Platform Extension | Beta |
 | `memory-knowledge-search` | Memory, Knowledge, Context and Search capabilities | `data`, `context`, `search` | Platform Extension | Beta |
 | `conversations-browser-terminal` | conversational, browser and terminal product capabilities | `conversations`, `browser`, `terminal` | Platform Extension | Beta |
@@ -176,6 +176,8 @@ Generated DTOs must derive from the canonical transport contract/version. Genera
 A generator may emit role/stability metadata for documentation or product signaling, but clients must not use those labels as lifecycle, authorization or availability state.
 
 ### CLI and Python
+
+The `cli-surface` classification applies to shared CLI invocation/profile/authentication/rendering/global-option conventions. A feature-specific command group keeps the stability declared by its owning feature; for example, `platform learning` remains Experimental rather than inheriting the generic CLI framework's Beta level.
 
 CLI commands are public only where documented as supported. Python objects are public only when the owning documentation or this registry explicitly claims them as a public contract. Internal importability is not a compatibility promise.
 
