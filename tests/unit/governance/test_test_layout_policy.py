@@ -53,7 +53,7 @@ def test_issue_number_without_separator_is_also_rejected() -> None:
     assert "issue number" in violations[0]
 
 
-def test_modifying_existing_legacy_test_is_grandfathered() -> None:
+def test_modified_paths_are_ignored_by_the_diff_level_guard() -> None:
     changes = changed_targets("M\ttests/test_issue_12_legacy.py")
 
     assert changes == ()
