@@ -266,7 +266,7 @@ The acceptance criteria are satisfied by the following platform contracts and te
 
 | Acceptance criterion | Evidence |
 | --- | --- |
-| Single-node production remains supported without HA dependencies | `test_issue_89_control_plane_ha.py::test_single_node_remains_active_without_ha_coordination` plus #39 single-node smoke |
+| Single-node production remains supported without HA dependencies | `tests/integration/control_plane/test_control_plane_ha.py::test_single_node_remains_active_without_ha_coordination` plus #39 single-node smoke |
 | Process/host identity is not canonical | ADR 0009, this ownership model, Worker restart/re-registration identity assertions |
 | Active/passive or warm-standby reference path | `ControlPlaneFailoverService`, `InMemoryCoordinationProvider`, simultaneous acquisition and promotion tests |
 | Split-brain/stale leader fails closed | stale-leader, simultaneous-acquisition, Worker-epoch and coordination-outage tests |
