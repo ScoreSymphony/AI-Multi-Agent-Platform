@@ -35,7 +35,7 @@ Authorization-audit writes use their own `audit` serialization domain. Audit sto
 
 ## Cancellation and error semantics
 
-Caller cancellation is shielded until the worker-side persistence boundary settles. Repeated cancellation therefore cannot report cancellation while a Security SQLite mutation is still unresolved. If the worker fails while cancellation is pending, the persistence failure wins over the pending cancellation so callers do not lose the authoritative storage failure.
+Worker-side persistence remains shielded until its durable boundary settles. In addition, Approval mutations whose committed state requires a lifecycle notification or authorization audit use a wider Security completion boundary: once the mutation is in flight, caller cancellation is deferred until the durable Approval operation and its required post-commit event/audit sequence have finished. This prevents a client disconnect from leaving a durable pending/resolved Approval without the corresponding required-attention/resolved notification or audit. Repeated cancellation is still deferred, and an inner persistence/audit failure wins over the pending cancellation so callers do not lose the authoritative failure.
 
 SQLite `busy` and `locked` operational failures map to retryable `TRANSIENT_FAILURE`; other SQLite failures map to `BACKEND_ERROR`. Existing domain errors such as `NOT_FOUND`, `CONFLICT`, and `FORBIDDEN` are preserved.
 
@@ -57,7 +57,8 @@ The #892 Security persistence regression suite covers:
 - weak backing-service ownership so shared offloads do not become process-lifetime registry leaks;
 - reuse across multiple event-loop lifetimes;
 - repeated cancellation at a durable write boundary;
-- worker-error precedence over cancellation;
+- cancellation after an Approval mutation starts still completing required/resolved events and durable audit before cancellation propagates;
+- worker/error precedence over pending cancellation;
 - retryable busy/locked mapping;
 - rollback of in-memory state after failed durable Approval writes;
 - durable expiration-on-read behavior after restart;
