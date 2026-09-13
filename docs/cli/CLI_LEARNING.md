@@ -178,4 +178,4 @@ The public CLI composition now:
 5. preserves the deployment-owned `LearningPlatformPolicy` floor;
 6. delegates every unrelated CLI area unchanged to the existing lower-level composition.
 
-Regression coverage in `tests/test_issue_81_cli_entrypoint.py` proves that candidate inspection reaches `/api/v1/learning-candidates`, promotion requires global `--yes` before transport, confirmed promotion dispatches the exact candidate revision and optional Approval binding, and generic extension execution cannot bypass the Learning domain safeguards.
+Regression coverage in `tests/integration/cli/test_cli_entrypoint.py` proves that candidate inspection reaches `/api/v1/learning-candidates`, promotion requires global `--yes` before transport, confirmed promotion dispatches the exact candidate revision and optional Approval binding, and generic extension execution cannot bypass the Learning domain safeguards.

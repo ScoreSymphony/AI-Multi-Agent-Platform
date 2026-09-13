@@ -8,7 +8,7 @@ The required suite is network-independent, uses no production credential and req
 
 ### GitHub publication negative paths
 
-`tests/integration/application_distribution/test_issue751_github_conformance.py`
+`tests/integration/application_distribution/test_github_conformance.py`
 
 Proves with a controlled GitHub REST transport:
 
@@ -23,13 +23,13 @@ Proves with a controlled GitHub REST transport:
 - public/private repository visibility semantics;
 - recognizable fixture credential non-disclosure from provider outputs and representative errors.
 
-`tests/integration/application_distribution/test_issue751_github_validation_failure.py`
+`tests/integration/application_distribution/test_github_validation_failure.py`
 
 Adds the connection-validation boundary: a controlled GitHub validation outage preserves the canonical retryable provider-error category while proving the recognizable credential from the provider response cannot escape through the exception surface.
 
 ### Versioned Control Plane and publication security
 
-`tests/integration/application_distribution/test_issue751_control_plane_security.py`
+`tests/integration/application_distribution/test_control_plane_security.py`
 
 Proves through the registered `application-releases` Control Plane surface:
 
@@ -49,13 +49,13 @@ Proves through the registered `application-releases` Control Plane surface:
 - provider failure leaving canonical state un-published;
 - preservation of canonical build provenance when publisher metadata is added.
 
-`tests/integration/application_distribution/test_issue751_connector_authorization.py`
+`tests/integration/application_distribution/test_connector_authorization.py`
 
 Proves the application-release publication gate and Connector authorization boundary compose rather than replace one another. Even when the application publication proposal is allowed, `ConnectorService` can still deny the `github.release.create` external action and canonical release state remains ready and unpublished.
 
 ### Generic CLI parity
 
-`tests/integration/application_distribution/test_issue751_client_parity.py`
+`tests/integration/application_distribution/test_client_parity.py`
 
 Proves the already-supported generic CLI extension surface can list/show `application-releases` without rewriting canonical target, artifact, download or external-metadata state. #751 does not require a dedicated application-distribution Web screen.
 
@@ -109,11 +109,11 @@ The GitHub reference provider does not emit a separate application-domain event 
 The platform-wide #46 suite should treat the following as the application-distribution acceptance bundle:
 
 ```text
-tests/integration/application_distribution/test_issue751_github_conformance.py
-tests/integration/application_distribution/test_issue751_github_validation_failure.py
-tests/integration/application_distribution/test_issue751_control_plane_security.py
-tests/integration/application_distribution/test_issue751_connector_authorization.py
-tests/integration/application_distribution/test_issue751_client_parity.py
+tests/integration/application_distribution/test_github_conformance.py
+tests/integration/application_distribution/test_github_validation_failure.py
+tests/integration/application_distribution/test_control_plane_security.py
+tests/integration/application_distribution/test_connector_authorization.py
+tests/integration/application_distribution/test_client_parity.py
 tests/integration/application_distribution/test_remote_worker_multitarget.py
 tests/integration/application_distribution/test_remote_worker_result_evidence.py
 tests/integration/application_distribution/test_release_gate_provenance.py

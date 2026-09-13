@@ -38,7 +38,7 @@ Archived or hidden Tasks remain canonical resources and can still be retrieved d
 
 ## Regression coverage
 
-`tests/test_issue88_finalization.py` verifies:
+`tests/integration/planning/test_finalization.py` verifies:
 
 - succeeded Tasks can be archived/hidden without changing `status=succeeded`;
 - cancelled Tasks can be hidden without changing `status=cancelled`;
