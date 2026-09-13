@@ -14,7 +14,7 @@ from ai_multi_agent_platform.organizations import MembershipStatus, Organization
 from .extensions import ControlPlaneModule, ResourceService
 from .models import PageQuery, RequestContext
 from .module_registry import install_control_plane_modules
-from .organization_runtime_composition import ControlPlane as _OrganizationControlPlane
+from .organization_explicit_composition import ControlPlane as _OrganizationControlPlane
 
 ORGANIZATION_AUDIT_COLLECTION = "organization-audit-events"
 ORGANIZATION_AUDIT_SOURCE = "control-plane.organization-audit"
@@ -158,6 +158,7 @@ def organization_audit_control_plane_module(
             ORGANIZATION_AUDIT_COLLECTION: _OrganizationAuditResources(service, audit),
         },
         command_observers=(observe,),
+        requires=frozenset({"organizations"}),
     )
 
 
