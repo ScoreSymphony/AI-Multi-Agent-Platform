@@ -1,0 +1,298 @@
+name: Bifrost DNS rebinding runtime
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/issue859-bifrost-dns-rebinding.yml"
+      - "scripts/ci/issue859_mock_openai.py"
+      - "scripts/ci/issue859_ssrf_sentinel.py"
+      - "scripts/ci/issue859_rebinding_dns.py"
+      - "tests/integration/platform/test_bifrost_dns_rebinding.py"
+      - "upstream/bifrost.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  dns-rebinding-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install platform test environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+
+      - name: Create isolated rebinding network
+        shell: bash
+        run: |
+          docker network create \
+            --driver bridge \
+            --subnet 203.0.113.0/24 \
+            issue859-rebinding-net
+          docker pull python:3.12-slim
+          docker pull maximhq/bifrost:v2.1.1
+
+      - name: Start controlled upstream, sentinel and rebinding DNS
+        shell: bash
+        run: |
+          docker run -d \
+            --name issue859-rebinding-mock \
+            --network issue859-rebinding-net \
+            --ip 203.0.113.20 \
+            -v "$GITHUB_WORKSPACE/scripts/ci/issue859_mock_openai.py:/fixture.py:ro" \
+            python:3.12-slim \
+            python /fixture.py --host 0.0.0.0 --port 18000
+
+          docker run -d \
+            --name issue859-rebinding-sentinel \
+            --network issue859-rebinding-net \
+            --ip 203.0.113.10 \
+            -p 127.0.0.1:18001:18001 \
+            -v "$GITHUB_WORKSPACE/scripts/ci/issue859_ssrf_sentinel.py:/fixture.py:ro" \
+            python:3.12-slim \
+            python /fixture.py \
+              --host 0.0.0.0 \
+              --port 18001 \
+              --rebinding-location http://issue859-rebind.test:18003/ssrf-sentinel.txt
+
+          docker run -d \
+            --name issue859-rebinding-dns \
+            --network issue859-rebinding-net \
+            --ip 203.0.113.53 \
+            -p 127.0.0.1:18002:18002 \
+            -v "$GITHUB_WORKSPACE/scripts/ci/issue859_rebinding_dns.py:/fixture.py:ro" \
+            python:3.12-slim \
+            python /fixture.py \
+              --dns-host 0.0.0.0 \
+              --dns-port 53 \
+              --control-host 0.0.0.0 \
+              --control-port 18002 \
+              --hostname issue859-rebind.test \
+              --first-ip 203.0.113.10 \
+              --rebound-ip 127.0.0.1
+
+          python - <<'PY'
+          import json
+          import time
+          import urllib.request
+
+          urls = (
+              "http://127.0.0.1:18001/healthz",
+              "http://127.0.0.1:18002/healthz",
+          )
+          for url in urls:
+              for _ in range(60):
+                  try:
+                      with urllib.request.urlopen(url, timeout=1) as response:
+                          payload = json.load(response)
+                      if payload.get("healthy") is True:
+                          break
+                  except Exception:
+                      time.sleep(0.25)
+              else:
+                  raise SystemExit(f"controlled issue #859 fixture did not become healthy: {url}")
+          PY
+
+      - name: Create pinned Bifrost configuration
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.issue859-bifrost-rebinding"
+          chmod 777 "$GITHUB_WORKSPACE/.issue859-bifrost-rebinding"
+          cat > "$GITHUB_WORKSPACE/.issue859-bifrost-rebinding/config.json" <<'JSON'
+          {
+            "encryption_key": "env.BIFROST_ENCRYPTION_KEY",
+            "client": {
+              "drop_excess_requests": false,
+              "enable_logging": false
+            },
+            "providers": {
+              "issue859-local": {
+                "keys": [
+                  {
+                    "name": "issue859-fixture-key",
+                    "value": "env.ISSUE859_PROVIDER_KEY",
+                    "models": ["fixture-model"],
+                    "weight": 1.0
+                  }
+                ],
+                "network_config": {
+                  "base_url": "http://203.0.113.20:18000",
+                  "default_request_timeout_in_seconds": 5,
+                  "max_retries": 0
+                },
+                "custom_provider_config": {
+                  "base_provider_type": "openai",
+                  "allowed_requests": {
+                    "list_models": true,
+                    "chat_completion": true,
+                    "chat_completion_stream": true
+                  },
+                  "request_path_overrides": {
+                    "chat_completion": "/v1/chat/completions",
+                    "chat_completion_stream": "/v1/chat/completions"
+                  }
+                }
+              },
+              "openai": {
+                "keys": [
+                  {
+                    "name": "issue859-native-openai-key",
+                    "value": "env.ISSUE859_NATIVE_OPENAI_KEY",
+                    "models": ["fixture-model"],
+                    "weight": 1.0
+                  }
+                ],
+                "network_config": {
+                  "base_url": "http://203.0.113.20:18000/v1",
+                  "default_request_timeout_in_seconds": 5,
+                  "max_retries": 0
+                }
+              }
+            },
+            "config_store": {
+              "enabled": false
+            }
+          }
+          JSON
+
+      - name: Start reviewed Bifrost with controlled DNS
+        shell: bash
+        run: |
+          docker run -d \
+            --name issue859-bifrost-rebinding \
+            --network issue859-rebinding-net \
+            --ip 203.0.113.30 \
+            --dns 203.0.113.53 \
+            -p 127.0.0.1:18080:8080 \
+            -v "$GITHUB_WORKSPACE/.issue859-bifrost-rebinding:/app/data" \
+            -e APP_HOST=0.0.0.0 \
+            -e BIFROST_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef \
+            -e ISSUE859_PROVIDER_KEY=ci-fixture-provider-key \
+            -e ISSUE859_NATIVE_OPENAI_KEY=ci-fixture-native-openai-key \
+            maximhq/bifrost:v2.1.1
+          python - <<'PY'
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+
+          payload = json.dumps({
+              "model": "issue859-local/fixture-model",
+              "messages": [{"role": "user", "content": "ready"}],
+          }).encode("utf-8")
+          for _ in range(120):
+              request = urllib.request.Request(
+                  "http://127.0.0.1:18080/v1/chat/completions",
+                  data=payload,
+                  headers={"Content-Type": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=2) as response:
+                      body = json.load(response)
+                  if response.status == 200 and body.get("choices"):
+                      break
+              except (OSError, urllib.error.HTTPError):
+                  time.sleep(0.5)
+          else:
+              raise SystemExit("Bifrost DNS-rebinding endpoint did not become healthy")
+          PY
+
+      - name: Run DNS rebinding runtime gate
+        env:
+          BIFROST_EVAL_BIFROST_BASE_URL: http://127.0.0.1:18080/v1
+          BIFROST_EVAL_BIFROST_NATIVE_OPENAI_MODEL: openai/fixture-model
+          BIFROST_EVAL_SSRF_REBINDING_URL: http://issue859-rebind.test:18001/redirect-to-rebound-host
+          BIFROST_EVAL_REBINDING_DNS_CONTROL_URL: http://127.0.0.1:18002
+          BIFROST_EVAL_SSRF_SENTINEL_CONTROL_URL: http://127.0.0.1:18001/control
+        run: pytest -q tests/integration/platform/test_bifrost_dns_rebinding.py -m integration
+
+      - name: Record DNS rebinding evidence
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          python - <<'PY'
+          import json
+          import pathlib
+          import urllib.request
+
+          def get(url: str) -> dict[str, object]:
+              with urllib.request.urlopen(url, timeout=3) as response:
+                  payload = json.load(response)
+              if not isinstance(payload, dict):
+                  raise SystemExit(f"unexpected JSON payload from {url}")
+              return payload
+
+          dns = get("http://127.0.0.1:18002/stats")
+          sentinel = get("http://127.0.0.1:18001/control/stats")
+          evidence = {
+              "bifrost_version": "v2.1.1",
+              "network": "isolated Docker bridge 203.0.113.0/24",
+              "hostname": "issue859-rebind.test",
+              "entry_url": "http://issue859-rebind.test:18001/redirect-to-rebound-host",
+              "redirect_url": "http://issue859-rebind.test:18003/ssrf-sentinel.txt",
+              "first_dns_answer": "203.0.113.10",
+              "rebound_dns_answer": "127.0.0.1",
+              "dns": dns,
+              "sentinel": sentinel,
+              "expected_contract": (
+                  "public first dial reaches controlled redirect; redirect forces a new dial; "
+                  "new dial re-resolves and blocks rebound loopback before connection"
+              ),
+          }
+          pathlib.Path("artifacts/issue-859-dns-rebinding-runtime.json").write_text(
+              json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload DNS rebinding evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-859-dns-rebinding-runtime
+          path: artifacts/issue-859-dns-rebinding-runtime.json
+          if-no-files-found: warn
+
+      - name: Show diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "--- rebinding DNS ---"
+          docker logs issue859-rebinding-dns || true
+          echo "--- sentinel ---"
+          docker logs issue859-rebinding-sentinel || true
+          echo "--- upstream mock ---"
+          docker logs issue859-rebinding-mock || true
+          echo "--- Bifrost ---"
+          docker logs issue859-bifrost-rebinding || true
+          echo "--- Bifrost resolv.conf ---"
+          docker exec issue859-bifrost-rebinding cat /etc/resolv.conf || true
+          echo "--- network ---"
+          docker network inspect issue859-rebinding-net || true
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f \
+            issue859-bifrost-rebinding \
+            issue859-rebinding-dns \
+            issue859-rebinding-sentinel \
+            issue859-rebinding-mock || true
+          docker network rm issue859-rebinding-net || true
