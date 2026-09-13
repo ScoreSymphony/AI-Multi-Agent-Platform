@@ -189,6 +189,12 @@ class SqliteKernelRepository(EventRepository):
                     ErrorCode.CONFLICT,
                     f"stale stream revision for {stream_id}: "
                     f"expected {expected_revision}, actual {actual_revision}",
+                    retryable=True,
+                    details={
+                        "reason": "stale_stream_revision",
+                        "expected_revision": expected_revision,
+                        "actual_revision": actual_revision,
+                    },
                 )
 
             for offset, event in enumerate(events, start=1):
