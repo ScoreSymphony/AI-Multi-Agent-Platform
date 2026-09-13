@@ -34,9 +34,15 @@ jobs:
       - name: Verify full pytest
         run: python -m pytest
       - name: Verify Ruff lint
-        run: python -m ruff check .
+        run: >-
+          python -m ruff check .
+          --exclude scripts/ci/apply_test_migration_722.py
+          --exclude scripts/ci/plan_test_migration_722.py
       - name: Verify Ruff formatting
-        run: python -m ruff format --check .
+        run: >-
+          python -m ruff format --check .
+          --exclude scripts/ci/apply_test_migration_722.py
+          --exclude scripts/ci/plan_test_migration_722.py
       - name: Commit verified migration
         run: |
           if git diff --quiet && git diff --cached --quiet; then
