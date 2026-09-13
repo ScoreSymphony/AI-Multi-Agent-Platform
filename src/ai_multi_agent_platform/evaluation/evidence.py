@@ -5,8 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from math import isfinite
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
+from ai_multi_agent_platform.accounting.async_service import (
+    AsyncAccountingService,
+    runtime_accounting_service,
+)
 from ai_multi_agent_platform.accounting.models import UsageQuery, UsageRecord, UsageScope
 from ai_multi_agent_platform.accounting.service import (
     AccountingService,
@@ -51,6 +55,36 @@ class EvaluationEvidenceProvider(Protocol):
     def collect(self, *, task_id: str, run_id: str) -> EvaluationEvidence: ...
 
 
+@runtime_checkable
+class AsyncEvaluationEvidenceProvider(Protocol):
+    """Optional awaitable evidence projection for providers with blocking runtime backends."""
+
+    async def async_collect(self, *, task_id: str, run_id: str) -> EvaluationEvidence: ...
+
+
+def _merge_evidence(evidence_items: tuple[EvaluationEvidence, ...]) -> EvaluationEvidence:
+    data: dict[str, JsonValue] = {}
+    metrics: dict[str, float] = {}
+    refs: list[str] = []
+    for evidence in evidence_items:
+        data_collision = set(data).intersection(evidence.data)
+        if data_collision:
+            names = ", ".join(sorted(data_collision))
+            raise ValueError(f"evaluation evidence data keys collide: {names}")
+        metric_collision = set(metrics).intersection(evidence.metrics)
+        if metric_collision:
+            names = ", ".join(sorted(metric_collision))
+            raise ValueError(f"evaluation evidence metric keys collide: {names}")
+        data.update(evidence.data)
+        metrics.update(evidence.metrics)
+        refs.extend(evidence.telemetry_refs)
+    return EvaluationEvidence(
+        data=data,
+        metrics=metrics,
+        telemetry_refs=_unique(tuple(refs)),
+    )
+
+
 class CompositeEvaluationEvidenceProvider:
     """Compose evidence providers without silently overwriting one another."""
 
@@ -58,27 +92,38 @@ class CompositeEvaluationEvidenceProvider:
         self._providers = providers
 
     def collect(self, *, task_id: str, run_id: str) -> EvaluationEvidence:
-        data: dict[str, JsonValue] = {}
-        metrics: dict[str, float] = {}
-        refs: list[str] = []
-        for provider in self._providers:
-            evidence = provider.collect(task_id=task_id, run_id=run_id)
-            data_collision = set(data).intersection(evidence.data)
-            if data_collision:
-                names = ", ".join(sorted(data_collision))
-                raise ValueError(f"evaluation evidence data keys collide: {names}")
-            metric_collision = set(metrics).intersection(evidence.metrics)
-            if metric_collision:
-                names = ", ".join(sorted(metric_collision))
-                raise ValueError(f"evaluation evidence metric keys collide: {names}")
-            data.update(evidence.data)
-            metrics.update(evidence.metrics)
-            refs.extend(evidence.telemetry_refs)
-        return EvaluationEvidence(
-            data=data,
-            metrics=metrics,
-            telemetry_refs=_unique(tuple(refs)),
+        return _merge_evidence(
+            tuple(provider.collect(task_id=task_id, run_id=run_id) for provider in self._providers)
         )
+
+    async def async_collect(self, *, task_id: str, run_id: str) -> EvaluationEvidence:
+        evidence_items: list[EvaluationEvidence] = []
+        for provider in self._providers:
+            if isinstance(provider, AsyncEvaluationEvidenceProvider):
+                evidence = await provider.async_collect(task_id=task_id, run_id=run_id)
+            else:
+                evidence = provider.collect(task_id=task_id, run_id=run_id)
+            evidence_items.append(evidence)
+        return _merge_evidence(tuple(evidence_items))
+
+
+def _merge_accounting_records(
+    run_records: tuple[UsageRecord, ...],
+    task_records: tuple[UsageRecord, ...],
+    *,
+    task_id: str,
+    run_id: str,
+) -> tuple[UsageRecord, ...]:
+    by_id: dict[str, UsageRecord] = {}
+    for record in run_records:
+        if record.scope.task_id is not None and record.scope.task_id != task_id:
+            continue
+        by_id[record.id] = record
+    for record in task_records:
+        if record.scope.run_id not in {None, run_id}:
+            continue
+        by_id[record.id] = record
+    return tuple(sorted(by_id.values(), key=lambda item: (item.timestamp, item.id)))
 
 
 def _accounting_records(
@@ -89,16 +134,26 @@ def _accounting_records(
 ) -> tuple[UsageRecord, ...]:
     """Resolve all usage attributable to the exact run plus task-only measurements."""
 
-    by_id: dict[str, UsageRecord] = {}
-    for record in accounting.query(UsageQuery(scope=UsageScope(run_id=run_id))):
-        if record.scope.task_id is not None and record.scope.task_id != task_id:
-            continue
-        by_id[record.id] = record
-    for record in accounting.query(UsageQuery(scope=UsageScope(task_id=task_id))):
-        if record.scope.run_id not in {None, run_id}:
-            continue
-        by_id[record.id] = record
-    return tuple(sorted(by_id.values(), key=lambda item: (item.timestamp, item.id)))
+    return _merge_accounting_records(
+        accounting.query(UsageQuery(scope=UsageScope(run_id=run_id))),
+        accounting.query(UsageQuery(scope=UsageScope(task_id=task_id))),
+        task_id=task_id,
+        run_id=run_id,
+    )
+
+
+async def _async_accounting_records(
+    accounting: AsyncAccountingService,
+    *,
+    task_id: str,
+    run_id: str,
+) -> tuple[UsageRecord, ...]:
+    return _merge_accounting_records(
+        await accounting.query(UsageQuery(scope=UsageScope(run_id=run_id))),
+        await accounting.query(UsageQuery(scope=UsageScope(task_id=task_id))),
+        task_id=task_id,
+        run_id=run_id,
+    )
 
 
 def _usage_record_payload(record: UsageRecord) -> dict[str, JsonValue]:
@@ -116,55 +171,71 @@ def _usage_record_payload(record: UsageRecord) -> dict[str, JsonValue]:
     }
 
 
+def _accounting_evidence(records: tuple[UsageRecord, ...]) -> EvaluationEvidence:
+    grouped: dict[tuple[str, str], list[UsageRecord]] = {}
+    for record in records:
+        grouped.setdefault((record.metric_type, record.unit), []).append(record)
+
+    metrics: dict[str, float] = {}
+    aggregates: list[JsonValue] = []
+    for metric_type, unit in sorted(grouped):
+        group = tuple(grouped[(metric_type, unit)])
+        aggregate = aggregate_usage_records(
+            group,
+            metric_type=metric_type,
+            unit=unit,
+        )
+        metric_name = f"accounting:{metric_type}:{unit}"
+        if aggregate.total is not None:
+            metrics[metric_name] = aggregate.total
+        aggregates.append(
+            {
+                "metric_name": metric_name,
+                "metric_type": metric_type,
+                "unit": unit,
+                "total": aggregate.total,
+                "record_count": aggregate.record_count,
+                "unavailable_count": aggregate.unavailable_count,
+                "aggregation_mode": aggregate.aggregation_mode.value,
+                "quality_counts": {
+                    quality.value: count for quality, count in aggregate.quality_counts.items()
+                },
+            }
+        )
+
+    return EvaluationEvidence(
+        data={
+            "accounting_evidence": {
+                "records": [_usage_record_payload(record) for record in records],
+                "aggregates": aggregates,
+            }
+        },
+        metrics=metrics,
+        telemetry_refs=tuple(f"accounting:usage:{record.id}" for record in records),
+    )
+
+
 class AccountingEvaluationEvidenceProvider:
     """Project canonical #76 UsageRecord evidence without fabricating missing metrics."""
 
     def __init__(self, accounting: AccountingService) -> None:
         self._accounting = accounting
+        self._runtime_accounting = runtime_accounting_service(accounting)
 
     def collect(self, *, task_id: str, run_id: str) -> EvaluationEvidence:
-        records = _accounting_records(self._accounting, task_id=task_id, run_id=run_id)
-        grouped: dict[tuple[str, str], list[UsageRecord]] = {}
-        for record in records:
-            grouped.setdefault((record.metric_type, record.unit), []).append(record)
+        """Synchronous setup/offline/test compatibility seam."""
 
-        metrics: dict[str, float] = {}
-        aggregates: list[JsonValue] = []
-        for metric_type, unit in sorted(grouped):
-            group = tuple(grouped[(metric_type, unit)])
-            aggregate = aggregate_usage_records(
-                group,
-                metric_type=metric_type,
-                unit=unit,
-            )
-            metric_name = f"accounting:{metric_type}:{unit}"
-            if aggregate.total is not None:
-                metrics[metric_name] = aggregate.total
-            aggregates.append(
-                {
-                    "metric_name": metric_name,
-                    "metric_type": metric_type,
-                    "unit": unit,
-                    "total": aggregate.total,
-                    "record_count": aggregate.record_count,
-                    "unavailable_count": aggregate.unavailable_count,
-                    "aggregation_mode": aggregate.aggregation_mode.value,
-                    "quality_counts": {
-                        quality.value: count for quality, count in aggregate.quality_counts.items()
-                    },
-                }
-            )
-
-        return EvaluationEvidence(
-            data={
-                "accounting_evidence": {
-                    "records": [_usage_record_payload(record) for record in records],
-                    "aggregates": aggregates,
-                }
-            },
-            metrics=metrics,
-            telemetry_refs=tuple(f"accounting:usage:{record.id}" for record in records),
+        return _accounting_evidence(
+            _accounting_records(self._accounting, task_id=task_id, run_id=run_id)
         )
+
+    async def async_collect(self, *, task_id: str, run_id: str) -> EvaluationEvidence:
+        records = await _async_accounting_records(
+            self._runtime_accounting,
+            task_id=task_id,
+            run_id=run_id,
+        )
+        return _accounting_evidence(records)
 
 
 LogReferenceResolver = Callable[[StructuredLog], str | None]
@@ -315,10 +386,16 @@ class EvidenceEnrichingCaseExecutor:
             raise ValueError(
                 "evidence-enriched evaluation execution requires canonical task_id and run_id"
             )
-        evidence = self._evidence_provider.collect(
-            task_id=observation.task_id,
-            run_id=observation.run_id,
-        )
+        if isinstance(self._evidence_provider, AsyncEvaluationEvidenceProvider):
+            evidence = await self._evidence_provider.async_collect(
+                task_id=observation.task_id,
+                run_id=observation.run_id,
+            )
+        else:
+            evidence = self._evidence_provider.collect(
+                task_id=observation.task_id,
+                run_id=observation.run_id,
+            )
         data_collision = set(observation.data).intersection(evidence.data)
         if data_collision:
             names = ", ".join(sorted(data_collision))
@@ -337,6 +414,7 @@ class EvidenceEnrichingCaseExecutor:
 
 __all__ = [
     "AccountingEvaluationEvidenceProvider",
+    "AsyncEvaluationEvidenceProvider",
     "CompositeEvaluationEvidenceProvider",
     "EvaluationEvidence",
     "EvaluationEvidenceProvider",

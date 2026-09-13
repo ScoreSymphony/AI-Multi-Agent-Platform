@@ -10,6 +10,7 @@ from uuid import NAMESPACE_URL, uuid5
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider, FileState
 
+from .async_service import AsyncAccountingService, runtime_accounting_service
 from .models import (
     AggregationMode,
     MeasurementQuality,
@@ -20,6 +21,7 @@ from .models import (
 from .service import AccountingService
 
 FILE_STORAGE_METRIC = "storage.file.bytes.current"
+AccountingRuntime = AccountingService | AsyncAccountingService
 
 
 class FileStorageAccounting:
@@ -30,8 +32,8 @@ class FileStorageAccounting:
     logical Workspace/Snapshot footprint metrics instead of duplicating physical storage.
     """
 
-    def __init__(self, accounting: AccountingService, provider: FileProvider) -> None:
-        self._accounting = accounting
+    def __init__(self, accounting: AccountingRuntime, provider: FileProvider) -> None:
+        self._accounting = runtime_accounting_service(accounting)
         self._provider = provider
 
     async def reconcile(
@@ -50,7 +52,7 @@ class FileStorageAccounting:
         try:
             files = await self._provider.list_files(context)
         except ContractError:
-            self._accounting.record_unavailable(
+            await self._accounting.record_unavailable(
                 metric_type=FILE_STORAGE_METRIC,
                 unit="bytes",
                 source="file-provider",
@@ -103,7 +105,7 @@ class FileStorageAccounting:
                 "storage_semantics": "physical_project_bytes",
             },
         )
-        self._accounting.record(usage)
+        await self._accounting.record(usage)
         return usage
 
 
