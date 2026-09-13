@@ -6,10 +6,7 @@ import sys
 from pathlib import Path
 
 _SCRIPT = (
-    Path(__file__).resolve().parents[3]
-    / "scripts"
-    / "ci"
-    / "issue562_real_two_vps_conformance.py"
+    Path(__file__).resolve().parents[3] / "scripts" / "ci" / "issue562_real_two_vps_conformance.py"
 )
 
 
@@ -50,6 +47,7 @@ def _probe(endpoint: str, scope: str) -> dict[str, object]:
 
 
 def _valid_issue562_report() -> dict[str, object]:
+    worker_id = "worker_00000000-0000-4000-8000-000000000562"
     probes = [
         _probe(endpoint, scope)
         for endpoint in ("worker-protocol", "message-broker")
@@ -65,14 +63,12 @@ def _valid_issue562_report() -> dict[str, object]:
         "worker_host_label": "host-b",
         "canonical": {
             "node_id": "node_00000000-0000-4000-8000-000000000562",
-            "worker_id": "worker_00000000-0000-4000-8000-000000000562",
+            "worker_id": worker_id,
             "task_id": "task_00000000-0000-4000-8000-000000000562",
             "run_id": "run_00000000-0000-4000-8000-000000000562",
             "worker_job_id": "worker_job_00000000-0000-4000-8000-000000000562",
             "post_recovery_run_id": "run_00000000-0000-4000-8000-000000000563",
-            "post_recovery_worker_job_id": (
-                "worker_job_00000000-0000-4000-8000-000000000563"
-            ),
+            "post_recovery_worker_job_id": ("worker_job_00000000-0000-4000-8000-000000000563"),
             "post_restart_run_id": "run_00000000-0000-4000-8000-000000000564",
         },
         "advertised_capability_refs": ["execution:general"],
@@ -92,6 +88,11 @@ def _valid_issue562_report() -> dict[str, object]:
         "transport_evidence": {
             "status": "pass",
             "schema": "ai-multi-agent-platform/issue-388-two-host-transport/v1",
+            "worker_id": worker_id,
+            "authentication": "mtls",
+            "tls": True,
+            "artifact_refs": ["artifact_input", "artifact_output"],
+            "evidence_refs": ["evidence:issue388-two-host"],
         },
         "conformance": {
             "scenario_id": "E",
@@ -213,3 +214,47 @@ def test_profile_rejects_secret_bearing_or_non_sanitized_final_report(tmp_path: 
     scenario = report["scenarios"][0]
     assert scenario["status"] == "fail"
     assert "retained credential material" in scenario["stderr"]
+
+
+def test_profile_rejects_nested_secret_key_even_if_flag_claims_sanitized(tmp_path: Path) -> None:
+    payload = _valid_issue562_report()
+    payload["unexpected"] = {"token_value": "must-not-survive"}
+    evidence_path = tmp_path / "issue562.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+    report_path = tmp_path / "conformance.json"
+
+    completed = _run(
+        "--acceptance-evidence",
+        str(evidence_path),
+        "--json-report",
+        str(report_path),
+    )
+
+    assert completed.returncode == 1
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    scenario = report["scenarios"][0]
+    assert scenario["status"] == "fail"
+    assert "unsafe evidence key is not allowed" in scenario["stderr"]
+
+
+def test_profile_rejects_forged_optional_transport_evidence(tmp_path: Path) -> None:
+    payload = _valid_issue562_report()
+    transport = payload["transport_evidence"]
+    assert isinstance(transport, dict)
+    transport["tls"] = False
+    evidence_path = tmp_path / "issue562.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+    report_path = tmp_path / "conformance.json"
+
+    completed = _run(
+        "--acceptance-evidence",
+        str(evidence_path),
+        "--json-report",
+        str(report_path),
+    )
+
+    assert completed.returncode == 1
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    scenario = report["scenarios"][0]
+    assert scenario["status"] == "fail"
+    assert "encrypted-transport proof" in scenario["stderr"]
