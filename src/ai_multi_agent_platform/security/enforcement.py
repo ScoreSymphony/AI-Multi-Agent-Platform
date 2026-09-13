@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
@@ -94,51 +95,66 @@ class AuthorizationGate:
             approval_id=approval_id,
         )
         decision = normalize_authorization_decision(await self.provider.authorize(request))
-        resolved_approval: ApprovalRecord | None = None
 
         if decision.outcome is AuthorizationOutcome.REQUIRE_APPROVAL:
-            resolved_approval = await self.runtime_approvals.resolve_valid_for(
-                action,
-                approval_id=approval_id,
-            )
-
-            if resolved_approval is not None:
-                allowed = AuthorizationDecision(
-                    AuthorizationOutcome.ALLOW,
-                    reason="exact action covered by approved approval",
-                    policy_id=decision.policy_id,
-                    constraints=decision.constraints,
-                    audit_metadata=decision.audit_metadata,
-                    adapter_metadata=decision.adapter_metadata,
+            return await _await_security_completion(
+                self._complete_required_approval_decision(
+                    action,
+                    decision,
+                    approval_id=approval_id,
+                    risk=risk,
                 )
-                await self._audit(action, allowed, resolved_approval.approval_id)
-                return allowed
-
-            pending, created = await self.runtime_approvals.ensure_pending(
-                action,
-                reason=decision.reason or "authorization policy requires approval",
-                policy_id=decision.policy_id or "authorization:unspecified",
-                risk=risk,
             )
-            if created:
-                await self._emit_approval("required", pending)
-            gated = AuthorizationDecision(
-                AuthorizationOutcome.REQUIRE_APPROVAL,
-                reason=decision.reason,
-                policy_id=decision.policy_id,
-                constraints={
-                    **dict(decision.constraints),
-                    "approval_id": pending.approval_id,
-                    "requested_action_digest": digest,
-                },
-                audit_metadata=decision.audit_metadata,
-                adapter_metadata=decision.adapter_metadata,
-            )
-            await self._audit(action, gated, pending.approval_id)
-            return gated
 
         await self._audit(action, decision, approval_id)
         return decision
+
+    async def _complete_required_approval_decision(
+        self,
+        action: ProposedAction,
+        decision: AuthorizationDecision,
+        *,
+        approval_id: str | None,
+        risk: RiskClassification,
+    ) -> AuthorizationDecision:
+        """Finish Approval persistence, attention event and audit as one cancellation boundary."""
+
+        resolved_approval = await self.runtime_approvals.resolve_valid_for(
+            action,
+            approval_id=approval_id,
+        )
+        if resolved_approval is not None:
+            allowed = AuthorizationDecision(
+                AuthorizationOutcome.ALLOW,
+                reason="exact action covered by approved approval",
+                policy_id=decision.policy_id,
+                constraints=decision.constraints,
+                audit_metadata=decision.audit_metadata,
+                adapter_metadata=decision.adapter_metadata,
+            )
+            await self._audit(action, allowed, resolved_approval.approval_id)
+            return allowed
+
+        pending, _ = await self._ensure_pending_and_emit(
+            action,
+            reason=decision.reason or "authorization policy requires approval",
+            policy_id=decision.policy_id or "authorization:unspecified",
+            risk=risk,
+        )
+        gated = AuthorizationDecision(
+            AuthorizationOutcome.REQUIRE_APPROVAL,
+            reason=decision.reason,
+            policy_id=decision.policy_id,
+            constraints={
+                **dict(decision.constraints),
+                "approval_id": pending.approval_id,
+                "requested_action_digest": action.digest,
+            },
+            audit_metadata=decision.audit_metadata,
+            adapter_metadata=decision.adapter_metadata,
+        )
+        await self._audit(action, gated, pending.approval_id)
+        return gated
 
     async def enforce(
         self,
@@ -217,14 +233,16 @@ class AuthorizationGate:
                     "approval_id": approval_id,
                 },
             )
-        updated = await self.runtime_approvals.decide_authorized(
-            approval_id,
-            approver_ref=approver.actor_id,
-            approve=approve,
-            comment=comment,
+        return await _await_security_completion(
+            self._mutate_approval_and_emit(
+                self.runtime_approvals.decide_authorized(
+                    approval_id,
+                    approver_ref=approver.actor_id,
+                    approve=approve,
+                    comment=comment,
+                )
+            )
         )
-        await self._emit_approval("resolved", updated)
-        return updated
 
     async def cancel_approval(
         self,
@@ -276,12 +294,14 @@ class AuthorizationGate:
                 provider_id=self.provider.descriptor.provider_id,
                 details={"approval_id": approval_id},
             )
-        updated = await self.runtime_approvals.cancel_authorized(
-            approval_id,
-            actor_ref=actor.actor_id,
+        return await _await_security_completion(
+            self._mutate_approval_and_emit(
+                self.runtime_approvals.cancel_authorized(
+                    approval_id,
+                    actor_ref=actor.actor_id,
+                )
+            )
         )
-        await self._emit_approval("resolved", updated)
-        return updated
 
     def ensure_pending_approval(
         self,
@@ -310,6 +330,24 @@ class AuthorizationGate:
     ) -> ApprovalRecord:
         """Create a pending Approval and publish its best-effort required-attention event."""
 
+        record, _ = await _await_security_completion(
+            self._ensure_pending_and_emit(
+                action,
+                reason=reason,
+                policy_id=policy_id,
+                risk=risk,
+            )
+        )
+        return record
+
+    async def _ensure_pending_and_emit(
+        self,
+        action: ProposedAction,
+        *,
+        reason: str,
+        policy_id: str,
+        risk: RiskClassification,
+    ) -> tuple[ApprovalRecord, bool]:
         record, created = await self.runtime_approvals.ensure_pending(
             action,
             reason=reason,
@@ -318,7 +356,15 @@ class AuthorizationGate:
         )
         if created:
             await self._emit_approval("required", record)
-        return record
+        return record, created
+
+    async def _mutate_approval_and_emit(
+        self,
+        mutation: Awaitable[ApprovalRecord],
+    ) -> ApprovalRecord:
+        updated = await mutation
+        await self._emit_approval("resolved", updated)
+        return updated
 
     async def _emit_approval(self, event: str, record: ApprovalRecord) -> None:
         for sink in tuple(self._approval_event_sinks):
@@ -357,6 +403,24 @@ class AuthorizationGate:
         self._audit_records.append(record)
         if self._runtime_audit_sink is not None:
             await self._runtime_audit_sink.append(record)
+
+
+async def _await_security_completion[T](operation: Awaitable[T]) -> T:
+    """Defer caller cancellation until a security mutation's required side effects finish."""
+
+    task = asyncio.ensure_future(operation)
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
+        failure = task.exception()
+        if failure is not None:
+            raise failure from None
+        raise
 
 
 def _approval_operation(record: ApprovalRecord, supplied: OperationContext) -> OperationContext:
