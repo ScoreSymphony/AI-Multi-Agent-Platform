@@ -161,12 +161,15 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `high-availability` | Control Plane leadership/fencing/failover profile | `distributed` | Optional / Advanced | Experimental |
 | `learning` | governed learning/improvement resources and workflows | `learning` | Optional / Advanced | Experimental |
 | `repository-intelligence-enhanced-providers` | named enhanced repository-intelligence provider integrations | `repositories` | Optional / Advanced | Experimental |
+| `mcp-tasks-interoperability` | opt-in `MCPServerConfig(enable_tasks=True)` SEP-2663 task-aware MCP adapter profile | `capabilities`, `repository` | Platform Extension | Experimental |
 
 The registry carries the compatibility note, canonical documentation links and user-signaling expectation for each entry. Experimental entries additionally declare `signaling_docs`: concrete public documentation entrypoints that must visibly state the Experimental maturity. New public capabilities should be added at the same granularity.
 
 Repository Intelligence is deliberately split across role boundaries per ADR 0011: the provider-neutral layer and deterministic local baseline are Core, while named enhanced providers remain optional integrations. Classifying a provider as Experimental does not downgrade the canonical baseline.
 
 The same independence applies to other advanced capabilities: Research, Decision/Compensation, Application Distribution and Backup/Restore are Optional / Advanced because the reference runtime does not require those advanced workflows for ordinary execution, but their current public contracts are supported as Beta rather than being labelled Experimental merely because they are advanced. Governed Learning, HA and named enhanced repository-intelligence providers retain explicit Experimental status where current compatibility commitments are intentionally weaker.
+
+The MCP Tasks profile is a separate Experimental compatibility boundary layered under the Core Capabilities/Tools authority. Its provider-private task identifiers and statuses remain adapter state and never replace canonical Task, Run or CapabilityInvocation identity/lifecycle authority.
 
 ## API, schema and DTO policy
 

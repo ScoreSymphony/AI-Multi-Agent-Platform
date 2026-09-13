@@ -401,3 +401,15 @@ docs = ["docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md
 signaling_docs = ["docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md"]
 compatibility = "Named enhanced providers remain optional and Experimental; provider-specific integrations may change incompatibly in non-patch releases and must not redefine the canonical repository-intelligence baseline."
 user_signaling = "documentation_and_ui_contextual"
+
+[[feature]]
+id = "mcp-tasks-interoperability"
+name = "MCP Tasks (SEP-2663) interoperability"
+owners = ["capabilities", "repository"]
+role = "platform_extension"
+stability = "experimental"
+public_surfaces = ["MCPServerConfig(enable_tasks=True) SEP-2663 task-aware MCP adapter profile"]
+docs = ["docs/integrations/MCP_TASKS_SEP_2663.md"]
+signaling_docs = ["docs/integrations/MCP_TASKS_SEP_2663.md"]
+compatibility = "Experimental provider interoperability profile pinned to MCP 2026-07-28/SEP-2663; incompatible changes may occur in non-patch releases and external task identity/status never becomes canonical lifecycle authority."
+user_signaling = "documentation_and_ui_contextual"
