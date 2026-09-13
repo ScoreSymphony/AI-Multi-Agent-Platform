@@ -125,7 +125,7 @@ owner = "platform/execution"
 local_first = true
 mandatory_paid_service = false
 unique_value = "Allow-listed deterministic local execution baseline."
-overlap = "Deprecated Forge and experimental Agent-Sandbox, OpenShell and SWE-ReX implementations target the same contract with distinct external runtime behavior."
+overlap = "Experimental Agent-Sandbox, OpenShell and SWE-ReX implementations target the same contract with distinct external runtime behavior."
 test_burden = "low"
 doc_burden = "low"
 security_surface = "allow-listed actions and workspace path enforcement"
@@ -135,28 +135,6 @@ usage = "Single-node, Worker reference and release vertical paths."
 evidence = ["docs/PLATFORM_CONFORMANCE.md", "tests/unit/security/test_security_primitives.py", "tests/integration/security/test_executor_confinement.py"]
 docs = ["docs/runtime/EXECUTION.md", "docs/PLATFORM_CONFORMANCE.md"]
 migration = "n/a"
-
-[[implementation]]
-id = "executor.forge"
-boundary = "executor"
-kind = "adapter"
-symbol = "ForgeExecutor"
-source = "src/ai_multi_agent_platform/adapters/forge.py"
-tier = "deprecated"
-owner = "platform/adapters"
-local_first = false
-mandatory_paid_service = false
-unique_value = "Temporary execution-only Forge sidecar compatibility without Forge lifecycle authority."
-overlap = "ReferenceExecutor is the platform baseline; the proven Forge sidecar profile does not establish a non-null Forge CLI capability advantage."
-test_burden = "high"
-doc_burden = "high"
-security_surface = "sidecar network boundary, workspace mapping and result translation"
-upstream_health = "reviewed/pinned integration surface; retained only through the #991 deprecation window"
-compatibility = "Deprecated compatibility profile. Existing sidecar coverage is retained only until #991 removal gates are satisfied."
-usage = "Compatibility/regression evidence only; do not introduce new Forge-specific dependencies."
-evidence = ["tests/contract/execution/test_forge_executor.py", "tests/integration/forge/test_sidecar.py", "docs/integrations/FORGE_RETENTION_DECISION.md"]
-docs = ["docs/integrations/FORGE_ADAPTER.md", "docs/integrations/FORGE_RETENTION_DECISION.md", "docs/PLATFORM_CONFORMANCE.md"]
-migration = "Switch to ReferenceExecutor or another independently supported Executor while preserving canonical identities; remove Forge after the #991 gates pass."
 
 [[implementation]]
 id = "executor.agent-sandbox"

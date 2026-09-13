@@ -59,7 +59,7 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | D-model — local model | loopback OpenAI-compatible local/self-hosted ModelProvider fixture | #10 / #250 / #252 |
 | D-capability — capability boundary | capability discovery/invocation contract suite | #12 |
 | D-vertical — local model + distributed capability | authenticated AgentRun -> real loopback OpenAI-compatible model tool call -> pinned `tool.echo@1.0` -> canonical CapabilityInvoker/ToolInvocation -> DistributedExecutorEchoProvider -> ReferenceExecutor -> exact Worker/Node while preserving the root Run and Workspace/Snapshot binding | #46 / #10 / #12 / #7 / #14 |
-| MA — reference multi-agent baseline | maintained Hermes/Forge-free single-node #889 golden path: canonical multi-Step Plan with parallel roots/fan-in -> exact Agent revisions -> Handoffs -> ContextBundles -> Result -> exact Verification -> accepted Task, with persisted provenance across every boundary | #889 / #46 |
+| MA — reference multi-agent baseline | maintained external-orchestrator/executor-free single-node #889 golden path: canonical multi-Step Plan with parallel roots/fan-in -> exact Agent revisions -> Handoffs -> ContextBundles -> Result -> exact Verification -> accepted Task, with persisted provenance across every boundary | #889 / #46 |
 | F — approval gate | exact-action approval and changed-payload rejection | #15 |
 | H — restart/recovery | crash after backend accept -> process reconstruction -> same running canonical Run with no duplicate dispatch, plus queued/pre-accept/orphaned recovery classification | #46 / canonical kernel recovery |
 | J-cli — client consistency | CLI reads shared canonical Task/Run/Result fixtures through versioned Control Plane routes | #17 / #46 |
@@ -67,21 +67,22 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | U — runtime verification | Verification gates completion, binds exact revisions, works deterministically without an LLM, enforces reviewer independence and keeps repair loops bounded and auditable | #86 |
 | ARCH — architecture invariants | canonical/backend isolation, AST-resolved northbound Python client backend isolation, backend-private public-type guard and platform-owned Task/Run identity preserved through distributed restart/failover | #46 |
 
-The fast tier is intentionally local/reference-only and deterministic. It requires no paid AI/API service and no Hermes, Forge, LiteLLM, Registry, remote distributed deployment or HA service. D-vertical does instantiate an in-process local Worker/Node fixture so the canonical Executor/Worker boundary is continuously exercised without claiming the optional distributed deployment profile.
+The fast tier is intentionally local/reference-only and deterministic. It requires no paid AI/API service and no Hermes, removed Forge runtime, LiteLLM, Registry, remote distributed deployment or HA service. D-vertical does instantiate an in-process local Worker/Node fixture so the canonical Executor/Worker boundary is continuously exercised without claiming the optional distributed deployment profile.
 
-`MA` is the maintained #46 acceptance registration for the #889 reference multi-agent runtime rather than a second demo implementation. Its conformance command executes `test_reference_multi_agent_golden_path_persists_complete_canonical_provenance` directly. The test constructs the ordinary `build_single_node_deployment` path with local `FakeModelProvider` execution and the reference Context orchestrator, then proves persisted Task -> Plan -> Step -> Run -> AgentRun -> Handoff -> ContextBundle -> Result -> Verification -> accepted Task lineage. Hermes and Forge stay disabled and are not imported as hidden fallback owners.
+`MA` is the maintained #46 acceptance registration for the #889 reference multi-agent runtime rather than a second demo implementation. Its conformance command executes `test_reference_multi_agent_golden_path_persists_complete_canonical_provenance` directly. The test constructs the ordinary `build_single_node_deployment` path with local `FakeModelProvider` execution and the reference Context orchestrator, then proves persisted Task -> Plan -> Step -> Run -> AgentRun -> Handoff -> ContextBundle -> Result -> Verification -> accepted Task lineage. Hermes stays disabled and the removed Forge runtime is absent rather than acting as a hidden fallback owner.
 
 ### `integration`
 
-The integration tier includes the complete fast tier and explicitly records optional capability profiles for:
+The integration tier includes the complete fast tier and explicitly records maintained optional capability profiles for:
 
 - B — Hermes orchestration;
-- C — Forge execution;
 - E — distributed Worker/Node;
 - S — optional Registry;
 - X — optional Control Plane HA.
 
-These entries remain `disabled` unless explicitly enabled. Enabling B or C uses a fail-closed external-profile runner: missing Hermes source/revision configuration or a missing Forge sidecar environment is a failed compatibility run, not a skipped passing test.
+These entries remain `disabled` unless explicitly enabled. Enabling B uses a fail-closed external-profile runner: missing Hermes source/revision configuration is a failed compatibility run, not a skipped passing test.
+
+Scenario ID C historically represented Forge execution. After #991 removed the first-party Forge adapter, HTTP transport and sidecar compatibility lane, C has no maintained acceptance command and is **not a current compatibility claim**. If an older caller explicitly enables C, activation fails closed as `not_implemented`/`incomplete`; new deployment profiles must not enable it.
 
 ### `release`
 
@@ -123,7 +124,6 @@ The following optional scenarios have maintained executable #46 evidence and can
 | Scenario | Representative evidence |
 | --- | --- |
 | B — Hermes | real pinned Hermes `/v1/runs` API compatibility test through the platform adapter |
-| C — Forge | real execution-only Forge Rust sidecar integration test |
 | E — Distributed Worker | authorization context + canonical terminal result identity + correlated safe distributed telemetry |
 | N — Notifications | authenticated recipient scope, Task success/failure plus Approval/Verification source linkage, deduplication and replay-safe projection |
 | Q — Templates | exact-source authorization, dependency/compatibility/secret blockers, guarded composite compensation, composed Single-Node integrations and composite revision stability: later published Template revisions do not alter an existing instance/reapply unless an upgrade revision is explicitly selected |
@@ -142,7 +142,7 @@ For R, the maintained public path goes through the versioned Control Plane comma
 
 For V, the enabled claim includes personal scope without a synthetic Organization, Organization/Team sharing and isolation, an explicit authorization check for requested cross-Organization sharing, immediate loss of future Membership-derived scope after suspension/removal, and unchanged historical Task ownership/Event actor provenance.
 
-B and C still require prepared external Hermes/Forge environments. Explicit activation remains fail-closed when those external preconditions are absent.
+B still requires a prepared external Hermes environment. Explicit activation remains fail-closed when that external precondition is absent. Forge/C is deliberately absent from the maintained evidence registry after #991.
 
 ## Compatibility semantics
 
@@ -161,7 +161,7 @@ Report compatibility values:
 - `incomplete` — no enabled scenario failed, but at least one required scenario has no passing acceptance result;
 - `not_claimed` — used at scenario level for disabled/unsupported/not-yet-implemented paths.
 
-A `compatible` report applies only to its explicit deployment profile and enabled scenario set. A compatible reference release does not imply Hermes, Forge, distributed Worker, Registry or HA compatibility. Conversely, enabling an optional profile changes that scenario to `required=true` in the report, so a failed or missing path cannot be hidden behind optionality.
+A `compatible` report applies only to its explicit deployment profile and enabled scenario set. A compatible reference release does not imply Hermes, the removed Forge runtime, distributed Worker, Registry or HA compatibility. Conversely, enabling an optional maintained profile changes that scenario to `required=true` in the report, so a failed or missing path cannot be hidden behind optionality.
 
 ## Evidence model
 
@@ -192,6 +192,8 @@ Scenarios may emit a structured runtime-evidence envelope after their maintained
 5. the real distributed lost-owner -> fence -> persisted restart -> alternate-Worker redispatch path must preserve the same platform-owned canonical Task/Run identity and correlation/causation context;
 6. optional backend packages such as LiteLLM/MCP/provider SDKs must not become mandatory platform runtime dependencies.
 
+The retained Forge names in these negative architecture guards are intentional: they prevent a removed vendor-specific runtime from leaking back into canonical layers and are not an active Forge dependency.
+
 The Python client-domain check complements the maintained Control Plane parity scenarios; the Web client remains covered by its own API-facing integration/acceptance evidence rather than by this Python import scanner. Control Plane HA identity remains owned by optional scenario X instead of being inferred from the focused distributed-runtime invariant.
 
 Additional #46 invariants should be added as they can be checked reliably without encoding brittle implementation details.
@@ -212,7 +214,7 @@ The repository treats conformance as three different cost/coverage tiers rather 
 
 Both release-based jobs execute `REL-BACKUP`, `REL-UPGRADE`, `REL-EVAL` and the complete `REL-VERTICAL` automatically because those checks are required members of the release profile rather than separately enabled options.
 
-Hermes and Forge retain their real upstream/sidecar setup in adapter-specific integration jobs; their conformance activation is valid only after those external preconditions are satisfied. The default reference jobs never install or require either runtime.
+Hermes retains its real upstream setup in an adapter-specific integration job; its conformance activation is valid only after those external preconditions are satisfied. The default reference jobs never install or require Hermes. The former Forge sidecar job and maintained Scenario C evidence were removed under #991.
 
 ## Relationship to #252
 
