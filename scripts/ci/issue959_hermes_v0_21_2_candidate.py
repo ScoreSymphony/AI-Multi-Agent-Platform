@@ -62,8 +62,12 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    # Platform-owned compatibility and real /v1/runs seam against the exact candidate.
-    platform_status = _run("tests/integration/upstreams/test_hermes_v0_21_2_candidate.py")
+    # Extend the accepted v0.21.1 adapter matrix with candidate-bound regressions,
+    # then exercise the exact candidate's real /v1/runs seam.
+    platform_status = _run(
+        "tests/regression/upstreams/test_hermes_v0_21_2.py",
+        "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py",
+    )
     if platform_status:
         return platform_status
 
