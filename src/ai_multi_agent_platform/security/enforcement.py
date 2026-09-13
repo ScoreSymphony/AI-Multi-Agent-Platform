@@ -22,7 +22,6 @@ from .async_persistence import (
     AsyncApprovalServiceAdapter,
     AsyncAuthorizationAuditSink,
     AsyncAuthorizationAuditSinkAdapter,
-    SecurityPersistenceOffload,
 )
 from .authorization import (
     ActorIdentity,
@@ -53,21 +52,19 @@ class AuthorizationGate:
     ) -> None:
         self.provider = provider
         self.approvals = approvals or ApprovalService()
-        needs_offload = runtime_approvals is None or (
-            runtime_audit_sink is None and audit_sink is not None
-        )
-        persistence_offload = SecurityPersistenceOffload() if needs_offload else None
-        self.runtime_approvals = runtime_approvals or AsyncApprovalServiceAdapter(
-            self.approvals,
-            offload=persistence_offload,
-        )
+        approval_adapter: AsyncApprovalServiceAdapter | None = None
+        if runtime_approvals is None:
+            approval_adapter = AsyncApprovalServiceAdapter(self.approvals)
+            self.runtime_approvals: AsyncApprovalService = approval_adapter
+        else:
+            self.runtime_approvals = runtime_approvals
         self._audit_sink = audit_sink
         self._runtime_audit_sink = runtime_audit_sink or (
             None
             if audit_sink is None
             else AsyncAuthorizationAuditSinkAdapter(
                 audit_sink,
-                offload=persistence_offload,
+                offload=None if approval_adapter is None else approval_adapter.offload,
             )
         )
         self._approval_event_sinks: list[ApprovalEventSink] = []
