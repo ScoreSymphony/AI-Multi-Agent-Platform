@@ -1,6 +1,6 @@
 """Current public Control Plane composition with canonical Conversations (#72).
 
-Conversation northbound ownership is registered explicitly.  The public façade keeps
+Conversation northbound ownership is registered explicitly. The public façade keeps
 only the cross-domain Task bridge and transport ergonomics that cannot be represented as
 plain resource/command registrations; it no longer composes Conversation behavior by
 stacking a second Control Plane superclass with Notifications.
@@ -55,13 +55,13 @@ from .conversation_streaming_http import (
 from .http import HTTPRequest, HTTPResponse, _header
 from .models import API_VERSION, APIException, RequestContext
 from .module_registry import install_control_plane_modules
-from .notifications_plugin_composition import (
+from .notifications_explicit_composition import (
     AuthenticatedControlPlaneHTTP as _NotificationAuthenticatedControlPlaneHTTP,
 )
-from .notifications_plugin_composition import ControlPlane as _NotificationControlPlane
-from .notifications_plugin_composition import ControlPlaneASGI as _NotificationControlPlaneASGI
-from .notifications_plugin_composition import ControlPlaneHTTP as _NotificationControlPlaneHTTP
-from .notifications_plugin_composition import build_openapi as _build_notification_openapi
+from .notifications_explicit_composition import ControlPlane as _NotificationControlPlane
+from .notifications_explicit_composition import ControlPlaneASGI as _NotificationControlPlaneASGI
+from .notifications_explicit_composition import ControlPlaneHTTP as _NotificationControlPlaneHTTP
+from .notifications_explicit_composition import build_openapi as _build_notification_openapi
 
 _ALL_CURRENT_CONVERSATION_COMMANDS = (
     *_ALL_CONVERSATION_COMMANDS,
