@@ -219,9 +219,7 @@ def test_failure_evidence_replans_to_new_revision_and_repairs_success(tmp_path: 
         assert replacement.proposal.plan_revision == initial.proposal.plan_revision + 1
         assert replacement.proposal.evidence_refs == (failed_run.run_id,)
         assert replacement.proposal.supersedes_proposal_id == initial.proposal.proposal_id
-        execute_draft = next(
-            step for step in replacement.proposal.steps if step.key == "execute"
-        )
+        execute_draft = next(step for step in replacement.proposal.steps if step.key == "execute")
         assert set(execute_draft.reuse_step_ids) == {research.id, approach.id}
         assert failed_step.id not in execute_draft.reuse_step_ids
 
