@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
-from ai_multi_agent_platform.control_plane.extensions import ControlPlane, ResourceService
+from ai_multi_agent_platform.control_plane.extensions import (
+    CommandHandler,
+    ControlPlane,
+    ControlPlaneModule,
+    ResourceService,
+)
 from ai_multi_agent_platform.control_plane.models import RequestContext
+from ai_multi_agent_platform.control_plane.module_registry import install_control_plane_modules
 
 from .control_plane import (
     RESEARCH_CLAIM_COLLECTION,
+    RESEARCH_COMMANDS,
     RESEARCH_EVIDENCE_COLLECTION,
     RESEARCH_ITEM_COLLECTION,
     RESEARCH_OBSERVATION_COLLECTION,
@@ -21,6 +28,8 @@ from .control_plane import (
 )
 from .models import Claim, EvidenceRecord, ResearchItem, SourceObservation, SourceRecord
 from .service import ResearchService
+
+RESEARCH_MODULE = "research"
 
 
 class ResearchItemSearchResourceService(ResearchItemResourceService):
@@ -166,21 +175,47 @@ def research_search_resource_services(
     }
 
 
+class _ResearchRegistrationCapture:
+    """Capture canonical Research handlers without installing its non-Search read views."""
+
+    def __init__(self) -> None:
+        self.commands: dict[str, CommandHandler] = {}
+
+    def register_resource_service(self, collection: str, service: ResourceService) -> None:
+        del collection, service
+
+    def register_command(self, command: str, handler: CommandHandler) -> None:
+        if command in self.commands:
+            raise RuntimeError(f"duplicate captured Research command: {command}")
+        self.commands[command] = handler
+
+
 def register_searchable_research_control_plane(
     control_plane: ControlPlane,
     research: ResearchService,
 ) -> None:
-    """Register canonical Research commands plus Search-aware read projections.
+    """Install one explicitly owned Research module with Search-aware read projections.
 
-    The Search-aware services replace only the registered ResourceService objects. All
-    mutations continue to use the canonical command handlers from
-    ``register_research_control_plane`` and therefore retain the existing authorization,
-    idempotency and evidence-integrity semantics.
+    The canonical Research registration helper remains the source of command handlers,
+    while its ordinary read services are captured rather than installed. This avoids the
+    pre-#982 pattern of registering a collection and then silently replacing it with a
+    Search-aware service.
     """
 
-    register_research_control_plane(control_plane, research)
-    for collection, service in research_search_resource_services(research).items():
-        control_plane.register_resource_service(collection, service)
+    capture = _ResearchRegistrationCapture()
+    register_research_control_plane(control_plane=cast(ControlPlane, capture), research=research)
+    if frozenset(capture.commands) != frozenset(RESEARCH_COMMANDS):
+        raise RuntimeError("explicit Research module command inventory is incomplete")
+    install_control_plane_modules(
+        control_plane,
+        (
+            ControlPlaneModule(
+                name=RESEARCH_MODULE,
+                resource_services=research_search_resource_services(research),
+                command_handlers=capture.commands,
+            ),
+        ),
+    )
 
 
 def _item_search_resource(item: ResearchItem) -> dict[str, JsonValue]:
@@ -312,6 +347,7 @@ def _visible(item: ResearchItem, context: RequestContext) -> bool:
 
 
 __all__ = [
+    "RESEARCH_MODULE",
     "ResearchClaimSearchResourceService",
     "ResearchEvidenceSearchResourceService",
     "ResearchItemSearchResourceService",
