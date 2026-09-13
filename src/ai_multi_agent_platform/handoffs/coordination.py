@@ -59,7 +59,7 @@ class CoordinatedHandoffService:
         expected_previous_revision: int = 0,
     ) -> AgentHandoff:
         await self._require_creation_binding_async(content)
-        return self._handoffs.create_handoff(
+        return await self._handoffs.async_create_handoff(
             content,
             idempotency_key=idempotency_key,
             handoff_id=handoff_id,
@@ -96,9 +96,9 @@ class CoordinatedHandoffService:
         consumer: ParticipantRef,
         context_bundle_ref: HandoffSourceRef | None = None,
     ) -> HandoffRuntimeContext:
-        handoff = self._handoffs.get_handoff(handoff_id, revision)
+        handoff = await self._handoffs.async_get_handoff(handoff_id, revision)
         await self._require_consumption_binding_async(handoff, consuming_run_id)
-        return self._handoffs.consume_handoff(
+        return await self._handoffs.async_consume_handoff(
             handoff_id,
             revision,
             consuming_run_id=consuming_run_id,
@@ -109,14 +109,34 @@ class CoordinatedHandoffService:
     def get_handoff(self, handoff_id: str, revision: int | None = None) -> AgentHandoff:
         return self._handoffs.get_handoff(handoff_id, revision)
 
+    async def async_get_handoff(
+        self,
+        handoff_id: str,
+        revision: int | None = None,
+    ) -> AgentHandoff:
+        return await self._handoffs.async_get_handoff(handoff_id, revision)
+
     def list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]:
         return self._handoffs.list_handoffs_for_task(task_id)
+
+    async def async_list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]:
+        return await self._handoffs.async_list_handoffs_for_task(task_id)
 
     def list_handoffs_for_step(self, step_id: str) -> tuple[AgentHandoff, ...]:
         return self._handoffs.list_handoffs_for_step(step_id)
 
+    async def async_list_handoffs_for_step(self, step_id: str) -> tuple[AgentHandoff, ...]:
+        return await self._handoffs.async_list_handoffs_for_step(step_id)
+
     def list_consumptions(self, handoff_id: str, revision: int) -> tuple[HandoffConsumption, ...]:
         return self._handoffs.list_consumptions(handoff_id, revision)
+
+    async def async_list_consumptions(
+        self,
+        handoff_id: str,
+        revision: int,
+    ) -> tuple[HandoffConsumption, ...]:
+        return await self._handoffs.async_list_consumptions(handoff_id, revision)
 
     def _require_creation_binding(self, content: HandoffContent) -> None:
         state = self._coordinator.get_plan(content.plan_id)
