@@ -18,9 +18,9 @@ _DISTRIBUTED_KEY = "distributed_behavior"
 
 
 class ApprovalRecordReader(Protocol):
-    """Minimal approval read boundary consumed by Evaluation evidence projection."""
+    """Minimal awaitable Approval read boundary consumed by Evaluation evidence projection."""
 
-    def all(self) -> tuple[ApprovalRecord, ...]: ...
+    async def all(self) -> tuple[ApprovalRecord, ...]: ...
 
 
 def _unique(values: tuple[str, ...]) -> tuple[str, ...]:
@@ -52,7 +52,7 @@ class ApprovalEvidenceCaseExecutor:
             )
         records = tuple(
             record
-            for record in self._approvals.all()
+            for record in await self._approvals.all()
             if (observation.task_id is not None and record.task_id == observation.task_id)
             or (observation.run_id is not None and record.run_id == observation.run_id)
         )
