@@ -28,6 +28,7 @@ REQUIRED_BOUNDARIES = {
     "verification-provider",
     "evaluation-provider",
     "security-evidence-provider",
+    "deployment-adapter",
 }
 REQUIRED_FIELDS = {
     "id",
