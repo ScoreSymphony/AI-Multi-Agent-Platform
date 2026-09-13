@@ -5,14 +5,16 @@ from __future__ import annotations
 import json
 import sqlite3
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import validate_id
 
+from ._sqlite_async import AsyncSqliteOffload, map_sqlite_error
 from .models import (
     Automation,
     AutomationState,
@@ -26,6 +28,8 @@ from .models import (
     TriggerDelivery,
     TriggerType,
 )
+
+_T = TypeVar("_T")
 
 
 class AutomationRepository(ABC):
@@ -131,11 +135,12 @@ class InMemoryAutomationRepository(AutomationRepository):
 
 
 class SqliteAutomationRepository(AutomationRepository):
-    """Restart-safe reference repository with one dedupe constraint per automation."""
+    """Restart-safe SQLite repository with bounded async offload and serialized writes."""
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, *, max_concurrency: int = 4) -> None:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._offload = AsyncSqliteOffload(max_concurrency=max_concurrency)
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
@@ -176,77 +181,109 @@ class SqliteAutomationRepository(AutomationRepository):
                 ErrorCode.BACKEND_ERROR, "failed to initialize automation storage"
             ) from exc
 
-    async def save_automation(self, automation: Automation) -> Automation:
-        encoded = json.dumps(_automation_json(automation), sort_keys=True, separators=(",", ":"))
+    async def _run_sqlite(
+        self,
+        operation: Callable[[], _T],
+        *,
+        write: bool,
+        message: str,
+    ) -> _T:
         try:
-            with self._connect() as connection:
-                connection.execute(
-                    """
-                    INSERT INTO automations(id, payload) VALUES (?, ?)
-                    ON CONFLICT(id) DO UPDATE SET payload = excluded.payload
-                    """,
-                    (automation.id, encoded),
-                )
+            return await self._offload.run(operation, write=write)
+        except ContractError:
+            raise
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to persist automation") from exc
+            raise map_sqlite_error(exc, message) from exc
+
+    async def save_automation(self, automation: Automation) -> Automation:
+        return await self._run_sqlite(
+            lambda: self._save_automation_sync(automation),
+            write=True,
+            message="failed to persist automation",
+        )
+
+    def _save_automation_sync(self, automation: Automation) -> Automation:
+        encoded = json.dumps(_automation_json(automation), sort_keys=True, separators=(",", ":"))
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO automations(id, payload) VALUES (?, ?)
+                ON CONFLICT(id) DO UPDATE SET payload = excluded.payload
+                """,
+                (automation.id, encoded),
+            )
         return automation
 
     async def get_automation(self, automation_id: str) -> Automation:
         validate_id(automation_id, "automation")
-        try:
-            with self._connect() as connection:
-                row = connection.execute(
-                    "SELECT payload FROM automations WHERE id = ?", (automation_id,)
-                ).fetchone()
-        except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to read automation") from exc
+        return await self._run_sqlite(
+            lambda: self._get_automation_sync(automation_id),
+            write=False,
+            message="failed to read automation",
+        )
+
+    def _get_automation_sync(self, automation_id: str) -> Automation:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT payload FROM automations WHERE id = ?", (automation_id,)
+            ).fetchone()
         if row is None:
             raise ContractError(ErrorCode.NOT_FOUND, f"automation not found: {automation_id}")
         return _automation_from_json(cast(str, row["payload"]))
 
     async def list_automations(self) -> tuple[Automation, ...]:
-        try:
-            with self._connect() as connection:
-                rows = connection.execute("SELECT payload FROM automations ORDER BY id").fetchall()
-        except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to list automations") from exc
+        return await self._run_sqlite(
+            self._list_automations_sync,
+            write=False,
+            message="failed to list automations",
+        )
+
+    def _list_automations_sync(self) -> tuple[Automation, ...]:
+        with self._connect() as connection:
+            rows = connection.execute("SELECT payload FROM automations ORDER BY id").fetchall()
         return tuple(_automation_from_json(cast(str, row["payload"])) for row in rows)
 
     async def remove_automation_if_unused(self, automation_id: str) -> None:
         validate_id(automation_id, "automation")
-        try:
-            with self._connect() as connection:
-                delivery = connection.execute(
-                    "SELECT 1 FROM trigger_deliveries WHERE automation_id = ? LIMIT 1",
-                    (automation_id,),
-                ).fetchone()
-                if delivery is not None:
-                    raise ContractError(
-                        ErrorCode.CONFLICT,
-                        "cannot remove automation with trigger delivery history",
-                        details={"automation_id": automation_id},
-                    )
-                deleted = connection.execute(
-                    "DELETE FROM automations WHERE id = ?",
-                    (automation_id,),
+        await self._run_sqlite(
+            lambda: self._remove_automation_if_unused_sync(automation_id),
+            write=True,
+            message="failed to remove unused automation",
+        )
+
+    def _remove_automation_if_unused_sync(self, automation_id: str) -> None:
+        with self._connect() as connection:
+            delivery = connection.execute(
+                "SELECT 1 FROM trigger_deliveries WHERE automation_id = ? LIMIT 1",
+                (automation_id,),
+            ).fetchone()
+            if delivery is not None:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "cannot remove automation with trigger delivery history",
+                    details={"automation_id": automation_id},
                 )
-                if deleted.rowcount == 0:
-                    raise ContractError(
-                        ErrorCode.NOT_FOUND,
-                        f"automation not found: {automation_id}",
-                    )
-        except ContractError:
-            raise
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to remove unused automation",
-            ) from exc
+            deleted = connection.execute(
+                "DELETE FROM automations WHERE id = ?",
+                (automation_id,),
+            )
+            if deleted.rowcount == 0:
+                raise ContractError(
+                    ErrorCode.NOT_FOUND,
+                    f"automation not found: {automation_id}",
+                )
 
     async def save_delivery(self, delivery: TriggerDelivery) -> TriggerDelivery:
+        return await self._run_sqlite(
+            lambda: self._save_delivery_sync(delivery),
+            write=True,
+            message="failed to persist trigger delivery",
+        )
+
+    def _save_delivery_sync(self, delivery: TriggerDelivery) -> TriggerDelivery:
         encoded = json.dumps(_delivery_json(delivery), sort_keys=True, separators=(",", ":"))
-        try:
-            with self._connect() as connection:
+        with self._connect() as connection:
+            try:
                 connection.execute(
                     """
                     INSERT INTO trigger_deliveries(id, automation_id, dedupe_key, payload)
@@ -255,28 +292,34 @@ class SqliteAutomationRepository(AutomationRepository):
                     """,
                     (delivery.id, delivery.automation_id, delivery.dedupe_key, encoded),
                 )
-        except sqlite3.IntegrityError:
-            existing = await self.find_delivery_by_dedupe(
-                delivery.automation_id, delivery.dedupe_key
-            )
-            if existing is not None:
-                return existing
-            raise ContractError(ErrorCode.CONFLICT, "trigger delivery dedupe conflict") from None
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR, "failed to persist trigger delivery"
-            ) from exc
+            except sqlite3.IntegrityError:
+                row = connection.execute(
+                    """
+                    SELECT payload FROM trigger_deliveries
+                    WHERE automation_id = ? AND dedupe_key = ?
+                    """,
+                    (delivery.automation_id, delivery.dedupe_key),
+                ).fetchone()
+                if row is not None:
+                    return _delivery_from_json(cast(str, row["payload"]))
+                raise ContractError(
+                    ErrorCode.CONFLICT, "trigger delivery dedupe conflict"
+                ) from None
         return delivery
 
     async def get_delivery(self, delivery_id: str) -> TriggerDelivery:
         validate_id(delivery_id, "trigger_delivery")
-        try:
-            with self._connect() as connection:
-                row = connection.execute(
-                    "SELECT payload FROM trigger_deliveries WHERE id = ?", (delivery_id,)
-                ).fetchone()
-        except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to read trigger delivery") from exc
+        return await self._run_sqlite(
+            lambda: self._get_delivery_sync(delivery_id),
+            write=False,
+            message="failed to read trigger delivery",
+        )
+
+    def _get_delivery_sync(self, delivery_id: str) -> TriggerDelivery:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT payload FROM trigger_deliveries WHERE id = ?", (delivery_id,)
+            ).fetchone()
         if row is None:
             raise ContractError(ErrorCode.NOT_FOUND, f"trigger delivery not found: {delivery_id}")
         return _delivery_from_json(cast(str, row["payload"]))
@@ -285,43 +328,52 @@ class SqliteAutomationRepository(AutomationRepository):
         self, automation_id: str, dedupe_key: str
     ) -> TriggerDelivery | None:
         validate_id(automation_id, "automation")
-        try:
-            with self._connect() as connection:
-                row = connection.execute(
-                    """
-                    SELECT payload FROM trigger_deliveries
-                    WHERE automation_id = ? AND dedupe_key = ?
-                    """,
-                    (automation_id, dedupe_key),
-                ).fetchone()
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR, "failed to dedupe trigger delivery"
-            ) from exc
+        return await self._run_sqlite(
+            lambda: self._find_delivery_by_dedupe_sync(automation_id, dedupe_key),
+            write=False,
+            message="failed to dedupe trigger delivery",
+        )
+
+    def _find_delivery_by_dedupe_sync(
+        self, automation_id: str, dedupe_key: str
+    ) -> TriggerDelivery | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT payload FROM trigger_deliveries
+                WHERE automation_id = ? AND dedupe_key = ?
+                """,
+                (automation_id, dedupe_key),
+            ).fetchone()
         return None if row is None else _delivery_from_json(cast(str, row["payload"]))
 
     async def list_deliveries(
         self, automation_id: str | None = None
     ) -> tuple[TriggerDelivery, ...]:
-        try:
-            with self._connect() as connection:
-                if automation_id is None:
-                    rows = connection.execute(
-                        "SELECT payload FROM trigger_deliveries ORDER BY id"
-                    ).fetchall()
-                else:
-                    validate_id(automation_id, "automation")
-                    rows = connection.execute(
-                        """
-                        SELECT payload FROM trigger_deliveries
-                        WHERE automation_id = ? ORDER BY id
-                        """,
-                        (automation_id,),
-                    ).fetchall()
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR, "failed to list trigger deliveries"
-            ) from exc
+        if automation_id is not None:
+            validate_id(automation_id, "automation")
+        return await self._run_sqlite(
+            lambda: self._list_deliveries_sync(automation_id),
+            write=False,
+            message="failed to list trigger deliveries",
+        )
+
+    def _list_deliveries_sync(
+        self, automation_id: str | None = None
+    ) -> tuple[TriggerDelivery, ...]:
+        with self._connect() as connection:
+            if automation_id is None:
+                rows = connection.execute(
+                    "SELECT payload FROM trigger_deliveries ORDER BY id"
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT payload FROM trigger_deliveries
+                    WHERE automation_id = ? ORDER BY id
+                    """,
+                    (automation_id,),
+                ).fetchall()
         return tuple(_delivery_from_json(cast(str, row["payload"])) for row in rows)
 
 
