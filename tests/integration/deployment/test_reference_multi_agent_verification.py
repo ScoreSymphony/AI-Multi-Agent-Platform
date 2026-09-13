@@ -195,7 +195,9 @@ async def _run_reference_task(
 
 def _execute_lineage(deployment: Any, plan_id: str):
     state = deployment.coordination_repository.get_plan(plan_id)
-    execute_step = next(step for step in state.steps if step.title == "Produce the requested result")
+    execute_step = next(
+        step for step in state.steps if step.title == "Produce the requested result"
+    )
     record = deployment.coordination_repository.get_step_record(execute_step.id)
     assert record.latest_run_id is not None
     agent_runs = deployment.agents.repository.list_agent_runs(record.latest_run_id)
