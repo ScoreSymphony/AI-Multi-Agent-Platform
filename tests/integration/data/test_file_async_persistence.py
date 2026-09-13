@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
-from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
+from ai_multi_agent_platform.data import DataAccessContext, FileRecord, LocalFileProvider
 from ai_multi_agent_platform.data._async_offload import AsyncDataOffload
 from ai_multi_agent_platform.domain import new_id
 
@@ -28,9 +28,15 @@ def _context() -> DataAccessContext:
 
 
 class _SlowCreateProvider(LocalFileProvider):
-    def _create_file_sync(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
-        time.sleep(0.08)
-        return super()._create_file_sync(*args, **kwargs)  # type: ignore[arg-type]
+    def __init__(self, root: Path, db_path: Path) -> None:
+        self.delay_connections = False
+        super().__init__(root, db_path)
+        self.delay_connections = True
+
+    def _connect(self) -> sqlite3.Connection:
+        if self.delay_connections:
+            time.sleep(0.08)
+        return super()._connect()
 
 
 class _RecordingProvider(LocalFileProvider):
@@ -57,7 +63,7 @@ class _BoundedReadProvider(LocalFileProvider):
         self.max_active_reads = 0
         super().__init__(root, db_path, max_concurrency=max_concurrency)
 
-    def _get_file_sync(self, file_id: str, context: DataAccessContext):  # type: ignore[no-untyped-def]
+    def _get_file_sync(self, file_id: str, context: DataAccessContext) -> FileRecord:
         if not self.measure_reads:
             return super()._get_file_sync(file_id, context)
         with self._counter_lock:
