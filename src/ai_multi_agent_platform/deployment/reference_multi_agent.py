@@ -56,11 +56,15 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
 
         research_assignment = AgentAssignment(
             role_requirement="researcher",
-            rationale="reference golden path: resolve Research Agent through canonical #903 matcher",
+            rationale=(
+                "reference golden path: resolve Research Agent through canonical #903 matcher"
+            ),
         )
         execution_assignment = AgentAssignment(
             role_requirement="developer",
-            rationale="reference golden path: resolve Execution Agent through canonical #903 matcher",
+            rationale=(
+                "reference golden path: resolve Execution Agent through canonical #903 matcher"
+            ),
         )
         review_assignment = AgentAssignment(
             role_requirement="reviewer",
