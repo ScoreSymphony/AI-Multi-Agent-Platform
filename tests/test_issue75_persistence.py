@@ -31,7 +31,7 @@ def test_sqlite_notification_and_preference_state_survives_restart(tmp_path: Pat
             repository=SqliteNotificationRepository(db),
             preferences=SqliteNotificationPreferenceRepository(db),
         )
-        first.set_preference(
+        await first.set_preference(
             NotificationPreference(
                 recipient=user,
                 minimum_severity=NotificationSeverity.WARNING,
@@ -60,7 +60,7 @@ def test_sqlite_notification_and_preference_state_survives_restart(tmp_path: Pat
             preferences=SqliteNotificationPreferenceRepository(db),
         )
         restored = await restarted.get(created.id, recipient=user)
-        preference = restarted.get_preference(user)
+        preference = await restarted.get_preference(user)
 
         assert restored.state is NotificationState.READ
         assert restored.read_at is not None
