@@ -1,0 +1,399 @@
+schema_version = 1
+profile = "control-plane-active-passive-postgres-v1"
+issue = 956
+integration_owner_issue = 566
+
+# disposition values:
+# - shared_sql: canonical state must be available through the HA SQL composition.
+# - shared_provider: canonical content must use a provider reachable by the promoted process.
+# - reconstructable: safe to rebuild after promotion from shared canonical state or live peers.
+# - unsupported: initial HA profile must reject/gate the capability while this state is host-local.
+#
+# initial_support values:
+# - required: must be shared before #566 may claim the baseline failover scenario.
+# - conditional: required only when the named capability is enabled; otherwise it must fail closed.
+# - reconstructable: does not need shared persistence for correctness.
+# - single_node_only: intentionally excluded from the initial HA capability claim.
+
+[[state]]
+id = "kernel"
+source = "db/kernel.sqlite3"
+owner = "kernel"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Task/Run/Event history, revisions and idempotency are the canonical failover spine."
+
+[[state]]
+id = "coordination"
+source = "db/coordination.sqlite3"
+owner = "coordination"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Durable plan/step coordination must survive Control Plane replacement without duplicate step authority."
+
+[[state]]
+id = "scopes"
+source = "db/scopes.sqlite3"
+owner = "control-plane"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Project/scope identity referenced by canonical work must remain stable after promotion."
+
+[[state]]
+id = "files"
+source = "db/files.sqlite3"
+owner = "data"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "File metadata and content references used by active work must survive promotion."
+
+[[state]]
+id = "workspaces"
+source = "db/workspaces.sqlite3"
+owner = "workspaces"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Workspace metadata required by promoted work cannot remain host-local."
+
+[[state]]
+id = "run-workspace-bindings"
+source = "db/run-workspace-bindings.sqlite3"
+owner = "workspaces"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Run-to-workspace identity is required to reconcile in-flight work after promotion."
+
+[[state]]
+id = "repository-bindings"
+source = "db/repository-bindings.sqlite3"
+owner = "repositories"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Reject repository-managed HA operations until bindings use shared persistence."
+reason = "Repository binding state is canonical but is not required for the minimum #566 failover fixture."
+
+[[state]]
+id = "repository-provenance"
+source = "db/repository-provenance.sqlite3"
+owner = "repositories"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Reject repository-managed HA operations until provenance uses shared persistence."
+reason = "Repository provenance must not silently diverge between active and standby."
+
+[[state]]
+id = "connectors"
+source = "db/connectors.sqlite3"
+owner = "connectors"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable connector-backed HA actions until connector state uses shared persistence."
+reason = "Connector definitions and delivery state cannot remain host-local when connector capabilities are enabled."
+
+[[state]]
+id = "memory"
+source = "db/memory.sqlite3"
+owner = "context"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable durable-memory-dependent HA operations until memory uses shared persistence."
+reason = "Durable memory is canonical capability state but is outside the minimum #566 acceptance path."
+
+[[state]]
+id = "knowledge"
+source = "db/knowledge.sqlite3"
+owner = "context"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable knowledge-dependent HA operations until knowledge uses shared persistence."
+reason = "Knowledge state must not be read authoritatively from a stale host-local copy."
+
+[[state]]
+id = "research"
+source = "db/research.sqlite3"
+owner = "research"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable research-state mutation in HA until the research repository is shared."
+reason = "Research state is canonical but not required for the initial failover fixture."
+
+[[state]]
+id = "handoffs"
+source = "db/handoffs.sqlite3"
+owner = "handoffs"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable durable handoff workflows in HA until handoff state is shared."
+reason = "Handoff ownership/evidence cannot safely split across Control Plane hosts."
+
+[[state]]
+id = "verification"
+source = "db/verification.sqlite3"
+owner = "verification"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable verification-dependent HA mutations until verification state is shared."
+reason = "Verification completion evidence is canonical and must never regress after promotion."
+
+[[state]]
+id = "evaluation"
+source = "db/evaluation.sqlite3"
+owner = "evaluation"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable durable evaluation mutation in HA until evaluation state is shared."
+reason = "Evaluation history is not required for minimum failover correctness."
+
+[[state]]
+id = "learning"
+source = "db/learning.sqlite3"
+owner = "learning"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable learning mutation in HA until learning state is shared."
+reason = "Learning state is canonical capability state outside the initial failover claim."
+
+[[state]]
+id = "learning-post-promotion"
+source = "db/learning-post-promotion.sqlite3"
+owner = "learning"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable post-promotion learning mutation in HA until the store is shared."
+reason = "Promotion must not create divergent local learning evidence."
+
+[[state]]
+id = "authentication"
+source = "db/authentication.sqlite3"
+owner = "security"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Credentials, sessions and revocations must survive process replacement."
+
+[[state]]
+id = "authorization"
+source = "db/authorization.sqlite3"
+owner = "security"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Authorization policy must be identical before and after promotion."
+
+[[state]]
+id = "approvals"
+source = "db/approvals.sqlite3"
+owner = "security"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Approval state must survive promotion and cannot be weakened to restore service."
+
+[[state]]
+id = "governance"
+source = "db/governance.sqlite3"
+owner = "governance"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable governance-state mutation in HA until governance persistence is shared."
+reason = "Optional governance state cannot be treated as authoritative from a stale local store."
+
+[[state]]
+id = "decisions"
+source = "db/decisions.sqlite3"
+owner = "decisions"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable durable decision-state mutation in HA until decision persistence is shared."
+reason = "Decision records are canonical when enabled but outside the minimum failover path."
+
+[[state]]
+id = "authorization-audit"
+source = "db/authorization-audit.sqlite3"
+owner = "security"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Security audit continuity is part of the supported HA security boundary."
+
+[[state]]
+id = "automation"
+source = "db/automation.sqlite3"
+owner = "automation"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Definitions, trigger/delivery state and single-fire evidence must survive promotion."
+
+[[state]]
+id = "notifications"
+source = "db/notifications.sqlite3"
+owner = "notifications"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable notification delivery in HA until delivery/deduplication state is shared."
+reason = "Host-local delivery state risks duplicate external side effects."
+
+[[state]]
+id = "agents"
+source = "db/agents.json"
+owner = "agents"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Reject agent-definition mutations and agent-dependent HA work until agent state is shared."
+reason = "Agent definitions are canonical but currently stored in a host-local JSON document."
+
+[[state]]
+id = "conversations"
+source = "db/conversations.json"
+owner = "conversations"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable conversation-dependent HA work until conversation state is shared."
+reason = "Conversation history cannot be served authoritatively from divergent local JSON."
+
+[[state]]
+id = "models"
+source = "db/models.json"
+owner = "models"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Reject model-registry mutation in HA until model registry state is shared."
+reason = "Model registry configuration used by promoted work cannot silently diverge."
+
+[[state]]
+id = "model-providers"
+source = "db/model-providers.json"
+owner = "onboarding"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Reject provider-setup mutation in HA until provider setup state is shared."
+reason = "Provider setup references are canonical configuration state, not process-local cache."
+
+[[state]]
+id = "onboarding-commands"
+source = "db/onboarding-commands.json"
+owner = "onboarding"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable onboarding mutation in HA until command replay state is shared."
+reason = "Onboarding command idempotency cannot be correct across hosts while host-local."
+
+[[state]]
+id = "templates"
+source = "db/templates.json"
+owner = "templates"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable template mutation/application requiring durable template state in HA."
+reason = "Template definitions are canonical when enabled and currently host-local."
+
+[[state]]
+id = "workflows"
+source = "db/workflows.json"
+owner = "workflows"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable durable workflow mutation in HA until workflow state is shared."
+reason = "Workflow definitions cannot diverge between active and standby."
+
+[[state]]
+id = "capability-assignments"
+source = "db/capability-assignments.json"
+owner = "capability-assignments"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Reject durable capability-assignment mutation in HA until assignments are shared."
+reason = "Authorization/routing behavior may differ if assignment state diverges."
+
+[[state]]
+id = "distributed-runtime-state"
+source = "db/distributed-runtime-state.json"
+owner = "distributed-runtime"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Worker/node registration, reservations, dispatch records and reconciliation inputs must survive process replacement."
+
+[[state]]
+id = "upgrade-version-state"
+source = "db/platform-upgrade.json"
+owner = "upgrade"
+disposition = "unsupported"
+initial_support = "single_node_only"
+gate = "HA startup uses shared SQL schema compatibility metadata instead of host-local upgrade JSON."
+reason = "The single-node upgrade marker is not an HA consistency authority."
+
+[[state]]
+id = "migration-history"
+source = "db/migration-history.json"
+owner = "upgrade"
+disposition = "unsupported"
+initial_support = "single_node_only"
+gate = "HA startup validates shared SQL migration metadata; do not merge host-local histories."
+reason = "Host-local migration history is not sufficient to prove standby schema compatibility."
+
+[[state]]
+id = "upgrade-history"
+source = "db/upgrade-history.json"
+owner = "upgrade"
+disposition = "unsupported"
+initial_support = "single_node_only"
+gate = "HA startup uses shared SQL schema metadata; host-local upgrade history remains single-node recovery evidence."
+reason = "The current JSON history remains part of #39/#41 rather than HA coordination."
+
+# Persisted by build_single_node_deployment but currently absent from SINGLE_NODE_DURABLE_STORES.
+# #956 treats the omission as an inventory/recovery gap, not as permission to ignore the state.
+[[state]]
+id = "model-routing-profiles"
+source = "db/model-routing-profiles.json"
+owner = "models"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Reject routing-profile-dependent HA mutation/execution until routing profiles use shared persistence."
+reason = "Routing profiles affect agent/model execution and must not diverge across Control Plane hosts."
+current_single_node_inventory = false
+
+# Provider/content state outside the db/ inventory.
+[[state]]
+id = "file-content"
+source = "files/"
+owner = "data"
+disposition = "shared_provider"
+initial_support = "required"
+reason = "Metadata alone is insufficient; content referenced by active work must be reachable after promotion."
+
+[[state]]
+id = "workspace-content"
+source = "workspaces/"
+owner = "workspaces"
+disposition = "shared_provider"
+initial_support = "required"
+reason = "The promoted Control Plane/Workers must resolve the same workspace content or immutable snapshot."
+
+[[state]]
+id = "managed-repository-content"
+source = "managed repository working trees"
+owner = "repositories"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Reject HA use of host-local managed working trees unless they are reproducibly rematerialized from shared provenance."
+reason = "A local working tree is not shared canonical durable state."
+
+[[state]]
+id = "observability-export-buffer"
+source = "process memory"
+owner = "observability"
+disposition = "reconstructable"
+initial_support = "reconstructable"
+reason = "Correctness authority lives in canonical durable state; volatile export buffers may restart after promotion."
+
+[[state]]
+id = "live-worker-heartbeats"
+source = "live Worker registrations/heartbeats"
+owner = "distributed-runtime"
+disposition = "reconstructable"
+initial_support = "reconstructable"
+reason = "Workers re-register after promotion; durable reservations/dispatch records remain shared separately."
+
+[[state]]
+id = "ha-schema-metadata"
+source = "shared PostgreSQL schema/migration metadata"
+owner = "upgrade"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Standby readiness must prove compatible, complete shared schema state before authority is accepted."
