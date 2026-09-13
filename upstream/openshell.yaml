@@ -1,0 +1,46 @@
+name: "NVIDIA OpenShell"
+purpose: "Optional high-isolation Executor/Sandbox evaluation for untrusted agent workloads behind platform-owned execution and Worker boundaries."
+status: experimental_only
+integration_categories:
+  - "external self-hosted service"
+  - "executor adapter"
+  - "sandbox runtime"
+canonical_upstream: "https://github.com/NVIDIA/OpenShell"
+pinned_revision: "5b9daab9351b1e053f9a5e0ce4c899f5d3f674b0"
+verified_license: "Apache-2.0 at the reviewed revision."
+license_verification_date: "2026-09-13"
+last_review_date: "2026-09-13"
+platform_adapter_or_boundary: "Optional OpenShellExecutor behind canonical #7 Executor and #14 Worker/Node boundaries; Task/Run/Workspace/File/Artifact/Browser/authorization/secret identities remain platform-owned."
+local_source_path: "src/ai_multi_agent_platform/adapters/openshell.py"
+source_origin_path: "No OpenShell source is copied; the platform proof-of-concept contains only adapter-owned contracts and deterministic test doubles."
+modified_locally: false
+modification_summary: "Platform-owned adapter proof-of-concept only; no upstream source modifications."
+required_notices:
+  - "Retain upstream Apache-2.0 notices for any future redistributed source or artifact as applicable."
+compatibility_constraints:
+  - "OpenShell remains optional and is not a baseline platform dependency."
+  - "The reviewed repository advertises Linux, Apple Silicon macOS and experimental WSL2 hosts plus Docker, Podman, MicroVM and Kubernetes compute drivers; each runtime profile has a distinct security boundary and must be evaluated independently."
+  - "The proof-of-concept names Docker as the reviewed source-level runtime profile because it is a documented local runtime, but does not claim Docker is equivalent to the MicroVM boundary."
+  - "Provider-native sandbox/gateway/runtime/policy identifiers remain namespaced adapter metadata."
+  - "Browser/computer-use behavior, if used later, must integrate through canonical #74 capability ownership rather than a parallel privileged API."
+  - "OpenShell policy enforcement may implement platform decisions but must not become canonical authorization, egress, capability or lifecycle authority."
+security_constraints:
+  - "Canonical #15 authorization, #34 secret identity/scope, #37 Workspace ownership, #43 security/egress policy and #591 data/provider policy remain authoritative."
+  - "Direct ExecutionRequest.environment projection is rejected by the evaluation adapter; a future credential-provider integration must map scoped #34 SecretReferences without making OpenShell the secret store."
+  - "Reviewed upstream source describes minimal/default-deny outbound access and policy-enforced egress with HTTP method/path controls; effective DNS, redirect, private/link-local, IPv6 and alternate-protocol behavior remains runtime-evidence-gated."
+  - "Reviewed upstream source describes filesystem/process/network/provider policy layers; effective host-mount, namespace/cgroup, seccomp/Landlock and cross-sandbox guarantees remain runtime-profile-specific."
+  - "Provider credentials, refresh state and endpoint-bound injection metadata must not become canonical execution evidence or plaintext logs."
+  - "Failure/provider metadata is allow-listed before becoming canonical adapter evidence."
+deployment_constraints:
+  - "Baseline/reference operation must remain unchanged when OpenShell is absent."
+  - "The reviewed repository is explicitly alpha and the Kubernetes path is documented as experimental; no production support claim is made by this evaluation."
+  - "A production-promotion evaluation would require a representative self-hosted Docker/Podman or MicroVM campaign and, if claimed, a separate Kubernetes campaign."
+resource_constraints:
+  - "Cold start, idle overhead, per-sandbox memory, density, cleanup and upgrade burden were not measured on a project-controlled representative VPS in #963."
+  - "The absence of such live measurements blocks supported production classification but does not block an experimental-only source/contract evaluation."
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Pin every evaluated revision; re-check license, project maturity, compute-driver matrix, policy semantics, credential behavior, mount/workspace rules, resource controls and API compatibility; then rerun adapter tests and any live promotion campaign."
+exit_replacement_strategy: "Disable/remove the optional adapter and external runtime. Canonical Task/Run/Workspace/File/Artifact/authorization/secret identities and the reference Executor require no migration because OpenShell owns none of them."
+adr: ""
+notes: "Issue #963 outcome: experimental_only. Evaluation: docs/upstream/OPENSHELL_EVALUATION.md; threat model: docs/upstream/OPENSHELL_THREAT_MODEL.md"

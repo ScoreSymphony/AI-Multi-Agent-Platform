@@ -125,7 +125,7 @@ owner = "platform/execution"
 local_first = true
 mandatory_paid_service = false
 unique_value = "Allow-listed deterministic local execution baseline."
-overlap = "Forge, Agent-Sandbox and SWE-ReX target the same contract with external runtime behavior."
+overlap = "Forge and experimental Agent-Sandbox, OpenShell and SWE-ReX implementations target the same contract with distinct external runtime behavior."
 test_burden = "low"
 doc_burden = "low"
 security_surface = "allow-listed actions and workspace path enforcement"
@@ -179,6 +179,28 @@ usage = "Evaluation/live-validation only."
 evidence = ["tests/contract/execution/test_agent_sandbox_executor.py"]
 docs = ["docs/upstream/AGENT_SANDBOX_EVALUATION.md"]
 migration = "Use a reference/supported Executor for supported deployments until promotion."
+
+[[implementation]]
+id = "executor.openshell"
+boundary = "executor"
+kind = "adapter"
+symbol = "OpenShellExecutor"
+source = "src/ai_multi_agent_platform/adapters/openshell.py"
+tier = "experimental"
+owner = "platform/adapters"
+local_first = false
+mandatory_paid_service = false
+unique_value = "Multi-runtime sandbox evaluation with non-Kubernetes local drivers plus declarative filesystem, process, network and provider policy."
+overlap = "Overlaps Agent-Sandbox and Containarium high-isolation evaluation; retained for its multi-driver policy and endpoint-bound credential concepts."
+test_burden = "high"
+doc_burden = "high"
+security_surface = "driver-specific isolation, egress policy, credential delivery, workspace mounts, resources and cleanup"
+upstream_health = "pinned alpha upstream; source-reviewed; promotion requires runtime-profile-specific live evidence"
+compatibility = "No production compatibility claim; experimental evaluation only at the pinned revision."
+usage = "Evaluation and contract research only."
+evidence = ["tests/contract/execution/test_openshell_executor.py", "upstream/openshell.yaml"]
+docs = ["docs/upstream/OPENSHELL_EVALUATION.md", "docs/upstream/OPENSHELL_THREAT_MODEL.md"]
+migration = "Use a reference/supported Executor; removing OpenShell requires no canonical Task/Run/Workspace/File/Artifact migration."
 
 [[implementation]]
 id = "executor.swe-rex"

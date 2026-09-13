@@ -58,7 +58,7 @@ The complete entry-by-entry inventory, owner, burden, security surface, upstream
 | --- | --- | --- | --- |
 | Planner | `planner.reference` | `planner.model-backed` | — |
 | Orchestrator | `orchestrator.reference` | `orchestrator.hermes` | — |
-| Executor | `executor.reference` | `executor.forge` | `executor.agent-sandbox`, `executor.swe-rex` |
+| Executor | `executor.reference` | `executor.forge` | `executor.agent-sandbox`, `executor.openshell`, `executor.swe-rex` |
 | Model provider | `model.openai-compatible` | `model.litellm` | dedicated Bifrost/SGLang adapters intentionally absent |
 | Model router | `model.router` | — | — |
 | Capability/tool | `capability.native` | `capability.mcp` | — |
@@ -119,7 +119,7 @@ This preserves the architectural rule that logical repository ownership is indep
 
 ### 8. External executor experiments do not inherit production support from contract tests
 
-`AgentSandboxExecutor` and `SwerexExecutor` implement the canonical Executor and have deterministic tests, but that does not make them supported. Agent-Sandbox remains evidence-gated by live isolation evaluation; SWE-ReX is explicitly evaluation/experimental-only. Neither belongs in an unqualified “supported executors” claim.
+`AgentSandboxExecutor`, `OpenShellExecutor` and `SwerexExecutor` implement the canonical Executor and have deterministic tests, but that does not make them supported. Agent-Sandbox remains evidence-gated by live isolation evaluation; OpenShell is explicitly `experimental_only` at the pinned alpha revision until one concrete runtime profile has retained isolation/egress/credential/resource evidence; SWE-ReX is explicitly evaluation/experimental-only. None belongs in an unqualified “supported executors” claim.
 
 ### 9. SkillSpector is supported only in the evaluated static evidence profile
 
