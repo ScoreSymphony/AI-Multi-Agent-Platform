@@ -127,8 +127,8 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
                     key="execute",
                     title="Produce the requested result",
                     objective=(
-                        "Produce the task result using the completed research and execution-approach "
-                        "Handoffs as canonical Context. " + request.objective
+                        "Produce the task result using the completed research and "
+                        "execution-approach Handoffs as canonical Context. " + request.objective
                     ),
                     depends_on=("research", "approach"),
                     assignment=execution_assignment,
@@ -140,8 +140,8 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
                     key="review",
                     title="Review the exact produced result",
                     objective=(
-                        "Review the exact result revision produced by the execution step and report "
-                        "whether it satisfies the task objective. " + request.objective
+                        "Review the exact result revision produced by the execution step and "
+                        "report whether it satisfies the task objective. " + request.objective
                     ),
                     depends_on=("execute",),
                     assignment=review_assignment,
