@@ -1,44 +1,36 @@
 name: "ScoreSymphony AI-Agent-VPS Forge subsystem"
-purpose: "Deprecated optional execution-only compatibility runtime behind the platform-owned Executor boundary, retained temporarily for removal-gate evidence plus historical recovery, event/idempotency and workspace reuse provenance from issue #9."
-status: deprecated
+purpose: "Historical provenance for the former optional execution-only Forge compatibility runtime removed under issue #991."
+status: removed
 integration_categories:
-  - "adapter integration"
-  - "external optional runtime"
+  - "historical adapter integration"
+  - "historical external optional runtime"
   - "reference-only influence"
 canonical_upstream: "https://github.com/ScoreSymphony/AI-Agent-VPS"
 pinned_revision: "00b821bc94767865457814bf282982ca242a2e10"
 verified_license: "MIT"
 license_verification_date: "2026-09-03"
 last_review_date: "2026-09-13"
-platform_adapter_or_boundary: "src/ai_multi_agent_platform/adapters/forge.py implements the canonical Executor through the platform-owned ForgeClient protocol; src/ai_multi_agent_platform/adapters/forge_http.py implements that protocol against the pinned execution-only Forge sidecar. The adapter remains executable only during the bounded #991 deprecation window."
-local_source_path: "src/ai_multi_agent_platform/adapters/forge.py; src/ai_multi_agent_platform/adapters/forge_http.py"
-source_origin_path: "AI-Agent-VPS core/forge/crates/executor-sidecar plus reused core/forge/crates/executors, cli-adapters, git and api-types; no upstream source is copied into this repository."
+platform_adapter_or_boundary: "Removed under #991. The surviving platform-owned Executor contract and ReferenceExecutor remain independent of Forge; this record documents only the former forge-executor-sidecar/v1 integration."
+local_source_path: "none; src/ai_multi_agent_platform/adapters/forge.py and forge_http.py were removed under #991"
+source_origin_path: "Historical runtime source was AI-Agent-VPS core/forge/crates/executor-sidecar plus reused core/forge/crates/executors, cli-adapters, git and api-types; no upstream source was copied into this repository."
 modified_locally: false
-modification_summary: "The platform adapter and HTTP client are platform-owned Python code. The execution-only sidecar is maintained in the canonical AI-Agent-VPS upstream repository and is consumed at the pinned revision only while #991 removal gates remain open."
+modification_summary: "No upstream source was vendored. The former platform-owned Python adapter and HTTP transport were deleted after the #889/#46 removal gates passed."
 required_notices:
-  - "No upstream source is vendored or copied into this repository. The upstream runtime retains its MIT license metadata at its source repository. Preserve MIT notices if substantial upstream source is ever copied locally."
+  - "No upstream source is vendored or copied into this repository. Preserve MIT notices if substantial upstream source is copied in a future, separately reviewed integration."
 compatibility_constraints:
-  - "Forge is deprecated by issue #991 and ADR 0013; it is not the reference/default executor and no new platform feature may depend specifically on it."
-  - "The concrete runtime compatibility target is protocol forge-executor-sidecar/v1 at pinned revision 00b821bc94767865457814bf282982ca242a2e10."
-  - "Forge Task/Project/Event/API/DB types are not canonical platform types and are not required by the sidecar boundary."
-  - "Canonical Task/Run/Step/correlation identity and lifecycle ownership remain in the platform kernel."
-  - "The sidecar request_ref is derived from the canonical Run ID and acts only as a backend idempotency/recovery key."
-  - "The validated real sidecar profile uses the deterministic null adapter; non-null CLI executor families do not currently provide evidence sufficient to restore supported status."
+  - "No current Forge compatibility claim exists after #991."
+  - "Canonical Task/Run/Step/correlation identity and lifecycle ownership remain platform-owned and require no Forge state migration."
+  - "Historical persisted/imported provider-private Forge identifiers remain non-canonical metadata and may still be rejected by portability validation."
 security_constraints:
-  - "The sidecar binds only to loopback by default and refuses a non-loopback bind in its current entrypoint."
-  - "Executor families are explicitly allowlisted; the default allowlist contains only null."
-  - "Any shell/process or coding-CLI execution path requires explicit policy, environment filtering, workspace isolation and sandbox/resource controls before enablement."
-  - "Forge authentication/authorization may protect a future remote backend connection but may not replace platform authorization."
-  - "ForgeExecutor validates the configured workspace root and rejects traversal before dispatch; the sidecar independently canonicalizes and verifies the requested workspace below its configured root."
+  - "No Forge sidecar is started, configured, exposed or authenticated by the current platform."
+  - "Historical sidecar security findings are retained only in the #9/#991 audit documents."
 deployment_constraints:
-  - "Forge remains optional and deprecated; it is not imported by execution core startup or required for reference executor tests."
-  - "The temporarily retained runtime is the execution-only sidecar, not the legacy full Forge Task/Project application."
-  - "The sidecar requires a Rust build/runtime artifact and configured workspace/log roots but no Forge database, TaskService, Project service or domain-event service."
+  - "Forge is not an available deployment profile and is not required for baseline, optional conformance or release CI."
 resource_constraints:
-  - "Resource usage depends on the explicitly enabled executor family. The null integration smoke test has negligible requirements; no baseline GPU or paid service is required."
+  - "No current Forge runtime resources are required."
 required_for_baseline: false
 recurring_paid_service_required: false
-update_review_method: "During the bounded deprecation window, update only for correctness, security, compatibility or removal-enabling work. For any runtime update, compare the pinned AI-Agent-VPS revision, review executor-sidecar protocol/license/security changes and reused executor/cli-adapter changes, update this record and Forge design docs, then run platform unit/contract tests plus the pinned real-sidecar CI integration test."
-exit_replacement_strategy: "After the #991 / ADR 0013 removal gates pass, remove src/ai_multi_agent_platform/adapters/forge.py, forge_http.py and sidecar-specific configuration/CI. Canonical Task/Run/Event/Workspace state remains platform-owned, so removing the runtime requires no canonical-state migration. Historical provenance may remain."
+update_review_method: "Historical record only. Do not update the old pin for routine upstream changes. Any future Forge reintroduction requires a new adoption/support decision, current provenance/security review and fresh conformance evidence."
+exit_replacement_strategy: "Completed under #991: executable adapter, transport, Forge-only tests, sidecar CI and active support/release claims were removed. ReferenceExecutor remains the migration target; canonical state required no migration."
 adr: "docs/adr/0013-deprecate-forge-execution-adapter-pending-removal-gates.md"
-notes: "Issue #991 demotes Forge from supported to deprecated. The execution-only sidecar was merged upstream through AI-Agent-VPS PR #71. Platform CI checks out the exact pinned revision, builds the sidecar, starts it on loopback with the null executor allowlisted, and runs real health/execute/cancellation integration through ForgeHttpClient and ForgeExecutor. Recovery/idempotency behavior is split deliberately: the sidecar durably maps request_ref to backend execution identity and marks interrupted in-flight jobs for reconciliation after restart, while canonical lifecycle/event replay remains owned and tested by PlatformKernel. The sidecar remains only until the documented #889/#46 and generic-guarantee removal gates pass."
+notes: "Issue #9 established the former execution-only boundary. Issue #991 first deprecated it, then removed the executable integration after #889 and #46 proved the required backend-neutral/reference guarantees. This file is retained solely as historical architecture, license and provenance evidence."
