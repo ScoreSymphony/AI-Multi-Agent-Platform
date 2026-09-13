@@ -41,8 +41,12 @@ from .extensions import (
     PLATFORM_COLLECTIONS,
     REQUIRED_COMMANDS,
     CommandHandler,
+    ControlPlaneModule,
+    ControlPlaneRoute,
     InMemoryResourceService,
+    OpenAPIContributor,
     ResourceService,
+    RouteHandler,
 )
 from .http import HTTPRequest, HTTPResponse
 from .models import (
@@ -142,6 +146,8 @@ __all__ = [
     "ControlPlane",
     "ControlPlaneASGI",
     "ControlPlaneHTTP",
+    "ControlPlaneModule",
+    "ControlPlaneRoute",
     "DELIVERY_COLLECTION",
     "EVALUATION_COLLECTIONS",
     "EVALUATION_COMMANDS",
@@ -164,6 +170,7 @@ __all__ = [
     "ORGANIZATION_COLLECTION",
     "ORGANIZATION_COLLECTIONS",
     "ORGANIZATION_COMMANDS",
+    "OpenAPIContributor",
     "OrganizationAuditLog",
     "PLATFORM_COLLECTIONS",
     "PLUGIN_CANDIDATE_COLLECTION",
@@ -178,6 +185,7 @@ __all__ = [
     "RESOURCE_SHARE_COLLECTION",
     "RequestContext",
     "ResourceService",
+    "RouteHandler",
     "SUPPORTED_API_VERSIONS",
     "ScopePersistenceOffload",
     "ScopeStore",
