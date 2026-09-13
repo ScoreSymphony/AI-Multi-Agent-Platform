@@ -1,0 +1,11 @@
+# Issue #562 reference only. Do not commit real keys or provider addresses.
+# Host A: Control Plane / scheduler / broker side.
+[Interface]
+Address = 10.203.0.1/30
+ListenPort = 51820
+PrivateKey = <HOST_A_WIREGUARD_PRIVATE_KEY>
+
+[Peer]
+PublicKey = <HOST_B_WIREGUARD_PUBLIC_KEY>
+AllowedIPs = 10.203.0.2/32
+# Endpoint intentionally omitted: Host B initiates the tunnel.
