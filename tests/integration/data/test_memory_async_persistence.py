@@ -4,6 +4,7 @@ import asyncio
 import sqlite3
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -112,6 +113,44 @@ def test_memory_sqlite_runtime_bounds_concurrent_worker_operations(tmp_path: Pat
         query = MemoryQuery(MemoryScope.USER, "user-a")
         await asyncio.gather(*(provider.query_entries(query, _context()) for _ in range(8)))
         assert provider.maximum_active == 2
+
+    asyncio.run(scenario())
+
+
+def test_memory_backlog_does_not_consume_shared_default_executor(tmp_path: Path) -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    class BlockingMemoryProvider(LocalMemoryProvider):
+        @staticmethod
+        def _insert_entry(connection: sqlite3.Connection, entry: MemoryEntry) -> None:
+            started.set()
+            if not release.wait(timeout=2):
+                raise RuntimeError("test memory backlog was not released")
+            LocalMemoryProvider._insert_entry(connection, entry)
+
+    async def scenario() -> None:
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(
+            ThreadPoolExecutor(max_workers=2, thread_name_prefix="test-default")
+        )
+        provider = BlockingMemoryProvider(tmp_path / "executor-isolation.sqlite3", max_concurrency=2)
+        writes = [
+            asyncio.create_task(provider.write_entry(_entry(value=f"queued-{index}"), _context()))
+            for index in range(8)
+        ]
+        try:
+            for _ in range(100):
+                if started.is_set():
+                    break
+                await asyncio.sleep(0.005)
+            assert started.is_set()
+            unrelated = asyncio.create_task(asyncio.to_thread(lambda: "unrelated-ready"))
+            assert await asyncio.wait_for(unrelated, timeout=0.5) == "unrelated-ready"
+        finally:
+            release.set()
+            outcomes = await asyncio.gather(*writes, return_exceptions=True)
+        assert all(isinstance(outcome, MemoryEntry) for outcome in outcomes)
 
     asyncio.run(scenario())
 
