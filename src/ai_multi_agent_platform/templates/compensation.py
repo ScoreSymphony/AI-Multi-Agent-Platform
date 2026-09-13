@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from ai_multi_agent_platform.agents import AgentService
 from ai_multi_agent_platform.automation import AutomationService
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.control_plane.async_scope import AsyncScopeStore, AsyncScopeStoreAdapter
+from ai_multi_agent_platform.control_plane.async_scope import (
+    AsyncScopeStore,
+    AsyncScopeStoreAdapter,
+)
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.workspaces import WorkspaceProvider
 
