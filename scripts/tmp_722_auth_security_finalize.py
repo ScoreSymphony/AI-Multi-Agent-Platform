@@ -150,3 +150,8 @@ replace_exact(
     "`tests/test_security_baseline.py` establishes regression fixtures for currently implementable invariants:",
     "`tests/unit/security/test_security_primitives.py` and `tests/integration/security/test_executor_confinement.py` establish regression fixtures for currently implementable invariants:",
 )
+replace_exact(
+    "src/ai_multi_agent_platform/conformance/optional_profiles.py",
+    '"tests/test_issue_384_control_plane_authorization.py::"',
+    '"tests/integration/security/test_coordination_control_plane_authorization.py::"',
+)
