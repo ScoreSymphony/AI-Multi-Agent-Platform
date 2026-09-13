@@ -44,10 +44,10 @@ jobs:
           BASELINE_COUNT=$(python - <<'PY'
           import re
           text = open('/tmp/722-baseline-collect.txt', encoding='utf-8').read()
-          matches = re.findall(r'(\d+) tests? collected', text)
-          if not matches:
-              raise SystemExit('Could not parse baseline collection count')
-          print(matches[-1])
+          counts = [int(value) for value in re.findall(r'^tests/.*?: (\d+)\s*$', text, re.MULTILINE)]
+          if not counts:
+              raise SystemExit('Could not parse baseline per-file collection counts')
+          print(sum(counts))
           PY
           )
           echo "BASELINE_COUNT=$BASELINE_COUNT" >> "$GITHUB_ENV"
@@ -57,6 +57,144 @@ jobs:
         run: |
           set -euo pipefail
           git merge --no-edit origin/main
+      - name: Classify remaining core security and authorization tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import ast
+          from pathlib import Path
+
+          def ensure_free(path: str) -> Path:
+              target = Path(path)
+              if target.exists():
+                  raise SystemExit(f"Target already exists: {path}")
+              target.parent.mkdir(parents=True, exist_ok=True)
+              return target
+
+          def move_with_provenance(source: str, target: str, provenance: str) -> None:
+              src = Path(source)
+              if not src.exists():
+                  raise SystemExit(f"Missing migration source: {source}")
+              dst = ensure_free(target)
+              dst.write_text(f'"""{provenance}"""\n\n' + src.read_text(encoding='utf-8'), encoding='utf-8')
+              src.unlink()
+
+          def split_tests(source: str, outputs: dict[str, tuple[str, set[str]]], provenance: str) -> None:
+              src = Path(source)
+              if not src.exists():
+                  raise SystemExit(f"Missing split source: {source}")
+              text = src.read_text(encoding='utf-8')
+              lines = text.splitlines(keepends=True)
+              tree = ast.parse(text)
+              tests = {
+                  node.name: node
+                  for node in tree.body
+                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                  and node.name.startswith('test_')
+              }
+              assigned = set().union(*(names for _, names in outputs.values()))
+              missing = assigned - tests.keys()
+              unassigned = tests.keys() - assigned
+              if missing or unassigned:
+                  raise SystemExit(
+                      f"Split mismatch for {source}: missing={sorted(missing)} unassigned={sorted(unassigned)}"
+                  )
+              first_test_line = min(node.lineno for node in tests.values())
+              header = ''.join(lines[: first_test_line - 1]).rstrip() + '\n\n'
+              for target, (_, names) in outputs.items():
+                  dst = ensure_free(target)
+                  chunks = []
+                  for node in tree.body:
+                      if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names:
+                          assert node.end_lineno is not None
+                          chunks.append(''.join(lines[node.lineno - 1 : node.end_lineno]).rstrip())
+                  body = (
+                      f'"""{provenance}"""\n\n'
+                      '# ruff: noqa: F401\n\n'
+                      + header
+                      + '\n\n\n'.join(chunks)
+                      + '\n'
+                  )
+                  dst.write_text(body, encoding='utf-8')
+              src.unlink()
+
+          split_tests(
+              'tests/test_security_baseline.py',
+              {
+                  'tests/unit/security/test_security_primitives.py': (
+                      'unit',
+                      {
+                          'test_resolve_within_rejects_parent_traversal_and_absolute_paths',
+                          'test_resolve_within_rejects_symlink_escape_when_supported',
+                          'test_redaction_recursively_removes_sensitive_values',
+                          'test_secret_reference_serializes_without_plaintext_secret_material',
+                          'test_validate_untrusted_json_rejects_non_json_and_non_finite_values',
+                          'test_validate_untrusted_json_enforces_resource_bounds',
+                          'test_security_decision_is_deny_by_default',
+                          'test_adapter_private_metadata_cannot_grant_authority',
+                          'test_optional_adapter_absence_does_not_change_canonical_security_decision',
+                      },
+                  ),
+                  'tests/integration/security/test_executor_confinement.py': (
+                      'integration',
+                      {
+                          'test_reference_executor_rejects_workspace_traversal',
+                          'test_reference_executor_rejects_artifact_symlink_escape_when_supported',
+                      },
+                  ),
+              },
+              'Migrated from root-level security baseline coverage under #722.',
+          )
+
+          split_tests(
+              'tests/test_issue_15_hardening.py',
+              {
+                  'tests/integration/security/test_authorization_hardening.py': (
+                      'integration',
+                      {
+                          'test_refined_issue_13_data_paths_cannot_bypass_authorization',
+                          'test_control_plane_bridge_uses_canonical_vocabulary_and_resumes_after_approval',
+                          'test_control_plane_create_approval_cannot_be_reused_for_changed_payload',
+                      },
+                  ),
+                  'tests/contract/security/test_control_plane_authorization_hardening_vocabulary.py': (
+                      'contract',
+                      {'test_control_plane_vocabulary_mapping_is_platform_owned'},
+                  ),
+              },
+              'Migrated under #722; original coverage tracked issue #15.',
+          )
+
+          move_with_provenance(
+              'tests/test_issue_14_authorization_vocabulary.py',
+              'tests/contract/security/test_distributed_authorization_vocabulary.py',
+              'Migrated under #722; original coverage tracked issue #14.',
+          )
+          move_with_provenance(
+              'tests/test_issue75_authorization.py',
+              'tests/contract/security/test_notification_authorization_vocabulary.py',
+              'Migrated under #722; original coverage tracked issue #75.',
+          )
+          move_with_provenance(
+              'tests/test_issue_241_authorization_vocabulary.py',
+              'tests/contract/security/test_automation_authorization_vocabulary.py',
+              'Migrated under #722; original coverage tracked issue #241.',
+          )
+          move_with_provenance(
+              'tests/test_issue_384_control_plane_authorization.py',
+              'tests/integration/security/test_coordination_control_plane_authorization.py',
+              'Migrated under #722; original coverage tracked issue #384.',
+          )
+          move_with_provenance(
+              'tests/test_issue_87_cross_org_authorization.py',
+              'tests/integration/security/test_cross_organization_authorization.py',
+              'Migrated under #722; original coverage tracked issue #87.',
+          )
+          PY
+          git status --short
       - name: Install merged candidate
         shell: bash
         run: |
@@ -74,6 +212,13 @@ jobs:
         run: |
           set -euo pipefail
           legacy_paths=(
+            tests/test_security_baseline.py
+            tests/test_issue_14_authorization_vocabulary.py
+            tests/test_issue_15_hardening.py
+            tests/test_issue75_authorization.py
+            tests/test_issue_241_authorization_vocabulary.py
+            tests/test_issue_384_control_plane_authorization.py
+            tests/test_issue_87_cross_org_authorization.py
             tests/test_issue_36_authentication.py
             tests/test_issue_36_authentication_hardening.py
             tests/test_issue_15_team_scope.py
@@ -116,15 +261,22 @@ jobs:
           MIGRATED_COUNT=$(python - <<'PY'
           import re
           text = open('/tmp/722-migrated-collect.txt', encoding='utf-8').read()
-          matches = re.findall(r'(\d+) tests? collected', text)
-          if not matches:
-              raise SystemExit('Could not parse migrated collection count')
-          print(matches[-1])
+          counts = [int(value) for value in re.findall(r'^tests/.*?: (\d+)\s*$', text, re.MULTILINE)]
+          if not counts:
+              raise SystemExit('Could not parse migrated per-file collection counts')
+          print(sum(counts))
           PY
           )
           echo "MIGRATED_COUNT=$MIGRATED_COUNT" >> "$GITHUB_ENV"
           echo "Migrated collection: $MIGRATED_COUNT"
           test "$MIGRATED_COUNT" = "$BASELINE_COUNT"
+      - name: Ruff-check migrated security/auth suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          ruff format --check tests/unit/security tests/unit/authorization tests/contract/security tests/integration/security tests/e2e/security
+          ruff check tests/unit/security tests/unit/authorization tests/contract/security tests/integration/security tests/e2e/security
       - name: Run targeted authentication authorization and security suites
         shell: bash
         run: |
@@ -142,6 +294,7 @@ jobs:
         run: |
           set -euo pipefail
           git rm .github/workflows/tmp-722-auth-security-finalize.yml
-          git commit -m "chore: remove temporary #722 auth security validation"
+          git add -A
+          git commit -m "test: complete authentication authorization and security migration"
           git push origin HEAD:test/722-auth-security
           echo "Validated $BASELINE_COUNT -> $MIGRATED_COUNT tests on main $BASE_MAIN_SHA"
