@@ -441,7 +441,9 @@ class AsyncResearchService(ResearchService):
             current_time = now or datetime.now(UTC)
             if current_time.tzinfo is None or current_time.utcoffset() is None:
                 raise ValueError("freshness evaluation time must be timezone-aware")
-            if (current_time - observation.retrieved_at).total_seconds() > item.freshness_policy.max_age_seconds:
+            if (
+                current_time - observation.retrieved_at
+            ).total_seconds() > item.freshness_policy.max_age_seconds:
                 return EvidenceFreshness.STALE
         return EvidenceFreshness.CURRENT
 
