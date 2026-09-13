@@ -225,9 +225,19 @@ class ControlPlane(BaseControlPlane):
         self._openapi_contributors: list[tuple[str, OpenAPIContributor]] = []
         self._registered_modules: dict[str, ControlPlaneModule] = {}
         for collection, service in (resource_services or {}).items():
-            self.register_resource_service(collection, service, owner="constructor")
+            ControlPlane.register_resource_service(
+                self,
+                collection,
+                service,
+                owner="constructor",
+            )
         for command, handler in (command_handlers or {}).items():
-            self.register_command(command, handler, owner="constructor")
+            ControlPlane.register_command(
+                self,
+                command,
+                handler,
+                owner="constructor",
+            )
         self.register_modules(modules)
 
     @property
@@ -324,12 +334,25 @@ class ControlPlane(BaseControlPlane):
             for route in module.routes:
                 _claim(route_claims, _route_key(route.method, route.path), name, kind="route")
 
+        # Commit only after all claims have been validated. Explicit base-class
+        # dispatch prevents a legacy compatibility subclass from turning module
+        # installation back into MRO-sensitive behavior during the migration.
         for name in sorted(by_name):
             module = by_name[name]
             for collection, service in sorted(module.resource_services.items()):
-                self.register_resource_service(collection, service, owner=name)
+                ControlPlane.register_resource_service(
+                    self,
+                    collection,
+                    service,
+                    owner=name,
+                )
             for command, handler in sorted(module.command_handlers.items()):
-                self.register_command(command, handler, owner=name)
+                ControlPlane.register_command(
+                    self,
+                    command,
+                    handler,
+                    owner=name,
+                )
             for route in sorted(module.routes, key=lambda item: (item.method, item.path)):
                 key = _route_key(route.method, route.path)
                 self._route_handlers[key] = route.handler
