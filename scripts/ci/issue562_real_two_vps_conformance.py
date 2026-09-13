@@ -274,7 +274,10 @@ def _validate_transport(
         raise EvidenceError("#562 transport evidence must be an object when present")
     if set(transport.keys()) != _TRANSPORT_KEYS:
         raise EvidenceError("#562 transport evidence does not match the compact #388 schema")
-    if transport.get("status") != "pass" or transport.get("schema") != ISSUE388_TRANSPORT_SCHEMA:
+    if (
+        transport.get("status") != "pass"
+        or transport.get("schema") != ISSUE388_TRANSPORT_SCHEMA
+    ):
         raise EvidenceError("#562 transport evidence is not a passing supported #388 report")
     if transport.get("worker_id") != worker_id:
         raise EvidenceError("#562 transport evidence uses a different canonical Worker")
