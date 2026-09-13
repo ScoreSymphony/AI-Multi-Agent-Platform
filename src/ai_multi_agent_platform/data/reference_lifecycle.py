@@ -431,8 +431,20 @@ class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
     ) -> KnowledgeDocument:
         """Expose a durable FAILED state when re-indexing starts but ingestion fails."""
 
+        validate_id(source_id, "knowledge_source")
+        if not revision.strip():
+            raise ContractError(ErrorCode.INVALID_REQUEST, "knowledge revision must not be blank")
         return await self._complete_knowledge_mutation(
-            self._reindex_with_failure_state(source_id, revision, content, location, context)
+            self._serialize_source_mutation(
+                source_id,
+                lambda: self._reindex_with_failure_state(
+                    source_id,
+                    revision,
+                    content,
+                    location,
+                    context,
+                ),
+            )
         )
 
     async def _reindex_with_failure_state(
@@ -446,7 +458,7 @@ class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
         try:
             return await self._reindex_source_impl(source_id, revision, content, location, context)
         except ContractError as exc:
-            if exc.code is ErrorCode.BACKEND_ERROR:
+            if exc.code in {ErrorCode.BACKEND_ERROR, ErrorCode.TRANSIENT_FAILURE}:
                 await self._mark_reindex_failed(source_id, revision)
             raise
 
@@ -456,14 +468,23 @@ class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
         def operation() -> None:
             now = datetime.now(UTC).isoformat()
             with self._connect() as connection:
-                connection.execute(
+                source_update = connection.execute(
                     """
                     UPDATE data_knowledge_sources
                     SET revision = ?, status = ?, updated_at = ?
-                    WHERE source_id = ?
+                    WHERE source_id = ? AND revision = ? AND status = ?
                     """,
-                    (revision, KnowledgeStatus.FAILED.value, now, source_id),
+                    (
+                        revision,
+                        KnowledgeStatus.FAILED.value,
+                        now,
+                        source_id,
+                        revision,
+                        KnowledgeStatus.INDEXING.value,
+                    ),
                 )
+                if source_update.rowcount == 0:
+                    return
                 connection.execute(
                     """
                     UPDATE data_knowledge_indexes
