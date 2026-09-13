@@ -9,10 +9,10 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Protocol, TypeVar, cast
-from weakref import WeakKeyDictionary
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import Plan, Step
+from ai_multi_agent_platform.persistence_offload import SharedPersistenceOffloadRegistry
 
 from .models import CoordinatorClaim, PlanRuntimeState, StepCoordinationRecord
 from .repository import CoordinatorRepository
@@ -53,6 +53,11 @@ class AsyncCoordinatorRepository(Protocol):
     ) -> PlanRuntimeState: ...
 
     async def get_plan(self, plan_id: str) -> PlanRuntimeState: ...
+
+    async def get_plan_snapshot(
+        self,
+        plan_id: str,
+    ) -> tuple[PlanRuntimeState, tuple[StepCoordinationRecord, ...]]: ...
 
     async def get_step_record(self, step_id: str) -> StepCoordinationRecord: ...
 
@@ -141,23 +146,21 @@ class CoordinationPersistenceOffload:
             self._capacity.release()
 
 
-_SHARED_COORDINATION_OFFLOADS: WeakKeyDictionary[object, CoordinationPersistenceOffload] = (
-    WeakKeyDictionary()
-)
-_SHARED_COORDINATION_OFFLOADS_LOCK = threading.Lock()
+_SHARED_COORDINATION_OFFLOADS = SharedPersistenceOffloadRegistry[CoordinationPersistenceOffload]()
 
 
 def _coordination_offload(
     repository: CoordinatorRepository,
     requested: CoordinationPersistenceOffload | None,
+    *,
+    owner: object,
 ) -> CoordinationPersistenceOffload:
-    with _SHARED_COORDINATION_OFFLOADS_LOCK:
-        existing = _SHARED_COORDINATION_OFFLOADS.get(repository)
-        if existing is not None:
-            return existing
-        resolved = requested or CoordinationPersistenceOffload()
-        _SHARED_COORDINATION_OFFLOADS[repository] = resolved
-        return resolved
+    return _SHARED_COORDINATION_OFFLOADS.resolve(
+        repository,
+        owner=owner,
+        requested=requested,
+        factory=CoordinationPersistenceOffload,
+    )
 
 
 async def _await_persistence_boundary[T](worker: asyncio.Future[T]) -> T:
@@ -202,7 +205,7 @@ class AsyncCoordinatorRepositoryAdapter:
         offload: CoordinationPersistenceOffload | None = None,
     ) -> None:
         self._repository = repository
-        self._offload = _coordination_offload(repository, offload)
+        self._offload = _coordination_offload(repository, offload, owner=self)
 
     @property
     def offload(self) -> CoordinationPersistenceOffload:
@@ -234,6 +237,18 @@ class AsyncCoordinatorRepositoryAdapter:
         return await self._run(
             lambda: self._repository.get_plan(plan_id),
             message="failed to read Coordination plan",
+        )
+
+    async def get_plan_snapshot(
+        self,
+        plan_id: str,
+    ) -> tuple[PlanRuntimeState, tuple[StepCoordinationRecord, ...]]:
+        return await self._run(
+            lambda: (
+                self._repository.get_plan(plan_id),
+                self._repository.list_step_records(plan_id),
+            ),
+            message="failed to read Coordination plan snapshot",
         )
 
     async def get_step_record(self, step_id: str) -> StepCoordinationRecord:

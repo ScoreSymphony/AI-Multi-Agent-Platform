@@ -200,9 +200,9 @@ class DurablePlanStepCoordinator:
         made_progress = True
         while made_progress:
             made_progress = False
-            state = await self.runtime_repository.get_plan(plan_id)
+            state, records = await self.runtime_repository.get_plan_snapshot(plan_id)
             by_id = {step.id: step for step in state.steps}
-            for record in await self.runtime_repository.list_step_records(plan_id):
+            for record in records:
                 step = by_id[record.step_id]
                 if record.phase is CoordinationPhase.RETRY_SCHEDULED:
                     if record.retry_due_at is not None and record.retry_due_at <= current_time:
@@ -216,16 +216,12 @@ class DurablePlanStepCoordinator:
                         or made_progress
                     )
 
-            # Refresh canonical projection after barrier/retry mutations. The repository ordering
-            # defines a deterministic batch; asyncio affects only execution overlap, never which
-            # Steps are eligible to run.
-            state = self.repository.get_plan(plan_id)
+            # Refresh one coherent runtime snapshot after barrier/retry mutations. The dedicated
+            # repository ordering defines a deterministic batch; asyncio affects only execution
+            # overlap, never which Steps are eligible to run.
+            state, records = await self.runtime_repository.get_plan_snapshot(plan_id)
             by_id = {step.id: step for step in state.steps}
-            ready = tuple(
-                record
-                for record in self.repository.list_step_records(plan_id)
-                if record.phase is CoordinationPhase.READY
-            )
+            ready = tuple(record for record in records if record.phase is CoordinationPhase.READY)
             if ready:
                 started = await asyncio.gather(
                     *(
@@ -470,12 +466,10 @@ class DurablePlanStepCoordinator:
         return self._projection_from_state(state, records)
 
     async def async_projection(self, plan_id: str) -> PlanCoordinationProjection:
-        """Runtime-safe projection that never performs blocking persistence inline."""
+        """Runtime-safe projection from one serialized persistence snapshot."""
 
-        state = await self.runtime_repository.get_plan(plan_id)
-        records = {
-            item.step_id: item for item in await self.runtime_repository.list_step_records(plan_id)
-        }
+        state, snapshot_records = await self.runtime_repository.get_plan_snapshot(plan_id)
+        records = {item.step_id: item for item in snapshot_records}
         return self._projection_from_state(state, records)
 
     @staticmethod
