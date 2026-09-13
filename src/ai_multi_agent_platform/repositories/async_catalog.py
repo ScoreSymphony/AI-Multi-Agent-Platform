@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from collections.abc import Callable
-from typing import Protocol, cast
+from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
@@ -172,7 +172,7 @@ def ensure_async_repository_binding_catalog(
 
     if isinstance(catalog, SqliteRepositoryBindingCatalog):
         return AsyncSqliteRepositoryBindingCatalog(catalog, max_concurrency=max_concurrency)
-    return cast(RepositoryBindingCatalog, catalog)
+    return catalog
 
 
 async def _run_to_transaction_boundary[T](operation: Callable[[], T]) -> T:
