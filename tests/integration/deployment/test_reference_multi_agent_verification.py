@@ -9,6 +9,7 @@ import pytest
 
 from ai_multi_agent_platform.agents import (
     AgentInstructions,
+    AgentModelPolicy,
     AgentProfile,
     AgentRevisionRef,
     AgentRunStatus,
@@ -86,6 +87,7 @@ def _profile(name: str, role: str) -> AgentProfile:
                 version="1",
             )
         ),
+        model=AgentModelPolicy(allow_task_override=role == "developer"),
     )
 
 
