@@ -9,6 +9,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Literal, Protocol, TypeVar
+from weakref import WeakKeyDictionary
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
@@ -119,6 +120,29 @@ class SecurityPersistenceOffload:
             return operation()
 
 
+_SHARED_APPROVAL_OFFLOADS: WeakKeyDictionary[ApprovalService, SecurityPersistenceOffload] = (
+    WeakKeyDictionary()
+)
+_SHARED_APPROVAL_OFFLOADS_LOCK = threading.Lock()
+
+
+def _shared_approval_offload(approvals: ApprovalService) -> SecurityPersistenceOffload:
+    """Return the process-local serialization owner for one mutable Approval service.
+
+    Multiple runtime projections may wrap the same synchronous ApprovalService. They must share
+    the same Approval lock or a reader could observe an in-memory mutation before its durable
+    SQLite write settles. Weak ownership avoids extending the lifetime of the backing service.
+    """
+
+    with _SHARED_APPROVAL_OFFLOADS_LOCK:
+        existing = _SHARED_APPROVAL_OFFLOADS.get(approvals)
+        if existing is not None:
+            return existing
+        created = SecurityPersistenceOffload()
+        _SHARED_APPROVAL_OFFLOADS[approvals] = created
+        return created
+
+
 async def _await_persistence_boundary[T](worker: asyncio.Future[T]) -> T:
     try:
         return await asyncio.shield(worker)
@@ -165,6 +189,10 @@ class _AsyncAdapterBase:
     def __init__(self, *, offload: SecurityPersistenceOffload | None = None) -> None:
         self._offload = offload or SecurityPersistenceOffload()
 
+    @property
+    def offload(self) -> SecurityPersistenceOffload:
+        return self._offload
+
     async def _run[T](
         self,
         operation: Callable[[], T],
@@ -192,7 +220,7 @@ class AsyncApprovalServiceAdapter(_AsyncAdapterBase):
         *,
         offload: SecurityPersistenceOffload | None = None,
     ) -> None:
-        super().__init__(offload=offload)
+        super().__init__(offload=offload or _shared_approval_offload(approvals))
         self._approvals = approvals
 
     async def get(self, approval_id: str) -> ApprovalRecord:
