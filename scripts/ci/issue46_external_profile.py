@@ -65,6 +65,7 @@ def _hermes() -> int:
         return _run_pytest(
             "tests/test_issue_8_hermes_adapter.py::"
             "test_hermes_agent_mapper_pins_agent_team_model_and_capability_contracts",
+            "tests/regression/upstreams/test_hermes_v0_21_2.py",
             "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py",
         )
 
