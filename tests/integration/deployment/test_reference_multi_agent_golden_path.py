@@ -328,7 +328,11 @@ def test_public_single_node_runs_reference_multi_agent_golden_path_to_completion
                 step_runs[run.run.subject_id] = run.run_id
         assert set(step_runs) == {step.id for step in state.steps}
 
-        for draft, step in zip(proposal.proposal.steps, state.steps, strict=True):
+        drafts_by_title = {draft.title: draft for draft in proposal.proposal.steps}
+        steps_by_title = {step.title: step for step in state.steps}
+        assert set(steps_by_title) == set(drafts_by_title)
+        for title, step in steps_by_title.items():
+            draft = drafts_by_title[title]
             assert draft.assignment is not None
             agent_runs = deployment.agents.repository.list_agent_runs(step_runs[step.id])
             assert len(agent_runs) == 1
@@ -336,7 +340,10 @@ def test_public_single_node_runs_reference_multi_agent_golden_path_to_completion
             assert agent_runs[0].agent.revision == draft.assignment.agent_revision
             assert len(agent_runs[0].result_ids) == 1
 
-        research_step, approach_step, execute_step, review_step = state.steps
+        research_step = steps_by_title["Gather authoritative evidence"]
+        approach_step = steps_by_title["Prepare an independent execution approach"]
+        execute_step = steps_by_title["Produce the requested result"]
+        review_step = steps_by_title["Review the exact produced result"]
         execute_handoffs = tuple(
             handoff
             for handoff in deployment.handoffs.service.list_handoffs_for_step(execute_step.id)
