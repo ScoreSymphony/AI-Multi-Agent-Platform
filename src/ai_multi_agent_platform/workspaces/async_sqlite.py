@@ -23,10 +23,9 @@ from .models import (
     WorkspaceSourceRef,
     WorkspaceType,
 )
+from .run_bindings import RunWorkspaceBinding, _time
 from .run_bindings import (
-    RunWorkspaceBinding,
     SqliteRunWorkspaceBindingRepository as _SyncRunWorkspaceBindingRepository,
-    _time,
 )
 from .sqlite import SqliteWorkspaceProvider as _SyncWorkspaceProvider
 
