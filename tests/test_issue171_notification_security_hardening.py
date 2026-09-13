@@ -28,7 +28,7 @@ def test_budget_notification_honors_preferences_and_recipient_isolation() -> Non
         recipient = RecipientRef(RecipientType.USER, new_id("user"))
         other = RecipientRef(RecipientType.USER, new_id("user"))
         preferences = InMemoryNotificationPreferenceRepository()
-        preferences.save(
+        await preferences.save(
             NotificationPreference(
                 recipient=recipient,
                 enabled_categories=frozenset({NotificationCategory.APPROVAL}),
@@ -61,7 +61,7 @@ def test_budget_notification_honors_preferences_and_recipient_isolation() -> Non
         assert await service.create_once(candidate) is None
         assert await service.list(NotificationQuery(recipient=recipient)) == ()
 
-        preferences.save(
+        await preferences.save(
             NotificationPreference(
                 recipient=recipient,
                 enabled_categories=frozenset({NotificationCategory.RESOURCE}),
