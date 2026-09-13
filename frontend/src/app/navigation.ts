@@ -5,6 +5,12 @@ export interface NavigationItem {
   apiResource?: string;
 }
 
+export type NavigationMaturity = "beta" | "experimental";
+
+export const navigationMaturity: Partial<Record<string, NavigationMaturity>> = {
+  "/learning": "experimental",
+};
+
 export const navigation: NavigationItem[] = [
   { label: "Home", path: "/", group: "Work" },
   { label: "First-run onboarding", path: "/onboarding", group: "Work", apiResource: "onboarding" },

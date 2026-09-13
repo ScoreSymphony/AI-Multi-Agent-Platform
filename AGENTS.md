@@ -10,6 +10,7 @@ All contributors and coding agents must treat the following documents as authori
 
 - [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md) — product identity, canonical workflow, deployment/cost goals and replaceable architecture layers.
 - [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md) — non-negotiable architecture principles and explicit invariants.
+- [`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md) and [`docs/FEATURE_CLASSIFICATION.toml`](docs/FEATURE_CLASSIFICATION.toml) — orthogonal architectural-role/public-stability taxonomy and the audited major public surfaces.
 - [`docs/PACKAGE_BOUNDARIES.md`](docs/PACKAGE_BOUNDARIES.md) and [`docs/PACKAGE_BOUNDARIES.toml`](docs/PACKAGE_BOUNDARIES.toml) — top-level Python package ownership, migration disposition and the machine-checked root namespace inventory.
 - [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) — dependency-driven execution order, parallel work lanes and convergence gates.
 - [`docs/adr/README.md`](docs/adr/README.md) — process for recording material architecture decisions.
@@ -35,6 +36,7 @@ Implementation work must not silently contradict the normative documents. If a m
 15. Treat single-node operation as a valid production topology and multi-node operation as an extension of the same contracts.
 16. Treat security, approvals, traceability, observability and recovery as cross-cutting platform requirements.
 17. Extend an existing top-level package owner by default. A new package directly below `ai_multi_agent_platform` requires an explicit ownership rationale in `docs/PACKAGE_BOUNDARIES.toml` and must satisfy the criteria in `docs/PACKAGE_BOUNDARIES.md`; issue-, provider- and one-feature-only root packages are not an acceptable default.
+18. When adding a new public platform capability or making an internal surface public, declare its canonical owner, architectural role, stability level, compatibility expectation and authoritative documentation under `docs/FEATURE_CLASSIFICATION.*`. Do not infer stability from package location, UI prominence, issue state or repository `0.x` versioning.
 
 ## Issue dependency and execution rules
 

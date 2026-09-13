@@ -2,6 +2,8 @@
 
 Issue: #595
 
+> **Experimental:** `platform learning` is an Experimental public surface. It is available for real governed-learning workflows, but its public command/resource contracts may change incompatibly in a non-patch release without a deprecation window. Use [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md) as the repository-wide maturity policy.
+
 The Learning CLI is API-first. It reads and mutates governed Learning state only through the canonical `/api/v1` Control Plane. It never imports Learning repositories or owner-domain storage directly.
 
 ## Public entrypoint
