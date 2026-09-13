@@ -288,7 +288,7 @@ def assess_private_mcp_transport_evaluation(
                 f"latency.{field} has fewer than {minimum_latency_samples} retained samples"
             )
 
-    adoption_blockers = _adoption_blockers(report, hard_result_failures)
+    adoption_blockers = _adoption_blockers(report, failed)
     decision_ready = not decision_blockers
     adoption_eligible = decision_ready and not adoption_blockers
 
@@ -326,9 +326,9 @@ def assess_private_mcp_transport_evaluation(
 
 def _adoption_blockers(
     report: Mapping[str, Any],
-    hard_result_failures: Sequence[str],
+    failed_cases: Sequence[str],
 ) -> list[str]:
-    blockers = [f"failed required invariant: {case}" for case in hard_result_failures]
+    blockers = [f"failed required case: {case}" for case in failed_cases]
 
     topology = _require_mapping(report.get("topology"), "topology")
     if topology.get("public_backend_exposed") is not False:
