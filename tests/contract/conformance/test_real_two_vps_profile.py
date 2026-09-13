@@ -68,9 +68,7 @@ def _valid_issue562_report() -> dict[str, object]:
             "run_id": "run_00000000-0000-4000-8000-000000000562",
             "worker_job_id": "worker_job_00000000-0000-4000-8000-000000000562",
             "post_recovery_run_id": "run_00000000-0000-4000-8000-000000000563",
-            "post_recovery_worker_job_id": (
-                "worker_job_00000000-0000-4000-8000-000000000563"
-            ),
+            "post_recovery_worker_job_id": ("worker_job_00000000-0000-4000-8000-000000000563"),
             "post_restart_run_id": "run_00000000-0000-4000-8000-000000000564",
         },
         "advertised_capability_refs": ["execution:general"],
