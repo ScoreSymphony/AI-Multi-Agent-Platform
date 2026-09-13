@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
-from ai_multi_agent_platform.contracts import ContractError
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import validate_id
 
 from . import delivery_sqlite as _legacy_delivery
@@ -30,7 +32,7 @@ class SqliteNotificationRepository(_SyncNotificationRepository):
 
     async def _run_sqlite[T](
         self,
-        operation: callable[[], T],
+        operation: Callable[[], T],
         *,
         message: str,
         write: bool = False,
@@ -85,8 +87,6 @@ class SqliteNotificationRepository(_SyncNotificationRepository):
 
         encoded = await self._run_sqlite(operation, message="failed to read notification")
         if encoded is None:
-            from ai_multi_agent_platform.contracts import ErrorCode
-
             raise ContractError(ErrorCode.NOT_FOUND, "notification not found")
         return _legacy_notifications._decode_notification(encoded)
 
@@ -255,7 +255,7 @@ class SqliteDeliveryAttemptRepository(_SyncDeliveryAttemptRepository):
 
     async def _run_sqlite[T](
         self,
-        operation: callable[[], T],
+        operation: Callable[[], T],
         *,
         message: str,
         write: bool = False,
@@ -268,8 +268,6 @@ class SqliteDeliveryAttemptRepository(_SyncDeliveryAttemptRepository):
             raise map_sqlite_error(exc, message) from exc
 
     async def save(self, attempt: DeliveryAttempt) -> DeliveryAttempt:
-        import json
-
         payload = json.dumps(
             _legacy_delivery._encode(attempt),
             sort_keys=True,
@@ -362,7 +360,7 @@ class SqliteNotificationRuntimeState(_SyncNotificationRuntimeState):
 
     async def _run_sqlite[T](
         self,
-        operation: callable[[], T],
+        operation: Callable[[], T],
         *,
         message: str,
         write: bool = False,
