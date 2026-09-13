@@ -207,7 +207,7 @@ def merge_active_aggregate(existing: Notification, incoming: Notification) -> No
         severity=incoming.severity,
         state=NotificationState.UNREAD,
         occurrence_count=existing.occurrence_count + 1,
-        updated_at=incoming.updated_at,
+        updated_at=max(existing.updated_at, incoming.updated_at),
         read_at=None,
         correlation_id=incoming.correlation_id or existing.correlation_id,
         causation_id=incoming.causation_id or existing.causation_id,
