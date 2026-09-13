@@ -38,20 +38,27 @@ from ai_multi_agent_platform.testing import FakeModelProvider
 
 _PASSWORD = "correct horse battery staple for issue 889"
 _MODEL_ID = "model-issue-889-reference-replanning"
+_EXECUTE_TITLE = "Produce the requested result"
 
 
 class _ExecuteFailureProvider(FakeModelProvider):
-    def __init__(self, *, fail_execute: bool = True) -> None:
+    def __init__(self, deployment: Any, *, fail_execute: bool = True) -> None:
         super().__init__()
+        self.deployment = deployment
         self.fail_execute = fail_execute
         self.execute_failures = 0
 
     async def generate(self, request: ModelRequest):
-        # The reference DAG has exactly two model-backed READY roots (research + approach).
-        # Their relative completion order is intentionally irrelevant. Once both calls have
-        # reached the provider, every subsequent ordinary model call belongs to execute until
-        # execute succeeds; review cannot start across the canonical fan-in barrier first.
-        if self.fail_execute and len(self.calls) >= 2:
+        run_id = request.request_id.removesuffix(":model")
+        run = await self.deployment.kernel.get_run(request.context.correlation_id, run_id)
+        is_execute = False
+        if run.run.subject_type == "step":
+            record = self.deployment.coordination_repository.get_step_record(run.run.subject_id)
+            step = self.deployment.coordination_repository.get_plan(record.plan_id).step(
+                run.run.subject_id
+            )
+            is_execute = step.title == _EXECUTE_TITLE
+        if self.fail_execute and is_execute:
             self.calls.append(request)
             self.execute_failures += 1
             raise ContractError(ErrorCode.TRANSIENT_FAILURE, "injected canonical execute failure")
@@ -159,7 +166,7 @@ def _step_by_title(deployment: Any, plan_id: str, title: str):
 
 
 async def _failed_execute_run(deployment: Any, task_id: str, plan_id: str):
-    step = _step_by_title(deployment, plan_id, "Produce the requested result")
+    step = _step_by_title(deployment, plan_id, _EXECUTE_TITLE)
     record = deployment.coordination_repository.get_step_record(step.id)
     assert record.latest_run_id is not None
     run = await deployment.kernel.get_run(task_id, record.latest_run_id)
@@ -173,7 +180,7 @@ def test_failure_evidence_replans_to_new_revision_and_repairs_success(tmp_path: 
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
         )
-        provider = _ExecuteFailureProvider()
+        provider = _ExecuteFailureProvider(deployment)
         _install_model(deployment, provider)
         admin = deployment.bootstrap_admin("issue-889-replan-admin", _PASSWORD)
         owner = OwnerRef(type="user", id=admin.user_id)
@@ -266,7 +273,7 @@ def test_replan_budget_exhaustion_is_resource_exhausted_and_stops_progress(tmp_p
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
         )
-        provider = _ExecuteFailureProvider()
+        provider = _ExecuteFailureProvider(deployment)
         _install_model(deployment, provider)
         deployment.planning.replan_policy = ReplanPolicy(max_replans=1)
         admin = deployment.bootstrap_admin("issue-889-budget-admin", _PASSWORD)
