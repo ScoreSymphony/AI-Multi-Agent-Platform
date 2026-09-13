@@ -10,17 +10,19 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, PlatformEvent
 from ai_multi_agent_platform.kernel.repository import EventRepository
 
+from ._sqlite_async import AsyncSqliteOffload, map_sqlite_error
 from .models import TriggerDelivery, require_aware, utc_now
 from .runtime_service import AutomationService
 from .service import ReferenceScheduler
 
 AutomationEventPreprocessor = Callable[[PlatformEvent], Awaitable[None]]
+_T = TypeVar("_T")
 
 _RETRYABLE_EVENT_ERROR_CODES = frozenset(
     {
@@ -117,11 +119,12 @@ class InMemoryAutomationRuntimeState(AutomationRuntimeState):
 
 
 class SqliteAutomationRuntimeState(AutomationRuntimeState):
-    """Restart-safe runtime state that may share the Automation repository SQLite file."""
+    """Restart-safe runtime state with bounded SQLite offload and serialized writes."""
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, *, max_concurrency: int = 4) -> None:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._offload = AsyncSqliteOffload(max_concurrency=max_concurrency)
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
@@ -166,24 +169,49 @@ class SqliteAutomationRuntimeState(AutomationRuntimeState):
                 "failed to initialize automation runtime state",
             ) from exc
 
+    async def _run_sqlite(
+        self,
+        operation: Callable[[], _T],
+        *,
+        write: bool,
+        message: str,
+    ) -> _T:
+        try:
+            return await self._offload.run(operation, write=write)
+        except ContractError:
+            raise
+        except sqlite3.Error as exc:
+            raise map_sqlite_error(exc, message) from exc
+
     async def get_command(
         self, principal_ref: str, idempotency_key: str
     ) -> AutomationCommandRecord | None:
-        try:
-            with self._connect() as connection:
-                row = connection.execute(
-                    """
-                    SELECT command, resource_ref, payload_digest, result
-                    FROM automation_runtime_commands
-                    WHERE principal_ref = ? AND idempotency_key = ?
-                    """,
-                    (principal_ref, idempotency_key),
-                ).fetchone()
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to read automation command replay state",
-            ) from exc
+        return await self._run_sqlite(
+            lambda: self._get_command_sync(principal_ref, idempotency_key),
+            write=False,
+            message="failed to read automation command replay state",
+        )
+
+    def _get_command_sync(
+        self, principal_ref: str, idempotency_key: str
+    ) -> AutomationCommandRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT command, resource_ref, payload_digest, result
+                FROM automation_runtime_commands
+                WHERE principal_ref = ? AND idempotency_key = ?
+                """,
+                (principal_ref, idempotency_key),
+            ).fetchone()
+        return self._command_from_row(principal_ref, idempotency_key, row)
+
+    def _command_from_row(
+        self,
+        principal_ref: str,
+        idempotency_key: str,
+        row: sqlite3.Row | None,
+    ) -> AutomationCommandRecord | None:
         if row is None:
             return None
         result = cast(dict[str, JsonValue], json.loads(cast(str, row["result"])))
@@ -197,35 +225,44 @@ class SqliteAutomationRuntimeState(AutomationRuntimeState):
         )
 
     async def save_command(self, record: AutomationCommandRecord) -> AutomationCommandRecord:
+        return await self._run_sqlite(
+            lambda: self._save_command_sync(record),
+            write=True,
+            message="failed to persist automation command replay state",
+        )
+
+    def _save_command_sync(self, record: AutomationCommandRecord) -> AutomationCommandRecord:
         encoded = json.dumps(record.result, sort_keys=True, separators=(",", ":"))
-        try:
-            with self._connect() as connection:
-                connection.execute(
-                    """
-                    INSERT OR IGNORE INTO automation_runtime_commands(
-                        principal_ref,
-                        idempotency_key,
-                        command,
-                        resource_ref,
-                        payload_digest,
-                        result
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        record.principal_ref,
-                        record.idempotency_key,
-                        record.command,
-                        record.resource_ref,
-                        record.payload_digest,
-                        encoded,
-                    ),
-                )
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to persist automation command replay state",
-            ) from exc
-        existing = await self.get_command(record.principal_ref, record.idempotency_key)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO automation_runtime_commands(
+                    principal_ref,
+                    idempotency_key,
+                    command,
+                    resource_ref,
+                    payload_digest,
+                    result
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.principal_ref,
+                    record.idempotency_key,
+                    record.command,
+                    record.resource_ref,
+                    record.payload_digest,
+                    encoded,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT command, resource_ref, payload_digest, result
+                FROM automation_runtime_commands
+                WHERE principal_ref = ? AND idempotency_key = ?
+                """,
+                (record.principal_ref, record.idempotency_key),
+            ).fetchone()
+        existing = self._command_from_row(record.principal_ref, record.idempotency_key, row)
         if existing is None:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
@@ -234,60 +271,64 @@ class SqliteAutomationRuntimeState(AutomationRuntimeState):
         return existing
 
     async def has_processed_event(self, event_id: str) -> bool:
-        try:
-            with self._connect() as connection:
-                row = connection.execute(
-                    "SELECT 1 FROM automation_runtime_processed_events WHERE event_id = ?",
-                    (event_id,),
-                ).fetchone()
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to read automation event cursor",
-            ) from exc
+        return await self._run_sqlite(
+            lambda: self._has_processed_event_sync(event_id),
+            write=False,
+            message="failed to read automation event cursor",
+        )
+
+    def _has_processed_event_sync(self, event_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM automation_runtime_processed_events WHERE event_id = ?",
+                (event_id,),
+            ).fetchone()
         return row is not None
 
     async def mark_processed_event(self, event_id: str) -> None:
-        try:
-            with self._connect() as connection:
-                connection.execute(
-                    """
-                    INSERT OR IGNORE INTO automation_runtime_processed_events(event_id)
-                    VALUES (?)
-                    """,
-                    (event_id,),
-                )
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to persist automation event cursor",
-            ) from exc
+        await self._run_sqlite(
+            lambda: self._mark_processed_event_sync(event_id),
+            write=True,
+            message="failed to persist automation event cursor",
+        )
+
+    def _mark_processed_event_sync(self, event_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO automation_runtime_processed_events(event_id)
+                VALUES (?)
+                """,
+                (event_id,),
+            )
 
     async def append_audit_event(self, event: dict[str, JsonValue]) -> None:
         encoded = json.dumps(event, sort_keys=True, separators=(",", ":"))
-        try:
-            with self._connect() as connection:
-                connection.execute(
-                    "INSERT INTO automation_runtime_audit(payload) VALUES (?)",
-                    (encoded,),
-                )
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to persist automation audit event",
-            ) from exc
+        await self._run_sqlite(
+            lambda: self._append_audit_event_sync(encoded),
+            write=True,
+            message="failed to persist automation audit event",
+        )
+
+    def _append_audit_event_sync(self, encoded: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO automation_runtime_audit(payload) VALUES (?)",
+                (encoded,),
+            )
 
     async def list_audit_events(self) -> tuple[dict[str, JsonValue], ...]:
-        try:
-            with self._connect() as connection:
-                rows = connection.execute(
-                    "SELECT payload FROM automation_runtime_audit ORDER BY sequence"
-                ).fetchall()
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to list automation audit events",
-            ) from exc
+        return await self._run_sqlite(
+            self._list_audit_events_sync,
+            write=False,
+            message="failed to list automation audit events",
+        )
+
+    def _list_audit_events_sync(self) -> tuple[dict[str, JsonValue], ...]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT payload FROM automation_runtime_audit ORDER BY sequence"
+            ).fetchall()
         return tuple(
             cast(dict[str, JsonValue], json.loads(cast(str, row["payload"]))) for row in rows
         )
