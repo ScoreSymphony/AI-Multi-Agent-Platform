@@ -63,11 +63,13 @@ def main() -> int:
         return 2
 
     # Extend the accepted v0.21.1 adapter matrix with candidate-bound regressions,
-    # then exercise the exact candidate's real /v1/runs seam and cancellation isolation.
+    # then exercise the exact candidate's real /v1/runs seam, cancellation isolation,
+    # and durable active-run recovery after runtime recreation.
     platform_status = _run(
         "tests/regression/upstreams/test_hermes_v0_21_2.py",
         "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py",
         "tests/integration/upstreams/test_hermes_v0_21_2_concurrency.py",
+        "tests/integration/upstreams/test_hermes_v0_21_2_restart.py",
     )
     if platform_status:
         return platform_status
