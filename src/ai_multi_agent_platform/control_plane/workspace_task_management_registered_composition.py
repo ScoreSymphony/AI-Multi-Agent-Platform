@@ -25,13 +25,17 @@ from .task_management_api import (
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
     TASK_MANAGEMENT_UPDATE_COMMAND,
+)
+from .task_management_contract import (
     _augment_openapi as _augment_task_management_openapi,
 )
 from .workspace_task_management_explicit_composition import (
     INSECURE_CONTROL_PLANE_ENV,
-    ControlPlane as _LinearControlPlane,
     ControlPlaneHTTP,
     build_openapi,
+)
+from .workspace_task_management_explicit_composition import (
+    ControlPlane as _LinearControlPlane,
 )
 
 TASK_MANAGEMENT_MODULE = "task-management"
