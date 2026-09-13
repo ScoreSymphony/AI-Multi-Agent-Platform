@@ -187,6 +187,29 @@ def test_verifier_rejects_parent_traversal(tmp_path: Path) -> None:
         verify_private_mcp_transport_evidence_files(report, evidence_root=tmp_path)
 
 
+def test_verifier_rejects_windows_drive_relative_path(tmp_path: Path) -> None:
+    report = _report("b" * 64)
+    report["raw_evidence"] = [{"path": "C:outside.json", "sha256": "b" * 64}]
+
+    with pytest.raises(ValueError, match="must be relative"):
+        verify_private_mcp_transport_evidence_files(report, evidence_root=tmp_path)
+
+
+def test_verifier_rejects_symlink_escape(tmp_path: Path) -> None:
+    outside = tmp_path.parent / f"{tmp_path.name}-outside-evidence.json"
+    outside.write_text("outside evidence\n", encoding="utf-8")
+    evidence = tmp_path / _EVIDENCE_PATH
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        evidence.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+    report = _report(_sha256(outside))
+
+    with pytest.raises(ValueError, match="escapes evidence_root"):
+        verify_private_mcp_transport_evidence_files(report, evidence_root=tmp_path)
+
+
 def test_verifier_rejects_duplicate_manifest_path(tmp_path: Path) -> None:
     evidence = _write_evidence(tmp_path)
     entry = {"path": _EVIDENCE_PATH, "sha256": _sha256(evidence)}
@@ -217,6 +240,7 @@ def test_cli_validate_emits_verified_manifest(
     payload = json.loads(capsys.readouterr().out)
     assert payload["valid"] is True
     assert payload["evidence"]["files_verified"] == 1
+    assert "evidence_root" not in payload["evidence"]
 
 
 def test_cli_can_gate_definition_of_done(
