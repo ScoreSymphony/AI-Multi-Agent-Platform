@@ -16,7 +16,7 @@ def _client() -> MCPStatelessHTTPClient:
     )
 
 
-def test_all_stateless_requests_use_required_method_header() -> None:
+def test_all_stateless_requests_use_required_transport_headers() -> None:
     client = _client()
 
     headers = client._request_headers(
@@ -28,6 +28,8 @@ def test_all_stateless_requests_use_required_method_header() -> None:
         }
     )
 
+    assert headers["Accept"] == "application/json, text/event-stream"
+    assert headers["MCP-Protocol-Version"] == "2026-07-28"
     assert headers["Mcp-Method"] == "server/discover"
     assert "Mcp-Name" not in headers
 
