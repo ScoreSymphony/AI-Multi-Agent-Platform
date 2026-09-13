@@ -146,6 +146,48 @@ def test_shared_registry_releases_offload_after_final_owner_only() -> None:
     assert offload_reference() is None
 
 
+def test_owner_release_callback_can_reenter_registry_during_resolve() -> None:
+    registry = SharedPersistenceOffloadRegistry[_OffloadToken]()
+    first_repository = object()
+    owner_holder = [_RegistryOwner()]
+    registry.resolve(
+        first_repository,
+        owner=owner_holder[0],
+        requested=None,
+        factory=_OffloadToken,
+    )
+
+    second_repository = object()
+    second_owner = _RegistryOwner()
+    completed = threading.Event()
+    failures: list[BaseException] = []
+
+    def factory() -> _OffloadToken:
+        owner_holder.clear()
+        gc.collect()
+        return _OffloadToken()
+
+    def resolve_second_repository() -> None:
+        try:
+            registry.resolve(
+                second_repository,
+                owner=second_owner,
+                requested=None,
+                factory=factory,
+            )
+        except BaseException as exc:  # pragma: no cover - asserted after thread completion
+            failures.append(exc)
+        finally:
+            completed.set()
+
+    worker = threading.Thread(target=resolve_second_repository, daemon=True)
+    worker.start()
+    worker.join(timeout=1)
+
+    assert completed.is_set(), "weakref callback deadlocked while resolve held the registry lock"
+    assert failures == []
+
+
 def test_plan_snapshot_holds_serialization_boundary_across_all_reads() -> None:
     async def scenario() -> None:
         repository = _BlockingSnapshotRepository()
