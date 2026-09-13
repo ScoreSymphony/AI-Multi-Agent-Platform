@@ -23,7 +23,6 @@ from ai_multi_agent_platform.research import (
     SqliteResearchRepository,
 )
 
-
 OWNER = OwnerRef(type="user", id="issue-892-research")
 
 
