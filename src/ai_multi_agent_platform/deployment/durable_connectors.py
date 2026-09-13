@@ -62,6 +62,7 @@ from ai_multi_agent_platform.planning import (
     PlanningOrchestratorAdapter,
     PlanningService,
     PolicyAwarePlanningEnvironmentResolver,
+    ReplanningEvidenceBridge,
     planning_command_handlers,
     planning_resource_services,
 )
@@ -150,10 +151,12 @@ class SingleNodeDeployment(BaseSingleNodeDeployment):
     planning_repository: JsonPlanningRepository
     planning_kernel: PlatformKernel
     planning: PlanningService
+    replanning: ReplanningEvidenceBridge
     egress: EgressDeploymentBindings
     context: SingleNodeContextComposition
     learning: SingleNodeLearningComposition
     handoffs: HandoffDeploymentComposition
+    automatic_reviewer: AutomaticReviewerWorkflow
     reviewer_recovery: AutomaticReviewerStartupReconciler
 
 
@@ -383,6 +386,12 @@ def build_single_node_deployment(
         event_sink=_planning_event_sink(base.telemetry),
         environment_resolver=planning_environment,
     )
+    replanning = ReplanningEvidenceBridge(
+        planning,
+        coordination_repository=base.coordination_repository,
+        verification_repository=base.verification,
+        event_sink=_planning_event_sink(base.telemetry),
+    )
     for collection, service in planning_resource_services(planning).items():
         base.control_plane.register_resource_service(collection, service)
     for command, handler in planning_command_handlers(planning).items():
@@ -426,7 +435,11 @@ def build_single_node_deployment(
     # #889 adds no second Context lifecycle. It extends the already-installed #590 source factory
     # with one adapter that asks the canonical #651 owner to bind incoming Handoffs to the exact
     # consuming Run before Context assembly. Root Steps simply contribute no Handoff candidates.
-    incoming_handoffs = ReferenceIncomingHandoffContextAdapter(handoffs)
+    incoming_handoffs = ReferenceIncomingHandoffContextAdapter(
+        handoffs,
+        coordinator=base.coordination_repository,
+        kernel=base.kernel,
+    )
     canonical_binding_factory = context.lifecycle._binding_factory  # noqa: SLF001
 
     def reference_binding_factory(
@@ -498,10 +511,12 @@ def build_single_node_deployment(
         planning_repository=planning_repository,
         planning_kernel=planning_kernel,
         planning=planning,
+        replanning=replanning,
         egress=egress,
         context=context,
         learning=learning,
         handoffs=handoffs,
+        automatic_reviewer=automatic_reviewer,
         reviewer_recovery=reviewer_recovery,
     )
 
