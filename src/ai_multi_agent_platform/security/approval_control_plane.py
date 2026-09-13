@@ -29,9 +29,7 @@ class ApprovalResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(
-            _approval_resource(record) for record in await self._runtime_approvals.all()
-        )
+        return tuple(_approval_resource(record) for record in await self._runtime_approvals.all())
 
     async def get_resource(
         self,
