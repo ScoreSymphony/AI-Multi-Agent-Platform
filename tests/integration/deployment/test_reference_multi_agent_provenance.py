@@ -11,9 +11,8 @@ from ai_multi_agent_platform.agents import (
     AgentRevisionRef,
     AgentRunStatus,
     InstructionSource,
-    ReferenceOrchestratorMapper,
 )
-from ai_multi_agent_platform.context import ContextSourceType
+from ai_multi_agent_platform.context import ContextSourceType, ReferenceContextOrchestratorAdapter
 from ai_multi_agent_platform.contracts import HealthStatus, ModelRequest, ModelResponse
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.deployment.reference_multi_agent import (
@@ -249,7 +248,10 @@ def test_reference_multi_agent_golden_path_persists_complete_canonical_provenanc
             assert producer.agent == expected_refs[step.id]
             assert producer.selected_model_config_id == _MODEL_ID
             assert producer.selected_provider_id == provider.descriptor.provider_id
-            assert producer.orchestrator_adapter_id == ReferenceOrchestratorMapper.adapter_id
+            assert (
+                producer.orchestrator_adapter_id
+                == ReferenceContextOrchestratorAdapter.adapter_id
+            )
             assert run.backend_ref == f"agent-run:{producer.agent_run_id}"
             assert len(producer.result_ids) == 1
             result_id = producer.result_ids[0]
@@ -264,7 +266,7 @@ def test_reference_multi_agent_golden_path_persists_complete_canonical_provenanc
             assert binding.task_id == task.task_id
             assert binding.agent_id == producer.agent.agent_id
             assert binding.agent_revision == producer.agent.revision
-            assert binding.orchestrator_adapter_id == ReferenceOrchestratorMapper.adapter_id
+            assert binding.orchestrator_adapter_id == ReferenceContextOrchestratorAdapter.adapter_id
             assert binding.context_bundle_digest == bundle.digest
             assert bundle.task_id == task.task_id
             assert bundle.run_id == run.run_id
@@ -372,7 +374,7 @@ def test_reference_multi_agent_golden_path_persists_complete_canonical_provenanc
         assert isinstance(provider, FakeModelProvider)
         assert deployment.models.get_model(_MODEL_ID).location is ModelLocation.LOCAL
         assert all(
-            producer.orchestrator_adapter_id == ReferenceOrchestratorMapper.adapter_id
+            producer.orchestrator_adapter_id == ReferenceContextOrchestratorAdapter.adapter_id
             for producer in producer_runs.values()
         )
         assert all(
