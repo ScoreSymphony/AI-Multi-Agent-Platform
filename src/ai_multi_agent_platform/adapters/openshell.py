@@ -324,7 +324,9 @@ class OpenShellExecutor(Executor):
         if request.cancellation is None:
             if request.timeout_seconds is None:
                 return await self._client.execute(backend_request)
-            return await asyncio.wait_for(self._client.execute(backend_request), request.timeout_seconds)
+            return await asyncio.wait_for(
+                self._client.execute(backend_request), request.timeout_seconds
+            )
 
         result_task = asyncio.create_task(self._client.execute(backend_request))
         cancel_task = asyncio.create_task(request.cancellation.wait())
@@ -448,7 +450,9 @@ class OpenShellExecutor(Executor):
             stdout="" if redact_provider_failure else backend.stdout,
             stderr=_PROVIDER_FAILURE_MESSAGE if redact_provider_failure else backend.stderr,
             artifacts=tuple(artifacts),
-            started_at=started_at if redact_provider_failure else (backend.started_at or started_at),
+            started_at=(
+                started_at if redact_provider_failure else (backend.started_at or started_at)
+            ),
             finished_at=(
                 datetime.now(UTC).isoformat()
                 if redact_provider_failure
