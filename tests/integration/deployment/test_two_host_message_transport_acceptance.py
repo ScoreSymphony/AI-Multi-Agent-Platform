@@ -6,10 +6,7 @@ import sys
 from pathlib import Path
 
 _SCRIPT = (
-    Path(__file__).resolve().parents[3]
-    / "scripts"
-    / "acceptance"
-    / "two_host_message_transport.py"
+    Path(__file__).resolve().parents[3] / "scripts" / "acceptance" / "two_host_message_transport.py"
 )
 
 

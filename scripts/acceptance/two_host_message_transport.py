@@ -392,7 +392,9 @@ async def _run_control(args: argparse.Namespace) -> dict[str, object]:
             raise RuntimeError("input Artifact reference did not survive result retrieval")
         output_artifact_ref = str(args.output_artifact_ref)
         if output_artifact_ref not in result.artifact_refs:
-            raise RuntimeError("Worker-produced Artifact reference did not survive result retrieval")
+            raise RuntimeError(
+                "Worker-produced Artifact reference did not survive result retrieval"
+            )
         evidence_ref = str(args.evidence_ref)
         if evidence_ref not in result.evidence_refs:
             raise RuntimeError("Worker Evidence reference did not survive result retrieval")
@@ -408,9 +410,13 @@ async def _run_control(args: argparse.Namespace) -> dict[str, object]:
             "worker_host_label",
         )
         if worker_instance_ref not in result.evidence_refs:
-            raise RuntimeError("Worker instance Evidence reference did not survive result retrieval")
+            raise RuntimeError(
+                "Worker instance Evidence reference did not survive result retrieval"
+            )
         if worker_host_label != str(args.expected_worker_host_label):
-            raise RuntimeError("Worker-reported host label does not match the expected Host B label")
+            raise RuntimeError(
+                "Worker-reported host label does not match the expected Host B label"
+            )
 
         return {
             "schema": REPORT_SCHEMA,
@@ -511,7 +517,9 @@ def _verify_restart(
         if report.get("expected_evidence_ref") not in evidence_refs:
             raise ValueError("Evidence reference is absent from acceptance evidence")
         if report.get("worker_instance_ref") not in evidence_refs:
-            raise ValueError("Worker instance Evidence reference is absent from acceptance evidence")
+            raise ValueError(
+                "Worker instance Evidence reference is absent from acceptance evidence"
+            )
         if report.get("credential_material_recorded") is not False:
             raise ValueError("report does not affirm credential redaction")
         if report.get("broker_address_recorded") is not False:
