@@ -1,5 +1,6 @@
 name: Apply Test Migration 722
-# Current-main baseline at de65bfcd: 3789 collected tests.
+# Current-main baseline at de65bfcd: 3788 collected test items.
+# Normal pytest reports 3742 passed + 47 skipped because one collection-time/module skip is not a collected item.
 
 on:
   push:
@@ -166,7 +167,7 @@ jobs:
           python -m pytest --collect-only -q | tee /tmp/collection.txt
           count=$(awk -F': ' '/\.py: [0-9]+$/{sum+=$2} END{print sum+0}' /tmp/collection.txt)
           echo "Collected tests: ${count}"
-          test "${count}" = "3789"
+          test "${count}" = "3788"
       - name: Verify full pytest
         run: python -m pytest
       - name: Remove temporary migration machinery
