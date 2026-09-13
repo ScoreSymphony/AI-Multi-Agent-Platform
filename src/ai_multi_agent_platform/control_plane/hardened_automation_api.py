@@ -5,10 +5,6 @@
 reference the historical module, but do not maintain a second composition path.
 """
 
-from .automation_explicit_composition import (
-    ControlPlane,
-    _owned_automation_resource,
-    _owned_delivery_resource,
-)
+from .automation_explicit_composition import ControlPlane
 
 __all__ = ["ControlPlane"]
