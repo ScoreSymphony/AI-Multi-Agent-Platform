@@ -1,0 +1,11 @@
+# Issue #562 reference only. Do not commit real keys or provider addresses.
+# Host B: remote Worker side. Host B initiates/maintains the reference tunnel.
+[Interface]
+Address = 10.203.0.2/30
+PrivateKey = <HOST_B_WIREGUARD_PRIVATE_KEY>
+
+[Peer]
+PublicKey = <HOST_A_WIREGUARD_PUBLIC_KEY>
+Endpoint = <HOST_A_PUBLIC_ADDRESS>:51820
+AllowedIPs = 10.203.0.1/32
+PersistentKeepalive = 25
