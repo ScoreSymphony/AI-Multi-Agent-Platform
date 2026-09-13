@@ -1,0 +1,33 @@
+name: "PostgreSQL"
+purpose: "Optional self-hosted transactional coordination service for multi-instance Control Plane HA"
+status: approved
+integration_categories:
+  - "external self-hosted service"
+  - "adapter integration"
+canonical_upstream: "https://github.com/postgres/postgres"
+pinned_revision: "18.6"
+verified_license: "PostgreSQL License (permissive BSD-like)"
+license_verification_date: "2026-09-13"
+last_review_date: "2026-09-13"
+platform_adapter_or_boundary: "ai_multi_agent_platform.distributed.postgres_control_plane_coordination.PostgresCoordinationProvider"
+local_source_path: ""
+source_origin_path: ""
+modified_locally: false
+modification_summary: ""
+required_notices: []
+compatibility_constraints:
+  - "Initial reviewed compatibility target is PostgreSQL 18.6; broader versions require retained evidence."
+security_constraints:
+  - "Use authenticated private connectivity and TLS/service identity for non-loopback traffic."
+  - "DSNs and credentials remain deployment secrets and must not enter canonical state/logs."
+deployment_constraints:
+  - "Optional HA-only service; not required by the single-node baseline."
+  - "Schema bootstrap should be run before runtime leadership operations."
+resource_constraints:
+  - "Database service footprint is deployment-specific; coordination state itself is minimal."
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Explicit service compatibility PR; review release/security/license changes and run real PostgreSQL coordination integration plus full CI."
+exit_replacement_strategy: "Replace the adapter with another CoordinationProvider after a safe leaderless/reconciled transition; canonical Task/Run/Agent state requires no coordination-table migration."
+adr: "docs/adr/0009-control-plane-active-passive-high-availability.md"
+notes: "Approved as one replaceable #566 reference backend; #956 separately owns shared canonical durable state."

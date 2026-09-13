@@ -1,0 +1,32 @@
+name: "Psycopg 3"
+purpose: "Optional Python PostgreSQL transport used by the #566 CoordinationProvider adapter"
+status: approved
+integration_categories:
+  - "library dependency"
+  - "adapter integration"
+canonical_upstream: "https://github.com/psycopg/psycopg"
+pinned_revision: "3.3.5"
+verified_license: "LGPL-3.0-only"
+license_verification_date: "2026-09-13"
+last_review_date: "2026-09-13"
+platform_adapter_or_boundary: "ai_multi_agent_platform.distributed.postgres_control_plane_coordination.PostgresCoordinationProvider"
+local_source_path: ""
+source_origin_path: ""
+modified_locally: false
+modification_summary: ""
+required_notices: []
+compatibility_constraints:
+  - "Python >=3.12 platform baseline; reviewed Psycopg release 3.3.5."
+  - "The pure psycopg package requires an available PostgreSQL client library (libpq)."
+security_constraints:
+  - "Driver/backend exception text is not exposed as canonical coordination errors."
+deployment_constraints:
+  - "Installed only through the optional ha-postgres extra."
+resource_constraints:
+  - "No separate service; uses the configured PostgreSQL endpoint."
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Explicit pinned dependency update; review license/security/API changes and run deterministic plus real PostgreSQL integration tests and full CI."
+exit_replacement_strategy: "Remove the optional dependency and replace the private connection implementation while preserving CoordinationProvider semantics."
+adr: ""
+notes: "Pure package selected instead of psycopg[binary] to avoid unnecessary bundled native-library redistribution in this slice."
