@@ -455,10 +455,9 @@ async def _complete_repository_mutation[T](operation: Awaitable[T]) -> T:
                 await asyncio.shield(task)
             except asyncio.CancelledError:
                 continue
-        try:
-            task.result()
-        except Exception:
-            pass
+        failure = task.exception()
+        if failure is not None:
+            raise failure from None
         raise
 
 
