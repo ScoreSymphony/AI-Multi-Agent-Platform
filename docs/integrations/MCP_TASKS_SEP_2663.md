@@ -65,12 +65,16 @@ The client first inspects `server/discover` and requires the server capability d
 ```
 
 Only when both the platform configuration (`enable_tasks=true`) and server declaration are present
-does a `tools/call` advertise the extension in per-request client capabilities. The server remains
-the sole decider whether that request completes synchronously or returns `resultType: "task"`.
+does a new `tools/call` advertise the extension in per-request client capabilities. The server
+remains the sole decider whether that request completes synchronously or returns
+`resultType: "task"`.
 
-If the server does not advertise Tasks, the invocation uses the unchanged synchronous MCP path and
-does not declare the extension. A server that requires or returns Tasks without the negotiated
-capability is therefore not silently accepted.
+If the server does not advertise Tasks **and the canonical invocation has no existing durable task
+binding**, the invocation uses the unchanged synchronous MCP path and does not declare the
+extension. An existing binding is resolved first: recovery continues against that exact external
+handle, and inability to poll it fails closed rather than redispatching a synchronous `tools/call`.
+A server that requires or returns Tasks without negotiated capability on a new invocation is
+therefore not silently accepted.
 
 For task lifecycle requests the client implements:
 
@@ -177,10 +181,14 @@ Platform cancellation remains authoritative.
 When the canonical invocation coroutine is cancelled (for example because the Run/Capability
 pipeline has already recorded cancellation intent), the MCP provider:
 
-1. marks cancellation intent on the exact external-task binding;
-2. sends `tasks/cancel` for that bound task only;
-3. records whether the server acknowledged it or whether cancellation delivery failed;
-4. re-raises cancellation so the canonical invoker applies its existing disposition.
+1. ensures an already-started durable bind reaches its persistence boundary;
+2. marks cancellation intent on the exact external-task binding;
+3. sends `tasks/cancel` for that bound task only;
+4. records whether the server acknowledged it or whether cancellation delivery failed;
+5. re-raises cancellation so the canonical invoker applies its existing disposition.
+
+If persistence itself fails while cancellation is pending, the persistence failure wins; the adapter
+does not report a clean cancellation for a binding whose durable state could not be established.
 
 SEP-2663 cancellation is cooperative and acknowledgement-only. A successful `tasks/cancel` response
 is therefore evidence that the intent was received, **not** proof that external work stopped. The
@@ -189,11 +197,14 @@ outside the normal Run/lifecycle authority.
 
 ## Recovery and reconnect
 
-On restart, the provider looks up `(provider_id, capability_invocation_id)` before any new
-`tools/call`:
+On restart, the provider looks up `(provider_id, capability_invocation_id)` before capability
+negotiation or any new `tools/call`:
 
 - existing binding -> validate canonical context and resume `tasks/get` on that exact handle;
-- no binding -> perform one new task-capable `tools/call` for that canonical attempt;
+- no binding -> negotiate Tasks and perform one new task-capable `tools/call`, or use synchronous
+  fallback when Tasks are not advertised;
+- existing binding whose server no longer advertises Tasks -> still reconcile the bound handle and
+  fail closed if it cannot be polled; never issue a replacement synchronous `tools/call`;
 - missing/expired bound task -> explicit `NOT_FOUND` / `mcp_task_lost` failure;
 - conflicting binding/context -> fail closed;
 - duplicate observations -> merge idempotently without creating a second canonical attempt;
@@ -243,7 +254,9 @@ The #964 profile enforces these boundaries:
 - raw bearer-like task IDs and canonical idempotency keys are not written into generic telemetry;
 - external result and input-request payloads remain untrusted;
 - unknown provider statuses fail closed;
-- a server without Tasks continues through the ordinary synchronous path;
+- a server without Tasks uses the ordinary synchronous path only when no durable task binding exists;
+- a known durable task binding is always reconciled before fallback, preventing duplicate side
+  effects after restart or transient discovery changes;
 - removing/disabling MCP Tasks does not affect native capabilities or the canonical lifecycle.
 
 ## Support recommendation
