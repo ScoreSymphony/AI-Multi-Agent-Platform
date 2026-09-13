@@ -1,0 +1,38 @@
+name: Temporary #722 fix finalization guard
+
+on:
+  push:
+    branches:
+      - test/722-auth-security
+
+permissions:
+  contents: write
+
+jobs:
+  fix-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: test/722-auth-security
+          fetch-depth: 0
+      - name: Fix legacy-path working-tree guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/tmp-722-auth-security-finalize.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '''            if git ls-files --error-unmatch "$path" >/dev/null 2>&1; then\n              echo "Legacy file still tracked: $path" >&2\n              exit 1\n            fi\n'''
+          new = '''            if [[ -e "$path" ]]; then\n              echo "Legacy file still present in working tree: $path" >&2\n              exit 1\n            fi\n'''
+          if old not in text:
+              raise SystemExit('Expected guard snippet not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git rm .github/workflows/tmp-722-fix-finalize-guard.yml
+          git add .github/workflows/tmp-722-auth-security-finalize.yml
+          git commit -m "ci: fix #722 finalization legacy path guard"
+          git push origin HEAD:test/722-auth-security
