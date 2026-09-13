@@ -519,9 +519,7 @@ def test_evaluation_runner_sqlite_and_in_memory_runtime_semantics_match(tmp_path
 
     assert memory.run.status is EvaluationRunStatus.COMPLETED
     assert sqlite.run.status is EvaluationRunStatus.COMPLETED
-    assert [
-        (item.case_id, item.outcome, item.deterministic_pass) for item in memory.results
-    ] == [
+    assert [(item.case_id, item.outcome, item.deterministic_pass) for item in memory.results] == [
         (item.case_id, item.outcome, item.deterministic_pass) for item in sqlite.results
     ]
     restarted = SqliteEvaluationRepository(database)
@@ -582,9 +580,7 @@ def test_control_plane_evaluation_reads_use_awaitable_service_path(tmp_path: Pat
         )
         resources = EvaluationRunResourceService(service)
 
-        pending = asyncio.create_task(
-            resources.list_resources(cast(Any, None), cast(Any, None))
-        )
+        pending = asyncio.create_task(resources.list_resources(cast(Any, None), cast(Any, None)))
         await asyncio.sleep(0.01)
 
         assert not pending.done()
