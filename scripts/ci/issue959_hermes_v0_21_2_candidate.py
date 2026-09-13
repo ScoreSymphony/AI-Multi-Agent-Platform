@@ -37,9 +37,7 @@ def _candidate_checkout() -> Path:
 
     upstream = Path(upstream_value).resolve()
     if not (upstream / "gateway" / "platforms" / "api_server.py").is_file():
-        raise RuntimeError(
-            f"HERMES_UPSTREAM_DIR is not a Hermes source checkout: {upstream}"
-        )
+        raise RuntimeError(f"HERMES_UPSTREAM_DIR is not a Hermes source checkout: {upstream}")
 
     completed = subprocess.run(
         ("git", "rev-parse", "HEAD"),
