@@ -1,13 +1,30 @@
+"""Migrated under #722; original coverage tracked issue #310."""
+
+
+# ruff: noqa: F401
+
+
 from __future__ import annotations
 
+
 import asyncio
+
+
 import json
+
+
 from pathlib import Path
+
 
 import pytest
 
+
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
+
+
 from ai_multi_agent_platform.domain import OwnerRef, new_id
+
+
 from ai_multi_agent_platform.security import (
     ActorIdentity,
     ActorType,
@@ -19,10 +36,14 @@ from ai_multi_agent_platform.security import (
     ProposedAction,
     ResourceType,
 )
+
+
 from ai_multi_agent_platform.security.policy_profile_persistence import (
     JsonAuthorizationPolicyProfileRepository,
     policy_profile_revision_to_json,
 )
+
+
 from ai_multi_agent_platform.security.policy_profiles import (
     AuthorizationPolicyConditions,
     AuthorizationPolicyProfileCallContext,
@@ -216,40 +237,6 @@ def test_json_repository_survives_restart_with_history_assignment_and_disable(
     assert restored.get_assignment(assignment.assignment_id).profile_ref.revision == 1
 
 
-def test_local_reference_provider_compiles_canonical_revision_without_owning_identity() -> None:
-    project_id = new_id("project")
-    profile_id = new_id("authorization_policy_profile")
-    revision = AuthorizationPolicyProfileRevision(
-        policy_profile_id=profile_id,
-        revision=3,
-        owner_ref=OwnerRef(type="user", id="admin"),
-        content=_content(project_ids=(project_id,)),
-        project_id=project_id,
-    )
-    policy = compile_local_principal_policy(
-        revision,
-        principal_ref="agent:worker",
-        actor_types=(ActorType.AGENT,),
-    )
-    actor = ActorIdentity("agent:worker", ActorType.AGENT)
-    proposed = ProposedAction(
-        AuthorizationContext(
-            actor=actor,
-            action=AuthorizationAction.READ,
-            resource_type=ResourceType.FILE,
-            resource_id="file:one",
-            operation=_operation(project_id=project_id),
-        )
-    )
-
-    first = AuthorizationGate(LocalAuthorizationProvider((policy,), provider_id="local-a"))
-    second = AuthorizationGate(LocalAuthorizationProvider((policy,), provider_id="local-b"))
-    assert asyncio.run(first.enforce(proposed)).allowed
-    assert asyncio.run(second.enforce(proposed)).allowed
-    assert revision.ref == AuthorizationPolicyProfileRef(profile_id, 3)
-    assert revision.ref.token == f"{profile_id}@3"
-
-
 def test_untrusted_imported_profile_cannot_self_grant_assignment_authority() -> None:
     repository = InMemoryAuthorizationPolicyProfileRepository()
     service = AuthorizationPolicyProfileService(repository, _admin_gate())
@@ -372,44 +359,3 @@ def test_assignment_requires_preexisting_authority_not_profile_contents() -> Non
         )
     assert captured.value.code is ErrorCode.FORBIDDEN
     assert repository.list_assignments() == ()
-
-
-def test_unsupported_provider_neutral_conditions_fail_closed_in_local_compiler() -> None:
-    revision = AuthorizationPolicyProfileRevision(
-        policy_profile_id=new_id("authorization_policy_profile"),
-        revision=1,
-        owner_ref=OwnerRef(type="service", id="tests"),
-        content=AuthorizationPolicyProfileContent(
-            name="Conditioned",
-            allowed_actions=(AuthorizationAction.READ,),
-            conditions=AuthorizationPolicyConditions(required_security_labels=("confidential",)),
-            provenance=AuthorizationPolicyProvenance(created_by="service:tests", source="local"),
-        ),
-    )
-
-    with pytest.raises(ContractError) as captured:
-        compile_local_principal_policy(
-            revision,
-            principal_ref="agent:test",
-            actor_types=(ActorType.AGENT,),
-        )
-    assert captured.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
-
-
-def test_canonical_serialization_contains_no_credentials_or_provider_private_policy_objects() -> (
-    None
-):
-    revision = AuthorizationPolicyProfileRevision(
-        policy_profile_id=new_id("authorization_policy_profile"),
-        revision=1,
-        owner_ref=OwnerRef(type="service", id="tests"),
-        content=_content(),
-    )
-    payload = policy_profile_revision_to_json(revision)
-    encoded = json.dumps(payload, sort_keys=True)
-
-    assert payload["schema_version"] == "1"
-    assert "credential" not in encoded.lower()
-    assert "secret" not in encoded.lower()
-    assert "provider_policy" not in encoded.lower()
-    assert "localprincipalpolicy" not in encoded.lower()

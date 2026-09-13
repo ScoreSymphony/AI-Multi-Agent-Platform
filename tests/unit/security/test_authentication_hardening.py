@@ -1,20 +1,43 @@
+"""Migrated under #722; original coverage tracked issue #36."""
+
+
+# ruff: noqa: F401
+
+
 from __future__ import annotations
 
+
 import asyncio
+
+
 from dataclasses import replace
+
+
 from datetime import UTC, datetime, timedelta
+
+
 from typing import Any
+
 
 import pytest
 
+
 from ai_multi_agent_platform.contracts.types import JsonValue
+
+
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
     ControlPlane,
     HTTPRequest,
 )
+
+
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
+
+
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
+
+
 from ai_multi_agent_platform.security import (
     ActorType,
     AuthenticationAuditRecord,
@@ -35,9 +58,14 @@ from ai_multi_agent_platform.security import (
     ScryptPasswordHasher,
     VerifiedExternalIdentity,
 )
+
+
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
 
+
 NOW = datetime(2026, 9, 3, 18, 30, tzinfo=UTC)
+
+
 PASSWORD = "correct horse battery staple"
 
 
@@ -142,75 +170,8 @@ def _real_http(
     )
 
 
-def test_credential_scope_denies_even_when_15_policy_allows() -> None:
-    http, secret, _ = _real_http(
-        allowed_actions=frozenset({AuthorizationAction.VIEW, AuthorizationAction.CREATE}),
-        scope=CredentialScope(
-            actions=frozenset({AuthorizationAction.VIEW}),
-            resource_types=frozenset({ResourceType.TASK}),
-        ),
-    )
-
-    allowed = _run(
-        http.handle(
-            HTTPRequest(
-                method="GET",
-                path="/api/v1/tasks",
-                headers={"authorization": f"Bearer {secret}"},
-            )
-        )
-    )
-    assert allowed.status == 200
-
-    denied = _run(
-        http.handle(
-            HTTPRequest(
-                method="POST",
-                path="/api/v1/tasks",
-                headers={
-                    "authorization": f"Bearer {secret}",
-                    "content-type": "application/json",
-                    "idempotency-key": "scope-must-deny",
-                },
-                body={
-                    "title": "Blocked",
-                    "objective": "#15 scope ceiling must deny this create",
-                },
-            )
-        )
-    )
-    assert denied.status == 403
-    assert denied.body["category"] == "authorization"
-
-
-def test_15_policy_denies_even_when_credential_scope_allows() -> None:
-    http, secret, _ = _real_http(
-        allowed_actions=frozenset({AuthorizationAction.VIEW}),
-        scope=CredentialScope(
-            actions=frozenset({AuthorizationAction.CREATE}),
-            resource_types=frozenset({ResourceType.TASK}),
-        ),
-    )
-
-    denied = _run(
-        http.handle(
-            HTTPRequest(
-                method="POST",
-                path="/api/v1/tasks",
-                headers={
-                    "authorization": f"Bearer {secret}",
-                    "content-type": "application/json",
-                    "idempotency-key": "policy-must-deny",
-                },
-                body={
-                    "title": "Blocked by policy",
-                    "objective": "Credential scope must never grant #15 permission",
-                },
-            )
-        )
-    )
-    assert denied.status == 403
-    assert denied.body["category"] == "authorization"
+def _run(awaitable: Any) -> Any:
+    return asyncio.run(awaitable)
 
 
 def test_scoped_credential_survives_authentication_service_recreation() -> None:
@@ -424,82 +385,6 @@ def test_locked_account_and_automation_integration_credentials() -> None:
     assert integration_actor.method is AuthenticationMethod.INTEGRATION_TOKEN
 
 
-def test_scoped_personal_credential_http_contract_exposes_safe_scope_metadata() -> None:
-    auth = _service()
-    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
-    bootstrap = auth.create_personal_access_token(user.user_id, purpose="bootstrap", now=NOW)
-    http = AuthenticatedControlPlaneHTTP(_PermissiveControlPlane(), auth, secure_cookie=False)
-
-    created = _run(
-        http.handle(
-            HTTPRequest(
-                method="POST",
-                path="/api/v1/auth/credentials",
-                headers={"authorization": f"Bearer {bootstrap.secret}"},
-                body={
-                    "purpose": "read-only task inspection",
-                    "scope": {
-                        "actions": [AuthorizationAction.VIEW.value],
-                        "resource_types": [ResourceType.TASK.value],
-                        "resource_ids": [],
-                    },
-                },
-            )
-        )
-    )
-    assert created.status == 201
-    assert created.body["scope"] == {
-        "actions": ["view"],
-        "resource_types": ["task"],
-        "resource_ids": [],
-    }
-    assert isinstance(created.body["secret"], str)
-
-    listed = _run(
-        http.handle(
-            HTTPRequest(
-                method="GET",
-                path="/api/v1/auth/credentials",
-                headers={"authorization": f"Bearer {bootstrap.secret}"},
-            )
-        )
-    )
-    assert listed.status == 200
-    scoped_items = [item for item in listed.body["items"] if item["id"] == created.body["id"]]
-    assert scoped_items[0]["scope"]["actions"] == ["view"]
-    assert "secret" not in scoped_items[0]
-
-
-def test_authenticated_request_rate_limit_hook_returns_429() -> None:
-    auth = _service(max_requests=1)
-    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
-    token = auth.create_personal_access_token(user.user_id, purpose="rate-limit", now=NOW)
-    http = AuthenticatedControlPlaneHTTP(_PermissiveControlPlane(), auth, secure_cookie=False)
-
-    first = _run(
-        http.handle(
-            HTTPRequest(
-                method="GET",
-                path="/api/v1/tasks",
-                headers={"authorization": f"Bearer {token.secret}"},
-            )
-        )
-    )
-    second = _run(
-        http.handle(
-            HTTPRequest(
-                method="GET",
-                path="/api/v1/tasks",
-                headers={"authorization": f"Bearer {token.secret}"},
-            )
-        )
-    )
-
-    assert first.status == 200
-    assert second.status == 429
-    assert second.body["code"] == "rate_limited"
-
-
 def test_worker_rotation_revokes_old_secret_and_preserves_scope() -> None:
     auth = _service()
     scope = CredentialScope(
@@ -538,107 +423,3 @@ def test_worker_rotation_revokes_old_secret_and_preserves_scope() -> None:
     with pytest.raises(AuthenticationError) as compromised:
         auth.authenticate_bearer(rotation.replacement.secret, now=NOW)
     assert compromised.value.failure is AuthenticationFailure.CREDENTIAL_REVOKED
-
-
-def test_session_renewal_revokes_old_session_and_targeted_revoke_is_deterministic() -> None:
-    auth = _service()
-    auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
-    http = AuthenticatedControlPlaneHTTP(_PermissiveControlPlane(), auth, secure_cookie=False)
-
-    login = _run(
-        http.handle(
-            HTTPRequest(
-                method="POST",
-                path="/api/v1/auth/login",
-                body={"username": "alice", "password": PASSWORD},
-            )
-        )
-    )
-    assert login.status == 200
-    old_cookie = login.headers["set-cookie"].split(";", 1)[0]
-    old_csrf = login.body["csrf_token"]
-
-    renewed = _run(
-        http.handle(
-            HTTPRequest(
-                method="POST",
-                path="/api/v1/auth/session:renew",
-                headers={"cookie": old_cookie, "x-csrf-token": old_csrf},
-            )
-        )
-    )
-    assert renewed.status == 200
-    new_cookie = renewed.headers["set-cookie"].split(";", 1)[0]
-    new_csrf = renewed.body["csrf_token"]
-    assert new_cookie != old_cookie
-
-    old_session = _run(
-        http.handle(
-            HTTPRequest(
-                method="GET",
-                path="/api/v1/auth/me",
-                headers={"cookie": old_cookie},
-            )
-        )
-    )
-    assert old_session.status == 401
-
-    sessions = _run(
-        http.handle(
-            HTTPRequest(
-                method="GET",
-                path="/api/v1/auth/sessions",
-                headers={"cookie": new_cookie},
-            )
-        )
-    )
-    assert sessions.status == 200
-    active = [item for item in sessions.body["items"] if item["active"]]
-    assert len(active) == 1
-    active_session_id = active[0]["id"]
-
-    revoked = _run(
-        http.handle(
-            HTTPRequest(
-                method="POST",
-                path=f"/api/v1/auth/sessions/{active_session_id}:revoke",
-                headers={"cookie": new_cookie, "x-csrf-token": new_csrf},
-            )
-        )
-    )
-    assert revoked.status == 200
-    assert revoked.body == {"id": active_session_id, "revoked": True}
-
-    revoked_session = _run(
-        http.handle(
-            HTTPRequest(
-                method="GET",
-                path="/api/v1/auth/me",
-                headers={"cookie": new_cookie},
-            )
-        )
-    )
-    assert revoked_session.status == 401
-
-
-def test_scoped_credential_openapi_matches_current_composed_http_contract() -> None:
-    auth = _service()
-    http = AuthenticatedControlPlaneHTTP(_PermissiveControlPlane(), auth, secure_cookie=False)
-
-    response = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json")))
-
-    assert response.status == 200
-    assert "x-automation" in response.body
-    credential_post = response.body["paths"]["/api/v1/auth/credentials"]["post"]
-    schema = credential_post["requestBody"]["content"]["application/json"]["schema"]
-    assert schema["required"] == ["purpose"]
-    assert schema["properties"]["expires_at"]["format"] == "date-time"
-    scope_schema = schema["properties"]["scope"]
-    assert scope_schema["type"] == "object"
-    assert scope_schema["properties"]["actions"]["type"] == "array"
-    assert scope_schema["properties"]["resource_types"]["type"] == "array"
-    assert scope_schema["properties"]["resource_ids"]["type"] == "array"
-
-
-def _run(awaitable: Any) -> Any:
-    return asyncio.run(awaitable)

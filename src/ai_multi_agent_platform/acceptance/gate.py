@@ -91,7 +91,11 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
                 "approval-boundary",
                 "#15 authorization/approval",
                 "high-risk approval is exact-action bound and cannot authorize a modified action",
-                _pytest("tests/test_issue_15_final_boundaries.py"),
+                _pytest(
+                    "tests/integration/security/test_authorization_final_boundaries.py",
+                    "tests/unit/authorization/test_approval_project_scope.py",
+                    "tests/contract/security/test_control_plane_authorization_vocabulary.py",
+                ),
             ),
             AcceptanceCheck(
                 "verification-boundary",
