@@ -1,0 +1,46 @@
+name: "OpenZiti MCP Gateway"
+purpose: "Candidate optional private remote MCP transport profile using zrok/OpenZiti without making overlay identity a canonical authorization authority."
+status: candidate
+integration_categories:
+  - "external self-hosted service"
+  - "adapter integration"
+canonical_upstream: "https://github.com/openziti/mcp-gateway"
+pinned_revision: "8f99623d95d2f5223d2fa12b9f125688d8c80bf9"
+verified_license: "Apache-2.0"
+license_verification_date: "2026-09-13"
+last_review_date: "2026-09-13"
+platform_adapter_or_boundary: "Existing platform-owned MCP provider, Connection, Capability, Authorization and SecretReference boundaries; overlay routing remains provider/deployment metadata."
+local_source_path: ""
+source_origin_path: ""
+modified_locally: false
+modification_summary: ""
+required_notices: []
+compatibility_constraints:
+  - "Evaluated mcp-gateway release is v0.1.11 at commit 8f99623d95d2f5223d2fa12b9f125688d8c80bf9."
+  - "Pinned mcp-gateway go.mod requires Go 1.25.7, github.com/openziti/zrok/v2 v2.0.0-rc7, github.com/openziti/agora v0.1.5 and github.com/openziti/sdk-golang v1.5.4."
+  - "zrok v2.0.0-rc7 resolves to commit a325978114282cfb59d794f67c5d1e82956e816a and is Apache-2.0."
+  - "agora v0.1.5 resolves to commit bb779c2c3d758e90276e86ef6d7d9e1dde5ab2ed and is Apache-2.0."
+  - "sdk-golang v1.5.4 resolves through annotated tag 61d4501fac707469fea1a62f04c9944b1611938c to commit baf6808f09a4c23d6099ce82a677230e61917a4a and is Apache-2.0."
+  - "At the evaluated revision, zrok-mode `mcp-tools run/http` accepts the share token as a positional process argument; no environment/file/stdin share-token input is exposed by that CLI path."
+security_constraints:
+  - "Transport identity must remain separate from canonical #15 authorization and approval."
+  - "Gateway tool filtering and path policy are defense in depth only and cannot widen canonical Capability permissions."
+  - "Share tokens, enrollment material and overlay identities must originate from #34-compatible SecretReferences and remain excluded from ordinary canonical state and telemetry."
+  - "A production-supportable profile must additionally prove that resolved credential material is not exposed through process argv; SecretReference-at-rest handling alone is insufficient."
+  - "An established transport/session must lose backend invocation access after effective identity/share revocation; stale-session access must be measured rather than inferred."
+  - "Service removal or access-relevant reconfiguration must make the old path fail closed and must have explicit recovery evidence before a final recommendation."
+  - "The evaluated MCP backend must remain loopback/stdio/private-only and must not expose a public backend listener."
+  - "Provider management/control-plane APIs remain separated from agent-facing invocation paths."
+deployment_constraints:
+  - "The supported evaluation topology is two-node/two-VPS: platform client side on Node A and gateway plus private MCP backend on Node B."
+  - "Any OpenZiti/zrok controller or router ports required by the exact self-hosted deployment must be captured as separate overlay infrastructure exposure, not conflated with MCP backend exposure."
+  - "Hosted zrok may be used only as convenience/comparison evidence; decision eligibility requires a self-hosted or otherwise already-covered no-new-recurring-paid-service path."
+  - "Local MCP operation must remain functional when the overlay candidate is absent."
+resource_constraints:
+  - "CPU, memory, connection-establishment, warm-call and reconnect overhead must be measured on the evaluated two-VPS topology before a final recommendation."
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Explicit pinned-revision review; re-check mcp-gateway/zrok/OpenZiti versions, licenses, credential-input semantics, share/access semantics, tool filtering, restart/revocation behavior and the retained two-VPS evidence before promotion or update."
+exit_replacement_strategy: "Remove the optional provider/deployment profile and continue using the existing local MCP path or another private networking implementation without migrating canonical Task, Run, Capability, Authorization, Connection or Secret state."
+adr: ""
+notes: "Issue #967 evaluation candidate only. No final recommendation is recorded until reproducible two-VPS evidence satisfies the versioned private-MCP transport report and the self-hosted cost/security gate. The positional share-token CLI behavior is an explicit adoption risk to resolve or accept only under a non-production recommendation."

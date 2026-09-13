@@ -1,0 +1,53 @@
+# Evaluation-only Node B profile for issue #967.
+# Source semantics are pinned to openziti/mcp-gateway v0.1.11.
+#
+# This file intentionally contains no share token, enrollment token or identity material.
+# In standalone mode the gateway creates an ephemeral owner-only private zrok share.
+# Treat the emitted share token as a secret and move it into #34-compatible secret handling;
+# do not retain raw startup stdout as ordinary evidence.
+
+session_idle_timeout: 10m
+
+zrok:
+  share:
+    enabled: true
+    # Empty means owner-only at the evaluated upstream revision.
+    access_grants: []
+
+aggregator:
+  name: "issue-967-private-mcp"
+  version: "1.0.0"
+  separator: ":"
+  connection:
+    connect_timeout: 30s
+    call_timeout: 60s
+
+backends:
+  - id: "fixture"
+    name: "Bounded issue 967 filesystem fixture"
+    transport:
+      type: "stdio"
+      command: "/opt/ai-multi-agent-platform/issue967/bin/mcp-filesystem"
+      args:
+        - "/var/lib/ai-multi-agent-platform/issue967/workspace"
+      working_dir: "/var/lib/ai-multi-agent-platform/issue967/workspace"
+    tools:
+      mode: "allow"
+      list:
+        - "read_file"
+        - "list_directory"
+        - "write_file"
+    policy:
+      paths:
+        - tool: "read_file"
+          argument: "path"
+          roots:
+            - "/var/lib/ai-multi-agent-platform/issue967/workspace"
+        - tool: "list_directory"
+          argument: "path"
+          roots:
+            - "/var/lib/ai-multi-agent-platform/issue967/workspace"
+        - tool: "write_file"
+          argument: "path"
+          roots:
+            - "/var/lib/ai-multi-agent-platform/issue967/workspace"
