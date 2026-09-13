@@ -1,6 +1,6 @@
 """Explicit canonical Control Plane composition for Automation (#18, #982).
 
-Automation remains owned by ``AutomationService``.  This composition keeps the existing
+Automation remains owned by ``AutomationService``. This composition keeps the existing
 scheduler, object-scoped authorization, audit context and Search projection semantics,
 but publishes the northbound collections and commands through one named module instead
 of relying on the historical Automation/Search ControlPlane MRO stack.
@@ -8,6 +8,7 @@ of relying on the historical Automation/Search ControlPlane MRO stack.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, cast
 
 from ai_multi_agent_platform.automation import (
@@ -29,10 +30,11 @@ from .automation_api import (
     AUTOMATION_COMMANDS,
     DELIVERY_COLLECTION,
     WebhookVerifier,
+    _automation_resource,
+    _delivery_resource,
 )
 from .automation_api import ControlPlane as _LegacyAutomationControlPlane
 from .extensions import ControlPlaneModule, ResourceService
-from .hardened_automation_api import _owned_automation_resource, _owned_delivery_resource
 from .models import ActorContext, PageQuery, RequestContext, paginate
 from .module_registry import install_control_plane_modules
 from .search_checkpoint_contract import ControlPlane as _SearchCheckpointControlPlane
@@ -121,7 +123,7 @@ class ControlPlane(_SearchCheckpointControlPlane):
         **kwargs: Any,
     ) -> None:
         supplied_resources = kwargs.get("resource_services")
-        if isinstance(supplied_resources, dict):
+        if isinstance(supplied_resources, Mapping):
             conflicts = sorted(
                 set(supplied_resources).intersection(
                     {AUTOMATION_COLLECTION, DELIVERY_COLLECTION}
@@ -132,7 +134,7 @@ class ControlPlane(_SearchCheckpointControlPlane):
                     f"resource_services conflict with canonical automation routes: {conflicts}"
                 )
         supplied_commands = kwargs.get("command_handlers")
-        if isinstance(supplied_commands, dict):
+        if isinstance(supplied_commands, Mapping):
             conflicts = sorted(set(supplied_commands).intersection(AUTOMATION_COMMANDS))
             if conflicts:
                 raise ValueError(
@@ -278,8 +280,8 @@ class ControlPlane(_SearchCheckpointControlPlane):
             automation_change_actor(context.actor.principal_ref),
             automation_creation_idempotency_key(idempotency_key),
         ):
-            return await _LegacyAutomationControlPlane._automation_create_command(
-                self,
+            return await self._call_legacy_command(
+                _LegacyAutomationControlPlane._automation_create_command,
                 context,
                 resource_ref,
                 payload,
@@ -348,7 +350,11 @@ class ControlPlane(_SearchCheckpointControlPlane):
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         with automation_change_actor(context.actor.principal_ref):
-            await self._authorize_automation_target(context, "automation.invalidate", resource_ref)
+            await self._authorize_automation_target(
+                context,
+                "automation.invalidate",
+                resource_ref,
+            )
             reason_code = payload.get("reason_code")
             if not isinstance(reason_code, str):
                 raise ContractError(
@@ -369,7 +375,11 @@ class ControlPlane(_SearchCheckpointControlPlane):
     ) -> dict[str, JsonValue]:
         del payload
         with automation_change_actor(context.actor.principal_ref):
-            await self._authorize_automation_target(context, "automation.revalidate", resource_ref)
+            await self._authorize_automation_target(
+                context,
+                "automation.revalidate",
+                resource_ref,
+            )
             revalidated = await self.automation_service.revalidate_automation(resource_ref)
             return _owned_automation_resource(revalidated)
 
@@ -380,8 +390,8 @@ class ControlPlane(_SearchCheckpointControlPlane):
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         await self._authorize_automation_target(context, "automation.test", resource_ref)
-        return await _LegacyAutomationControlPlane._automation_test_command(
-            self,
+        return await self._call_legacy_command(
+            _LegacyAutomationControlPlane._automation_test_command,
             context,
             resource_ref,
             payload,
@@ -394,8 +404,8 @@ class ControlPlane(_SearchCheckpointControlPlane):
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         await self._authorize_automation_target(context, "automation.webhook", resource_ref)
-        return await _LegacyAutomationControlPlane._automation_webhook_command(
-            self,
+        return await self._call_legacy_command(
+            _LegacyAutomationControlPlane._automation_webhook_command,
             context,
             resource_ref,
             payload,
@@ -407,8 +417,8 @@ class ControlPlane(_SearchCheckpointControlPlane):
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        return await _LegacyAutomationControlPlane._automation_event_command(
-            self,
+        return await self._call_legacy_command(
+            _LegacyAutomationControlPlane._automation_event_command,
             context,
             resource_ref,
             payload,
@@ -420,8 +430,8 @@ class ControlPlane(_SearchCheckpointControlPlane):
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        return await _LegacyAutomationControlPlane._automation_evaluate_command(
-            self,
+        return await self._call_legacy_command(
+            _LegacyAutomationControlPlane._automation_evaluate_command,
             context,
             resource_ref,
             payload,
@@ -458,7 +468,21 @@ class ControlPlane(_SearchCheckpointControlPlane):
             raise RuntimeError(f"not an Automation configuration command: {command}")
         with automation_change_actor(context.actor.principal_ref):
             await self._authorize_automation_target(context, command, resource_ref)
-            return await handler(self, context, resource_ref, payload)
+            return await self._call_legacy_command(
+                handler,
+                context,
+                resource_ref,
+                payload,
+            )
+
+    async def _call_legacy_command(
+        self,
+        handler: Any,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        return await handler(self, context, resource_ref, payload)
 
     async def _authorize_automation_target(
         self,
@@ -502,6 +526,46 @@ class ControlPlane(_SearchCheckpointControlPlane):
             owner_id=automation.identity.owner_id,
             project_id=automation.project_id,
         )
+
+
+def _owned_automation_resource(automation: Automation) -> dict[str, JsonValue]:
+    resource = _automation_resource(automation)
+    resource["owner_ref"] = {
+        "type": automation.identity.owner_type,
+        "id": automation.identity.owner_id,
+    }
+    resource["invalidation_reason_code"] = automation.invalidation_reason_code
+    resource["invalidated_at"] = (
+        None if automation.invalidated_at is None else automation.invalidated_at.isoformat()
+    )
+    resource["state_before_invalid"] = (
+        None if automation.state_before_invalid is None else automation.state_before_invalid.value
+    )
+    return resource
+
+
+def _owned_delivery_resource(
+    delivery: TriggerDelivery,
+    automation: Automation,
+) -> dict[str, JsonValue]:
+    resource = _delivery_resource(delivery)
+    resource["owner_ref"] = {
+        "type": automation.identity.owner_type,
+        "id": automation.identity.owner_id,
+    }
+    resource["project_id"] = automation.project_id
+    resource["workspace_id"] = automation.workspace_id
+    resource["retryable"] = delivery.retryable
+    resource["last_failed_at"] = (
+        None if delivery.last_failed_at is None else delivery.last_failed_at.isoformat()
+    )
+    resource["next_retry_at"] = (
+        None if delivery.next_retry_at is None else delivery.next_retry_at.isoformat()
+    )
+    resource["retry_exhausted_at"] = (
+        None if delivery.retry_exhausted_at is None else delivery.retry_exhausted_at.isoformat()
+    )
+    return resource
 
 
 __all__ = ["AUTOMATION_MODULE", "ControlPlane"]
