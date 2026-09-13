@@ -183,18 +183,22 @@ class OpenShellExecutor(Executor):
         capabilities: tuple[str, ...],
         runtime_profile: str = OPENSHELL_REVIEWED_RUNTIME_PROFILE,
         policy_projection: OpenShellPolicyProjection | None = None,
+        cancel_timeout_seconds: float = 1.0,
         executor_id: str = "openshell",
     ) -> None:
         if not executor_id.strip():
             raise ValueError("executor_id must not be blank")
         if not runtime_profile.strip():
             raise ValueError("runtime_profile must not be blank")
+        if cancel_timeout_seconds <= 0:
+            raise ValueError("cancel_timeout_seconds must be greater than zero")
         self._client = client
         self._root = Path(workspace_root).resolve()
         self._root.mkdir(parents=True, exist_ok=True)
         self._capabilities = tuple(dict.fromkeys(capabilities))
         self._runtime_profile = runtime_profile
         self._policy_projection = policy_projection or OpenShellPolicyProjection()
+        self._cancel_timeout_seconds = cancel_timeout_seconds
         self._executor_id = executor_id
 
     @property
@@ -356,8 +360,20 @@ class OpenShellExecutor(Executor):
         return candidate
 
     async def _cancel_backend(self, request_ref: str) -> None:
+        cancel_task = asyncio.create_task(self._client.cancel(request_ref))
         try:
-            await self._client.cancel(request_ref)
+            done, _ = await asyncio.wait(
+                {cancel_task},
+                timeout=self._cancel_timeout_seconds,
+                return_when=asyncio.ALL_COMPLETED,
+            )
+            if not done:
+                cancel_task.cancel()
+                return
+            cancel_task.result()
+        except asyncio.CancelledError:
+            cancel_task.cancel()
+            return
         except Exception:
             return
 
