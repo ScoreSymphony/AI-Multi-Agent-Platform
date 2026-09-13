@@ -27,6 +27,8 @@ security_constraints:
   - "Gateway tool filtering and path policy are defense in depth only and cannot widen canonical Capability permissions."
   - "Share tokens, enrollment material and overlay identities must originate from #34-compatible SecretReferences and remain excluded from ordinary canonical state and telemetry."
   - "A production-supportable profile must additionally prove that resolved credential material is not exposed through process argv; SecretReference-at-rest handling alone is insufficient."
+  - "An established transport/session must lose backend invocation access after effective identity/share revocation; stale-session access must be measured rather than inferred."
+  - "Service removal or access-relevant reconfiguration must make the old path fail closed and must have explicit recovery evidence before a final recommendation."
   - "The evaluated MCP backend must remain loopback/stdio/private-only and must not expose a public backend listener."
   - "Provider management/control-plane APIs remain separated from agent-facing invocation paths."
 deployment_constraints:
