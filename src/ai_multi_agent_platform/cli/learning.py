@@ -23,7 +23,11 @@ def add_learning_parser(
 
     learning = areas.add_parser(
         "learning",
-        help="inspect feedback and governed Learning Candidates",
+        help="Experimental: inspect feedback and governed Learning Candidates",
+        description=(
+            "Experimental public surface. Inspect feedback and governed Learning Candidates; "
+            "its public contracts may change under the repository Experimental policy."
+        ),
     )
     learning.set_defaults(area="learning")
     commands = learning.add_subparsers(dest="command", required=True)
