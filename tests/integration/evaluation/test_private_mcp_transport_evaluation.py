@@ -211,7 +211,9 @@ def test_hard_security_failure_rejects_experimental_only_recommendation() -> Non
     assert readiness.decision_ready is True
     assert readiness.adoption_eligible is False
     assert readiness.definition_of_done is False
-    assert "hard security/cost blockers require a negative final recommendation" in readiness.blockers
+    assert (
+        "hard security/cost blockers require a negative final recommendation" in readiness.blockers
+    )
 
 
 def test_operational_failure_can_support_experimental_only() -> None:
