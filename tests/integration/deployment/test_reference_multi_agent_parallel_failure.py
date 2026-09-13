@@ -151,7 +151,8 @@ async def _run_order(tmp_path: Path, order: Literal["failure-first", "success-fi
         tuple(
             (
                 step.title,
-                deployment.coordination_repository.get_step_record(step.id).latest_run_id is not None,
+                deployment.coordination_repository.get_step_record(step.id).latest_run_id
+                is not None,
             )
             for step in state.steps
         ),
