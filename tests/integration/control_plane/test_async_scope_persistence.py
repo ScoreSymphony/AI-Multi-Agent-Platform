@@ -19,6 +19,7 @@ from ai_multi_agent_platform.control_plane.async_scope import (
 )
 from ai_multi_agent_platform.control_plane.scope_store import ScopeStore
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
+from ai_multi_agent_platform.domain import new_id
 
 
 class _RecordingScopeStore(SqliteScopeStore):
@@ -166,6 +167,7 @@ def test_scope_read_waits_for_inflight_write_and_restart_sees_commit(tmp_path: P
         scopes = _BlockingScopeStore(database)
         writer = AsyncScopeStoreAdapter(scopes)
         reader = AsyncScopeStoreAdapter(scopes)
+        project_id = new_id("project")
         scopes.arm()
 
         write = asyncio.create_task(
@@ -174,7 +176,7 @@ def test_scope_read_waits_for_inflight_write_and_restart_sees_commit(tmp_path: P
                 name="Serialized Project",
                 owner_type="user",
                 owner_id="user:alice",
-                project_id="project_serialized",
+                project_id=project_id,
             )
         )
         assert await asyncio.to_thread(scopes.started.wait, 1)
@@ -199,6 +201,7 @@ def test_scope_cancellation_waits_for_durable_write(tmp_path: Path) -> None:
         database = tmp_path / "scope.sqlite3"
         scopes = _BlockingScopeStore(database)
         adapter = AsyncScopeStoreAdapter(scopes)
+        project_id = new_id("project")
         scopes.arm()
 
         pending = asyncio.create_task(
@@ -207,7 +210,7 @@ def test_scope_cancellation_waits_for_durable_write(tmp_path: Path) -> None:
                 name="Cancellation Project",
                 owner_type="user",
                 owner_id="user:alice",
-                project_id="project_cancelled",
+                project_id=project_id,
             )
         )
         assert await asyncio.to_thread(scopes.started.wait, 1)
@@ -222,7 +225,7 @@ def test_scope_cancellation_waits_for_durable_write(tmp_path: Path) -> None:
             await pending
 
         restarted = SqliteScopeStore(database)
-        assert restarted.get_project("project_cancelled").name == "Cancellation Project"
+        assert restarted.get_project(project_id).name == "Cancellation Project"
 
     asyncio.run(scenario())
 
@@ -284,7 +287,7 @@ def test_failed_scope_write_leaves_memory_and_sqlite_unchanged(tmp_path: Path) -
                 name="Failed Project",
                 owner_type="user",
                 owner_id="user:alice",
-                project_id="project_failed",
+                project_id=new_id("project"),
             )
 
         assert raised.value.code is ErrorCode.BACKEND_ERROR
@@ -295,37 +298,45 @@ def test_failed_scope_write_leaves_memory_and_sqlite_unchanged(tmp_path: Path) -
     asyncio.run(scenario())
 
 
-async def _exercise_scope_contract(adapter: AsyncScopeStoreAdapter) -> tuple[object, ...]:
+async def _exercise_scope_contract(
+    adapter: AsyncScopeStoreAdapter,
+    *,
+    project_id: str,
+    ignored_project_id: str,
+    workspace_id: str,
+    ignored_workspace_id: str,
+    disposable_id: str,
+) -> tuple[object, ...]:
     project = await adapter.create_project(
         key="project-create",
         name="Contract Project",
         owner_type="user",
         owner_id="user:alice",
-        project_id="project_contract",
+        project_id=project_id,
     )
     replayed_project = await adapter.create_project(
         key="project-create",
         name="ignored-on-idempotent-replay",
         owner_type="service",
         owner_id="service:ignored",
-        project_id="project_ignored",
+        project_id=ignored_project_id,
     )
     workspace = await adapter.create_workspace(
         key="workspace-create",
         project_id=project.id,
-        workspace_id="workspace_contract",
+        workspace_id=workspace_id,
     )
     replayed_workspace = await adapter.create_workspace(
         key="workspace-create",
         project_id=project.id,
-        workspace_id="workspace_ignored",
+        workspace_id=ignored_workspace_id,
     )
     disposable = await adapter.create_project(
         key="project-disposable",
         name="Disposable Project",
         owner_type="user",
         owner_id="user:alice",
-        project_id="project_disposable",
+        project_id=disposable_id,
     )
     compensated = await adapter.compensate_project(
         disposable.id,
@@ -352,9 +363,20 @@ async def _exercise_scope_contract(adapter: AsyncScopeStoreAdapter) -> tuple[obj
 
 def test_scope_in_memory_and_sqlite_contract_parity(tmp_path: Path) -> None:
     async def scenario() -> None:
-        memory_result = await _exercise_scope_contract(AsyncScopeStoreAdapter(ScopeStore()))
+        identities = {
+            "project_id": new_id("project"),
+            "ignored_project_id": new_id("project"),
+            "workspace_id": new_id("workspace"),
+            "ignored_workspace_id": new_id("workspace"),
+            "disposable_id": new_id("project"),
+        }
+        memory_result = await _exercise_scope_contract(
+            AsyncScopeStoreAdapter(ScopeStore()),
+            **identities,
+        )
         sqlite_result = await _exercise_scope_contract(
-            AsyncScopeStoreAdapter(SqliteScopeStore(tmp_path / "scope.sqlite3"))
+            AsyncScopeStoreAdapter(SqliteScopeStore(tmp_path / "scope.sqlite3")),
+            **identities,
         )
         assert sqlite_result == memory_result
 
@@ -366,18 +388,20 @@ def test_scope_async_sqlite_parity_for_project_and_workspace_restart(tmp_path: P
         database = tmp_path / "scope.sqlite3"
         scopes = SqliteScopeStore(database)
         adapter = AsyncScopeStoreAdapter(scopes)
+        project_id = new_id("project")
+        workspace_id = new_id("workspace")
 
         project = await adapter.create_project(
             key="project-create",
             name="Parity Project",
             owner_type="user",
             owner_id="user:alice",
-            project_id="project_parity",
+            project_id=project_id,
         )
         workspace = await adapter.create_workspace(
             key="workspace-create",
             project_id=project.id,
-            workspace_id="workspace_parity",
+            workspace_id=workspace_id,
         )
 
         assert await adapter.get_project(project.id) == project
@@ -402,7 +426,7 @@ def test_scope_compensation_is_durable_across_restart(tmp_path: Path) -> None:
             name="Compensated Project",
             owner_type="user",
             owner_id="user:alice",
-            project_id="project_compensated",
+            project_id=new_id("project"),
         )
 
         assert await adapter.compensate_project(project.id, external_dependencies=()) == project
