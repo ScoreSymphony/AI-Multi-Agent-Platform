@@ -44,15 +44,11 @@ def test_forge_has_no_active_ci_or_external_conformance_lane() -> None:
 
 
 def test_forge_is_not_a_first_party_or_release_compatibility_claim() -> None:
-    support = tomllib.loads(
-        (ROOT / "docs/ADAPTER_SUPPORT_MATRIX.toml").read_text(encoding="utf-8")
-    )
+    support = tomllib.loads((ROOT / "docs/ADAPTER_SUPPORT_MATRIX.toml").read_text(encoding="utf-8"))
     implementation_ids = {entry["id"] for entry in support["implementation"]}
     assert "executor.forge" not in implementation_ids
 
-    compatibility = json.loads(
-        (ROOT / "release/compatibility.json").read_text(encoding="utf-8")
-    )
+    compatibility = json.loads((ROOT / "release/compatibility.json").read_text(encoding="utf-8"))
     sources = {entry["source_url"] for entry in compatibility["components"]}
     assert "https://github.com/ScoreSymphony/AI-Agent-VPS" not in sources
 
