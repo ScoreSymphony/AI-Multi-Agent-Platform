@@ -183,30 +183,30 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Adoption review:** `docs/upstream/SKILLSPECTOR_ADOPTION.md`.
 - **Security/operations review:** `docs/security/SKILLSPECTOR_SECURITY_EVIDENCE.md`.
 
-### ScoreSymphony AI-Agent-VPS Forge subsystem
+### ScoreSymphony AI-Agent-VPS Forge subsystem — historical
 
-- **Purpose:** deprecated optional execution-only compatibility runtime behind the platform-owned `Executor` boundary, retained temporarily for #991 removal-gate evidence plus historical workspace, idempotency, recovery and event reuse provenance from issue #9.
-- **Status:** deprecated by #991 / ADR 0013; executable adapter, transport and sidecar CI remain only during the bounded removal window. The legacy full Forge Task/Project application is not integrated.
-- **Integration category/categories:** adapter integration; external optional runtime; reference-only influence.
+- **Purpose:** historical provenance for the former execution-only Forge compatibility runtime and for workspace, idempotency, recovery and event reuse decisions originally evaluated under issue #9.
+- **Status:** removed under #991 after the #889 reference golden path and #46 backend-neutral conformance gates passed. The legacy full Forge Task/Project application was never integrated.
+- **Integration category/categories:** removed adapter integration; historical external runtime; reference-only influence.
 - **Canonical upstream repository:** `https://github.com/ScoreSymphony/AI-Agent-VPS`.
-- **Pinned version/tag/commit or deployed revision:** `00b821bc94767865457814bf282982ca242a2e10`.
+- **Pinned version/tag/commit or deployed revision:** final reviewed executable revision `00b821bc94767865457814bf282982ca242a2e10`; retained for provenance only, not as a current compatibility pin.
 - **Verified license:** MIT.
 - **License verification date:** 2026-09-03.
 - **Last review date:** 2026-09-13.
-- **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.forge.ForgeExecutor` implements the canonical `Executor`; `ai_multi_agent_platform.adapters.forge_http.ForgeHttpClient` implements the platform-owned `ForgeClient` protocol against `forge-executor-sidecar/v1`. `ExecutorLifecycleBackend` carries namespaced backend metadata into canonical kernel history. This executable boundary is retained only until the #991 removal gates pass.
-- **Local source path:** `src/ai_multi_agent_platform/adapters/forge.py` and `src/ai_multi_agent_platform/adapters/forge_http.py` are platform-owned code; no upstream Forge source is copied into this repository.
-- **Source origin/path:** runtime at `core/forge/crates/executor-sidecar`, reusing `core/forge/crates/executors`, `cli-adapters`, `git` and `api-types`; behavior/specification review also covered domain-event, recovery, task-dispatch, workspace and legacy API code.
-- **Modified locally:** no upstream source is vendored or modified in this repository; the sidecar is maintained at the canonical upstream repository.
-- **Required notices / attribution:** no copied-source notice is required because no upstream source is vendored here. The upstream repository retains its MIT license metadata; preserve MIT notices if substantial source is copied locally in the future.
-- **Known compatibility constraints:** Forge is deprecated and is not the reference/default executor. The concrete runtime target remains `forge-executor-sidecar/v1` at the pinned revision. Canonical Task/Run/Step/correlation identity and lifecycle remain platform-owned. The legacy Forge task-launch API remains rejected because it requires Forge Task/Project lifecycle ownership. The validated real sidecar profile uses `null`; non-null CLI executor families have not produced evidence sufficient to restore `supported` status.
-- **Security/deployment/resource constraints:** Forge remains optional and deprecated. The sidecar binds to loopback in its current entrypoint, enforces an executor allowlist, independently validates workspace containment and requires no Forge DB/TaskService/Project/Event services. Shell/process or coding-CLI families require explicit policy, environment filtering, sandbox/resource controls and any required backend authentication before enablement.
-- **Required for baseline:** no; core startup and reference execution remain Forge-independent.
+- **Platform adapter/boundary:** no active Forge adapter remains. The former `ForgeExecutor`, `ForgeHttpClient`, `forge-executor-sidecar/v1` CI lane and maintained #46 Forge evidence were removed under #991. The canonical `Executor`, Task/Run/Step identity and lifecycle remain platform-owned.
+- **Local source path:** none. The former platform-owned `src/ai_multi_agent_platform/adapters/forge.py` and `src/ai_multi_agent_platform/adapters/forge_http.py` were removed under #991; no upstream Forge source is copied into this repository.
+- **Source origin/path:** historical runtime source was `core/forge/crates/executor-sidecar`, reusing `core/forge/crates/executors`, `cli-adapters`, `git` and `api-types`; behavior/specification review also covered domain-event, recovery, task-dispatch, workspace and legacy API code.
+- **Modified locally:** no upstream source was vendored or modified in this repository.
+- **Required notices / attribution:** no copied-source notice is required because no upstream source is vendored here. Preserve MIT notices if substantial Forge source is ever copied locally in a future, separately reviewed integration.
+- **Known compatibility constraints:** no current Forge compatibility claim exists. Historical backend-private Forge IDs remain non-canonical metadata and may remain in portability validation only to reject or sanitize old state. Any future reintroduction requires a new adoption/support decision rather than reusing this historical pin as an implicit compatibility claim.
+- **Security/deployment/resource constraints:** no Forge sidecar is started, configured or required by current deployment profiles. Historical sidecar security observations remain in #9/#991 audit material only.
+- **Required for baseline:** no.
 - **Recurring paid service required:** no.
-- **Update/review method:** during the bounded deprecation window, changes are limited to correctness, security, compatibility and removal-enabling work. Any pin update must still review sidecar protocol/license/security and reused executor/CLI-adapter changes, update Forge audit/provenance records, and run executor contracts, backend-neutral kernel/recovery regressions, the real pinned-sidecar integration and full repository CI.
-- **Exit/replacement strategy:** after the #991 / ADR 0013 gates pass, remove the Forge adapter/HTTP transport and sidecar-specific configuration/CI. Canonical Task/Run/Event/Workspace state requires no migration because it remains platform-owned; historical provenance may remain.
+- **Update/review method:** historical record only; routine upstream Forge changes do not update this pin. Any future reintroduction requires fresh license/security/protocol review plus current executor-contract and conformance evidence.
+- **Exit/replacement strategy:** completed under #991. `ReferenceExecutor` remains the baseline and canonical Task/Run/Event/Workspace state required no migration because Forge never owned it.
 - **ADR:** `docs/adr/0013-deprecate-forge-execution-adapter-pending-removal-gates.md`.
-- **Provenance:** `upstream/forge-ai-agent-vps.yaml`.
-- **Completion audit:** `docs/FORGE_REUSE_AUDIT.md`.
+- **Provenance:** `upstream/forge-ai-agent-vps.yaml` (`status: removed`).
+- **Completion audit:** `docs/FORGE_REUSE_AUDIT.md` and `docs/integrations/FORGE_RETENTION_DECISION.md`.
 
 ### PostgreSQL
 

@@ -14,15 +14,22 @@ PYPROJECT_PATH = ROOT / "pyproject.toml"
 LITELLM_INTEGRATION_TEST_PATH = (
     ROOT / "tests" / "integration" / "upstreams" / "test_litellm_pinned.py"
 )
-TRACKED_UPSTREAMS = (
+TRACKED_ACTIVE_UPSTREAMS = (
     ROOT / "upstream" / "hermes-agent.yaml",
-    ROOT / "upstream" / "forge-ai-agent-vps.yaml",
     ROOT / "upstream" / "litellm.yaml",
 )
+FORGE_PROVENANCE_PATH = ROOT / "upstream" / "forge-ai-agent-vps.yaml"
 
 
 def _quoted_field(path: Path, field: str) -> str:
     pattern = re.compile(rf'^{re.escape(field)}:\s*"([^"]+)"\s*$', re.MULTILINE)
+    match = pattern.search(path.read_text(encoding="utf-8"))
+    assert match is not None, f"missing {field} in {path}"
+    return match.group(1)
+
+
+def _plain_field(path: Path, field: str) -> str:
+    pattern = re.compile(rf"^{re.escape(field)}:\s*([^\s#]+)\s*$", re.MULTILINE)
     match = pattern.search(path.read_text(encoding="utf-8"))
     assert match is not None, f"missing {field} in {path}"
     return match.group(1)
@@ -35,18 +42,22 @@ def _governed_pin(path: Path) -> tuple[str, str]:
     )
 
 
-def test_compatibility_matrix_matches_governed_upstream_pins() -> None:
+def test_compatibility_matrix_matches_active_governed_upstream_pins() -> None:
     document = json.loads(COMPATIBILITY_PATH.read_text(encoding="utf-8"))
     components = document["components"]
     by_source = {item["source_url"]: item for item in components}
 
-    for upstream_path in TRACKED_UPSTREAMS:
+    for upstream_path in TRACKED_ACTIVE_UPSTREAMS:
         source, pinned_revision = _governed_pin(upstream_path)
         assert source in by_source
         assert by_source[source]["revision"] == pinned_revision
 
+    forge_source, _ = _governed_pin(FORGE_PROVENANCE_PATH)
+    assert _plain_field(FORGE_PROVENANCE_PATH, "status") == "removed"
+    assert forge_source not in by_source
 
-def test_runtime_and_ci_pins_match_governed_upstream_revisions() -> None:
+
+def test_runtime_and_ci_pins_match_active_governed_upstream_revisions() -> None:
     workflow = CI_PATH.read_text(encoding="utf-8")
 
     hermes_source, hermes_revision = _governed_pin(ROOT / "upstream" / "hermes-agent.yaml")
@@ -55,9 +66,10 @@ def test_runtime_and_ci_pins_match_governed_upstream_revisions() -> None:
     assert f"ref: {hermes_revision}" in workflow
     assert f"HERMES_UPSTREAM_REVISION: {hermes_revision}" in workflow
 
-    forge_source, forge_revision = _governed_pin(ROOT / "upstream" / "forge-ai-agent-vps.yaml")
-    assert f"repository: {forge_source.removeprefix('https://github.com/')}" in workflow
-    assert f"ref: {forge_revision}" in workflow
+    forge_source, forge_revision = _governed_pin(FORGE_PROVENANCE_PATH)
+    assert forge_source.removeprefix("https://github.com/") not in workflow
+    assert forge_revision not in workflow
+    assert "FORGE_SIDECAR_" not in workflow
 
 
 def test_litellm_package_and_integration_test_pin_match_governance() -> None:

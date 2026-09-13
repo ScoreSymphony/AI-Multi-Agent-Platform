@@ -1,0 +1,415 @@
+schema_version = 1
+
+# Architectural role and public-surface stability are deliberately orthogonal.
+# Package ownership remains authoritative in PACKAGE_BOUNDARIES.toml.
+
+[[feature]]
+id = "task-run-lifecycle"
+name = "Canonical Task/Run lifecycle"
+owners = ["domain", "kernel", "planning"]
+role = "core"
+stability = "stable"
+public_surfaces = ["canonical Task/Run/Plan/Step schemas", "kernel lifecycle semantics"]
+docs = ["docs/DOMAIN_MODEL.md", "docs/KERNEL.md", "docs/runtime/DOMAIN_CONTRACT_VERSIONING.md"]
+compatibility = "Canonical schema majors and lifecycle semantics use explicit versioning; incompatible schema changes require a new major and migration handling."
+user_signaling = "none"
+
+[[feature]]
+id = "durable-coordination"
+name = "Durable Plan/Step coordination"
+owners = ["coordination"]
+role = "core"
+stability = "beta"
+public_surfaces = ["plan-coordination resource", "coordination reconcile/cancel/repair commands", "Task workflow coordination progress projection"]
+docs = ["docs/PLANNING.md", "docs/PLATFORM_CONFORMANCE.md", "docs/SECURITY_THREAT_MODEL.md"]
+compatibility = "The canonical coordinator remains the supported dependency/readiness/fan-out/fan-in/reconciliation authority; its public resource and repair-command contracts may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "control-plane-v1"
+name = "Control Plane API v1 foundation"
+owners = ["control_plane"]
+role = "core"
+stability = "stable"
+public_surfaces = ["shared HTTP /api/v1 protocol and foundation conventions", "generated OpenAPI 3.1 foundation conventions"]
+docs = ["docs/runtime/CONTROL_PLANE.md", "docs/adr/0003-versioned-control-plane-api.md"]
+compatibility = "Stable applies to shared v1 protocol/foundation conventions and does not promote later-domain maturity; ADR 0003 still requires a new Control Plane major for every breaking canonical northbound contract change, including Beta or Experimental resources composed under /api/v1."
+user_signaling = "none"
+
+[[feature]]
+id = "provider-contracts-v2"
+name = "Provider and adapter contracts v2"
+owners = ["contracts"]
+role = "core"
+stability = "stable"
+public_surfaces = ["provider contract 2.0 Python interfaces", "provider descriptors and canonical errors"]
+docs = ["docs/CONTRACTS.md"]
+compatibility = "Breaking provider-contract changes require a new contract major; adapters advertise the major they implement."
+user_signaling = "none"
+
+[[feature]]
+id = "agents-teams"
+name = "Agents and Agent Teams"
+owners = ["agents"]
+role = "core"
+stability = "beta"
+public_surfaces = ["Agent resources", "Agent Team resources", "agent-facing Control Plane behavior"]
+docs = ["docs/DOMAIN_MODEL.md"]
+compatibility = "Supported for real use; bounded contract evolution may occur in non-patch releases with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "agent-handoffs"
+name = "Canonical Agent Handoffs"
+owners = ["handoffs"]
+role = "core"
+stability = "beta"
+public_surfaces = ["Handoff resources", "handoff create/consume commands", "handoff-to-ContextBundle runtime bridge"]
+docs = ["docs/runtime/AGENT_HANDOFFS.md", "docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Explicit Agent/AgentTeam work-transfer contracts are canonical runtime semantics without owning Task/Plan/Run progression; their public resource and command contracts may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "models-routing"
+name = "Models, providers and routing"
+owners = ["models"]
+role = "core"
+stability = "beta"
+public_surfaces = ["model/provider registry API", "routing profiles and model assignments"]
+docs = ["docs/runtime/CONTROL_PLANE.md", "docs/CONTRACTS.md"]
+compatibility = "Supported and compatibility-tested, but routing/resource contracts may evolve in non-patch releases."
+user_signaling = "documentation"
+
+[[feature]]
+id = "capabilities-tools"
+name = "Capabilities and Tools"
+owners = ["capabilities"]
+role = "core"
+stability = "beta"
+public_surfaces = ["capability discovery", "tool invocation contracts", "tool Control Plane resources"]
+docs = ["docs/CONTRACTS.md"]
+compatibility = "Canonical tool/capability semantics are supported while public resource details may evolve with documented migration."
+user_signaling = "documentation"
+
+[[feature]]
+id = "execution-runtime"
+name = "Execution runtime"
+owners = ["execution"]
+role = "core"
+stability = "beta"
+public_surfaces = ["executor boundaries", "reference execution behavior"]
+docs = ["docs/CONTRACTS.md", "docs/KERNEL.md"]
+compatibility = "Execution implementations remain replaceable; supported public execution contracts may evolve in non-patch releases."
+user_signaling = "documentation"
+
+[[feature]]
+id = "message-transport"
+name = "Internal messaging and event transport"
+owners = ["messaging"]
+role = "core"
+stability = "beta"
+public_surfaces = ["MessageTransport provider boundary", "TransportEnvelope 1.0 wire contract and delivery semantics"]
+docs = ["docs/runtime/MESSAGING.md", "docs/adr/0005-separate-message-transport-from-canonical-event-history.md"]
+compatibility = "The platform-owned transport boundary is supported as Beta; TransportEnvelope 1.x wire compatibility is preserved within its envelope major, and incompatible envelope changes require a new envelope major while provider/service evolution receives documented migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "workspaces-data"
+name = "Projects, Workspaces, files and data boundaries"
+owners = ["domain", "workspaces", "data"]
+role = "core"
+stability = "beta"
+public_surfaces = ["Project resources", "Workspace resources", "file/data provider contracts", "Artifact/Result data boundaries"]
+docs = ["docs/DOMAIN_MODEL.md", "docs/CONTRACTS.md"]
+compatibility = "Canonical Project/Workspace identity and ownership are preserved; public resource/provider details may evolve with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "security-governance"
+name = "Security and runtime governance"
+owners = ["security", "governance"]
+role = "core"
+stability = "beta"
+public_surfaces = ["authentication/session APIs", "authorization/approval behavior", "governed action semantics"]
+docs = ["docs/ARCHITECTURE_PRINCIPLES.md", "SECURITY.md"]
+compatibility = "Security invariants are mandatory; public policy/resource contracts may still receive bounded non-patch changes."
+user_signaling = "documentation"
+
+[[feature]]
+id = "verification-review"
+name = "Verification and Review"
+owners = ["verification"]
+role = "core"
+stability = "beta"
+public_surfaces = ["Verification resources", "review/completion-gate semantics"]
+docs = ["docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Exact-revision verification semantics are canonical while public workflow/resource details may still evolve."
+user_signaling = "documentation"
+
+[[feature]]
+id = "evaluation-regression"
+name = "Evaluation and regression"
+owners = ["evaluation"]
+role = "core"
+stability = "beta"
+public_surfaces = ["Evaluation Suite resources", "Evaluation Run resources", "evaluation/regression CLI and browser workflows"]
+docs = ["docs/quality/EVALUATION.md", "docs/cli/CLI.md"]
+compatibility = "Evaluation is a canonical platform quality boundary and public product surface; its resource/workflow contracts are supported but may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "repository-intelligence-core"
+name = "Repository intelligence provider-neutral baseline"
+owners = ["repositories"]
+role = "core"
+stability = "beta"
+public_surfaces = ["provider-neutral repository intelligence contracts", "deterministic local repository-intelligence baseline"]
+docs = ["docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md", "docs/STATUS.md"]
+compatibility = "The provider-neutral v1 layer and deterministic local baseline are canonical operational core; their public contracts are supported as Beta and may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "observability-accounting"
+name = "Observability and accounting"
+owners = ["observability", "accounting"]
+role = "core"
+stability = "beta"
+public_surfaces = ["health/telemetry views", "usage/resource accounting views"]
+docs = ["docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Supported operator/public views may evolve in non-patch releases; canonical IDs and attribution semantics remain authoritative."
+user_signaling = "documentation"
+
+[[feature]]
+id = "cli-surface"
+name = "Platform CLI framework"
+owners = ["control_plane"]
+role = "core"
+stability = "beta"
+public_surfaces = ["shared platform CLI invocation, profile/authentication, rendering and global-option conventions"]
+docs = ["README.md", "docs/DEVELOPMENT.md"]
+compatibility = "Shared CLI framework conventions are Beta; feature-specific CLI commands keep the stability declared by their owning feature and do not inherit Beta compatibility from this entry."
+user_signaling = "documentation"
+
+[[feature]]
+id = "onboarding-first-run"
+name = "First-run Onboarding"
+owners = ["onboarding"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["onboarding first-run status and commands", "platform onboarding CLI", "browser /onboarding workflow"]
+docs = ["docs/product/FIRST_RUN_ONBOARDING.md", "docs/product/WEB_FIRST_RUN_ONBOARDING.md"]
+compatibility = "Onboarding is a supported thin composition over canonical Model, Project, Workspace, Agent and Task/Run owners; its public workflow/API details may evolve in bounded non-patch releases with migration guidance and must not redefine those underlying lifecycles."
+user_signaling = "documentation"
+
+[[feature]]
+id = "memory-knowledge-search"
+name = "Memory, Knowledge, Context and Search"
+owners = ["data", "context", "search"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["Memory resources", "Knowledge resources", "ContextBundle/context assembly resources", "platform Search APIs"]
+docs = ["docs/DOMAIN_MODEL.md"]
+compatibility = "First-class optional platform capabilities with supported APIs that may evolve in bounded non-patch changes."
+user_signaling = "documentation"
+
+[[feature]]
+id = "conversations-browser-terminal"
+name = "Conversation, Browser and Terminal product capabilities"
+owners = ["conversations", "browser", "terminal"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["conversation/chat resources", "browser capability", "terminal/session capability"]
+docs = ["docs/FRONTEND.md", "docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Supported optional product capabilities; public workflow details may evolve in non-patch releases."
+user_signaling = "documentation_and_ui_contextual"
+
+[[feature]]
+id = "automation-notifications"
+name = "Automation and Notifications"
+owners = ["automation", "notifications"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["automation schedules/triggers", "notification resources and delivery behavior"]
+docs = ["docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Supported optional capabilities with bounded contract evolution and migration guidance for breaking changes."
+user_signaling = "documentation"
+
+[[feature]]
+id = "templates-workflows-portability"
+name = "Templates, Workflows and portability"
+owners = ["templates", "workflows", "portability"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["Template resources", "reusable Workflow definitions", "portable import/export formats"]
+docs = ["docs/product/TEMPLATES.md", "docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Supported optional capabilities; versioned stored/public formats retain migration or explicit version semantics."
+user_signaling = "documentation"
+
+[[feature]]
+id = "repositories-connectors"
+name = "Repositories and Connectors"
+owners = ["repositories", "repository"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["Repository/Git resources", "connector resources and sync behavior"]
+docs = ["docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Supported integration surfaces remain provider-neutral but may receive bounded non-patch contract changes."
+user_signaling = "documentation"
+
+[[feature]]
+id = "organizations-collaboration"
+name = "Organizations and collaboration"
+owners = ["organizations"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["Organizations", "Teams", "Memberships", "sharing/ownership APIs"]
+docs = ["docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Supported collaboration model; authorization/ownership invariants remain canonical while resource contracts may evolve."
+user_signaling = "documentation"
+
+[[feature]]
+id = "goals-task-management"
+name = "Goals and practical Task management"
+owners = ["goals", "task_management"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["Goal resources", "priority/deadline/dependency/assignment Task management"]
+docs = ["docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Supported work-management extension over the canonical Task lifecycle; public details may evolve without creating a second lifecycle."
+user_signaling = "documentation"
+
+[[feature]]
+id = "proposal-specification-governance"
+name = "Proposal and Specification governance"
+owners = ["governance"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["Proposal and immutable Specification resources", "proposal/specification governance commands", "governance Web and CLI workflows"]
+docs = ["docs/extensions/PROPOSAL_SPECIFICATION_GOVERNANCE.md", "docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Proposal/Specification governance is a supported optional layer over canonical Task, Approval and owner-domain authorities; its public contracts may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "plugin-skill-ecosystem"
+name = "Plugin and Skill ecosystem"
+owners = ["repository", "skills"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["plugin loading/discovery", "Skill metadata/execution integration"]
+docs = ["docs/extensions/PLUGINS.md"]
+compatibility = "Supported extension points integrate behind platform contracts; plugin/skill public metadata may evolve in bounded non-patch changes."
+user_signaling = "documentation"
+
+[[feature]]
+id = "distributed-workers"
+name = "Distributed Workers"
+owners = ["distributed"]
+role = "optional_advanced"
+stability = "beta"
+public_surfaces = ["Node/Worker resources", "distributed scheduling/dispatch profile"]
+docs = ["docs/PLATFORM_CONFORMANCE.md", "docs/PACKAGE_BOUNDARIES.md"]
+compatibility = "Optional distributed profile is supported when explicitly claimed by conformance evidence; contracts may evolve in bounded non-patch releases."
+user_signaling = "documentation_and_ui_contextual"
+
+[[feature]]
+id = "registry-marketplace"
+name = "Registry and Marketplace"
+owners = ["distribution"]
+role = "optional_advanced"
+stability = "beta"
+public_surfaces = ["component registry/catalog discovery", "validation/install/distribution APIs"]
+docs = ["docs/PLATFORM_CONFORMANCE.md", "docs/PACKAGE_BOUNDARIES.md"]
+compatibility = "Optional ecosystem profile; compatibility is evidence-based for exact claimed versions and may evolve in non-patch releases."
+user_signaling = "documentation_and_ui_contextual"
+
+[[feature]]
+id = "research-evidence"
+name = "Research Evidence"
+owners = ["research"]
+role = "optional_advanced"
+stability = "beta"
+public_surfaces = ["Research Item/Source/Claim/Evidence resources", "research semantic mutation commands and governed research-to-action workflow"]
+docs = ["docs/research/RESEARCH_EVIDENCE.md", "docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Research is a supported canonical evidence/workflow capability composed over existing Task/Run, Search, Browser, Verification and authorization owners; its public contracts may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "decision-compensation"
+name = "Decision and compensation workflows"
+owners = ["decisions", "compensation"]
+role = "optional_advanced"
+stability = "beta"
+public_surfaces = ["Decision resources", "compensation/rollback workflow resources"]
+docs = ["docs/product/DECISION_RECORDS.md", "docs/runtime/COMPENSATION.md", "docs/PACKAGE_BOUNDARIES.md"]
+compatibility = "Decision and compensation are supported advanced canonical workflows; their public contracts may receive bounded non-patch changes with migration guidance while retaining existing owner-domain and lifecycle authorities."
+user_signaling = "documentation"
+
+[[feature]]
+id = "application-distribution"
+name = "Application distribution"
+owners = ["application_distribution"]
+role = "optional_advanced"
+stability = "beta"
+public_surfaces = ["application build/distribution state and release integration"]
+docs = ["docs/product/APPLICATION_DISTRIBUTION.md", "docs/PACKAGE_BOUNDARIES.md", "docs/RELEASE_PROCESS.md"]
+compatibility = "Application distribution is a supported advanced canonical domain; its public build/release contracts may receive bounded non-patch changes with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "backup-restore"
+name = "Backup, restore and disaster recovery"
+owners = ["repository"]
+role = "optional_advanced"
+stability = "beta"
+public_surfaces = ["platform-backup operator CLI", "backup manifest v1 and restore compatibility contract"]
+docs = ["docs/operations/BACKUP_RESTORE.md", "docs/adr/0012-retain-domain-separated-sqlite-for-single-node-v1.md"]
+compatibility = "Backup/restore is a supported advanced operational surface; manifest and durable-store format changes require explicit versioned migration, v1 readability and exact-release/build restore rules remain documented, and CLI workflow changes follow Beta migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
+id = "high-availability"
+name = "High Availability"
+owners = ["distributed"]
+role = "optional_advanced"
+stability = "experimental"
+public_surfaces = ["Control Plane leadership/fencing/failover profile"]
+docs = ["docs/operations/CONTROL_PLANE_HIGH_AVAILABILITY.md", "docs/PLATFORM_CONFORMANCE.md", "docs/PACKAGE_BOUNDARIES.md"]
+signaling_docs = ["docs/operations/CONTROL_PLANE_HIGH_AVAILABILITY.md"]
+compatibility = "Experimental optional profile; exact-revision conformance evidence does not create forward compatibility guarantees."
+user_signaling = "documentation_and_ui_contextual"
+
+[[feature]]
+id = "learning"
+name = "Governed Learning"
+owners = ["learning"]
+role = "optional_advanced"
+stability = "experimental"
+public_surfaces = ["learning/improvement resources", "governed Learning CLI and browser workflows"]
+docs = ["docs/product/GOVERNED_LEARNING.md", "docs/cli/CLI_LEARNING.md", "docs/PACKAGE_BOUNDARIES.md"]
+signaling_docs = ["docs/cli/CLI_LEARNING.md"]
+compatibility = "Experimental advanced Learning capability; public contracts may change incompatibly in non-patch releases without deprecation while canonical governance and owner-domain boundaries remain mandatory."
+user_signaling = "documentation_and_ui_contextual"
+
+[[feature]]
+id = "repository-intelligence-enhanced-providers"
+name = "Repository intelligence enhanced providers"
+owners = ["repositories"]
+role = "optional_advanced"
+stability = "experimental"
+public_surfaces = ["optional enhanced repository-intelligence provider integrations and provider-specific capability activation"]
+docs = ["docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md"]
+signaling_docs = ["docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md"]
+compatibility = "Named enhanced providers remain optional and Experimental; provider-specific integrations may change incompatibly in non-patch releases and must not redefine the canonical repository-intelligence baseline."
+user_signaling = "documentation_and_ui_contextual"
+
+[[feature]]
+id = "mcp-tasks-interoperability"
+name = "MCP Tasks (SEP-2663) interoperability"
+owners = ["capabilities", "repository"]
+role = "platform_extension"
+stability = "experimental"
+public_surfaces = ["MCPServerConfig(enable_tasks=True) SEP-2663 task-aware MCP adapter profile"]
+docs = ["docs/integrations/MCP_TASKS_SEP_2663.md"]
+signaling_docs = ["docs/integrations/MCP_TASKS_SEP_2663.md"]
+compatibility = "Experimental provider interoperability profile pinned to MCP 2026-07-28/SEP-2663; incompatible changes may occur in non-patch releases and external task identity/status never becomes canonical lifecycle authority."
+user_signaling = "documentation_and_ui_contextual"

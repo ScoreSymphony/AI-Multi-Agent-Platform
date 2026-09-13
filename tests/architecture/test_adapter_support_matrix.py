@@ -82,11 +82,6 @@ FIRST_PARTY_IMPLEMENTATION_INVENTORY = {
         "ReferenceExecutor",
     ),
     (
-        "executor.forge",
-        "src/ai_multi_agent_platform/adapters/forge.py",
-        "ForgeExecutor",
-    ),
-    (
         "executor.agent-sandbox",
         "src/ai_multi_agent_platform/adapters/agent_sandbox.py",
         "AgentSandboxExecutor",
