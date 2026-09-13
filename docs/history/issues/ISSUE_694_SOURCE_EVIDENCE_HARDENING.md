@@ -76,7 +76,14 @@ Automatic Candidate generation is **not enabled by this hardening**. Candidate g
 
 ## Regression coverage
 
-`tests/test_issue_694_learning_source_evidence.py` covers:
+The former issue-numbered regression module was split by responsibility during #722. Current coverage lives in:
+
+- `tests/integration/context/test_run_source_evidence.py` for canonical Run failure evidence;
+- `tests/integration/context/test_planning_source_evidence.py` for Planning failure/replanning evidence;
+- `tests/integration/search/test_research_operator_sources.py` for Research ownership/evidence projection, operator-source impersonation rejection and the public `learning.propose` source-type boundary;
+- `tests/integration/context/test_source_immutability.py` for immutability of canonical Run, Planning and Research source records during resolution/projection.
+
+Together these tests cover:
 
 - two canonical Run failures -> Candidate;
 - duplicate Run evidence rejected as a repeated pattern;
@@ -87,9 +94,8 @@ Automatic Candidate generation is **not enabled by this hardening**. Candidate g
 - exact Research ownership/revision/digest projection;
 - broken Research ownership chain and project mismatch rejection;
 - operator-source impersonation rejection;
-- public `learning.propose` source-type boundary.
-
-`tests/integration/context/test_source_immutability.py` additionally proves that resolving/projecting canonical Run, Planning and Research evidence leaves the historical owner records unchanged.
+- public `learning.propose` source-type boundary;
+- canonical source immutability while Learning resolves/projects evidence.
 
 Existing #595 tests continue to prove quality gates, authorization/Approval, stale target handling, restart-safe owner revision promotion and historical Feedback/Verification/Evaluation immutability.
 

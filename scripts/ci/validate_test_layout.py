@@ -18,9 +18,11 @@ class ChangedPath:
 def changed_targets(name_status: str) -> tuple[ChangedPath, ...]:
     """Return newly introduced target paths from git --name-status output.
 
-    Existing legacy files may still be modified while #722 migrates them, so
-    modified/deleted paths are intentionally ignored. Rename/copy records use
-    their destination path because that is the newly introduced repository name.
+    This diff-level guard evaluates newly introduced repository names. Modified
+    and deleted paths are intentionally ignored here because the CI workflow also
+    audits the complete test tree on every pull request and main-branch push.
+    Rename/copy records use their destination path because that is the newly
+    introduced repository name.
     """
 
     changes: list[ChangedPath] = []
