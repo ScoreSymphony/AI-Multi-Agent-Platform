@@ -13,16 +13,12 @@ GOVERNANCE = ROOT / "src" / "ai_multi_agent_platform" / "governance"
 # reviewed implementation compositions explicit so a new ControlPlane MRO stack
 # cannot be introduced silently while compatibility layers are retired.
 _ALLOWED_IMPLEMENTATION_MULTIPLE_INHERITANCE = {
-    ("workspace_task_management_api.py", "ControlPlane"): frozenset(
+    ("workspace_task_management_explicit_composition.py", "ControlPlane"): frozenset(
         {
             "RepositoryRunProvenanceMixin",
             "AuthorizationBoundaryHardeningMixin",
             "_RunWorkspaceControlPlane",
-            "_TaskManagementControlPlane",
         }
-    ),
-    ("workspace_task_management_api.py", "ControlPlaneHTTP"): frozenset(
-        {"_RunWorkspaceControlPlaneHTTP", "_TaskManagementControlPlaneHTTP"}
     ),
 }
 
