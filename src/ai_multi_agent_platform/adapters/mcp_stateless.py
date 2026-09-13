@@ -156,6 +156,23 @@ class MCPStatelessHTTPClient(MCPClient):
         )
         result_type = result.get("resultType")
         if result_type == "task":
+            # CreateTaskResult is ``Result & Task`` rather than ``DetailedTask``. Its seed state
+            # can legally already be terminal or input_required without carrying result/error/
+            # inputRequests. Resolve those non-working seed states through tasks/get before
+            # exposing them to the provider's detailed lifecycle logic.
+            try:
+                task_id = _required_string(result, "taskId")
+                seed_status = MCPTaskStatus(_required_string(result, "status"))
+            except ValueError as exc:
+                raise self._invalid_response(
+                    "MCP CreateTaskResult does not match the pinned SEP-2663 Task shape"
+                ) from exc
+            if seed_status in {
+                MCPTaskStatus.INPUT_REQUIRED,
+                MCPTaskStatus.COMPLETED,
+                MCPTaskStatus.FAILED,
+            }:
+                return MCPTaskStarted(await self.get_task(task_id))
             return MCPTaskStarted(_task_snapshot(result, provider_id=self._provider_id))
         if result_type == "input_required":
             raise ContractError(
@@ -357,7 +374,7 @@ class MCPStatelessHTTPClient(MCPClient):
         }
         method = body.get("method")
         params = body.get("params")
-        if method in _TASK_METHODS and isinstance(params, Mapping):
+        if isinstance(method, str) and method in _TASK_METHODS and isinstance(params, Mapping):
             task_id = params.get("taskId")
             if not isinstance(task_id, str) or not task_id.strip():
                 raise ContractError(
