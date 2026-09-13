@@ -74,13 +74,30 @@ def _json_value(value: object, name: str) -> JsonValue:
     )
 
 
+def _freeze_json_value(value: JsonValue) -> JsonValue:
+    if isinstance(value, Mapping):
+        frozen = MappingProxyType(
+            {str(key): _freeze_json_value(item) for key, item in value.items()}
+        )
+        return cast(JsonValue, frozen)
+    if isinstance(value, list | tuple):
+        return cast(JsonValue, tuple(_freeze_json_value(item) for item in value))
+    return value
+
+
+def _freeze_json_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
+    return MappingProxyType(
+        {key: _freeze_json_value(item) for key, item in value.items()}
+    )
+
+
 def _json_mapping(value: object, name: str) -> Mapping[str, JsonValue]:
     if not isinstance(value, Mapping):
         raise ContractError(ErrorCode.INVALID_PROVIDER_RESPONSE, f"{name} must be an object")
     normalized = _json_value(value, name)
     if not isinstance(normalized, dict):
         raise AssertionError("mapping normalization returned a non-mapping")
-    return MappingProxyType(normalized)
+    return _freeze_json_mapping(normalized)
 
 
 def _required_string(value: object, name: str) -> str:
@@ -176,7 +193,7 @@ class McpSkillEntry:
                 raise ValueError("MCP Skill resource URIs must be unique")
             if self.uri not in set(uris):
                 raise ValueError("MCP Skill manifest must include its SKILL.md URI")
-        object.__setattr__(self, "frontmatter", MappingProxyType(dict(self.frontmatter)))
+        object.__setattr__(self, "frontmatter", _freeze_json_mapping(self.frontmatter))
 
 
 @dataclass(frozen=True, slots=True)
@@ -502,6 +519,7 @@ class McpSkillsAdapter:
             )
             target_path = self.staging_root / snapshot_digest
             if target_path.exists():
+                _make_read_only(target_path)
                 if _digest_tree(target_path) != snapshot_digest:
                     raise ContractError(
                         ErrorCode.CONTRACT_VIOLATION,
@@ -509,6 +527,7 @@ class McpSkillsAdapter:
                     )
                 shutil.rmtree(temp_path)
             else:
+                _make_read_only(temp_path)
                 os.replace(temp_path, target_path)
                 _make_read_only(target_path)
             staged = StagedSkillCandidate(
@@ -535,6 +554,10 @@ class McpSkillsAdapter:
             )
         except Exception:
             if temp_path.exists():
+                try:
+                    _make_writable(temp_path)
+                except OSError:
+                    pass
                 shutil.rmtree(temp_path, ignore_errors=True)
             raise
 
@@ -748,13 +771,18 @@ def _decoded_segments(path: str, name: str) -> tuple[str, ...]:
     return tuple(segments)
 
 
+def _update_digest_field(digest: object, payload: bytes) -> None:
+    """NUL-escape a field before its delimiter so the framing is unambiguous."""
+
+    digest.update(payload.replace(b"\0", b"\0\0"))  # type: ignore[attr-defined]
+    digest.update(b"\0")  # type: ignore[attr-defined]
+
+
 def _digest_tree(root: Path) -> str:
     digest = sha256()
     for path in sorted(value for value in root.rglob("*") if value.is_file()):
-        digest.update(path.relative_to(root).as_posix().encode())
-        digest.update(b"\0")
-        digest.update(path.read_bytes())
-        digest.update(b"\0")
+        _update_digest_field(digest, path.relative_to(root).as_posix().encode())
+        _update_digest_field(digest, path.read_bytes())
     return digest.hexdigest()
 
 
@@ -764,3 +792,11 @@ def _make_read_only(root: Path) -> None:
     for path in sorted(root.rglob("*"), key=lambda value: len(value.parts), reverse=True):
         path.chmod(0o555 if path.is_dir() else 0o444)
     root.chmod(0o555)
+
+
+def _make_writable(root: Path) -> None:
+    if os.name != "posix":
+        return
+    root.chmod(0o755)
+    for path in sorted(root.rglob("*"), key=lambda value: len(value.parts)):
+        path.chmod(0o755 if path.is_dir() else 0o644)
