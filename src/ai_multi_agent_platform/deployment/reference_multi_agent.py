@@ -31,14 +31,26 @@ from ai_multi_agent_platform.security import ActorIdentity, ActorType
 
 from .handoff_composition import HandoffDeploymentComposition
 
+REFERENCE_MULTI_AGENT_CONSTRAINT = "runtime:reference-multi-agent"
 _REFERENCE_ROLES = frozenset({"researcher", "developer", "reviewer"})
+
+
+def _enabled_reference_roles(request: PlanningRequest) -> frozenset[str]:
+    return frozenset(
+        candidate.role
+        for candidate in request.inventory.agents
+        if candidate.enabled and candidate.role in _REFERENCE_ROLES
+    )
 
 
 def _has_reference_roles(request: PlanningRequest) -> bool:
     """Detect the standard golden-path roles without becoming a selection authority."""
 
-    enabled_roles = {candidate.role for candidate in request.inventory.agents if candidate.enabled}
-    return _REFERENCE_ROLES.issubset(enabled_roles)
+    return _REFERENCE_ROLES.issubset(_enabled_reference_roles(request))
+
+
+def _reference_multi_agent_requested(request: PlanningRequest) -> bool:
+    return REFERENCE_MULTI_AGENT_CONSTRAINT in request.task_constraints
 
 
 def _agent_actor(agent: AgentRevisionRef) -> ActorIdentity:
@@ -53,8 +65,9 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
 
     The planner expresses role requirements only. Proposal construction then delegates actual
     eligibility and exact immutable Agent revision selection to the canonical #903 matcher already
-    owned by #439. If the standard role set is unavailable, the ordinary single-Agent deterministic
-    reference plan remains unchanged.
+    owned by #439. The ordinary deterministic single-Agent reference path remains available when
+    the multi-Agent path was not requested. An explicitly requested multi-Agent path fails closed
+    when a required role is unavailable instead of silently selecting a fallback Agent.
     """
 
     def __init__(self) -> None:
@@ -62,7 +75,14 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
 
     async def propose(self, request: PlanningRequest) -> PlannerOutput:
         if not _has_reference_roles(request):
-            return await super().propose(request)
+            if not _reference_multi_agent_requested(request):
+                return await super().propose(request)
+            missing_roles = sorted(_REFERENCE_ROLES - _enabled_reference_roles(request))
+            raise ContractError(
+                ErrorCode.UNSUPPORTED_CAPABILITY,
+                "reference multi-agent planning requires every canonical golden-path role",
+                details={"missing_roles": missing_roles},
+            )
 
         reused: tuple[str, ...] = ()
         if request.prior_plan is not None:
@@ -438,4 +458,8 @@ class ReferenceIncomingHandoffContextAdapter:
         )
 
 
-__all__ = ["ReferenceIncomingHandoffContextAdapter", "ReferenceMultiAgentPlanner"]
+__all__ = [
+    "REFERENCE_MULTI_AGENT_CONSTRAINT",
+    "ReferenceIncomingHandoffContextAdapter",
+    "ReferenceMultiAgentPlanner",
+]
