@@ -1,8 +1,10 @@
 # Forge reuse audit
 
-Status: **Completed implementation audit for issue #9**
+Status: **Historical completed implementation audit for issue #9; executable Forge integration removed by #991 / ADR 0014.**
 
-This document records the final reuse decisions for execution-related engineering from `ScoreSymphony/AI-Agent-VPS`, the canonical mappings used by this platform, and the evidence that the selected Forge behavior is now integrated without importing the legacy Forge lifecycle as platform architecture.
+> This document preserves the implementation state reached when issue #9 completed. The Forge adapter, HTTP transport, sidecar CI lane and active compatibility claim described below were later removed by #991 after their generic guarantees had backend-neutral/reference evidence. Present-tense implementation statements below therefore describe the historical #9 completion state, not current platform support. See [`FORGE_RETENTION_DECISION.md`](FORGE_RETENTION_DECISION.md) for the current decision.
+
+This document records the final reuse decisions for execution-related engineering from `ScoreSymphony/AI-Agent-VPS`, the canonical mappings used by this platform, and the evidence that the selected Forge behavior was integrated without importing the legacy Forge lifecycle as platform architecture.
 
 Issue #9 is already marked completed on GitHub. This revision reconciles the original Phase 1–3 audit text with the implementation that subsequently landed.
 
@@ -18,7 +20,7 @@ Issue #9 is already marked completed on GitHub. This revision reconciles the ori
 - Review/reconciliation date: 2026-09-03
 - Machine-readable provenance: `upstream/forge-ai-agent-vps.yaml`
 
-No Forge source is copied or vendored into this repository. The Python adapter and HTTP client are platform-owned implementations. The Rust sidecar remains in the canonical `AI-Agent-VPS` source repository and is consumed at an exact pinned revision.
+No Forge source is copied or vendored into this repository. The Python adapter and HTTP client were platform-owned implementations. The Rust sidecar remains in the canonical `AI-Agent-VPS` source repository as historical upstream source, but the platform no longer consumes it after #991.
 
 ## Architectural invariants
 
@@ -193,4 +195,4 @@ Each can be evaluated independently later without reopening canonical lifecycle 
 
 ## Definition of Done conclusion
 
-Issue #9's intended result has been achieved: the platform recovered the genuinely useful Forge executor, workspace-isolation, logging, cancellation, idempotency and recovery engineering while retaining platform-owned canonical contracts and lifecycle state. Forge is now an optional execution backend, not the architecture of the platform.
+Issue #9's intended result was achieved at the time: the platform recovered the genuinely useful Forge executor, workspace-isolation, logging, cancellation, idempotency and recovery engineering while retaining platform-owned canonical contracts and lifecycle state. #991 later retired the executable Forge backend after those guarantees had independent platform-owned evidence. Forge is now historical provenance rather than an active execution backend.
