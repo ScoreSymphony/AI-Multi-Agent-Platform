@@ -12,6 +12,7 @@ import ai_multi_agent_platform.adapters.mcp_skills as mcp_skills
 from ai_multi_agent_platform.adapters.mcp_skills import (
     MCP_SKILLS_EXTENSION_ID,
     PINNED_MCP_PROTOCOL_REVISION,
+    McpSkillCanonicalCandidate,
     McpSkillsAdapter,
 )
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -83,7 +84,11 @@ def _payload(
     )
 
 
-def _stage(tmp_path: Path, *, frontmatter: dict[str, object] | None = None):
+def _stage(
+    tmp_path: Path,
+    *,
+    frontmatter: dict[str, object] | None = None,
+) -> McpSkillCanonicalCandidate:
     entry, files = _payload(frontmatter=frontmatter)
     return McpSkillsAdapter(_Rpc(entry=entry, files=files), tmp_path / "staging").fetch_and_stage(
         "skill://demo/SKILL.md"
@@ -139,7 +144,10 @@ def test_snapshot_is_read_only_before_atomic_publication(
     real_replace = mcp_skills.os.replace
     observed = False
 
-    def guarded_replace(source: str | bytes | os.PathLike[str] | os.PathLike[bytes], destination: str | bytes | os.PathLike[str] | os.PathLike[bytes]) -> None:
+    def guarded_replace(
+        source: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        destination: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+    ) -> None:
         nonlocal observed
         source_path = Path(source)
         assert source_path.stat().st_mode & 0o222 == 0
