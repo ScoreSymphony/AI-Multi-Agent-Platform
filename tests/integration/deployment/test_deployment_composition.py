@@ -31,6 +31,10 @@ def test_public_single_node_deployment_owns_durable_handoff_runtime(tmp_path: Pa
     assert deployment.handoffs.references.verification is deployment.verification_runtime.evidence
     assert deployment.handoffs.references.authorization is deployment.approval_gate.provider
 
+    assert deployment.context.research is deployment.research
+    assert deployment.context.research_repository is deployment.research.repository
+    assert deployment.handoffs.research_repository is deployment.context.research_repository
+
     assert (config.database_dir / "handoffs.sqlite3").exists()
     assert (config.database_dir / "research.sqlite3").exists()
     assert (config.database_dir / "skills.json").parent == config.database_dir
