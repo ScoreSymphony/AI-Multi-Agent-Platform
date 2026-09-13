@@ -33,9 +33,13 @@ The existing required `litellm-compat` CI context runs this profile and retains 
 
 ## Real distributed infrastructure (`ENV-DISTRIBUTED-REAL`)
 
-Issue #562 adds a separate environment claim for a physically real two-VPS deployment connected through a private tunnel. This is deliberately **not** the same evidence as optional Scenario E in the normal integration/release matrix: Scenario E exercises the canonical distributed Worker contracts with maintained fixtures, while `ENV-DISTRIBUTED-REAL` proves those contracts across two independent operator-controlled hosts and a real network boundary.
+Issue #562 defines the repository-side topology, acceptance harness, evidence contracts and #46 bridge for a physically real two-VPS deployment connected through a private tunnel. Issue #829 owns the actual execution on independent operator-controlled VPS/reference hosts and retention of the resulting sanitized live evidence.
 
-The live operator flow first produces the finalized sanitized report documented in [`../operations/TWO_VPS_PRIVATE_TUNNEL_ACCEPTANCE.md`](../operations/TWO_VPS_PRIVATE_TUNNEL_ACCEPTANCE.md). That report can then be promoted into the standard #46 report schema with:
+This is deliberately **not** the same evidence as optional Scenario E in the normal integration/release matrix: Scenario E exercises the canonical distributed Worker contracts with maintained fixtures, while `ENV-DISTRIBUTED-REAL` can only become a passing claim after #829 has exercised those contracts across two independent hosts and a real network boundary.
+
+The #829 live operator flow uses the runbook prepared under #562 in [`../operations/TWO_VPS_PRIVATE_TUNNEL_ACCEPTANCE.md`](../operations/TWO_VPS_PRIVATE_TUNNEL_ACCEPTANCE.md). It produces the finalized sanitized report using the stable `issue562-*` schema lineage introduced by #562. That schema name is retained for compatibility/provenance and does not assign physical-host execution ownership back to #562.
+
+The retained live report can then be promoted into the standard #46 report schema with:
 
 ```text
 python scripts/ci/issue562_real_two_vps_conformance.py \
@@ -43,11 +47,11 @@ python scripts/ci/issue562_real_two_vps_conformance.py \
   --json-report conformance-real-two-vps.json
 ```
 
-The bridge validates the finalized #562 schema, all required live phases, private/public network probes, canonical IDs, advertised Worker capabilities, secret/address sanitization and the real-infrastructure conformance marker. It also requires the `platform_commit` in the live report to equal the exact Git commit of the checkout making the compatibility claim. Evidence from another commit therefore cannot silently certify a newer or different platform revision.
+The bridge validates the finalized #562-defined schema, all required live phases, private/public network probes, canonical IDs, advertised Worker capabilities, secret/address sanitization and the real-infrastructure conformance marker. It also requires the `platform_commit` in the live report to equal the exact Git commit of the checkout making the compatibility claim. Evidence from another commit therefore cannot silently certify a newer or different platform revision.
 
-If the command is run without `--acceptance-evidence`, the generated `ai-multi-agent-platform/platform-conformance/v1` report records `ENV-DISTRIBUTED-REAL` as `required=true`, `status=unsupported`, `compatibility_result=not_claimed` and the overall real-infrastructure claim as `incomplete`. Simulated Scenario E evidence is never substituted for the missing live report. When valid live evidence is supplied, the scenario becomes `pass` and promotes the observed Node/Worker/Task/Run/WorkerJob IDs plus sanitized #562 evidence references into the standard conformance report.
+If the command is run without `--acceptance-evidence`, the generated `ai-multi-agent-platform/platform-conformance/v1` report records `ENV-DISTRIBUTED-REAL` as `required=true`, `status=unsupported`, `compatibility_result=not_claimed` and the overall real-infrastructure claim as `incomplete`. Simulated Scenario E evidence is never substituted for the missing live report. When valid #829 live evidence is supplied, the scenario becomes `pass` and promotes the observed Node/Worker/Task/Run/WorkerJob IDs plus sanitized evidence references into the standard conformance report.
 
-This profile is an operator/release acceptance path and is not part of the fast PR suite. It requires no paid AI/API/workflow service beyond the already operated VPS infrastructure.
+This profile is an operator/release acceptance path and is not part of the fast PR suite. The repository-side preparation is completed under #562; the physical-host campaign remains tracked under #829. It requires no paid AI/API/workflow service beyond the already operated VPS infrastructure.
 
 ## Boundary
 
