@@ -12,6 +12,7 @@ from ai_multi_agent_platform.domain import OwnerRef, Plan, RunStatus, Step, Step
 from ai_multi_agent_platform.kernel.models import RunState
 from ai_multi_agent_platform.observability import TelemetryOutcome
 
+from .async_repository import AsyncCoordinatorRepository
 from .models import (
     ApprovalOutcome,
     CoordinationPhase,
@@ -22,7 +23,6 @@ from .models import (
     WaitResolution,
     WaitType,
 )
-from .repository import CoordinatorRepository
 
 
 class WaitRunKernel(Protocol):
@@ -32,7 +32,7 @@ class WaitRunKernel(Protocol):
 
 
 class RequiredClaimProvider(Protocol):
-    def __call__(self, step_id: str, now: datetime) -> CoordinatorClaim: ...
+    async def __call__(self, step_id: str, now: datetime) -> CoordinatorClaim: ...
 
 
 class CancelActiveRun(Protocol):
@@ -67,7 +67,7 @@ class CoordinationWaits:
     def __init__(
         self,
         *,
-        repository: CoordinatorRepository,
+        repository: AsyncCoordinatorRepository,
         kernel: WaitRunKernel,
     ) -> None:
         self.repository = repository
@@ -81,9 +81,9 @@ class CoordinationWaits:
         required_claim: RequiredClaimProvider,
         emit: WaitEmitter,
     ) -> WaitMutation:
-        state = self.repository.get_plan(wait.plan_id)
+        state = await self.repository.get_plan(wait.plan_id)
         step = state.step(wait.step_id)
-        record = self.repository.get_step_record(wait.step_id)
+        record = await self.repository.get_step_record(wait.step_id)
         self.validate_wait_scope(wait, state.plan, step, record)
         if record.wait is not None:
             if record.wait.wait_key == wait.wait_key:
@@ -95,11 +95,11 @@ class CoordinationWaits:
             or record.phase is not CoordinationPhase.ATTEMPT_ACTIVE
         ):
             raise ContractError(ErrorCode.CONFLICT, "only an active running Step can enter a wait")
-        claim = required_claim(step.id, now)
+        claim = await required_claim(step.id, now)
         try:
             waiting = step.transition_to(StepStatus.WAITING)
             updated = replace(record, phase=CoordinationPhase.WAITING, wait=wait)
-            self.repository.save_step(
+            await self.repository.save_step(
                 step=waiting,
                 record=updated,
                 expected_revision=record.revision,
@@ -107,7 +107,7 @@ class CoordinationWaits:
                 now=now,
             )
         finally:
-            self.repository.release_claim(claim)
+            await self.repository.release_claim(claim)
         emit(
             "coordination.wait.created",
             record.task_id,
@@ -135,7 +135,7 @@ class CoordinationWaits:
         cancel_active_run: CancelActiveRun,
         emit: WaitEmitter,
     ) -> WaitMutation:
-        record = self.repository.get_step_record(step_id)
+        record = await self.repository.get_step_record(step_id)
         if resolution_key in record.processed_keys:
             return WaitMutation(plan_id=record.plan_id, changed=False)
         wait = record.wait
@@ -184,7 +184,7 @@ class CoordinationWaits:
         if not event_id.strip():
             raise ValueError("event_id must not be blank")
         resolution_key = f"event:{event_id}"
-        record = self.repository.get_step_record(step_id)
+        record = await self.repository.get_step_record(step_id)
         if resolution_key in record.processed_keys:
             return WaitMutation(plan_id=record.plan_id, changed=False)
         wait = record.wait
@@ -217,7 +217,7 @@ class CoordinationWaits:
         cancel_active_run: CancelActiveRun,
         emit: WaitEmitter,
     ) -> WaitMutation:
-        record = self.repository.get_step_record(step_id)
+        record = await self.repository.get_step_record(step_id)
         if resolution_key in record.processed_keys:
             return WaitMutation(plan_id=record.plan_id, changed=False)
         wait = record.wait
@@ -249,18 +249,18 @@ class CoordinationWaits:
     ) -> WaitMutation:
         if not resolution_key.strip():
             raise ValueError("resolution_key must not be blank")
-        record = self.repository.get_step_record(step_id)
+        record = await self.repository.get_step_record(step_id)
         if resolution_key in record.processed_keys:
             return WaitMutation(plan_id=record.plan_id, changed=False)
         wait = record.wait
         if wait is None or wait.resolved or record.phase is not CoordinationPhase.WAITING:
             raise ContractError(ErrorCode.CONFLICT, "Step has no active durable wait")
-        claim = required_claim(step_id, now)
+        claim = await required_claim(step_id, now)
         try:
-            current = self.repository.get_step_record(step_id)
+            current = await self.repository.get_step_record(step_id)
             if resolution_key in current.processed_keys:
                 return WaitMutation(plan_id=current.plan_id, changed=False)
-            state = self.repository.get_plan(current.plan_id)
+            state = await self.repository.get_plan(current.plan_id)
             step = state.step(step_id)
             processed = (*current.processed_keys, resolution_key)
             resolved_wait = self.close_wait(
@@ -329,7 +329,7 @@ class CoordinationWaits:
                     retry_state=retry_state,
                     processed_keys=processed,
                 )
-            self.repository.save_step(
+            await self.repository.save_step(
                 step=next_step,
                 record=updated,
                 expected_revision=current.revision,
@@ -356,7 +356,7 @@ class CoordinationWaits:
             )
             return WaitMutation(plan_id=current.plan_id, changed=True)
         finally:
-            self.repository.release_claim(claim)
+            await self.repository.release_claim(claim)
 
     @staticmethod
     def validate_wait_scope(
