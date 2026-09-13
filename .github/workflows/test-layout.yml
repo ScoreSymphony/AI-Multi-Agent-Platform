@@ -116,20 +116,62 @@ jobs:
           print(summary, end="")
           assert not duplicates, duplicates
           PY
-      - name: Directory collection selections
+      - name: Directory and marker collection selections
         shell: bash
         run: |
-          for suite in architecture unit contract integration e2e performance regression release; do
-            pytest --collect-only "tests/${suite}" > ".pytest-directory-${suite}.txt"
-            tail -n 1 ".pytest-directory-${suite}.txt"
-          done
-      - name: Marker collection selections
-        shell: bash
-        run: |
-          for marker in unit contract integration e2e performance regression release; do
-            pytest --collect-only -m "${marker}" > ".pytest-marker-${marker}.txt"
-            tail -n 1 ".pytest-marker-${marker}.txt"
-          done
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          failures: list[str] = []
+
+          def collect(label: str, command: list[str], output: Path) -> None:
+              completed = subprocess.run(command, text=True, capture_output=True)
+              text = completed.stdout + completed.stderr
+              output.write_text(text, encoding="utf-8")
+              summary = next(
+                  (line for line in reversed(text.splitlines()) if " collected " in line),
+                  "no collection summary",
+              )
+              print(f"{label}: rc={completed.returncode}; {summary}")
+              if completed.returncode != 0:
+                  failures.append(label)
+                  print(text)
+
+          for suite in (
+              "architecture",
+              "unit",
+              "contract",
+              "integration",
+              "e2e",
+              "performance",
+              "regression",
+              "release",
+          ):
+              collect(
+                  f"directory:{suite}",
+                  ["pytest", "--collect-only", f"tests/{suite}"],
+                  Path(f".pytest-directory-{suite}.txt"),
+              )
+
+          for marker in (
+              "unit",
+              "contract",
+              "integration",
+              "e2e",
+              "performance",
+              "regression",
+              "release",
+          ):
+              collect(
+                  f"marker:{marker}",
+                  ["pytest", "--collect-only", "-m", marker],
+                  Path(f".pytest-marker-{marker}.txt"),
+              )
+
+          if failures:
+              raise SystemExit("collection selections failed: " + ", ".join(failures))
+          PY
       - name: Exact-path guard regression
         run: pytest tests/unit/governance/test_test_layout_policy.py
       - name: Upload collection reconciliation evidence
@@ -142,5 +184,6 @@ jobs:
             .pytest-collection-summary.txt
             .pytest-directory-*.txt
             .pytest-marker-*.txt
-          if-no-files-found: warn
+          if-no-files-found: error
+          include-hidden-files: true
           retention-days: 14
