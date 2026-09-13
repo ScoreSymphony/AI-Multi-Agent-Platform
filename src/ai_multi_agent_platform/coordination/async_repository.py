@@ -8,7 +8,7 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
-from typing import Protocol, TypeVar
+from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 from weakref import WeakKeyDictionary
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -17,6 +17,9 @@ from ai_multi_agent_platform.domain import Plan, Step
 from .models import CoordinatorClaim, PlanRuntimeState, StepCoordinationRecord
 from .repository import CoordinatorRepository
 
+if TYPE_CHECKING:
+    from .retirement import PlanRetirement
+
 _T = TypeVar("_T")
 _BUSY_MARKERS = (
     "database is locked",
@@ -24,6 +27,19 @@ _BUSY_MARKERS = (
     "database schema is locked",
     "database is busy",
 )
+
+
+class _RetirementRepository(Protocol):
+    def retire_plan(
+        self,
+        plan_id: str,
+        *,
+        superseded_by_plan_id: str | None,
+        reason: str,
+        retired_at: datetime,
+    ) -> PlanRetirement: ...
+
+    def plan_retirement(self, plan_id: str) -> PlanRetirement | None: ...
 
 
 class AsyncCoordinatorRepository(Protocol):
@@ -72,6 +88,17 @@ class AsyncCoordinatorRepository(Protocol):
     ) -> CoordinatorClaim | None: ...
 
     async def release_claim(self, claim: CoordinatorClaim) -> bool: ...
+
+    async def retire_plan(
+        self,
+        plan_id: str,
+        *,
+        superseded_by_plan_id: str | None,
+        reason: str,
+        retired_at: datetime,
+    ) -> PlanRetirement: ...
+
+    async def plan_retirement(self, plan_id: str) -> PlanRetirement | None: ...
 
 
 class CoordinationPersistenceOffload:
@@ -281,6 +308,32 @@ class AsyncCoordinatorRepositoryAdapter:
         return await self._run(
             lambda: self._repository.release_claim(claim),
             message="failed to release Coordination claim",
+        )
+
+    async def retire_plan(
+        self,
+        plan_id: str,
+        *,
+        superseded_by_plan_id: str | None,
+        reason: str,
+        retired_at: datetime,
+    ) -> PlanRetirement:
+        repository = cast(_RetirementRepository, self._repository)
+        return await self._run(
+            lambda: repository.retire_plan(
+                plan_id,
+                superseded_by_plan_id=superseded_by_plan_id,
+                reason=reason,
+                retired_at=retired_at,
+            ),
+            message="failed to retire Coordination plan",
+        )
+
+    async def plan_retirement(self, plan_id: str) -> PlanRetirement | None:
+        repository = cast(_RetirementRepository, self._repository)
+        return await self._run(
+            lambda: repository.plan_retirement(plan_id),
+            message="failed to read Coordination plan retirement",
         )
 
 
