@@ -164,9 +164,7 @@ def test_candidate_declares_required_run_lifecycle_surface(
     upstream_adapter = APIServerAdapter(
         PlatformConfig(enabled=True, extra={"host": "127.0.0.1", "port": 0})
     )
-    routes = {
-        (method, path) for method, path, _handler in upstream_adapter._http_route_table()
-    }
+    routes = {(method, path) for method, path, _handler in upstream_adapter._http_route_table()}
 
     assert {
         ("POST", "/v1/runs"),
@@ -223,9 +221,7 @@ def test_candidate_startup_auth_and_health_contract(
         assert auth_error is not None
         assert auth_error.status == 401
 
-        routes = {
-            (method, path) for method, path, _handler in upstream_adapter._http_route_table()
-        }
+        routes = {(method, path) for method, path, _handler in upstream_adapter._http_route_table()}
         assert ("GET", "/health") in routes
         assert ("GET", "/health/detailed") in routes
 
@@ -434,12 +430,8 @@ def test_parallel_candidate_runs_keep_results_and_external_ids_isolated(
 
             with patch.object(upstream_adapter, "_create_agent", side_effect=make_agent):
                 first, second = await asyncio.gather(
-                    HermesOrchestrator(config, secret_resolver=lambda _: None).plan(
-                        first_request
-                    ),
-                    HermesOrchestrator(config, secret_resolver=lambda _: None).plan(
-                        second_request
-                    ),
+                    HermesOrchestrator(config, secret_resolver=lambda _: None).plan(first_request),
+                    HermesOrchestrator(config, secret_resolver=lambda _: None).plan(second_request),
                 )
 
             assert "parallel-alpha" in first.summary
@@ -503,8 +495,7 @@ def test_candidate_status_mapping_remains_fail_closed(
             await orchestrator.plan(_request(f"status-{status}"))
         assert error.value.code is expected_code
         assert (
-            error.value.adapter_metadata[0].values["upstream_revision"]
-            == HERMES_V0_21_2_REVISION
+            error.value.adapter_metadata[0].values["upstream_revision"] == HERMES_V0_21_2_REVISION
         )
 
     asyncio.run(scenario())
