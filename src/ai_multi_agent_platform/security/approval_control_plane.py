@@ -6,6 +6,7 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
 from .approvals import ApprovalRecord, ApprovalService
+from .async_persistence import AsyncApprovalService, AsyncApprovalServiceAdapter
 
 APPROVAL_COLLECTION = "approvals"
 
@@ -13,8 +14,14 @@ APPROVAL_COLLECTION = "approvals"
 class ApprovalResourceService:
     """Expose approval lifecycle metadata without exposing proposed payload values."""
 
-    def __init__(self, approvals: ApprovalService) -> None:
+    def __init__(
+        self,
+        approvals: ApprovalService,
+        *,
+        runtime_approvals: AsyncApprovalService | None = None,
+    ) -> None:
         self._approvals = approvals
+        self._runtime_approvals = runtime_approvals or AsyncApprovalServiceAdapter(approvals)
 
     async def list_resources(
         self,
@@ -22,7 +29,9 @@ class ApprovalResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(_approval_resource(record) for record in self._approvals.all())
+        return tuple(
+            _approval_resource(record) for record in await self._runtime_approvals.all()
+        )
 
     async def get_resource(
         self,
@@ -30,15 +39,22 @@ class ApprovalResourceService:
         resource_id: str,
     ) -> dict[str, JsonValue]:
         del context
-        return _approval_resource(self._approvals.get(resource_id))
+        return _approval_resource(await self._runtime_approvals.get(resource_id))
 
 
 def approval_resource_services(
     approvals: ApprovalService,
+    *,
+    runtime_approvals: AsyncApprovalService | None = None,
 ) -> dict[str, ApprovalResourceService]:
     """Register the canonical approval inspection collection through the extension seam."""
 
-    return {APPROVAL_COLLECTION: ApprovalResourceService(approvals)}
+    return {
+        APPROVAL_COLLECTION: ApprovalResourceService(
+            approvals,
+            runtime_approvals=runtime_approvals,
+        )
+    }
 
 
 def _approval_resource(record: ApprovalRecord) -> dict[str, JsonValue]:
