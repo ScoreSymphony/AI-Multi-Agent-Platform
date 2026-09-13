@@ -17,6 +17,7 @@ from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.repositories import (
     RepositoryBinding,
+    RepositoryBindingRecord,
     RepositoryCallContext,
     RepositoryConnection,
     RepositoryManagementService,
@@ -47,7 +48,7 @@ def test_management_cancellation_settles_persistence_and_registry_publish(tmp_pa
             self.release = threading.Event()
             super().__init__(path)
 
-        def save(self, record):  # type: ignore[no-untyped-def]
+        def save(self, record: RepositoryBindingRecord) -> RepositoryBindingRecord:
             self.started.set()
             if not self.release.wait(timeout=2):
                 raise RuntimeError("test write was not released")
