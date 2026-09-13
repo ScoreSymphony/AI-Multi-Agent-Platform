@@ -69,12 +69,13 @@ Architecture tests reject every new or changed multiple-inheritance stack on a `
 
 ## Migration inventory
 
-The #982 ownership audit found two Control Plane diamonds in which independent later domains competed to contribute northbound resources/commands through MRO, plus a longer historical chain of compatibility/transport layers.
+The #982 ownership audit found three Control Plane diamonds in which independent later domains competed to contribute northbound resources/commands through MRO, plus a longer historical chain of compatibility/transport layers.
 
 | Pre-#982 composition | Risk | #982 state |
 | --- | --- | --- |
 | `ApprovalControlPlane + PortabilityControlPlane` in the single-node product composition | two domain parents; MRO decided initialization and registration order | Portability is an explicit `portability` module; canonical composition has one Control Plane base |
 | `PluginControlPlane + TerminalControlPlane` | two domain parents; plugin/terminal behavior coupled through MRO | Plugin lifecycle is an explicit `plugins` module; terminal composition has one Control Plane base |
+| `ConversationControlPlane + NotificationControlPlane` | two independently evolving later-domain parents shared registration and command-dispatch state through cooperative MRO | Conversations are an explicit `conversations` module; the current Conversation façade has one Notification Control Plane base |
 | `portability_api.ControlPlane` | commands/resources and conflict guards lived in a subclass | compatibility façade only; domain behavior lives in `portability_module.py` |
 | `plugin_api.ControlPlane` | lifecycle commands/resources and conflict guards lived in a subclass | compatibility façade only; domain behavior lives in `plugin_module.py` |
 | focused #723 service façade | ordinary implementation façade, not a later-domain composition mechanism | preserved |
@@ -108,6 +109,17 @@ The `PortabilityWorkflowService` remains the behavior owner.
 - the existing `plugin.*` lifecycle command vocabulary.
 
 `PluginRegistry` and `PluginCatalog` remain the lifecycle/discovery owners.
+
+### Conversations
+
+`conversation_control_plane_module(...)` adapts `ConversationService` and its current Agent/File/Knowledge dependencies into the `conversations` module. It owns:
+
+- `conversations`;
+- `conversation-messages`;
+- `conversation-exports`;
+- the canonical `conversation.*` command vocabulary, including waiting-task resume and retention commands.
+
+The existing resource-aware authorization remains inside the canonical Conversation handlers rather than being replaced by a generic command-name preflight. Task lifecycle ownership remains with the kernel; the current façade only preserves the established cross-domain Task/Conversation linkage adapter and transport-specific streaming/ergonomic routes.
 
 ## Contributor rule
 
