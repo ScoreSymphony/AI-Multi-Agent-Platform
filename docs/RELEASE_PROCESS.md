@@ -8,7 +8,9 @@
 - Minor versions add backward-compatible capabilities.
 - Major versions may change public or canonical contracts and require migration guidance.
 
-Optional ecosystem and advanced-deployment capabilities do not redefine the ordinary local/self-hosted baseline unless a release explicitly claims support for the corresponding profile.
+Repository/release versioning and per-surface compatibility are separate. [`FEATURE_CLASSIFICATION.md`](FEATURE_CLASSIFICATION.md) defines the authoritative **architectural role + stability** vocabulary for public platform surfaces. In particular, repository `0.x` does not make every surface Experimental: a surface classified Stable must follow its own major-version/deprecation rules even before repository `1.0.0`, while Beta/Experimental surfaces may evolve under the bounded rules documented there. Release notes must identify user-visible maturity changes, deprecations and incompatible Beta/Experimental changes.
+
+Optional ecosystem and advanced-deployment capabilities do not redefine the ordinary local/self-hosted baseline unless a release explicitly claims support for the corresponding profile. Role/stability labels likewise do not imply that an optional profile is enabled or conformance-tested; concrete compatibility claims still require evidence for the exact release/profile combination.
 
 The detailed release-manifest, dependency/provenance/SBOM, compatibility-state, upstream-update and fail-closed gate rules are defined in [`operations/RELEASE_AND_UPSTREAM_POLICY.md`](operations/RELEASE_AND_UPSTREAM_POLICY.md). Security-sensitive releases additionally follow [`security/SECURITY_HOTFIX_RELEASE_RUNBOOK.md`](security/SECURITY_HOTFIX_RELEASE_RUNBOOK.md). These documents extend this publication process; they do not create a separate versioning authority.
 
@@ -37,7 +39,7 @@ The `1.0.0` operational target remains gated by #46 full platform conformance. C
 - [ ] Upstream revisions, licenses, notices and provenance records are current.
 - [ ] Exact dependency lockfiles or resolved dependency sets are frozen and cryptographically bound to the release manifest.
 - [ ] Security findings were triaged and no known release-blocking issue remains.
-- [ ] `CHANGELOG.md` contains user-visible changes, known limitations and security notes.
+- [ ] `CHANGELOG.md` contains user-visible changes, known limitations, security notes, public-surface maturity promotions/downgrades and relevant deprecation/migration notes.
 - [ ] Package, container and other published artifacts use the same version and source revision.
 - [ ] The compatibility/acceptance report names the exact enabled optional profiles rather than implying untested support.
 - [ ] The compatibility matrix records the complete canonical `VersionSnapshot` for the tested combination.
