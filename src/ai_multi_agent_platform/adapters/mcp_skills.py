@@ -571,7 +571,7 @@ class McpSkillsAdapter:
         license_name = (
             raw_license if isinstance(raw_license, str) and raw_license.strip() else "UNKNOWN"
         )
-        declarations = {
+        declarations: dict[str, JsonValue] = {
             key: frontmatter[key]
             for key in ("allowed-tools", "allowed_tools", "tools", "capabilities")
             if key in frontmatter
