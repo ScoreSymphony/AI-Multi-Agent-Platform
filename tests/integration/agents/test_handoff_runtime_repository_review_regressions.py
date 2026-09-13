@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, cast
+from typing import cast
 
 from ai_multi_agent_platform.agents import AgentRepository, AgentRevisionRef
 from ai_multi_agent_platform.context import ContextSourceRequest
@@ -20,7 +20,9 @@ from ai_multi_agent_platform.handoffs.repository import HandoffRepository
 
 class _ExplodingCompatibilityRepository(InMemoryHandoffRepository):
     def get_handoff(self, handoff_id: str, revision: int | None = None) -> AgentHandoff:
-        raise AssertionError(f"synchronous compatibility repository read used for {handoff_id}@{revision}")
+        raise AssertionError(
+            f"synchronous compatibility repository read used for {handoff_id}@{revision}"
+        )
 
     def list_consumptions_for_run(self, run_id: str) -> tuple[HandoffConsumption, ...]:
         raise AssertionError(f"synchronous compatibility repository read used for run {run_id}")
