@@ -63,13 +63,13 @@ def test_feature_classification_registry_is_well_formed() -> None:
         )
 
 
-def test_feature_owners_reference_canonical_package_inventory() -> None:
+def test_feature_owners_reference_canonical_package_owners() -> None:
     package_entries = _load(PACKAGE_BOUNDARIES_PATH).get("package")
     assert isinstance(package_entries, list)
-    package_names = {entry["name"] for entry in package_entries}
+    canonical_owners = {entry["owner"] for entry in package_entries}
 
     for feature in _features():
-        unknown = set(feature["owners"]) - package_names
+        unknown = set(feature["owners"]) - canonical_owners
         assert not unknown, f"{feature['id']}: unknown canonical owner(s): {sorted(unknown)}"
 
 
