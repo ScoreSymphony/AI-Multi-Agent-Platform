@@ -20,17 +20,24 @@ def shift_file_ancestor_references(path: Path, depth_delta: int) -> None:
     text = path.read_text(encoding="utf-8")
 
     def shift_parents(match: re.Match[str]) -> str:
-        return f"Path(__file__).resolve().parents[{int(match.group(1)) + depth_delta}]"
+        resolver = match.group("resolver") or ""
+        index = int(match.group("index")) + depth_delta
+        return f"Path(__file__){resolver}.parents[{index}]"
 
     text = re.sub(
-        r"Path\(__file__\)\.resolve\(\)\.parents\[(\d+)\]",
+        r"Path\(__file__\)(?P<resolver>\.resolve\(\))?\.parents\[(?P<index>\d+)\]",
         shift_parents,
         text,
     )
+
+    def shift_parent(match: re.Match[str]) -> str:
+        resolver = match.group("resolver") or ""
+        return f"Path(__file__){resolver}.parents[{depth_delta}]"
+
     # Do not match the `parent` prefix inside `.parents[...]`.
     text = re.sub(
-        r"Path\(__file__\)\.resolve\(\)\.parent(?!s\[)",
-        f"Path(__file__).resolve().parents[{depth_delta}]",
+        r"Path\(__file__\)(?P<resolver>\.resolve\(\))?\.parent(?!s\[)",
+        shift_parent,
         text,
     )
     path.write_text(text, encoding="utf-8")
@@ -86,9 +93,7 @@ def write_manifest(moves: dict[Path, Path], residual: dict[str, str], reference_
         "than reusing an issue number or overwriting another test module.",
         "",
     ]
-    lines.extend(
-        f"- `{source}` — {reason}" for source, reason in sorted(residual.items())
-    )
+    lines.extend(f"- `{source}` — {reason}" for source, reason in sorted(residual.items()))
     lines.extend(["", "## Safe move map", ""])
     lines.extend(
         f"- `{source.as_posix()}` → `{destination.as_posix()}`"
