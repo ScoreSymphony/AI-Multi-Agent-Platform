@@ -91,6 +91,7 @@ def test_migrated_compatibility_facades_do_not_own_domain_behavior() -> None:
         "portability_api.py": {"__init__", "portability_workflow"},
         "plugin_api.py": {"__init__", "plugin_registry", "plugin_catalog", "attach_plugin_runtime"},
         "organization_audit_api.py": {"__init__", "organization_audit"},
+        "approval_decision_composition.py": {"__init__"},
     }
     for filename, allowed_methods in allowed.items():
         facade = _class(CONTROL_PLANE / filename, "ControlPlane")
@@ -137,10 +138,15 @@ def test_migrated_domains_declare_explicit_module_owners() -> None:
     organization_audit = (CONTROL_PLANE / "organization_audit_api.py").read_text(
         encoding="utf-8"
     )
+    approval_decisions = (CONTROL_PLANE / "approval_decision_module.py").read_text(
+        encoding="utf-8"
+    )
 
     assert 'PORTABILITY_MODULE = "portability"' in portability
     assert 'PLUGIN_MODULE = "plugins"' in plugins
     assert 'ORGANIZATION_AUDIT_MODULE = "organization-audit"' in organization_audit
+    assert 'APPROVAL_DECISION_MODULE = "approval-decisions"' in approval_decisions
     assert "ControlPlaneModule(" in portability
     assert "ControlPlaneModule(" in plugins
     assert "ControlPlaneModule(" in organization_audit
+    assert "ControlPlaneModule(" in approval_decisions
