@@ -33,28 +33,40 @@ from ai_multi_agent_platform.governance.repository import (
     SqliteGovernanceRepository,
 )
 from ai_multi_agent_platform.governance.service import GovernanceService
+from ai_multi_agent_platform.portability.workflow import PortabilityWorkflowService
 from ai_multi_agent_platform.security import AuthorizationGate
 
 from .approval_decision_composition import ControlPlane as _ApprovalControlPlane
 from .extensions import _singular, _validate_resources
 from .goal_contract import goal_command_handlers, goal_resource_services
 from .models import PageQuery, RequestContext, paginate
-from .portability_api import ControlPlane as _PortabilityControlPlane
+from .module_registry import install_control_plane_modules
+from .portability_module import portability_control_plane_module
 
 
-class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
-    """Approval-aware Control Plane with durable canonical product resources."""
+class ControlPlane(_ApprovalControlPlane):
+    """Approval-aware Control Plane with explicitly registered product modules."""
 
     def __init__(
         self,
         *args: Any,
+        portability_workflow: PortabilityWorkflowService | None = None,
         governance_repository: GovernanceRepository | None = None,
         governance_state_path: str | Path | None = None,
         decision_repository: DecisionRepository | None = None,
         decision_state_path: str | Path | None = None,
         **kwargs: Any,
     ) -> None:
+        # Portability used to enter the canonical deployment through a second
+        # ControlPlane base class. Install its explicit contribution instead, so
+        # command/resource ownership no longer depends on Python MRO order.
         super().__init__(*args, **kwargs)
+        self._portability_workflow = portability_workflow
+        if portability_workflow is not None:
+            install_control_plane_modules(
+                self,
+                (portability_control_plane_module(portability_workflow),),
+            )
 
         # Goals are canonical product state, not an optional deployment extension. Reuse the
         # existing kernel EventRepository so Goal snapshots, idempotency records and Task work
@@ -101,6 +113,10 @@ class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
             for command, handler in decision_record_command_handlers(decisions).items():
                 self.register_command(command, handler)
             self.decisions = decisions
+
+    @property
+    def portability_workflow(self) -> PortabilityWorkflowService | None:
+        return self._portability_workflow
 
     async def _create_task_from_automation(
         self,
