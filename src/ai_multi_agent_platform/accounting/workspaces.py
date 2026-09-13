@@ -11,23 +11,23 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider, FileState
 from ai_multi_agent_platform.workspaces.models import Workspace, WorkspaceSnapshot, WorkspaceStatus
 
+from .async_service import AsyncAccountingService, runtime_accounting_service
 from .models import AggregationMode, MeasurementQuality, UsageRecord, UsageScope, utc_now
 from .service import AccountingService
 
 WORKSPACE_LOGICAL_BYTES_METRIC = "workspace.snapshot.logical_bytes.current"
 WORKSPACE_FILE_REFERENCES_METRIC = "workspace.snapshot.file_references.current"
+AccountingRuntime = AccountingService | AsyncAccountingService
 
 
 class WorkspaceSnapshotAccounting:
-    """Measure the logical footprint of the current canonical Workspace snapshot.
+    """Measure the logical footprint of the current canonical Workspace snapshot."""
 
-    Logical bytes count every path reference in the snapshot. They are deliberately not
-    physical/deduplicated storage bytes: snapshots may share canonical File IDs and the
-    #13 FileProvider remains the sole source for project-level physical storage accounting.
-    """
-
-    def __init__(self, accounting: AccountingService, files: FileProvider) -> None:
-        self._accounting = accounting
+    def __init__(self, accounting: AccountingRuntime, files: FileProvider) -> None:
+        self._runtime_accounting = runtime_accounting_service(accounting)
+        self._synchronous_accounting = (
+            accounting if isinstance(accounting, AccountingService) else None
+        )
         self._files = files
 
     async def reconcile(
@@ -44,7 +44,7 @@ class WorkspaceSnapshotAccounting:
 
         timestamp = observed_at or utc_now()
         scope = _workspace_scope(workspace)
-        reference_record = self._record(
+        reference_record = await self._record_runtime(
             metric_type=WORKSPACE_FILE_REFERENCES_METRIC,
             unit="count",
             quantity=float(len(snapshot.files)),
@@ -81,7 +81,7 @@ class WorkspaceSnapshotAccounting:
                 logical_bytes += file_record.size_bytes
                 unique_file_ids.add(file_record.file_id)
         except ContractError:
-            unavailable = self._accounting.record_unavailable(
+            unavailable = await self._runtime_accounting.record_unavailable(
                 metric_type=WORKSPACE_LOGICAL_BYTES_METRIC,
                 unit="bytes",
                 source="workspace-snapshot",
@@ -93,7 +93,7 @@ class WorkspaceSnapshotAccounting:
             )
             raise WorkspaceSnapshotMeasurementError(reference_record, unavailable) from None
 
-        bytes_record = self._record(
+        bytes_record = await self._record_runtime(
             metric_type=WORKSPACE_LOGICAL_BYTES_METRIC,
             unit="bytes",
             quantity=float(logical_bytes),
@@ -119,12 +119,11 @@ class WorkspaceSnapshotAccounting:
         *,
         observed_at: datetime | None = None,
     ) -> tuple[UsageRecord, UsageRecord]:
-        """Zero current logical gauges only after canonical Workspace deletion.
+        """Synchronous setup/compatibility seam for retiring deleted Workspace gauges."""
 
-        Archiving intentionally does not erase the last logical footprint. Deletion/cleanup
-        is the lifecycle transition that retires current Workspace accounting state.
-        """
-
+        accounting = self._synchronous_accounting
+        if accounting is None:
+            raise RuntimeError("retire() requires a synchronous AccountingService")
         if workspace.status is not WorkspaceStatus.DELETED:
             raise ValueError("only a deleted Workspace can retire current snapshot gauges")
         timestamp = observed_at or utc_now()
@@ -133,7 +132,7 @@ class WorkspaceSnapshotAccounting:
             "workspace_status": workspace.status.value,
             "lifecycle_transition": "deleted",
         }
-        references = self._record(
+        references = self._make_record(
             metric_type=WORKSPACE_FILE_REFERENCES_METRIC,
             unit="count",
             quantity=0.0,
@@ -143,7 +142,8 @@ class WorkspaceSnapshotAccounting:
             timestamp=timestamp,
             provenance=common,
         )
-        logical_bytes = self._record(
+        accounting.record(references)
+        logical_bytes = self._make_record(
             metric_type=WORKSPACE_LOGICAL_BYTES_METRIC,
             unit="bytes",
             quantity=0.0,
@@ -153,10 +153,38 @@ class WorkspaceSnapshotAccounting:
             timestamp=timestamp,
             provenance=common,
         )
+        accounting.record(logical_bytes)
         return references, logical_bytes
 
-    def _record(
+    async def _record_runtime(
         self,
+        *,
+        metric_type: str,
+        unit: str,
+        quantity: float,
+        quality: MeasurementQuality,
+        scope: UsageScope,
+        snapshot: WorkspaceSnapshot | None,
+        timestamp: datetime,
+        provenance: dict[str, JsonValue],
+        provider: str | None = None,
+    ) -> UsageRecord:
+        record = self._make_record(
+            metric_type=metric_type,
+            unit=unit,
+            quantity=quantity,
+            quality=quality,
+            scope=scope,
+            snapshot=snapshot,
+            timestamp=timestamp,
+            provenance=provenance,
+            provider=provider,
+        )
+        await self._runtime_accounting.record(record)
+        return record
+
+    @staticmethod
+    def _make_record(
         *,
         metric_type: str,
         unit: str,
@@ -189,7 +217,7 @@ class WorkspaceSnapshotAccounting:
                     "snapshot_content_checksum": snapshot.content_checksum,
                 }
             )
-        record = UsageRecord(
+        return UsageRecord(
             id=f"usage_{uuid5(NAMESPACE_URL, identity)}",
             metric_type=metric_type,
             unit=unit,
@@ -202,8 +230,6 @@ class WorkspaceSnapshotAccounting:
             provider=provider,
             provenance=effective_provenance,
         )
-        self._accounting.record(record)
-        return record
 
     @staticmethod
     def _validate_scope(
