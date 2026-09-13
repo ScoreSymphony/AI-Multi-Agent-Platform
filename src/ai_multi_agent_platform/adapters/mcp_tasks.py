@@ -405,10 +405,10 @@ class SqliteMCPTaskBindingStore:
                     ),
                 )
         except sqlite3.IntegrityError as exc:
-            existing = self._get_sync(binding.provider_id, binding.invocation_id)
-            if existing is not None:
-                _assert_same_binding_identity(existing, binding)
-                return existing
+            stored = self._get_sync(binding.provider_id, binding.invocation_id)
+            if stored is not None:
+                _assert_same_binding_identity(stored, binding)
+                return stored
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "external MCP task handle is already bound to another canonical invocation",
