@@ -193,9 +193,7 @@ def test_security_sqlite_runtime_is_responsive_and_worker_owned(tmp_path: Path) 
         assert decision.outcome is AuthorizationOutcome.REQUIRE_APPROVAL
         assert approvals.connection_threads
         assert audit.connection_threads
-        assert all(
-            thread_id != event_loop_thread for thread_id in approvals.connection_threads[2:]
-        )
+        assert all(thread_id != event_loop_thread for thread_id in approvals.connection_threads[2:])
         assert all(thread_id != event_loop_thread for thread_id in audit.connection_threads[1:])
 
     asyncio.run(scenario())
@@ -333,9 +331,7 @@ def test_security_worker_failure_wins_over_pending_cancellation() -> None:
                 raise TimeoutError("test Security worker release timed out")
             raise RuntimeError("worker persistence failed")
 
-        pending = asyncio.create_task(
-            offload.run(fail_after_release, serialization="approvals")
-        )
+        pending = asyncio.create_task(offload.run(fail_after_release, serialization="approvals"))
         assert await asyncio.to_thread(started.wait, 1)
         pending.cancel()
         await asyncio.sleep(0)
