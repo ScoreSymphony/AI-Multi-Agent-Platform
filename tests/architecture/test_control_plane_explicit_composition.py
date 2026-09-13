@@ -132,6 +132,23 @@ def test_plugin_terminal_composition_has_one_control_plane_base() -> None:
     )
 
 
+def test_current_conversation_composition_has_one_control_plane_base() -> None:
+    path = CONTROL_PLANE / "conversation_current_composition.py"
+    facade = _class(path, "ControlPlane")
+    assert len(facade.bases) == 1
+    assert _base_name(facade.bases[0]) == "_NotificationControlPlane"
+
+    imports = [node for node in _tree(path).body if isinstance(node, ast.ImportFrom)]
+    assert not any(
+        node.module == "conversation_composition"
+        and any(
+            alias.name == "ControlPlane" or alias.asname == "_ConversationControlPlane"
+            for alias in node.names
+        )
+        for node in imports
+    )
+
+
 def test_migrated_domains_declare_explicit_module_owners() -> None:
     portability = (CONTROL_PLANE / "portability_module.py").read_text(encoding="utf-8")
     plugins = (CONTROL_PLANE / "plugin_module.py").read_text(encoding="utf-8")
@@ -141,12 +158,15 @@ def test_migrated_domains_declare_explicit_module_owners() -> None:
     approval_decisions = (CONTROL_PLANE / "approval_decision_module.py").read_text(
         encoding="utf-8"
     )
+    conversations = (CONTROL_PLANE / "conversation_module.py").read_text(encoding="utf-8")
 
     assert 'PORTABILITY_MODULE = "portability"' in portability
     assert 'PLUGIN_MODULE = "plugins"' in plugins
     assert 'ORGANIZATION_AUDIT_MODULE = "organization-audit"' in organization_audit
     assert 'APPROVAL_DECISION_MODULE = "approval-decisions"' in approval_decisions
+    assert 'CONVERSATION_MODULE = "conversations"' in conversations
     assert "ControlPlaneModule(" in portability
     assert "ControlPlaneModule(" in plugins
     assert "ControlPlaneModule(" in organization_audit
     assert "ControlPlaneModule(" in approval_decisions
+    assert "ControlPlaneModule(" in conversations
