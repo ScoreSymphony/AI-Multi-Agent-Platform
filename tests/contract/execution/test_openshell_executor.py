@@ -188,7 +188,9 @@ def test_provider_request_refs_are_private_and_unique_per_execution(tmp_path: Pa
     assert "run-1" not in refs
 
 
-def test_reviewed_docker_profile_and_default_deny_policy_are_provider_private(tmp_path: Path) -> None:
+def test_reviewed_docker_profile_and_default_deny_policy_are_provider_private(
+    tmp_path: Path,
+) -> None:
     projection = OpenShellPolicyProjection(
         default_deny_egress=True,
         allowed_hosts=("api.example.test",),
@@ -225,7 +227,9 @@ def test_health_keeps_platform_lifecycle_and_policy_authority(tmp_path: Path) ->
     assert descriptor.metadata["runtime_profile"] == OPENSHELL_REVIEWED_RUNTIME_PROFILE
 
 
-def test_direct_environment_projection_fails_closed_without_provider_dispatch(tmp_path: Path) -> None:
+def test_direct_environment_projection_fails_closed_without_provider_dispatch(
+    tmp_path: Path,
+) -> None:
     executor, client = _executor(tmp_path)
     result = asyncio.run(
         executor.execute(
