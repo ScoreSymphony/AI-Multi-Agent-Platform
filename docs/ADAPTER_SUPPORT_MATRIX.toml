@@ -264,7 +264,7 @@ security_surface = "routing metadata only"
 upstream_health = "platform-owned"
 compatibility = "Reference router used by canonical model runtime."
 usage = "Reference and model-backed runtime composition."
-evidence = ["tests/test_issue_10_model_registry_router.py"]
+evidence = ["tests/unit/models/test_registry_router.py"]
 docs = ["docs/PLATFORM_CONFORMANCE.md"]
 migration = "n/a"
 
