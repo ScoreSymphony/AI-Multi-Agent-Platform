@@ -1,17 +1,31 @@
 """Reference multi-agent composition over existing platform runtime authorities (#889).
 
 The code here deliberately owns no Task/Run, Plan/Step, Handoff, Context or verification state.
-It supplies a deterministic reference planner behind #439 and a source adapter that binds incoming
-#651 Handoffs to the exact consuming Run immediately before the existing #590 Context resolver
-assembles that Run's immutable ContextBundle.
+It supplies a deterministic reference planner behind #439, projects canonical predecessor outputs
+into #651 Handoffs after kernel persistence, and binds incoming Handoffs to the exact consuming Run
+before the existing #590 Context resolver assembles that Run's immutable ContextBundle.
 """
 
 from __future__ import annotations
 
 from ai_multi_agent_platform.agents import AgentRevisionRef
+from ai_multi_agent_platform.agents.execution_profile import decode_agent_step_execution_binding
 from ai_multi_agent_platform.context import ContextCandidate, ContextSourceRequest
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    OperationContext,
+    OutputAttachmentObserver,
+    PlatformEvent,
+)
+from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
+from ai_multi_agent_platform.handoffs import (
+    HandoffContent,
+    HandoffSourceKind,
+    HandoffSourceRef,
+)
 from ai_multi_agent_platform.handoffs.production import DurableConsumedHandoffContextAdapter
+from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.planning import DeterministicReferencePlanner
 from ai_multi_agent_platform.planning.models import (
     AgentAssignment,
@@ -122,6 +136,171 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
         return PlannerOutput(draft=draft, planner=self.descriptor)
 
 
+class ReferenceMultiAgentOutputObserver:
+    """Project persisted Step outputs into canonical, idempotent dependency Handoffs.
+
+    The kernel remains the Result/Artifact authority, #384 remains the dependency authority and
+    #651 remains the Handoff authority. This observer only joins those already-durable identities.
+    It activates exclusively for canonical Step Runs carrying exact #439 Agent bindings.
+    """
+
+    def __init__(
+        self,
+        *,
+        kernel: PlatformKernel,
+        coordinator: CoordinatorRepository,
+        handoffs: HandoffDeploymentComposition,
+        downstream: OutputAttachmentObserver | None = None,
+    ) -> None:
+        self._kernel = kernel
+        self._coordinator = coordinator
+        self._handoffs = handoffs
+        self._downstream = downstream
+
+    async def output_attached(self, event: PlatformEvent) -> None:
+        await self._create_dependency_handoffs(event)
+        if self._downstream is not None:
+            await self._downstream.output_attached(event)
+
+    async def _create_dependency_handoffs(self, event: PlatformEvent) -> None:
+        if event.subject_type != "run":
+            return
+        run = await self._kernel.get_run(event.correlation_id, event.subject_id)
+        if run.run.subject_type != "step":
+            return
+
+        task = await self._kernel.get_task(event.correlation_id)
+        producer_step_id = run.run.subject_id
+        producer_binding = decode_agent_step_execution_binding(task.task.metadata, producer_step_id)
+        if producer_binding is None:
+            return
+        if producer_binding.agent_revision is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "planned Agent Step output is missing its exact Agent revision binding",
+            )
+
+        try:
+            record = self._coordinator.get_step_record(producer_step_id)
+        except ContractError as exc:
+            if exc.code is ErrorCode.NOT_FOUND:
+                return
+            raise
+        if record.task_id != task.task_id or record.latest_run_id != run.run_id:
+            return
+        plan = self._coordinator.get_plan(record.plan_id)
+        consumers = tuple(
+            step for step in plan.steps if producer_step_id in step.depends_on
+        )
+        if not consumers:
+            return
+
+        producer = AgentRevisionRef(
+            producer_binding.agent_id,
+            producer_binding.agent_revision,
+        )
+        producer_runs = tuple(
+            item
+            for item in self._handoffs.runtime.agents.list_agent_runs(run.run_id)
+            if item.task_id == task.task_id and item.agent == producer
+        )
+        if len(producer_runs) != 1:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "planned Step output does not resolve to exactly one bound AgentRun",
+                details={"run_id": run.run_id, "match_count": len(producer_runs)},
+            )
+
+        source_ref = await self._source_reference(event, task.task_id)
+        operation = OperationContext(
+            correlation_id=task.task_id,
+            causation_id=event.id,
+            owner_type=task.task.owner_ref.type,
+            owner_id=task.task.owner_ref.id,
+            project_id=task.task.project_id,
+        )
+        producer_actor = ActorIdentity(producer.agent_id, ActorType.AGENT)
+
+        for consumer_step in sorted(consumers, key=lambda item: item.id):
+            consumer_binding = decode_agent_step_execution_binding(
+                task.task.metadata,
+                consumer_step.id,
+            )
+            if consumer_binding is None:
+                continue
+            if consumer_binding.agent_revision is None:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "dependent planned Agent Step is missing its exact Agent revision binding",
+                    details={"step_id": consumer_step.id},
+                )
+            consumer = AgentRevisionRef(
+                consumer_binding.agent_id,
+                consumer_binding.agent_revision,
+            )
+            output_label = f"{source_ref.kind.value}:{source_ref.resource_id}@{source_ref.revision}"
+            idempotency_key = (
+                "reference-multi-agent-handoff:"
+                f"{producer_step_id}:{consumer_step.id}:{output_label}"
+            )
+            await self._handoffs.runtime.create_handoff(
+                HandoffContent(
+                    task_id=task.task_id,
+                    plan_id=plan.plan.id,
+                    producer_step_id=producer_step_id,
+                    consumer_step_id=consumer_step.id,
+                    producer_run_id=run.run_id,
+                    producer=producer,
+                    intended_consumer=consumer,
+                    objective=consumer_binding.objective or consumer_step.title,
+                    completed_work_summary=(
+                        f"Canonical predecessor output {output_label} is ready for consumption."
+                    ),
+                    recommended_next_action=(
+                        consumer_binding.objective or f"Continue Step {consumer_step.id}."
+                    ),
+                    requested_output=f"Complete canonical Step {consumer_step.id}.",
+                    source_refs=(source_ref,),
+                ),
+                idempotency_key=idempotency_key,
+                producer_actor=producer_actor,
+                intended_consumer_actor=ActorIdentity(consumer.agent_id, ActorType.AGENT),
+                operation=operation,
+            )
+
+    async def _source_reference(self, event: PlatformEvent, task_id: str) -> HandoffSourceRef:
+        if event.event_type == "result.attached":
+            source_kind = HandoffSourceKind.RESULT
+            payload_key = "result_id"
+        elif event.event_type == "artifact.attached":
+            source_kind = HandoffSourceKind.ARTIFACT
+            payload_key = "artifact_id"
+        else:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "reference output observer received an unsupported output attachment event",
+                details={"event_type": event.event_type},
+            )
+        source_id = event.payload.get(payload_key)
+        if not isinstance(source_id, str):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical output attachment event is missing its source identity",
+                details={"event_type": event.event_type},
+            )
+        subject = await self._handoffs.references.verification.resolve_subject(
+            task_id=task_id,
+            subject_type=source_kind.value,
+            subject_id=source_id,
+        )
+        return HandoffSourceRef(
+            source_kind,
+            source_id,
+            revision=subject.revision,
+            digest=subject.digest.removeprefix("sha256:"),
+        )
+
+
 class ReferenceIncomingHandoffContextAdapter:
     """Bind all incoming Handoffs, then project them through the existing durable #590 adapter.
 
@@ -174,4 +353,8 @@ class ReferenceIncomingHandoffContextAdapter:
         return await self._durable.collect(request)
 
 
-__all__ = ["ReferenceIncomingHandoffContextAdapter", "ReferenceMultiAgentPlanner"]
+__all__ = [
+    "ReferenceIncomingHandoffContextAdapter",
+    "ReferenceMultiAgentOutputObserver",
+    "ReferenceMultiAgentPlanner",
+]
