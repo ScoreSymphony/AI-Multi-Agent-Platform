@@ -24,6 +24,8 @@ from ai_multi_agent_platform.contracts.types import (
     ToolResult,
 )
 
+from .mcp_tasks import MCPInvocationClient, MCPInvocationMetadataProvider
+
 
 @dataclass(frozen=True, slots=True)
 class MCPServerConfig:
@@ -183,11 +185,17 @@ class MCPToolProvider(CapabilityToolProvider):
                 f"MCP tool {invocation.tool_ref!r} is not available",
                 provider_id=self.descriptor.provider_id,
             )
+        task_metadata: tuple[AdapterMetadata, ...] = ()
         try:
-            output = await self._client.call_tool(
-                invocation.tool_ref,
-                invocation.arguments_json(),
-            )
+            if isinstance(self._client, MCPInvocationClient):
+                outcome = await self._client.call_tool_for_invocation(invocation)
+                output = outcome.output
+                task_metadata = outcome.adapter_metadata
+            else:
+                output = await self._client.call_tool(
+                    invocation.tool_ref,
+                    invocation.arguments_json(),
+                )
         except ContractError:
             raise
         except Exception as exc:
@@ -195,27 +203,36 @@ class MCPToolProvider(CapabilityToolProvider):
                 ErrorCode.BACKEND_ERROR,
                 f"MCP tool {invocation.tool_ref!r} failed",
                 provider_id=self.descriptor.provider_id,
-                adapter_metadata=(
-                    AdapterMetadata(
-                        namespace="mcp",
-                        values={
-                            "server_id": self._config.server_id,
-                            "tool_name": invocation.tool_ref,
-                        },
-                    ),
-                ),
+                adapter_metadata=self._base_metadata(invocation),
             ) from exc
         return ToolResult(
             invocation_id=invocation.invocation_id,
             output=output,
-            adapter_metadata=(
-                AdapterMetadata(
-                    namespace="mcp",
-                    values={
-                        "server_id": self._config.server_id,
-                        "tool_name": invocation.tool_ref,
-                    },
-                ),
+            adapter_metadata=(*self._base_metadata(invocation), *task_metadata),
+        )
+
+    def invocation_failure_metadata(
+        self,
+        invocation: ToolInvocation,
+        *,
+        error_code: str,
+        duration_ms: float,
+    ) -> tuple[AdapterMetadata, ...]:
+        """Expose external-task evidence without letting it determine canonical outcome."""
+
+        metadata = self._base_metadata(invocation)
+        if isinstance(self._client, MCPInvocationMetadataProvider):
+            metadata = (*metadata, *self._client.invocation_failure_metadata(invocation))
+        return metadata
+
+    def _base_metadata(self, invocation: ToolInvocation) -> tuple[AdapterMetadata, ...]:
+        return (
+            AdapterMetadata(
+                namespace="mcp",
+                values={
+                    "server_id": self._config.server_id,
+                    "tool_name": invocation.tool_ref,
+                },
             ),
         )
 
