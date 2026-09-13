@@ -7,7 +7,6 @@ from typing import Any, Literal
 from ai_multi_agent_platform.agents import (
     AgentInstructions,
     AgentProfile,
-    AgentRevisionRef,
     AgentRunStatus,
     InstructionSource,
 )
