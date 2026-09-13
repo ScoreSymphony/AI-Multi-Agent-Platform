@@ -134,6 +134,19 @@ The SQLite store has unique constraints for `(provider_id, invocation_id)` and
 `(provider_id, external_task_id)`. Rediscovering a handle therefore resumes the same canonical
 attempt instead of creating a second Run or rebinding a task to another invocation.
 
+The store also owns a durable pre-dispatch claim keyed by `(provider_id, invocation_id)`. The claim
+is acquired **before** task-capable `tools/call` may create external work, so two provider instances
+or processes sharing the same store cannot both dispatch the same canonical attempt. A successful
+external task bind consumes the claim in the same persistence transaction. If delivery is ambiguous,
+the process crashes before a handle is persisted, or a task-capable call completes synchronously,
+the claim intentionally remains as a tombstone for that exact attempt. A later replay then fails
+closed instead of silently repeating an external side effect. A distinct canonical retry/new Run
+uses a distinct invocation identity and may dispatch normally.
+
+All canonical task/run/owner scope required for a task binding is validated before the dispatch claim
+and before external `tools/call`. Invalid canonical context therefore cannot create an orphaned MCP
+task and only fail later during binding.
+
 ### Raw task IDs and observability
 
 SEP-2663 permits task IDs to behave like bearer tokens. The exact ID is therefore persisted only
@@ -212,8 +225,11 @@ On restart, the provider looks up `(provider_id, capability_invocation_id)` befo
 negotiation or any new `tools/call`:
 
 - existing binding -> validate canonical context and resume `tasks/get` on that exact handle;
-- no binding -> negotiate Tasks and perform one new task-capable `tools/call`, or use synchronous
-  fallback when Tasks are not advertised;
+- no binding and no dispatch claim -> negotiate Tasks and, when advertised, atomically claim this
+  canonical attempt before one new task-capable `tools/call`; otherwise use synchronous fallback;
+- no binding but an existing dispatch claim -> fail closed because delivery is still in flight or
+  became ambiguous before a recoverable external handle was persisted; never redispatch that exact
+  attempt automatically;
 - existing binding whose server no longer advertises Tasks -> still reconcile the bound handle and
   fail closed if it cannot be polled; never issue a replacement synchronous `tools/call`;
 - missing/expired bound task -> explicit `NOT_FOUND` / `mcp_task_lost` failure;
@@ -222,8 +238,9 @@ negotiation or any new `tools/call`:
 - stale external observations -> cannot replace a newer persisted external observation.
 
 A restart therefore does not create another canonical Run and does not deliberately create a second
-external task for an already-known handle. Answered input-request keys and cancellation evidence are
-part of the durable binding, so reconnect does not silently repeat those provider-side actions.
+external task for an already-known or ambiguously dispatched attempt. Answered input-request keys,
+cancellation evidence and dispatch claims are durable, so reconnect does not silently repeat those
+provider-side actions.
 
 ## Idempotency and ambiguous delivery
 
@@ -235,12 +252,18 @@ Consequently the adapter **does not automatically retry a task-capable `tools/ca
 transport failure**. If the server might have created work but the client never received the task
 handle, blind redispatch could duplicate a side effect.
 
+The durable dispatch claim makes that rule restart- and concurrency-safe. It is consumed before the
+first task-capable `tools/call`; a known task binding replaces it, while an ambiguous/no-handle or
+synchronous completion leaves a tombstone for that exact invocation. This deliberately prefers
+fail-closed duplicate prevention over transparent replay when the protocol cannot prove that a
+second dispatch is safe.
+
 The safe distinction is:
 
 - retry `tasks/get` / reconnect for a known durable external handle;
 - resume a known binding after platform restart;
-- do not silently redispatch an ambiguously delivered creation call within the same canonical
-  attempt;
+- do not silently redispatch an ambiguously delivered or already-consumed creation call within the
+  same canonical attempt;
 - an explicit platform retry/new Run is a new attempt and may create a distinct external task.
 
 The existing protocol-version rejection retry is only taken after an explicit unsupported-version
@@ -261,6 +284,9 @@ The #964 profile enforces these boundaries:
 - no caller-facing API accepts an arbitrary external task ID for lookup/cancellation;
 - exact canonical Task/Run/actor/Project/causation/correlation/idempotency context is checked on
   recovery;
+- task-aware canonical scope is validated before external work can be dispatched;
+- a durable pre-dispatch claim prevents concurrent/restarted provider instances from silently
+  creating multiple external operations for one canonical attempt;
 - one external handle cannot bind to two canonical invocations for the same provider;
 - raw bearer-like task IDs and canonical idempotency keys are not written into generic telemetry;
 - external result and input-request payloads remain untrusted;
@@ -276,9 +302,9 @@ The #964 profile enforces these boundaries:
 
 The architecture and wire path are implemented and contract-tested against the finalized SEP-2663
 shape, including negotiation, asynchronous completion, update/cancel, missing-task handling,
-recovery, stale/duplicate observation handling, required modern routing headers, request-scoped SSE
-final responses and synchronous fallback. It should remain an explicit experimental adapter profile
-until at least one maintained upstream client SDK/conformance line supports the same finalized
-extension and a real external implementation is included in repeatable interoperability evidence.
-Promoting it earlier would overstate upstream compatibility even though the platform-side authority
-boundary is already correct.
+recovery, stale/duplicate observation handling, durable pre-dispatch idempotency, required modern
+routing headers, request-scoped SSE final responses and synchronous fallback. It should remain an
+explicit experimental adapter profile until at least one maintained upstream client SDK/conformance
+line supports the same finalized extension and a real external implementation is included in
+repeatable interoperability evidence. Promoting it earlier would overstate upstream compatibility
+even though the platform-side authority boundary is already correct.
