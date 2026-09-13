@@ -2,7 +2,7 @@
 
 Status: **Deprecated compatibility backend pending the removal gates in [`FORGE_RETENTION_DECISION.md`](FORGE_RETENTION_DECISION.md) (#991).** Forge is not the reference/default executor and new platform features must not depend on it.
 
-Issue #9 completed the optional execution-only Forge transport and adapter boundary. That implementation remains useful as compatibility and regression evidence during the deprecation window, but the current real sidecar evidence does not establish a non-null Forge CLI execution capability that justifies long-term `supported` status.
+Issue #9 completed the optional execution-only Forge transport and adapter boundary. That implementation remains useful as compatibility and runtime evidence during the deprecation window, but the current real sidecar evidence does not establish a non-null Forge CLI execution capability that justifies long-term `supported` status.
 
 `ai_multi_agent_platform.adapters.forge.ForgeExecutor` is an optional execution adapter behind the platform-owned `Executor` contract.
 
@@ -31,7 +31,7 @@ Canonical identifiers always remain those from `ExecutionRequest`:
 
 A Forge execution ID is adapter-private and is returned only under `ExecutionResult.adapter_metadata["forge"]["execution_id"]`.
 
-`ExecutorLifecycleBackend` carries adapter metadata into its canonical handle/snapshot so Forge external identity can be persisted in canonical kernel events without becoming a canonical ID. For Step Runs, the bridge keeps the owning canonical Task ID as `task_id` and carries the Step ID separately as `step_id`.
+`ExecutorLifecycleBackend` carries adapter metadata into its canonical handle/snapshot so external execution identity can be persisted in canonical kernel events without becoming a canonical ID. For Step Runs, the bridge keeps the owning canonical Task ID as `task_id` and carries the Step ID separately as `step_id`.
 
 The canonical `run_id` is also used as the adapter request reference for best-effort backend cancellation. It is not replaced by a Forge ID.
 
@@ -57,14 +57,13 @@ The canonical kernel already provides:
 - restart recovery and external-job reconciliation;
 - explicit orphaned-running detection without blind redispatch.
 
-`tests/regression/forge/test_forge_kernel_regressions.py` binds those mechanisms to the Forge adapter and proves that:
+The former Forge-specific regression file `tests/regression/forge/test_forge_kernel_regressions.py` was retired under #991 after its generic guarantees were proven outside Forge:
 
-1. a namespaced Forge execution ID survives canonical SQLite event replay and restart;
-2. retrying the original canonical create command after restart returns the existing Task rather than creating another one;
-3. Step execution preserves distinct Task and Step identities at the Forge boundary;
-4. if a canonical Run is `RUNNING` after restart but the fresh lifecycle adapter cannot find the Forge job, recovery marks reconciliation as required and does not redispatch the work.
+1. `tests/integration/kernel/test_executor_kernel_integration.py` now verifies `ExecutorLifecycleBackend` Task/Run/Step/correlation identity propagation with a backend-neutral recording executor;
+2. the same integration module verifies namespaced adapter metadata and backend references survive canonical SQLite replay without any Forge type;
+3. `tests/unit/kernel/test_kernel.py` already verifies orphaned-running recovery requires reconciliation and does not redispatch, plus generic SQLite event/adapter-metadata replay and idempotency behavior.
 
-These are platform guarantees, not a reason to retain Forge indefinitely. Before final removal, any still-unique regression assertion in the Forge-specific suite must be generalized into backend-neutral/reference coverage as specified by #991.
+This removes Forge as the sole carrier of those platform guarantees before executable Forge removal is attempted.
 
 ## Workspace and artifact boundary
 
@@ -101,9 +100,9 @@ A health transport failure marks the Forge executor unhealthy rather than breaki
 - in-flight cancellation forwarding;
 - backend availability/retry hints without adapter-owned retries.
 
-`tests/contract/forge/test_forge_optionality.py` proves importing the execution core does not import the Forge adapter.
+The same reusable contract suite is applied to `ReferenceExecutor`, so generic timeout, cancellation, capability, workspace and artifact-boundary semantics are not Forge-owned.
 
-`tests/regression/forge/test_forge_kernel_regressions.py` covers canonical persistence/replay, Step identity propagation and restart reconciliation with a Forge-backed executor boundary.
+`tests/contract/forge/test_forge_optionality.py` proves importing the execution core does not import the Forge adapter.
 
 ## Provenance
 
