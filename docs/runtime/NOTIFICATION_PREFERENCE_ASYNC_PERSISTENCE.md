@@ -21,13 +21,13 @@ Each operation creates, uses and closes its SQLite connection inside the worker 
 
 Preference serialization/deserialization remains part of the persistence operation, so callers receive domain objects rather than driver-specific rows or payloads.
 
-## Concurrency and event-loop lifetime
+## Concurrency, executor isolation and event-loop lifetime
 
-Notification SQLite offload uses thread-based synchronization rather than asyncio-bound locks. A repository instance is therefore reusable across separate `asyncio.run(...)` lifetimes, matching existing test and embedding behavior.
+Each Notification SQLite adapter owns a dedicated `ThreadPoolExecutor` bounded by `max_concurrency`. Notification backlog therefore queues inside the adapter-owned executor instead of occupying asyncio's process-wide default executor. Unrelated `asyncio.to_thread(...)` work can continue even when Notification persistence has more queued operations than its configured concurrency limit.
 
-`max_concurrency` bounds active persistence operations per adapter. Reads may execute concurrently up to that bound. Durable writes additionally acquire the adapter's mutation gate before consuming a slot, keeping writes serialized without allowing queued writers to consume read capacity.
+Reads may execute concurrently up to the configured worker bound. Durable writes additionally acquire the adapter's thread-based mutation gate, keeping writes serialized without introducing an asyncio-loop-bound synchronization primitive.
 
-The worker itself is scheduled through `asyncio.to_thread`; the provider-level bounded semaphore limits active Notification persistence work even when multiple callers arrive concurrently.
+Both the executor and the write gate are independent of an asyncio event-loop lifetime, so one adapter instance remains reusable across separate `asyncio.run(...)` lifetimes, matching existing test and embedding behavior.
 
 ## Cancellation and transaction boundary
 
@@ -61,6 +61,7 @@ The in-memory preference repository implements the same `AsyncNotificationPrefer
 - event-loop heartbeat responsiveness during intentionally slow SQLite preference work;
 - worker-thread SQLite connection ownership;
 - bounded concurrent operations;
+- isolation of queued Notification work from asyncio's process-wide default executor;
 - reuse across multiple event-loop lifetimes;
 - cancellation deferred to the persistence boundary;
 - retryable busy/locked mapping;
