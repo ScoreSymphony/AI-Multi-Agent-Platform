@@ -9,6 +9,7 @@ runtime-only inputs and are never written to evidence reports.
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import socket
 import sys
@@ -46,6 +47,12 @@ _COMMON_PHASE_KEYS = {
     "control_host_label",
     "worker_host_label",
     "json_report",
+}
+_NETWORK_SETUP_ERRNOS = {
+    errno.EADDRNOTAVAIL,
+    errno.EHOSTUNREACH,
+    errno.ENETDOWN,
+    errno.ENETUNREACH,
 }
 
 
@@ -242,18 +249,41 @@ def _run_probe(args: argparse.Namespace) -> dict[str, object]:
 
     started = time.perf_counter()
     reachable = False
+    outcome = "connected"
     error_class: str | None = None
+    error_errno: int | None = None
     try:
         with socket.create_connection(
             (str(args.target_address), int(args.port)),
             timeout=float(args.timeout_seconds),
         ):
             reachable = True
+    except socket.gaierror as exc:
+        raise AcceptanceError("network probe setup failed: target address did not resolve") from exc
+    except TimeoutError as exc:
+        outcome = "timeout"
+        error_class = type(exc).__name__
+        error_errno = exc.errno
     except OSError as exc:
         error_class = type(exc).__name__
+        error_errno = exc.errno
+        if exc.errno in _NETWORK_SETUP_ERRNOS:
+            raise AcceptanceError(
+                f"network probe setup failed before endpoint test: {error_class}"
+            ) from exc
+        if exc.errno == errno.ECONNREFUSED:
+            outcome = "refused"
+        elif exc.errno == errno.ETIMEDOUT:
+            outcome = "timeout"
+        else:
+            raise AcceptanceError(
+                f"network probe failed with unsupported network error: {error_class}"
+            ) from exc
 
     expected_reachable = args.expect == "reachable"
     passed = reachable is expected_reachable
+    if args.expect == "closed" and outcome not in {"refused", "timeout"}:
+        passed = False
     payload: dict[str, object] = {
         "schema": PROBE_SCHEMA,
         "status": "pass" if passed else "fail",
@@ -265,8 +295,10 @@ def _run_probe(args: argparse.Namespace) -> dict[str, object]:
         "port": int(args.port),
         "expected": str(args.expect),
         "reachable": reachable,
+        "outcome": outcome,
         "latency_ms": round((time.perf_counter() - started) * 1000.0, 3),
         "error_class": error_class,
+        "error_errno": error_errno,
         "target_address_recorded": False,
         "credential_material_recorded": False,
     }
@@ -274,7 +306,7 @@ def _run_probe(args: argparse.Namespace) -> dict[str, object]:
     if not passed:
         raise AcceptanceError(
             f"network probe failed for {args.endpoint_label}/{args.scope}: "
-            f"expected {args.expect}, reachable={reachable}"
+            f"expected {args.expect}, reachable={reachable}, outcome={outcome}"
         )
     return payload
 
@@ -311,6 +343,7 @@ def _phase_passed(command: str, values: Mapping[str, object]) -> bool:
         return bool(
             values["authenticated"]
             and values["heartbeat_healthy"]
+            and values["capability_refs"]
             and int(values["cpu_cores"]) > 0
             and int(values["ram_bytes"]) > 0
         )
@@ -391,6 +424,17 @@ def _validate_phase(payload: Mapping[str, object], phase: str) -> None:
         raise AcceptanceError(f"{phase} evidence may not record network addresses")
 
 
+def _validate_capabilities(registration: Mapping[str, object]) -> list[str]:
+    capability_refs = registration.get("capability_refs")
+    if (
+        not isinstance(capability_refs, list)
+        or not capability_refs
+        or not all(isinstance(item, str) and item.strip() for item in capability_refs)
+    ):
+        raise AcceptanceError("registration evidence must contain advertised capabilities")
+    return sorted(set(capability_refs))
+
+
 def _validate_probes(
     reports: Sequence[Mapping[str, object]],
     *,
@@ -410,11 +454,14 @@ def _validate_probes(
         scope = _required_string(report, "scope")
         if label not in _ENDPOINT_LABELS or scope not in {"private", "public"}:
             raise AcceptanceError("network probe has an unsupported endpoint label/scope")
+        key = (label, scope)
+        if key in observed:
+            raise AcceptanceError(f"duplicate network probe for {label}/{scope}")
         if report.get("target_address_recorded") is not False:
             raise AcceptanceError("network probe must not retain the tested address")
         if report.get("credential_material_recorded") is not False:
             raise AcceptanceError("network probe must not retain credential material")
-        observed[(label, scope)] = report
+        observed[key] = report
         safe_reports.append(dict(report))
 
     required = {(label, scope) for label in _ENDPOINT_LABELS for scope in ("private", "public")}
@@ -424,12 +471,21 @@ def _validate_probes(
     for label in _ENDPOINT_LABELS:
         private_report = observed[(label, "private")]
         public_report = observed[(label, "public")]
+        private_port = _required_int(private_report, "port")
+        public_port = _required_int(public_report, "port")
+        if private_port != public_port:
+            raise AcceptanceError(f"{label} public/private probes must test the same service port")
         if (
             private_report.get("expected") != "reachable"
             or private_report.get("reachable") is not True
+            or private_report.get("outcome") != "connected"
         ):
             raise AcceptanceError(f"{label} must be reachable through the private tunnel")
-        if public_report.get("expected") != "closed" or public_report.get("reachable") is not False:
+        if (
+            public_report.get("expected") != "closed"
+            or public_report.get("reachable") is not False
+            or public_report.get("outcome") not in {"refused", "timeout"}
+        ):
             raise AcceptanceError(f"{label} must be closed on the tested public path")
     return safe_reports
 
@@ -538,6 +594,16 @@ def _validate_platform_phases(
     if restart.get("post_restart_status") != "succeeded":
         raise AcceptanceError("post-restart deterministic dispatch did not succeed")
 
+    original_run_id = _required_string(dispatch, "run_id")
+    recovery_run_id = _required_string(recovery, "post_recovery_run_id")
+    restart_run_id = _required_string(restart, "post_restart_run_id")
+    if len({original_run_id, recovery_run_id, restart_run_id}) != 3:
+        raise AcceptanceError("dispatch, recovery, and restart must use distinct canonical Run IDs")
+    original_worker_job_id = _required_string(dispatch, "worker_job_id")
+    recovery_worker_job_id = _required_string(recovery, "post_recovery_worker_job_id")
+    if original_worker_job_id == recovery_worker_job_id:
+        raise AcceptanceError("post-recovery dispatch must use a fresh canonical WorkerJob ID")
+
     security_checks = (
         "worker_ports_publicly_closed",
         "unauthenticated_registration_rejected",
@@ -584,6 +650,7 @@ def _finalize(args: argparse.Namespace) -> dict[str, object]:
         raise AcceptanceError("Worker registration was not authenticated")
     if not _required_bool(registration, "heartbeat_healthy"):
         raise AcceptanceError("Worker heartbeat was not healthy before dispatch")
+    capability_refs = _validate_capabilities(registration)
     _validate_platform_phases(phases, worker_id=worker_id)
 
     dispatch = phases["dispatch"]
@@ -622,6 +689,7 @@ def _finalize(args: argparse.Namespace) -> dict[str, object]:
             ),
             "post_restart_run_id": _required_string(restart, "post_restart_run_id"),
         },
+        "advertised_capability_refs": capability_refs,
         "phases": {phase: "pass" for phase in sorted(_PHASES)},
         "network": {
             "status": "pass",
