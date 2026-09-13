@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Protocol
+from inspect import iscoroutinefunction
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed.runtime import DistributedRuntime
 from ai_multi_agent_platform.security.approvals import ApprovalRecord, ApprovalService
-from ai_multi_agent_platform.security.async_persistence import AsyncApprovalServiceAdapter
+from ai_multi_agent_platform.security.async_persistence import (
+    AsyncApprovalServiceAdapter,
+    SecurityPersistenceOffload,
+)
 
 from .context import EvaluationExecutionContext
 from .contracts import EvaluationCaseExecutor
@@ -24,6 +28,26 @@ class ApprovalRecordReader(Protocol):
     async def all(self) -> tuple[ApprovalRecord, ...]: ...
 
 
+class _SyncApprovalRecordReader(Protocol):
+    """Legacy structural Approval reader retained as an offloaded compatibility seam."""
+
+    def all(self) -> tuple[ApprovalRecord, ...]: ...
+
+
+_LEGACY_APPROVAL_READER_OFFLOAD = SecurityPersistenceOffload()
+
+
+class _SyncApprovalRecordReaderAdapter:
+    def __init__(self, reader: _SyncApprovalRecordReader) -> None:
+        self._reader = reader
+
+    async def all(self) -> tuple[ApprovalRecord, ...]:
+        return await _LEGACY_APPROVAL_READER_OFFLOAD.run(
+            self._reader.all,
+            serialization="approvals",
+        )
+
+
 def _unique(values: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(values))
 
@@ -34,14 +58,17 @@ class ApprovalEvidenceCaseExecutor:
     def __init__(
         self,
         executor: EvaluationCaseExecutor,
-        approvals: ApprovalRecordReader | ApprovalService,
+        approvals: ApprovalRecordReader | _SyncApprovalRecordReader | ApprovalService,
     ) -> None:
         self._executor = executor
-        self._approvals: ApprovalRecordReader = (
-            AsyncApprovalServiceAdapter(approvals)
-            if isinstance(approvals, ApprovalService)
-            else approvals
-        )
+        if isinstance(approvals, ApprovalService):
+            self._approvals: ApprovalRecordReader = AsyncApprovalServiceAdapter(approvals)
+        elif iscoroutinefunction(approvals.all):
+            self._approvals = cast(ApprovalRecordReader, approvals)
+        else:
+            self._approvals = _SyncApprovalRecordReaderAdapter(
+                cast(_SyncApprovalRecordReader, approvals)
+            )
 
     async def execute_case(
         self,
