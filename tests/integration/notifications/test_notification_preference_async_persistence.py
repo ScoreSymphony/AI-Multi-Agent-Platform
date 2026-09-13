@@ -59,11 +59,11 @@ class _BoundedPreferenceRepository(SqliteNotificationPreferenceRepository):
 
 
 class _BlockingPreferenceRepository(SqliteNotificationPreferenceRepository):
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path, *, max_concurrency: int = 4) -> None:
         self.block = False
         self.started = threading.Event()
         self.release = threading.Event()
-        super().__init__(db_path)
+        super().__init__(db_path, max_concurrency=max_concurrency)
         self.block = True
 
     def _connect(self) -> sqlite3.Connection:
@@ -106,6 +106,31 @@ def test_preference_sqlite_runtime_concurrency_is_bounded(tmp_path: Path) -> Non
         await asyncio.gather(*(repository.get(recipient) for _ in range(8)))
 
         assert 1 < repository.max_active <= 2
+
+    asyncio.run(scenario())
+
+
+def test_preference_backlog_does_not_exhaust_default_executor(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        repository = _BlockingPreferenceRepository(
+            tmp_path / "notifications.sqlite3",
+            max_concurrency=1,
+        )
+        recipient = _recipient()
+        pending = [asyncio.create_task(repository.get(recipient)) for _ in range(12)]
+        assert await asyncio.to_thread(repository.started.wait, 1)
+
+        try:
+            default_worker_thread = await asyncio.wait_for(
+                asyncio.to_thread(threading.get_ident),
+                timeout=0.5,
+            )
+            assert default_worker_thread != threading.get_ident()
+            assert any(not task.done() for task in pending)
+        finally:
+            repository.release.set()
+
+        await asyncio.gather(*pending)
 
     asyncio.run(scenario())
 
