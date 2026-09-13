@@ -10,7 +10,12 @@ import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.data import DataAccessContext, FileRecord, LocalFileProvider
+from ai_multi_agent_platform.data import (
+    DataAccessContext,
+    FileRecord,
+    LocalFileProvider,
+    OrphanReport,
+)
 from ai_multi_agent_platform.data._async_offload import AsyncDataOffload
 from ai_multi_agent_platform.domain import new_id
 
@@ -108,7 +113,7 @@ class _BlockingCreateProvider(LocalFileProvider):
             metadata=metadata,
         )
 
-    def _detect_orphans_sync(self, context: DataAccessContext):  # type: ignore[no-untyped-def]
+    def _detect_orphans_sync(self, context: DataAccessContext) -> OrphanReport:
         self.orphan_scan_started.set()
         return super()._detect_orphans_sync(context)
 
