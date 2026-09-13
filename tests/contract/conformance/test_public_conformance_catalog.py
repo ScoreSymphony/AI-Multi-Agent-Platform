@@ -21,10 +21,7 @@ def _documented_scenario_ids(documentation: str, expected: set[str]) -> set[str]
 
 
 def test_public_conformance_documentation_covers_release_registry() -> None:
-    expected = {
-        scenario.scenario_id
-        for scenario in profile_scenarios(ConformanceProfile.RELEASE)
-    }
+    expected = {scenario.scenario_id for scenario in profile_scenarios(ConformanceProfile.RELEASE)}
     documentation = _DOCUMENTATION_PATH.read_text(encoding="utf-8")
 
     assert _documented_scenario_ids(documentation, expected) == expected
