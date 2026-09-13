@@ -419,9 +419,7 @@ def _task_snapshot(result: Mapping[str, Any], *, provider_id: str) -> MCPTaskSna
             nullable=True,
         )
         status_message_value = result.get("statusMessage")
-        status_message = (
-            status_message_value if isinstance(status_message_value, str) else None
-        )
+        status_message = status_message_value if isinstance(status_message_value, str) else None
         task_result: JsonValue = None
         task_error: JsonValue = None
         input_requests: dict[str, JsonValue] | None = None
