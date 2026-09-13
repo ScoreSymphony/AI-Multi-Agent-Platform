@@ -129,6 +129,10 @@ Decision readiness requires retained evidence for:
 - authorized principal + valid transport succeeds;
 - unauthorized principal + valid transport remains denied;
 - invalid/revoked transport fails closed;
+- revocation while a transport/session is already established, including proof that stale access does
+  not survive beyond the documented accepted effective-revocation window;
+- service removal/reconfiguration, including fail-closed behavior for the old path and explicit
+  recovery behavior for the intended replacement/restored path;
 - cross-client/service isolation and provider-ID non-authority;
 - canonical capability allowlist authority, filter non-widening, collision handling and dynamic
   backend non-escalation;
