@@ -41,16 +41,16 @@ _MODEL_ID = "model-issue-889-reference-replanning"
 
 
 class _ExecuteFailureProvider(FakeModelProvider):
-    def __init__(self, *, failure_limit: int) -> None:
+    def __init__(self, *, fail_execute: bool = True) -> None:
         super().__init__()
-        self.failure_limit = failure_limit
+        self.fail_execute = fail_execute
         self.execute_failures = 0
 
     async def generate(self, request: ModelRequest):
         if (
             request.messages
             and "Produce the task result using the completed research" in request.messages[-1]
-            and self.execute_failures < self.failure_limit
+            and self.fail_execute
         ):
             self.calls.append(request)
             self.execute_failures += 1
@@ -173,7 +173,7 @@ def test_failure_evidence_replans_to_new_revision_and_repairs_success(tmp_path: 
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
         )
-        provider = _ExecuteFailureProvider(failure_limit=1)
+        provider = _ExecuteFailureProvider()
         _install_model(deployment, provider)
         admin = deployment.bootstrap_admin("issue-889-replan-admin", _PASSWORD)
         owner = OwnerRef(type="user", id=admin.user_id)
@@ -208,6 +208,8 @@ def test_failure_evidence_replans_to_new_revision_and_repairs_success(tmp_path: 
         )
         assert research.status is StepStatus.SUCCEEDED
         assert approach.status is StepStatus.SUCCEEDED
+        failures_before_repair = provider.execute_failures
+        assert failures_before_repair >= 1
 
         replacement = await deployment.replanning.from_terminal_run(
             task_id=task.task_id,
@@ -222,6 +224,7 @@ def test_failure_evidence_replans_to_new_revision_and_repairs_success(tmp_path: 
         assert set(execute_draft.reuse_step_ids) == {research.id, approach.id}
         assert failed_step.id not in execute_draft.reuse_step_ids
 
+        provider.fail_execute = False
         activated_replacement = await deployment.planning.activate(
             replacement.proposal.proposal_id,
             idempotency_key="issue-889:replan-success:activate-2",
@@ -238,7 +241,7 @@ def test_failure_evidence_replans_to_new_revision_and_repairs_success(tmp_path: 
         assert planning_history[0].proposal.proposal_id == initial.proposal.proposal_id
         assert planning_history[1].proposal.proposal_id == replacement.proposal.proposal_id
         assert planning_history[1].proposal.base_plan_id == first_plan_id
-        assert provider.execute_failures == 1
+        assert provider.execute_failures == failures_before_repair
 
         second_state = deployment.coordination_repository.get_plan(
             activated_replacement.activation_plan_id
@@ -263,7 +266,7 @@ def test_replan_budget_exhaustion_is_resource_exhausted_and_stops_progress(tmp_p
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
         )
-        provider = _ExecuteFailureProvider(failure_limit=2)
+        provider = _ExecuteFailureProvider()
         _install_model(deployment, provider)
         deployment.planning.replan_policy = ReplanPolicy(max_replans=1)
         admin = deployment.bootstrap_admin("issue-889-budget-admin", _PASSWORD)
@@ -306,8 +309,10 @@ def test_replan_budget_exhaustion_is_resource_exhausted_and_stops_progress(tmp_p
         before_history = deployment.planning.history(task.task_id)
         before_run_ids = before_task.run_ids
         before_step_ids = before_task.step_ids
+        failures_before_exhaustion = provider.execute_failures
         assert before_task.status is TaskStatus.FAILED
         assert len(before_history) == 2
+        assert failures_before_exhaustion >= 2
 
         with pytest.raises(ContractError) as raised:
             await deployment.replanning.from_terminal_run(
@@ -322,7 +327,7 @@ def test_replan_budget_exhaustion_is_resource_exhausted_and_stops_progress(tmp_p
         assert after_task.run_ids == before_run_ids
         assert after_task.step_ids == before_step_ids
         assert deployment.planning.history(task.task_id) == before_history
-        assert provider.execute_failures == 2
+        assert provider.execute_failures == failures_before_exhaustion
 
     asyncio.run(scenario())
 
