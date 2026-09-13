@@ -33,6 +33,14 @@ _LEGACY_DIRECT_REGISTRATION_SUBCLASSES = {
     "terminal_composition.py",
 }
 
+# These canonical later-domain façades have completed their #982 migration. They may
+# retain integration methods, but they must not regain private command dispatch or
+# direct resource/command registration through another linear subclass layer.
+_MIGRATED_LINEAR_DOMAIN_FACADES = {
+    "organization_explicit_composition.py",
+    "task_project_reassignment.py",
+}
+
 
 def _tree(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -47,6 +55,14 @@ def _class(path: Path, name: str) -> ast.ClassDef:
 
 def _base_name(base: ast.expr) -> str:
     return ast.unparse(base)
+
+
+def _method_names(node: ast.ClassDef) -> frozenset[str]:
+    return frozenset(
+        child.name
+        for child in node.body
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef)
+    )
 
 
 def _direct_registration_calls(node: ast.ClassDef) -> tuple[str, ...]:
@@ -128,6 +144,14 @@ def test_new_control_plane_subclasses_cannot_claim_domain_ownership_directly() -
     assert violations == []
 
 
+def test_migrated_linear_domain_facades_do_not_regain_dispatch_ownership() -> None:
+    forbidden = {"execute_command", "register_command", "register_resource_service"}
+    for filename in sorted(_MIGRATED_LINEAR_DOMAIN_FACADES):
+        facade = _class(CONTROL_PLANE / filename, "ControlPlane")
+        regained = sorted(_method_names(facade).intersection(forbidden))
+        assert regained == [], f"{filename} regained domain dispatch/registration: {regained!r}"
+
+
 def test_migrated_compatibility_facades_do_not_own_domain_behavior() -> None:
     """Compatibility classes may install modules but may not reimplement domain behavior."""
 
@@ -162,6 +186,45 @@ def test_hardened_automation_is_behavior_free_compatibility_import() -> None:
         and any(alias.name == "ControlPlane" for alias in node.names)
         for node in imports
     )
+
+
+def test_organization_runtime_is_behavior_free_compatibility_import() -> None:
+    path = CONTROL_PLANE / "organization_runtime_composition.py"
+    tree = _tree(path)
+    assert not any(isinstance(node, ast.ClassDef) for node in tree.body)
+    imports = [node for node in tree.body if isinstance(node, ast.ImportFrom)]
+    assert any(
+        node.module == "organization_explicit_composition"
+        and any(alias.name == "ControlPlane" for alias in node.names)
+        for node in imports
+    )
+
+
+def test_organization_audit_uses_explicit_organization_composition() -> None:
+    path = CONTROL_PLANE / "organization_audit_api.py"
+    imports = [node for node in _tree(path).body if isinstance(node, ast.ImportFrom)]
+    assert not any(node.module == "organization_runtime_composition" for node in imports)
+    assert any(
+        node.module == "organization_explicit_composition"
+        and any(alias.asname == "_OrganizationControlPlane" for alias in node.names)
+        for node in imports
+    )
+
+
+def test_release_status_special_route_is_explicitly_owned() -> None:
+    path = CONTROL_PLANE / "release_api.py"
+    source = path.read_text(encoding="utf-8")
+    assert 'RELEASE_STATUS_MODULE = "release-status"' in source
+    assert "ControlPlaneRoute(" in source
+    assert "ControlPlaneModule(" in source
+
+    facade = _class(path, "ControlPlaneHTTP")
+    handle = next(
+        node
+        for node in facade.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "handle"
+    )
+    assert "RELEASE_STATUS_PATH" not in ast.unparse(handle)
 
 
 def test_canonical_single_node_portability_composition_has_one_control_plane_base() -> None:
@@ -236,6 +299,9 @@ def test_current_conversation_composition_has_one_control_plane_base() -> None:
 def test_migrated_domains_declare_explicit_module_owners() -> None:
     portability = (CONTROL_PLANE / "portability_module.py").read_text(encoding="utf-8")
     plugins = (CONTROL_PLANE / "plugin_module.py").read_text(encoding="utf-8")
+    organization = (CONTROL_PLANE / "organization_explicit_composition.py").read_text(
+        encoding="utf-8"
+    )
     organization_audit = (CONTROL_PLANE / "organization_audit_api.py").read_text(encoding="utf-8")
     approval_decisions = (CONTROL_PLANE / "approval_decision_module.py").read_text(encoding="utf-8")
     automation = (CONTROL_PLANE / "automation_explicit_composition.py").read_text(encoding="utf-8")
@@ -244,17 +310,23 @@ def test_migrated_domains_declare_explicit_module_owners() -> None:
         encoding="utf-8"
     )
     terminal = (CONTROL_PLANE / "terminal_module.py").read_text(encoding="utf-8")
+    task_project = (CONTROL_PLANE / "task_project_reassignment.py").read_text(encoding="utf-8")
+    release = (CONTROL_PLANE / "release_api.py").read_text(encoding="utf-8")
     product = (CONTROL_PLANE / "approval_portability_composition.py").read_text(encoding="utf-8")
     governance = (GOVERNANCE / "control_plane_module.py").read_text(encoding="utf-8")
 
     assert 'PORTABILITY_MODULE = "portability"' in portability
     assert 'PLUGIN_MODULE = "plugins"' in plugins
+    assert 'ORGANIZATION_MODULE = "organizations"' in organization
+    assert 'ACCOUNTING_MODULE = "accounting"' in organization
     assert 'ORGANIZATION_AUDIT_MODULE = "organization-audit"' in organization_audit
     assert 'APPROVAL_DECISION_MODULE = "approval-decisions"' in approval_decisions
     assert 'AUTOMATION_MODULE = "automation"' in automation
     assert 'CONVERSATION_MODULE = "conversations"' in conversations
     assert 'NOTIFICATION_MODULE = "notifications"' in notifications
     assert 'TERMINAL_MODULE = "terminal"' in terminal
+    assert 'TASK_PROJECT_REASSIGNMENT_MODULE = "task-project-reassignment"' in task_project
+    assert 'RELEASE_STATUS_MODULE = "release-status"' in release
     assert 'GOAL_MODULE = "goals"' in product
     assert 'DECISION_RECORD_MODULE = "decision-records"' in product
     assert 'GOVERNANCE_MODULE = "governance"' in governance
@@ -262,12 +334,15 @@ def test_migrated_domains_declare_explicit_module_owners() -> None:
     for source in (
         portability,
         plugins,
+        organization,
         organization_audit,
         approval_decisions,
         automation,
         conversations,
         notifications,
         terminal,
+        task_project,
+        release,
         product,
         governance,
     ):
