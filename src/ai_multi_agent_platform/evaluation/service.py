@@ -150,8 +150,8 @@ class EvaluationService:
             )
         self._suite_assets = repository
         if self._async_suite_assets is None:
-            self._async_suite_assets = async_repository or AsyncEvaluationSuiteAssetRepositoryAdapter(
-                repository
+            self._async_suite_assets = (
+                async_repository or AsyncEvaluationSuiteAssetRepositoryAdapter(repository)
             )
         self._validate_suite_asset_collisions()
 
