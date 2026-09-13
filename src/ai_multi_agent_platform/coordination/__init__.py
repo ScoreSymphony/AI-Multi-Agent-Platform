@@ -22,6 +22,12 @@ from .models import (
     WaitResolution,
     WaitType,
 )
+from .async_repository import (
+    AsyncCoordinatorRepository,
+    AsyncCoordinatorRepositoryAdapter,
+    CoordinationPersistenceOffload,
+    runtime_coordinator_repository,
+)
 from .control_plane import (
     CoordinatorCommandHandlers,
     CoordinatorPlanResourceService,
@@ -50,9 +56,12 @@ from .sqlite_repository_v3 import SQLiteCoordinatorRepository
 
 __all__ = [
     "ApprovalOutcome",
+    "AsyncCoordinatorRepository",
+    "AsyncCoordinatorRepositoryAdapter",
     "COORDINATOR_MIGRATION_REVISION",
     "COORDINATOR_SCHEMA_VERSION",
     "CanonicalRunKernel",
+    "CoordinationPersistenceOffload",
     "CoordinationPhase",
     "CoordinatorClaim",
     "CoordinatorCommandHandlers",
@@ -83,4 +92,5 @@ __all__ = [
     "coordinator_migration_plan",
     "inspect_coordinator_store",
     "migrate_coordinator_store",
+    "runtime_coordinator_repository",
 ]
