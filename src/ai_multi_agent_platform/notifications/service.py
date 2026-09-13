@@ -445,7 +445,9 @@ class NotificationService:
         await self._event_sink(payload)
 
 
-def _notification_from_candidate(candidate: NotificationCandidate, current: datetime) -> Notification:
+def _notification_from_candidate(
+    candidate: NotificationCandidate, current: datetime
+) -> Notification:
     return Notification(
         category=candidate.category,
         severity=candidate.severity,
