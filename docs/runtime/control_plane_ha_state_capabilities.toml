@@ -31,6 +31,17 @@ disposition = "shared_sql"
 initial_support = "required"
 reason = "Durable plan/step coordination must survive Control Plane replacement without duplicate step authority."
 
+# Persisted by the production durable composition but currently absent from SINGLE_NODE_DURABLE_STORES.
+# #956 treats the omission as an inventory/recovery gap, not as permission to ignore canonical Plan state.
+[[state]]
+id = "planning"
+source = "db/planning.json"
+owner = "planning"
+disposition = "shared_sql"
+initial_support = "required"
+reason = "Durable proposals, replanning and exact Step bindings must survive promotion with the canonical Plan state intact."
+current_single_node_inventory = false
+
 [[state]]
 id = "scopes"
 source = "db/scopes.sqlite3"
