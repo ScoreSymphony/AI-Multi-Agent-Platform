@@ -24,6 +24,11 @@ class CoordinatorRepository(Protocol):
 
     def get_plan(self, plan_id: str) -> PlanRuntimeState: ...
 
+    def get_plan_snapshot(
+        self,
+        plan_id: str,
+    ) -> tuple[PlanRuntimeState, tuple[StepCoordinationRecord, ...]]: ...
+
     def get_step_record(self, step_id: str) -> StepCoordinationRecord: ...
 
     def list_step_records(self, plan_id: str) -> tuple[StepCoordinationRecord, ...]: ...
@@ -99,6 +104,25 @@ class InMemoryCoordinatorRepository:
                     ErrorCode.NOT_FOUND, f"coordination plan {plan_id} not found"
                 ) from exc
 
+    def get_plan_snapshot(
+        self,
+        plan_id: str,
+    ) -> tuple[PlanRuntimeState, tuple[StepCoordinationRecord, ...]]:
+        with self._lock:
+            try:
+                state = self._plans[plan_id]
+            except KeyError as exc:
+                raise ContractError(
+                    ErrorCode.NOT_FOUND, f"coordination plan {plan_id} not found"
+                ) from exc
+            records = tuple(
+                sorted(
+                    (record for record in self._records.values() if record.plan_id == plan_id),
+                    key=lambda item: item.step_id,
+                )
+            )
+            return state, records
+
     def get_step_record(self, step_id: str) -> StepCoordinationRecord:
         with self._lock:
             try:
@@ -109,14 +133,7 @@ class InMemoryCoordinatorRepository:
                 ) from exc
 
     def list_step_records(self, plan_id: str) -> tuple[StepCoordinationRecord, ...]:
-        self.get_plan(plan_id)
-        with self._lock:
-            return tuple(
-                sorted(
-                    (record for record in self._records.values() if record.plan_id == plan_id),
-                    key=lambda item: item.step_id,
-                )
-            )
+        return self.get_plan_snapshot(plan_id)[1]
 
     def list_active_plans(self) -> tuple[PlanRuntimeState, ...]:
         with self._lock:
