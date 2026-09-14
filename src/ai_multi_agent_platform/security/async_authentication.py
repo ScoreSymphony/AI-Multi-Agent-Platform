@@ -18,6 +18,7 @@ from .authentication import (
     BrowserSession,
     IssuedCredential,
     LocalAuthenticationService,
+    LocalUserAccount,
     LoginResult,
     SessionGrant,
     StoredCredential,
@@ -43,6 +44,13 @@ class _ScopedAuthenticationService(Protocol):
         scope: CredentialScope | None = None,
     ) -> IssuedCredential: ...
 
+    def check_authenticated_request(
+        self,
+        actor: AuthenticatedActor,
+        *,
+        now: datetime | None = None,
+    ) -> None: ...
+
 
 class AsyncAuthenticationService(Protocol):
     """Backend-neutral awaitable Authentication contract for async transports."""
@@ -53,7 +61,7 @@ class AsyncAuthenticationService(Protocol):
         password: str,
         *,
         correlation_id: str | None = None,
-    ): ...
+    ) -> LocalUserAccount: ...
 
     async def login(
         self,
@@ -82,11 +90,15 @@ class AsyncAuthenticationService(Protocol):
         correlation_id: str | None = None,
     ) -> AuthenticatedActor: ...
 
+    async def check_authenticated_request(self, actor: AuthenticatedActor) -> None: ...
+
     async def logout(self, token: str) -> None: ...
 
     async def revoke_session(self, user_id: str, session_id: str) -> None: ...
 
     async def create_browser_session(self, user_id: str) -> SessionGrant: ...
+
+    async def renew_browser_session(self, user_id: str, session_id: str) -> SessionGrant: ...
 
     async def list_sessions(self, user_id: str) -> tuple[BrowserSession, ...]: ...
 
@@ -190,6 +202,15 @@ async def _await_persistence_boundary[T](worker: asyncio.Future[T]) -> T:
         raise
 
 
+def _sqlite_error(exc: BaseException) -> sqlite3.Error | None:
+    current: BaseException | None = exc
+    while current is not None:
+        if isinstance(current, sqlite3.Error):
+            return current
+        current = current.__cause__
+    return None
+
+
 def _map_sqlite_error(exc: sqlite3.Error, message: str) -> ContractError:
     if isinstance(exc, sqlite3.OperationalError) and any(
         marker in str(exc).casefold() for marker in _BUSY_MARKERS
@@ -217,8 +238,11 @@ class AsyncAuthenticationServiceAdapter:
     async def _run[T](self, operation: Callable[[], T], *, message: str) -> T:
         try:
             return await self._offload.run(operation)
-        except ContractError:
-            raise
+        except ContractError as exc:
+            sqlite_error = _sqlite_error(exc)
+            if sqlite_error is None:
+                raise
+            raise _map_sqlite_error(sqlite_error, message) from exc
         except sqlite3.Error as exc:
             raise _map_sqlite_error(exc, message) from exc
 
@@ -228,7 +252,7 @@ class AsyncAuthenticationServiceAdapter:
         password: str,
         *,
         correlation_id: str | None = None,
-    ):
+    ) -> LocalUserAccount:
         return await self._run(
             lambda: self._service.bootstrap_first_admin(
                 username,
@@ -292,6 +316,13 @@ class AsyncAuthenticationServiceAdapter:
             message="failed to persist bearer authentication",
         )
 
+    async def check_authenticated_request(self, actor: AuthenticatedActor) -> None:
+        scoped = cast(_ScopedAuthenticationService, self._service)
+        await self._run(
+            lambda: scoped.check_authenticated_request(actor),
+            message="failed to evaluate authenticated request controls",
+        )
+
     async def logout(self, token: str) -> None:
         await self._run(
             lambda: self._service.logout(token),
@@ -308,6 +339,16 @@ class AsyncAuthenticationServiceAdapter:
         return await self._run(
             lambda: self._service.create_browser_session(user_id),
             message="failed to persist browser session",
+        )
+
+    async def renew_browser_session(self, user_id: str, session_id: str) -> SessionGrant:
+        def renew() -> SessionGrant:
+            self._service.revoke_session(user_id, session_id)
+            return self._service.create_browser_session(user_id)
+
+        return await self._run(
+            renew,
+            message="failed to persist browser-session renewal",
         )
 
     async def list_sessions(self, user_id: str) -> tuple[BrowserSession, ...]:
