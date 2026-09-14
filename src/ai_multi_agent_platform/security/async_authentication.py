@@ -9,9 +9,9 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Protocol, cast
-from weakref import WeakKeyDictionary
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.persistence_offload import SharedPersistenceOffloadRegistry
 
 from .authentication import (
     AuthenticatedActor,
@@ -180,23 +180,23 @@ class AuthenticationPersistenceOffload:
             self._capacity.release()
 
 
-_SHARED_AUTHENTICATION_OFFLOADS: WeakKeyDictionary[
-    LocalAuthenticationService, AuthenticationPersistenceOffload
-] = WeakKeyDictionary()
-_SHARED_AUTHENTICATION_OFFLOADS_LOCK = threading.Lock()
+_SHARED_AUTHENTICATION_OFFLOADS = SharedPersistenceOffloadRegistry[
+    AuthenticationPersistenceOffload
+]()
 
 
 def _authentication_offload(
     service: LocalAuthenticationService,
     requested: AuthenticationPersistenceOffload | None,
+    *,
+    owner: object,
 ) -> AuthenticationPersistenceOffload:
-    with _SHARED_AUTHENTICATION_OFFLOADS_LOCK:
-        existing = _SHARED_AUTHENTICATION_OFFLOADS.get(service)
-        if existing is not None:
-            return existing
-        resolved = requested or AuthenticationPersistenceOffload()
-        _SHARED_AUTHENTICATION_OFFLOADS[service] = resolved
-        return resolved
+    return _SHARED_AUTHENTICATION_OFFLOADS.resolve(
+        service,
+        owner=owner,
+        requested=requested,
+        factory=AuthenticationPersistenceOffload,
+    )
 
 
 async def _await_persistence_boundary[T](worker: asyncio.Future[T]) -> T:
@@ -241,7 +241,7 @@ class AsyncAuthenticationServiceAdapter:
         offload: AuthenticationPersistenceOffload | None = None,
     ) -> None:
         self._service = service
-        self._offload = _authentication_offload(service, offload)
+        self._offload = _authentication_offload(service, offload, owner=self)
 
     @property
     def offload(self) -> AuthenticationPersistenceOffload:
