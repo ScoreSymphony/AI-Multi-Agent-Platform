@@ -244,7 +244,9 @@ def test_sqlite_authentication_failures_map_to_canonical_errors(
     asyncio.run(scenario())
 
 
-def test_authentication_restart_preserves_async_session_and_credential_state(tmp_path: Path) -> None:
+def test_authentication_restart_preserves_async_session_and_credential_state(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         path = tmp_path / "authentication.sqlite3"
         first = _service(SqliteAuthenticationStore(path))
@@ -292,7 +294,9 @@ def test_in_memory_and_sqlite_async_authentication_contracts_match(tmp_path: Pat
 
     async def scenario() -> None:
         memory = await exercise(_service())
-        sqlite = await exercise(_service(SqliteAuthenticationStore(tmp_path / "authentication.sqlite3")))
+        sqlite = await exercise(
+            _service(SqliteAuthenticationStore(tmp_path / "authentication.sqlite3"))
+        )
         assert memory == sqlite
 
     asyncio.run(scenario())
