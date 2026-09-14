@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import AuthorizationProvider, OperationContext
 from ai_multi_agent_platform.contracts.authorization import AuthorizationRequest
@@ -16,6 +16,11 @@ from ai_multi_agent_platform.security import (
     CredentialScope,
     ResourceType,
 )
+from ai_multi_agent_platform.security.async_authentication import (
+    AsyncAuthenticationService,
+    runtime_authentication_service,
+)
+from ai_multi_agent_platform.security.authentication_hardening import LocalAuthenticationService
 
 from .models import Heartbeat, NodeRecord, RegistrationRequest, WorkerRecord, utc_now
 from .pressure_reporting import authenticate_pressure_report
@@ -107,12 +112,17 @@ class WorkerProtocolService:
         *,
         authentication: WorkerRequestAuthenticator,
         authorization: AuthorizationProvider,
+        runtime_authentication: AsyncAuthenticationService | None = None,
         initial_trust_level: str = "untrusted",
     ) -> None:
         if not initial_trust_level.strip():
             raise ValueError("initial_trust_level must not be blank")
         self.runtime = runtime
         self.authentication = authentication
+        self.runtime_authentication = runtime_authentication_service(
+            cast(LocalAuthenticationService, authentication),
+            runtime_service=runtime_authentication,
+        )
         self.authorization = authorization
         self.initial_trust_level = initial_trust_level
 
@@ -124,7 +134,7 @@ class WorkerProtocolService:
         now: datetime | None = None,
     ) -> WorkerProtocolReceipt:
         timestamp = now or utc_now()
-        actor = self._authenticate(credentials, now=timestamp)
+        actor = await self._authenticate(credentials, now=timestamp)
         reporter_id = self._registration_reporter(request, actor)
         existing_node = self._optional_node(request.node.node_id)
         incoming_ids = {worker.worker_id for worker in request.workers}
@@ -193,7 +203,7 @@ class WorkerProtocolService:
         now: datetime | None = None,
     ) -> WorkerProtocolReceipt:
         timestamp = now or utc_now()
-        actor = self._authenticate(credentials, now=timestamp)
+        actor = await self._authenticate(credentials, now=timestamp)
         reporter_id = self._require_reporter_identity(request.service_identity_ref, actor)
         node = self._required_node(request.heartbeat.node_id)
         reporter = self._required_worker(reporter_id)
@@ -265,7 +275,7 @@ class WorkerProtocolService:
         now: datetime | None = None,
     ) -> None:
         timestamp = now or utc_now()
-        actor = self._authenticate(credentials, now=timestamp)
+        actor = await self._authenticate(credentials, now=timestamp)
         reporter_id = self._require_reporter_identity(worker_id, actor)
         worker = self._required_worker(reporter_id)
         if worker.node_id != node_id:
@@ -280,13 +290,13 @@ class WorkerProtocolService:
         )
         self.runtime.deregister_worker(worker.worker_id)
 
-    def _authenticate(
+    async def _authenticate(
         self,
         credentials: WorkerRequestCredentials,
         *,
         now: datetime,
     ) -> AuthenticatedActor:
-        actor = self.authentication.authenticate_worker_request(
+        actor = await self.runtime_authentication.authenticate_worker_request(
             credentials.token,
             nonce=credentials.nonce,
             issued_at=credentials.issued_at,
