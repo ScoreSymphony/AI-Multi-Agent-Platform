@@ -5,6 +5,7 @@ import gc
 import threading
 import weakref
 from dataclasses import replace
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -13,6 +14,7 @@ from ai_multi_agent_platform.coordination import (
     AsyncCoordinatorRepositoryAdapter,
     CoordinationPhase,
     InMemoryCoordinatorRepository,
+    SQLiteCoordinatorRepository,
     StepCoordinationRecord,
 )
 from ai_multi_agent_platform.coordination.plan_step_coordinator import (
@@ -66,12 +68,20 @@ class _BlockingSnapshotRepository(InMemoryCoordinatorRepository):
         self.release_snapshot = threading.Event()
         self.block_snapshot = False
 
-    def get_plan(self, plan_id: str):  # type: ignore[no-untyped-def]
-        state = super().get_plan(plan_id)
+    def get_plan_snapshot(self, plan_id: str):  # type: ignore[no-untyped-def]
+        snapshot = super().get_plan_snapshot(plan_id)
         if self.block_snapshot:
             self.snapshot_started.set()
             self.release_snapshot.wait(timeout=5)
-        return state
+        return snapshot
+
+
+class _SplitReadForbiddenSQLiteRepository(SQLiteCoordinatorRepository):
+    def get_plan(self, plan_id: str):  # type: ignore[no-untyped-def]
+        raise AssertionError(f"split get_plan read used for {plan_id}")
+
+    def list_step_records(self, plan_id: str):  # type: ignore[no-untyped-def]
+        raise AssertionError(f"split list_step_records read used for {plan_id}")
 
 
 class _SnapshotOnlyAdapter(AsyncCoordinatorRepositoryAdapter):
@@ -88,6 +98,24 @@ class _RegistryOwner:
 
 class _OffloadToken:
     pass
+
+
+class _ReentrantOwnerReferenceRegistry(SharedPersistenceOffloadRegistry[_OffloadToken]):
+    def __init__(self, owner_holder: list[_RegistryOwner]) -> None:
+        super().__init__()
+        self.owner_holder = owner_holder
+        self.release_on_next_reference = False
+
+    def _owner_reference(  # type: ignore[override]
+        self,
+        repository_id: int,
+        owner: object,
+    ) -> weakref.ReferenceType[object]:
+        if self.release_on_next_reference:
+            self.release_on_next_reference = False
+            self.owner_holder.clear()
+            gc.collect()
+        return super()._owner_reference(repository_id, owner)
 
 
 def test_unhashable_nonweakrefable_repository_can_share_one_offload() -> None:
@@ -188,6 +216,39 @@ def test_owner_release_callback_can_reenter_registry_during_resolve() -> None:
     assert failures == []
 
 
+def test_reentrant_owner_release_keeps_new_owner_registered() -> None:
+    repository = object()
+    owner_holder = [_RegistryOwner()]
+    registry = _ReentrantOwnerReferenceRegistry(owner_holder)
+    first_offload = registry.resolve(
+        repository,
+        owner=owner_holder[0],
+        requested=None,
+        factory=_OffloadToken,
+    )
+    offload_reference = weakref.ref(first_offload)
+
+    second_owner = _RegistryOwner()
+    registry.release_on_next_reference = True
+    second_offload = registry.resolve(
+        repository,
+        owner=second_owner,
+        requested=None,
+        factory=_OffloadToken,
+    )
+    assert owner_holder == []
+    assert second_offload is first_offload
+
+    del first_offload
+    del second_offload
+    gc.collect()
+    assert offload_reference() is not None
+
+    del second_owner
+    gc.collect()
+    assert offload_reference() is None
+
+
 def test_plan_snapshot_holds_serialization_boundary_across_all_reads() -> None:
     async def scenario() -> None:
         repository = _BlockingSnapshotRepository()
@@ -219,6 +280,26 @@ def test_plan_snapshot_holds_serialization_boundary_across_all_reads() -> None:
         assert (await adapter.get_plan(plan.id)).store_revision == state.store_revision + 1
 
     asyncio.run(scenario())
+
+
+def test_sqlite_plan_snapshot_uses_one_repository_atomic_read(tmp_path: Path) -> None:
+    path = tmp_path / "coordination.sqlite3"
+    reader = _SplitReadForbiddenSQLiteRepository(path)
+    writer = SQLiteCoordinatorRepository(path)
+    plan, step, record = _plan_fixture()
+    reader.create_plan(plan, (step,), (record,))
+
+    saved = writer.save_step(
+        step=step,
+        record=replace(record, phase=CoordinationPhase.READY),
+        expected_revision=record.revision,
+    )
+
+    state, records = reader.get_plan_snapshot(plan.id)
+
+    assert records == (saved,)
+    assert state.store_revision == writer.get_plan(plan.id).store_revision
+    assert state.steps == writer.get_plan(plan.id).steps
 
 
 def test_runtime_projection_uses_atomic_snapshot_api() -> None:
