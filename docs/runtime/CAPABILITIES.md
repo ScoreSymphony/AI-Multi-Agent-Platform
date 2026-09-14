@@ -123,7 +123,7 @@ Install the real transport integration with:
 python -m pip install -e '.[mcp]'
 ```
 
-The repository pins the optional SDK to `mcp==2.1.1`. CI also installs that version through the development extra so the real transport integration is continuously tested.
+The repository pins the optional SDK to `mcp==2.2.0`. CI also installs that version through the development extra so the real transport integration is continuously tested.
 
 ### Streamable HTTP
 
