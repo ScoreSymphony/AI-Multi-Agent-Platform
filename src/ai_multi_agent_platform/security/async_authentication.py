@@ -90,6 +90,18 @@ class AsyncAuthenticationService(Protocol):
         correlation_id: str | None = None,
     ) -> AuthenticatedActor: ...
 
+    async def authenticate_worker_request(
+        self,
+        token: str,
+        *,
+        nonce: str,
+        issued_at: datetime,
+        tls_peer_ref: str | None = None,
+        now: datetime | None = None,
+        request_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> AuthenticatedActor: ...
+
     async def check_authenticated_request(self, actor: AuthenticatedActor) -> None: ...
 
     async def logout(self, token: str) -> None: ...
@@ -314,6 +326,30 @@ class AsyncAuthenticationServiceAdapter:
                 correlation_id=correlation_id,
             ),
             message="failed to persist bearer authentication",
+        )
+
+    async def authenticate_worker_request(
+        self,
+        token: str,
+        *,
+        nonce: str,
+        issued_at: datetime,
+        tls_peer_ref: str | None = None,
+        now: datetime | None = None,
+        request_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> AuthenticatedActor:
+        return await self._run(
+            lambda: self._service.authenticate_worker_request(
+                token,
+                nonce=nonce,
+                issued_at=issued_at,
+                tls_peer_ref=tls_peer_ref,
+                now=now,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            ),
+            message="failed to persist worker authentication",
         )
 
     async def check_authenticated_request(self, actor: AuthenticatedActor) -> None:
