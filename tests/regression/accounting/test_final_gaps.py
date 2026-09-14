@@ -114,7 +114,8 @@ def test_canonical_accounting_collections_cannot_be_replaced_after_composition()
     control_plane = ControlPlane(kernel=kernel, events=events, accounting_service=accounting)
 
     for collection in ("usage-records", "usage-aggregates", "usage-budgets"):
-        with pytest.raises(ValueError, match="canonical accounting route"):
+        assert control_plane.resource_owner(collection) == "accounting"
+        with pytest.raises(ValueError, match="duplicate Control Plane resource ownership"):
             control_plane.register_resource_service(collection, InMemoryResourceService())
 
 
