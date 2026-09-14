@@ -20,6 +20,7 @@ from ai_multi_agent_platform.skills import (
 )
 from ai_multi_agent_platform.verification import VerificationService
 
+from .explicit_control_plane import register_explicit_scoped_learning_control_plane
 from .governance import GovernedObservedLearningService, LearningPlatformPolicy
 from .post_promotion_repository import SQLitePostPromotionEvaluationRecorder
 from .promotion import (
@@ -30,7 +31,6 @@ from .promotion import (
 )
 from .repository import SQLiteLearningRepository
 from .runtime import PostPromotionEvaluator
-from .scoped_control_plane import register_scoped_learning_control_plane
 from .service import LearningQualityGate
 from .source_evidence import (
     KernelRunFailureEvidenceResolver,
@@ -62,7 +62,7 @@ class SingleNodeLearningComposition:
         registered = set(control_plane.registered_collections)
         if register_skills and SKILL_COLLECTION not in registered:
             register_skill_control_plane(control_plane, self.skills)
-        register_scoped_learning_control_plane(control_plane, self.service)
+        register_explicit_scoped_learning_control_plane(control_plane, self.service)
 
 
 def build_single_node_learning(

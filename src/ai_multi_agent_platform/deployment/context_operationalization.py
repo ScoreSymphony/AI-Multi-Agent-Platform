@@ -8,7 +8,7 @@ so every canonical Agent-bound Run crosses the Context Bundle boundary before mo
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ai_multi_agent_platform.agents import AgentCapabilityTurn, AgentRepository, AgentRunStatus
 from ai_multi_agent_platform.capabilities import (
@@ -76,7 +76,6 @@ from ai_multi_agent_platform.kernel import EventSourcedRunRepository, EventSourc
 from ai_multi_agent_platform.research import (
     ResearchService,
     SqliteResearchRepository,
-    register_research_control_plane,
 )
 from ai_multi_agent_platform.security import (
     AuthorizedDataFileProvider,
@@ -280,8 +279,8 @@ def install_single_node_context(
 
     skills_repository = JsonSkillRepository(database_dir / "skills.json")
     skills = SkillService(skills_repository)
-    research_repository = SqliteResearchRepository(database_dir / "research.sqlite3")
-    research = ResearchService(research_repository, authorization=base.approval_gate)
+    research = base.research
+    research_repository = cast(SqliteResearchRepository, research.repository)
 
     task_adapter = TaskContextSourceAdapter(tasks)
     agent_adapter = AgentContextSourceAdapter(base.agents)
@@ -493,7 +492,6 @@ def install_single_node_context(
     # These domains are canonical source owners for Context and therefore join the ordinary Control
     # Plane instead of becoming Context-private stores.
     register_skill_control_plane(base.control_plane, skills)
-    register_research_control_plane(base.control_plane, research)
 
     reconciliation = reconcile_context_run_bindings(
         agents=base.agents.repository,

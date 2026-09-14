@@ -7,8 +7,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
+from .extensions import ControlPlaneModule, ControlPlaneRoute
 from .http import HTTPRequest, HTTPResponse
 from .models import API_VERSION
+from .module_registry import install_control_plane_modules
 from .task_project_reassignment import (
     AuthenticatedControlPlaneHTTP as _CurrentAuthenticatedControlPlaneHTTP,
 )
@@ -20,10 +22,86 @@ if TYPE_CHECKING:
     from ai_multi_agent_platform.release.operator import ReleaseOperatorService
 
 RELEASE_STATUS_PATH = f"/api/{API_VERSION}/release/status"
+RELEASE_STATUS_MODULE = "release-status"
+
+
+def _runtime_release_operator() -> ReleaseOperatorService:
+    from ai_multi_agent_platform.release.operator import ReleaseOperatorService
+
+    return ReleaseOperatorService.runtime_defaults()
+
+
+def _release_status_module(operator: ReleaseOperatorService) -> ControlPlaneModule:
+    async def release_status(request: HTTPRequest) -> HTTPResponse:
+        del request
+        return HTTPResponse(
+            status=200,
+            body=cast(JsonValue, operator.status()),
+            headers={},
+        )
+
+    return ControlPlaneModule(
+        name=RELEASE_STATUS_MODULE,
+        routes=(
+            ControlPlaneRoute(
+                method="GET",
+                path=RELEASE_STATUS_PATH,
+                handler=release_status,
+            ),
+        ),
+        openapi_contributors=(_augment_openapi,),
+    )
+
+
+def _install_release_status_module(
+    control_plane: Any,
+    release_operator: ReleaseOperatorService | None,
+) -> ReleaseOperatorService:
+    existing = getattr(control_plane, "_release_operator", None)
+    if existing is not None:
+        if release_operator is not None and release_operator is not existing:
+            raise ValueError("release status operator is already bound to this Control Plane")
+        return cast("ReleaseOperatorService", existing)
+
+    operator = release_operator or _runtime_release_operator()
+    registered_modules = getattr(control_plane, "registered_modules", ())
+    if RELEASE_STATUS_MODULE not in registered_modules and hasattr(
+        control_plane, "register_modules"
+    ):
+        install_control_plane_modules(control_plane, (_release_status_module(operator),))
+    control_plane._release_operator = operator
+    return operator
+
+
+def _augment_root_manifest(body: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    manifest = deepcopy(body)
+    manifest["release_status"] = RELEASE_STATUS_PATH
+    return manifest
+
+
+def _filter_extension_discovery(
+    control_plane: Any,
+    body: dict[str, JsonValue],
+) -> dict[str, JsonValue]:
+    """Keep legacy extension metadata separate from explicit canonical ownership."""
+
+    specification = deepcopy(body)
+    for key, attribute in (
+        ("x-registered-extension-collections", "extension_collections"),
+        ("x-registered-extension-commands", "extension_commands"),
+    ):
+        raw = specification.get(key)
+        if not isinstance(raw, list):
+            continue
+        existing = tuple(value for value in raw if isinstance(value, str))
+        discoverable = getattr(control_plane, attribute, existing)
+        allowed = set(discoverable) if isinstance(discoverable, tuple) else set(existing)
+        specification[key] = [value for value in existing if value in allowed]
+    return specification
 
 
 class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
-    """Expose operator-readable release metadata without adding update mutation routes."""
+    """Expose release metadata through an explicitly owned special route."""
 
     def __init__(
         self,
@@ -32,11 +110,10 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
         release_operator: ReleaseOperatorService | None = None,
     ) -> None:
         super().__init__(control_plane)
-        if release_operator is None:
-            from ai_multi_agent_platform.release.operator import ReleaseOperatorService
-
-            release_operator = ReleaseOperatorService.runtime_defaults()
-        self._release_operator = release_operator
+        self._release_operator = _install_release_status_module(
+            control_plane,
+            release_operator,
+        )
 
     @property
     def release_operator(self) -> ReleaseOperatorService:
@@ -44,43 +121,28 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
 
     async def handle(self, request: HTTPRequest) -> HTTPResponse:
         response = await super().handle(request)
-        if request.method == "GET" and request.path.rstrip("/") == RELEASE_STATUS_PATH:
-            return HTTPResponse(
-                status=200,
-                body=cast(JsonValue, self._release_operator.status()),
-                headers=dict(response.headers),
-            )
-        if (
-            request.method == "GET"
-            and request.path.rstrip("/") == f"/api/{API_VERSION}"
-            and response.status == 200
-            and isinstance(response.body, dict)
-        ):
-            body = deepcopy(response.body)
-            body["release_status"] = RELEASE_STATUS_PATH
+        if response.status != 200 or not isinstance(response.body, dict):
+            return response
+        if request.method != "GET":
+            return response
+        normalized_path = request.path.rstrip("/")
+        if normalized_path == f"/api/{API_VERSION}":
             return HTTPResponse(
                 status=response.status,
-                body=body,
+                body=_augment_root_manifest(response.body),
                 headers=dict(response.headers),
             )
-        if (
-            request.method == "GET"
-            and request.path.rstrip("/") == f"/api/{API_VERSION}/openapi.json"
-            and response.status == 200
-            and isinstance(response.body, dict)
-        ):
-            specification = cast(dict[str, Any], deepcopy(response.body))
-            _augment_openapi(specification)
+        if normalized_path == f"/api/{API_VERSION}/openapi.json":
             return HTTPResponse(
                 status=response.status,
-                body=cast(dict[str, JsonValue], specification),
+                body=_filter_extension_discovery(self._control_plane, response.body),
                 headers=dict(response.headers),
             )
         return response
 
 
 class AuthenticatedControlPlaneHTTP(_CurrentAuthenticatedControlPlaneHTTP):
-    """Authenticate normally, then expose the read-only #42 operator status route."""
+    """Authenticate normally, then expose the explicitly owned #42 status route."""
 
     def __init__(
         self,
@@ -143,6 +205,7 @@ __all__ = [
     "ControlPlane",
     "ControlPlaneASGI",
     "ControlPlaneHTTP",
+    "RELEASE_STATUS_MODULE",
     "RELEASE_STATUS_PATH",
     "build_openapi",
 ]

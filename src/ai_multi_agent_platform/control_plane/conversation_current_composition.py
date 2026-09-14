@@ -1,7 +1,9 @@
 """Current public Control Plane composition with canonical Conversations (#72).
 
-This bridge deliberately composes Conversations above the newest public Control Plane
-instead of pinning the Conversation domain to an older intermediate composition layer.
+Conversation northbound ownership is registered explicitly. The public façade keeps
+only the cross-domain Task bridge and transport ergonomics that cannot be represented as
+plain resource/command registrations; it no longer composes Conversation behavior by
+stacking a second Control Plane superclass with Notifications.
 """
 
 from __future__ import annotations
@@ -15,25 +17,21 @@ from ai_multi_agent_platform.agents import AgentService
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.conversations import (
-    RESERVED_CONVERSATION_METADATA_KEYS,
     ContextResolvingConversationResponseProvider,
-    Conversation,
     ConversationService,
-    ReferenceKind,
-    ResourceReference,
 )
 from ai_multi_agent_platform.conversations.responses import ConversationResponseProvider
 from ai_multi_agent_platform.data import FileProvider, KnowledgeProvider
+from ai_multi_agent_platform.domain import TaskStatus, validate_id
 from ai_multi_agent_platform.search import SearchResult
 
-from .conversation_api import CONVERSATION_COLLECTIONS, ConversationCommandHandlers
+from .conversation_api import CONVERSATION_COLLECTIONS
 from .conversation_composition import (
     _ALL_CONVERSATION_COMMANDS,
     _augment_conversation_openapi,
     _rewrite_conversation_request,
 )
-from .conversation_composition import ControlPlane as _ConversationControlPlane
-from .conversation_knowledge import validate_conversation_knowledge_reference
+from .conversation_module import conversation_control_plane_module
 from .conversation_response_streaming import (
     ConversationResponseASGI,
     augment_response_stream_openapi,
@@ -43,7 +41,6 @@ from .conversation_retention import (
     CONVERSATION_EXPORT_COLLECTION,
     CONVERSATION_RETENTION_COMMANDS,
     augment_conversation_retention_openapi,
-    register_conversation_retention_control_plane,
     rewrite_conversation_retention_request,
 )
 from .conversation_search import (
@@ -55,21 +52,16 @@ from .conversation_streaming_http import (
     _augment_stream_openapi,
     _is_conversation_stream_path,
 )
-from .extensions import (
-    CommandHandler,
-    ResourceService,
-    _reject_private_payload,
-    _validate_command_name,
-)
 from .http import HTTPRequest, HTTPResponse, _header
 from .models import API_VERSION, APIException, RequestContext
-from .notifications_plugin_composition import (
+from .module_registry import install_control_plane_modules
+from .notifications_explicit_composition import (
     AuthenticatedControlPlaneHTTP as _NotificationAuthenticatedControlPlaneHTTP,
 )
-from .notifications_plugin_composition import ControlPlane as _NotificationControlPlane
-from .notifications_plugin_composition import ControlPlaneASGI as _NotificationControlPlaneASGI
-from .notifications_plugin_composition import ControlPlaneHTTP as _NotificationControlPlaneHTTP
-from .notifications_plugin_composition import build_openapi as _build_notification_openapi
+from .notifications_explicit_composition import ControlPlane as _NotificationControlPlane
+from .notifications_explicit_composition import ControlPlaneASGI as _NotificationControlPlaneASGI
+from .notifications_explicit_composition import ControlPlaneHTTP as _NotificationControlPlaneHTTP
+from .notifications_explicit_composition import build_openapi as _build_notification_openapi
 
 _ALL_CURRENT_CONVERSATION_COMMANDS = (
     *_ALL_CONVERSATION_COMMANDS,
@@ -77,99 +69,8 @@ _ALL_CURRENT_CONVERSATION_COMMANDS = (
 )
 
 
-class _KnowledgeConversationCommandHandlers(ConversationCommandHandlers):
-    """Conversation handlers that add Knowledge and reserved-metadata boundaries."""
-
-    def __init__(
-        self,
-        service: ConversationService,
-        control_plane: ControlPlane,
-        *,
-        agent_service: AgentService | None,
-        file_provider: FileProvider | None,
-        knowledge_provider: KnowledgeProvider | None,
-    ) -> None:
-        super().__init__(
-            service,
-            control_plane,
-            agent_service=agent_service,
-            file_provider=file_provider,
-        )
-        self._knowledge_provider = knowledge_provider
-
-    async def create_conversation(
-        self,
-        context: RequestContext,
-        resource_ref: str,
-        payload: dict[str, JsonValue],
-    ) -> dict[str, JsonValue]:
-        metadata = payload.get("metadata")
-        if isinstance(metadata, Mapping):
-            if "target" in metadata:
-                raise ContractError(
-                    ErrorCode.INVALID_REQUEST,
-                    "conversation target metadata is platform-managed; use the top-level target",
-                    details={"field": "target"},
-                )
-            reserved = sorted(RESERVED_CONVERSATION_METADATA_KEYS.intersection(metadata))
-            if reserved:
-                raise ContractError(
-                    ErrorCode.INVALID_REQUEST,
-                    "conversation retention metadata is platform-managed",
-                    details={"fields": cast(JsonValue, reserved)},
-                )
-        return await super().create_conversation(
-            context,
-            resource_ref,
-            self._pin_agent_revisions(payload),
-        )
-
-    def _pin_agent_revisions(self, payload: dict[str, JsonValue]) -> dict[str, JsonValue]:
-        """Snapshot omitted Agent/Team revisions before the durable Conversation is created."""
-
-        service = self._agent_service
-        if service is None:
-            return payload
-        normalized = dict(payload)
-        for field_name in ("target", "default_agent"):
-            raw = normalized.get(field_name)
-            if not isinstance(raw, Mapping):
-                continue
-            kind = raw.get("kind")
-            resource_id = raw.get("id")
-            revision = raw.get("revision")
-            if revision is not None or not isinstance(resource_id, str):
-                continue
-            if kind == "agent":
-                revision = service.get_agent_revision(resource_id).revision
-            elif kind == "agent_team":
-                revision = service.get_team_revision(resource_id).revision
-            else:
-                continue
-            resolved = dict(raw)
-            resolved["revision"] = revision
-            normalized[field_name] = cast(JsonValue, resolved)
-        return normalized
-
-    async def _validate_reference(
-        self,
-        context: RequestContext,
-        conversation: Conversation,
-        reference: ResourceReference,
-    ) -> None:
-        if reference.kind is ReferenceKind.KNOWLEDGE:
-            await validate_conversation_knowledge_reference(
-                self._knowledge_provider,
-                context,
-                conversation,
-                reference,
-            )
-            return
-        await super()._validate_reference(context, conversation, reference)
-
-
-class ControlPlane(_ConversationControlPlane, _NotificationControlPlane):
-    """Conversation behavior composed cooperatively above the current Notification stack."""
+class ControlPlane(_NotificationControlPlane):
+    """Current Control Plane with Conversations installed through explicit ownership."""
 
     def __init__(
         self,
@@ -191,33 +92,9 @@ class ControlPlane(_ConversationControlPlane, _NotificationControlPlane):
             )
         ):
             raise ValueError("conversation dependencies require conversation_service")
-        if conversation_service is not None:
-            supplied_resources = kwargs.get("resource_services")
-            if isinstance(supplied_resources, Mapping) and (
-                CONVERSATION_EXPORT_COLLECTION in supplied_resources
-            ):
-                raise ValueError(
-                    "resource_services conflict with canonical conversation export route"
-                )
-            supplied_commands = kwargs.get("command_handlers")
-            if isinstance(supplied_commands, Mapping):
-                conflicts = sorted(
-                    set(supplied_commands).intersection(CONVERSATION_RETENTION_COMMANDS)
-                )
-                if conflicts:
-                    raise ValueError(
-                        "command_handlers conflict with canonical conversation retention commands: "
-                        f"{conflicts!r}"
-                    )
 
-        self._installing_conversation_retention = False
-        super().__init__(
-            *args,
-            conversation_service=conversation_service,
-            conversation_agent_service=conversation_agent_service,
-            conversation_file_provider=conversation_file_provider,
-            **kwargs,
-        )
+        super().__init__(*args, **kwargs)
+        self._conversation_service = conversation_service
         self._conversation_knowledge_provider = conversation_knowledge_provider
         self.conversation_response_provider = (
             ContextResolvingConversationResponseProvider(
@@ -230,24 +107,23 @@ class ControlPlane(_ConversationControlPlane, _NotificationControlPlane):
         )
 
         if conversation_service is not None:
-            install_conversation_search_services(self, conversation_service)
-            # The intermediate Conversation composition installs the canonical handlers.
-            # Replace only handlers that need current-domain extensions; the underlying
-            # Conversation lifecycle and persistence path remains the same.
-            handlers = _KnowledgeConversationCommandHandlers(
-                conversation_service,
+            install_control_plane_modules(
                 self,
-                agent_service=conversation_agent_service,
-                file_provider=conversation_file_provider,
-                knowledge_provider=conversation_knowledge_provider,
+                (
+                    conversation_control_plane_module(
+                        self,
+                        conversation_service,
+                        agent_service=conversation_agent_service,
+                        file_provider=conversation_file_provider,
+                        knowledge_provider=conversation_knowledge_provider,
+                    ),
+                ),
             )
-            self._command_handlers["conversation.create"] = handlers.create_conversation
-            self._command_handlers["conversation.message.add"] = handlers.add_message
-            self._installing_conversation_retention = True
-            try:
-                register_conversation_retention_control_plane(self, conversation_service)
-            finally:
-                self._installing_conversation_retention = False
+            install_conversation_search_services(self, conversation_service)
+
+    @property
+    def conversation_service(self) -> ConversationService | None:
+        return self._conversation_service
 
     async def _search_result_allowed(
         self,
@@ -261,52 +137,117 @@ class ControlPlane(_ConversationControlPlane, _NotificationControlPlane):
                 return allowed
         return await super()._search_result_allowed(context, result)
 
-    async def execute_command(
+    async def resume_task_from_conversation_input(
         self,
         context: RequestContext,
-        command: str,
-        resource_ref: str,
-        payload: dict[str, JsonValue] | None = None,
+        *,
+        task_id: str,
+        conversation_id: str,
+        message_id: str,
+        request_payload_digest: str,
     ) -> dict[str, JsonValue]:
-        if command not in CONVERSATION_RETENTION_COMMANDS or self.conversation_service is None:
-            return await super().execute_command(context, command, resource_ref, payload)
-        _validate_command_name(command)
+        """Resume one waiting canonical Task from referenced Conversation input."""
+
+        validate_id(task_id, "task")
+        validate_id(conversation_id, "conversation")
+        validate_id(message_id, "message")
         if context.idempotency_key is None:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "Idempotency-Key is required for mutating commands",
-                details={"header": "Idempotency-Key"},
             )
-        handler = self._command_handlers.get(command)
-        if handler is None:
+
+        state = await self._kernel.get_task(task_id)
+        await self._authorize_for_task(
+            context,
+            "task:resume",
+            task_id,
+            state,
+            request_payload_digest=request_payload_digest,
+        )
+        resume_key = f"{context.idempotency_key}:conversation-resume:{message_id}"
+
+        if state.status is not TaskStatus.WAITING:
+            await self._kernel.resume_task(
+                idempotency_key=resume_key,
+                task_id=task_id,
+                actor_ref=context.actor.principal_ref,
+                source="control-plane:conversation",
+            )
+            return await self.get_task(context, task_id)
+
+        input_ref: dict[str, JsonValue] = {
+            "conversation_id": conversation_id,
+            "message_id": message_id,
+        }
+        if state.task.metadata.get("conversation_input") != input_ref:
+            await self._kernel.update_task(
+                idempotency_key=(f"{context.idempotency_key}:conversation-input:{message_id}"),
+                task_id=task_id,
+                metadata={"conversation_input": input_ref},
+                actor_ref=context.actor.principal_ref,
+                source="control-plane:conversation",
+            )
+
+        await self._kernel.resume_task(
+            idempotency_key=resume_key,
+            task_id=task_id,
+            actor_ref=context.actor.principal_ref,
+            source="control-plane:conversation",
+        )
+        return await self.get_task(context, task_id)
+
+    async def create_task(
+        self,
+        context: RequestContext,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        """Persist Conversation linkage already authorized as part of Task creation."""
+
+        resource = await super().create_task(context, payload)
+        raw_metadata = payload.get("metadata")
+        if not isinstance(raw_metadata, Mapping):
+            return resource
+        conversation_id = raw_metadata.get("conversation_id")
+        message_id = raw_metadata.get("conversation_message_id")
+        if not isinstance(conversation_id, str) or not isinstance(message_id, str):
+            return resource
+        validate_id(conversation_id, "conversation")
+        validate_id(message_id, "message")
+        task_id = resource.get("id")
+        if not isinstance(task_id, str):
             raise ContractError(
-                ErrorCode.NOT_FOUND,
-                f"canonical command is not registered: {command}",
-                details={"command": command},
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical task creation did not return a task id",
             )
-        result = await handler(context, resource_ref, payload or {})
-        _reject_private_payload(result)
-        return result
+        if context.idempotency_key is None:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "Idempotency-Key is required for mutating commands",
+            )
+        state = await self._kernel.get_task(task_id)
+        metadata = dict(raw_metadata)
+        if all(state.task.metadata.get(key) == value for key, value in metadata.items()):
+            return await self.get_task(context, task_id)
+        await self._kernel.update_task(
+            idempotency_key=f"{context.idempotency_key}:conversation-link",
+            task_id=task_id,
+            metadata=metadata,
+            actor_ref=context.actor.principal_ref,
+            source="control-plane:conversation",
+        )
+        return await self.get_task(context, task_id)
 
-    def register_resource_service(self, collection: str, service: ResourceService) -> None:
-        if (
-            collection == CONVERSATION_EXPORT_COLLECTION
-            and not self._installing_conversation_retention
-        ):
-            raise ValueError(
-                f"extension collection conflicts with canonical conversation route: {collection}"
-            )
-        super().register_resource_service(collection, service)
-
-    def register_command(self, command: str, handler: CommandHandler) -> None:
-        if (
-            command in CONVERSATION_RETENTION_COMMANDS
-            and not self._installing_conversation_retention
-        ):
-            raise ValueError(
-                f"extension command conflicts with canonical conversation command: {command}"
-            )
-        super().register_command(command, handler)
+    async def get_task(
+        self,
+        context: RequestContext,
+        task_id: str,
+    ) -> dict[str, JsonValue]:
+        resource = await super().get_task(context, task_id)
+        state = await self._kernel.get_task(task_id)
+        if state.task.metadata:
+            resource["metadata"] = cast(JsonValue, dict(state.task.metadata))
+        return resource
 
 
 class ControlPlaneHTTP(_NotificationControlPlaneHTTP):

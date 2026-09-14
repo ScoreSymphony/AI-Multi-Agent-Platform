@@ -294,9 +294,11 @@ def test_registered_command_receives_actor_correlation_and_idempotency_context()
             return {"id": resource_ref, "type": "widget", "refreshed": True}
 
         control_plane, http = _stack(command_handlers={"widget.refresh": refresh_widget})
-        assert control_plane.registered_commands == tuple(
+        assert control_plane.extension_commands == tuple(
             sorted((*AUTOMATION_COMMANDS, "widget.refresh"))
         )
+        assert "widget.refresh" in control_plane.registered_commands
+        assert control_plane.command_owner("widget.refresh") == "constructor"
 
         manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1"))
         assert isinstance(manifest.body, dict)

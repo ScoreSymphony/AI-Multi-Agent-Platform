@@ -270,19 +270,31 @@ class ControlPlane(_CurrentControlPlane):
     def organization_service(self) -> OrganizationService | None:
         return self._organization_service
 
-    def register_resource_service(self, collection: str, service: ResourceService) -> None:
+    def register_resource_service(
+        self,
+        collection: str,
+        service: ResourceService,
+        *,
+        owner: str = "manual",
+    ) -> None:
         if collection in ORGANIZATION_COLLECTIONS:
             raise ValueError(
                 f"extension collection conflicts with canonical organization route: {collection}"
             )
-        super().register_resource_service(collection, service)
+        super().register_resource_service(collection, service, owner=owner)
 
-    def register_command(self, command: str, handler: CommandHandler) -> None:
+    def register_command(
+        self,
+        command: str,
+        handler: CommandHandler,
+        *,
+        owner: str = "manual",
+    ) -> None:
         if command in ORGANIZATION_COMMANDS:
             raise ValueError(
                 f"extension command conflicts with canonical organization command: {command}"
             )
-        super().register_command(command, handler)
+        super().register_command(command, handler, owner=owner)
 
     async def execute_command(
         self,

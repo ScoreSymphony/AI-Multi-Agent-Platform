@@ -8,8 +8,9 @@ domains are therefore registered explicitly instead of being predeclared here.
 from __future__ import annotations
 
 import re
-from collections.abc import Awaitable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Any, Protocol, cast, runtime_checkable
 from uuid import uuid4
 
@@ -75,6 +76,7 @@ REQUIRED_COMMANDS: tuple[str, ...] = ()
 _RESERVED_COLLECTIONS = BASE_COLLECTIONS | {"timeline", "commands"}
 _COLLECTION_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 _COMMAND_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*$")
+_MODULE_PATTERN = re.compile(r"^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*$")
 
 
 @runtime_checkable
@@ -103,6 +105,101 @@ class CommandHandler(Protocol):
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> Awaitable[dict[str, JsonValue]]: ...
+
+
+class CommandAuthorizer(Protocol):
+    """Explicit replacement for the generic command authorization preflight.
+
+    Most modules should omit this and inherit the canonical
+    ``_authorize(context, command, resource_ref)`` policy. A domain whose existing
+    contract authorizes a richer relationship (for example source + destination
+    scopes) can declare that policy explicitly without retaining an ``execute_command``
+    subclass override solely to control MRO dispatch.
+    """
+
+    def __call__(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> Awaitable[None]: ...
+
+
+class CommandObserver(Protocol):
+    """Post-success projection hook owned by an explicitly registered module."""
+
+    def __call__(
+        self,
+        context: RequestContext,
+        command: str,
+        resource_ref: str,
+        result: dict[str, JsonValue],
+    ) -> Awaitable[None]: ...
+
+
+RouteHandler = Callable[[HTTPRequest], Awaitable[HTTPResponse]]
+OpenAPIContributor = Callable[[dict[str, Any]], None]
+
+
+@dataclass(frozen=True, slots=True)
+class ControlPlaneRoute:
+    """One exact HTTP route explicitly owned by a Control Plane module."""
+
+    method: str
+    path: str
+    handler: RouteHandler
+
+    def __post_init__(self) -> None:
+        method = self.method.upper().strip()
+        path = self.path.rstrip("/") or "/"
+        if not method:
+            raise ValueError("Control Plane route method must be non-blank")
+        if not path.startswith("/"):
+            raise ValueError("Control Plane route path must be absolute")
+        object.__setattr__(self, "method", method)
+        object.__setattr__(self, "path", path)
+
+
+@dataclass(frozen=True, slots=True)
+class ControlPlaneModule:
+    """Explicit northbound contribution owned by one platform domain.
+
+    Domain services remain the behavior owners. A module only declares how those
+    services are exposed through the canonical Control Plane. Module batches are
+    validated before installation, making conflicts deterministic and independent
+    of registration order.
+
+    ``command_authorizers`` is intentionally narrow: it can customize authorization
+    only for commands owned by the same module. ``command_observers`` run after a
+    successful, privacy-validated command result and are intended for derived audit or
+    projection side effects, not for command ownership or dispatch.
+
+    ``discover_as_extension`` separates explicit runtime ownership from the legacy
+    extension-discovery contract. Canonical modules that have dedicated API metadata
+    may remain fully owned/dispatchable without being advertised as generic extensions.
+    """
+
+    name: str
+    resource_services: Mapping[str, ResourceService] = field(default_factory=dict)
+    command_handlers: Mapping[str, CommandHandler] = field(default_factory=dict)
+    command_authorizers: Mapping[str, CommandAuthorizer] = field(default_factory=dict)
+    command_observers: tuple[CommandObserver, ...] = ()
+    routes: tuple[ControlPlaneRoute, ...] = ()
+    openapi_contributors: tuple[OpenAPIContributor, ...] = ()
+    requires: frozenset[str] = frozenset()
+    discover_as_extension: bool = True
+
+    def __post_init__(self) -> None:
+        if _MODULE_PATTERN.fullmatch(self.name) is None:
+            raise ValueError("Control Plane module name must use lowercase canonical segments")
+        if self.name in self.requires:
+            raise ValueError("Control Plane module cannot require itself")
+        orphan_authorizers = sorted(set(self.command_authorizers).difference(self.command_handlers))
+        if orphan_authorizers:
+            raise ValueError(
+                "Control Plane module command authorizers must belong to commands "
+                f"owned by the same module: {orphan_authorizers!r}"
+            )
 
 
 class InMemoryResourceService:
@@ -154,6 +251,7 @@ class ControlPlane(BaseControlPlane):
         model_registry: ModelRegistry | None = None,
         resource_services: Mapping[str, ResourceService] | None = None,
         command_handlers: Mapping[str, CommandHandler] | None = None,
+        modules: Sequence[ControlPlaneModule] = (),
     ) -> None:
         super().__init__(
             kernel=kernel,
@@ -166,10 +264,29 @@ class ControlPlane(BaseControlPlane):
         )
         self._resource_services: dict[str, ResourceService] = {}
         self._command_handlers: dict[str, CommandHandler] = {}
+        self._resource_owners: dict[str, str] = {}
+        self._command_owners: dict[str, str] = {}
+        self._command_authorizers: dict[str, CommandAuthorizer] = {}
+        self._command_observers: list[tuple[str, CommandObserver]] = []
+        self._route_handlers: dict[tuple[str, str], RouteHandler] = {}
+        self._route_owners: dict[tuple[str, str], str] = {}
+        self._openapi_contributors: list[tuple[str, OpenAPIContributor]] = []
+        self._registered_modules: dict[str, ControlPlaneModule] = {}
         for collection, service in (resource_services or {}).items():
-            self.register_resource_service(collection, service)
+            ControlPlane.register_resource_service(
+                self,
+                collection,
+                service,
+                owner="constructor",
+            )
         for command, handler in (command_handlers or {}).items():
-            self.register_command(command, handler)
+            ControlPlane.register_command(
+                self,
+                command,
+                handler,
+                owner="constructor",
+            )
+        self.register_modules(modules)
 
     @property
     def registered_collections(self) -> tuple[str, ...]:
@@ -179,13 +296,166 @@ class ControlPlane(BaseControlPlane):
     def registered_commands(self) -> tuple[str, ...]:
         return tuple(sorted(self._command_handlers))
 
-    def register_resource_service(self, collection: str, service: ResourceService) -> None:
-        _validate_extension_collection(collection)
-        self._resource_services[collection] = service
+    @property
+    def extension_collections(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                collection
+                for collection, owner in self._resource_owners.items()
+                if self._owner_is_extension_discoverable(owner)
+            )
+        )
 
-    def register_command(self, command: str, handler: CommandHandler) -> None:
+    @property
+    def extension_commands(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                command
+                for command, owner in self._command_owners.items()
+                if self._owner_is_extension_discoverable(owner)
+            )
+        )
+
+    @property
+    def registered_modules(self) -> tuple[str, ...]:
+        return tuple(sorted(self._registered_modules))
+
+    @property
+    def registered_routes(self) -> tuple[tuple[str, str], ...]:
+        return tuple(sorted(self._route_handlers))
+
+    def resource_owner(self, collection: str) -> str | None:
+        return self._resource_owners.get(collection)
+
+    def command_owner(self, command: str) -> str | None:
+        return self._command_owners.get(command)
+
+    def route_owner(self, method: str, path: str) -> str | None:
+        return self._route_owners.get(_route_key(method, path))
+
+    def _owner_is_extension_discoverable(self, owner: str) -> bool:
+        if owner in {"constructor", "manual"}:
+            return True
+        module = self._registered_modules.get(owner)
+        return module is None or module.discover_as_extension
+
+    def register_resource_service(
+        self,
+        collection: str,
+        service: ResourceService,
+        *,
+        owner: str = "manual",
+    ) -> None:
+        _validate_extension_collection(collection)
+        _validate_owner(owner)
+        existing_owner = self._resource_owners.get(collection)
+        if existing_owner is not None:
+            raise ValueError(
+                "duplicate Control Plane resource ownership for "
+                f"{collection!r}: {existing_owner!r} and {owner!r}"
+            )
+        self._resource_services[collection] = service
+        self._resource_owners[collection] = owner
+
+    def register_command(
+        self,
+        command: str,
+        handler: CommandHandler,
+        *,
+        owner: str = "manual",
+    ) -> None:
         _validate_command_name(command)
+        _validate_owner(owner)
+        existing_owner = self._command_owners.get(command)
+        if existing_owner is not None:
+            raise ValueError(
+                "duplicate Control Plane command ownership for "
+                f"{command!r}: {existing_owner!r} and {owner!r}"
+            )
         self._command_handlers[command] = handler
+        self._command_owners[command] = owner
+
+    def register_modules(self, modules: Sequence[ControlPlaneModule]) -> None:
+        """Validate and install a module batch without registration-order semantics."""
+
+        if not modules:
+            return
+        by_name: dict[str, ControlPlaneModule] = {}
+        for module in modules:
+            if module.name in by_name or module.name in self._registered_modules:
+                raise ValueError(f"duplicate Control Plane module ownership: {module.name!r}")
+            by_name[module.name] = module
+
+        available = set(self._registered_modules) | set(by_name)
+        for module in by_name.values():
+            missing = sorted(module.requires.difference(available))
+            if missing:
+                raise ValueError(
+                    f"Control Plane module {module.name!r} requires missing modules: {missing!r}"
+                )
+
+        resource_claims = dict(self._resource_owners)
+        command_claims = dict(self._command_owners)
+        route_claims = dict(self._route_owners)
+        for name in sorted(by_name):
+            module = by_name[name]
+            for collection in sorted(module.resource_services):
+                _validate_extension_collection(collection)
+                _claim(resource_claims, collection, name, kind="resource")
+            for command in sorted(module.command_handlers):
+                _validate_command_name(command)
+                _claim(command_claims, command, name, kind="command")
+            for route in module.routes:
+                _claim(route_claims, _route_key(route.method, route.path), name, kind="route")
+
+        # Commit only after all claims have been validated. Explicit base-class
+        # dispatch prevents a legacy compatibility subclass from turning module
+        # installation back into MRO-sensitive behavior during the migration.
+        installation_order = _module_dependency_order(by_name)
+        for name in installation_order:
+            module = by_name[name]
+            for collection, service in sorted(module.resource_services.items()):
+                ControlPlane.register_resource_service(
+                    self,
+                    collection,
+                    service,
+                    owner=name,
+                )
+            for command, handler in sorted(module.command_handlers.items()):
+                ControlPlane.register_command(
+                    self,
+                    command,
+                    handler,
+                    owner=name,
+                )
+            for command, authorizer in sorted(module.command_authorizers.items()):
+                self._command_authorizers[command] = authorizer
+            for observer in module.command_observers:
+                self._command_observers.append((name, observer))
+            for route in sorted(module.routes, key=lambda item: (item.method, item.path)):
+                key = _route_key(route.method, route.path)
+                self._route_handlers[key] = route.handler
+                self._route_owners[key] = name
+            for contributor in module.openapi_contributors:
+                self._openapi_contributors.append((name, contributor))
+            self._registered_modules[name] = module
+        dependency_order = {
+            name: index
+            for index, name in enumerate(_module_dependency_order(self._registered_modules))
+        }
+        self._command_observers.sort(key=lambda item: dependency_order[item[0]])
+        self._openapi_contributors.sort(key=lambda item: dependency_order[item[0]])
+
+    def apply_openapi_contributions(self, specification: dict[str, Any]) -> dict[str, Any]:
+        for _, contributor in self._openapi_contributors:
+            contributor(specification)
+        return specification
+
+    async def dispatch_registered_route(self, request: HTTPRequest) -> HTTPResponse | None:
+        handler = self._route_handlers.get(_route_key(request.method, request.path))
+        if handler is None:
+            return None
+        return await handler(request)
 
     async def list_extension_resources(
         self,
@@ -232,9 +502,16 @@ class ControlPlane(BaseControlPlane):
                 "Idempotency-Key is required for mutating commands",
                 details={"header": "Idempotency-Key"},
             )
-        await self._authorize(context, command, resource_ref)
-        result = await handler(context, resource_ref, payload or {})
+        effective_payload = payload or {}
+        authorizer = self._command_authorizers.get(command)
+        if authorizer is None:
+            await self._authorize(context, command, resource_ref)
+        else:
+            await authorizer(context, resource_ref, effective_payload)
+        result = await handler(context, resource_ref, effective_payload)
         _reject_private_payload(result)
+        for _, observer in self._command_observers:
+            await observer(context, command, resource_ref, result)
         return result
 
     def _registered_resource_service(self, collection: str) -> ResourceService:
@@ -262,23 +539,40 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
         try:
             version, relative = _split_version(request.path)
             _require_supported_version(version)
+            registered_collections = self._extended_control_plane.registered_collections
+            registered_commands = self._extended_control_plane.registered_commands
+            extension_collections = getattr(
+                self._extended_control_plane,
+                "extension_collections",
+                registered_collections,
+            )
+            extension_commands = getattr(
+                self._extended_control_plane,
+                "extension_commands",
+                registered_commands,
+            )
 
             if request.method == "GET" and relative == "/openapi.json":
                 specification = build_openapi(
-                    extension_collections=self._extended_control_plane.registered_collections,
-                    extension_commands=self._extended_control_plane.registered_commands,
+                    extension_collections=extension_collections,
+                    extension_commands=extension_commands,
                 )
+                contributor = getattr(
+                    self._extended_control_plane,
+                    "apply_openapi_contributions",
+                    None,
+                )
+                if callable(contributor):
+                    specification = contributor(specification)
                 return self._response(200, specification, request_id, correlation_id)
 
             if request.method == "GET" and relative in {"", "/"}:
                 manifest_resources: list[JsonValue] = [
                     *PLATFORM_COLLECTIONS,
-                    *self._extended_control_plane.registered_collections,
+                    *extension_collections,
                     "timeline",
                 ]
-                manifest_commands: list[JsonValue] = [
-                    command for command in self._extended_control_plane.registered_commands
-                ]
+                manifest_commands: list[JsonValue] = [command for command in extension_commands]
                 return self._response(
                     200,
                     {
@@ -292,8 +586,25 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                     correlation_id,
                 )
 
+            route_response: HTTPResponse | None = None
+            route_dispatcher = getattr(
+                self._extended_control_plane,
+                "dispatch_registered_route",
+                None,
+            )
+            if callable(route_dispatcher):
+                route_response = await route_dispatcher(request)
+            if route_response is not None:
+                headers = dict(route_response.headers)
+                headers.setdefault("X-Request-Id", request_id)
+                headers.setdefault("X-Correlation-Id", correlation_id)
+                return HTTPResponse(
+                    status=route_response.status,
+                    body=route_response.body,
+                    headers=headers,
+                )
+
             segments = [segment for segment in relative.split("/") if segment]
-            registered_collections = self._extended_control_plane.registered_collections
             if segments and segments[0] in registered_collections:
                 context = _request_context(request, request_id, correlation_id)
                 query = _page_query(request.query)
@@ -518,6 +829,53 @@ def _validate_extension_collection(collection: str) -> None:
 def _validate_command_name(command: str) -> None:
     if _COMMAND_PATTERN.fullmatch(command) is None:
         raise ValueError("command must use lowercase canonical segments separated by dots")
+
+
+def _validate_owner(owner: str) -> None:
+    if not owner.strip():
+        raise ValueError("Control Plane ownership label must be non-blank")
+
+
+def _module_dependency_order(
+    modules: Mapping[str, ControlPlaneModule],
+) -> tuple[str, ...]:
+    """Return deterministic dependency-first module order or reject a cycle."""
+
+    remaining = set(modules)
+    ordered: list[str] = []
+    while remaining:
+        ready = sorted(name for name in remaining if modules[name].requires.isdisjoint(remaining))
+        if not ready:
+            raise ValueError(f"Control Plane module dependency cycle: {sorted(remaining)!r}")
+        ordered.extend(ready)
+        remaining.difference_update(ready)
+    return tuple(ordered)
+
+
+def _claim(
+    claims: dict[Any, str],
+    key: Any,
+    owner: str,
+    *,
+    kind: str,
+) -> None:
+    existing_owner = claims.get(key)
+    if existing_owner is not None:
+        raise ValueError(
+            f"duplicate Control Plane {kind} ownership for {key!r}: "
+            f"{existing_owner!r} and {owner!r}"
+        )
+    claims[key] = owner
+
+
+def _route_key(method: str, path: str) -> tuple[str, str]:
+    normalized_method = method.upper().strip()
+    normalized_path = path.rstrip("/") or "/"
+    if not normalized_method:
+        raise ValueError("Control Plane route method must be non-blank")
+    if not normalized_path.startswith("/"):
+        raise ValueError("Control Plane route path must be absolute")
+    return normalized_method, normalized_path
 
 
 def _validate_resources(collection: str, resources: list[dict[str, JsonValue]]) -> None:
