@@ -243,8 +243,25 @@ class AsyncCoordinatorRepositoryAdapter:
         self,
         plan_id: str,
     ) -> tuple[PlanRuntimeState, tuple[StepCoordinationRecord, ...]]:
+        snapshot_reader = getattr(self._repository, "get_plan_snapshot", None)
+        if callable(snapshot_reader):
+            return await self._run(
+                lambda: cast(
+                    tuple[PlanRuntimeState, tuple[StepCoordinationRecord, ...]],
+                    snapshot_reader(plan_id),
+                ),
+                message="failed to read Coordination plan snapshot",
+            )
+
+        # Preserve the original synchronous repository compatibility seam. Current platform
+        # durable backends implement the optional atomic snapshot capability; older/custom
+        # repositories remain usable and their split reads still execute in one serialized
+        # offload operation instead of on the event loop.
         return await self._run(
-            lambda: self._repository.get_plan_snapshot(plan_id),
+            lambda: (
+                self._repository.get_plan(plan_id),
+                self._repository.list_step_records(plan_id),
+            ),
             message="failed to read Coordination plan snapshot",
         )
 
