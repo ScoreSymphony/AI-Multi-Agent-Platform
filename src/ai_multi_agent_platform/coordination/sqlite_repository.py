@@ -402,35 +402,23 @@ class SQLiteCoordinatorRepository:
             return state
 
     def get_plan(self, plan_id: str) -> PlanRuntimeState:
-        state, _records = self.get_plan_snapshot(plan_id)
-        return state
-
-    def get_plan_snapshot(
-        self,
-        plan_id: str,
-    ) -> tuple[PlanRuntimeState, tuple[StepCoordinationRecord, ...]]:
-        """Read canonical plan, Steps, and coordination records from one SQLite snapshot."""
-
         with self._connect() as connection:
-            connection.execute("BEGIN")
             row = connection.execute(
                 "SELECT plan_json, store_revision FROM coordinator_plans WHERE plan_id = ?",
                 (plan_id,),
             ).fetchone()
             if row is None:
                 raise ContractError(ErrorCode.NOT_FOUND, f"coordination plan {plan_id} not found")
-            step_rows = connection.execute(
-                "SELECT step_json, record_json FROM coordinator_steps "
-                "WHERE plan_id = ? ORDER BY step_id",
-                (plan_id,),
-            ).fetchall()
-            state = PlanRuntimeState(
-                plan=_plan_from_dict(_load(row[0])),
-                steps=tuple(_step_from_dict(_load(item[0])) for item in step_rows),
-                store_revision=int(row[1]),
+            steps = tuple(
+                _step_from_dict(_load(item[0]))
+                for item in connection.execute(
+                    "SELECT step_json FROM coordinator_steps WHERE plan_id = ? ORDER BY step_id",
+                    (plan_id,),
+                ).fetchall()
             )
-            records = tuple(_record_from_dict(_load(item[1])) for item in step_rows)
-            return state, records
+            return PlanRuntimeState(
+                plan=_plan_from_dict(_load(row[0])), steps=steps, store_revision=int(row[1])
+            )
 
     def get_step_record(self, step_id: str) -> StepCoordinationRecord:
         with self._connect() as connection:
@@ -442,8 +430,15 @@ class SQLiteCoordinatorRepository:
             return _record_from_dict(_load(row[0]))
 
     def list_step_records(self, plan_id: str) -> tuple[StepCoordinationRecord, ...]:
-        _state, records = self.get_plan_snapshot(plan_id)
-        return records
+        self.get_plan(plan_id)
+        with self._connect() as connection:
+            return tuple(
+                _record_from_dict(_load(row[0]))
+                for row in connection.execute(
+                    "SELECT record_json FROM coordinator_steps WHERE plan_id = ? ORDER BY step_id",
+                    (plan_id,),
+                ).fetchall()
+            )
 
     def list_active_plans(self) -> tuple[PlanRuntimeState, ...]:
         with self._connect() as connection:
