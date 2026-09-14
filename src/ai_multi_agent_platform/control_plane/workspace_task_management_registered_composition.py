@@ -79,6 +79,7 @@ class ControlPlane(_LinearControlPlane):
                         TASK_MANAGEMENT_BULK_UPDATE_COMMAND: _task_management_authorizer,
                     },
                     openapi_contributors=(_augment_task_management_module_openapi,),
+                    discover_as_extension=False,
                 ),
             ),
         )
