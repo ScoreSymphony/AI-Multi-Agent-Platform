@@ -22,6 +22,9 @@ from ai_multi_agent_platform.coordination.plan_step_coordinator import (
     DurablePlanStepCoordinator,
 )
 from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
+from ai_multi_agent_platform.coordination.sqlite_repository import (
+    SQLiteCoordinatorRepository as LegacySQLiteCoordinatorRepository,
+)
 from ai_multi_agent_platform.domain import OwnerRef, Plan, Step, new_id
 from ai_multi_agent_platform.persistence_offload import SharedPersistenceOffloadRegistry
 
@@ -280,6 +283,20 @@ def test_plan_snapshot_holds_serialization_boundary_across_all_reads() -> None:
         assert (await adapter.get_plan(plan.id)).store_revision == state.store_revision + 1
 
     asyncio.run(scenario())
+
+
+def test_legacy_sqlite_repository_remains_snapshot_compatible(tmp_path: Path) -> None:
+    repository = LegacySQLiteCoordinatorRepository(tmp_path / "legacy-coordination.sqlite3")
+    assert not hasattr(repository, "get_plan_snapshot")
+    plan, step, record = _plan_fixture()
+    repository.create_plan(plan, (step,), (record,))
+    adapter = AsyncCoordinatorRepositoryAdapter(repository)
+
+    state, records = asyncio.run(adapter.get_plan_snapshot(plan.id))
+
+    assert state.plan == plan
+    assert state.steps == (step,)
+    assert records == (record,)
 
 
 def test_sqlite_plan_snapshot_uses_one_repository_atomic_read(tmp_path: Path) -> None:
