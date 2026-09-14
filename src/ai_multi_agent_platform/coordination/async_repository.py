@@ -244,10 +244,7 @@ class AsyncCoordinatorRepositoryAdapter:
         plan_id: str,
     ) -> tuple[PlanRuntimeState, tuple[StepCoordinationRecord, ...]]:
         return await self._run(
-            lambda: (
-                self._repository.get_plan(plan_id),
-                self._repository.list_step_records(plan_id),
-            ),
+            lambda: self._repository.get_plan_snapshot(plan_id),
             message="failed to read Coordination plan snapshot",
         )
 
