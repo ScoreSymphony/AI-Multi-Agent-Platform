@@ -64,9 +64,9 @@ name = "Canonical Agent Handoffs"
 owners = ["handoffs"]
 role = "core"
 stability = "beta"
-public_surfaces = ["Handoff resources", "handoff create/consume commands", "handoff-to-ContextBundle runtime bridge"]
-docs = ["docs/runtime/AGENT_HANDOFFS.md", "docs/PLATFORM_CONFORMANCE.md"]
-compatibility = "Explicit Agent/AgentTeam work-transfer contracts are canonical runtime semantics without owning Task/Plan/Run progression; their public resource and command contracts may receive bounded non-patch changes with migration guidance."
+public_surfaces = ["Handoff resources", "handoff create/consume commands", "handoff-to-ContextBundle runtime bridge", "documented AsyncHandoffRepository and HandoffService.async_* Python runtime interfaces"]
+docs = ["docs/runtime/AGENT_HANDOFFS.md", "docs/runtime/HANDOFF_ASYNC_PERSISTENCE.md", "docs/PLATFORM_CONFORMANCE.md"]
+compatibility = "Explicit Agent/AgentTeam work-transfer and documented async runtime persistence interfaces are canonical Beta runtime semantics without owning Task/Plan/Run progression; their public resource, command and documented Python contracts may receive bounded non-patch changes with migration guidance."
 user_signaling = "documentation"
 
 [[feature]]

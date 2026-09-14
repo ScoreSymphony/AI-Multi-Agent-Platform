@@ -190,6 +190,7 @@ class ReferenceIncomingHandoffContextAdapter:
         self._durable = DurableConsumedHandoffContextAdapter(
             repository=handoffs.repository,
             agents=handoffs.runtime.agents,
+            runtime_repository=handoffs.service.runtime_repository,
         )
         self._kernel = kernel
 
@@ -204,9 +205,10 @@ class ReferenceIncomingHandoffContextAdapter:
             )
 
         has_dependencies = await self._ensure_dependency_handoffs(request, operation)
+        stored_handoffs = await self._handoffs.service.async_list_handoffs_for_step(request.step_id)
         incoming = tuple(
             handoff
-            for handoff in self._handoffs.service.list_handoffs_for_step(request.step_id)
+            for handoff in stored_handoffs
             if handoff.content.consumer_step_id == request.step_id
             and handoff.content.task_id == request.task_id
             and (request.plan_id is None or handoff.content.plan_id == request.plan_id)

@@ -130,7 +130,7 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `control-plane-v1` | shared HTTP `/api/v1` protocol/foundation + generated OpenAPI conventions | `control_plane` | Core | Stable |
 | `provider-contracts-v2` | provider/adapter contracts `2.0` | `contracts` | Core | Stable |
 | `agents-teams` | Agent and Agent Team public resources/behavior | `agents` | Core | Beta |
-| `agent-handoffs` | explicit Agent/AgentTeam work-transfer resources and commands | `handoffs` | Core | Beta |
+| `agent-handoffs` | explicit Agent/AgentTeam work-transfer resources/commands plus documented async Handoff runtime persistence Python interfaces | `handoffs` | Core | Beta |
 | `models-routing` | model/provider registry, routing and assignments | `models` | Core | Beta |
 | `capabilities-tools` | capability/tool declaration, discovery and invocation | `capabilities` | Core | Beta |
 | `execution-runtime` | executor/reference execution public contracts | `execution` | Core | Beta |
@@ -198,6 +198,8 @@ A generator may emit role/stability metadata for documentation or product signal
 The `cli-surface` classification applies to shared CLI invocation/profile/authentication/rendering/global-option conventions. A feature-specific command group keeps the stability declared by its owning feature; for example, `platform learning` remains Experimental rather than inheriting the generic CLI framework's Beta level.
 
 CLI commands are public only where documented as supported. Python objects are public only when the owning documentation or this registry explicitly claims them as a public contract. Internal importability is not a compatibility promise.
+
+For `agent-handoffs`, the documented `AsyncHandoffRepository`, `AsyncHandoffRepositoryAdapter` and `HandoffService.async_*` runtime interfaces are part of the Beta public Python surface described in `docs/runtime/HANDOFF_ASYNC_PERSISTENCE.md`; lower-level persistence/offload helpers remain implementation details unless separately documented.
 
 ## Product/UI signaling
 

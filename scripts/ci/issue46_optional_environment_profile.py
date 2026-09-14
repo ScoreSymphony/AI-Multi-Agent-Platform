@@ -55,7 +55,7 @@ _PROFILES: dict[str, OptionalEnvironmentProfile] = {
         deployment_profile="mcp-2025-11-25-client-streamable-http",
         distribution="mcp",
         component_name="mcp-python-sdk",
-        expected_version="2.1.1",
+        expected_version="2.2.0",
         pytest_node=(
             "tests/integration/mcp/test_sdk_transports.py::"
             "test_official_mcp_sdk_streamable_http_uses_exact_claimed_profile"
@@ -76,7 +76,7 @@ _PROFILES: dict[str, OptionalEnvironmentProfile] = {
         deployment_profile="litellm-pinned",
         distribution="litellm",
         component_name="litellm",
-        expected_version="1.99.0",
+        expected_version="1.100.1",
         pytest_node=(
             "tests/integration/upstreams/test_litellm_pinned.py::"
             "test_pinned_litellm_library_executes_through_platform_adapter"
