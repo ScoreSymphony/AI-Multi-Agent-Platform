@@ -79,6 +79,27 @@ def _augment_root_manifest(body: dict[str, JsonValue]) -> dict[str, JsonValue]:
     return manifest
 
 
+def _filter_extension_discovery(
+    control_plane: Any,
+    body: dict[str, JsonValue],
+) -> dict[str, JsonValue]:
+    """Keep legacy extension metadata separate from explicit canonical ownership."""
+
+    specification = deepcopy(body)
+    for key, attribute in (
+        ("x-registered-extension-collections", "extension_collections"),
+        ("x-registered-extension-commands", "extension_commands"),
+    ):
+        raw = specification.get(key)
+        if not isinstance(raw, list):
+            continue
+        existing = tuple(value for value in raw if isinstance(value, str))
+        discoverable = getattr(control_plane, attribute, existing)
+        allowed = set(discoverable) if isinstance(discoverable, tuple) else set(existing)
+        specification[key] = [value for value in existing if value in allowed]
+    return specification
+
+
 class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
     """Expose release metadata through an explicitly owned special route."""
 
@@ -100,15 +121,21 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
 
     async def handle(self, request: HTTPRequest) -> HTTPResponse:
         response = await super().handle(request)
-        if (
-            request.method == "GET"
-            and request.path.rstrip("/") == f"/api/{API_VERSION}"
-            and response.status == 200
-            and isinstance(response.body, dict)
-        ):
+        if response.status != 200 or not isinstance(response.body, dict):
+            return response
+        if request.method != "GET":
+            return response
+        normalized_path = request.path.rstrip("/")
+        if normalized_path == f"/api/{API_VERSION}":
             return HTTPResponse(
                 status=response.status,
                 body=_augment_root_manifest(response.body),
+                headers=dict(response.headers),
+            )
+        if normalized_path == f"/api/{API_VERSION}/openapi.json":
+            return HTTPResponse(
+                status=response.status,
+                body=_filter_extension_discovery(self._control_plane, response.body),
                 headers=dict(response.headers),
             )
         return response
