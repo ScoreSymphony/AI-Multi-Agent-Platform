@@ -46,7 +46,8 @@ class SharedPersistenceOffloadRegistry[OffloadT]:
         with self._lock:
             entry = self._entries.get(repository_id)
             if entry is not None:
-                entry.owners.append(self._owner_reference(repository_id, owner))
+                owner_reference = self._owner_reference(repository_id, owner)
+                entry.owners.append(owner_reference)
                 self._entries[repository_id] = entry
                 return entry.offload
 
