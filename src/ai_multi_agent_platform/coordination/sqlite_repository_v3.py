@@ -7,8 +7,9 @@ from datetime import datetime
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
 from .migrations import COORDINATOR_MIGRATION_REVISION, COORDINATOR_SCHEMA_VERSION
-from .models import PlanRuntimeState
+from .models import PlanRuntimeState, StepCoordinationRecord
 from .retirement import PlanRetirement
+from .sqlite_repository import _load, _plan_from_dict, _record_from_dict, _step_from_dict
 from .sqlite_repository_v2 import SQLiteCoordinatorRepository as _V2SQLiteCoordinatorRepository
 
 
@@ -95,6 +96,29 @@ class SQLiteCoordinatorRepository(_V2SQLiteCoordinatorRepository):
                     ("migration_revision", COORDINATOR_MIGRATION_REVISION),
                 ),
             )
+
+    def get_plan_snapshot(
+        self,
+        plan_id: str,
+    ) -> tuple[PlanRuntimeState, tuple[StepCoordinationRecord, ...]]:
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                "SELECT p.plan_json, p.store_revision, s.step_json, s.record_json "
+                "FROM coordinator_plans AS p "
+                "LEFT JOIN coordinator_steps AS s ON s.plan_id = p.plan_id "
+                "WHERE p.plan_id = ? ORDER BY s.step_id",
+                (plan_id,),
+            ).fetchall()
+        if not rows:
+            raise ContractError(ErrorCode.NOT_FOUND, f"coordination plan {plan_id} not found")
+        steps = tuple(_step_from_dict(_load(row[2])) for row in rows if row[2] is not None)
+        records = tuple(_record_from_dict(_load(row[3])) for row in rows if row[3] is not None)
+        state = PlanRuntimeState(
+            plan=_plan_from_dict(_load(rows[0][0])),
+            steps=steps,
+            store_revision=int(rows[0][1]),
+        )
+        return state, records
 
     def retire_plan(
         self,
