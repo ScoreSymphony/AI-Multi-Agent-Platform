@@ -64,6 +64,18 @@ class _OpaqueRepository:
         return getattr(self._inner, name)
 
 
+class _PreSnapshotRepository:
+    """Compatibility double for a repository implementing the original sync contract only."""
+
+    def __init__(self) -> None:
+        self._inner = InMemoryCoordinatorRepository()
+
+    def __getattr__(self, name: str):  # type: ignore[no-untyped-def]
+        if name == "get_plan_snapshot":
+            raise AttributeError(name)
+        return getattr(self._inner, name)
+
+
 class _BlockingSnapshotRepository(InMemoryCoordinatorRepository):
     def __init__(self) -> None:
         super().__init__()
@@ -285,9 +297,22 @@ def test_plan_snapshot_holds_serialization_boundary_across_all_reads() -> None:
     asyncio.run(scenario())
 
 
-def test_legacy_sqlite_repository_remains_snapshot_compatible(tmp_path: Path) -> None:
+def test_pre_snapshot_custom_repository_remains_compatible() -> None:
+    repository = _PreSnapshotRepository()
+    canonical = cast(CoordinatorRepository, repository)
+    plan, step, record = _plan_fixture()
+    canonical.create_plan(plan, (step,), (record,))
+    adapter = AsyncCoordinatorRepositoryAdapter(canonical)
+
+    state, records = asyncio.run(adapter.get_plan_snapshot(plan.id))
+
+    assert state.plan == plan
+    assert state.steps == (step,)
+    assert records == (record,)
+
+
+def test_legacy_sqlite_repository_has_atomic_snapshot_capability(tmp_path: Path) -> None:
     repository = LegacySQLiteCoordinatorRepository(tmp_path / "legacy-coordination.sqlite3")
-    assert not hasattr(repository, "get_plan_snapshot")
     plan, step, record = _plan_fixture()
     repository.create_plan(plan, (step,), (record,))
     adapter = AsyncCoordinatorRepositoryAdapter(repository)
