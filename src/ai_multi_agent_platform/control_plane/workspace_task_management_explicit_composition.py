@@ -34,10 +34,6 @@ from .task_management_api import (
     _task_page_query,
 )
 from .task_management_api import build_openapi as _build_task_management_openapi
-from .task_management_contract import (
-    TASK_MANAGEMENT_COMMANDS,
-    TASK_MANAGEMENT_UPDATE_COMMAND,
-)
 from .task_management_contract import ControlPlane as _TaskManagementAdapter
 from .task_management_contract import (
     _augment_openapi as _augment_task_management_openapi,
@@ -194,8 +190,6 @@ class ControlPlane(
         task_id: str,
         payload: dict[str, JsonValue] | None = None,
     ) -> dict[str, JsonValue]:
-        task = await self._kernel.get_task(task_id)
-        await self._authorize_for_task(context, "task:start", task_id, task)
         await self._task_management.require_eligible(task_id)
         return await super().start_task(context, task_id, payload)
 
@@ -205,8 +199,6 @@ class ControlPlane(
         task_id: str,
         payload: dict[str, JsonValue] | None = None,
     ) -> dict[str, JsonValue]:
-        task = await self._kernel.get_task(task_id)
-        await self._authorize_for_task(context, "task:retry", task_id, task)
         await self._task_management.require_eligible(task_id)
         return await super().retry_task(context, task_id, payload)
 
@@ -217,19 +209,7 @@ class ControlPlane(
         resource_ref: str,
         payload: dict[str, JsonValue] | None = None,
     ) -> dict[str, JsonValue]:
-        if command not in TASK_MANAGEMENT_COMMANDS:
-            return await super().execute_command(context, command, resource_ref, payload)
-        if context.idempotency_key is None:
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "Idempotency-Key is required for mutating commands",
-                details={"header": "Idempotency-Key"},
-            )
-        await self._authorize(context, command, resource_ref)
-        body = payload or {}
-        if command == TASK_MANAGEMENT_UPDATE_COMMAND:
-            return await self._update_management_command(context, resource_ref, body)
-        return await self._bulk_update_management_command(context, resource_ref, body)
+        return await super().execute_command(context, command, resource_ref, payload)
 
     async def _update_management_command(
         self,
@@ -237,12 +217,7 @@ class ControlPlane(
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        return await self._call_task_management_adapter(
-            _TaskManagementAdapter._update_management_command,
-            context,
-            resource_ref,
-            payload,
-        )
+        return await super()._update_management_command(context, resource_ref, payload)
 
     async def _bulk_update_management_command(
         self,
@@ -250,12 +225,7 @@ class ControlPlane(
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        return await self._call_task_management_adapter(
-            _TaskManagementAdapter._bulk_update_management_command,
-            context,
-            resource_ref,
-            payload,
-        )
+        return await super()._bulk_update_management_command(context, resource_ref, payload)
 
     async def _managed_task_resource(self, state: Any) -> dict[str, JsonValue]:
         return await self._call_task_management_adapter(
