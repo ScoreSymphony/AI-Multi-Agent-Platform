@@ -75,6 +75,7 @@ class ControlPlane(_CurrentControlPlane):
                         TASK_PROJECT_BULK_MOVE_COMMAND: _handler_owned_authorization,
                     },
                     openapi_contributors=(_augment_openapi,),
+                    discover_as_extension=False,
                 ),
             ),
         )
