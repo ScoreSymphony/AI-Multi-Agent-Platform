@@ -130,9 +130,9 @@ Only the upstream exception class name is retained in adapter diagnostics; raw e
 
 ## Optional dependency and version policy
 
-The library extra is pinned to `litellm==1.99.0` for this compatibility target. Core imports must remain valid without that package installed. The normal `dev` extra intentionally does not depend on LiteLLM.
+The library extra is pinned to `litellm==1.100.1` for this compatibility target. Core imports must remain valid without that package installed. The normal `dev` extra intentionally does not depend on LiteLLM.
 
-The repository records provenance in `upstream/litellm.yaml`. The reviewed upstream license states that content outside `enterprise/` is MIT while `enterprise/` has separate licensing. This integration neither copies nor depends on Enterprise source.
+The repository records provenance in `upstream/litellm.yaml`. The reviewed upstream `v1.100.1` license states that content outside `enterprise/` is MIT while `enterprise/` has separate licensing. This integration neither copies nor depends on Enterprise source. The pinned real-library integration test exercises `acompletion` through LiteLLM's supported `mock_response` path without a paid provider or external credential.
 
 Updates require an explicit version-change review and must rerun:
 
