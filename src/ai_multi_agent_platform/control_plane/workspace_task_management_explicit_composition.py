@@ -197,7 +197,7 @@ class ControlPlane(
         task = await self._kernel.get_task(task_id)
         await self._authorize_for_task(context, "task:start", task_id, task)
         await self._task_management.require_eligible(task_id)
-        return await _RunWorkspaceControlPlane.start_task(self, context, task_id, payload)
+        return await super().start_task(context, task_id, payload)
 
     async def retry_task(
         self,
@@ -208,7 +208,7 @@ class ControlPlane(
         task = await self._kernel.get_task(task_id)
         await self._authorize_for_task(context, "task:retry", task_id, task)
         await self._task_management.require_eligible(task_id)
-        return await _RunWorkspaceControlPlane.retry_task(self, context, task_id, payload)
+        return await super().retry_task(context, task_id, payload)
 
     async def execute_command(
         self,
