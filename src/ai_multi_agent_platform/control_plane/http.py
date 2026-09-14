@@ -25,6 +25,7 @@ from .models import (
 )
 from .openapi import build_openapi
 from .service import ControlPlane
+from .stream_preparation import prepare_stream_request
 
 
 @dataclass(frozen=True, slots=True)
@@ -495,7 +496,8 @@ class ControlPlaneASGI:
             stream_headers = dict(headers)
             stream_headers["x-request-id"] = request_id
             stream_headers["x-correlation-id"] = correlation_id
-            prepared = self._http.prepare_stream_request(
+            prepared = await prepare_stream_request(
+                self._http,
                 HTTPRequest(method="GET", path=path, headers=stream_headers, query=query),
                 request_id=request_id,
                 correlation_id=correlation_id,
