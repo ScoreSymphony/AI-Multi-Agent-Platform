@@ -2,11 +2,12 @@
 
 - **Project name:** Model Context Protocol Python SDK
 - **Canonical upstream repository:** https://github.com/modelcontextprotocol/python-sdk
-- **Adopted version:** 2.1.1
+- **Adopted version:** 2.2.0
+- **Pinned tag/commit:** `v2.2.0` / `9972c21aa42054fb1450c5fc614761ed11847ec6`
 - **Integration category:** optional adapter/library dependency
 - **Platform boundary:** `ai_multi_agent_platform.adapters.mcp_sdk`
 - **Reviewer:** ScoreSymphony
-- **Review date:** 2026-09-02
+- **Review date:** 2026-09-14
 - **Related issue:** #12
 
 ## Decision
@@ -18,15 +19,15 @@ The SDK is not a canonical platform dependency. Capability identity, schemas, po
 ## Version and provenance
 
 - [x] Canonical upstream verified as `modelcontextprotocol/python-sdk`.
-- [x] Version `2.1.1` is the latest stable release at review time (released 2026-08-25).
-- [x] Production dependency is pinned exactly as `mcp==2.1.1` in the optional `mcp` extra.
+- [x] Tag `v2.2.0` resolves to commit `9972c21aa42054fb1450c5fc614761ed11847ec6`.
+- [x] Production dependency is pinned exactly as `mcp==2.2.0` in the optional `mcp` extra.
 - [x] Development/CI installs the same exact version so integration drift is visible.
 - [x] Upstream package requires Python >=3.10; the platform requires Python >=3.12.
 - [x] Upstream classifies the package as production/stable.
 
 ## License review
 
-The SDK is MIT licensed. No SDK source is copied, vendored or forked into this repository.
+The SDK at `v2.2.0` is MIT licensed. No SDK source is copied, vendored or forked into this repository.
 
 The material dependency set resolved/reviewed for the SDK is permissively licensed. The reviewed licenses include MIT, BSD-3-Clause, Apache-2.0 and PSF-2.0 families. Representative direct dependencies include:
 
@@ -54,6 +55,8 @@ The official SDK supplies the two transports required by #12 without making eith
 - Streamable HTTP connections for deployed MCP servers.
 
 The adapter uses the SDK's high-level `Client` for initialization, tool discovery and tool invocation. It deliberately does not rely on the legacy/deprecated MCP ping request for health; successful transport connection and protocol negotiation are used instead.
+
+The 2.2.0 review also accounts for the upstream behavior changes relevant to this boundary: HTTP redirects are constrained to the endpoint origin (with same-host HTTP-to-HTTPS upgrade allowed), legacy stateful Streamable HTTP sessions gain idle/session limits on the server side, and OAuth metadata validation is stricter. The platform's current claimed client/tool Streamable-HTTP profile remains compatible under the retained official protocol and platform integration tests.
 
 ## Architecture fit
 
@@ -87,7 +90,7 @@ Tool arguments and returned output are not automatically copied into the default
 
 Removal steps:
 
-1. remove `mcp==2.1.1` from the optional and development dependency sets;
+1. remove `mcp==2.2.0` from the optional and development dependency sets;
 2. remove or replace `adapters/mcp_sdk.py`;
 3. retain `adapters/mcp.py` if another implementation still satisfies `MCPClient`;
 4. run native/core architecture tests to verify MCP remains optional.
@@ -99,6 +102,7 @@ No persisted-data migration is required because canonical audit events and capab
 - [x] Real stdio server fixture exists using the official SDK.
 - [x] Integration test launches the stdio server and invokes its tool through the canonical registry/invoker path.
 - [x] Streamable HTTP is supported by the concrete client through endpoint configuration.
+- [x] Official `2025-11-25` client/tool Streamable-HTTP protocol conformance passes with SDK 2.2.0.
 - [x] Ambiguous endpoint+command configurations are rejected.
 - [x] MCP output schemas are projected into canonical capability schemas.
 - [ ] Final repository CI is green on the merge-ready PR head.
