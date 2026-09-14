@@ -4,16 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from .http import HTTPRequest, HTTPResponse
-
 
 async def prepare_stream_request(
     http: Any,
-    request: HTTPRequest,
+    request: Any,
     *,
     request_id: str,
     correlation_id: str,
-) -> HTTPRequest | HTTPResponse:
+) -> Any:
     """Prefer an awaitable stream preflight while preserving synchronous test seams."""
 
     prepare_async = getattr(http, "async_prepare_stream_request", None)
