@@ -8,9 +8,9 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Protocol, TypeVar
-from weakref import WeakKeyDictionary
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.persistence_offload import SharedPersistenceOffloadRegistry
 
 from .models import AgentHandoff, HandoffConsumption
 from .repository import HandoffRepository
@@ -105,21 +105,21 @@ class HandoffPersistenceOffload:
             self._capacity.release()
 
 
-_SHARED_HANDOFF_OFFLOADS: WeakKeyDictionary[object, HandoffPersistenceOffload] = WeakKeyDictionary()
-_SHARED_HANDOFF_OFFLOADS_LOCK = threading.Lock()
+_SHARED_HANDOFF_OFFLOADS = SharedPersistenceOffloadRegistry[HandoffPersistenceOffload]()
 
 
 def _handoff_offload(
     repository: HandoffRepository,
     requested: HandoffPersistenceOffload | None,
+    *,
+    owner: object,
 ) -> HandoffPersistenceOffload:
-    with _SHARED_HANDOFF_OFFLOADS_LOCK:
-        existing = _SHARED_HANDOFF_OFFLOADS.get(repository)
-        if existing is not None:
-            return existing
-        resolved = requested or HandoffPersistenceOffload()
-        _SHARED_HANDOFF_OFFLOADS[repository] = resolved
-        return resolved
+    return _SHARED_HANDOFF_OFFLOADS.resolve(
+        repository,
+        owner=owner,
+        requested=requested,
+        factory=HandoffPersistenceOffload,
+    )
 
 
 async def _await_persistence_boundary[T](worker: asyncio.Future[T]) -> T:
@@ -155,7 +155,7 @@ class AsyncHandoffRepositoryAdapter:
         offload: HandoffPersistenceOffload | None = None,
     ) -> None:
         self._repository = repository
-        self._offload = _handoff_offload(repository, offload)
+        self._offload = _handoff_offload(repository, offload, owner=self)
 
     @property
     def offload(self) -> HandoffPersistenceOffload:

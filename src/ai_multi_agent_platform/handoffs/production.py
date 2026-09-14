@@ -58,7 +58,7 @@ from ai_multi_agent_platform.security import (
 from ai_multi_agent_platform.skills import SkillRepository
 from ai_multi_agent_platform.verification import VerificationEvidenceResolver
 
-from .async_repository import runtime_handoff_repository
+from .async_repository import AsyncHandoffRepository, runtime_handoff_repository
 from .context import handoff_context_candidate
 from .coordination import CoordinatedHandoffService
 from .models import (
@@ -409,10 +409,14 @@ class DurableConsumedHandoffContextAdapter(ContextSourceAdapter):
 
     repository: HandoffRepository
     agents: AgentRepository
+    runtime_repository: AsyncHandoffRepository | None = None
     adapter_id: str = "canonical-agent-handoff-durable"
 
     async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
-        runtime_repository = runtime_handoff_repository(self.repository)
+        runtime_repository = runtime_handoff_repository(
+            self.repository,
+            runtime_repository=self.runtime_repository,
+        )
         candidates: list[ContextCandidate] = []
         consumptions = await runtime_repository.list_consumptions_for_run(request.run_id)
         for consumption in consumptions:
@@ -633,7 +637,11 @@ class ProductionHandoffRuntime:
         )
         execution_agent, team_revision = self._execution_identity(consumer, consumer_agent)
         handoff = runtime_context.handoff
-        durable_adapter = DurableConsumedHandoffContextAdapter(self.repository, self.agents)
+        durable_adapter = DurableConsumedHandoffContextAdapter(
+            self.repository,
+            self.agents,
+            runtime_repository=self.runtime_repository,
+        )
         bundle = await self.context_assembly.assemble(
             ContextAssemblyRequest(
                 task_id=handoff.task_id,
