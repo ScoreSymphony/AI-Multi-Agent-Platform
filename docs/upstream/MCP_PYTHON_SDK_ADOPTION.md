@@ -10,6 +10,8 @@
 - **Review date:** 2026-09-14
 - **Related issue:** #12
 
+This review was refreshed for the grouped dependency update in PR #1004.
+
 ## Decision
 
 **Approved** as an optional implementation of the platform-owned `MCPClient` boundary.
