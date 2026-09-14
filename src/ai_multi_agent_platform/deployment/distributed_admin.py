@@ -24,6 +24,14 @@ from ai_multi_agent_platform.security import (
     ResourceType,
     StoredCredential,
 )
+from ai_multi_agent_platform.security.async_authorization_policy import (
+    AsyncAuthorizationPolicyService,
+    runtime_authorization_policy_service,
+)
+from ai_multi_agent_platform.security.async_worker_credentials import (
+    AsyncWorkerCredentialService,
+    runtime_worker_credential_service,
+)
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
 
 from .advanced_profiles import AdvancedDeploymentProfile, DeploymentNode
@@ -46,10 +54,21 @@ class DistributedWorkerAdmin:
         profile: AdvancedDeploymentProfile,
         authentication: LocalAuthenticationService,
         authorization: SqliteLocalAuthorizationProvider,
+        *,
+        runtime_credentials: AsyncWorkerCredentialService | None = None,
+        runtime_authorization_policies: AsyncAuthorizationPolicyService | None = None,
     ) -> None:
         self._profile = profile
         self._authentication = authentication
         self._authorization = authorization
+        self._runtime_credentials = runtime_worker_credential_service(
+            authentication,
+            runtime_service=runtime_credentials,
+        )
+        self._runtime_authorization_policies = runtime_authorization_policy_service(
+            authorization,
+            runtime_service=runtime_authorization_policies,
+        )
 
     async def provision(
         self,
@@ -61,10 +80,10 @@ class DistributedWorkerAdmin:
         node = self._reporter_node(resource_ref)
         purpose = _optional_string(payload, "purpose") or "distributed Worker authentication"
         _only_keys(payload, {"purpose"})
-        self._ensure_worker_policy(resource_ref)
+        await self._ensure_worker_policy(resource_ref)
 
         now = datetime.now(UTC)
-        active = self._active_worker_credentials(resource_ref, now=now)
+        active = await self._active_worker_credentials(resource_ref, now=now)
         if active:
             return {
                 "id": resource_ref,
@@ -75,7 +94,7 @@ class DistributedWorkerAdmin:
                 "secret_display": "not_recoverable",
             }
 
-        issued = self._authentication.create_worker_credential(
+        issued = await self._runtime_credentials.create_worker_credential(
             resource_ref,
             purpose=purpose,
             scope=self._credential_scope(node),
@@ -103,9 +122,9 @@ class DistributedWorkerAdmin:
         _only_keys(payload, {"credential_id", "purpose"})
         credential_id = _required_string(payload, "credential_id")
         purpose = _optional_string(payload, "purpose")
-        self._ensure_worker_policy(resource_ref)
+        await self._ensure_worker_policy(resource_ref)
         try:
-            rotation = self._authentication.rotate_worker_credential(
+            rotation = await self._runtime_credentials.rotate_worker_credential(
                 resource_ref,
                 credential_id,
                 purpose=purpose,
@@ -157,10 +176,8 @@ class DistributedWorkerAdmin:
             ),
         )
 
-    def _ensure_worker_policy(self, reporter_id: str) -> None:
-        if self._authorization.has_policy(reporter_id):
-            return
-        self._authorization.register(
+    async def _ensure_worker_policy(self, reporter_id: str) -> None:
+        await self._runtime_authorization_policies.ensure_registered(
             LocalPrincipalPolicy(
                 principal_ref=reporter_id,
                 actor_types=frozenset({ActorType.WORKER}),
@@ -169,7 +186,7 @@ class DistributedWorkerAdmin:
             )
         )
 
-    def _active_worker_credentials(
+    async def _active_worker_credentials(
         self,
         worker_id: str,
         *,
@@ -177,7 +194,7 @@ class DistributedWorkerAdmin:
     ) -> tuple[StoredCredential, ...]:
         return tuple(
             credential
-            for credential in self._authentication.list_credentials(worker_id)
+            for credential in await self._runtime_credentials.list_credentials(worker_id)
             if credential.kind is CredentialKind.WORKER and credential.active(now=now)
         )
 
@@ -188,10 +205,18 @@ def register_distributed_worker_admin(
     profile: AdvancedDeploymentProfile,
     authentication: LocalAuthenticationService,
     authorization: SqliteLocalAuthorizationProvider,
+    runtime_credentials: AsyncWorkerCredentialService | None = None,
+    runtime_authorization_policies: AsyncAuthorizationPolicyService | None = None,
 ) -> DistributedWorkerAdmin:
     """Register the profile-bound operator credential lifecycle on the current Control Plane."""
 
-    admin = DistributedWorkerAdmin(profile, authentication, authorization)
+    admin = DistributedWorkerAdmin(
+        profile,
+        authentication,
+        authorization,
+        runtime_credentials=runtime_credentials,
+        runtime_authorization_policies=runtime_authorization_policies,
+    )
     control_plane.register_command("worker.provision", admin.provision)
     control_plane.register_command("worker.rotate-credential", admin.rotate)
     return admin
