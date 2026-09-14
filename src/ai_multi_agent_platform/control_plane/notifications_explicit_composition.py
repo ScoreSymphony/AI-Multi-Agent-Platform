@@ -93,6 +93,7 @@ class ControlPlane(_NotificationImplementationControlPlane):
                             handler=_notification_stream_transport_route,
                         ),
                     ),
+                    discover_as_extension=False,
                 ),
             ),
         )
