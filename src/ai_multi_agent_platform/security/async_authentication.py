@@ -419,21 +419,22 @@ class AsyncAuthenticationServiceAdapter:
         scope: CredentialScope | None = None,
     ) -> IssuedCredential:
         if scope is None:
-            operation = lambda: self._service.create_personal_access_token(
-                user_id,
-                purpose=purpose,
-                expires_at=expires_at,
+            return await self._run(
+                lambda: self._service.create_personal_access_token(
+                    user_id,
+                    purpose=purpose,
+                    expires_at=expires_at,
+                ),
+                message="failed to persist personal access token",
             )
-        else:
-            scoped = cast(_ScopedAuthenticationService, self._service)
-            operation = lambda: scoped.create_personal_access_token(
+        scoped = cast(_ScopedAuthenticationService, self._service)
+        return await self._run(
+            lambda: scoped.create_personal_access_token(
                 user_id,
                 purpose=purpose,
                 expires_at=expires_at,
                 scope=scope,
-            )
-        return await self._run(
-            operation,
+            ),
             message="failed to persist personal access token",
         )
 
