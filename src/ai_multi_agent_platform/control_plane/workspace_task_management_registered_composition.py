@@ -13,7 +13,6 @@ from typing import Any
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-from .authorization_hardening import AuthorizationBoundaryHardeningMixin
 from .extensions import ControlPlaneModule, _reject_private_payload, _validate_command_name
 from .models import RequestContext
 from .module_registry import install_control_plane_modules
@@ -135,8 +134,7 @@ class ControlPlane(_LinearControlPlane):
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        return await AuthorizationBoundaryHardeningMixin._update_management_command(
-            self,
+        return await self._update_management_command(
             context,
             resource_ref,
             payload,
@@ -148,8 +146,7 @@ class ControlPlane(_LinearControlPlane):
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        return await AuthorizationBoundaryHardeningMixin._bulk_update_management_command(
-            self,
+        return await self._bulk_update_management_command(
             context,
             resource_ref,
             payload,
