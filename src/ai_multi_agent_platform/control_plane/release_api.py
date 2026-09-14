@@ -73,6 +73,12 @@ def _install_release_status_module(
     return operator
 
 
+def _augment_root_manifest(body: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    manifest = deepcopy(body)
+    manifest["release_status"] = RELEASE_STATUS_PATH
+    return manifest
+
+
 class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
     """Expose release metadata through an explicitly owned special route."""
 
@@ -100,11 +106,9 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
             and response.status == 200
             and isinstance(response.body, dict)
         ):
-            body = deepcopy(response.body)
-            body["release_status"] = RELEASE_STATUS_PATH
             return HTTPResponse(
                 status=response.status,
-                body=body,
+                body=_augment_root_manifest(response.body),
                 headers=dict(response.headers),
             )
         return response
