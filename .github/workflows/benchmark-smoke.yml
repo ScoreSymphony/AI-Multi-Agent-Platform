@@ -514,7 +514,7 @@ jobs:
           PY
       - name: Upload HA failover evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-ha-failover-benchmark
           path: artifacts/benchmarks/pr-ha-failover
@@ -575,7 +575,7 @@ jobs:
           PY
       - name: Upload heterogeneous placement evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-heterogeneous-placement-benchmark
           path: artifacts/benchmarks/pr-heterogeneous-placement
