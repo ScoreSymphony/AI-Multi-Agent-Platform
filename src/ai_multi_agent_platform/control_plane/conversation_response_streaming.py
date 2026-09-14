@@ -36,6 +36,7 @@ from .http import (
     _send_sse_error,
 )
 from .models import API_VERSION, APIException, RequestContext, api_exception_from_contract
+from .stream_preparation import prepare_stream_request
 
 CONVERSATION_RESPONSE_STREAM_SUFFIX = ("response", "stream")
 
@@ -287,7 +288,8 @@ class ConversationResponseASGI:
         correlation_id = headers.get("x-correlation-id") or request_id
         started = False
         try:
-            prepared = self._http.prepare_stream_request(
+            prepared = await prepare_stream_request(
+                self._http,
                 HTTPRequest(method="POST", path=path, headers=headers),
                 request_id=request_id,
                 correlation_id=correlation_id,
