@@ -173,6 +173,10 @@ class ControlPlaneModule:
     only for commands owned by the same module. ``command_observers`` run after a
     successful, privacy-validated command result and are intended for derived audit or
     projection side effects, not for command ownership or dispatch.
+
+    ``discover_as_extension`` separates explicit runtime ownership from the legacy
+    extension-discovery contract. Canonical modules that have dedicated API metadata
+    may remain fully owned/dispatchable without being advertised as generic extensions.
     """
 
     name: str
@@ -183,6 +187,7 @@ class ControlPlaneModule:
     routes: tuple[ControlPlaneRoute, ...] = ()
     openapi_contributors: tuple[OpenAPIContributor, ...] = ()
     requires: frozenset[str] = frozenset()
+    discover_as_extension: bool = True
 
     def __post_init__(self) -> None:
         if _MODULE_PATTERN.fullmatch(self.name) is None:
@@ -292,6 +297,26 @@ class ControlPlane(BaseControlPlane):
         return tuple(sorted(self._command_handlers))
 
     @property
+    def extension_collections(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                collection
+                for collection, owner in self._resource_owners.items()
+                if self._owner_is_extension_discoverable(owner)
+            )
+        )
+
+    @property
+    def extension_commands(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                command
+                for command, owner in self._command_owners.items()
+                if self._owner_is_extension_discoverable(owner)
+            )
+        )
+
+    @property
     def registered_modules(self) -> tuple[str, ...]:
         return tuple(sorted(self._registered_modules))
 
@@ -307,6 +332,12 @@ class ControlPlane(BaseControlPlane):
 
     def route_owner(self, method: str, path: str) -> str | None:
         return self._route_owners.get(_route_key(method, path))
+
+    def _owner_is_extension_discoverable(self, owner: str) -> bool:
+        if owner in {"constructor", "manual"}:
+            return True
+        module = self._registered_modules.get(owner)
+        return module is None or module.discover_as_extension
 
     def register_resource_service(
         self,
@@ -508,26 +539,40 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
         try:
             version, relative = _split_version(request.path)
             _require_supported_version(version)
+            registered_collections = self._extended_control_plane.registered_collections
+            registered_commands = self._extended_control_plane.registered_commands
+            extension_collections = getattr(
+                self._extended_control_plane,
+                "extension_collections",
+                registered_collections,
+            )
+            extension_commands = getattr(
+                self._extended_control_plane,
+                "extension_commands",
+                registered_commands,
+            )
 
             if request.method == "GET" and relative == "/openapi.json":
                 specification = build_openapi(
-                    extension_collections=self._extended_control_plane.registered_collections,
-                    extension_commands=self._extended_control_plane.registered_commands,
+                    extension_collections=extension_collections,
+                    extension_commands=extension_commands,
                 )
-                specification = self._extended_control_plane.apply_openapi_contributions(
-                    specification
+                contributor = getattr(
+                    self._extended_control_plane,
+                    "apply_openapi_contributions",
+                    None,
                 )
+                if callable(contributor):
+                    specification = contributor(specification)
                 return self._response(200, specification, request_id, correlation_id)
 
             if request.method == "GET" and relative in {"", "/"}:
                 manifest_resources: list[JsonValue] = [
                     *PLATFORM_COLLECTIONS,
-                    *self._extended_control_plane.registered_collections,
+                    *extension_collections,
                     "timeline",
                 ]
-                manifest_commands: list[JsonValue] = [
-                    command for command in self._extended_control_plane.registered_commands
-                ]
+                manifest_commands: list[JsonValue] = [command for command in extension_commands]
                 return self._response(
                     200,
                     {
@@ -541,7 +586,14 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                     correlation_id,
                 )
 
-            route_response = await self._extended_control_plane.dispatch_registered_route(request)
+            route_response: HTTPResponse | None = None
+            route_dispatcher = getattr(
+                self._extended_control_plane,
+                "dispatch_registered_route",
+                None,
+            )
+            if callable(route_dispatcher):
+                route_response = await route_dispatcher(request)
             if route_response is not None:
                 headers = dict(route_response.headers)
                 headers.setdefault("X-Request-Id", request_id)
@@ -553,7 +605,6 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                 )
 
             segments = [segment for segment in relative.split("/") if segment]
-            registered_collections = self._extended_control_plane.registered_collections
             if segments and segments[0] in registered_collections:
                 context = _request_context(request, request_id, correlation_id)
                 query = _page_query(request.query)
