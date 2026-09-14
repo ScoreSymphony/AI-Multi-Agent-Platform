@@ -37,6 +37,7 @@ from .http import ControlPlaneASGI as _BaseControlPlaneASGI
 from .http import HTTPRequest, HTTPResponse, _request_context
 from .models import API_VERSION, APIException, PageQuery, RequestContext, paginate
 from .service import _payload_digest
+from .stream_preparation import prepare_stream_request
 from .terminal_session_contract import (
     TerminalSessionASGI,
     terminal_command_handlers,
@@ -459,7 +460,8 @@ class _PreparedTerminalStreamASGI:
         )
         request_id = headers.get("x-request-id") or "terminal-websocket"
         correlation_id = headers.get("x-correlation-id") or request_id
-        prepared = self._http.prepare_stream_request(
+        prepared = await prepare_stream_request(
+            self._http,
             HTTPRequest(method="GET", path=path, headers=headers, query=query),
             request_id=request_id,
             correlation_id=correlation_id,
