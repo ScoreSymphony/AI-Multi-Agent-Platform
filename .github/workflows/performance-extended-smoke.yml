@@ -528,7 +528,7 @@ jobs:
           PY
       - name: Upload persistence fault evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-persistence-fault-benchmark
           path: artifacts/benchmarks/pr-persistence-fault
