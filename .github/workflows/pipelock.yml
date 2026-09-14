@@ -47,7 +47,7 @@ jobs:
           path: .candidate/pipelock
           persist-credentials: false
       - name: Set up Go from pinned upstream module
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: .candidate/pipelock/go.mod
           cache-dependency-path: .candidate/pipelock/go.sum
@@ -105,7 +105,7 @@ jobs:
           path: .candidate/pipelock
           persist-credentials: false
       - name: Set up Go from pinned upstream module
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: .candidate/pipelock/go.mod
           cache-dependency-path: .candidate/pipelock/go.sum
@@ -176,7 +176,7 @@ jobs:
           path: .candidate/pipelock
           persist-credentials: false
       - name: Set up Go from pinned upstream module
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: .candidate/pipelock/go.mod
           cache-dependency-path: .candidate/pipelock/go.sum
@@ -233,7 +233,7 @@ jobs:
           path: .candidate/pipelock
           persist-credentials: false
       - name: Set up Go from pinned upstream module
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: .candidate/pipelock/go.mod
           cache-dependency-path: .candidate/pipelock/go.sum
@@ -298,7 +298,7 @@ jobs:
           path: .candidate/pipelock
           persist-credentials: false
       - name: Set up Go from pinned upstream module
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: .candidate/pipelock/go.mod
           cache-dependency-path: .candidate/pipelock/go.sum
@@ -356,7 +356,7 @@ jobs:
           path: .candidate/pipelock
           persist-credentials: false
       - name: Set up Go from pinned upstream module
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: .candidate/pipelock/go.mod
           cache-dependency-path: .candidate/pipelock/go.sum
@@ -446,7 +446,7 @@ jobs:
           path: .candidate/pipelock
           persist-credentials: false
       - name: Set up Go from pinned upstream module
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: .candidate/pipelock/go.mod
           cache-dependency-path: .candidate/pipelock/go.sum
