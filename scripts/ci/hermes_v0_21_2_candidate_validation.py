@@ -1,4 +1,4 @@
-"""Revision-bound Hermes Agent v0.21.2 candidate validation for issue #959.
+"""Run revision-bound Hermes Agent v0.21.2 candidate validation.
 
 This runner intentionally does not mutate or depend on the accepted Hermes pin. It
 validates the candidate first; promotion of HERMES_PINNED_REVISION happens only after
@@ -28,10 +28,10 @@ def _candidate_checkout() -> Path:
     upstream_value = os.getenv("HERMES_UPSTREAM_DIR")
     declared_revision = os.getenv("HERMES_UPSTREAM_REVISION")
     if not upstream_value:
-        raise RuntimeError("HERMES_UPSTREAM_DIR is required for the #959 candidate gate")
+        raise RuntimeError("HERMES_UPSTREAM_DIR is required for the Hermes candidate gate")
     if declared_revision != HERMES_V0_21_2_REVISION:
         raise RuntimeError(
-            "#959 candidate gate requires exact Hermes revision "
+            "Hermes candidate gate requires exact revision "
             f"{HERMES_V0_21_2_REVISION}; got {declared_revision!r}"
         )
 
@@ -49,7 +49,7 @@ def _candidate_checkout() -> Path:
     actual_revision = completed.stdout.strip()
     if actual_revision != HERMES_V0_21_2_REVISION:
         raise RuntimeError(
-            "#959 candidate checkout drifted: "
+            "Hermes candidate checkout drifted: "
             f"expected {HERMES_V0_21_2_REVISION}, got {actual_revision}"
         )
     return upstream
@@ -77,7 +77,7 @@ def main() -> int:
     # Upstream's own release-specific state.db regressions. These are run from the
     # exact source checkout so the evidence is tied to the tagged implementation,
     # not merely to release-note claims. The write-lock patience suite supplies the
-    # explicit legitimate writer-vs-writer contention case required by #959.
+    # explicit legitimate writer-vs-writer contention case required by this gate.
     upstream_status = _run(
         "tests/hermes_state/test_corrupt_row_robustness.py",
         "tests/hermes_state/test_read_path_transient_ioerr.py",

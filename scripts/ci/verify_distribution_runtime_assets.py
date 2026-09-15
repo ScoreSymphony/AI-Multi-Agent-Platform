@@ -92,11 +92,11 @@ def venv_python(venv_dir: Path) -> Path:
 
 
 def verify_installed_wheel(path: Path, root: Path) -> None:
-    smoke_script = root / "scripts/ci/issue725_installed_resource_smoke.py"
+    smoke_script = root / "scripts/ci/installed_runtime_resources_smoke.py"
     if not smoke_script.is_file():
         raise RuntimeError(f"missing installed-resource smoke script: {smoke_script}")
 
-    with tempfile.TemporaryDirectory(prefix="issue725-wheel-smoke-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="runtime-assets-wheel-smoke-") as temporary:
         temporary_root = Path(temporary)
         venv_dir = temporary_root / "venv"
         venv.EnvBuilder(with_pip=True).create(venv_dir)
