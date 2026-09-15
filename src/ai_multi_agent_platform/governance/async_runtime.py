@@ -349,18 +349,32 @@ class AsyncGovernanceRuntime:
                 message="failed to persist governance approval resolution audit",
             )
 
-        reserved = await self._run(
-            lambda: self.repository.reserve_conversion(
-                existing
-                or TaskConversion(
-                    specification_id=specification.id,
-                    specification_revision=specification.revision,
-                    specification_digest=specification.content_digest,
-                    proposal_id=proposal_id,
-                    task_id=new_id("task"),
-                    approval_id=approval_id,
+        conversion = existing or TaskConversion(
+            specification_id=specification.id,
+            specification_revision=specification.revision,
+            specification_digest=specification.content_digest,
+            proposal_id=proposal_id,
+            task_id=new_id("task"),
+            approval_id=approval_id,
+        )
+
+        def reserve_current_conversion() -> TaskConversion:
+            current = self.repository.get_specification(specification.id)
+            if (
+                current.revision != specification.revision
+                or current.content_digest != specification.content_digest
+            ):
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "Specification changed before its Task conversion could be reserved",
                 )
-            ),
+            return self.repository.reserve_conversion(conversion)
+
+        # Current-spec validation and reservation share one Governance persistence offload.
+        # Concurrent async revisions therefore cannot slip between the final validation and the
+        # durable reservation and bind a Task to stale specification content.
+        reserved = await self._run(
+            reserve_current_conversion,
             message="failed to reserve governance Task conversion",
         )
         task_title = proposal.title if proposal is not None else specification.goal[:120]
