@@ -184,9 +184,7 @@ async def _budget_resource(
         "updated_at": policy.updated_at.isoformat(),
         "limits": [_limit_resource(limit) for limit in policy.limits],
         "dimensions": [_dimension_resource(item) for item in snapshot.dimensions],
-        "warnings": [
-            item.limit.dimension.value for item in snapshot.dimensions if item.warning
-        ],
+        "warnings": [item.limit.dimension.value for item in snapshot.dimensions if item.warning],
         "blocking_dimensions": [
             item.limit.dimension.value for item in snapshot.dimensions if item.exhausted
         ],
@@ -255,7 +253,9 @@ def _limits(payload: Mapping[str, JsonValue]) -> tuple[TaskBudgetLimit, ...]:
                 _optional_string(item.get("unavailable_policy"), "unavailable_policy") or "block"
             )
         except ValueError as exc:
-            raise ContractError(ErrorCode.INVALID_REQUEST, f"invalid budget limit enum: {exc}") from exc
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, f"invalid budget limit enum: {exc}"
+            ) from exc
         limits.append(
             TaskBudgetLimit(
                 dimension=dimension,
