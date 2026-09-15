@@ -1,7 +1,12 @@
 """Canonical evidence-backed Decision Records (#598)."""
 
 from .async_persistence import DecisionPersistenceOffload, decision_persistence_offload
-from .async_runtime import AsyncDecisionRuntime, AsyncDecisionService, as_async_decision_service
+from .async_runtime import (
+    ASYNC_DECISION_SERVICE_MARKER,
+    AsyncDecisionRuntime,
+    AsyncDecisionService,
+    as_async_decision_service,
+)
 from .control_plane import (
     DECISION_COLLECTION,
     DECISION_COMMANDS,
@@ -33,6 +38,7 @@ from .repository import DecisionRepository, SqliteDecisionRepository
 from .service import DecisionReferenceValidator, DecisionService
 
 __all__ = [
+    "ASYNC_DECISION_SERVICE_MARKER",
     "DECISION_BUNDLE_SCHEMA_VERSION",
     "DECISION_COLLECTION",
     "DECISION_COMMANDS",
