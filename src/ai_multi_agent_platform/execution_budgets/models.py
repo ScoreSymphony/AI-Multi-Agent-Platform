@@ -57,6 +57,7 @@ class BudgetAdmissionOutcome(StrEnum):
     ALLOWED = "allowed"
     WARNING = "warning"
     BLOCKED = "blocked"
+    EXHAUSTED_DURING_EXECUTION = "exhausted_during_execution"
     APPROVAL_REQUIRED = "approval_required"
     METRIC_UNAVAILABLE = "metric_unavailable"
 
@@ -215,6 +216,12 @@ class BudgetDimensionSnapshot:
     @property
     def exhausted(self) -> bool:
         return self.consumed + self.reserved >= self.limit.limit
+
+    @property
+    def overrun(self) -> bool:
+        """Whether trustworthy consumed usage itself is already beyond the configured limit."""
+
+        return self.consumed > self.limit.limit
 
 
 @dataclass(frozen=True, slots=True)
