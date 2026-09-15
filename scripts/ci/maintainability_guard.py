@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import tomllib
 from collections.abc import Iterable, Mapping, Sequence
@@ -124,6 +125,11 @@ def _exemption_reason(
 ) -> str | None:
     exemption = config.exemptions.get((kind, path, symbol))
     return exemption.reason if exemption is not None else None
+
+
+def _ast_fingerprint(node: ast.AST) -> str:
+    structure = ast.dump(node, annotate_fields=True, include_attributes=False)
+    return hashlib.sha256(structure.encode("utf-8")).hexdigest()
 
 
 class _BranchComplexityVisitor(ast.NodeVisitor):
@@ -253,6 +259,7 @@ def _function_inventory(
                 "end_lineno": end_lineno,
                 "lines": lines,
                 "complexity": complexity,
+                "fingerprint": _ast_fingerprint(node),
                 "review": review,
                 "extreme": extreme,
                 "exemption": reason,
@@ -280,6 +287,7 @@ def build_inventory(root: Path, config: Configuration) -> dict[str, Any]:
             {
                 "path": relative,
                 "lines": lines,
+                "fingerprint": _ast_fingerprint(tree),
                 "review": lines > thresholds.module_review_lines,
                 "extreme": lines > thresholds.module_extreme_lines,
                 "exemption": reason,
@@ -387,34 +395,53 @@ def _active_extreme(entry: Mapping[str, Any]) -> bool:
     return bool(entry["extreme"]) and entry.get("exemption") is None
 
 
+def _active_extreme_fingerprints(entries: Iterable[Mapping[str, Any]]) -> set[str]:
+    return {
+        fingerprint
+        for entry in entries
+        if _active_extreme(entry)
+        if isinstance((fingerprint := entry.get("fingerprint")), str)
+    }
+
+
 def compare_inventories(
     baseline: Mapping[str, Any],
     current: Mapping[str, Any],
 ) -> list[str]:
     baseline_modules = {module["path"]: module for module in baseline["modules"]}
+    baseline_module_fingerprints = _active_extreme_fingerprints(baseline["modules"])
     regressions: list[str] = []
 
     for module in current["modules"]:
         if not _active_extreme(module):
             continue
         previous = baseline_modules.get(module["path"])
-        if previous is None or not _active_extreme(previous):
-            regressions.append(
-                f"module {module['path']} is a newly introduced extreme ({module['lines']} lines)"
-            )
+        if previous is not None and _active_extreme(previous):
+            continue
+        if module.get("fingerprint") in baseline_module_fingerprints:
+            continue
+        regressions.append(
+            f"module {module['path']} is a newly introduced extreme ({module['lines']} lines)"
+        )
 
     baseline_functions = {
         (path, function["qualname"]): function for path, function in _all_functions(baseline)
     }
+    baseline_function_fingerprints = _active_extreme_fingerprints(
+        function for _, function in _all_functions(baseline)
+    )
     for path, function in _all_functions(current):
         if not _active_extreme(function):
             continue
         previous = baseline_functions.get((path, function["qualname"]))
-        if previous is None or not _active_extreme(previous):
-            regressions.append(
-                f"function {path}:{function['qualname']} is a newly introduced extreme "
-                f"({function['lines']} lines, complexity {function['complexity']})"
-            )
+        if previous is not None and _active_extreme(previous):
+            continue
+        if function.get("fingerprint") in baseline_function_fingerprints:
+            continue
+        regressions.append(
+            f"function {path}:{function['qualname']} is a newly introduced extreme "
+            f"({function['lines']} lines, complexity {function['complexity']})"
+        )
     return sorted(regressions)
 
 
