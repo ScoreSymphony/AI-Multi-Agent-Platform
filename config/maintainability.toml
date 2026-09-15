@@ -1,0 +1,15 @@
+# Repository-wide maintainability review signals for production Python code.
+#
+# These thresholds trigger review/reporting; they are not architectural correctness rules.
+# Historical outliers are reported, while CI fails only for newly introduced unexempt extremes.
+# Add exemptions only for intentionally generated/declarative code and always include a reason.
+
+exemptions = []
+
+[thresholds]
+module_review_lines = 400
+module_extreme_lines = 1000
+function_review_lines = 50
+function_extreme_lines = 100
+function_review_complexity = 12
+function_extreme_complexity = 20
