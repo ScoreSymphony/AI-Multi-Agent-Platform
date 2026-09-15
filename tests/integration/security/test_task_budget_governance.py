@@ -7,16 +7,16 @@ import pytest
 from ai_multi_agent_platform.accounting.service import AccountingService
 from ai_multi_agent_platform.accounting.store import InMemoryUsageStore
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
-from ai_multi_agent_platform.execution_budgets import (
+from ai_multi_agent_platform.execution.budgets import (
     BudgetConsumptionSource,
     BudgetDimension,
     InMemoryTaskBudgetStore,
     TaskBudgetEnforcementService,
     TaskBudgetLimit,
     TaskBudgetPolicy,
+    TaskBudgetPolicyMutationService,
 )
-from ai_multi_agent_platform.execution_budgets.governance import TaskBudgetPolicyMutationService
-from ai_multi_agent_platform.execution_budgets.models import utc_now
+from ai_multi_agent_platform.execution.budgets.models import utc_now
 from ai_multi_agent_platform.security import (
     ActorIdentity,
     ActorType,
@@ -209,3 +209,32 @@ async def test_revision_cannot_reset_runtime_origin() -> None:
     stored = await budgets.policy(first.task_id)
     assert stored is not None
     assert stored.version == 1
+
+
+@pytest.mark.asyncio
+async def test_authorized_human_can_create_initial_policy() -> None:
+    gate = AuthorizationGate(
+        LocalAuthorizationProvider(
+            (
+                LocalPrincipalPolicy(
+                    principal_ref="user:operator",
+                    actor_types=frozenset({ActorType.HUMAN}),
+                    allowed_actions=frozenset({AuthorizationAction.CREATE}),
+                    resource_types=frozenset({ResourceType.TASK}),
+                ),
+            )
+        )
+    )
+    budgets, mutations = _runtime(gate)
+    policy = _policy()
+
+    snapshot = await mutations.configure(
+        policy,
+        actor=ActorIdentity("user:operator", ActorType.HUMAN),
+        operation=_operation("user", "operator"),
+    )
+
+    assert snapshot.policy_version == 1
+    stored = await budgets.policy(policy.task_id)
+    assert stored is not None
+    assert stored.provenance["budget_mutation_actor"] == "user:operator"
