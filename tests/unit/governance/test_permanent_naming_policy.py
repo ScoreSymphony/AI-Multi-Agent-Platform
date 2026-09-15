@@ -37,10 +37,15 @@ def test_changed_targets_include_added_modified_copied_and_renamed_destinations(
 
 
 def test_issue_numbered_permanent_path_is_rejected() -> None:
-    violations = path_violations((ChangedPath("A", "scripts/ci/issue123_release_gate.py"),))
+    changes = (
+        ChangedPath("A", "scripts/ci/issue123_release_gate.py"),
+        ChangedPath("A", "src/package/issue_123/__init__.py"),
+    )
 
-    assert violations == (
+    assert path_violations(changes) == (
         "scripts/ci/issue123_release_gate.py: permanent paths must describe behavior, "
+        "not a GitHub issue number",
+        "src/package/issue_123/__init__.py: permanent paths must describe behavior, "
         "not a GitHub issue number",
     )
 
@@ -62,10 +67,15 @@ def test_recovery_completion_is_idempotent() -> None:
     assert source_violations("tests/unit/test_recovery.py", source) == ()
 
 
-def test_issue_numbered_test_and_helper_identifiers_are_rejected() -> None:
+def test_issue_numbered_test_helper_and_attribute_identifiers_are_rejected() -> None:
     source = """
 def _issue_20_manifest_document() -> dict[str, object]:
     return {}
+
+
+class Cache:
+    def remember(self, value: object) -> None:
+        self.issue_123_cache = value
 
 
 def test_issue_20_manifest_contract() -> None:
@@ -75,6 +85,7 @@ def test_issue_20_manifest_contract() -> None:
     violations = source_violations("tests/unit/plugins/test_plugins.py", source)
 
     assert any("_issue_20_manifest_document" in violation for violation in violations)
+    assert any("issue_123_cache" in violation for violation in violations)
     assert any("test_issue_20_manifest_contract" in violation for violation in violations)
 
 
