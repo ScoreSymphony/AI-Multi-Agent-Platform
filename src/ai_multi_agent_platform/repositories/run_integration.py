@@ -19,6 +19,7 @@ from ai_multi_agent_platform.workspaces import (
     WorkspaceSourceKind,
 )
 
+from .async_provenance import AsyncRepositoryProvenanceAdapter
 from .models import RepositoryRunProvenance, utc_now, validate_git_revision
 from .service import RepositoryProvenanceStore, RepositoryRegistry
 
@@ -55,6 +56,7 @@ class RepositoryRunIntegration:
     ) -> None:
         self._repositories = repositories
         self._provenance = provenance
+        self._async_provenance = AsyncRepositoryProvenanceAdapter(provenance)
         self._workspaces = workspaces
         self._files = files
         self._kernel = kernel
@@ -126,7 +128,7 @@ class RepositoryRunIntegration:
                 agent_id=agent_id,
                 provider_resource_ids=(binding.reference.id,),
             )
-            self._provenance.upsert(provenance)
+            await self._async_provenance.upsert(provenance)
             recorded.append(provenance)
         return tuple(recorded)
 
@@ -190,17 +192,17 @@ class RepositoryRunIntegration:
         revisions = dict(output_revisions or {})
         for repository_id, revision in revisions.items():
             validate_git_revision(revision)
-            if self._provenance.get(run_id, repository_id) is None:
+            if await self._async_provenance.get(run_id, repository_id) is None:
                 raise ContractError(
                     ErrorCode.NOT_FOUND,
                     "cannot record repository output revision without Run input provenance",
                     details={"run_id": run_id, "repository_id": repository_id},
                 )
 
-        for current in self._provenance.for_run(run_id):
+        for current in await self._async_provenance.for_run(run_id):
             merged_artifacts = tuple(dict.fromkeys((*current.diff_artifact_ids, *artifact_ids)))
             output_revision = revisions.get(current.repository_id, current.output_revision)
-            self._provenance.upsert(
+            await self._async_provenance.upsert(
                 replace(
                     current,
                     output_revision=output_revision,
@@ -228,7 +230,11 @@ class RepositoryRunIntegration:
         agent_id: str | None = None,
         artifact_ids: tuple[str, ...] = (),
     ) -> RepositoryRunProvenance:
-        """Record a commit created after execution without implying that push occurred."""
+        """Record a commit created after execution without implying that push occurred.
+
+        This synchronous method is retained as an explicit setup/offline compatibility seam.
+        Async runtime callers use the awaitable provenance boundary above.
+        """
 
         validate_id(run_id, "run")
         validate_git_revision(output_revision)
