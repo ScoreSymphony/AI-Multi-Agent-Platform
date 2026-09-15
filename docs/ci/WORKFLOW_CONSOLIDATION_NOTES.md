@@ -18,4 +18,4 @@ The standalone Pipelock candidate-compatibility workflow is retired after #730 c
 
 ## Historical Actions entries
 
-Deleting YAML files alone does not remove old workflow names from the Actions sidebar. `repository-quality.yml` includes a bounded orphaned-run cleanup job. It deletes only completed runs whose recorded workflow path no longer exists on the repository default branch. It can be run manually and is also available for the post-merge consolidation cleanup.
+Deleting YAML files alone does not remove old workflow names from the Actions sidebar. `repository-quality.yml` includes a bounded history-cleanup job with an explicit allowlist of workflow paths retired by this consolidation. It deletes only completed runs for those reviewed paths, can be run manually, and is also available for the post-merge consolidation cleanup.
