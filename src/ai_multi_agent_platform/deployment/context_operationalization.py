@@ -98,9 +98,6 @@ if TYPE_CHECKING:
     )
 
 
-# Explicit provider-neutral output reserve. This is intentionally a platform constant rather than
-# an adapter/model-specific guess and can later become deployment configuration without changing
-# Context Bundle identity semantics.
 CONTEXT_OUTPUT_RESERVE_TOKENS = 2_048
 
 
@@ -236,12 +233,11 @@ def install_single_node_context(
     *,
     egress: EgressDeploymentBindings | None = None,
 ) -> SingleNodeContextComposition:
-    """Install the canonical Context Bundle path into one already-built single-node deployment.
+    """Install the canonical Context Bundle path through public composition seams.
 
-    The installer replaces only the kernel lifecycle participant. Every other canonical owner
-    remains unchanged and one #15 authorization wrapper stays the execution enforcement boundary
-    after canonical Task Project scope is resolved. This keeps Task/Run/Agent ownership intact
-    while making #590 the effective context authority.
+    The installer replaces only the deployment lifecycle binding. Every canonical owner remains
+    unchanged and one #15 authorization wrapper stays the execution enforcement boundary after
+    canonical Task Project scope is resolved. The kernel itself is never introspected or mutated.
 
     When the public deployment supplies #591 bindings, Context rendering and capability execution
     share that exact durable egress gate. Focused lower-level embeddings may omit the bindings and
@@ -268,9 +264,6 @@ def install_single_node_context(
         ),
     )
 
-    # Reuse the authoritative local File store. Memory/Knowledge use canonical local SQLite
-    # providers so the reference profile remains fully local and requires no hosted RAG/vector
-    # service. Authorization wrappers preserve #15 at each source boundary.
     protected_files = AuthorizedDataFileProvider(base.files, base.approval_gate)
     memory = LocalMemoryProvider(database_dir / "memory.sqlite3")
     knowledge = LocalKnowledgeProvider(database_dir / "knowledge.sqlite3")
@@ -457,13 +450,8 @@ def install_single_node_context(
         )
     )
 
-    previous_lifecycle = base.kernel._lifecycle  # noqa: SLF001 - composition boundary replacement
-    # The base profile intentionally already wraps its inner lifecycle with #15. Reuse that inner
-    # participant as the fallback and make one fresh #15 wrapper after canonical Project-scope
-    # binding, avoiding duplicate authorization/audit events for non-Agent executions.
-    fallback = getattr(previous_lifecycle, "_inner", previous_lifecycle)
     lifecycle = CanonicalContextAgentLifecycleBackend(
-        delegate=fallback,
+        delegate=base.execution_fallback_lifecycle,
         tasks=tasks,
         agents=base.agent_runtime,
         models=base.model_runtime,
@@ -478,9 +466,11 @@ def install_single_node_context(
         base.approval_gate,
         allow_internal_service_reads=True,
     )
-    base.kernel._lifecycle = _TaskProjectScopeLifecycleBackend(  # noqa: SLF001
-        authorized_lifecycle,
-        tasks,
+    base.execution_lifecycle.bind(
+        _TaskProjectScopeLifecycleBackend(
+            authorized_lifecycle,
+            tasks,
+        )
     )
 
     register_context_control_plane(
@@ -489,8 +479,6 @@ def install_single_node_context(
         run_bindings,
         visibility=AuthorizationContextEntryVisibilityResolver(base.authorization),
     )
-    # These domains are canonical source owners for Context and therefore join the ordinary Control
-    # Plane instead of becoming Context-private stores.
     register_skill_control_plane(base.control_plane, skills)
 
     reconciliation = reconcile_context_run_bindings(
