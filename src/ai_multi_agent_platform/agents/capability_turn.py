@@ -241,30 +241,37 @@ class AgentCapabilityTurn:
             causation_id=causation_id,
             provenance={"enforcement_point": "agent_capability_turn"},
         )
-        if not decision.permitted:
-            raise ContractError(
-                ErrorCode.RESOURCE_EXHAUSTED,
-                decision.reason,
-                details={
-                    "budget_outcome": decision.outcome.value,
-                    "budget_action": decision.action.value,
-                    "task_id": task_id,
-                    "blocking_dimension": (
-                        None
-                        if decision.blocking_dimension is None
-                        else decision.blocking_dimension.value
-                    ),
-                },
-            )
+        self._require_budget_permitted(decision)
         return decision
 
     async def _reconcile_budget(self, decision: BudgetAdmissionDecision | None) -> None:
-        if decision is not None and self._budget_admission is not None:
-            await self._budget_admission.reconcile(decision)
+        if decision is None or self._budget_admission is None:
+            return
+        post_action = await self._budget_admission.reconcile(decision)
+        self._require_budget_permitted(post_action)
 
     async def _release_budget(self, decision: BudgetAdmissionDecision | None) -> None:
         if decision is not None and self._budget_admission is not None:
             await self._budget_admission.release(decision)
+
+    @staticmethod
+    def _require_budget_permitted(decision: BudgetAdmissionDecision) -> None:
+        if decision.permitted:
+            return
+        raise ContractError(
+            ErrorCode.RESOURCE_EXHAUSTED,
+            decision.reason,
+            details={
+                "budget_outcome": decision.outcome.value,
+                "budget_action": decision.action.value,
+                "task_id": decision.task_id,
+                "blocking_dimension": (
+                    None
+                    if decision.blocking_dimension is None
+                    else decision.blocking_dimension.value
+                ),
+            },
+        )
 
     def _tool_definitions(
         self,
