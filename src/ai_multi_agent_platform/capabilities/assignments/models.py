@@ -1,4 +1,4 @@
-"""Canonical durable capability-assignment policy models for issue #366."""
+"""Canonical durable capability-assignment policy models."""
 
 from __future__ import annotations
 
