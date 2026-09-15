@@ -205,7 +205,7 @@ def build_single_node_deployment(
     # the only producer API; automatic review remains explicit opt-in in versioned Verification
     # policy metadata. A needs_changes result routes one bounded canonical repair Step back through
     # the exact producer Agent before a fresh exact-subject review.
-    completion = base.kernel._completion_authority  # noqa: SLF001
+    completion = base.verification_completion
     if not isinstance(completion, VerificationCompletionAuthority):
         raise RuntimeError("normal single-node kernel is missing Verification completion authority")
     reviewer_inputs = KernelFileReviewerSubjectInputProvider(
