@@ -1,8 +1,6 @@
 name: Platform conformance and acceptance
 
 on:
-  push:
-    branches: [main]
   pull_request:
     paths:
       - ".github/workflows/conformance.yml"
@@ -32,7 +30,7 @@ permissions:
 jobs:
   conformance:
     name: platform-conformance
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -94,8 +92,8 @@ jobs:
   stable-2025-11-25:
     name: mcp-protocol-2025-11-25
     if: >-
-      github.event_name == 'push' ||
       github.event_name == 'pull_request' ||
+      github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
@@ -155,8 +153,8 @@ jobs:
   prerelease-2026-07-28:
     name: mcp-protocol-2026-07-28-informational
     if: >-
-      github.event_name == 'push' ||
       github.event_name == 'pull_request' ||
+      github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     continue-on-error: true
@@ -207,10 +205,7 @@ jobs:
 
   acceptance:
     name: prototype-acceptance
-    if: >-
-      github.event_name == 'push' ||
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -268,7 +263,10 @@ jobs:
           if-no-files-found: warn
 
   issue749-acceptance:
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
