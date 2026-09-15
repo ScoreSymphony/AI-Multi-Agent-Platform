@@ -54,7 +54,7 @@ def path_violations(changes: tuple[ChangedPath, ...]) -> tuple[str, ...]:
         path = PurePosixPath(change.path)
         if not path.parts or path.parts[0] not in PERMANENT_ROOTS or _is_provenance_path(path):
             continue
-        if ISSUE_PATH_TOKEN.search(path.name):
+        if any(ISSUE_PATH_TOKEN.search(part) for part in path.parts[1:]):
             violations.append(
                 f"{change.path}: permanent paths must describe behavior, not a GitHub issue number"
             )
@@ -70,6 +70,8 @@ def _identifier_names(tree: ast.AST) -> tuple[tuple[str, int], ...]:
             names.append((node.arg, node.lineno))
         elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
             names.append((node.id, node.lineno))
+        elif isinstance(node, ast.Attribute):
+            names.append((node.attr, node.lineno))
         elif isinstance(node, ast.alias) and node.asname:
             names.append((node.asname, getattr(node, "lineno", 1)))
     return tuple(names)
