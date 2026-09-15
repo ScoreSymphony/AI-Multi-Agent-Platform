@@ -37,9 +37,7 @@ def test_changed_targets_include_added_modified_copied_and_renamed_destinations(
 
 
 def test_issue_numbered_permanent_path_is_rejected() -> None:
-    violations = path_violations(
-        (ChangedPath("A", "scripts/ci/issue123_release_gate.py"),)
-    )
+    violations = path_violations((ChangedPath("A", "scripts/ci/issue123_release_gate.py"),))
 
     assert violations == (
         "scripts/ci/issue123_release_gate.py: permanent paths must describe behavior, "
@@ -97,7 +95,7 @@ def test_issue_reference_must_be_secondary_provenance_in_docstring() -> None:
     bad = '"""Issue #723 decomposed this compatibility facade."""\n'
     good = (
         '"""Compatibility facade for focused provider modules.\n\n'
-        'Historical context: issue #723.\n'
+        "Historical context: issue #723.\n"
         '"""\n'
     )
 
