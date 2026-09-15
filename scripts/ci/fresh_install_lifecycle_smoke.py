@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-BOOTSTRAP_PASSWORD = "issue39-ci-only-password"
+BOOTSTRAP_PASSWORD = "fresh-install-ci-only-password"
 READY_TIMEOUT_SECONDS = 20.0
 
 
@@ -110,7 +110,7 @@ def main() -> int:
     if executable is None:
         raise RuntimeError("platform-server console entrypoint is not installed")
 
-    with tempfile.TemporaryDirectory(prefix="issue39-install-smoke-") as temporary_directory:
+    with tempfile.TemporaryDirectory(prefix="fresh-install-smoke-") as temporary_directory:
         root = Path(temporary_directory)
         data_dir = root / "data"
         port = _reserve_loopback_port()
@@ -158,7 +158,7 @@ def main() -> int:
                 f"after:  {second_smoke}"
             )
 
-    print("issue #39 fresh-install lifecycle smoke succeeded")
+    print("fresh-install lifecycle smoke succeeded")
     return 0
 
 
