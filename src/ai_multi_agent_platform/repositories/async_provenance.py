@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import sqlite3
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.persistence_offload import SharedPersistenceOffloadRegistry
@@ -209,6 +210,57 @@ class AsyncRepositoryProvenanceReaderAdapter(AsyncRepositoryProvenanceGetAdapter
         )
 
 
+def as_async_repository_provenance_get_reader(
+    reader: RepositoryProvenanceGetReader | AsyncRepositoryProvenanceGetReader,
+) -> AsyncRepositoryProvenanceGetReader:
+    """Keep native async backends native; adapt synchronous compatibility readers once."""
+
+    if _method_is_async(reader, "get"):
+        return cast(AsyncRepositoryProvenanceGetReader, reader)
+    return AsyncRepositoryProvenanceGetAdapter(cast(RepositoryProvenanceGetReader, reader))
+
+
+def as_async_repository_provenance_reader(
+    reader: RepositoryProvenanceReader | AsyncRepositoryProvenanceReader,
+) -> AsyncRepositoryProvenanceReader:
+    """Return one awaitable reader without forcing future native-async backends through threads."""
+
+    _require_consistent_async_shape(reader, ("get", "for_run"))
+    if _method_is_async(reader, "for_run"):
+        return cast(AsyncRepositoryProvenanceReader, reader)
+    return AsyncRepositoryProvenanceReaderAdapter(cast(RepositoryProvenanceReader, reader))
+
+
+def as_async_repository_provenance_store(
+    store: RepositoryProvenanceStore | AsyncRepositoryProvenanceStore,
+) -> AsyncRepositoryProvenanceStore:
+    """Normalize a sync local store or native async backend to the runtime repository contract."""
+
+    _require_consistent_async_shape(store, ("record", "upsert", "get", "for_run"))
+    if _method_is_async(store, "upsert"):
+        return cast(AsyncRepositoryProvenanceStore, store)
+    return AsyncRepositoryProvenanceAdapter(cast(RepositoryProvenanceStore, store))
+
+
+def is_async_repository_provenance_store(
+    store: RepositoryProvenanceStore | AsyncRepositoryProvenanceStore,
+) -> bool:
+    """Identify native async stores for compatibility-only synchronous seams."""
+
+    _require_consistent_async_shape(store, ("record", "upsert", "get", "for_run"))
+    return _method_is_async(store, "upsert")
+
+
+def _method_is_async(value: object, name: str) -> bool:
+    return inspect.iscoroutinefunction(getattr(value, name, None))
+
+
+def _require_consistent_async_shape(value: object, names: tuple[str, ...]) -> None:
+    states = tuple(_method_is_async(value, name) for name in names)
+    if any(states) and not all(states):
+        raise TypeError("repository provenance backend must be consistently sync or async")
+
+
 async def _await_persistence_boundary[T](worker: asyncio.Future[T]) -> T:
     """Let started persistence settle; worker failure wins pending cancellation."""
 
@@ -245,4 +297,9 @@ __all__ = [
     "RepositoryProvenancePersistenceOffload",
     "RepositoryProvenanceReader",
     "RepositoryProvenanceStore",
+    "RepositoryProvenanceWriter",
+    "as_async_repository_provenance_get_reader",
+    "as_async_repository_provenance_reader",
+    "as_async_repository_provenance_store",
+    "is_async_repository_provenance_store",
 ]
