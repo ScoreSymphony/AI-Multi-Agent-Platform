@@ -72,14 +72,14 @@ name = "capabilities"
 kind = "domain"
 owner = "capabilities"
 disposition = "keep"
-responsibility = "Canonical capability declaration, discovery and selection semantics."
+responsibility = "Canonical capability declaration, discovery and selection semantics, including capability-assignment policy under capabilities.assignments."
 
 [[package]]
 name = "capability_assignments"
 kind = "migration"
 owner = "capabilities"
-disposition = "consolidate"
-responsibility = "Capability-to-resource assignment is a capabilities subdomain; migrate under capabilities without breaking supported imports."
+disposition = "compatibility"
+responsibility = "Canonical implementation lives at capabilities.assignments; this root package is a bounded compatibility namespace for supported legacy imports."
 
 [[package]]
 name = "cli"

@@ -12,6 +12,7 @@ All contributors and coding agents must treat the following documents as authori
 - [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md) — non-negotiable architecture principles and explicit invariants.
 - [`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md) and [`docs/FEATURE_CLASSIFICATION.toml`](docs/FEATURE_CLASSIFICATION.toml) — orthogonal architectural-role/public-stability taxonomy and the audited major public surfaces.
 - [`docs/PACKAGE_BOUNDARIES.md`](docs/PACKAGE_BOUNDARIES.md) and [`docs/PACKAGE_BOUNDARIES.toml`](docs/PACKAGE_BOUNDARIES.toml) — top-level Python package ownership, migration disposition and the machine-checked root namespace inventory.
+- [`docs/BOUNDED_CONTEXTS.md`](docs/BOUNDED_CONTEXTS.md) — contributor-facing primary context map, dependency direction and staged package-consolidation guidance built on the canonical package inventory.
 - [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) — dependency-driven execution order, parallel work lanes and convergence gates.
 - [`docs/adr/README.md`](docs/adr/README.md) — process for recording material architecture decisions.
 
@@ -83,7 +84,7 @@ When work is being collected through a shared integration branch, documentation/
 
 ## Top-level Python package ownership
 
-`docs/PACKAGE_BOUNDARIES.toml` is the checked inventory for every importable package directly below `src/ai_multi_agent_platform/`. Its `owner`, `kind`, `disposition` and `responsibility` fields must remain aligned with `docs/PACKAGE_BOUNDARIES.md`.
+`docs/PACKAGE_BOUNDARIES.toml` is the checked inventory for every importable package directly below `src/ai_multi_agent_platform/`. Its `owner`, `kind`, `disposition` and `responsibility` fields must remain aligned with `docs/PACKAGE_BOUNDARIES.md`. Use `docs/BOUNDED_CONTEXTS.md` first when navigating the repository from a small number of primary contexts; use the manifest when exact canonical ownership matters.
 
 When adding functionality:
 

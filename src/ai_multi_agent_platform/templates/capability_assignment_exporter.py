@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.capabilities import CapabilityCompatibilityRequest
-from ai_multi_agent_platform.capability_assignments import (
+from ai_multi_agent_platform.capabilities.assignments import (
     CapabilityAssignmentAccessContext,
     CapabilityAssignmentRevision,
     CapabilityAssignmentRule,
