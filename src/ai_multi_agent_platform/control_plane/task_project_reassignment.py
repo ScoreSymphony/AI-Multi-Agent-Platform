@@ -1,4 +1,4 @@
-"""Canonical northbound Task Project reassignment commands for issue #157."""
+"""Canonical northbound Task Project reassignment commands."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import Any
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.task_reassignment import (
+from ai_multi_agent_platform.task_management.reassignment import (
     DefaultTaskProjectCompatibilityPolicy,
     TaskProjectMoveRequest,
     TaskProjectReassignmentService,
