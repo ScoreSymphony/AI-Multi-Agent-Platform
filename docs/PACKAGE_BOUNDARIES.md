@@ -66,11 +66,23 @@ The canonical implementation imports `TaskManagementService` from its sibling `s
 than from the package root. This keeps the new ownership direction explicit and avoids introducing a
 package-level circular import merely for re-export convenience.
 
+### `capabilities` and `capability_assignments`
+
+Capability assignment policy is part of the capability domain rather than a separate durable domain.
+Issue #895 moves the canonical implementation to `capabilities.assignments` and turns the historical
+`ai_multi_agent_platform.capability_assignments` package into a compatibility-only namespace.
+
+- new assignment behavior belongs under `capabilities.assignments`;
+- package-level and historical submodule imports continue to resolve through thin re-exports;
+- canonical `capabilities` code must never import the compatibility namespace;
+- the compatibility package may be removed only after the normal public-import deprecation policy
+  permits removal and repository references have migrated to the canonical path.
+
 ### Other explicit consolidation candidates
 
 The inventory records two additional narrow packages as migrations rather than new durable domains:
 
-- `capability_assignments` -> `capabilities`;
+- `high_availability` -> `distributed`;
 - `repository_intelligence` -> `repositories`.
 
 These are dispositions, not instructions to move all files in #726. Each move should be a focused,
