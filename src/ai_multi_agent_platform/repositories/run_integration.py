@@ -250,7 +250,8 @@ class RepositoryRunIntegration:
         if provenance is None:
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
-                "synchronous repository provenance compatibility seam is unavailable for a native async backend",
+                "synchronous repository provenance compatibility seam is unavailable "
+                "for a native async backend",
             )
         validate_id(run_id, "run")
         validate_git_revision(output_revision)
