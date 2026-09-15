@@ -159,6 +159,47 @@ export interface ConfigureOnboardingModelResult {
   credential_mode: "secret_reference" | "none";
 }
 
+export interface MultiAgentFirstRunInput {
+  objective: string;
+  title?: string;
+  project_id?: string;
+  workspace_id?: string;
+}
+
+export interface MultiAgentFirstRunStep {
+  step_id: string;
+  title: string;
+  status: string;
+  phase: string;
+  dependency_ids: string[];
+  satisfied_dependency_ids: string[];
+  agent_id: string | null;
+  agent_revision: number | null;
+  run_id: string | null;
+  result_ids: string[];
+  artifact_ids: string[];
+}
+
+export interface MultiAgentFirstRunResult {
+  id: string;
+  type: "multi_agent_first_run_result";
+  task_id: string;
+  task_status: string;
+  plan_id: string;
+  project_id: string;
+  workspace_id: string;
+  agents: Record<string, { agent_id: string; revision: number }>;
+  steps: MultiAgentFirstRunStep[];
+  result_ids: string[];
+  artifact_ids: string[];
+  review: { step: MultiAgentFirstRunStep | null; status: string };
+  verification: {
+    canonical_records: Array<Record<string, JsonValue>>;
+    reviewer_step_is_baseline_check: boolean;
+  };
+  trace: { task_id: string; plan_id: string; step_ids: string[] };
+}
+
 export interface FirstRunTaskInput {
   objective: string;
   title?: string;
@@ -248,6 +289,13 @@ export class OnboardingClient {
       resource_ref: "first-run",
       ...input,
     });
+  }
+
+  runMultiAgentGoldenPath(input: MultiAgentFirstRunInput): Promise<MultiAgentFirstRunResult> {
+    return this.command<MultiAgentFirstRunResult>(
+      "/commands/onboarding.run-multi-agent-golden-path",
+      { resource_ref: "first-run", ...input },
+    );
   }
 
   bootstrapStandardAgents(): Promise<StandardAgentBootstrapResult> {
