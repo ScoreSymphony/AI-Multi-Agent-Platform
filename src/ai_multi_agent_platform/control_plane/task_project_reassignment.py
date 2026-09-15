@@ -1,4 +1,4 @@
-"""Canonical northbound Task Project reassignment commands for issue #157."""
+"""Canonical northbound Task Project reassignment commands."""
 
 from __future__ import annotations
 
