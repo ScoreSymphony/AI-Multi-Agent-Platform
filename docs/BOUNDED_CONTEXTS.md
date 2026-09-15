@@ -90,11 +90,13 @@ navigation.
 
 **Durable owner:** `distributed`.
 
-**Migration namespace:** `high_availability` -> `distributed.high_availability`.
+**Migration namespace:** `high_availability` -> `distributed`.
 
 Node, Worker, scheduling, transport, leadership, fencing and failover belong to one distributed-runtime
-context. HA remains security- and lifecycle-sensitive, so the migration must preserve its explicit
-contracts and cannot be folded into deployment wiring.
+context. The Control Plane HA contracts are already canonical at `distributed.control_plane_ha` and
+`high_availability.contracts` is a compatibility re-export. Remaining HA service, integration,
+telemetry and worker-transport code still has active runtime consumers, so its migration must remain
+staged and evidence-driven rather than forcing a new directory shape.
 
 ### 8. Distribution and application delivery
 
@@ -160,24 +162,59 @@ Additional rules:
 6. New root packages remain exceptional under `PACKAGE_BOUNDARIES.md`; normal growth happens inside an
    existing canonical owner or context.
 
+## Measured dependency graph
+
+`scripts/ci/package_dependency_audit.py` is the reproducible top-level dependency-graph audit. It
+parses imports from the Python AST, reports every directed root-package edge and computes strongly
+connected components with Tarjan's algorithm. The reviewed baseline lives in
+`PACKAGE_DEPENDENCY_CYCLES.toml` and is exercised by
+`tests/architecture/test_package_dependency_cycles.py`.
+
+The first enforced #895 probe measured:
+
+- **62** importable top-level packages;
+- **434** directed top-level import edges;
+- **1** cyclic strongly connected component;
+- that SCC contained **47 packages**.
+
+That result means the present architecture does not primarily have many isolated small cycles. Most
+runtime/application packages participate in one large cyclic component. Treating that debt as dozens
+of unrelated pairwise cycles would therefore be misleading.
+
+The baseline is shrink-only: an SCC may split or lose members, but a current SCC must remain a subset
+of an explicitly reviewed baseline set. A new SCC outside that set, or growth that pulls another root
+package into the reviewed SCC, fails the architecture test. Before freezing the baseline, #895 moved
+the last production Control Plane import of the `task_reassignment` compatibility namespace to
+`task_management.reassignment`; the compatibility root is intentionally excluded from the allowed
+SCC. This records an actual cycle-membership reduction rather than merely documenting existing debt.
+
+The large SCC is a migration constraint, not a target architecture. Future focused work should shrink
+it by moving internal callers off compatibility namespaces and by removing reverse dependencies at
+real ownership boundaries. The guard intentionally permits shrinkage without requiring the whole SCC
+to be eliminated in one risky refactor.
+
 ## Current migration state
 
 | Historical root package | Canonical destination | State | Removal criterion |
 | --- | --- | --- | --- |
-| `task_reassignment` | `task_management.reassignment` | compatibility-only since #726 | Remove only after supported callers have migrated and the normal public-import deprecation window permits removal. |
+| `task_reassignment` | `task_management.reassignment` | compatibility-only since #726; internal Control Plane caller migrated in #895 | Remove only after supported external callers have migrated and the normal public-import deprecation window permits removal. |
 | `capability_assignments` | `capabilities.assignments` | compatibility-only in #895 | Same public-import deprecation rule; canonical code must not import the shim. |
-| `repository_intelligence` | `repositories.intelligence` | planned | First move provider-neutral canonical implementation, then leave bounded re-exports for supported imports. |
-| `high_availability` | `distributed.high_availability` | planned, higher risk | Move only with HA contract/restart/fencing coverage; deployment wiring must remain separate. |
+| `repository_intelligence` | `repositories.intelligence` | planned, compatibility-sensitive | Move provider-neutral implementation only with production consumer migration and preserved plugin/import-string compatibility. |
+| `high_availability` | `distributed` | partially migrated, higher risk | Contracts are already canonical at `distributed.control_plane_ha`; move remaining code only with HA restart/fencing/failover coverage and no deployment-ownership inversion. |
 
 ## Staged migration order
 
 1. **Capability assignments** — low-risk ownership is already explicit; move implementation under
    `capabilities.assignments`, preserve root imports, and enforce object identity/direction.
-2. **Repository intelligence** — migrate provider-neutral repository intelligence beneath
-   `repositories`, keeping enhanced providers behind replaceable extension boundaries.
-3. **High availability** — migrate leadership/fencing/failover beneath `distributed` only after
+2. **Compatibility-edge cleanup** — move internal callers from historical compatibility paths to the
+   canonical owners so migration namespaces do not remain part of the canonical dependency SCC merely
+   because first-party code still imports them.
+3. **Repository intelligence** — migrate provider-neutral repository intelligence beneath
+   `repositories` only when the production consumers and ProjectAtlas import-string compatibility are
+   preserved explicitly.
+4. **High availability** — continue the existing partial migration beneath `distributed` only after
    targeted restart/failover tests prove no lifecycle regression.
-4. **Broader subdomain nesting** — consider additional physical moves only when dependency evidence
+5. **Broader subdomain nesting** — consider additional physical moves only when dependency evidence
    shows a clear benefit. Documentation grouping alone is preferable to mass path churn for stable
    canonical owners.
 
