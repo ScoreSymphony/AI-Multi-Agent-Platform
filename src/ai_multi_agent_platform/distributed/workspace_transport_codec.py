@@ -115,7 +115,10 @@ def _tree_content_checksum(files: Mapping[str, tuple[bytes, str]]) -> str:
 
 
 def _entry_token(entry: _ManifestEntry) -> str:
-    return hashlib.sha256(entry.relative_path.encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(entry.relative_path.encode("utf-8")).hexdigest()
+    # This token is Worker-local only. 128 bits keeps collision risk negligible while preserving
+    # enough Windows path budget for staging roots under ordinary user and pytest temp paths.
+    return digest[:32]
 
 
 def _encode_request(request: RemoteMaterializationRequest) -> dict[str, JsonValue]:
