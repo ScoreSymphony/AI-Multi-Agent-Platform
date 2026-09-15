@@ -13,6 +13,13 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from .models import RepositoryRunProvenance
 from .service import RepositoryProvenanceStore
 
+_BUSY_MARKERS = (
+    "database is locked",
+    "database table is locked",
+    "database schema is locked",
+    "database is busy",
+)
+
 
 class SqliteRepositoryProvenanceStore(RepositoryProvenanceStore):
     """Restart-safe SQLite implementation of the repository provenance seam.
@@ -83,10 +90,7 @@ class SqliteRepositoryProvenanceStore(RepositoryProvenanceStore):
                     ),
                 )
         except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to persist repository Run provenance",
-            ) from exc
+            raise _sqlite_contract_error(exc, "failed to persist repository Run provenance") from exc
 
     def upsert(self, provenance: RepositoryRunProvenance) -> None:
         """Replace one Run/repository/input record as output evidence becomes available."""
@@ -123,10 +127,7 @@ class SqliteRepositoryProvenanceStore(RepositoryProvenanceStore):
                     ),
                 )
         except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to update repository Run provenance",
-            ) from exc
+            raise _sqlite_contract_error(exc, "failed to update repository Run provenance") from exc
 
     def get(self, run_id: str, repository_id: str) -> RepositoryRunProvenance | None:
         try:
@@ -142,10 +143,7 @@ class SqliteRepositoryProvenanceStore(RepositoryProvenanceStore):
                     (run_id, repository_id),
                 ).fetchone()
         except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to read repository Run provenance",
-            ) from exc
+            raise _sqlite_contract_error(exc, "failed to read repository Run provenance") from exc
         if row is None:
             return None
         return _decode_provenance(cast(str, row["payload_json"]))
@@ -163,11 +161,16 @@ class SqliteRepositoryProvenanceStore(RepositoryProvenanceStore):
                     (run_id,),
                 ).fetchall()
         except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to list repository Run provenance",
-            ) from exc
+            raise _sqlite_contract_error(exc, "failed to list repository Run provenance") from exc
         return tuple(_decode_provenance(cast(str, row["payload_json"])) for row in rows)
+
+
+def _sqlite_contract_error(exc: sqlite3.Error, message: str) -> ContractError:
+    if isinstance(exc, sqlite3.OperationalError) and any(
+        marker in str(exc).casefold() for marker in _BUSY_MARKERS
+    ):
+        return ContractError(ErrorCode.TRANSIENT_FAILURE, message, retryable=True)
+    return ContractError(ErrorCode.BACKEND_ERROR, message)
 
 
 def _encode_provenance(provenance: RepositoryRunProvenance) -> str:
