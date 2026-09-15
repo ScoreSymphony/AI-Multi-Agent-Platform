@@ -7,8 +7,9 @@ The repository keeps durable CI organized by stable responsibility rather than b
 - `ci.yml` — canonical code, package, frontend and maintained compatibility checks.
 - `codeql.yml` — dedicated CodeQL workflow. Keep this file and its job identities stable because GitHub Advanced Security correlates its configurations by workflow/job identity.
 - `governance.yml` — dependency review and repository/issue governance.
-- `repository-quality.yml` — test-layout policy and explicit orphaned Actions-history cleanup.
-- `conformance.yml` — platform/MCP conformance.
+- `repository-quality.yml` — pull-request test-layout policy and collection reconciliation.
+- `repository-maintenance.yml` — manual repository-maintenance operations such as bounded orphaned Actions-history cleanup.
+- `conformance.yml` — path-scoped pull-request conformance plus scheduled/manual platform, MCP and acceptance evidence.
 - `benchmark-smoke.yml` and `performance-extended-smoke.yml` — durable benchmark and pressure/fault smoke coverage.
 - `ha-postgres.yml` — PostgreSQL HA coordination and persistence acceptance.
 - `pipelock.yml` — maintained Pipelock validation suite.
@@ -35,7 +36,7 @@ These checks are also required for every pull request to `main`:
 - `Analyze (python)`
 - `Analyze (javascript-typescript)`
 
-The CodeQL checks stay in the dedicated `codeql.yml` workflow so GitHub Advanced Security keeps the established workflow/job configuration identity.
+The CodeQL checks stay in the dedicated `codeql.yml` workflow so GitHub Advanced Security keeps the established workflow/job configuration identity. CodeQL runs on pull requests to `main` and on its scheduled scan; the redundant post-merge `push` copy is intentionally omitted because the exact merge candidate has already passed the required CodeQL checks.
 
 ### Optional compatibility checks
 
@@ -62,6 +63,18 @@ Examples include:
 - broader platform conformance
 - release-manifest and release-compatibility validation
 - experimental/upstream evaluation workflows
+
+`conformance.yml` does not run its full five-job acceptance surface again on every ordinary `main` push. Relevant pull requests still trigger the path-scoped MCP/application acceptance jobs, and the complete default-branch conformance/acceptance surface runs on the daily schedule or by manual dispatch.
+
+## Routine check-count budget
+
+The default branch should not accumulate every specialized validation lane on every merge. For an ordinary `main` push, the target is **at most 10 check runs** with the current workflow inventory.
+
+The routine push surface keeps the canonical CI and benchmark smoke lanes that are intentionally configured for `push`, plus any other explicitly maintained push-only workflow. Duplicate post-merge CodeQL, full conformance/acceptance, and repository-layout validation are intentionally excluded from routine `main` pushes because they are already covered before merge and/or by scheduled validation.
+
+For ordinary pull requests that do not touch a specialized path-filtered integration surface, the intended baseline is also compact: core CI, the six required merge-gate identities, optional maintained compatibility checks already housed in `ci.yml`, and one repository-quality validation job. Manual maintenance jobs must not appear as skipped checks on ordinary pull requests.
+
+The check-count budget is an execution-surface policy, not a license to delete coverage. Expensive or specialized coverage should move to path-scoped pull requests, scheduled runs, manual validation, or release-specific workflows rather than disappearing.
 
 ## Forge retirement
 
@@ -93,6 +106,6 @@ Workflow consolidation must preserve the identities of checks that are still int
 
 ## Actions history cleanup
 
-Deleting a workflow file does not immediately remove its old runs from the Actions sidebar. `repository-quality.yml` therefore contains a bounded cleanup job with an explicit allowlist of workflow paths retired by the workflow consolidation. It deletes only completed runs whose recorded path is in that reviewed retirement set; unrelated historical or active workflow runs are not selected.
+Deleting a workflow file does not immediately remove its old runs from the Actions sidebar. `repository-maintenance.yml` contains the bounded cleanup job with an explicit allowlist of workflow paths retired by the workflow consolidation. It deletes only completed runs whose recorded path is in that reviewed retirement set; unrelated historical or active workflow runs are not selected.
 
-The cleanup can be invoked manually through `workflow_dispatch`. A merge commit containing `[actions-history-cleanup]` also triggers it on `main` so newly retired workflow histories can be removed after the consolidation becomes authoritative on the default branch.
+The cleanup is deliberately manual-only through `workflow_dispatch`. Keeping maintenance outside `repository-quality.yml` prevents an otherwise skipped maintenance job from appearing as an extra check on every pull request or default-branch push.
