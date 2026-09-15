@@ -316,7 +316,11 @@ class SQLiteTaskBudgetStore(TaskBudgetStore):
                     FROM task_budget_reservations
                     WHERE task_id = ? AND dimension = ? AND state = ?
                     """,
-                    (reservation.task_id, reservation.dimension.value, ReservationState.ACTIVE.value),
+                    (
+                        reservation.task_id,
+                        reservation.dimension.value,
+                        ReservationState.ACTIVE.value,
+                    ),
                 ).fetchone()
                 active = 0.0 if row is None else float(row["quantity"])
                 counter = 0.0
@@ -616,7 +620,9 @@ def _reservation_to_json(reservation: BudgetReservation) -> dict[str, object]:
         "correlation_id": reservation.correlation_id,
         "causation_id": reservation.causation_id,
         "created_at": reservation.created_at.isoformat(),
-        "expires_at": None if reservation.expires_at is None else reservation.expires_at.isoformat(),
+        "expires_at": None
+        if reservation.expires_at is None
+        else reservation.expires_at.isoformat(),
         "reconciled_quantity": reservation.reconciled_quantity,
         "provenance": dict(reservation.provenance),
     }
@@ -652,9 +658,7 @@ def _reservation_from_json(raw: str) -> BudgetReservation:
         ),
         created_at=datetime.fromisoformat(str(payload["created_at"])),
         expires_at=None if expires_at is None else datetime.fromisoformat(str(expires_at)),
-        reconciled_quantity=(
-            None if reconciled_quantity is None else float(reconciled_quantity)
-        ),
+        reconciled_quantity=(None if reconciled_quantity is None else float(reconciled_quantity)),
         provenance=dict(provenance),
     )
 
