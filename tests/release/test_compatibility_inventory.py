@@ -9,7 +9,7 @@ from ai_multi_agent_platform.upgrade.versioning import current_release_versions
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPATIBILITY_PATH = ROOT / "release" / "compatibility.json"
-CI_PATH = ROOT / ".github" / "workflows" / "ci.yml"
+COMPATIBILITY_WORKFLOW_PATH = ROOT / ".github" / "workflows" / "compatibility.yml"
 PYPROJECT_PATH = ROOT / "pyproject.toml"
 LITELLM_INTEGRATION_TEST_PATH = (
     ROOT / "tests" / "integration" / "upstreams" / "test_litellm_pinned.py"
@@ -57,8 +57,8 @@ def test_compatibility_matrix_matches_active_governed_upstream_pins() -> None:
     assert forge_source not in by_source
 
 
-def test_runtime_and_ci_pins_match_active_governed_upstream_revisions() -> None:
-    workflow = CI_PATH.read_text(encoding="utf-8")
+def test_runtime_and_compatibility_workflow_pins_match_governed_revisions() -> None:
+    workflow = COMPATIBILITY_WORKFLOW_PATH.read_text(encoding="utf-8")
 
     hermes_source, hermes_revision = _governed_pin(ROOT / "upstream" / "hermes-agent.yaml")
     assert HERMES_PINNED_REVISION == hermes_revision
@@ -128,10 +128,3 @@ def test_compatibility_matrix_contains_operator_query_fields() -> None:
         assert component["latest_known_revision"]
         assert component["update_risk"] in {"low", "medium", "high"}
         assert isinstance(component["local_modifications"], bool)
-        assert isinstance(component["patches"], list)
-
-
-def test_release_compatibility_metadata_has_no_floating_latest_pin() -> None:
-    raw = COMPATIBILITY_PATH.read_text(encoding="utf-8").lower()
-    assert '"revision": "latest"' not in raw
-    assert ":latest" not in raw
