@@ -8,7 +8,7 @@ from enum import StrEnum
 from math import isfinite
 from uuid import uuid4
 
-from ai_multi_agent_platform.accounting import MeasurementQuality
+from ai_multi_agent_platform.accounting.models import MeasurementQuality
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 
