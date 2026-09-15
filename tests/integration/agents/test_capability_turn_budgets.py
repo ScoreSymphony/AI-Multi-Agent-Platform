@@ -27,7 +27,7 @@ from ai_multi_agent_platform.contracts import (
     OperationContext,
 )
 from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.execution_budgets import (
+from ai_multi_agent_platform.execution.budgets import (
     BudgetConsumptionSource,
     BudgetDimension,
     InMemoryTaskBudgetStore,
@@ -35,7 +35,7 @@ from ai_multi_agent_platform.execution_budgets import (
     TaskBudgetLimit,
     TaskBudgetPolicy,
 )
-from ai_multi_agent_platform.execution_budgets.models import utc_now
+from ai_multi_agent_platform.execution.budgets.models import utc_now
 from ai_multi_agent_platform.models import (
     ModelCapabilities,
     ModelConfiguration,
