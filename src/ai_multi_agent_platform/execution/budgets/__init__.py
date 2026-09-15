@@ -26,6 +26,12 @@ from .models import (
     TaskBudgetSnapshot,
     UnavailableMetricPolicy,
 )
+from .runtime import (
+    TaskBudgetCapabilityInvoker,
+    TaskBudgetModelRuntime,
+    as_capability_invoker,
+    as_model_runtime,
+)
 from .service import TaskBudgetAdmission, TaskBudgetEnforcementService
 from .store import (
     InMemoryTaskBudgetStore,
@@ -53,14 +59,18 @@ __all__ = [
     "TASK_BUDGET_CONFIGURE_COMMAND",
     "TASK_BUDGET_REVISE_COMMAND",
     "TaskBudgetAdmission",
+    "TaskBudgetCapabilityInvoker",
     "TaskBudgetCommandHandlers",
     "TaskBudgetEnforcementService",
     "TaskBudgetLimit",
+    "TaskBudgetModelRuntime",
     "TaskBudgetPolicy",
     "TaskBudgetPolicyMutationService",
     "TaskBudgetResourceService",
     "TaskBudgetSnapshot",
     "TaskBudgetStore",
     "UnavailableMetricPolicy",
+    "as_capability_invoker",
+    "as_model_runtime",
     "register_task_budget_control_plane",
 ]
