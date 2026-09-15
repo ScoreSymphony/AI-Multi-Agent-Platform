@@ -1,16 +1,25 @@
-name: Test layout policy
+name: Repository quality
 
 on:
   pull_request:
   push:
     branches:
       - main
+      - ci/consolidate-actions-workflows
+  workflow_dispatch:
+    inputs:
+      cleanup_orphaned_history:
+        description: Delete completed Actions runs for explicitly retired workflow paths
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
   validate-test-layout:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -234,3 +243,102 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 14
+
+  forge-sidecar-integration:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify Forge executable integration remains retired
+        shell: bash
+        run: |
+          test ! -e src/ai_multi_agent_platform/adapters/forge.py
+          test ! -e src/ai_multi_agent_platform/adapters/forge_http.py
+          test ! -e tests/contract/execution/test_forge_executor.py
+          test ! -e tests/contract/forge/test_forge_optionality.py
+          test ! -e tests/integration/forge/test_forge_http.py
+          test ! -e tests/integration/forge/test_sidecar.py
+          test ! -e tests/regression/forge/test_forge_kernel_regressions.py
+
+          ! grep -Fq "ScoreSymphony/AI-Agent-VPS" .github/workflows/ci.yml
+          ! grep -Fq "FORGE_SIDECAR_" .github/workflows/ci.yml
+          ! grep -Fq "executor-sidecar" .github/workflows/ci.yml
+          ! grep -Fq "FORGE_SIDECAR_" scripts/ci/issue46_external_profile.py
+
+  cleanup-orphaned-actions-history:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[actions-history-cleanup]')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.cleanup_orphaned_history)
+    permissions:
+      actions: write
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete completed runs for explicitly retired workflow paths
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const retiredPaths = new Set([
+              '.github/workflows/forge-removal-guard.yml',
+              '.github/workflows/ha-postgres-coordination.yml',
+              '.github/workflows/ha-postgres-persistence.yml',
+              '.github/workflows/issue-862-garage-multinode-evidence.yml',
+              '.github/workflows/issue-862-rustfs-multinode-evidence.yml',
+              '.github/workflows/issue-862-storage-disaster-recovery-evidence.yml',
+              '.github/workflows/issue-862-storage-evidence.yml',
+              '.github/workflows/issue-862-storage-tls-evidence.yml',
+              '.github/workflows/issue-862-storage-upgrade-evidence.yml',
+              '.github/workflows/issue859-bifrost-dns-rebinding.yml',
+              '.github/workflows/issue859-bifrost-performance.yml',
+              '.github/workflows/issue859-bifrost-security.yml',
+              '.github/workflows/pipelock-candidate-compat.yml',
+              '.github/workflows/test-layout.yml',
+            ]);
+
+            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            const retired = runs.filter(
+              (run) =>
+                run.status === 'completed' &&
+                run.path &&
+                retiredPaths.has(run.path),
+            );
+            const byPath = new Map();
+            for (const run of retired) {
+              const bucket = byPath.get(run.path) || [];
+              bucket.push(run);
+              byPath.set(run.path, bucket);
+            }
+
+            core.info(`explicit_retired_workflow_paths=${retiredPaths.size}`);
+            core.info(`completed_retired_runs=${retired.length}`);
+            for (const [path, pathRuns] of [...byPath.entries()].sort()) {
+              core.info(`${path}: ${pathRuns.length} completed run(s)`);
+            }
+
+            const maxDelete = 4000;
+            let deleted = 0;
+            for (const [path, pathRuns] of [...byPath.entries()].sort()) {
+              if (deleted + pathRuns.length > maxDelete) {
+                core.warning(
+                  `Skipping ${path}: deleting its ${pathRuns.length} runs would exceed maxDelete=${maxDelete}`,
+                );
+                continue;
+              }
+              for (const run of pathRuns) {
+                try {
+                  await github.rest.actions.deleteWorkflowRun({ owner, repo, run_id: run.id });
+                  deleted += 1;
+                } catch (error) {
+                  if (error.status === 404) {
+                    continue;
+                  }
+                  throw error;
+                }
+              }
+            }
+            core.info(`deleted_retired_runs=${deleted}`);

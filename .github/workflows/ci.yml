@@ -328,6 +328,15 @@ jobs:
           if [ -f "$GITHUB_WORKSPACE/.issue859-mock-openai.pid" ]; then
             kill "$(cat "$GITHUB_WORKSPACE/.issue859-mock-openai.pid")" 2>/dev/null || true
           fi
+      - name: Run Bifrost DNS rebinding runtime gate
+        run: bash scripts/ci/bifrost_dns_rebinding_gate.sh
+      - name: Upload Bifrost DNS rebinding evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bifrost-dns-rebinding-runtime
+          path: artifacts/bifrost-dns-rebinding-runtime.json
+          if-no-files-found: warn
 
   hermes-pinned-compat:
     needs: test
