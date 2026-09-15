@@ -14,6 +14,7 @@ from .profiles import ProfileError
 _FIRST_RUN_RESOURCE = "first-run"
 _CONFIGURE_MODEL_COMMAND = "onboarding.configure-model"
 _RUN_FIRST_TASK_COMMAND = "onboarding.run-first-task"
+_RUN_MULTI_AGENT_COMMAND = "onboarding.run-multi-agent-golden-path"
 
 
 def add_onboarding_parser(
@@ -53,9 +54,19 @@ def add_onboarding_parser(
     )
     configure.add_argument("--idempotency-key")
 
+    multi_agent = commands.add_parser(
+        "run-multi-agent",
+        help="run the official researcher/developer/reviewer first-run workflow",
+    )
+    multi_agent.add_argument("--objective", required=True)
+    multi_agent.add_argument("--title")
+    multi_agent.add_argument("--project-id")
+    multi_agent.add_argument("--workspace-id")
+    multi_agent.add_argument("--idempotency-key")
+
     run = commands.add_parser(
         "run-first-task",
-        help="run the selected editable General Assistant through the canonical Task path",
+        help="run the legacy selected General Assistant through the canonical Task path",
     )
     run.add_argument("--objective", required=True)
     run.add_argument("--title")
@@ -100,6 +111,20 @@ def execute_onboarding(args: argparse.Namespace, client: ControlPlaneClient) -> 
         return client.post(
             f"/commands/{_CONFIGURE_MODEL_COMMAND}",
             body=body,
+            idempotency_key=args.idempotency_key,
+        )
+    if args.command == "run-multi-agent":
+        goal_body: dict[str, JsonValue] = {
+            "resource_ref": _FIRST_RUN_RESOURCE,
+            "objective": args.objective,
+        }
+        for field in ("title", "project_id", "workspace_id"):
+            value = getattr(args, field)
+            if value is not None:
+                goal_body[field] = value
+        return client.post(
+            f"/commands/{_RUN_MULTI_AGENT_COMMAND}",
+            body=goal_body,
             idempotency_key=args.idempotency_key,
         )
     if args.command == "run-first-task":
