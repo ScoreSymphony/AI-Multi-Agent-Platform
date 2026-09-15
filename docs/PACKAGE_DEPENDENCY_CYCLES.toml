@@ -1,0 +1,5 @@
+version = 1
+
+# Existing cyclic strongly connected components are recorded here only after audit.
+# A detected cycle may shrink or split, but it must not grow beyond one of these
+# explicitly reviewed package sets without an architecture change.
