@@ -34,12 +34,12 @@ from ai_multi_agent_platform.contracts import (
     JsonValue,
     OperationContext,
 )
-from ai_multi_agent_platform.execution_budgets import (
+from ai_multi_agent_platform.execution.budgets.models import (
     BudgetActionKind,
     BudgetAdmissionDecision,
     BudgetDimension,
-    TaskBudgetAdmission,
 )
+from ai_multi_agent_platform.execution.budgets.service import TaskBudgetAdmission
 from ai_multi_agent_platform.models import (
     CanonicalModelRequest,
     CanonicalModelResponse,
