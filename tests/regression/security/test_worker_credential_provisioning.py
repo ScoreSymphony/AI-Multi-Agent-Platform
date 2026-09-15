@@ -37,7 +37,7 @@ def test_concurrent_worker_credential_provisioning_is_idempotent() -> None:
             if credential.active(now=_NOW)
         )
         assert len(active) == 1
-        assert active[0].credential_id == issued[0].credential.credential_id
+        assert active[0].credential_id == issued[0].credential_id
         reused = next(result for result in results if result.issued is None)
         assert reused.active_credential_ids == (active[0].credential_id,)
 
