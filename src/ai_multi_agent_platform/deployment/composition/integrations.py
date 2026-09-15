@@ -17,11 +17,8 @@ from ai_multi_agent_platform.repositories import RepositoryDiscoveryResolver
 from ai_multi_agent_platform.repositories.connector_bootstrap import (
     connector_repository_discovery_resolver,
 )
-from ai_multi_agent_platform.security import (
-    AuthorizationGate,
-    SqliteLocalAuthorizationProvider,
-    build_durable_egress_runtime,
-)
+from ai_multi_agent_platform.security import AuthorizationGate, build_durable_egress_runtime
+from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
 
 from ..config import SingleNodeConfig
 from ..egress_bindings import EgressDeploymentBindings
