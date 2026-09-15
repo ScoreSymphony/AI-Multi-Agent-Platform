@@ -1,7 +1,9 @@
 version = 1
-enforce = false
+enforce = true
 
-# The #895 dependency audit is active, but enforcement remains disabled until
-# the current strongly connected components have been captured and reviewed.
-# Once populated, set enforce = true. A detected cycle may then shrink or split,
+# The #895 dependency audit is enforced against an explicit, reviewed set of
+# top-level strongly connected components. A detected cycle may shrink or split,
 # but it must not grow beyond one of the explicitly reviewed package sets.
+#
+# Baseline cycle entries are populated from the repository-wide AST audit and
+# document only pre-existing dependency debt; new/enlarged SCCs are rejected.
