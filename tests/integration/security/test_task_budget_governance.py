@@ -4,7 +4,8 @@ from dataclasses import replace
 
 import pytest
 
-from ai_multi_agent_platform.accounting import AccountingService, InMemoryUsageStore
+from ai_multi_agent_platform.accounting.service import AccountingService
+from ai_multi_agent_platform.accounting.store import InMemoryUsageStore
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.execution_budgets import (
     BudgetConsumptionSource,
@@ -13,8 +14,8 @@ from ai_multi_agent_platform.execution_budgets import (
     TaskBudgetEnforcementService,
     TaskBudgetLimit,
     TaskBudgetPolicy,
-    TaskBudgetPolicyMutationService,
 )
+from ai_multi_agent_platform.execution_budgets.governance import TaskBudgetPolicyMutationService
 from ai_multi_agent_platform.execution_budgets.models import utc_now
 from ai_multi_agent_platform.security import (
     ActorIdentity,
@@ -49,7 +50,9 @@ def _operation(owner_type: str, owner_id: str) -> OperationContext:
     )
 
 
-def _runtime(gate: AuthorizationGate) -> tuple[TaskBudgetEnforcementService, TaskBudgetPolicyMutationService]:
+def _runtime(
+    gate: AuthorizationGate,
+) -> tuple[TaskBudgetEnforcementService, TaskBudgetPolicyMutationService]:
     budgets = TaskBudgetEnforcementService(
         InMemoryTaskBudgetStore(),
         AccountingService(InMemoryUsageStore()),
@@ -137,7 +140,9 @@ async def test_agent_cannot_self_grant_but_exact_approved_revision_can_apply() -
         )
     assert pending.value.code is ErrorCode.FORBIDDEN
     approval_id = str(pending.value.details["approval_id"])
-    assert (await budgets.policy(first.task_id)).version == 1  # type: ignore[union-attr]
+    unchanged = await budgets.policy(first.task_id)
+    assert unchanged is not None
+    assert unchanged.version == 1
 
     await gate.decide_approval(
         approval_id,
