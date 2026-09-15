@@ -89,7 +89,7 @@ pytest -m integration
 pytest -m "contract or integration"
 ```
 
-The `Test layout policy` workflow executes collection-only directory and marker selections so path/marker drift is detected in CI.
+The `Repository quality` workflow executes collection-only directory and marker selections so path/marker drift is detected in CI.
 
 ## Completed #722 migration policy
 
@@ -103,7 +103,7 @@ The historical flat/issue-numbered migration is complete. New work must preserve
 6. mixed-responsibility modules must be split instead of assigned to an arbitrary suite;
 7. shared root helper/case modules are allowed only as non-collected infrastructure reused by canonical test modules, not as a way to hide ordinary tests at the root.
 
-`scripts/ci/validate_test_layout.py` rejects newly introduced root-level and issue-numbered test modules from pull-request diffs. `.github/workflows/test-layout.yml` additionally audits the complete repository tree on pull requests and `main` pushes, so legacy-style names cannot survive merely because a file was modified rather than added.
+`scripts/ci/validate_test_layout.py` rejects newly introduced root-level and issue-numbered test modules from pull-request diffs. `.github/workflows/repository-quality.yml` additionally audits the complete repository tree on pull requests and `main` pushes, so legacy-style names cannot survive merely because a file was modified rather than added.
 
 The four existing Hermes `v0_21_1` filenames are explicitly allowed because `v0_21_1` is an upstream semantic version, not historical issue/PR provenance. No issue-number filename exception is currently required.
 

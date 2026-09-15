@@ -25,7 +25,7 @@ def test_forge_executable_surface_is_absent() -> None:
 
 def test_forge_has_no_active_ci_or_external_conformance_lane() -> None:
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    guard = (ROOT / ".github/workflows/forge-removal-guard.yml").read_text(encoding="utf-8")
+    guard = (ROOT / ".github/workflows/repository-quality.yml").read_text(encoding="utf-8")
     external = (ROOT / "scripts/ci/issue46_external_profile.py").read_text(encoding="utf-8")
 
     assert "forge-sidecar-integration" not in ci
@@ -35,9 +35,9 @@ def test_forge_has_no_active_ci_or_external_conformance_lane() -> None:
     assert "FORGE_SIDECAR_" not in external
     assert "def _forge" not in external
 
-    # main still requires the historical check context. The dedicated guard may
-    # preserve that name and refer to retired tokens in negative grep assertions,
-    # but it must never recreate a Forge runtime/sidecar lane.
+    # main still requires the historical check context. The consolidated quality
+    # guard may preserve that name and refer to retired tokens in negative grep
+    # assertions, but it must never recreate a Forge runtime/sidecar lane.
     assert "forge-sidecar-integration" in guard
     assert ".upstream/forge" not in guard
     assert "FORGE_EXECUTOR_" not in guard
