@@ -43,6 +43,8 @@ class LifecycleBinding(LifecycleBackend):
     """
 
     def __init__(self, delegate: LifecycleBackend) -> None:
+        if delegate is None:
+            raise ValueError("lifecycle delegate is required")
         self._delegate = delegate
 
     @property
@@ -54,6 +56,8 @@ class LifecycleBinding(LifecycleBackend):
     def bind(self, delegate: LifecycleBackend) -> None:
         """Replace the startup-time delegate without mutating ``PlatformKernel`` internals."""
 
+        if delegate is None:
+            raise ValueError("lifecycle delegate is required")
         self._delegate = delegate
 
     @property
