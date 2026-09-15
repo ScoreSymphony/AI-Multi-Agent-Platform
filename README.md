@@ -128,6 +128,20 @@ Architectural role and public compatibility maturity are tracked separately. The
 
 No formal GitHub release has been published yet. Release claims are therefore intentionally conservative: merged functionality is real, but operational-version acceptance still depends on the repository's release and conformance gates. See [`CHANGELOG.md`](CHANGELOG.md), [`docs/STATUS.md`](docs/STATUS.md), [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md) and [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md) for the corresponding evidence and process.
 
+## Product first run
+
+The supported first-run product workflow is the real multi-agent golden path: configure one healthy local/self-hosted text model, create or select a Project and Workspace, then submit a non-trivial goal. The platform builds the canonical Plan, assigns scoped `researcher`, `developer`, and `reviewer` Agent revisions, executes the dependency graph, and exposes Results, Artifacts, review state, and the full Task → Plan → Step → Run trace through the same Control Plane used by Web and CLI.
+
+Start in the browser at `/onboarding`, or use:
+
+```bash
+platform onboarding status
+platform onboarding run-multi-agent \
+  --objective "Research two viable approaches, choose one, produce a concise result, and review it."
+```
+
+Hermes, Forge, LiteLLM, MCP, paid APIs, and the standard Agent catalog are not baseline requirements for this proof path. See [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md) for the complete Web/CLI/API workflow, failure behavior, verification semantics, and acceptance evidence.
+
 ## Quickstart for development
 
 Requirements:
@@ -194,13 +208,14 @@ Runtime integrations implement platform-owned contracts under `src/ai_multi_agen
 
 For a fresh checkout, environment setup and the CI-equivalent local validation path, follow [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). Contribution and architecture-change rules live in [`CONTRIBUTING.md`](CONTRIBUTING.md), and coding-agent execution/dependency rules live in [`AGENTS.md`](AGENTS.md).
 
-The canonical single-node prototype profiles are documented in [`docs/PROTOTYPE_ACCEPTANCE.md`](docs/PROTOTYPE_ACCEPTANCE.md). Wider platform acceptance and optional-profile reporting live in [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md).
+For the first product-level proof after startup, follow [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md). The canonical single-node prototype profiles are documented in [`docs/PROTOTYPE_ACCEPTANCE.md`](docs/PROTOTYPE_ACCEPTANCE.md). Wider platform acceptance and optional-profile reporting live in [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md).
 
 ## Documentation map
 
 | Need | Canonical location |
 | --- | --- |
 | Product identity and goals | [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md) |
+| Official multi-agent first run | [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md) |
 | Architecture invariants | [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md) |
 | Domain model | [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md) |
 | Replaceable contracts | [`docs/CONTRACTS.md`](docs/CONTRACTS.md) |
