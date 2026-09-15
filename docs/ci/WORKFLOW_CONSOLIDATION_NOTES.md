@@ -12,7 +12,7 @@ The standalone Pipelock candidate-compatibility workflow is retired as a separat
 
 ## Consolidated durable workflows
 
-`test-layout.yml` and `forge-removal-guard.yml` are consolidated into `repository-quality.yml`. The `forge-sidecar-integration` job ID is preserved because it is still a required branch-protection context.
+`test-layout.yml` and `forge-removal-guard.yml` were consolidated into `repository-quality.yml`. During the initial workflow consolidation, the historical `forge-sidecar-integration` job ID was temporarily preserved only because branch protection still required that context. The later required-check cleanup retires both that artificial job and its branch-protection requirement; Forge retirement remains enforced by the backend-neutral architecture regression in `tests/architecture/test_forge_removal.py`.
 
 `ha-postgres-coordination.yml` and `ha-postgres-persistence.yml` are consolidated into `ha-postgres.yml` while preserving both job IDs and their independent PostgreSQL service databases.
 
