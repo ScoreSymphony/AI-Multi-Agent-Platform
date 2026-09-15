@@ -8,9 +8,9 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol, TypeVar
-from weakref import WeakKeyDictionary
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.persistence_offload import SharedPersistenceOffloadRegistry
 
 from .models import (
     Claim,
@@ -119,23 +119,7 @@ class ResearchPersistenceOffload:
             return operation()
 
 
-_SHARED_RESEARCH_OFFLOADS: WeakKeyDictionary[object, ResearchPersistenceOffload] = (
-    WeakKeyDictionary()
-)
-_SHARED_RESEARCH_OFFLOADS_LOCK = threading.Lock()
-
-
-def _research_offload(
-    repository: ResearchRepository,
-    requested: ResearchPersistenceOffload | None,
-) -> ResearchPersistenceOffload:
-    with _SHARED_RESEARCH_OFFLOADS_LOCK:
-        existing = _SHARED_RESEARCH_OFFLOADS.get(repository)
-        if existing is not None:
-            return existing
-        resolved = requested or ResearchPersistenceOffload()
-        _SHARED_RESEARCH_OFFLOADS[repository] = resolved
-        return resolved
+_SHARED_RESEARCH_OFFLOADS = SharedPersistenceOffloadRegistry[ResearchPersistenceOffload]()
 
 
 async def _await_persistence_boundary[T](worker: asyncio.Future[T]) -> T:
@@ -192,7 +176,12 @@ class AsyncResearchRepositoryAdapter:
         offload: ResearchPersistenceOffload | None = None,
     ) -> None:
         self._repository = repository
-        self._offload = _research_offload(repository, offload)
+        self._offload = _SHARED_RESEARCH_OFFLOADS.resolve(
+            repository,
+            owner=self,
+            requested=offload,
+            factory=ResearchPersistenceOffload,
+        )
 
     @property
     def offload(self) -> ResearchPersistenceOffload:
