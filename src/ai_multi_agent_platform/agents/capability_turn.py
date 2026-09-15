@@ -34,6 +34,12 @@ from ai_multi_agent_platform.contracts import (
     JsonValue,
     OperationContext,
 )
+from ai_multi_agent_platform.execution_budgets import (
+    BudgetActionKind,
+    BudgetAdmissionDecision,
+    BudgetDimension,
+    TaskBudgetAdmission,
+)
 from ai_multi_agent_platform.models import (
     CanonicalModelRequest,
     CanonicalModelResponse,
@@ -66,10 +72,13 @@ class AgentCapabilityTurn:
         models: ModelRuntime,
         registry: CapabilityRegistry,
         invoker: CapabilityInvoker,
+        *,
+        budget_admission: TaskBudgetAdmission | None = None,
     ) -> None:
         self._models = models
         self._registry = registry
         self._invoker = invoker
+        self._budget_admission = budget_admission
 
     async def execute(
         self,
@@ -90,24 +99,42 @@ class AgentCapabilityTurn:
             capability_ids,
             capability_versions=capability_versions,
         )
-        response = await self._models.generate_canonical(
-            CanonicalModelRequest(
-                request_id=f"{run_id}:model",
-                context=context,
-                system_instruction=instruction,
-                messages=(ModelMessage.text(ModelRole.USER, objective or "Execute the task."),),
-                tools=tools,
-                model_config_id=model_config_id,
-                task_id=task_id,
-                run_id=run_id,
-                agent_id=agent_id,
-                routing_requirements={
-                    "modalities": ["text"],
-                    "tool_calling": bool(tools),
-                    "data_classification": data_classification.value,
-                },
-            )
+        model_budget = await self._admit_budget(
+            task_id=task_id,
+            action=BudgetActionKind.MODEL_CALL,
+            quantities={BudgetDimension.MODEL_CALLS: 1.0},
+            run_id=run_id,
+            agent_id=agent_id,
+            agent_run_id=agent_run_id,
+            correlation_id=context.correlation_id,
+            causation_id=context.causation_id,
         )
+        try:
+            response = await self._models.generate_canonical(
+                CanonicalModelRequest(
+                    request_id=f"{run_id}:model",
+                    context=context,
+                    system_instruction=instruction,
+                    messages=(
+                        ModelMessage.text(ModelRole.USER, objective or "Execute the task."),
+                    ),
+                    tools=tools,
+                    model_config_id=model_config_id,
+                    task_id=task_id,
+                    run_id=run_id,
+                    agent_id=agent_id,
+                    routing_requirements={
+                        "modalities": ["text"],
+                        "tool_calling": bool(tools),
+                        "data_classification": data_classification.value,
+                    },
+                )
+            )
+        except BaseException:
+            await self._release_budget(model_budget)
+            raise
+        else:
+            await self._reconcile_budget(model_budget)
 
         invocation_refs: list[str] = []
         artifact_refs: list[str] = []
@@ -128,24 +155,40 @@ class AgentCapabilityTurn:
                 )
             invocation_id = f"{run_id}:capability:{ordinal}"
             operation = replace(context, causation_id=response.request_id)
-            result = await self._invoker.invoke(
-                CapabilityInvocation(
-                    invocation_id=invocation_id,
-                    capability_id=capability_id,
-                    version=version,
-                    arguments=call.arguments,
-                    context=operation,
-                    trace=InvocationTrace(
-                        correlation_id=operation.correlation_id,
-                        task_id=task_id,
-                        run_id=run_id,
-                        agent_id=agent_id,
-                        agent_run_id=agent_run_id,
-                        project_id=operation.project_id,
-                        causation_id=operation.causation_id,
-                    ),
-                )
+            tool_budget = await self._admit_budget(
+                task_id=task_id,
+                action=BudgetActionKind.TOOL_CALL,
+                quantities={BudgetDimension.TOOL_CALLS: 1.0},
+                run_id=run_id,
+                agent_id=agent_id,
+                agent_run_id=agent_run_id,
+                correlation_id=operation.correlation_id,
+                causation_id=operation.causation_id,
             )
+            try:
+                result = await self._invoker.invoke(
+                    CapabilityInvocation(
+                        invocation_id=invocation_id,
+                        capability_id=capability_id,
+                        version=version,
+                        arguments=call.arguments,
+                        context=operation,
+                        trace=InvocationTrace(
+                            correlation_id=operation.correlation_id,
+                            task_id=task_id,
+                            run_id=run_id,
+                            agent_id=agent_id,
+                            agent_run_id=agent_run_id,
+                            project_id=operation.project_id,
+                            causation_id=operation.causation_id,
+                        ),
+                    )
+                )
+            except BaseException:
+                await self._release_budget(tool_budget)
+                raise
+            else:
+                await self._reconcile_budget(tool_budget)
             invocation_ref = result.canonical_tool_invocation_id or result.invocation_id
             invocation_refs.append(invocation_ref)
             artifact_refs.extend(result.artifact_refs)
@@ -174,6 +217,56 @@ class AgentCapabilityTurn:
             capability_results=tuple(results),
             model_usage=dict(response.usage),
         )
+
+    async def _admit_budget(
+        self,
+        *,
+        task_id: str,
+        action: BudgetActionKind,
+        quantities: dict[BudgetDimension, float],
+        run_id: str,
+        agent_id: str,
+        agent_run_id: str | None,
+        correlation_id: str | None,
+        causation_id: str | None,
+    ) -> BudgetAdmissionDecision | None:
+        if self._budget_admission is None:
+            return None
+        decision = await self._budget_admission.admit(
+            task_id=task_id,
+            action=action,
+            quantities=quantities,
+            run_id=run_id,
+            agent_id=agent_id,
+            agent_run_id=agent_run_id,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            provenance={"enforcement_point": "agent_capability_turn"},
+        )
+        if not decision.permitted:
+            raise ContractError(
+                ErrorCode.RESOURCE_EXHAUSTED,
+                decision.reason,
+                details={
+                    "budget_outcome": decision.outcome.value,
+                    "budget_action": decision.action.value,
+                    "task_id": task_id,
+                    "blocking_dimension": (
+                        None
+                        if decision.blocking_dimension is None
+                        else decision.blocking_dimension.value
+                    ),
+                },
+            )
+        return decision
+
+    async def _reconcile_budget(self, decision: BudgetAdmissionDecision | None) -> None:
+        if decision is not None and self._budget_admission is not None:
+            await self._budget_admission.reconcile(decision)
+
+    async def _release_budget(self, decision: BudgetAdmissionDecision | None) -> None:
+        if decision is not None and self._budget_admission is not None:
+            await self._budget_admission.release(decision)
 
     def _tool_definitions(
         self,
