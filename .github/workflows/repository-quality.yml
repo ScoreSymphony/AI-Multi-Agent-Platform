@@ -1,0 +1,347 @@
+name: Repository quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - ci/consolidate-actions-workflows
+  workflow_dispatch:
+    inputs:
+      cleanup_orphaned_history:
+        description: Delete completed Actions runs whose workflow path no longer exists on the default branch
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  validate-test-layout:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Reject new root-level and issue-numbered tests
+        if: github.event_name == 'pull_request'
+        run: >-
+          python scripts/ci/validate_test_layout.py
+          --base "${{ github.event.pull_request.base.sha }}"
+          --head "${{ github.event.pull_request.head.sha }}"
+      - name: Audit migrated test inventory
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          tests = sorted(Path("tests").rglob("test_*.py"))
+          root = sorted(Path("tests").glob("test_*.py"))
+          issue_named = [path for path in tests if path.name.startswith("test_issue")]
+          pr_named = [path for path in tests if path.name.startswith("test_pr_")]
+          duplicate_taxonomy = [
+              path for path in tests if "control_plane_control_plane" in path.name
+          ]
+          hermes_versions = [path for path in tests if "v0_21_1" in path.name]
+
+          # Historical provenance used bare numeric filename tokens such as
+          # ``..._651_...``. Semantic version tokens (for example Hermes
+          # v0_21_1/v0_21_2) are real upstream versions and must not be confused
+          # with issue/PR provenance. Semantic identifiers such as e2e, p0/p2,
+          # round4/round5, and v2 likewise remain valid behavior-oriented names.
+          semver_token = re.compile(r"v\d+(?:_\d+){2,}")
+          historical_numeric_token = re.compile(r"(?:^|_)\d{2,}(?:_|$)")
+          issue_or_pr_token = re.compile(r"(?:^|_)(?:issue|pr)_?\d+(?:_|$)")
+          suspicious_numeric = []
+          for path in tests:
+              without_semver = semver_token.sub("", path.stem)
+              if historical_numeric_token.search(without_semver) or issue_or_pr_token.search(
+                  without_semver
+              ):
+                  suspicious_numeric.append(path)
+
+          temporary_names = {
+              "plan_test_migration_722.py",
+              "apply_test_migration_722_residual.py",
+          }
+          temporary_722 = []
+          for path in Path(".").rglob("*"):
+              if not path.is_file():
+                  continue
+              if path.name in temporary_names:
+                  temporary_722.append(path)
+                  continue
+              if path.suffix.lower() not in {".py", ".yml", ".yaml", ".sh", ".ps1"}:
+                  continue
+              lowered = path.name.lower()
+              if "722" in lowered and any(
+                  token in lowered for token in ("migration", "audit", "residual", "temp")
+              ):
+                  temporary_722.append(path)
+
+          print(f"test_modules={len(tests)}")
+          print(f"root_level_tests={len(root)}")
+          print(f"issue_named_tests={len(issue_named)}")
+          print(f"pr_named_tests={len(pr_named)}")
+          print(f"control_plane_control_plane={len(duplicate_taxonomy)}")
+          print(f"hermes_v0_21_1={len(hermes_versions)}")
+          print(f"suspicious_numeric_test_names={len(suspicious_numeric)}")
+          print(f"temporary_722_artifacts={len(temporary_722)}")
+
+          assert not root, root
+          assert not issue_named, issue_named
+          assert not pr_named, pr_named
+          assert not duplicate_taxonomy, duplicate_taxonomy
+          assert len(hermes_versions) == 4, hermes_versions
+          assert not suspicious_numeric, suspicious_numeric
+          assert not temporary_722, temporary_722
+          PY
+      - name: Install project test environment
+        run: python -m pip install -e ".[dev]"
+      - name: Pytest collect-only and duplicate reconciliation
+        shell: bash
+        run: |
+          pytest --collect-only > .pytest-collect.txt
+          tail -n 5 .pytest-collect.txt
+          python - <<'PY'
+          from collections import Counter
+          from pathlib import Path
+
+          lines = Path(".pytest-collect.txt").read_text(encoding="utf-8").splitlines()
+          nodeids = [
+              line.strip()
+              for line in lines
+              if line.startswith("tests/") and "::" in line
+          ]
+          duplicates = sorted(nodeid for nodeid, count in Counter(nodeids).items() if count > 1)
+          summary = (
+              f"collected_nodeids={len(nodeids)}\n"
+              f"duplicate_nodeids={len(duplicates)}\n"
+          )
+          Path(".pytest-collection-summary.txt").write_text(summary, encoding="utf-8")
+          print(summary, end="")
+          assert not duplicates, duplicates
+          PY
+      - name: Directory and marker collection reconciliation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          runtime_suites = (
+              "unit",
+              "contract",
+              "integration",
+              "e2e",
+              "performance",
+              "regression",
+              "release",
+          )
+          primary_directories = ("architecture", *runtime_suites)
+          failures: list[str] = []
+
+          def parse_nodeids(text: str) -> set[str]:
+              return {
+                  line.strip()
+                  for line in text.splitlines()
+                  if line.startswith("tests/") and "::" in line
+              }
+
+          def collect(label: str, command: list[str], output: Path) -> set[str]:
+              completed = subprocess.run(command, text=True, capture_output=True)
+              text = completed.stdout + completed.stderr
+              output.write_text(text, encoding="utf-8")
+              selected = parse_nodeids(text)
+              summary = next(
+                  (line for line in reversed(text.splitlines()) if " collected " in line),
+                  "no collection summary",
+              )
+              print(
+                  f"{label}: rc={completed.returncode}; nodeids={len(selected)}; {summary}"
+              )
+              if completed.returncode != 0:
+                  failures.append(label)
+                  print(text)
+              return selected
+
+          directories = {
+              suite: collect(
+                  f"directory:{suite}",
+                  ["pytest", "--collect-only", f"tests/{suite}"],
+                  Path(f".pytest-directory-{suite}.txt"),
+              )
+              for suite in primary_directories
+          }
+          markers = {
+              marker: collect(
+                  f"marker:{marker}",
+                  ["pytest", "--collect-only", "-m", marker],
+                  Path(f".pytest-marker-{marker}.txt"),
+              )
+              for marker in runtime_suites
+          }
+
+          full = parse_nodeids(Path(".pytest-collect.txt").read_text(encoding="utf-8"))
+          primary = set().union(*(directories[suite] for suite in primary_directories))
+          missing_primary = sorted(full - primary)
+          unexpected_primary = sorted(primary - full)
+          if missing_primary or unexpected_primary:
+              failures.append("primary-directory-reconciliation")
+              print(f"missing_primary={missing_primary}")
+              print(f"unexpected_primary={unexpected_primary}")
+
+          for suite in runtime_suites:
+              directory_only = sorted(directories[suite] - markers[suite])
+              marker_only = sorted(markers[suite] - directories[suite])
+              if directory_only or marker_only:
+                  failures.append(f"marker-directory:{suite}")
+                  print(f"{suite}: directory_only={directory_only}")
+                  print(f"{suite}: marker_only={marker_only}")
+
+          reconciliation = (
+              f"full_collection_nodeids={len(full)}\n"
+              f"primary_directory_nodeids={len(primary)}\n"
+              + "".join(
+                  f"directory_{suite}_nodeids={len(directories[suite])}\n"
+                  for suite in primary_directories
+              )
+              + "".join(
+                  f"marker_{suite}_nodeids={len(markers[suite])}\n"
+                  for suite in runtime_suites
+              )
+          )
+          Path(".pytest-selector-reconciliation.txt").write_text(
+              reconciliation,
+              encoding="utf-8",
+          )
+          print(reconciliation, end="")
+
+          if failures:
+              raise SystemExit("collection reconciliation failed: " + ", ".join(failures))
+          PY
+      - name: Exact-path guard regression
+        run: pytest tests/unit/governance/test_test_layout_policy.py
+      - name: Upload collection reconciliation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-layout-collection-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            .pytest-collect.txt
+            .pytest-collection-summary.txt
+            .pytest-directory-*.txt
+            .pytest-marker-*.txt
+            .pytest-selector-reconciliation.txt
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  forge-sidecar-integration:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify Forge executable integration remains retired
+        shell: bash
+        run: |
+          test ! -e src/ai_multi_agent_platform/adapters/forge.py
+          test ! -e src/ai_multi_agent_platform/adapters/forge_http.py
+          test ! -e tests/contract/execution/test_forge_executor.py
+          test ! -e tests/contract/forge/test_forge_optionality.py
+          test ! -e tests/integration/forge/test_forge_http.py
+          test ! -e tests/integration/forge/test_sidecar.py
+          test ! -e tests/regression/forge/test_forge_kernel_regressions.py
+
+          ! grep -Fq "ScoreSymphony/AI-Agent-VPS" .github/workflows/ci.yml
+          ! grep -Fq "FORGE_SIDECAR_" .github/workflows/ci.yml
+          ! grep -Fq "executor-sidecar" .github/workflows/ci.yml
+          ! grep -Fq "FORGE_SIDECAR_" scripts/ci/issue46_external_profile.py
+
+  cleanup-orphaned-actions-history:
+    if: >-
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[actions-history-cleanup]')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.cleanup_orphaned_history)
+    permissions:
+      actions: write
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete completed runs for retired workflow paths
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const repository = await github.rest.repos.get({ owner, repo });
+            const defaultBranch = repository.data.default_branch;
+            const directory = await github.rest.repos.getContent({
+              owner,
+              repo,
+              path: '.github/workflows',
+              ref: defaultBranch,
+            });
+            if (!Array.isArray(directory.data)) {
+              core.setFailed('Expected .github/workflows to be a directory');
+              return;
+            }
+
+            const activePaths = new Set(
+              directory.data
+                .filter((entry) => entry.type === 'file' && /\.ya?ml$/i.test(entry.name))
+                .map((entry) => entry.path),
+            );
+
+            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            const orphaned = runs.filter(
+              (run) =>
+                run.status === 'completed' &&
+                run.path &&
+                !activePaths.has(run.path),
+            );
+            const byPath = new Map();
+            for (const run of orphaned) {
+              const bucket = byPath.get(run.path) || [];
+              bucket.push(run);
+              byPath.set(run.path, bucket);
+            }
+
+            core.info(`default_branch=${defaultBranch}`);
+            core.info(`active_workflow_paths=${activePaths.size}`);
+            core.info(`completed_orphaned_runs=${orphaned.length}`);
+            for (const [path, pathRuns] of [...byPath.entries()].sort()) {
+              core.info(`${path}: ${pathRuns.length} completed run(s)`);
+            }
+
+            const maxDelete = 4000;
+            let deleted = 0;
+            for (const [path, pathRuns] of [...byPath.entries()].sort()) {
+              if (deleted + pathRuns.length > maxDelete) {
+                core.warning(
+                  `Skipping ${path}: deleting its ${pathRuns.length} runs would exceed maxDelete=${maxDelete}`,
+                );
+                continue;
+              }
+              for (const run of pathRuns) {
+                try {
+                  await github.rest.actions.deleteWorkflowRun({ owner, repo, run_id: run.id });
+                  deleted += 1;
+                } catch (error) {
+                  if (error.status === 404) {
+                    continue;
+                  }
+                  throw error;
+                }
+              }
+            }
+            core.info(`deleted_orphaned_runs=${deleted}`);
