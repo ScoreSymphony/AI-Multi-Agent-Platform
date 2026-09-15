@@ -3,7 +3,10 @@
 from collections.abc import Iterable
 
 from ai_multi_agent_platform.accounting import AccountingService
-from ai_multi_agent_platform.application_distribution import ReleaseGatePolicy
+from ai_multi_agent_platform.application_distribution import (
+    ReleaseGatePolicy,
+    StaticReleaseGatePolicy,
+)
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.observability import InMemoryExporter
@@ -58,7 +61,7 @@ def build_single_node_deployment(
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
     application_release_gate_policy: ReleaseGatePolicy | None = None,
 ) -> SingleNodeDeployment:
-    """Build the public durable profile with release policy supplied at construction time."""
+    """Build the public durable profile with release gates bound during construction."""
 
     return _build_single_node_deployment(
         config,
@@ -69,7 +72,9 @@ def build_single_node_deployment(
         distributed_runtime=distributed_runtime,
         enable_distributed_execution=enable_distributed_execution,
         repository_discovery_resolver=repository_discovery_resolver,
-        application_release_gate_policy=application_release_gate_policy,
+        application_release_gate_policy=(
+            application_release_gate_policy or StaticReleaseGatePolicy()
+        ),
     )
 
 
