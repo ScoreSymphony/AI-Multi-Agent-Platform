@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - ".github/workflows/pipelock.yml"
+      - "src/ai_multi_agent_platform/adapters/pipelock.py"
+      - "tests/integration/security/test_pipelock_evaluation.py"
+      - "tests/integration/security/test_pipelock_transports.py"
+      - "tests/integration/pipelock/**"
+      - "upstream/pipelock-core.yaml"
       - "tests/integration/security/test_pipelock_security_corpus.py"
       - "tests/fixtures/pipelock_adversarial_cases.json"
       - "tests/fixtures/pipelock_websocket_audit.yaml"
@@ -34,6 +39,94 @@ permissions:
   contents: read
 
 jobs:
+  pinned-core-platform-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out platform
+        uses: actions/checkout@v7
+      - name: Check out exact Pipelock Core candidate
+        uses: actions/checkout@v7
+        with:
+          repository: luckyPipewrench/pipelock
+          ref: f7d1816f1a5ad63d501b0c48f36066f836f59022
+          path: .candidate/pipelock
+          persist-credentials: false
+      - name: Set up Go from pinned upstream module
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: .candidate/pipelock/go.mod
+          cache-dependency-path: .candidate/pipelock/go.sum
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install platform compatibility dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install "websockets==15.0.1"
+      - name: Build tag-free Core candidate
+        working-directory: .candidate/pipelock
+        run: make build
+      - name: Reject Enterprise-tagged candidate binaries
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          go version -m ./pipelock | tee "$RUNNER_TEMP/pipelock-platform-compat-buildinfo.txt"
+          if grep -Eq 'tags=.*enterprise' "$RUNNER_TEMP/pipelock-platform-compat-buildinfo.txt"; then
+            echo "candidate binary contains Enterprise build tag" >&2
+            exit 1
+          fi
+      - name: Generate audit-only evaluation configuration
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pipelock-platform-compat-home"
+          HOME="$RUNNER_TEMP/pipelock-platform-compat-home" ./pipelock init \
+            --scan-home "$RUNNER_TEMP/pipelock-platform-compat-home" \
+            --output "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml" \
+            --preset audit \
+            --skip-canary
+          grep -Eq '^mode:[[:space:]]*audit$' "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml"
+          sha256sum ./pipelock "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml" \
+            > "$RUNNER_TEMP/pipelock-platform-compat-sha256.txt"
+      - name: Exercise platform MCP stdio through pinned Pipelock
+        env:
+          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
+        run: |
+          pytest -q tests/integration/security/test_pipelock_evaluation.py \
+            -k pipelock_mcp_stdio_wraps_canonical_invocation_path \
+            --junitxml="$RUNNER_TEMP/pipelock-platform-mcp-stdio-junit.xml"
+      - name: Exercise platform MCP HTTP and WebSocket upstreams through pinned Pipelock
+        env:
+          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
+        run: |
+          pytest -q tests/integration/security/test_pipelock_transports.py \
+            --junitxml="$RUNNER_TEMP/pipelock-platform-mcp-remote-junit.xml"
+      - name: Exercise retained adversarial Pipelock integration cases
+        env:
+          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+        run: |
+          pytest -q tests/integration/pipelock/test_adversarial_security.py \
+            --junitxml="$RUNNER_TEMP/pipelock-platform-adversarial-junit.xml"
+      - name: Upload pinned platform compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pipelock-platform-compatibility-evidence
+          path: |
+            ${{ runner.temp }}/pipelock-platform-compat-buildinfo.txt
+            ${{ runner.temp }}/pipelock-platform-compat-sha256.txt
+            ${{ runner.temp }}/pipelock-platform-mcp-stdio-junit.xml
+            ${{ runner.temp }}/pipelock-platform-mcp-remote-junit.xml
+            ${{ runner.temp }}/pipelock-platform-adversarial-junit.xml
+          if-no-files-found: error
+
   pinned-core-adversarial-corpus:
     runs-on: ubuntu-latest
     steps:
