@@ -222,8 +222,7 @@ def test_capability_assignment_compatibility_import_preserves_public_objects() -
         assert getattr(compatibility, name) is getattr(canonical, name)
 
 
-def test_capability_assignment_submodule_compatibility_preserves_object_identity(
-) -> None:
+def test_capability_assignment_submodule_compatibility_preserves_object_identity() -> None:
     from ai_multi_agent_platform.capabilities.assignments import models as canonical_models
     from ai_multi_agent_platform.capabilities.assignments import (
         service as canonical_service,
