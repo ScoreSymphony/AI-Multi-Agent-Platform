@@ -16,10 +16,13 @@ from ai_multi_agent_platform.workspaces import (
     WorkspaceSourceKind,
 )
 
-from .async_provenance import AsyncRepositoryProvenanceAdapter
+from .async_provenance import (
+    AsyncRepositoryProvenanceReader,
+    RepositoryProvenanceReader,
+    as_async_repository_provenance_reader,
+)
 from .models import RepositoryRunProvenance
 from .run_integration import RepositoryRunIntegration
-from .service import RepositoryProvenanceStore
 
 
 class RepositoryWorkspaceExecutionCoordinator:
@@ -34,7 +37,7 @@ class RepositoryWorkspaceExecutionCoordinator:
         self,
         bindings: RunWorkspaceBindingRepository,
         workspaces: WorkspaceProvider,
-        provenance: RepositoryProvenanceStore,
+        provenance: RepositoryProvenanceReader | AsyncRepositoryProvenanceReader,
         *,
         fallback_workspace: str,
     ) -> None:
@@ -42,8 +45,7 @@ class RepositoryWorkspaceExecutionCoordinator:
             raise ValueError("fallback execution workspace must not be blank")
         self._bindings = bindings
         self._workspaces = workspaces
-        self._provenance = provenance
-        self._async_provenance = AsyncRepositoryProvenanceAdapter(provenance)
+        self._provenance = as_async_repository_provenance_reader(provenance)
         self._fallback_workspace = fallback_workspace
         self._run_integration: RepositoryRunIntegration | None = None
         self._materializations: dict[str, WorkspaceMaterialization] = {}
@@ -99,7 +101,7 @@ class RepositoryWorkspaceExecutionCoordinator:
                 details={"run_id": request.run_id},
             )
 
-        records = await self._async_provenance.for_run(request.run_id)
+        records = await self._provenance.for_run(request.run_id)
         actor_ref = self._provenance_actor(records, request.run_id) or "service:platform-execution"
         materialization = await self._workspaces.materialize(
             binding.workspace_id,
@@ -130,7 +132,7 @@ class RepositoryWorkspaceExecutionCoordinator:
         repository_backed = any(
             source.kind is WorkspaceSourceKind.REPOSITORY for source in snapshot.source_refs
         )
-        records = await self._async_provenance.for_run(request.run_id)
+        records = await self._provenance.for_run(request.run_id)
 
         if repository_backed and not records:
             raise ContractError(
