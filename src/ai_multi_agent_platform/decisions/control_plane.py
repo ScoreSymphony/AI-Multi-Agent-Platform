@@ -9,6 +9,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
+from .async_runtime import AsyncDecisionService, as_async_decision_service
 from .models import (
     DecisionAlternative,
     DecisionAlternativeStatus,
@@ -37,7 +38,7 @@ class DecisionRecordResourceService:
 
     def __init__(
         self,
-        decisions: DecisionService,
+        decisions: AsyncDecisionService,
         *,
         visibility: DecisionVisibility | None = None,
     ) -> None:
@@ -51,7 +52,7 @@ class DecisionRecordResourceService:
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
         resources: list[dict[str, JsonValue]] = []
-        for view in self._decisions.list_views():
+        for view in await self._decisions.list_views():
             if self._visibility is None or await self._visibility(context, view):
                 resources.append(decision_view_resource(view))
         return tuple(resources)
@@ -61,7 +62,7 @@ class DecisionRecordResourceService:
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        view = self._decisions.view(resource_id)
+        view = await self._decisions.view(resource_id)
         if self._visibility is not None and not await self._visibility(context, view):
             raise ContractError(ErrorCode.NOT_FOUND, "DecisionRecord was not found")
         return decision_view_resource(view)
@@ -70,7 +71,7 @@ class DecisionRecordResourceService:
 class DecisionRecordCommandHandler:
     """Mutation handler; authorization remains owned by the Control Plane/#15 boundary."""
 
-    def __init__(self, decisions: DecisionService, command: str) -> None:
+    def __init__(self, decisions: AsyncDecisionService, command: str) -> None:
         if command not in DECISION_COMMANDS:
             raise ValueError(f"unsupported DecisionRecord command: {command}")
         self._decisions = decisions
@@ -89,22 +90,22 @@ class DecisionRecordCommandHandler:
                     f"create resource_ref must be {DECISION_COLLECTION!r}",
                 )
             record = _record_from_payload(payload, actor_ref=context.actor.principal_ref)
-            return decision_view_resource(self._decisions.create(record))
+            return decision_view_resource(await self._decisions.create(record))
 
         if self._command == "decision-record.supersede":
-            previous = self._decisions.view(resource_ref)
+            previous = await self._decisions.view(resource_ref)
             record = _record_from_payload(
                 payload,
                 actor_ref=context.actor.principal_ref,
                 supersedes=resource_ref,
                 revision=previous.record.revision + 1,
             )
-            return decision_view_resource(self._decisions.supersede(resource_ref, record))
+            return decision_view_resource(await self._decisions.supersede(resource_ref, record))
 
         if self._command == "decision-record.withdraw":
             reason = _required_string(payload, "reason")
             return decision_view_resource(
-                self._decisions.withdraw(
+                await self._decisions.withdraw(
                     resource_ref,
                     actor_ref=context.actor.principal_ref,
                     reason=reason,
@@ -113,28 +114,30 @@ class DecisionRecordCommandHandler:
 
         reference = _reference(_required_object(payload, "reference"))
         return decision_view_resource(
-            self._decisions.link_downstream_provenance(resource_ref, reference)
+            await self._decisions.link_downstream_provenance(resource_ref, reference)
         )
 
 
 def decision_record_resource_services(
-    decisions: DecisionService,
+    decisions: DecisionService | AsyncDecisionService,
     *,
     visibility: DecisionVisibility | None = None,
 ) -> dict[str, DecisionRecordResourceService]:
+    runtime = as_async_decision_service(decisions)
     return {
         DECISION_COLLECTION: DecisionRecordResourceService(
-            decisions,
+            runtime,
             visibility=visibility,
         )
     }
 
 
 def decision_record_command_handlers(
-    decisions: DecisionService,
+    decisions: DecisionService | AsyncDecisionService,
 ) -> dict[str, DecisionRecordCommandHandler]:
+    runtime = as_async_decision_service(decisions)
     return {
-        command: DecisionRecordCommandHandler(decisions, command) for command in DECISION_COMMANDS
+        command: DecisionRecordCommandHandler(runtime, command) for command in DECISION_COMMANDS
     }
 
 
