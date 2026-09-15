@@ -87,7 +87,12 @@ class TaskBudgetAdmission(Protocol):
         decision: BudgetAdmissionDecision,
         *,
         actual_quantities: Mapping[BudgetDimension, float] | None = None,
-    ) -> None: ...
+    ) -> BudgetAdmissionDecision: ...
+
+    async def assess_after_action(
+        self,
+        decision: BudgetAdmissionDecision,
+    ) -> BudgetAdmissionDecision: ...
 
     async def release(self, decision: BudgetAdmissionDecision) -> None: ...
 
@@ -310,7 +315,7 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
         decision: BudgetAdmissionDecision,
         *,
         actual_quantities: Mapping[BudgetDimension, float] | None = None,
-    ) -> None:
+    ) -> BudgetAdmissionDecision:
         if not decision.permitted:
             raise ValueError("cannot reconcile a denied Task budget admission")
         quantities = dict(actual_quantities or {})
@@ -331,6 +336,97 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
                 consumed_quantity=quantity,
                 add_to_runtime_counter=(limit.source is BudgetConsumptionSource.RUNTIME_COUNTER),
             )
+        return await self.assess_after_action(decision)
+
+    async def assess_after_action(
+        self,
+        decision: BudgetAdmissionDecision,
+    ) -> BudgetAdmissionDecision:
+        """Re-read authoritative consumption after an action whose exact usage was not knowable.
+
+        Reservations are reconciled before this check. A call that lands exactly on a limit is
+        allowed to complete and blocks the next admission; only trustworthy consumed usage beyond
+        the configured limit is classified as exhaustion *during* the completed action.
+        """
+
+        policy = await asyncio.to_thread(self._store.get_policy, decision.task_id)
+        if policy is None:
+            return BudgetAdmissionDecision(
+                task_id=decision.task_id,
+                action=decision.action,
+                outcome=BudgetAdmissionOutcome.ALLOWED,
+                reason="no Task execution budget policy configured",
+            )
+        snapshot = await self.snapshot(decision.task_id)
+        requested = {
+            reservation.dimension: reservation.quantity for reservation in decision.reservations
+        }
+        relevant = _relevant_dimensions(decision.action, requested)
+
+        unavailable = _first_unavailable(snapshot, relevant)
+        if unavailable is not None:
+            if unavailable.limit.unavailable_policy is UnavailableMetricPolicy.REQUIRE_APPROVAL:
+                return _decision(
+                    decision.task_id,
+                    decision.action,
+                    BudgetAdmissionOutcome.APPROVAL_REQUIRED,
+                    "configured hard budget metric became unavailable after action",
+                    snapshot,
+                    unavailable.limit.dimension,
+                )
+            if unavailable.limit.unavailable_policy is UnavailableMetricPolicy.BLOCK:
+                return _decision(
+                    decision.task_id,
+                    decision.action,
+                    BudgetAdmissionOutcome.METRIC_UNAVAILABLE,
+                    "configured hard budget metric became unavailable after action",
+                    snapshot,
+                    unavailable.limit.dimension,
+                )
+
+        overrun = next(
+            (
+                item
+                for item in snapshot.dimensions
+                if item.limit.dimension in relevant and item.overrun
+            ),
+            None,
+        )
+        if overrun is not None:
+            return _decision(
+                decision.task_id,
+                decision.action,
+                BudgetAdmissionOutcome.EXHAUSTED_DURING_EXECUTION,
+                f"Task budget exceeded during {decision.action.value} for "
+                f"{overrun.limit.dimension.value}",
+                snapshot,
+                overrun.limit.dimension,
+            )
+
+        warning = next(
+            (
+                item
+                for item in snapshot.dimensions
+                if item.limit.dimension in relevant and item.warning
+            ),
+            None,
+        )
+        return BudgetAdmissionDecision(
+            task_id=decision.task_id,
+            action=decision.action,
+            outcome=(
+                BudgetAdmissionOutcome.WARNING
+                if warning is not None
+                else BudgetAdmissionOutcome.ALLOWED
+            ),
+            reason=(
+                "Task budget warning threshold reached after action"
+                if warning is not None
+                else "Task budget remains within configured limits after action"
+            ),
+            blocking_dimension=None if warning is None else warning.limit.dimension,
+            snapshot=snapshot,
+        )
 
     async def release(self, decision: BudgetAdmissionDecision) -> None:
         for reservation in decision.reservations:
