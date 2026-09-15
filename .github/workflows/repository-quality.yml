@@ -26,6 +26,12 @@ jobs:
           python scripts/ci/validate_test_layout.py
           --base "${{ github.event.pull_request.base.sha }}"
           --head "${{ github.event.pull_request.head.sha }}"
+      - name: Reject issue-number-driven permanent naming
+        if: github.event_name == 'pull_request'
+        run: >-
+          python scripts/ci/validate_permanent_naming.py
+          --base "${{ github.event.pull_request.base.sha }}"
+          --head "${{ github.event.pull_request.head.sha }}"
       - name: Audit migrated test inventory
         shell: bash
         run: |
@@ -219,7 +225,10 @@ jobs:
               raise SystemExit("collection reconciliation failed: " + ", ".join(failures))
           PY
       - name: Exact-path guard regression
-        run: pytest tests/unit/governance/test_test_layout_policy.py
+        run: >-
+          pytest
+          tests/unit/governance/test_test_layout_policy.py
+          tests/unit/governance/test_permanent_naming_policy.py
       - name: Upload collection reconciliation evidence
         if: always()
         uses: actions/upload-artifact@v7
