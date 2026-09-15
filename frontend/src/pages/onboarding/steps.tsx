@@ -4,7 +4,7 @@ import type { OnboardingStatus } from "../../api/onboarding";
 import type { CanonicalModel } from "../../api/types";
 import { AppLink } from "../../app/router";
 import { Card } from "../../components/States";
-import { CanonicalSelect, FirstTaskForm, GeneralAssistantCloneForm, ModelSetupForm } from "./forms";
+import { CanonicalSelect, FirstTaskForm, GeneralAssistantCloneForm, ModelSetupForm, MultiAgentGoalForm } from "./forms";
 import { Blockers, ModelHealthTable, UnavailableAction } from "./presentation";
 
 interface OnboardingStepsProps {
@@ -16,6 +16,7 @@ interface OnboardingStepsProps {
   configureAvailable: boolean;
   bootstrapAvailable: boolean;
   cloneAvailable: boolean;
+  multiAgentAvailable: boolean;
   firstTaskAvailable: boolean;
   projectAvailable: boolean;
   workspaceAvailable: boolean;
@@ -26,24 +27,27 @@ interface OnboardingStepsProps {
   onCreateWorkspace: (event: FormEvent<HTMLFormElement>) => void;
   onBootstrap: () => void;
   onCloneGeneralAssistant: (event: FormEvent<HTMLFormElement>) => void;
+  onRunMultiAgent: (event: FormEvent<HTMLFormElement>) => void;
   onRunFirstTask: (event: FormEvent<HTMLFormElement>) => void;
 }
 
 export function OnboardingSteps(props: OnboardingStepsProps) {
   const { status, busy } = props;
+  const scopeReady = status.state === "needs_general_assistant" || status.state === "needs_selection" || status.state === "ready_for_task";
   return (
     <>
       {status.state === "needs_model" ? <ModelStep {...props} /> : null}
       {status.state === "needs_project" ? <ProjectStep {...props} /> : null}
       {status.state === "needs_workspace" ? <WorkspaceStep {...props} /> : null}
-      {status.state === "needs_general_assistant" ? <GeneralAssistantStep {...props} /> : null}
-      {status.state === "needs_selection" ? (
-        <Card title="Select an executable path and run the first task">
-          {!props.firstTaskAvailable ? <UnavailableAction text="The onboarding.run-first-task command is unavailable in this deployment." /> : <FirstTaskForm status={status} busy={busy === "run-first-task"} onSubmit={props.onRunFirstTask} />}
+      {scopeReady ? (
+        <Card title="Official first run: multi-agent goal">
+          {!props.multiAgentAvailable ? <UnavailableAction text="The onboarding.run-multi-agent-golden-path command is unavailable in this deployment." /> : <MultiAgentGoalForm status={status} busy={busy === "run-multi-agent"} onSubmit={props.onRunMultiAgent} />}
         </Card>
       ) : null}
-      {status.state === "ready_for_task" ? (
-        <Card title="Run the first task">
+      {status.state === "needs_general_assistant" ? <GeneralAssistantStep {...props} /> : null}
+      {status.state === "needs_selection" || status.state === "ready_for_task" ? (
+        <Card title="Optional single-Agent first task">
+          <p>The multi-agent workflow above is the supported product first run. This path remains available for focused General Assistant use.</p>
           {!props.firstTaskAvailable ? <UnavailableAction text="The onboarding.run-first-task command is unavailable in this deployment." /> : <FirstTaskForm status={status} busy={busy === "run-first-task"} onSubmit={props.onRunFirstTask} />}
         </Card>
       ) : null}
@@ -105,13 +109,14 @@ function WorkspaceStep(props: OnboardingStepsProps) {
 function GeneralAssistantStep(props: OnboardingStepsProps) {
   const { status } = props;
   return (
-    <Card title="General Assistant">
+    <Card title="Optional General Assistant setup">
+      <p>The official multi-agent first run does not require a General Assistant. Install one only if you also want the editable single-Agent path.</p>
       {status.general_assistant_blockers.length ? <Blockers blockers={status.general_assistant_blockers} /> : null}
       {!status.starter_catalog_installed ? (
         <div className="state state-warning">
           <strong>The standard Agent catalog is not installed yet.</strong>
           <p>Bootstrap installs the bundled canonical definitions; it does not create a user-owned Assistant until you clone it.</p>
-          <button className="primary" disabled={!props.bootstrapAvailable || props.busy === "bootstrap-agents"} onClick={props.onBootstrap}>{props.busy === "bootstrap-agents" ? "Bootstrapping…" : "Bootstrap standard Agents"}</button>
+          <button className="secondary" disabled={!props.bootstrapAvailable || props.busy === "bootstrap-agents"} onClick={props.onBootstrap}>{props.busy === "bootstrap-agents" ? "Bootstrapping…" : "Bootstrap standard Agents"}</button>
           {!props.bootstrapAvailable ? <p>The standard-agent.bootstrap command is unavailable.</p> : null}
         </div>
       ) : <GeneralAssistantCloneForm workspaceIds={status.candidate_workspace_ids} busy={props.busy === "clone-agent"} available={props.cloneAvailable} onSubmit={props.onCloneGeneralAssistant} />}
