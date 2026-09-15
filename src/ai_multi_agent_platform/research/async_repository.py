@@ -7,6 +7,7 @@ import sqlite3
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from typing import Any, Protocol, TypeVar
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -258,8 +259,21 @@ class AsyncResearchRepositoryAdapter:
         )
 
     async def save_source(self, source: SourceRecord) -> SourceRecord:
+        def save() -> SourceRecord:
+            current = self._repository.get_source(source.source_id)
+            # Observation history is append-only. Async callers may derive SourceRecord updates
+            # from an earlier snapshot while another observation is being persisted; merge the
+            # canonical history under the shared repository offload instead of allowing a stale
+            # save to drop observation IDs. The incoming current observation remains authoritative
+            # for this mutation while previously committed history is retained.
+            observation_ids = tuple(
+                dict.fromkeys((*current.observation_ids, *source.observation_ids))
+            )
+            resolved = replace(source, observation_ids=observation_ids)
+            return self._repository.save_source(resolved)
+
         return await self._run(
-            lambda: self._repository.save_source(source),
+            save,
             message="failed to persist Research Source",
             mutation=True,
         )
