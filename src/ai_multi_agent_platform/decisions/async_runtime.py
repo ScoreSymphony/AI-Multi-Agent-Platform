@@ -146,10 +146,11 @@ def as_async_decision_service(
 ) -> AsyncDecisionService:
     """Keep native async services native; adapt only the concrete synchronous service.
 
-    Coroutine-function introspection is intentionally avoided here: a conforming async service may
-    use ordinary tracing/decorator wrappers whose methods are regular functions returning awaitables.
-    ``DecisionService`` is the explicit synchronous compatibility type, so every other value in the
-    supported union is already an async-service implementation and must be preserved as-is.
+    Coroutine-function introspection is intentionally avoided here: a conforming async service
+    may use ordinary tracing/decorator wrappers whose methods are regular functions returning
+    awaitables. ``DecisionService`` is the explicit synchronous compatibility type, so every other
+    value in the supported union is already an async-service implementation and must be preserved
+    as-is.
     """
 
     if isinstance(decisions, DecisionService):
