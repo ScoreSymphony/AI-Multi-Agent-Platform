@@ -178,7 +178,7 @@ def test_hermes_adapter_source_has_no_hermes_runtime_import() -> None:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imported_roots.extend(alias.name.split(".", maxsplit=1)[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+        elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
             imported_roots.append(node.module.split(".", maxsplit=1)[0])
 
     assert not any(name.startswith("hermes") for name in imported_roots)

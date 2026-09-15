@@ -1,23 +1,20 @@
 """Concrete adapters implementing platform-owned provider contracts."""
 
-from .hermes import (
+from .hermes import HermesOrchestrator, HermesRunSnapshot
+from .hermes_config import (
     HERMES_ADAPTER_ID,
     HERMES_CONFIGURATION_SCHEMA,
     HERMES_PINNED_REVISION,
     HERMES_UPSTREAM_REPOSITORY,
     HermesAdapterConfig,
-    HermesAgentMapper,
     HermesBridgeMode,
     HermesCompatibilityStatus,
     HermesDiagnosticsMode,
-    HermesHttpResponse,
-    HermesHttpTransport,
-    HermesOrchestrator,
     HermesRetryBehavior,
-    HermesRunSnapshot,
     HermesRuntimeMode,
-    UrllibHermesHttpTransport,
 )
+from .hermes_http import HermesHttpResponse, HermesHttpTransport, UrllibHermesHttpTransport
+from .hermes_mapping import HermesAgentMapper
 from .litellm import (
     LiteLLMMode,
     LiteLLMModelProvider,
