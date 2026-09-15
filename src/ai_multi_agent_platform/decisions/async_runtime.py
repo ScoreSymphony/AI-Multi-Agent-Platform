@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from collections.abc import Callable
 from typing import Protocol, TypeVar, cast
 
@@ -13,16 +12,6 @@ from .models import DecisionRecord, DecisionRecordView, DecisionReference
 from .service import DecisionService
 
 _T = TypeVar("_T")
-_ASYNC_METHODS = (
-    "create",
-    "supersede",
-    "withdraw",
-    "link_downstream_provenance",
-    "action_provenance",
-    "view",
-    "list_views",
-    "supersession_chain",
-)
 
 
 class AsyncDecisionService(Protocol):
@@ -155,18 +144,17 @@ class AsyncDecisionRuntime:
 def as_async_decision_service(
     decisions: DecisionService | AsyncDecisionService,
 ) -> AsyncDecisionService:
-    """Keep native async services native; adapt the synchronous compatibility service once."""
+    """Keep native async services native; adapt only the concrete synchronous service.
 
-    states = tuple(_method_is_async(decisions, name) for name in _ASYNC_METHODS)
-    if any(states) and not all(states):
-        raise TypeError("Decision service must be consistently sync or async")
-    if all(states):
-        return cast(AsyncDecisionService, decisions)
-    return AsyncDecisionRuntime(cast(DecisionService, decisions))
+    Coroutine-function introspection is intentionally avoided here: a conforming async service may
+    use ordinary tracing/decorator wrappers whose methods are regular functions returning awaitables.
+    ``DecisionService`` is the explicit synchronous compatibility type, so every other value in the
+    supported union is already an async-service implementation and must be preserved as-is.
+    """
 
-
-def _method_is_async(value: object, name: str) -> bool:
-    return inspect.iscoroutinefunction(getattr(value, name, None))
+    if isinstance(decisions, DecisionService):
+        return AsyncDecisionRuntime(decisions)
+    return cast(AsyncDecisionService, decisions)
 
 
 __all__ = [
