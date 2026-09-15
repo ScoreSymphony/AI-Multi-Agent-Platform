@@ -63,7 +63,7 @@ from .startup_recovery import (
     reconcile_single_node_startup,
     require_blocked_startup_run,
 )
-from .task_budget_bindings import TaskBudgetRepairRuntime
+from .task_budget_bindings import TaskBudgetCoordinationBindings, TaskBudgetRepairRuntime
 
 
 @dataclass(slots=True)
@@ -126,6 +126,10 @@ def build_single_node_deployment(
     # Replanning already owns a narrow admission seam on the #902 branch. Bind the same durable
     # authority used by model/tool execution rather than maintaining an independent counter.
     base.planning._budget_admission = task_budgets  # noqa: SLF001 - composition seam
+
+    # Coordination owns Step attempts/retries. Keep its lifecycle authority and decorate only the
+    # admission/release seams so parallel claims and retry counters share the Task-level budget.
+    TaskBudgetCoordinationBindings(base.coordination, task_budgets).install()
 
     budgeted_models = TaskBudgetModelRuntime(base.model_runtime, task_budgets)
     base.model_runtime = as_model_runtime(budgeted_models)
