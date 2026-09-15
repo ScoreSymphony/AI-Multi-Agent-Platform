@@ -76,8 +76,8 @@ def _write_fake_kubectl(
         "serverVersion": {"gitVersion": "v1.35.0"},
     }
 
-    executable = tmp_path / "kubectl-fake"
-    executable.write_text(
+    script = tmp_path / "kubectl-fake.py"
+    script.write_text(
         "#!/usr/bin/env python3\n"
         "import json, sys\n"
         f"POD = {pod!r}\n"
@@ -103,8 +103,16 @@ def _write_fake_kubectl(
         "raise SystemExit(2)\n",
         encoding="utf-8",
     )
-    executable.chmod(executable.stat().st_mode | 0o111)
-    return executable
+    if os.name == "nt":
+        executable = tmp_path / "kubectl-fake.cmd"
+        executable.write_text(
+            f'@echo off\r\n"{sys.executable}" "{script}" %*\r\n',
+            encoding="utf-8",
+        )
+        return executable
+
+    script.chmod(script.stat().st_mode | 0o111)
+    return script
 
 
 def _run(

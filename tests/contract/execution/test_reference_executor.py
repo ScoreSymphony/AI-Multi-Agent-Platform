@@ -40,6 +40,30 @@ def test_health_and_capability_metadata(tmp_path: Path) -> None:
     assert descriptor.metadata["arbitrary_commands"] is False
 
 
+def test_write_artifact_preserves_exact_utf8_bytes(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "workspaces"
+    workspace = workspace_root / "run-1"
+    workspace.mkdir(parents=True)
+    executor = ReferenceExecutor(workspace_root)
+    content = "line one\nline two\n"
+    request = ExecutionRequest(
+        task_id="task-1",
+        run_id="run-1",
+        step_id="step-1",
+        correlation_id="corr-1",
+        action="write_artifact",
+        workspace="run-1",
+        arguments={"path": "evidence.txt", "content": content},
+    )
+
+    result = asyncio.run(executor.execute(request))
+
+    expected = content.encode("utf-8")
+    assert result.status is ExecutionStatus.SUCCEEDED
+    assert (workspace / "evidence.txt").read_bytes() == expected
+    assert result.artifacts[0].size_bytes == len(expected)
+
+
 def test_inflight_cancellation_is_acknowledged_by_reference_executor(tmp_path: Path) -> None:
     workspace_root = tmp_path / "workspaces"
     workspace = workspace_root / "run-1"
