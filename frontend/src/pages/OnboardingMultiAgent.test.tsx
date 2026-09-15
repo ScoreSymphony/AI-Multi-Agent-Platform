@@ -1,7 +1,9 @@
 import { type AnchorHTMLAttributes, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import type { OnboardingStatus } from "../api/onboarding";
 import { MultiAgentFirstResult } from "./OnboardingPage";
+import { MultiAgentGoalForm } from "./onboarding/forms";
 
 vi.mock("../app/router", () => ({
   AppLink: ({ href, children, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & { children?: ReactNode }) => (
@@ -11,7 +13,46 @@ vi.mock("../app/router", () => ({
   useRouter: () => ({ path: "/", navigate: vi.fn() }),
 }));
 
+function status(overrides: Partial<OnboardingStatus> = {}): OnboardingStatus {
+  return {
+    id: "first-run",
+    type: "onboarding_status",
+    state: "needs_general_assistant",
+    authenticated_actor_present: true,
+    project_count: 2,
+    workspace_count: 1,
+    local_model_count: 1,
+    self_hosted_model_count: 0,
+    remote_model_count: 0,
+    text_capable_golden_path_model_count: 1,
+    usable_golden_path_model_count: 1,
+    general_assistant_count: 0,
+    executable_general_assistant_count: 0,
+    general_assistant_blockers: [],
+    selection_required: false,
+    selection_kind: null,
+    candidate_project_ids: ["project-a", "project-b"],
+    candidate_workspace_ids: ["workspace-only"],
+    candidate_agent_ids: [],
+    starter_catalog_installed: false,
+    installed_model_adapter_ids: ["adapter-test"],
+    automatic_remote_provider_selection: false,
+    automatic_paid_provider_selection: false,
+    guidance: [],
+    ...overrides,
+  };
+}
+
 describe("official multi-agent onboarding presentation", () => {
+  it("keeps the canonical Workspace explicit even when there is only one candidate", () => {
+    const html = renderToStaticMarkup(
+      <MultiAgentGoalForm status={status()} busy={false} onSubmit={() => undefined} />,
+    );
+
+    expect(html).toContain('name="workspace_id"');
+    expect(html).toContain("workspace-only");
+  });
+
   it("renders dependency, artifact, result and verification trace from the shared API response", () => {
     const html = renderToStaticMarkup(
       <MultiAgentFirstResult
