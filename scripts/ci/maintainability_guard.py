@@ -334,8 +334,7 @@ def render_markdown(inventory: Mapping[str, Any]) -> str:
     for module in sorted(modules, key=lambda item: (-item["lines"], item["path"]))[:30]:
         signal = "extreme" if module["extreme"] else "review" if module["review"] else ""
         lines.append(
-            f"| {module['lines']} | `{module['path']}` | {signal} | "
-            f"{module['exemption'] or ''} |"
+            f"| {module['lines']} | `{module['path']}` | {signal} | {module['exemption'] or ''} |"
         )
 
     lines.extend(
@@ -400,13 +399,11 @@ def compare_inventories(
         previous = baseline_modules.get(module["path"])
         if previous is None or not _active_extreme(previous):
             regressions.append(
-                f"module {module['path']} is a newly introduced extreme "
-                f"({module['lines']} lines)"
+                f"module {module['path']} is a newly introduced extreme ({module['lines']} lines)"
             )
 
     baseline_functions = {
-        (path, function["qualname"]): function
-        for path, function in _all_functions(baseline)
+        (path, function["qualname"]): function for path, function in _all_functions(baseline)
     }
     for path, function in _all_functions(current):
         if not _active_extreme(function):
