@@ -16,7 +16,6 @@ from ai_multi_agent_platform.application_distribution import (
     JsonApplicationReleaseRepository,
     LocalBuildTargetMatcher,
     ReleaseGatePolicy,
-    StaticReleaseGatePolicy,
 )
 from ai_multi_agent_platform.application_distribution.control_plane import (
     register_application_distribution_control_plane,
@@ -82,7 +81,7 @@ def build_application_distribution(
     control_plane: ControlPlane,
     release_gate_policy: ReleaseGatePolicy | None = None,
 ) -> ApplicationDistributionBundle:
-    """Build application distribution with release gates bound at construction time."""
+    """Build application distribution with an optional release gate bound at construction."""
 
     _install_application_policies(authorization, secrets=secrets is not None)
     repository = JsonApplicationReleaseRepository(config.database_dir / "application-releases.json")
@@ -120,12 +119,16 @@ def build_application_distribution(
         ),
         repository=kernel_repository,
     )
-    gate_coordinator = ApplicationReleaseGateCoordinator(
-        policy=release_gate_policy or StaticReleaseGatePolicy(),
-        files=files,
-        verification_access=CanonicalVerificationAccess(verification),
-        evaluations=evaluation_repository,
-        evaluation_service=evaluation,
+    gate_coordinator = (
+        None
+        if release_gate_policy is None
+        else ApplicationReleaseGateCoordinator(
+            policy=release_gate_policy,
+            files=files,
+            verification_access=CanonicalVerificationAccess(verification),
+            evaluations=evaluation_repository,
+            evaluation_service=evaluation,
+        )
     )
     service = ApplicationDistributionService(
         repository,
