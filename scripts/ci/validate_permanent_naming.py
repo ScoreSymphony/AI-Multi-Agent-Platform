@@ -118,7 +118,8 @@ def source_violations(path: str, source: str) -> tuple[str, ...]:
     for name, line in _identifier_names(tree):
         if ISSUE_IDENTIFIER.search(name):
             violations.append(
-                f"{path}:{line}: identifier {name!r} must describe behavior, not a GitHub issue number"
+                f"{path}:{line}: identifier {name!r} must describe behavior, "
+                "not a GitHub issue number"
             )
 
     for node in _docstring_nodes(tree):
