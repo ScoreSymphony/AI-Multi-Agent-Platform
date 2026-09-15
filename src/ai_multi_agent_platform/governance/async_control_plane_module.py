@@ -7,7 +7,11 @@ from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.control_plane.extensions import ControlPlane, ControlPlaneModule, ResourceService
+from ai_multi_agent_platform.control_plane.extensions import (
+    ControlPlane,
+    ControlPlaneModule,
+    ResourceService,
+)
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
 from .async_runtime import AsyncGovernanceRuntime
@@ -156,9 +160,7 @@ class AsyncProposalRevisionResourceService(ResourceService):
         proposal_id, revision = _revision_ref(resource_id, "proposal")
         current = await self._runtime.get_proposal(proposal_id)
         await _require_allowed(self._control_plane, context, "proposal:read", current)
-        return proposal_revision_resource(
-            await self._runtime.get_proposal(proposal_id, revision)
-        )
+        return proposal_revision_resource(await self._runtime.get_proposal(proposal_id, revision))
 
 
 class AsyncSpecificationRevisionResourceService(ResourceService):
