@@ -203,6 +203,9 @@ class ControlPlane(_BaseControlPlane):
                     retry_required = True
                     continue
                 budget = confirmed.budget
+                if budget.owner_type is None or budget.owner_id is None:
+                    retry_required = True
+                    continue
                 recipient = RecipientRef(RecipientType(budget.owner_type), budget.owner_id)
                 event = BudgetThresholdEvent(
                     budget_id=budget.id,
