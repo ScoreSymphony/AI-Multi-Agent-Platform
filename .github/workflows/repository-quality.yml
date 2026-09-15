@@ -4,7 +4,6 @@ on:
   pull_request:
   push:
     branches:
-      - main
       - ci/consolidate-actions-workflows
   workflow_dispatch:
     inputs:
@@ -245,9 +244,7 @@ jobs:
           retention-days: 14
 
   cleanup-orphaned-actions-history:
-    if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[actions-history-cleanup]')) ||
-      (github.event_name == 'workflow_dispatch' && inputs.cleanup_orphaned_history)
+    if: github.event_name == 'workflow_dispatch' && inputs.cleanup_orphaned_history
     permissions:
       actions: write
       contents: read
