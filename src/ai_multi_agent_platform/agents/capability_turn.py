@@ -115,9 +115,7 @@ class AgentCapabilityTurn:
                     request_id=f"{run_id}:model",
                     context=context,
                     system_instruction=instruction,
-                    messages=(
-                        ModelMessage.text(ModelRole.USER, objective or "Execute the task."),
-                    ),
+                    messages=(ModelMessage.text(ModelRole.USER, objective or "Execute the task."),),
                     tools=tools,
                     model_config_id=model_config_id,
                     task_id=task_id,
