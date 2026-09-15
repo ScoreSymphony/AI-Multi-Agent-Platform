@@ -8,7 +8,7 @@ The dedicated #862 object-storage evidence campaigns are retired because #862 is
 
 The dedicated #859 Bifrost security/performance/DNS-rebinding evaluation workflows are retired after the evaluation completed. The ordinary CI workflow retains the pinned Bifrost compatibility lane; the specialized #859 evidence remains preserved in source history, tests and research records rather than as three permanent issue-numbered Actions entries.
 
-The standalone Pipelock candidate-compatibility workflow is retired after #730 completed. `pipelock.yml` remains the maintained Pipelock validation suite and ordinary CI continues to run the repository test suite.
+The standalone Pipelock candidate-compatibility workflow is retired as a separate Actions entry, but its live pinned-runtime responsibilities are not dropped. `pipelock.yml` remains the maintained Pipelock validation suite and now directly exercises the exact reviewed Core pin against the platform adapter, MCP stdio, MCP HTTP/WebSocket transports, and retained adversarial integration cases. This preserves candidate compatibility coverage while keeping Pipelock under one durable workflow.
 
 ## Consolidated durable workflows
 
