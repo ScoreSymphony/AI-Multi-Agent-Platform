@@ -196,15 +196,20 @@ else:
     raise SystemExit("Bifrost DNS-rebinding endpoint did not become healthy")
 PY
 
+set +e
 BIFROST_EVAL_BIFROST_BASE_URL=http://127.0.0.1:18080/v1 \
 BIFROST_EVAL_BIFROST_NATIVE_OPENAI_MODEL=openai/fixture-model \
 BIFROST_EVAL_SSRF_REBINDING_URL=http://issue859-rebind.test:18001/redirect-to-rebound-host \
 BIFROST_EVAL_REBINDING_DNS_CONTROL_URL=http://127.0.0.1:18002 \
 BIFROST_EVAL_SSRF_SENTINEL_CONTROL_URL=http://127.0.0.1:18001/control \
 pytest -q tests/integration/platform/test_bifrost_dns_rebinding.py -m integration
+gate_status=$?
+set -e
+export BIFROST_DNS_REBINDING_GATE_STATUS="$gate_status"
 
 python - <<'PY'
 import json
+import os
 import pathlib
 import urllib.request
 
@@ -225,6 +230,7 @@ evidence = {
     "redirect_url": "http://issue859-rebind.test:18003/ssrf-sentinel.txt",
     "first_dns_answer": "203.0.113.10",
     "rebound_dns_answer": "127.0.0.1",
+    "gate_exit_status": int(os.environ["BIFROST_DNS_REBINDING_GATE_STATUS"]),
     "dns": get("http://127.0.0.1:18002/stats"),
     "sentinel": get("http://127.0.0.1:18001/control/stats"),
     "expected_contract": (
@@ -237,3 +243,4 @@ path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding=
 PY
 
 test -s "$artifact"
+exit "$gate_status"
