@@ -27,11 +27,11 @@ from .service import TaskBudgetEnforcementService
 
 
 class TaskBudgetPolicyMutationService:
-    """Apply exact, versioned Task-budget revisions behind the canonical security gate.
+    """Apply exact, versioned Task-budget changes behind the canonical security gate.
 
-    Agents may initiate a budget increase/override request, but an Agent can never turn an
-    authorization-policy ``allow`` into a silent self-grant. Agent-originated mutations require
-    an independently approved Approval record bound to the exact proposed policy revision.
+    Agents may initiate a budget configuration/increase request, but an Agent can never turn an
+    authorization-policy ``allow`` into a silent self-grant. Agent-originated mutations require an
+    independently approved Approval record bound to the exact proposed policy revision.
     """
 
     def __init__(
@@ -41,6 +41,55 @@ class TaskBudgetPolicyMutationService:
     ) -> None:
         self._budgets = budgets
         self._authorization = authorization
+
+    async def configure(
+        self,
+        candidate: TaskBudgetPolicy,
+        *,
+        actor: ActorIdentity,
+        operation: OperationContext,
+        approval_id: str | None = None,
+    ) -> TaskBudgetSnapshot:
+        """Create the first Task budget policy without bypassing #15 authorization."""
+
+        current = await self._budgets.policy(candidate.task_id)
+        if current is not None:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Task execution budget policy already exists; revise it instead",
+                details={"task_id": candidate.task_id, "current_version": current.version},
+            )
+        if candidate.version != 1:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "initial Task execution budget policy must use version 1",
+                details={"task_id": candidate.task_id, "requested_version": candidate.version},
+            )
+
+        action = _configuration_action(
+            candidate=candidate,
+            actor=actor,
+            operation=operation,
+        )
+        await self._require_independent_agent_approval(
+            action,
+            actor=actor,
+            approval_id=approval_id,
+            task_id=candidate.task_id,
+        )
+        await self._authorization.enforce(
+            action,
+            approval_id=approval_id,
+            risk=RiskClassification.HIGH,
+        )
+        return await self._budgets.put_policy(
+            _authorized_policy(
+                candidate,
+                actor=actor,
+                action=action,
+                approval_id=approval_id,
+            )
+        )
 
     async def revise(
         self,
@@ -80,56 +129,85 @@ class TaskBudgetPolicyMutationService:
             actor=actor,
             operation=operation,
         )
-
-        # An Agent can ask for more budget, but cannot silently grant itself more budget even if a
-        # permissive provider policy would otherwise return ALLOW. The exact proposed action must
-        # have an independently approved Approval record.
-        if actor.actor_type is ActorType.AGENT:
-            approved = await self._authorization.runtime_approvals.resolve_valid_for(
-                action,
-                approval_id=approval_id,
-            )
-            if approved is None:
-                pending = await self._authorization.ensure_pending_approval_with_event(
-                    action,
-                    reason="Agent-originated Task budget changes require independent Approval",
-                    policy_id="task-budget:agent-independent-approval",
-                    risk=RiskClassification.HIGH,
-                )
-                raise ContractError(
-                    ErrorCode.FORBIDDEN,
-                    "Agent-originated Task budget changes require independent Approval",
-                    details={
-                        "authorization_outcome": AuthorizationOutcome.REQUIRE_APPROVAL.value,
-                        "approval_id": pending.approval_id,
-                        "requested_action_digest": action.digest,
-                        "task_id": candidate.task_id,
-                    },
-                )
-
+        await self._require_independent_agent_approval(
+            action,
+            actor=actor,
+            approval_id=approval_id,
+            task_id=candidate.task_id,
+        )
         await self._authorization.enforce(
             action,
             approval_id=approval_id,
             risk=RiskClassification.HIGH,
         )
-
-        provenance = dict(candidate.provenance)
-        provenance.update(
-            {
-                "budget_mutation_actor": actor.actor_id,
-                "budget_mutation_actor_type": actor.actor_type.value,
-                "budget_mutation_action_digest": action.digest,
-            }
+        return await self._budgets.put_policy(
+            _authorized_policy(
+                candidate,
+                actor=actor,
+                action=action,
+                approval_id=approval_id,
+            )
         )
-        if approval_id is not None:
-            provenance["budget_mutation_approval_id"] = approval_id
 
-        authorized = replace(
-            candidate,
-            provenance=provenance,
-            updated_at=utc_now(),
+    async def _require_independent_agent_approval(
+        self,
+        action: ProposedAction,
+        *,
+        actor: ActorIdentity,
+        approval_id: str | None,
+        task_id: str,
+    ) -> None:
+        # An Agent can ask for budget, but cannot silently grant itself more budget even if a
+        # permissive provider policy would otherwise return ALLOW. The exact proposed action must
+        # have an independently approved Approval record.
+        if actor.actor_type is not ActorType.AGENT:
+            return
+        approved = await self._authorization.runtime_approvals.resolve_valid_for(
+            action,
+            approval_id=approval_id,
         )
-        return await self._budgets.put_policy(authorized)
+        if approved is not None:
+            return
+        pending = await self._authorization.ensure_pending_approval_with_event(
+            action,
+            reason="Agent-originated Task budget changes require independent Approval",
+            policy_id="task-budget:agent-independent-approval",
+            risk=RiskClassification.HIGH,
+        )
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "Agent-originated Task budget changes require independent Approval",
+            details={
+                "authorization_outcome": AuthorizationOutcome.REQUIRE_APPROVAL.value,
+                "approval_id": pending.approval_id,
+                "requested_action_digest": action.digest,
+                "task_id": task_id,
+            },
+        )
+
+
+def _configuration_action(
+    *,
+    candidate: TaskBudgetPolicy,
+    actor: ActorIdentity,
+    operation: OperationContext,
+) -> ProposedAction:
+    return ProposedAction(
+        AuthorizationContext(
+            actor=actor,
+            action=AuthorizationAction.CREATE,
+            resource_type=ResourceType.TASK,
+            resource_id=candidate.task_id,
+            operation=operation,
+            task_id=candidate.task_id,
+            side_effect="task_budget_policy_configuration",
+        ),
+        payload={
+            "task_id": candidate.task_id,
+            "requested_version": candidate.version,
+            "limits": [_limit_payload(limit) for limit in candidate.limits],
+        },
+    )
 
 
 def _revision_action(
@@ -155,6 +233,30 @@ def _revision_action(
             "requested_version": candidate.version,
             "limits": [_limit_payload(limit) for limit in candidate.limits],
         },
+    )
+
+
+def _authorized_policy(
+    candidate: TaskBudgetPolicy,
+    *,
+    actor: ActorIdentity,
+    action: ProposedAction,
+    approval_id: str | None,
+) -> TaskBudgetPolicy:
+    provenance = dict(candidate.provenance)
+    provenance.update(
+        {
+            "budget_mutation_actor": actor.actor_id,
+            "budget_mutation_actor_type": actor.actor_type.value,
+            "budget_mutation_action_digest": action.digest,
+        }
+    )
+    if approval_id is not None:
+        provenance["budget_mutation_approval_id"] = approval_id
+    return replace(
+        candidate,
+        provenance=provenance,
+        updated_at=utc_now(),
     )
 
 
