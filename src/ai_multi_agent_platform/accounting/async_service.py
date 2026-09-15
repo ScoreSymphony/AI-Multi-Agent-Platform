@@ -25,7 +25,6 @@ from .models import (
     UsageScope,
 )
 from .service import AccountingService
-from .store import UsageStore
 
 _T = TypeVar("_T")
 _BUSY_MARKERS = (
