@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ai_multi_agent_platform.contracts import LifecycleBackend
+from ai_multi_agent_platform.contracts import (
+    ExecutionHandle,
+    ExecutionRequest,
+    ExecutionSnapshot,
+    LifecycleBackend,
+    OperationContext,
+    ProviderDescriptor,
+)
 from ai_multi_agent_platform.distributed import (
     DistributedLifecycleBackend,
     DistributedRegistry,
@@ -27,6 +34,42 @@ from .storage import StorageBundle
 _REFERENCE_EXECUTION_WORKSPACE = "reference"
 
 
+class LifecycleBinding(LifecycleBackend):
+    """Narrow public composition seam around the kernel-owned lifecycle participant.
+
+    The binding itself is the stable lifecycle object handed to ``PlatformKernel``. Higher
+    deployment layers may replace its delegate during startup without reaching into kernel or
+    wrapper implementation internals. Runtime code only observes the final delegate.
+    """
+
+    def __init__(self, delegate: LifecycleBackend) -> None:
+        self._delegate = delegate
+
+    @property
+    def delegate(self) -> LifecycleBackend:
+        """Return the currently bound lifecycle through the public composition contract."""
+
+        return self._delegate
+
+    def bind(self, delegate: LifecycleBackend) -> None:
+        """Replace the startup-time delegate without mutating ``PlatformKernel`` internals."""
+
+        self._delegate = delegate
+
+    @property
+    def descriptor(self) -> ProviderDescriptor:
+        return self._delegate.descriptor
+
+    async def start(self, request: ExecutionRequest) -> ExecutionHandle:
+        return await self._delegate.start(request)
+
+    async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
+        return await self._delegate.get(run_id, context)
+
+    async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
+        return await self._delegate.cancel(run_id, context)
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutionBundle:
     """Reference execution authorities and the selected canonical lifecycle backend."""
@@ -34,7 +77,8 @@ class ExecutionBundle:
     reference_orchestrator: ReferenceOrchestrator
     reference_executor: ReferenceExecutor
     orchestrator: ObservedOrchestrator
-    lifecycle: LifecycleBackend
+    fallback_lifecycle: LifecycleBackend
+    lifecycle: LifecycleBinding
     distributed_runtime: DistributedRuntime | None
 
 
@@ -79,20 +123,24 @@ def build_execution(
             workspace_bindings=storage.run_workspace_bindings,
         )
 
-    lifecycle = AuthorizedLifecycleBackend(
-        FirstRunAgentLifecycleBackend(
-            delegate=execution_lifecycle,
-            tasks=EventSourcedTaskRepository(storage.kernel_repository),
-            agents=runtime.agent_runtime,
-            models=runtime.model_runtime,
-        ),
-        security.approval_gate,
-        allow_internal_service_reads=True,
+    fallback_lifecycle: LifecycleBackend = FirstRunAgentLifecycleBackend(
+        delegate=execution_lifecycle,
+        tasks=EventSourcedTaskRepository(storage.kernel_repository),
+        agents=runtime.agent_runtime,
+        models=runtime.model_runtime,
+    )
+    lifecycle = LifecycleBinding(
+        AuthorizedLifecycleBackend(
+            fallback_lifecycle,
+            security.approval_gate,
+            allow_internal_service_reads=True,
+        )
     )
     return ExecutionBundle(
         reference_orchestrator=reference_orchestrator,
         reference_executor=reference_executor,
         orchestrator=orchestrator,
+        fallback_lifecycle=fallback_lifecycle,
         lifecycle=lifecycle,
         distributed_runtime=effective_distributed_runtime,
     )
