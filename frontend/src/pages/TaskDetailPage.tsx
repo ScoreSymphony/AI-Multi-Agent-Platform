@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ControlPlaneClient } from "../api/client";
+import { ControlPlaneClient, isControlPlaneError } from "../api/client";
 import {
   describeLiveStreamError,
   TaskEventStream,
   type LiveConnectionState,
 } from "../api/live";
+import type { TaskExecutionBudgetProjection } from "../api/taskBudgets";
 import type {
   CanonicalProject,
   CanonicalRun,
@@ -25,6 +26,7 @@ import {
   LoadingState,
   StatusBadge,
 } from "../components/States";
+import { TaskExecutionBudget } from "../components/TaskExecutionBudget";
 import { WorkflowProgress } from "../components/WorkflowProgress";
 import { isCanonicalId } from "../platform/id";
 import { usePermissionHint } from "../security/permissions";
@@ -52,6 +54,9 @@ export function TaskDetailPage({
   const [task, setTask] = useState<CanonicalTask | null>(null);
   const [runs, setRuns] = useState<CanonicalRun[]>([]);
   const [events, setEvents] = useState<TimelineItem[]>([]);
+  const [budget, setBudget] = useState<TaskExecutionBudgetProjection | null>(null);
+  const [budgetError, setBudgetError] = useState<unknown>(null);
+  const [budgetLoading, setBudgetLoading] = useState(true);
   const [workflow, setWorkflow] = useState<PlanCoordinationProjection | null>(null);
   const [workflowError, setWorkflowError] = useState<unknown>(null);
   const [workflowUnavailable, setWorkflowUnavailable] = useState(false);
@@ -70,19 +75,34 @@ export function TaskDetailPage({
     if (!isCanonicalId(taskId)) {
       if (generation === loadGeneration.current) {
         setError(new Error("This route does not contain a valid canonical Task ID."));
+        setBudgetLoading(false);
       }
       return;
     }
+    setBudgetLoading(true);
     try {
-      const [nextTask, nextRuns, timeline] = await Promise.all([
+      const budgetRequest = client
+        .getTaskExecutionBudget(taskId)
+        .then((value) => ({ value, error: null as unknown }))
+        .catch((nextError: unknown) => {
+          if (isControlPlaneError(nextError) && nextError.status === 404) {
+            return { value: null, error: null };
+          }
+          return { value: null, error: nextError };
+        });
+      const [nextTask, nextRuns, timeline, nextBudget] = await Promise.all([
         client.getTask(taskId),
         client.listTaskRuns(taskId, { limit: 100, sort: "created_at", direction: "desc" }),
         client.timeline(taskId, { limit: 100, direction: "asc" }),
+        budgetRequest,
       ]);
       if (generation !== loadGeneration.current) return;
       setTask(nextTask);
       setRuns(nextRuns.items);
       setEvents(timeline.items);
+      setBudget(nextBudget.value);
+      setBudgetError(nextBudget.error);
+      setBudgetLoading(false);
       setError(null);
       if (nextTask.plan_ref === null) {
         setWorkflow(null);
@@ -90,7 +110,10 @@ export function TaskDetailPage({
         setWorkflowUnavailable(false);
       }
     } catch (nextError) {
-      if (generation === loadGeneration.current) setError(nextError);
+      if (generation === loadGeneration.current) {
+        setError(nextError);
+        setBudgetLoading(false);
+      }
     }
   }, [client, taskId]);
 
@@ -297,6 +320,7 @@ export function TaskDetailPage({
           <ReferenceList label="Results" values={task.result_ids} />
         </Card>
       </div>
+      <TaskExecutionBudget budget={budget} error={budgetError} loading={budgetLoading} />
       <Card title="Durable workflow progress">
         {workflowError != null ? (
           <ErrorState error={workflowError} />
