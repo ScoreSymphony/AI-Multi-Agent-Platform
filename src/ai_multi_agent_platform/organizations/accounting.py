@@ -10,7 +10,7 @@ from ai_multi_agent_platform.accounting.async_service import (
 )
 from ai_multi_agent_platform.accounting.control_plane import (
     _aggregate_resources,
-    _budget_resource_runtime,
+    _budget_resource_from_state,
     _record_resource,
 )
 from ai_multi_agent_platform.accounting.models import (
@@ -300,8 +300,9 @@ class OrganizationUsageBudgetResourceService:
         del query
         resources: list[dict[str, JsonValue]] = []
         for budget in await self._accounting.list_budgets():
-            if await self._visibility.budget_visible(context, budget):
-                resources.append(await _budget_resource_runtime(self._accounting, budget))
+            state = await self._accounting.budget_state(budget.id)
+            if await self._visibility.budget_visible(context, state.budget):
+                resources.append(_budget_resource_from_state(state.budget, state))
         return tuple(resources)
 
     async def get_resource(
@@ -312,7 +313,10 @@ class OrganizationUsageBudgetResourceService:
         budget = await self._accounting.get_budget(resource_id)
         if budget is None or not await self._visibility.budget_visible(context, budget):
             raise ContractError(ErrorCode.NOT_FOUND, f"usage budget not found: {resource_id}")
-        return await _budget_resource_runtime(self._accounting, budget)
+        state = await self._accounting.budget_state(resource_id)
+        if not await self._visibility.budget_visible(context, state.budget):
+            raise ContractError(ErrorCode.NOT_FOUND, f"usage budget not found: {resource_id}")
+        return _budget_resource_from_state(state.budget, state)
 
 
 def organization_accounting_resource_services(
