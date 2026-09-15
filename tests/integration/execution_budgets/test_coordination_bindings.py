@@ -79,7 +79,7 @@ def _record(
 
 
 @pytest.mark.asyncio
-async def test_parallel_claim_blocks_second_step_and_retry_is_counted_after_start() -> None:
+async def test_parallel_claim_blocks_second_step_retry_is_counted_and_cancel_releases_claim() -> None:
     task_id = new_id("task")
     plan_id = new_id("plan")
     first_step_id = new_id("step")
@@ -115,24 +115,25 @@ async def test_parallel_claim_blocks_second_step_and_retry_is_counted_after_star
     owner = OwnerRef(type="user", id="budget-test")
     first_step = Step(plan_id=plan_id, id=first_step_id, title="first", owner_ref=owner)
     second_step = Step(plan_id=plan_id, id=second_step_id, title="second", owner_ref=owner)
+    first_record = _record(
+        task_id=task_id,
+        plan_id=plan_id,
+        step_id=first_step_id,
+        current_attempt=0,
+    )
+    retry_record = _record(
+        task_id=task_id,
+        plan_id=plan_id,
+        step_id=second_step_id,
+        current_attempt=1,
+    )
     now = datetime.now(UTC)
 
-    assert await fake._start_attempt(
-        first_step,
-        _record(
-            task_id=task_id,
-            plan_id=plan_id,
-            step_id=first_step_id,
-            current_attempt=0,
-        ),
-        now,
-    )
+    assert await fake._start_attempt(first_step, first_record, now)
     snapshot = await budgets.snapshot(task_id)
     parallel = snapshot.for_dimension(BudgetDimension.PARALLEL_STEPS)
     assert parallel is not None
     assert parallel.reserved == 1.0
-    reservations = await budgets._store_list_reservations_for_test(task_id) if False else ()
-    del reservations
 
     with pytest.raises(ContractError) as blocked:
         await fake._start_attempt(
@@ -150,16 +151,7 @@ async def test_parallel_claim_blocks_second_step_and_retry_is_counted_after_star
     assert fake.started == [first_step_id]
 
     await bindings._release_parallel(task_id, first_step_id)  # noqa: SLF001
-    assert await fake._start_attempt(
-        second_step,
-        _record(
-            task_id=task_id,
-            plan_id=plan_id,
-            step_id=second_step_id,
-            current_attempt=1,
-        ),
-        now,
-    )
+    assert await fake._start_attempt(second_step, retry_record, now)
 
     after_retry = await budgets.snapshot(task_id)
     retry = after_retry.for_dimension(BudgetDimension.RETRIES)
@@ -168,3 +160,9 @@ async def test_parallel_claim_blocks_second_step_and_retry_is_counted_after_star
     assert retry.consumed == 1.0
     assert parallel is not None
     assert parallel.reserved == 1.0
+
+    await fake._cancel_active_run(retry_record, "cancel-second-step")
+    after_cancel = await budgets.snapshot(task_id)
+    parallel = after_cancel.for_dimension(BudgetDimension.PARALLEL_STEPS)
+    assert parallel is not None
+    assert parallel.reserved == 0.0
