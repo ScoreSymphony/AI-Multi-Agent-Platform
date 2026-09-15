@@ -55,7 +55,7 @@ export function MultiAgentGoalForm({
   return (
     <form className="stack" onSubmit={onSubmit}>
       <div className="form-grid">
-        {status.candidate_workspace_ids.length > 1 ? <CanonicalSelect label="Workspace" name="workspace_id" values={status.candidate_workspace_ids} /> : null}
+        {status.candidate_workspace_ids.length ? <CanonicalSelect label="Workspace" name="workspace_id" values={status.candidate_workspace_ids} /> : null}
         <label>Goal title (optional)<input name="title" placeholder="First multi-agent goal" /></label>
         <label>Goal<input name="objective" required defaultValue="Research two viable approaches, produce a concise result, and review the exact result." /></label>
       </div>
