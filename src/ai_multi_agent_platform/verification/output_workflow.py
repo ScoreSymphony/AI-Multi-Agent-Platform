@@ -27,6 +27,12 @@ from .agent_workflow import (
     ReviewerRuntimeOptions,
     ReviewWorkflowResult,
 )
+from .async_persistence import (
+    AsyncVerificationCompletionAuthority,
+    AsyncVerificationService,
+    runtime_verification_completion,
+    runtime_verification_service,
+)
 from .evidence import CanonicalVerificationRuntime
 from .gate import VerificationCompletionAuthority
 from .models import (
@@ -85,13 +91,7 @@ class AutomaticOutputReviewResult:
 
 
 class PolicyMetadataReviewerResolver(ReviewerAssignmentResolver):
-    """Resolve an exact reviewer revision from versioned VerificationPolicy metadata.
-
-    Automatic review is explicitly opt-in. A policy stage may either pin one exact Agent/Team
-    assignment or request bounded role/capability discovery inside an explicit canonical candidate
-    scope. Discovery never scans arbitrary global Agents, and the bundled Reviewer is never a
-    hidden fallback.
-    """
+    """Resolve an exact reviewer revision from versioned VerificationPolicy metadata."""
 
     def __init__(self, completion: VerificationCompletionAuthority) -> None:
         self._completion = completion
@@ -127,12 +127,7 @@ class PolicyMetadataReviewerResolver(ReviewerAssignmentResolver):
 
 
 class AutomaticReviewerOutputCoordinator:
-    """Drive configured Agent-verifier stages for canonical attached output.
-
-    A Task without a Verification requirement, or a policy without automatic-review metadata,
-    is a normal no-review case. Once automatic review is enabled for an output type, missing or
-    ambiguous reviewer configuration fails closed and canonical Verification remains authoritative.
-    """
+    """Drive configured Agent-verifier stages for canonical attached output."""
 
     def __init__(
         self,
@@ -141,10 +136,20 @@ class AutomaticReviewerOutputCoordinator:
         runtime: CanonicalVerificationRuntime,
         completion: VerificationCompletionAuthority,
         reviewer: AutomaticReviewerWorkflow,
+        runtime_verification: AsyncVerificationService | None = None,
+        runtime_completion: AsyncVerificationCompletionAuthority | None = None,
     ) -> None:
         self._kernel = kernel
         self._runtime = runtime
         self._completion = completion
+        self._runtime_verification = runtime_verification_service(
+            completion.verification,
+            runtime_service=runtime_verification,
+        )
+        self._runtime_completion = runtime_verification_completion(
+            completion,
+            runtime_completion=runtime_completion,
+        )
         self._reviewer = reviewer
 
     async def attach_result_and_review(
@@ -227,11 +232,11 @@ class AutomaticReviewerOutputCoordinator:
         if not correlation_id.strip():
             raise ValueError("correlation_id must not be blank")
 
-        requirement = self._completion.requirement_for(task_id)
+        requirement = await self._runtime_completion.requirement_for(task_id)
         if requirement is None:
             return await self._no_review(task_id)
 
-        policy = self._completion.verification.get_policy(
+        policy = await self._runtime_verification.get_policy(
             requirement.policy_id,
             requirement.policy_version,
         )
@@ -266,7 +271,7 @@ class AutomaticReviewerOutputCoordinator:
         )
         reviews: list[ReviewWorkflowResult] = []
         for stage in agent_stages:
-            existing = self._existing_current_request(
+            existing = await self._existing_current_request(
                 task_id=task_id,
                 policy=policy,
                 stage_id=stage.stage_id,
@@ -291,11 +296,8 @@ class AutomaticReviewerOutputCoordinator:
                 )
             reviews.append(review)
 
-        decision = self._completion.assess_task_completion(task_id)
+        decision = await self._runtime_completion.assess_task_completion(task_id)
         task = await self._kernel.get_task(task_id)
-        # Artifact output may be attached while a producer Run is still active. Likewise, a repair
-        # temporarily resumes a verification-blocked Task to RUNNING before its Step finishes. Only
-        # release accepted completion once every canonical Run is terminal.
         if (
             decision.state is CompletionState.ACCEPTED
             and task.status in {TaskStatus.WAITING, TaskStatus.RUNNING}
@@ -330,7 +332,7 @@ class AutomaticReviewerOutputCoordinator:
             reviews=(),
         )
 
-    def _existing_current_request(
+    async def _existing_current_request(
         self,
         *,
         task_id: str,
@@ -339,7 +341,7 @@ class AutomaticReviewerOutputCoordinator:
         subject: VerificationSubject,
     ) -> VerificationRequest | None:
         candidates: list[tuple[VerificationRequest, VerificationResult | None]] = []
-        for request, result in self._completion.verification.history(task_id=task_id):
+        for request, result in await self._runtime_verification.history(task_id=task_id):
             if (
                 request.policy_id == policy.policy_id
                 and request.policy_version == policy.version
@@ -392,10 +394,6 @@ class AutomaticReviewerOutputObserver(OutputAttachmentObserver):
         self._options = options
 
     async def output_attached(self, event: PlatformEvent) -> None:
-        # Automatic repair attaches the new canonical output before the workflow creates its
-        # lineage-preserving reverification request. Re-entering the general observer here would
-        # create a second unrelated Verification with repair_attempt=0 and could release the Task
-        # against the wrong lineage. The repair workflow therefore owns this one internal event.
         if event.provenance is not None and event.provenance.source == VERIFICATION_REPAIR_SOURCE:
             return
 

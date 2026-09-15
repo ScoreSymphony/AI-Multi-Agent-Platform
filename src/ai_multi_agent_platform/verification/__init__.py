@@ -1,5 +1,20 @@
 """Canonical runtime verification, review and completion-policy subsystem."""
 
+from .async_canonical_access import (
+    AsyncCanonicalVerificationService,
+    AsyncCanonicalVerificationServiceAdapter,
+    runtime_canonical_verification_service,
+)
+from .async_persistence import (
+    AsyncVerificationCompletionAuthority,
+    AsyncVerificationCompletionAuthorityAdapter,
+    AsyncVerificationService,
+    AsyncVerificationServiceAdapter,
+    VerificationPersistenceOffload,
+    runtime_verification_completion,
+    runtime_verification_service,
+)
+from .async_runtime import AsyncCanonicalVerificationRuntime
 from .audit import VerificationAuditEvent, VerificationAuditEventType
 from .canonical_access import CanonicalVerificationAccess
 from .deterministic import (
@@ -7,13 +22,14 @@ from .deterministic import (
     DeterministicVerifier,
     ReferenceDeterministicVerifier,
 )
+from .evidence import CanonicalVerificationRuntime as SynchronousCanonicalVerificationRuntime
 from .evidence import (
-    CanonicalVerificationRuntime,
     KernelFileVerificationEvidenceResolver,
     VerificationEvidenceContext,
     VerificationEvidenceResolver,
 )
 from .gate import (
+    AsyncOutputChangeAwareCompletionAuthority,
     CompletionAuthority,
     CompletionGateDecision,
     OutputChangeAwareCompletionAuthority,
@@ -46,13 +62,23 @@ from .persistence import (
 )
 from .verification_authority import VerificationService
 
+CanonicalVerificationRuntime = AsyncCanonicalVerificationRuntime
+
 __all__ = [
+    "AsyncCanonicalVerificationRuntime",
+    "AsyncCanonicalVerificationService",
+    "AsyncCanonicalVerificationServiceAdapter",
+    "AsyncOutputChangeAwareCompletionAuthority",
+    "AsyncVerificationCompletionAuthority",
+    "AsyncVerificationCompletionAuthorityAdapter",
+    "AsyncVerificationService",
+    "AsyncVerificationServiceAdapter",
     "CanonicalVerificationAccess",
+    "CanonicalVerificationRuntime",
     "CompletionAssessment",
     "CompletionAuthority",
     "CompletionGateDecision",
     "CompletionState",
-    "CanonicalVerificationRuntime",
     "OutputChangeAwareCompletionAuthority",
     "DeterministicCheck",
     "DeterministicVerifier",
@@ -62,6 +88,7 @@ __all__ = [
     "ReviewerIndependence",
     "SqliteVerificationCompletionAuthority",
     "SqliteVerificationService",
+    "SynchronousCanonicalVerificationRuntime",
     "TaskVerificationRequirement",
     "VERIFICATION_PERSISTENCE_SCHEMA_VERSION",
     "VerificationAuditEvent",
@@ -73,6 +100,7 @@ __all__ = [
     "VerificationFailurePolicy",
     "VerificationFinding",
     "VerificationOutcome",
+    "VerificationPersistenceOffload",
     "VerificationPolicy",
     "VerificationRequest",
     "VerificationRequestStatus",
@@ -83,4 +111,7 @@ __all__ = [
     "VerificationSubject",
     "VerifierIdentity",
     "VerifierKind",
+    "runtime_canonical_verification_service",
+    "runtime_verification_completion",
+    "runtime_verification_service",
 ]

@@ -166,6 +166,7 @@ from ai_multi_agent_platform.verification import (
     KernelFileVerificationEvidenceResolver,
     SqliteVerificationCompletionAuthority,
     SqliteVerificationService,
+    runtime_verification_completion,
 )
 from ai_multi_agent_platform.verification.control_plane import register_verification_control_plane
 from ai_multi_agent_platform.verification.observability import VerificationTimelineReader
@@ -574,6 +575,7 @@ def build_single_node_deployment(
         repository=kernel_repository,
         event_sink=observability_events,
         completion_authority=verification_completion,
+        async_completion_authority=runtime_verification_completion(verification_completion),
     )
     coordination_repository = SQLiteCoordinatorRepository(database_dir / "coordination.sqlite3")
     coordination = DurablePlanStepCoordinator(

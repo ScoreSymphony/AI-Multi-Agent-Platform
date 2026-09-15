@@ -15,6 +15,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.models import RoutingRequirements
 
+from .async_persistence import AsyncVerificationService, runtime_verification_service
 from .evidence import CanonicalVerificationRuntime, VerificationEvidenceResolver
 from .models import (
     VerificationFinding,
@@ -59,8 +60,13 @@ class ReviewerAgentRuntime:
         agents: AgentRuntime,
         evidence: VerificationEvidenceResolver | None = None,
         canonical_runtime: CanonicalVerificationRuntime | None = None,
+        runtime_verification: AsyncVerificationService | None = None,
     ) -> None:
         self._verification = verification
+        self._runtime_verification = runtime_verification_service(
+            verification,
+            runtime_service=runtime_verification,
+        )
         self._agents = agents
         self._evidence = evidence
         self._canonical_runtime = canonical_runtime
@@ -83,7 +89,7 @@ class ReviewerAgentRuntime:
         task_context: Mapping[str, JsonValue] | None = None,
         project_context: Mapping[str, JsonValue] | None = None,
     ) -> AgentRunRecord:
-        request = self._verification.get_request(verification_id)
+        request = await self._runtime_verification.get_request(verification_id)
         if request.requested_verifier_kind is not VerifierKind.AGENT:
             raise ContractError(
                 ErrorCode.CONFLICT,
@@ -106,7 +112,10 @@ class ReviewerAgentRuntime:
                 "reviewer Agent task_context cannot override canonical verification context",
             )
 
-        policy = self._verification.get_policy(request.policy_id, request.policy_version)
+        policy = await self._runtime_verification.get_policy(
+            request.policy_id,
+            request.policy_version,
+        )
         stage = policy.stage(request.stage_id)
         bound_team = None
         resolved_revision = revision
@@ -166,7 +175,7 @@ class ReviewerAgentRuntime:
             provider_id=spec.selected_provider_id,
             read_only=read_only,
         )
-        self._verification.validate_verifier(request.verification_id, verifier)
+        await self._runtime_verification.validate_verifier(request.verification_id, verifier)
         reviewer_selection = _reviewer_selection_context(
             policy,
             request.stage_id,
@@ -236,10 +245,13 @@ class ReviewerAgentRuntime:
         record = self._agents.service.repository.get_agent_run(agent_run_id)
         context = _bound_review_context(record)
         verification_id = _required_context_string(context, "verification_id")
-        request = self._verification.get_request(verification_id)
+        request = await self._runtime_verification.get_request(verification_id)
         read_only = _required_context_bool(context, "read_only")
         verifier = _verifier_from_record(record, read_only=read_only)
-        policy = self._verification.get_policy(request.policy_id, request.policy_version)
+        policy = await self._runtime_verification.get_policy(
+            request.policy_id,
+            request.policy_version,
+        )
         reviewer_selection = _reviewer_selection_context(
             policy,
             request.stage_id,
@@ -255,7 +267,7 @@ class ReviewerAgentRuntime:
             context,
             reviewer_selection=reviewer_selection,
         )
-        self._verification.validate_verifier(verification_id, verifier)
+        await self._runtime_verification.validate_verifier(verification_id, verifier)
 
         if record.status is AgentRunStatus.RUNNING:
             record = self._agents.finish_agent_run(
@@ -300,7 +312,7 @@ class ReviewerAgentRuntime:
         )
         if self._canonical_runtime is not None:
             return await self._canonical_runtime.submit_result(proposed)
-        return self._verification.submit_result(proposed)
+        return await self._runtime_verification.submit_result(proposed)
 
     def _spec_is_read_only(
         self,

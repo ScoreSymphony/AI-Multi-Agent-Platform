@@ -167,7 +167,7 @@ class RunCommandKernelHost(Protocol):
 
     async def _finish_cancel(self, task_id: str, run_id: str, causation_id: str) -> None: ...
 
-    def _invalidate_completion_subject(self, task_id: str) -> None: ...
+    async def _invalidate_completion_subject(self, task_id: str) -> None: ...
 
 
 class KernelRunCommands:
@@ -661,7 +661,7 @@ class KernelRunCommands:
             await self._host.get_run(task_id, run_id)
             subject_type = "run"
             subject_id = run_id
-        self._host._invalidate_completion_subject(task_id)
+        await self._host._invalidate_completion_subject(task_id)
         await self._host._commit_task_command(
             task=task,
             key=idempotency_key,
@@ -701,7 +701,7 @@ class KernelRunCommands:
             await self._host.get_run(task_id, run_id)
             subject_type = "run"
             subject_id = run_id
-        self._host._invalidate_completion_subject(task_id)
+        await self._host._invalidate_completion_subject(task_id)
         await self._host._commit_task_command(
             task=task,
             key=idempotency_key,

@@ -18,6 +18,10 @@ from ai_multi_agent_platform.verification import (
     VerificationResult,
     VerificationService,
 )
+from ai_multi_agent_platform.verification.async_persistence import (
+    AsyncVerificationService,
+    runtime_verification_service,
+)
 
 from .models import (
     ContextCandidate,
@@ -60,9 +64,14 @@ class VerificationContextSourceAdapter:
         verification: VerificationService,
         *,
         classification_resolver: VerificationContextClassificationResolver | None = None,
+        runtime_verification: AsyncVerificationService | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self.verification = verification
+        self.runtime_verification = runtime_verification_service(
+            verification,
+            runtime_service=runtime_verification,
+        )
         self.classification_resolver = classification_resolver
         self._now = now or (lambda: datetime.now(UTC))
 
@@ -72,11 +81,12 @@ class VerificationContextSourceAdapter:
         if current.tzinfo is None or current.utcoffset() is None:
             raise ValueError("Verification Context clock must be timezone-aware")
 
-        for verification_request, result in self.verification.history(task_id=request.task_id):
+        history = await self.runtime_verification.history(task_id=request.task_id)
+        for verification_request, result in history:
             if result is None:
                 continue
 
-            policy = self.verification.get_policy(
+            policy = await self.runtime_verification.get_policy(
                 verification_request.policy_id,
                 verification_request.policy_version,
             )

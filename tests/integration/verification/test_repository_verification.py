@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import threading
+import time
+
 import pytest
 
 from ai_multi_agent_platform.coding_batches import (
@@ -40,10 +44,20 @@ REPAIRED = "d" * 40
 
 
 class _RepositoryProvenance:
-    def __init__(self, records: tuple[RepositoryRunProvenance, ...]) -> None:
+    def __init__(
+        self,
+        records: tuple[RepositoryRunProvenance, ...],
+        *,
+        delay_seconds: float = 0.0,
+    ) -> None:
         self.records = records
+        self.delay_seconds = delay_seconds
+        self.threads: list[str] = []
 
     def get(self, run_id: str, repository_id: str) -> RepositoryRunProvenance | None:
+        self.threads.append(threading.current_thread().name)
+        if self.delay_seconds:
+            time.sleep(self.delay_seconds)
         for record in self.records:
             if record.run_id == run_id and record.repository_id == repository_id:
                 return record
@@ -103,6 +117,14 @@ class _EvidenceResolver:
         assert task_id == self.task_id
         assert all(artifact_id in self.subjects for artifact_id in artifact_ids)
         return artifact_ids
+
+
+async def _heartbeat_until(task: asyncio.Task[object]) -> int:
+    heartbeat = 0
+    while not task.done():
+        heartbeat += 1
+        await asyncio.sleep(0.005)
+    return heartbeat
 
 
 def _verification(
@@ -244,24 +266,37 @@ async def test_combined_validation_requires_complete_canonical_82_86_evidence() 
         run_id=run_id,
         artifacts=artifacts,
     )
+    repository_reader = _RepositoryProvenance((repository,), delay_seconds=0.08)
     verifier = CanonicalRepositoryOutputVerifier(
-        repository_provenance=_RepositoryProvenance((repository,)),
+        repository_provenance=repository_reader,
         verification_runtime=runtime,
         verification=service,
     )
     combined = CanonicalCombinedValidationCoordinator(coordinator, verifier)
-    request = await combined.ensure_request(
-        batch_id,
-        integration_id,
-        integration_task_id=task_id,
-        integration_run_id=run_id,
-        subject_artifact_id=artifacts[0],
-        policy_id=policy.policy_id,
-        policy_version=policy.version,
-        stage_id="review",
-        correlation_id="issue-872-combined",
-        causation_id="issue-872-combined-exact",
+    request_task = asyncio.create_task(
+        combined.ensure_request(
+            batch_id,
+            integration_id,
+            integration_task_id=task_id,
+            integration_run_id=run_id,
+            subject_artifact_id=artifacts[0],
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+            stage_id="review",
+            correlation_id="issue-872-combined",
+            causation_id="issue-872-combined-exact",
+        )
     )
+    heartbeat = await _heartbeat_until(request_task)
+    request = await request_task
+    assert heartbeat >= 2
+    assert repository_reader.threads
+    assert all(
+        name.startswith("repository-provenance-persistence") for name in repository_reader.threads
+    )
+    repository_reader.delay_seconds = 0.0
+    repository_reader.threads.clear()
+
     replay = await combined.ensure_request(
         batch_id,
         integration_id,

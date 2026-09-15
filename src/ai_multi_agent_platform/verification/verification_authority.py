@@ -776,7 +776,18 @@ class VerificationService:
                 or stored.subject != subject
             ):
                 continue
-            matches.append(self.get_request(stored.verification_id, now=now))
+            # Completion assessment is deliberately side-effect free. It may project an
+            # overdue request as EXPIRED for the decision without mutating canonical state;
+            # explicit request access persists the expiry and its audit event through the
+            # awaitable runtime boundary.
+            current = stored
+            if (
+                current.status is VerificationRequestStatus.PENDING
+                and current.expires_at is not None
+                and current.expires_at <= now
+            ):
+                current = replace(current, status=VerificationRequestStatus.EXPIRED)
+            matches.append(current)
         return matches
 
     def _matching_stage_results(
