@@ -11,18 +11,18 @@ from ai_multi_agent_platform.contracts import (
     JsonValue,
     OperationContext,
 )
-from ai_multi_agent_platform.security import (
+from ai_multi_agent_platform.security.authorization import (
     ActorIdentity,
     ActorType,
     AuthorizationAction,
     AuthorizationContext,
-    AuthorizationGate,
     ProposedAction,
     ResourceType,
     RiskClassification,
 )
+from ai_multi_agent_platform.security.enforcement import AuthorizationGate
 
-from .models import TaskBudgetPolicy, TaskBudgetSnapshot, utc_now
+from .models import TaskBudgetLimit, TaskBudgetPolicy, TaskBudgetSnapshot, utc_now
 from .service import TaskBudgetEnforcementService
 
 
@@ -30,7 +30,7 @@ class TaskBudgetPolicyMutationService:
     """Apply exact, versioned Task-budget revisions behind the canonical security gate.
 
     Agents may initiate a budget increase/override request, but an Agent can never turn an
-    authorization-policy ``allow`` into a silent self-grant.  Agent-originated mutations require
+    authorization-policy ``allow`` into a silent self-grant. Agent-originated mutations require
     an independently approved Approval record bound to the exact proposed policy revision.
     """
 
@@ -82,7 +82,7 @@ class TaskBudgetPolicyMutationService:
         )
 
         # An Agent can ask for more budget, but cannot silently grant itself more budget even if a
-        # permissive provider policy would otherwise return ALLOW.  The exact proposed action must
+        # permissive provider policy would otherwise return ALLOW. The exact proposed action must
         # have an independently approved Approval record.
         if actor.actor_type is ActorType.AGENT:
             approved = await self._authorization.runtime_approvals.resolve_valid_for(
@@ -158,13 +158,9 @@ def _revision_action(
     )
 
 
-def _limit_payload(limit: object) -> dict[str, JsonValue]:
+def _limit_payload(limit: TaskBudgetLimit) -> dict[str, JsonValue]:
     # Kept structural rather than accepting arbitrary caller metadata so the Approval digest binds
     # only to canonical budget semantics.
-    from .models import TaskBudgetLimit
-
-    if not isinstance(limit, TaskBudgetLimit):
-        raise TypeError("Task budget policy contains an invalid limit")
     return {
         "dimension": limit.dimension.value,
         "limit": limit.limit,
