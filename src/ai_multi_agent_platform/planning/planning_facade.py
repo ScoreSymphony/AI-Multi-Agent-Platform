@@ -14,11 +14,8 @@ from ai_multi_agent_platform.contracts import (
     OperationContext,
     PlatformEvent,
 )
-from ai_multi_agent_platform.execution_budgets import (
-    BudgetActionKind,
-    BudgetDimension,
-    TaskBudgetAdmission,
-)
+from ai_multi_agent_platform.execution.budgets.models import BudgetActionKind, BudgetDimension
+from ai_multi_agent_platform.execution.budgets.service import TaskBudgetAdmission
 from ai_multi_agent_platform.kernel.models import RunState, TaskState
 from ai_multi_agent_platform.models import ModelRegistry, RoutingRequirements
 from ai_multi_agent_platform.security import ActorIdentity, AuthorizationGate, ProposedAction
