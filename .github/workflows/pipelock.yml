@@ -111,6 +111,7 @@ jobs:
       - name: Exercise retained adversarial Pipelock integration cases
         env:
           PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
         run: |
           pytest -q tests/integration/pipelock/test_adversarial_security.py \
             --junitxml="$RUNNER_TEMP/pipelock-platform-adversarial-junit.xml"
@@ -187,6 +188,7 @@ jobs:
 
   pinned-core-containment-bypass:
     runs-on: ubuntu-latest
+    services: {}
     steps:
       - name: Check out platform
         uses: actions/checkout@v7
