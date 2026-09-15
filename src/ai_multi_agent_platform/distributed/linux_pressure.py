@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol, cast
 
 from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue
 
@@ -20,6 +20,18 @@ from .pressure import HostPressureSnapshot, PressureKind, PressureSignal, Pressu
 
 _LINUX_METADATA_NAMESPACE: Final = "linux.host_pressure"
 _KIB: Final = 1024
+
+
+class _StatVfsResult(Protocol):
+    f_blocks: int
+    f_frsize: int
+    f_bavail: int
+    f_files: int
+    f_favail: int
+
+
+class _StatVfs(Protocol):
+    def __call__(self, path: Path) -> _StatVfsResult: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,9 +334,8 @@ class LinuxHostPressureProvider:
     ) -> tuple[PressureSignal | None, dict[str, JsonValue], PressureSignal | None]:
         if self.storage_path is None:
             return None, {}, None
-        try:
-            stats = os.statvfs(self.storage_path)
-        except OSError:
+        stats = _try_statvfs(self.storage_path)
+        if stats is None:
             return None, {}, None
         total_bytes = stats.f_blocks * stats.f_frsize
         free_bytes = stats.f_bavail * stats.f_frsize
@@ -424,6 +435,16 @@ class LinuxHostPressureProvider:
             return path.read_text(encoding="utf-8")
         except (OSError, UnicodeError):
             return None
+
+
+def _try_statvfs(path: Path) -> _StatVfsResult | None:
+    statvfs = cast(_StatVfs | None, getattr(os, "statvfs", None))
+    if statvfs is None:
+        return None
+    try:
+        return statvfs(path)
+    except OSError:
+        return None
 
 
 def parse_psi(text: str | None) -> PsiReport | None:
