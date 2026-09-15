@@ -128,6 +128,21 @@ Architectural role and public compatibility maturity are tracked separately. The
 
 No formal GitHub release has been published yet. Release claims are therefore intentionally conservative: merged functionality is real, but operational-version acceptance still depends on the repository's release and conformance gates. See [`CHANGELOG.md`](CHANGELOG.md), [`docs/STATUS.md`](docs/STATUS.md), [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md) and [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md) for the corresponding evidence and process.
 
+## Product first run
+
+After the supported single-node platform is running, the maintained first product proof is a real multi-agent goal. Configure one healthy local/self-hosted text model, create or select a Project and Workspace, then open `/onboarding` and choose **Official first run: multi-agent goal**.
+
+The reference Planner exposes parallel-ready research and execution-approach branches, fans them into the producing Agent, applies canonical Agent Verification to the exact produced Result, and keeps the Plan, Steps, Agent assignments, Runs, Artifact, Result and Verification visible through the same Control Plane used by Web and CLI.
+
+The equivalent CLI action is:
+
+```bash
+platform onboarding run-multi-agent \
+  --objective "Research two viable approaches, produce a concise result from both inputs, and review the exact result."
+```
+
+Hermes, Forge, LiteLLM, MCP, the standard Agent catalog and paid providers are not baseline requirements. Follow [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md) for the clean-checkout startup path, model/setup requirements, Web/CLI/API workflow, recovery guidance and acceptance evidence.
+
 ## Quickstart for development
 
 Requirements:
@@ -192,7 +207,7 @@ Runtime integrations implement platform-owned contracts under `src/ai_multi_agen
 
 ## Start here
 
-For a fresh checkout, environment setup and the CI-equivalent local validation path, follow [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). Contribution and architecture-change rules live in [`CONTRIBUTING.md`](CONTRIBUTING.md), the contributor-facing implementation map and “where do I change X?” guide lives in [`docs/CONTRIBUTOR_ARCHITECTURE.md`](docs/CONTRIBUTOR_ARCHITECTURE.md), and coding-agent execution/dependency rules live in [`AGENTS.md`](AGENTS.md).
+For the maintained first product workflow, start with [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md). For a fresh checkout, environment setup and the CI-equivalent local validation path, follow [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). Contribution and architecture-change rules live in [`CONTRIBUTING.md`](CONTRIBUTING.md), the contributor-facing implementation map and “where do I change X?” guide lives in [`docs/CONTRIBUTOR_ARCHITECTURE.md`](docs/CONTRIBUTOR_ARCHITECTURE.md), and coding-agent execution/dependency rules live in [`AGENTS.md`](AGENTS.md).
 
 The canonical single-node prototype profiles are documented in [`docs/PROTOTYPE_ACCEPTANCE.md`](docs/PROTOTYPE_ACCEPTANCE.md). Wider platform acceptance and optional-profile reporting live in [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md).
 
@@ -201,6 +216,7 @@ The canonical single-node prototype profiles are documented in [`docs/PROTOTYPE_
 | Need | Canonical location |
 | --- | --- |
 | Product identity and goals | [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md) |
+| Official multi-agent first run | [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md) |
 | Architecture invariants | [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md) |
 | Contributor architecture and code navigation | [`docs/CONTRIBUTOR_ARCHITECTURE.md`](docs/CONTRIBUTOR_ARCHITECTURE.md) |
 | Domain model | [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md) |
