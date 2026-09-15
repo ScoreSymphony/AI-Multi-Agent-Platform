@@ -92,8 +92,8 @@ not a replacement for #591 policy identity.
 
 ## Reproducible audit-only Core pilot
 
-The candidate workflow `.github/workflows/pipelock-candidate-compat.yml` is an executable compatibility
-gate against the exact reviewed source. Its intended equivalent begins with:
+The maintained workflow `.github/workflows/pipelock.yml` job `pinned-core-platform-compatibility` is an
+executable compatibility gate against the exact reviewed source. Its intended equivalent begins with:
 
 ```bash
 git checkout f7d1816f1a5ad63d501b0c48f36066f836f59022
