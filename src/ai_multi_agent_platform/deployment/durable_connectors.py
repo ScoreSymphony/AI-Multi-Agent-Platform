@@ -54,6 +54,10 @@ from ai_multi_agent_platform.verification.reviewer_recovery import (
 )
 
 from .composition import (
+    ApplicationDistributionBundle,
+    ConnectorFoundationBundle,
+    PlanningBundle,
+    ReviewerBundle,
     build_application_distribution,
     build_connector_foundation,
     build_egress_connectors,
@@ -212,10 +216,7 @@ def build_single_node_deployment(
         model_runtime=base.model_runtime,
     )
     _register_handoff_context_source(base, context, handoffs)
-    _register_durable_template_environment(
-        base,
-        connector_foundation.registry,
-    )
+    _register_durable_template_environment(base, connector_foundation.registry)
     return _durable_deployment(
         base,
         connector_foundation=connector_foundation,
@@ -304,15 +305,15 @@ def _register_durable_template_environment(
 def _durable_deployment(
     base: BaseSingleNodeDeployment,
     *,
-    connector_foundation,
+    connector_foundation: ConnectorFoundationBundle,
     connectors: ConnectorService,
-    distribution,
-    planning,
+    distribution: ApplicationDistributionBundle,
+    planning: PlanningBundle,
     egress: EgressDeploymentBindings,
     context: SingleNodeContextComposition,
     learning: SingleNodeLearningComposition,
     handoffs: HandoffDeploymentComposition,
-    reviewer,
+    reviewer: ReviewerBundle,
 ) -> SingleNodeDeployment:
     base_values: dict[str, Any] = {
         field.name: getattr(base, field.name) for field in fields(BaseSingleNodeDeployment)
