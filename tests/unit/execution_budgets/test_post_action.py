@@ -10,7 +10,7 @@ from ai_multi_agent_platform.accounting.models import (
 from ai_multi_agent_platform.accounting.service import AccountingService
 from ai_multi_agent_platform.accounting.store import InMemoryUsageStore
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.execution_budgets import (
+from ai_multi_agent_platform.execution.budgets import (
     BudgetActionKind,
     BudgetAdmissionOutcome,
     BudgetConsumptionSource,
@@ -20,7 +20,7 @@ from ai_multi_agent_platform.execution_budgets import (
     TaskBudgetLimit,
     TaskBudgetPolicy,
 )
-from ai_multi_agent_platform.execution_budgets.models import utc_now
+from ai_multi_agent_platform.execution.budgets.models import utc_now
 
 
 def _token_service(limit: float) -> tuple[TaskBudgetEnforcementService, AccountingService]:
