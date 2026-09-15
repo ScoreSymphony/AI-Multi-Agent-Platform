@@ -51,6 +51,35 @@ The checked policy lives in [`../config/maintainability.toml`](../config/maintai
 
 These values are review heuristics, not canonical architecture constraints. Responsibility cohesion, dependency direction and stable contracts remain authoritative.
 
+## Baseline snapshot
+
+The first #896 inventory generated on 2026-09-15 for PR #1035 measured:
+
+| Metric | Count |
+| --- | ---: |
+| Production Python modules | 984 |
+| Modules above the review signal | 280 |
+| Modules above the extreme signal | 7 |
+| Functions/methods | 13,125 |
+| Functions above the review signal | 940 |
+| Functions above the extreme signal | 224 |
+
+The seven current module-level extremes are:
+
+| Lines | Module |
+| ---: | --- |
+| 1,136 | `learning/governed_learning_workflow.py` |
+| 1,125 | `adapters/hermes.py` |
+| 1,080 | `agents/matching.py` |
+| 1,067 | `security/policy_profiles.py` |
+| 1,047 | `browser/reference.py` |
+| 1,036 | `context/source_adapters.py` |
+| 1,017 | `onboarding/first_run_service.py` |
+
+The largest individual function in that baseline is `deployment.single_node.build_single_node_deployment` at 511 lines. The highest measured branch complexity is `PlanningProposalValidator.validate` at 69. These are separate signals from module size and should be reviewed even when their containing module is below the module-level extreme threshold.
+
+This snapshot is historical evidence, not a checked golden file. The generated CI inventory is authoritative for the current tree and is expected to improve as #896 refactors land.
+
 ## CI delta guard
 
 For pull requests, repository-quality CI builds inventories for both the PR base commit and the PR head with the same checked policy, then compares them. CI fails when the head introduces a module or function that is extreme where the corresponding base item was not already an active extreme.
@@ -74,17 +103,23 @@ The #723 invariants remain in force:
 - preserve restart, retry, ordering, cancellation, authorization and fail-closed semantics through behavior-level regression tests;
 - avoid mixing unrelated feature changes into decomposition PRs.
 
-## Initial prioritized audit queue
+## Prioritized audit queue
 
-The generated inventory is authoritative for exact line/complexity rankings. Current repository inspection identifies the following high-value audit candidates because they are both large and plausibly responsibility-dense:
+The generated inventory is authoritative for exact line/complexity rankings. The first module-level cohort should review all seven current extremes, but ranking alone does not determine refactor order. Priority also reflects responsibility density, public-contract risk and the availability of stable seams:
 
-1. `adapters/hermes.py` — configuration/schema, HTTP transport, orchestration lifecycle, mapping/parsing and provider-error behavior currently share one module. The first preferred seams are configuration, HTTP/client transport and mapping/parsing while preserving `ai_multi_agent_platform.adapters.hermes` imports.
-2. `security/policy_profiles.py` — policy profile domain/service/compiler responsibilities should be audited against the already separate persistence layer before any movement.
-3. `browser/reference.py` — reference browser state/session behavior, command execution and provider mechanics should be audited for independent seams while keeping browser contracts stable.
-4. Large adapter family modules (`adapters/litellm.py`, `adapters/mcp*.py`) — split only where protocol/client/mapping/lifecycle responsibilities are actually independent; do not duplicate shared MCP semantics.
-5. `security/egress_profiles.py` and large context lifecycle/operational modules — audit after the first adapter/security cohorts so responsibility boundaries can be reused rather than invented independently.
+1. `adapters/hermes.py` — 1,125 lines mixing configuration/schema, HTTP transport, orchestration lifecycle, planning parsing, provider-error behavior and agent/team mapping. It has unusually clear seams and broad adapter-contract coverage, so it is the preferred first decomposition while preserving `ai_multi_agent_platform.adapters.hermes` imports.
+2. `learning/governed_learning_workflow.py` — 1,136 lines, currently the largest production module. Audit workflow coordination, policy/governance decisions, persistence and result projection separately before choosing split points.
+3. `security/policy_profiles.py` — 1,067 lines. Audit policy profile domain/service/compiler responsibilities against the already separate persistence layer before movement; fail-closed semantics must remain explicit.
+4. `context/source_adapters.py` — 1,036 lines. Multiple source-specific collection paths make adapter-per-responsibility seams plausible, but canonical context ownership and classification/egress rules must remain centralized.
+5. `browser/reference.py` — 1,047 lines. Audit reference-browser state/session behavior, command execution, capability registration and provider mechanics while keeping browser contracts stable.
+6. `agents/matching.py` — 1,080 lines. Review matching constraints, scoring/ranking and compatibility diagnostics separately; avoid scattering the matching model across generic helpers.
+7. `onboarding/first_run_service.py` — 1,017 lines. Review status projection, model setup, first-run orchestration and persistence seams while preserving idempotent onboarding behavior.
 
-This queue is not a mandate to split by rank. Before moving code, inspect imports, callers, tests and ownership and record the intended responsibility boundary in the PR.
+After the module-level extremes, the function-level report should drive the next cohort. In particular, very large composition/build functions and high-complexity validation/scheduling functions may offer more maintainability value than splitting a merely large file.
+
+Large adapter-family modules (`adapters/litellm.py`, `adapters/mcp*.py`), `security/egress_profiles.py`, verification modules and context lifecycle/operational modules remain review candidates below the current 1,000-line extreme signal. They should be split only where protocol/client/mapping/lifecycle or policy/persistence responsibilities are genuinely independent.
+
+Before moving code, inspect imports, callers, tests and ownership and record the intended responsibility boundary in the PR. This queue is therefore a work order for architectural review, not a mandate to split files mechanically by rank.
 
 ## Exemption format
 
