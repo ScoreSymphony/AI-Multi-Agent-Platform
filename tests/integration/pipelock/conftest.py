@@ -39,7 +39,13 @@ def _stop(process: subprocess.Popen[str]) -> None:
         process.wait(timeout=5)
 
 
-def _replace_nested_scalar(text: str, *, section: str, key: str, value: str) -> str:
+def _replace_nested_scalar(
+    text: str,
+    *,
+    section: str,
+    key: str,
+    value: str,
+) -> str:
     lines = text.splitlines(keepends=True)
     in_section = False
     for index, line in enumerate(lines):
@@ -70,7 +76,9 @@ def _receipt_action_id(headers: Path) -> str:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def verify_strict_fetch_receipt_chain(tmp_path_factory: pytest.TempPathFactory) -> None:
+def verify_strict_fetch_receipt_chain(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
     """Preserve the pinned candidate's signed-receipt gate for the /fetch path."""
 
     binary_value = os.getenv("PIPELOCK_730_BIN")
@@ -81,7 +89,9 @@ def verify_strict_fetch_receipt_chain(tmp_path_factory: pytest.TempPathFactory) 
     binary = Path(binary_value)
     source_config = Path(config_value)
     if not binary.is_file() or not source_config.is_file():
-        raise AssertionError("pinned Pipelock runtime/config is unavailable for receipt verification")
+        raise AssertionError(
+            "pinned Pipelock runtime/config is unavailable for receipt verification"
+        )
 
     root = tmp_path_factory.mktemp("pipelock-strict-fetch")
     home = root / "home"
