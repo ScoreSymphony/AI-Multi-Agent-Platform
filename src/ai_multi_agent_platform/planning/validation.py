@@ -9,6 +9,7 @@ from ai_multi_agent_platform.models import ModelLocation, RoutingRequirements
 
 from .agent_matching import match_planning_step
 from .models import (
+    CapabilityRequirement,
     PlanningAgentCandidate,
     PlanningCapabilityCandidate,
     PlanningInventory,
@@ -42,8 +43,55 @@ class PlanningProposalValidator:
     def validate(self, proposal: PlanProposal, request: PlanningRequest) -> ProposalValidation:
         errors: list[str] = []
         warnings: list[str] = []
-        approval_required = False
         steps = proposal.steps
+        self._validate_graph(steps, request, errors)
+
+        agents = {(item.agent_id, item.revision): item for item in request.inventory.agents}
+        teams = {(item.team_id, item.revision): item for item in request.inventory.teams}
+        models = {item.model_config_id: item for item in request.inventory.models}
+        capabilities = self.capability_map(request.inventory)
+        approval_required = False
+
+        for step in steps:
+            assignment_agent, assignment_team = self._validate_assignment(
+                step,
+                request,
+                agents,
+                teams,
+                errors,
+            )
+            if self.contains_provider_private_metadata(step.metadata):
+                errors.append(
+                    f"Step {step.key} metadata contains provider-private runtime identity"
+                )
+            approval_required = (
+                self._validate_capabilities(
+                    step,
+                    request,
+                    capabilities,
+                    assignment_agent,
+                    assignment_team,
+                    errors,
+                    warnings,
+                )
+                or approval_required
+            )
+            self._validate_model(step, request, models, errors)
+            self._validate_reuse(step, request, errors)
+
+        return ProposalValidation(
+            valid=not errors,
+            errors=tuple(errors),
+            warnings=tuple(dict.fromkeys(warnings)),
+            approval_required=approval_required,
+        )
+
+    def _validate_graph(
+        self,
+        steps: tuple[PlanningStepDraft, ...],
+        request: PlanningRequest,
+        errors: list[str],
+    ) -> None:
         if not steps:
             errors.append("Plan requires at least one Step")
         if len(steps) > request.max_steps:
@@ -70,204 +118,256 @@ class PlanningProposalValidator:
                     f"{request.max_parallel_steps}"
                 )
 
-        agents = {(item.agent_id, item.revision): item for item in request.inventory.agents}
-        teams = {(item.team_id, item.revision): item for item in request.inventory.teams}
-        models = {item.model_config_id: item for item in request.inventory.models}
-        capabilities = self.capability_map(request.inventory)
-        prior = request.prior_plan
+    def _validate_assignment(
+        self,
+        step: PlanningStepDraft,
+        request: PlanningRequest,
+        agents: Mapping[tuple[str, int], PlanningAgentCandidate],
+        teams: Mapping[tuple[str, int], PlanningTeamCandidate],
+        errors: list[str],
+    ) -> tuple[PlanningAgentCandidate | None, PlanningTeamCandidate | None]:
+        assignment_agent: PlanningAgentCandidate | None = None
+        assignment_team: PlanningTeamCandidate | None = None
+        assignment = step.assignment
+        if assignment is None:
+            errors.append(f"Step {step.key} requires an Agent, Agent Team or role assignment")
+            return assignment_agent, assignment_team
 
-        for step in steps:
-            assignment_agent: PlanningAgentCandidate | None = None
-            assignment_team: PlanningTeamCandidate | None = None
-            if step.assignment is None:
-                errors.append(f"Step {step.key} requires an Agent, Agent Team or role assignment")
-            elif step.assignment.agent_id is not None:
-                revision = step.assignment.agent_revision
-                if revision is None:
-                    errors.append(f"Step {step.key} Agent assignment is missing its revision")
-                else:
-                    assignment_agent = agents.get((step.assignment.agent_id, revision))
-                    if assignment_agent is None:
-                        errors.append(
-                            f"Step {step.key} references missing Agent revision "
-                            f"{step.assignment.agent_id}@{revision}"
-                        )
-                    elif not assignment_agent.enabled:
-                        errors.append(
-                            f"Step {step.key} references disabled Agent {assignment_agent.agent_id}"
-                        )
-                    else:
-                        match = match_planning_step(step, request, agent_only=True)
-                        if match is None or match.status is not AgentMatchStatus.SELECTED:
-                            errors.append(
-                                f"Step {step.key} exact Agent assignment is not eligible under "
-                                "the canonical Agent matcher"
-                            )
-            elif step.assignment.team_id is not None:
-                revision = step.assignment.team_revision
-                if revision is None:
-                    errors.append(f"Step {step.key} Team assignment is missing its revision")
-                else:
-                    assignment_team = teams.get((step.assignment.team_id, revision))
-                    if assignment_team is None:
-                        errors.append(
-                            f"Step {step.key} references missing Agent Team revision "
-                            f"{step.assignment.team_id}@{revision}"
-                        )
-                    elif not assignment_team.enabled:
-                        errors.append(
-                            f"Step {step.key} references disabled/incompatible Agent Team "
-                            f"{assignment_team.team_id}"
-                        )
-                    else:
-                        match = match_planning_step(step, request)
-                        if match is None or match.status is not AgentMatchStatus.SELECTED:
-                            errors.append(
-                                f"Step {step.key} exact Agent Team assignment is not eligible "
-                                "under the canonical Agent matcher"
-                            )
-            elif step.assignment.role_requirement is not None:
-                role = step.assignment.role_requirement
-                match = match_planning_step(step, request, agent_only=True)
-                if match is None or match.status is AgentMatchStatus.NO_MATCH:
-                    errors.append(
-                        f"Step {step.key} has no eligible canonical Agent for role {role!r}"
-                    )
-                elif match.status is AgentMatchStatus.AMBIGUOUS:
-                    refs = [
-                        f"{item.agent_id}@{item.revision}"
-                        for item in match.ambiguous
-                        if hasattr(item, "agent_id")
-                    ]
-                    errors.append(
-                        f"Step {step.key} Agent match for role {role!r} is ambiguous: {refs!r}"
-                    )
-
-            if self.contains_provider_private_metadata(step.metadata):
+        if assignment.agent_id is not None:
+            revision = assignment.agent_revision
+            if revision is None:
+                errors.append(f"Step {step.key} Agent assignment is missing its revision")
+                return assignment_agent, assignment_team
+            assignment_agent = agents.get((assignment.agent_id, revision))
+            if assignment_agent is None:
                 errors.append(
-                    f"Step {step.key} metadata contains provider-private runtime identity"
+                    f"Step {step.key} references missing Agent revision "
+                    f"{assignment.agent_id}@{revision}"
                 )
-
-            required_by_step = {
-                requirement.capability_id
-                for requirement in step.capability_requirements
-                if requirement.required
-            }
-            if assignment_agent is not None:
-                missing_agent_requirements = (
-                    set(assignment_agent.required_capability_ids) - required_by_step
+            elif not assignment_agent.enabled:
+                errors.append(
+                    f"Step {step.key} references disabled Agent {assignment_agent.agent_id}"
                 )
-                if missing_agent_requirements:
+            else:
+                match = match_planning_step(step, request, agent_only=True)
+                if match is None or match.status is not AgentMatchStatus.SELECTED:
                     errors.append(
-                        f"Step {step.key} omits required Agent capabilities: "
-                        f"{sorted(missing_agent_requirements)!r}"
+                        f"Step {step.key} exact Agent assignment is not eligible under "
+                        "the canonical Agent matcher"
                     )
+            return assignment_agent, assignment_team
 
-            for requirement in step.capability_requirements:
-                candidate = capabilities.get(requirement.capability_id)
-                if candidate is None:
-                    if requirement.required:
-                        errors.append(
-                            f"Step {step.key} requires missing capability "
-                            f"{requirement.capability_id}"
-                        )
-                    else:
-                        warnings.append(
-                            f"Step {step.key} optional capability is missing: "
-                            f"{requirement.capability_id}"
-                        )
-                    continue
-                if requirement.required and not candidate.available:
-                    errors.append(
-                        f"Step {step.key} requires unavailable capability {candidate.capability_id}"
-                    )
-                if (
-                    requirement.exact_version is not None
-                    and candidate.version != requirement.exact_version
-                ):
-                    errors.append(
-                        f"Step {step.key} requires {candidate.capability_id}@"
-                        f"{requirement.exact_version}, found {candidate.version}"
-                    )
-                missing_features = set(requirement.required_features) - set(candidate.features)
-                if missing_features:
-                    errors.append(
-                        f"Step {step.key} capability {candidate.capability_id} misses features "
-                        f"{sorted(missing_features)!r}"
-                    )
-                missing_permissions = set(candidate.required_permissions) - set(
-                    request.granted_permissions
+        if assignment.team_id is not None:
+            revision = assignment.team_revision
+            if revision is None:
+                errors.append(f"Step {step.key} Team assignment is missing its revision")
+                return assignment_agent, assignment_team
+            assignment_team = teams.get((assignment.team_id, revision))
+            if assignment_team is None:
+                errors.append(
+                    f"Step {step.key} references missing Agent Team revision "
+                    f"{assignment.team_id}@{revision}"
                 )
-                if missing_permissions:
+            elif not assignment_team.enabled:
+                errors.append(
+                    f"Step {step.key} references disabled/incompatible Agent Team "
+                    f"{assignment_team.team_id}"
+                )
+            else:
+                match = match_planning_step(step, request)
+                if match is None or match.status is not AgentMatchStatus.SELECTED:
                     errors.append(
-                        f"Step {step.key} lacks permissions for {candidate.capability_id}: "
-                        f"{sorted(missing_permissions)!r}"
+                        f"Step {step.key} exact Agent Team assignment is not eligible "
+                        "under the canonical Agent matcher"
                     )
-                if (
-                    candidate.required_approvals
-                    or candidate.safety != "standard"
-                    or candidate.side_effects in {"external", "destructive"}
-                ):
-                    approval_required = True
-                    warnings.append(
-                        f"Step {step.key} capability {candidate.capability_id} requires activation "
-                        "approval"
-                    )
-                if assignment_agent is not None:
-                    if candidate.capability_id in assignment_agent.denied_capability_ids:
-                        errors.append(
-                            f"Step {step.key} capability {candidate.capability_id} is denied for "
-                            f"Agent {assignment_agent.agent_id}"
-                        )
-                    if (
-                        assignment_agent.allowed_capability_ids
-                        and candidate.capability_id not in assignment_agent.allowed_capability_ids
-                    ):
-                        errors.append(
-                            f"Step {step.key} capability {candidate.capability_id} is "
-                            "outside Agent "
-                            f"{assignment_agent.agent_id} allowlist"
-                        )
-                if assignment_team is not None and assignment_team.shared_capability_ids:
-                    if candidate.capability_id not in assignment_team.shared_capability_ids:
-                        warnings.append(
-                            f"Step {step.key} capability {candidate.capability_id} is not a shared "
-                            "Team capability; member-level policy must provide it"
-                        )
+            return assignment_agent, assignment_team
 
-            if step.requires_model or self.has_model_requirements(step.model_requirements):
-                compatible = [
-                    candidate
-                    for candidate in request.inventory.models
-                    if self.model_matches(candidate, step.model_requirements)
+        role = assignment.role_requirement
+        if role is not None:
+            match = match_planning_step(step, request, agent_only=True)
+            if match is None or match.status is AgentMatchStatus.NO_MATCH:
+                errors.append(f"Step {step.key} has no eligible canonical Agent for role {role!r}")
+            elif match.status is AgentMatchStatus.AMBIGUOUS:
+                refs = [
+                    f"{item.agent_id}@{item.revision}"
+                    for item in match.ambiguous
+                    if hasattr(item, "agent_id")
                 ]
-                if not compatible:
-                    errors.append(f"Step {step.key} has no compatible available canonical model")
-                explicit = step.model_requirements.explicit_model_id
-                if explicit is not None and explicit not in models:
-                    errors.append(
-                        f"Step {step.key} references unknown canonical model "
-                        f"configuration {explicit}"
-                    )
+                errors.append(
+                    f"Step {step.key} Agent match for role {role!r} is ambiguous: {refs!r}"
+                )
+        return assignment_agent, assignment_team
 
-            if step.reuse_step_ids:
-                if prior is None:
-                    errors.append(f"Step {step.key} cannot reuse work without a prior Plan")
-                else:
-                    allowed_reuse = set(prior.completed_step_ids)
-                    invalid_reuse = set(step.reuse_step_ids) - allowed_reuse
-                    if invalid_reuse:
-                        errors.append(
-                            f"Step {step.key} may reuse only completed prior Steps, not "
-                            f"{sorted(invalid_reuse)!r}"
-                        )
+    def _validate_capabilities(
+        self,
+        step: PlanningStepDraft,
+        request: PlanningRequest,
+        capabilities: Mapping[str, PlanningCapabilityCandidate],
+        assignment_agent: PlanningAgentCandidate | None,
+        assignment_team: PlanningTeamCandidate | None,
+        errors: list[str],
+        warnings: list[str],
+    ) -> bool:
+        required_by_step = {
+            requirement.capability_id
+            for requirement in step.capability_requirements
+            if requirement.required
+        }
+        if assignment_agent is not None:
+            missing_agent_requirements = (
+                set(assignment_agent.required_capability_ids) - required_by_step
+            )
+            if missing_agent_requirements:
+                errors.append(
+                    f"Step {step.key} omits required Agent capabilities: "
+                    f"{sorted(missing_agent_requirements)!r}"
+                )
 
-        return ProposalValidation(
-            valid=not errors,
-            errors=tuple(errors),
-            warnings=tuple(dict.fromkeys(warnings)),
-            approval_required=approval_required,
+        approval_required = False
+        for requirement in step.capability_requirements:
+            candidate = capabilities.get(requirement.capability_id)
+            if candidate is None:
+                self._record_missing_capability(step, requirement, errors, warnings)
+                continue
+            approval_required = (
+                self._validate_capability_requirement(
+                    step,
+                    request,
+                    requirement,
+                    candidate,
+                    assignment_agent,
+                    assignment_team,
+                    errors,
+                    warnings,
+                )
+                or approval_required
+            )
+        return approval_required
+
+    @staticmethod
+    def _record_missing_capability(
+        step: PlanningStepDraft,
+        requirement: CapabilityRequirement,
+        errors: list[str],
+        warnings: list[str],
+    ) -> None:
+        if requirement.required:
+            errors.append(
+                f"Step {step.key} requires missing capability {requirement.capability_id}"
+            )
+        else:
+            warnings.append(
+                f"Step {step.key} optional capability is missing: {requirement.capability_id}"
+            )
+
+    @staticmethod
+    def _validate_capability_requirement(
+        step: PlanningStepDraft,
+        request: PlanningRequest,
+        requirement: CapabilityRequirement,
+        candidate: PlanningCapabilityCandidate,
+        assignment_agent: PlanningAgentCandidate | None,
+        assignment_team: PlanningTeamCandidate | None,
+        errors: list[str],
+        warnings: list[str],
+    ) -> bool:
+        if requirement.required and not candidate.available:
+            errors.append(
+                f"Step {step.key} requires unavailable capability {candidate.capability_id}"
+            )
+        if requirement.exact_version is not None and candidate.version != requirement.exact_version:
+            errors.append(
+                f"Step {step.key} requires {candidate.capability_id}@{requirement.exact_version}, "
+                f"found {candidate.version}"
+            )
+        missing_features = set(requirement.required_features) - set(candidate.features)
+        if missing_features:
+            errors.append(
+                f"Step {step.key} capability {candidate.capability_id} misses features "
+                f"{sorted(missing_features)!r}"
+            )
+        missing_permissions = set(candidate.required_permissions) - set(request.granted_permissions)
+        if missing_permissions:
+            errors.append(
+                f"Step {step.key} lacks permissions for {candidate.capability_id}: "
+                f"{sorted(missing_permissions)!r}"
+            )
+
+        approval_required = bool(
+            candidate.required_approvals
+            or candidate.safety != "standard"
+            or candidate.side_effects in {"external", "destructive"}
         )
+        if approval_required:
+            warnings.append(
+                f"Step {step.key} capability {candidate.capability_id} requires activation approval"
+            )
+
+        if assignment_agent is not None:
+            if candidate.capability_id in assignment_agent.denied_capability_ids:
+                errors.append(
+                    f"Step {step.key} capability {candidate.capability_id} is denied for Agent "
+                    f"{assignment_agent.agent_id}"
+                )
+            if (
+                assignment_agent.allowed_capability_ids
+                and candidate.capability_id not in assignment_agent.allowed_capability_ids
+            ):
+                errors.append(
+                    f"Step {step.key} capability {candidate.capability_id} is outside Agent "
+                    f"{assignment_agent.agent_id} allowlist"
+                )
+        if (
+            assignment_team is not None
+            and assignment_team.shared_capability_ids
+            and candidate.capability_id not in assignment_team.shared_capability_ids
+        ):
+            warnings.append(
+                f"Step {step.key} capability {candidate.capability_id} is not a shared Team "
+                "capability; member-level policy must provide it"
+            )
+        return approval_required
+
+    def _validate_model(
+        self,
+        step: PlanningStepDraft,
+        request: PlanningRequest,
+        models: Mapping[str, PlanningModelCandidate],
+        errors: list[str],
+    ) -> None:
+        if not (step.requires_model or self.has_model_requirements(step.model_requirements)):
+            return
+        compatible = [
+            candidate
+            for candidate in request.inventory.models
+            if self.model_matches(candidate, step.model_requirements)
+        ]
+        if not compatible:
+            errors.append(f"Step {step.key} has no compatible available canonical model")
+        explicit = step.model_requirements.explicit_model_id
+        if explicit is not None and explicit not in models:
+            errors.append(
+                f"Step {step.key} references unknown canonical model configuration {explicit}"
+            )
+
+    @staticmethod
+    def _validate_reuse(
+        step: PlanningStepDraft,
+        request: PlanningRequest,
+        errors: list[str],
+    ) -> None:
+        if not step.reuse_step_ids:
+            return
+        prior = request.prior_plan
+        if prior is None:
+            errors.append(f"Step {step.key} cannot reuse work without a prior Plan")
+            return
+        invalid_reuse = set(step.reuse_step_ids) - set(prior.completed_step_ids)
+        if invalid_reuse:
+            errors.append(
+                f"Step {step.key} may reuse only completed prior Steps, not "
+                f"{sorted(invalid_reuse)!r}"
+            )
 
     @staticmethod
     def has_model_requirements(requirements: RoutingRequirements) -> bool:
@@ -285,8 +385,20 @@ class PlanningProposalValidator:
             )
         )
 
-    @staticmethod
+    @classmethod
     def model_matches(
+        cls,
+        candidate: PlanningModelCandidate,
+        requirements: RoutingRequirements,
+    ) -> bool:
+        return (
+            cls._model_identity_and_location_match(candidate, requirements)
+            and cls._model_context_matches(candidate, requirements)
+            and cls._model_features_match(candidate, requirements)
+        )
+
+    @staticmethod
+    def _model_identity_and_location_match(
         candidate: PlanningModelCandidate,
         requirements: RoutingRequirements,
     ) -> bool:
@@ -304,12 +416,23 @@ class PlanningProposalValidator:
             ModelLocation.SELF_HOSTED,
         }:
             return False
-        if requirements.min_context_window is not None:
-            if (
-                candidate.context_window is None
-                or candidate.context_window < requirements.min_context_window
-            ):
-                return False
+        return True
+
+    @staticmethod
+    def _model_context_matches(
+        candidate: PlanningModelCandidate,
+        requirements: RoutingRequirements,
+    ) -> bool:
+        minimum = requirements.min_context_window
+        if minimum is None:
+            return True
+        return candidate.context_window is not None and candidate.context_window >= minimum
+
+    @staticmethod
+    def _model_features_match(
+        candidate: PlanningModelCandidate,
+        requirements: RoutingRequirements,
+    ) -> bool:
         if requirements.tool_calling and not candidate.tool_calling:
             return False
         if requirements.structured_output and not candidate.structured_output:
