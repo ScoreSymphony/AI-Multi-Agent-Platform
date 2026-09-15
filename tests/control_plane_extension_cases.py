@@ -92,7 +92,7 @@ def _manifest_commands(*extensions: str) -> list[str]:
     return [*sorted((*AUTOMATION_COMMANDS, *extensions)), *NOTIFICATION_COMMANDS]
 
 
-def test_issue_32_foundation_is_separate_from_later_implemented_domains() -> None:
+def test_foundation_collections_are_separate_from_later_implemented_domains() -> None:
     assert FOUNDATION_COLLECTIONS == (
         "projects",
         "workspaces",

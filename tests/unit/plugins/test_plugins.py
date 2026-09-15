@@ -226,11 +226,13 @@ def test_remove_refuses_plugins_with_canonical_references() -> None:
     assert caught.value.code is ErrorCode.CONFLICT
 
 
-def _issue_20_manifest_document(*, extension_type: str = "transport_provider") -> dict[str, object]:
+def _acceptance_manifest_document(
+    *, extension_type: str = "transport_provider"
+) -> dict[str, object]:
     return {
         "plugin_id": "acceptance.plugin",
         "name": "Acceptance plugin",
-        "description": "Issue 20 acceptance manifest",
+        "description": "Plugin manifest acceptance fixture",
         "plugin_version": "1.0.0",
         "manifest_version": "1",
         "author": "tests",
@@ -257,7 +259,7 @@ def _issue_20_manifest_document(*, extension_type: str = "transport_provider") -
     }
 
 
-def test_issue_20_reserves_every_required_extension_category() -> None:
+def test_required_extension_categories_are_reserved() -> None:
     required = {
         "orchestrator",
         "executor",
@@ -282,8 +284,8 @@ def test_issue_20_reserves_every_required_extension_category() -> None:
     assert required <= {extension.value for extension in ExtensionType}
 
 
-def test_issue_20_manifest_v1_requires_explicit_capability_declarations() -> None:
-    document = _issue_20_manifest_document()
+def test_manifest_v1_requires_explicit_capability_declarations() -> None:
+    document = _acceptance_manifest_document()
     validate_manifest_document(document)
 
     missing = dict(document)
@@ -293,18 +295,18 @@ def test_issue_20_manifest_v1_requires_explicit_capability_declarations() -> Non
     assert caught.value.code is ErrorCode.INVALID_CONFIGURATION
 
 
-def test_issue_20_manifest_accepts_transport_and_configuration_extensions() -> None:
-    validate_manifest_document(_issue_20_manifest_document(extension_type="transport_provider"))
+def test_manifest_accepts_transport_and_configuration_extensions() -> None:
+    validate_manifest_document(_acceptance_manifest_document(extension_type="transport_provider"))
     validate_manifest_document(
-        _issue_20_manifest_document(extension_type="configuration_extension")
+        _acceptance_manifest_document(extension_type="configuration_extension")
     )
 
 
-def test_issue_20_manifest_model_rejects_duplicate_capability_ids() -> None:
+def test_manifest_model_rejects_duplicate_capability_ids() -> None:
     manifest = reference_manifest()
     with pytest.raises(ValueError, match="duplicate capabilities"):
         replace(manifest, capabilities=(REFERENCE_CAPABILITY_ID, REFERENCE_CAPABILITY_ID))
 
 
-def test_issue_20_reference_plugin_declares_its_capability() -> None:
+def test_reference_plugin_declares_its_capability() -> None:
     assert reference_manifest().capabilities == (REFERENCE_CAPABILITY_ID,)
