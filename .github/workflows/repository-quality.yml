@@ -10,6 +10,55 @@ permissions:
   contents: read
 
 jobs:
+  maintainability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Inventory current production Python maintainability
+        run: |
+          python scripts/ci/maintainability_guard.py inventory \
+            --root . \
+            --config config/maintainability.toml \
+            --json-out .maintainability/current.json \
+            --markdown-out .maintainability/current.md
+          cat .maintainability/current.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Materialize pull request base
+        if: github.event_name == 'pull_request'
+        run: |
+          mkdir -p .maintainability-base
+          git archive "${{ github.event.pull_request.base.sha }}" | tar -x -C .maintainability-base
+      - name: Inventory pull request base
+        if: github.event_name == 'pull_request'
+        run: >-
+          python scripts/ci/maintainability_guard.py inventory
+          --root .maintainability-base
+          --config config/maintainability.toml
+          --json-out .maintainability/base.json
+      - name: Reject newly introduced extreme outliers
+        if: github.event_name == 'pull_request'
+        run: >-
+          python scripts/ci/maintainability_guard.py compare
+          --baseline .maintainability/base.json
+          --current .maintainability/current.json
+      - name: Upload maintainability evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: maintainability-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            .maintainability/current.json
+            .maintainability/current.md
+            .maintainability/base.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
   validate-test-layout:
     runs-on: ubuntu-latest
     steps:
