@@ -20,8 +20,9 @@ from ai_multi_agent_platform.skills import (
 )
 from ai_multi_agent_platform.verification import VerificationService
 
-from .explicit_control_plane import register_explicit_scoped_learning_control_plane
-from .governance import GovernedObservedLearningService, LearningPlatformPolicy
+from .async_explicit_control_plane import register_async_explicit_scoped_learning_control_plane
+from .async_service import RuntimeGovernedLearningService
+from .governance import LearningPlatformPolicy
 from .post_promotion_repository import SQLitePostPromotionEvaluationRecorder
 from .promotion import (
     AgentPromotionAdapter,
@@ -31,6 +32,7 @@ from .promotion import (
 )
 from .repository import SQLiteLearningRepository
 from .runtime import PostPromotionEvaluator
+from .runtime_sources import RuntimeLearningSourceBridge
 from .service import LearningQualityGate
 from .source_evidence import (
     KernelRunFailureEvidenceResolver,
@@ -38,7 +40,6 @@ from .source_evidence import (
     PlanningEvidenceService,
     PlanningProposalFailureEvidenceResolver,
 )
-from .sources import LearningSourceBridge
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,8 +49,8 @@ class SingleNodeLearningComposition:
     repository: SQLiteLearningRepository
     post_promotion_recorder: SQLitePostPromotionEvaluationRecorder
     skills: SkillService
-    service: GovernedObservedLearningService
-    sources: LearningSourceBridge
+    service: RuntimeGovernedLearningService
+    sources: RuntimeLearningSourceBridge
 
     def register_control_plane(
         self,
@@ -62,7 +63,7 @@ class SingleNodeLearningComposition:
         registered = set(control_plane.registered_collections)
         if register_skills and SKILL_COLLECTION not in registered:
             register_skill_control_plane(control_plane, self.skills)
-        register_explicit_scoped_learning_control_plane(control_plane, self.service)
+        register_async_explicit_scoped_learning_control_plane(control_plane, self.service)
 
 
 def build_single_node_learning(
@@ -89,7 +90,7 @@ def build_single_node_learning(
     post_promotion_recorder = SQLitePostPromotionEvaluationRecorder(
         root / "learning-post-promotion.sqlite3"
     )
-    service = GovernedObservedLearningService(
+    service = RuntimeGovernedLearningService(
         repository,
         quality_gate=LearningQualityGate(
             evaluation=evaluation,
@@ -113,7 +114,7 @@ def build_single_node_learning(
         post_promotion_recorder=post_promotion_recorder,
         skills=skill_service,
         service=service,
-        sources=LearningSourceBridge(
+        sources=RuntimeLearningSourceBridge(
             service,
             research=research,
             run_failures=KernelRunFailureEvidenceResolver(kernel),
