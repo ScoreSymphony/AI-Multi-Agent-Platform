@@ -228,7 +228,7 @@ class MultiAgentFirstRunService:
         owned_projects = tuple(
             project
             for project in self._scopes.list_projects()
-            if project.owner_type == owner.type and project.owner_id == owner.id
+            if project.owner_ref == owner
         )
         if project_id is None:
             if len(owned_projects) != 1:
@@ -239,7 +239,7 @@ class MultiAgentFirstRunService:
                 )
             project_id = owned_projects[0].id
         project = self._scopes.get_project(project_id)
-        if project.owner_type != owner.type or project.owner_id != owner.id:
+        if project.owner_ref != owner:
             raise ContractError(ErrorCode.FORBIDDEN, "Selected Project is not owned by this actor.")
 
         owned_workspaces = tuple(
