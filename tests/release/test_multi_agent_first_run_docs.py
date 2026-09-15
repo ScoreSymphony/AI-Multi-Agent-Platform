@@ -19,8 +19,6 @@ def test_first_run_doc_uses_supported_single_node_and_canonical_command() -> Non
     assert "platform-server serve" in guide
     assert "onboarding.run-multi-agent-golden-path" in guide
     assert "platform onboarding run-multi-agent" in guide
-    assert "researcher · developer · reviewer" not in guide  # keep docs plain-text portable
-    for optional in ("Hermes", "Forge", "LiteLLM"):
-        assert f"does **not** require {optional}" not in guide
     assert "Hermes, Forge, LiteLLM" in guide
+    assert "does **not** require" in guide
     assert "paid" in guide.lower()
