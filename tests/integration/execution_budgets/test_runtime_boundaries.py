@@ -64,6 +64,23 @@ async def _consume_one(
     await budgets.reconcile(decision)
 
 
+def _local_runtime(budgets: TaskBudgetEnforcementService, *, model_ref: str) -> tuple[TaskBudgetModelRuntime, FakeModelProvider]:
+    provider = FakeModelProvider(model_ref=model_ref)
+    registry = ModelRegistry()
+    registry.register_provider(provider)
+    registry.register_model(
+        ModelConfiguration(
+            config_id=model_ref,
+            display_name="Budget boundary model",
+            provider_id=provider.descriptor.provider_id,
+            location=ModelLocation.LOCAL,
+            health=HealthStatus.HEALTHY,
+            capabilities=ModelCapabilities(context_window=4096),
+        )
+    )
+    return TaskBudgetModelRuntime(ModelRuntime(registry), budgets), provider
+
+
 @pytest.mark.asyncio
 async def test_direct_model_runtime_cannot_bypass_task_model_call_budget() -> None:
     task_id = new_id("task")
@@ -88,20 +105,7 @@ async def test_direct_model_runtime_cannot_bypass_task_model_call_budget() -> No
         dimension=BudgetDimension.MODEL_CALLS,
     )
 
-    provider = FakeModelProvider(model_ref="provider-budget-boundary")
-    registry = ModelRegistry()
-    registry.register_provider(provider)
-    registry.register_model(
-        ModelConfiguration(
-            config_id="model-budget-boundary",
-            display_name="Budget boundary model",
-            provider_id=provider.descriptor.provider_id,
-            location=ModelLocation.LOCAL,
-            health=HealthStatus.HEALTHY,
-            capabilities=ModelCapabilities(context_window=4096),
-        )
-    )
-    runtime = TaskBudgetModelRuntime(ModelRuntime(registry), budgets)
+    runtime, provider = _local_runtime(budgets, model_ref="model-budget-boundary")
     request = ModelRequest(
         request_id="budget-boundary-model",
         messages=("hello",),
@@ -119,6 +123,56 @@ async def test_direct_model_runtime_cannot_bypass_task_model_call_budget() -> No
     assert exc_info.value.code is ErrorCode.RESOURCE_EXHAUSTED
     assert exc_info.value.details["blocking_dimension"] == BudgetDimension.MODEL_CALLS.value
     assert provider.calls == []
+
+
+@pytest.mark.asyncio
+async def test_local_model_without_cost_metric_still_consumes_non_cost_budget() -> None:
+    task_id = new_id("task")
+    budgets = _budgets()
+    await budgets.put_policy(
+        TaskBudgetPolicy(
+            task_id=task_id,
+            started_at=utc_now(),
+            limits=(
+                TaskBudgetLimit(
+                    dimension=BudgetDimension.MODEL_CALLS,
+                    limit=1.0,
+                    source=BudgetConsumptionSource.RUNTIME_COUNTER,
+                ),
+            ),
+        )
+    )
+    runtime, provider = _local_runtime(budgets, model_ref="local-model-no-cost-budget")
+    request = ModelRequest(
+        request_id="local-budget-first",
+        messages=("hello",),
+        requirements={"task_id": task_id},
+        context=OperationContext(
+            correlation_id=task_id,
+            owner_type="user",
+            owner_id="local-budget-test",
+        ),
+    )
+
+    await runtime.generate(request)
+    snapshot = await budgets.snapshot(task_id)
+    model_calls = snapshot.for_dimension(BudgetDimension.MODEL_CALLS)
+    assert model_calls is not None
+    assert model_calls.consumed == 1.0
+    assert model_calls.remaining == 0.0
+    assert len(provider.calls) == 1
+
+    with pytest.raises(ContractError) as exc_info:
+        await runtime.generate(
+            ModelRequest(
+                request_id="local-budget-second",
+                messages=("again",),
+                requirements={"task_id": task_id},
+                context=request.context,
+            )
+        )
+    assert exc_info.value.code is ErrorCode.RESOURCE_EXHAUSTED
+    assert len(provider.calls) == 1
 
 
 @pytest.mark.asyncio
