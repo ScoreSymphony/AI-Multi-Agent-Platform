@@ -1,5 +1,6 @@
 """Per-Task autonomous execution budget enforcement for Issue #902."""
 
+from .governance import TaskBudgetPolicyMutationService
 from .models import (
     BudgetActionKind,
     BudgetAdmissionDecision,
@@ -42,6 +43,7 @@ __all__ = [
     "TaskBudgetEnforcementService",
     "TaskBudgetLimit",
     "TaskBudgetPolicy",
+    "TaskBudgetPolicyMutationService",
     "TaskBudgetSnapshot",
     "TaskBudgetStore",
     "UnavailableMetricPolicy",
