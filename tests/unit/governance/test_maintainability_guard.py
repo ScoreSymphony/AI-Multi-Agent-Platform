@@ -47,10 +47,10 @@ function_extreme_complexity = {complexity_extreme}
     )
 
 
-def _write_module(root: Path, source: str) -> None:
+def _write_module(root: Path, source: str, *, name: str = "sample.py") -> None:
     source_root = root / "src" / "ai_multi_agent_platform"
-    source_root.mkdir(parents=True)
-    (source_root / "sample.py").write_text(source, encoding="utf-8")
+    source_root.mkdir(parents=True, exist_ok=True)
+    (source_root / name).write_text(source, encoding="utf-8")
 
 
 @pytest.mark.unit
@@ -78,9 +78,11 @@ def test_inventory_reports_module_function_size_and_branch_complexity(tmp_path: 
     function = module["functions"][0]
     assert module["path"] == "src/ai_multi_agent_platform/sample.py"
     assert module["lines"] == 6
+    assert isinstance(module["fingerprint"], str)
     assert function["qualname"] == "branchy"
     assert function["lines"] == 6
     assert function["complexity"] == 4
+    assert isinstance(function["fingerprint"], str)
     assert function["review"] is True
     assert function["extreme"] is False
 
@@ -132,6 +134,42 @@ def test_compare_only_rejects_new_unexempt_extremes(tmp_path: Path) -> None:
 
     historical = guard.compare_inventories(current, current)
     assert historical == []
+
+
+@pytest.mark.unit
+def test_compare_recognizes_unchanged_extreme_function_moved_to_new_module(tmp_path: Path) -> None:
+    guard = _load_guard()
+    source = """def work(value: int) -> int:
+    if value > 10:
+        return 10
+    if value > 5:
+        return 5
+    if value > 0:
+        return value
+    return 0
+"""
+    config_path = tmp_path / "maintainability.toml"
+    _write_config(
+        config_path,
+        module_review=20,
+        module_extreme=30,
+        function_review=3,
+        function_extreme=6,
+        complexity_review=10,
+        complexity_extreme=20,
+    )
+    config = guard.load_configuration(config_path)
+
+    baseline_root = tmp_path / "baseline"
+    _write_module(baseline_root, source, name="old_owner.py")
+    current_root = tmp_path / "current"
+    _write_module(current_root, source, name="new_owner.py")
+
+    baseline = guard.build_inventory(baseline_root, config)
+    current = guard.build_inventory(current_root, config)
+    assert baseline["modules"][0]["functions"][0]["extreme"] is True
+    assert current["modules"][0]["functions"][0]["extreme"] is True
+    assert guard.compare_inventories(baseline, current) == []
 
 
 @pytest.mark.unit
