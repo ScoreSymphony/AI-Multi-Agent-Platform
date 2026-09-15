@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from ai_multi_agent_platform.agents import bootstrap_standard_agents
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane import ActorContext, PageQuery, RequestContext
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.repositories.async_catalog import AsyncSqliteRepositoryBindingCatalog
@@ -95,9 +96,12 @@ def test_mixed_control_plane_agent_workload_remains_responsive_during_sqlite_pre
                 heartbeat_ticks += 1
                 await asyncio.sleep(0)
 
-        async def representative_workload():
-            task_pages = []
-            agent_pages = []
+        async def representative_workload() -> tuple[
+            list[dict[str, JsonValue]],
+            list[dict[str, JsonValue]],
+        ]:
+            task_pages: list[dict[str, JsonValue]] = []
+            agent_pages: list[dict[str, JsonValue]] = []
             for index in range(6):
                 task_page, agent_page = await asyncio.gather(
                     deployment.control_plane.list_tasks(
