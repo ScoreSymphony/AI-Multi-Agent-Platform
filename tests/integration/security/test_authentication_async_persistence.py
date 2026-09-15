@@ -341,7 +341,7 @@ def test_worker_protocol_offloads_sqlite_worker_authentication(tmp_path: Path) -
         store = _SlowSQLiteAuthenticationStore(tmp_path / "authentication.sqlite3")
         authentication = _service(store)
         node = NodeRecord(
-            node_id="node_async_auth",
+            node_id="node_00000000-0000-4000-8000-000000000001",
             display_name="async-auth-node",
             resources=ResourceSnapshot(
                 cpu_cores_total=4.0,
@@ -354,7 +354,7 @@ def test_worker_protocol_offloads_sqlite_worker_authentication(tmp_path: Path) -
             supported_runtimes=("python",),
         )
         worker = WorkerRecord(
-            worker_id="worker_async_auth",
+            worker_id="worker_00000000-0000-4000-8000-000000000002",
             node_id=node.node_id,
             supported_executors=("reference",),
             supported_runtimes=("python",),
