@@ -16,8 +16,13 @@ from ai_multi_agent_platform.workspaces import (
     WorkspaceSourceKind,
 )
 
+from .async_provenance import (
+    AsyncRepositoryProvenanceReader,
+    RepositoryProvenanceReader,
+    as_async_repository_provenance_reader,
+)
+from .models import RepositoryRunProvenance
 from .run_integration import RepositoryRunIntegration
-from .service import RepositoryProvenanceStore
 
 
 class RepositoryWorkspaceExecutionCoordinator:
@@ -32,7 +37,7 @@ class RepositoryWorkspaceExecutionCoordinator:
         self,
         bindings: RunWorkspaceBindingRepository,
         workspaces: WorkspaceProvider,
-        provenance: RepositoryProvenanceStore,
+        provenance: RepositoryProvenanceReader | AsyncRepositoryProvenanceReader,
         *,
         fallback_workspace: str,
     ) -> None:
@@ -40,7 +45,7 @@ class RepositoryWorkspaceExecutionCoordinator:
             raise ValueError("fallback execution workspace must not be blank")
         self._bindings = bindings
         self._workspaces = workspaces
-        self._provenance = provenance
+        self._provenance = as_async_repository_provenance_reader(provenance)
         self._fallback_workspace = fallback_workspace
         self._run_integration: RepositoryRunIntegration | None = None
         self._materializations: dict[str, WorkspaceMaterialization] = {}
@@ -96,7 +101,8 @@ class RepositoryWorkspaceExecutionCoordinator:
                 details={"run_id": request.run_id},
             )
 
-        actor_ref = self._provenance_actor(request.run_id) or "service:platform-execution"
+        records = await self._provenance.for_run(request.run_id)
+        actor_ref = self._provenance_actor(records, request.run_id) or "service:platform-execution"
         materialization = await self._workspaces.materialize(
             binding.workspace_id,
             self._execution_data_context(request, binding, actor_ref=actor_ref),
@@ -126,7 +132,7 @@ class RepositoryWorkspaceExecutionCoordinator:
         repository_backed = any(
             source.kind is WorkspaceSourceKind.REPOSITORY for source in snapshot.source_refs
         )
-        records = self._provenance.for_run(request.run_id)
+        records = await self._provenance.for_run(request.run_id)
 
         if repository_backed and not records:
             raise ContractError(
@@ -143,7 +149,7 @@ class RepositoryWorkspaceExecutionCoordinator:
                     "repository Run integration is not configured for completion capture",
                     retryable=True,
                 )
-            actor_ref = self._provenance_actor(request.run_id)
+            actor_ref = self._provenance_actor(records, request.run_id)
             if actor_ref is None:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
@@ -184,8 +190,11 @@ class RepositoryWorkspaceExecutionCoordinator:
             )
         return binding
 
-    def _provenance_actor(self, run_id: str) -> str | None:
-        records = self._provenance.for_run(run_id)
+    @staticmethod
+    def _provenance_actor(
+        records: tuple[RepositoryRunProvenance, ...],
+        run_id: str,
+    ) -> str | None:
         if not records:
             return None
         actor_refs = {record.actor_ref for record in records}

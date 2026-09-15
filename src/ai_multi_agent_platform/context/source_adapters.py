@@ -34,11 +34,12 @@ from ai_multi_agent_platform.data.models import (
     MemoryScope,
 )
 from ai_multi_agent_platform.kernel.repository import RunRepository, TaskRepository
-from ai_multi_agent_platform.repositories.service import (
-    RepositoryCallContext,
-    RepositoryProvenanceStore,
-    RepositoryService,
+from ai_multi_agent_platform.repositories.async_provenance import (
+    AsyncRepositoryProvenanceReader,
+    RepositoryProvenanceReader,
+    as_async_repository_provenance_reader,
 )
+from ai_multi_agent_platform.repositories.service import RepositoryCallContext, RepositoryService
 from ai_multi_agent_platform.research import EvidenceFreshness, ResearchService
 from ai_multi_agent_platform.skills import ReferenceSkillRenderer, SkillBundle, SkillRepository
 
@@ -593,19 +594,22 @@ class RepositoryContextSourceAdapter:
 
     def __init__(
         self,
-        provenance: RepositoryProvenanceStore,
+        provenance: RepositoryProvenanceReader | AsyncRepositoryProvenanceReader,
         *,
         repositories: RepositoryService | None = None,
         tasks: TaskRepository | None = None,
     ) -> None:
-        self.provenance = provenance
+        self.provenance = as_async_repository_provenance_reader(provenance)
         self.repositories = repositories
         self.tasks = tasks
 
     async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
         candidates: list[ContextCandidate] = []
         provenance = tuple(
-            sorted(self.provenance.for_run(request.run_id), key=lambda x: x.repository_id)
+            sorted(
+                await self.provenance.for_run(request.run_id),
+                key=lambda x: x.repository_id,
+            )
         )
         for record in provenance:
             content = _canonical_json(

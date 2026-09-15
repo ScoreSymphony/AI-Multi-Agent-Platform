@@ -5,6 +5,21 @@ from .async_catalog import (
     InMemoryRepositoryBindingCatalog,
     RepositoryBindingCatalog,
 )
+from .async_provenance import (
+    AsyncRepositoryProvenanceAdapter,
+    AsyncRepositoryProvenanceGetAdapter,
+    AsyncRepositoryProvenanceGetReader,
+    AsyncRepositoryProvenanceReader,
+    AsyncRepositoryProvenanceReaderAdapter,
+    AsyncRepositoryProvenanceStore,
+    RepositoryProvenanceGetReader,
+    RepositoryProvenancePersistenceOffload,
+    RepositoryProvenanceReader,
+    RepositoryProvenanceWriter,
+    as_async_repository_provenance_get_reader,
+    as_async_repository_provenance_reader,
+    as_async_repository_provenance_store,
+)
 from .capabilities import (
     EXTERNAL_SIDE_EFFECT_OPERATIONS,
     LOCAL_GIT_CAPABILITIES,
@@ -67,6 +82,12 @@ from .service import (
 from .workspace import RepositoryWorkspaceSourceResolver
 
 __all__ = [
+    "AsyncRepositoryProvenanceAdapter",
+    "AsyncRepositoryProvenanceGetAdapter",
+    "AsyncRepositoryProvenanceGetReader",
+    "AsyncRepositoryProvenanceReader",
+    "AsyncRepositoryProvenanceReaderAdapter",
+    "AsyncRepositoryProvenanceStore",
     "AsyncSqliteRepositoryBindingCatalog",
     "ConnectorRepositoryProvider",
     "EXTERNAL_SIDE_EFFECT_OPERATIONS",
@@ -95,7 +116,11 @@ __all__ = [
     "RepositoryIssueState",
     "RepositoryManagementService",
     "RepositoryOperation",
+    "RepositoryProvenanceGetReader",
+    "RepositoryProvenancePersistenceOffload",
+    "RepositoryProvenanceReader",
     "RepositoryProvenanceStore",
+    "RepositoryProvenanceWriter",
     "RepositoryProvider",
     "RepositoryProviderFactory",
     "RepositoryReference",
@@ -114,6 +139,9 @@ __all__ = [
     "RepositoryWorkspaceSourceResolver",
     "SqliteRepositoryBindingCatalog",
     "SqliteRepositoryProvenanceStore",
+    "as_async_repository_provenance_get_reader",
+    "as_async_repository_provenance_reader",
+    "as_async_repository_provenance_store",
     "connector_repository_factory",
     "local_git_repository_factory",
     "managed_local_connection_metadata",
