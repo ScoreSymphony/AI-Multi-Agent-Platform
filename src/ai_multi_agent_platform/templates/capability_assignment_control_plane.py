@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ai_multi_agent_platform.capability_assignments import CapabilityAssignmentAccessContext
-from ai_multi_agent_platform.capability_assignments.control_plane import (
+from ai_multi_agent_platform.capabilities.assignments import CapabilityAssignmentAccessContext
+from ai_multi_agent_platform.capabilities.assignments.control_plane import (
     register_capability_assignment_resource_control_plane,
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
