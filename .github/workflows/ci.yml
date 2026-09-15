@@ -78,7 +78,7 @@ jobs:
           echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
       - name: Run fresh-install process lifecycle smoke
-        run: python scripts/ci/issue39_install_lifecycle_smoke.py
+        run: python scripts/ci/fresh_install_lifecycle_smoke.py
 
   frontend:
     runs-on: ubuntu-latest
