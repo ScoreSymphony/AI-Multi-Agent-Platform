@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import threading
+import time
+
 import pytest
 
 from ai_multi_agent_platform.agents import (
@@ -46,10 +50,20 @@ class _AgentRuns:
 
 
 class _RepositoryProvenance:
-    def __init__(self, record: RepositoryRunProvenance) -> None:
+    def __init__(
+        self,
+        record: RepositoryRunProvenance,
+        *,
+        delay_seconds: float = 0.0,
+    ) -> None:
         self.record = record
+        self.delay_seconds = delay_seconds
+        self.threads: list[str] = []
 
     def get(self, run_id: str, repository_id: str) -> RepositoryRunProvenance | None:
+        self.threads.append(threading.current_thread().name)
+        if self.delay_seconds:
+            time.sleep(self.delay_seconds)
         if run_id == self.record.run_id and repository_id == self.record.repository_id:
             return self.record
         return None
@@ -112,6 +126,14 @@ class _VerificationEvidenceResolver:
         assert task_id == self.task_id
         assert all(artifact_id in self.subjects for artifact_id in artifact_ids)
         return artifact_ids
+
+
+async def _heartbeat_until(task: asyncio.Task[object]) -> int:
+    heartbeat = 0
+    while not task.done():
+        heartbeat += 1
+        await asyncio.sleep(0.005)
+    return heartbeat
 
 
 def _fixture() -> tuple[
@@ -196,6 +218,8 @@ def _review(
     agent_run: AgentRunRecord,
     repository: RepositoryRunProvenance,
     artifacts: tuple[str, str],
+    *,
+    repository_reader: _RepositoryProvenance | None = None,
 ) -> tuple[
     CanonicalCodingVerificationCoordinator,
     CanonicalVerificationRuntime,
@@ -239,7 +263,7 @@ def _review(
     review = CanonicalCodingVerificationCoordinator(
         coordinator,
         agent_runs=_AgentRuns(agent_run),
-        repository_provenance=_RepositoryProvenance(repository),
+        repository_provenance=repository_reader or _RepositoryProvenance(repository),
         verification_runtime=runtime,
         verification=verification,
     )
@@ -317,6 +341,41 @@ async def test_canonical_verification_reuses_request_and_binds_full_diff_to_outp
         verification_id=canonical.verification_id,
     )
     assert replayed == workstream
+
+
+@pytest.mark.asyncio
+async def test_workstream_verification_repository_read_stays_off_event_loop() -> None:
+    coordinator, batch_id, task_id, agent_run, repository, artifacts = _fixture()
+    repository_reader = _RepositoryProvenance(repository, delay_seconds=0.08)
+    review, _runtime, _verification, policy = _review(
+        coordinator,
+        batch_id,
+        task_id,
+        agent_run,
+        repository,
+        artifacts,
+        repository_reader=repository_reader,
+    )
+
+    request_task = asyncio.create_task(
+        review.ensure_request(
+            batch_id,
+            "A",
+            subject_artifact_id=artifacts[0],
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+            stage_id="review",
+            correlation_id="issue-892-repository-provenance-offload",
+        )
+    )
+    heartbeat = await _heartbeat_until(request_task)
+    await request_task
+
+    assert heartbeat >= 2
+    assert repository_reader.threads
+    assert all(
+        name.startswith("repository-provenance-persistence") for name in repository_reader.threads
+    )
 
 
 @pytest.mark.asyncio

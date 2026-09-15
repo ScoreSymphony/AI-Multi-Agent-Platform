@@ -93,7 +93,9 @@ from ai_multi_agent_platform.verification.agent_repair import (
     KernelAgentRepairExecutor,
     ProducerAgentRepairBindingProvider,
 )
-from ai_multi_agent_platform.verification.agent_workflow import AutomaticReviewerWorkflow
+from ai_multi_agent_platform.verification.async_agent_workflow import (
+    AsyncAutomaticReviewerWorkflow,
+)
 from ai_multi_agent_platform.verification.gate import VerificationCompletionAuthority
 from ai_multi_agent_platform.verification.output_workflow import (
     AutomaticReviewerOutputCoordinator,
@@ -156,7 +158,7 @@ class SingleNodeDeployment(BaseSingleNodeDeployment):
     context: SingleNodeContextComposition
     learning: SingleNodeLearningComposition
     handoffs: HandoffDeploymentComposition
-    automatic_reviewer: AutomaticReviewerWorkflow
+    automatic_reviewer: AsyncAutomaticReviewerWorkflow
     reviewer_recovery: AutomaticReviewerStartupReconciler
 
 
@@ -217,7 +219,7 @@ def build_single_node_deployment(
         base.kernel,
         binding_provider=ProducerAgentRepairBindingProvider(),
     )
-    automatic_reviewer = AutomaticReviewerWorkflow(
+    automatic_reviewer = AsyncAutomaticReviewerWorkflow(
         runtime=base.verification_runtime,
         completion=completion,
         agents=base.agent_runtime,

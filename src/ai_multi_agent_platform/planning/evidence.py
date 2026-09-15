@@ -17,10 +17,15 @@ from ai_multi_agent_platform.coordination.models import CoordinationPhase, StepC
 from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.kernel.models import RunState
 from ai_multi_agent_platform.verification import VerificationOutcome
+from ai_multi_agent_platform.verification.async_persistence import (
+    AsyncVerificationService,
+    runtime_verification_service,
+)
 from ai_multi_agent_platform.verification.audit import (
     VerificationAuditEvent,
     VerificationAuditEventType,
 )
+from ai_multi_agent_platform.verification.service import VerificationService
 
 from .models import PlanningTrigger, ProposalRecord
 from .service import PlanningService
@@ -59,11 +64,18 @@ class ReplanningEvidenceBridge:
         *,
         coordination_repository: CoordinationEvidenceRepository | None = None,
         verification_repository: VerificationEvidenceRepository | None = None,
+        runtime_verification: AsyncVerificationService | None = None,
         event_sink: ReplanningEventSink | None = None,
     ) -> None:
         self._planning = planning
         self._coordination_repository = coordination_repository
         self._verification_repository = verification_repository
+        self._runtime_verification = runtime_verification
+        if self._runtime_verification is None and isinstance(
+            verification_repository,
+            VerificationService,
+        ):
+            self._runtime_verification = runtime_verification_service(verification_repository)
         self._event_sink = event_sink
 
     async def from_terminal_run(
@@ -138,7 +150,10 @@ class ReplanningEvidenceBridge:
         """Request replanning from one server-resolved canonical Verification audit event.
 
         The supplied object is used only as a lookup reference. Outcome, Task identity and all
-        evidence references are taken from #86's canonical append-only audit history.
+        evidence references are taken from #86's canonical append-only audit history. When the
+        repository is the canonical VerificationService, production reads automatically share its
+        bounded async persistence boundary; narrow synchronous repositories remain supported for
+        explicit offline/test composition.
         """
 
         if self._verification_repository is None:
@@ -152,15 +167,18 @@ class ReplanningEvidenceBridge:
                 "Verification evidence reference is missing Task identity",
                 details={"verification_audit_event_id": event.event_id},
             )
+        if self._runtime_verification is not None:
+            history = await self._runtime_verification.audit_history(
+                task_id=event.task_id,
+                verification_id=event.verification_id,
+            )
+        else:
+            history = self._verification_repository.audit_history(
+                task_id=event.task_id,
+                verification_id=event.verification_id,
+            )
         canonical = next(
-            (
-                candidate
-                for candidate in self._verification_repository.audit_history(
-                    task_id=event.task_id,
-                    verification_id=event.verification_id,
-                )
-                if candidate.event_id == event.event_id
-            ),
+            (candidate for candidate in history if candidate.event_id == event.event_id),
             None,
         )
         if canonical is None:

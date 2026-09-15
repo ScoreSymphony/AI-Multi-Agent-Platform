@@ -11,6 +11,7 @@ from ai_multi_agent_platform.observability import (
     TimelineEntry,
 )
 
+from .async_persistence import AsyncVerificationService, runtime_verification_service
 from .audit import VerificationAuditEvent, VerificationAuditEventType
 from .models import VerificationOutcome
 from .service import VerificationService
@@ -20,11 +21,22 @@ class VerificationTimelineReader:
     """Derived #16 TimelineReader backed only by canonical Verification audit facts.
 
     This projection is intentionally read-only. Completion policy never reads telemetry;
-    it continues to use VerificationService and CompletionAuthority state directly.
+    it continues to use VerificationService and CompletionAuthority state directly. The
+    synchronous reader remains an explicit offline/compatibility seam, while async Control Plane
+    consumers use ``query_timeline_async`` so SQLite-backed audit reads leave the event loop.
     """
 
-    def __init__(self, verification: VerificationService) -> None:
+    def __init__(
+        self,
+        verification: VerificationService,
+        *,
+        runtime_verification: AsyncVerificationService | None = None,
+    ) -> None:
         self._verification = verification
+        self._runtime_verification = runtime_verification_service(
+            verification,
+            runtime_service=runtime_verification,
+        )
 
     def query_timeline(
         self,
@@ -33,16 +45,46 @@ class VerificationTimelineReader:
         run_id: str | None = None,
         correlation_id: str | None = None,
     ) -> tuple[TimelineEntry, ...]:
-        entries = (
-            _timeline_entry(event)
-            for event in self._verification.audit_history(
+        return _project_timeline(
+            self._verification.audit_history(
                 task_id=task_id,
                 verification_id=None,
-            )
-            if (run_id is None or event.run_id == run_id)
-            and (correlation_id is None or event.correlation_id == correlation_id)
+            ),
+            run_id=run_id,
+            correlation_id=correlation_id,
         )
-        return tuple(sorted(entries, key=lambda entry: entry.timestamp))
+
+    async def query_timeline_async(
+        self,
+        *,
+        task_id: str | None = None,
+        run_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> tuple[TimelineEntry, ...]:
+        events = await self._runtime_verification.audit_history(
+            task_id=task_id,
+            verification_id=None,
+        )
+        return _project_timeline(
+            events,
+            run_id=run_id,
+            correlation_id=correlation_id,
+        )
+
+
+def _project_timeline(
+    events: tuple[VerificationAuditEvent, ...],
+    *,
+    run_id: str | None,
+    correlation_id: str | None,
+) -> tuple[TimelineEntry, ...]:
+    entries = (
+        _timeline_entry(event)
+        for event in events
+        if (run_id is None or event.run_id == run_id)
+        and (correlation_id is None or event.correlation_id == correlation_id)
+    )
+    return tuple(sorted(entries, key=lambda entry: entry.timestamp))
 
 
 def _timeline_entry(event: VerificationAuditEvent) -> TimelineEntry:

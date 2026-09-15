@@ -5,8 +5,13 @@ from __future__ import annotations
 from typing import Protocol
 
 from ai_multi_agent_platform.agents import AgentRunRecord, AgentRunStatus
-from ai_multi_agent_platform.repositories import RepositoryRunProvenance
+from ai_multi_agent_platform.repositories import (
+    AsyncRepositoryProvenanceGetReader,
+    RepositoryRunProvenance,
+    as_async_repository_provenance_get_reader,
+)
 from ai_multi_agent_platform.verification import (
+    AsyncVerificationService,
     CanonicalVerificationRuntime,
     ProducerIdentity,
     VerificationOutcome,
@@ -14,6 +19,7 @@ from ai_multi_agent_platform.verification import (
     VerificationRequestStatus,
     VerificationResult,
     VerificationService,
+    runtime_verification_service,
 )
 
 from .models import CodingBatch, CodingWorkstream, VerificationEvidence, WorkstreamState
@@ -28,7 +34,7 @@ class AgentRunEvidenceReader(Protocol):
 
 
 class RepositoryRunEvidenceReader(Protocol):
-    """Minimal #82 provenance boundary needed to bind artifacts to an exact output SHA."""
+    """Minimal #82 provenance read boundary needed to bind artifacts to an exact output SHA."""
 
     def get(self, run_id: str, repository_id: str) -> RepositoryRunProvenance | None: ...
 
@@ -50,12 +56,22 @@ class CanonicalCodingVerificationCoordinator:
         verification_runtime: CanonicalVerificationRuntime,
         verification: VerificationService,
         telemetry: CodingBatchTelemetry | None = None,
+        runtime_verification: AsyncVerificationService | None = None,
+        runtime_repository_provenance: AsyncRepositoryProvenanceGetReader | None = None,
     ) -> None:
         self._coordinator = coordinator
         self._agent_runs = agent_runs
         self._repository_provenance = repository_provenance
+        self._runtime_repository_provenance = (
+            runtime_repository_provenance
+            or as_async_repository_provenance_get_reader(repository_provenance)
+        )
         self._runtime = verification_runtime
         self._verification = verification
+        self._runtime_verification = runtime_verification_service(
+            verification,
+            runtime_service=runtime_verification,
+        )
         self._telemetry = telemetry
 
     async def ensure_request(
@@ -72,7 +88,7 @@ class CanonicalCodingVerificationCoordinator:
     ) -> VerificationRequest:
         """Create or reuse one exact canonical #86 request for the produced workstream output."""
 
-        batch, workstream, agent_run, _repository = self._output_evidence(
+        batch, workstream, agent_run, _repository = await self._runtime_output_evidence(
             batch_id,
             workstream_id,
         )
@@ -90,7 +106,8 @@ class CanonicalCodingVerificationCoordinator:
             subject_id=subject_artifact_id,
         )
         exact: list[VerificationRequest] = []
-        for request, _result in self._verification.history(task_id=workstream.work_item.task_id):
+        history = await self._runtime_verification.history(task_id=workstream.work_item.task_id)
+        for request, _result in history:
             same_route = (
                 request.policy_id == policy_id
                 and request.policy_version == policy_version
@@ -192,6 +209,27 @@ class CanonicalCodingVerificationCoordinator:
         batch_id: str,
         workstream_id: str,
     ) -> tuple[CodingBatch, CodingWorkstream, AgentRunRecord, RepositoryRunProvenance]:
+        batch, workstream, agent_run = self._output_context(batch_id, workstream_id)
+        repository = self._repository_provenance.get(agent_run.run_id, batch.repository_id)
+        return self._validate_repository_evidence(batch, workstream, agent_run, repository)
+
+    async def _runtime_output_evidence(
+        self,
+        batch_id: str,
+        workstream_id: str,
+    ) -> tuple[CodingBatch, CodingWorkstream, AgentRunRecord, RepositoryRunProvenance]:
+        batch, workstream, agent_run = self._output_context(batch_id, workstream_id)
+        repository = await self._runtime_repository_provenance.get(
+            agent_run.run_id,
+            batch.repository_id,
+        )
+        return self._validate_repository_evidence(batch, workstream, agent_run, repository)
+
+    def _output_context(
+        self,
+        batch_id: str,
+        workstream_id: str,
+    ) -> tuple[CodingBatch, CodingWorkstream, AgentRunRecord]:
         batch = self._coordinator.get(batch_id)
         workstream = batch.workstream(workstream_id)
         if workstream.result is None:
@@ -206,14 +244,22 @@ class CanonicalCodingVerificationCoordinator:
         expected_agent_revision = f"{agent_run.agent.agent_id}@{agent_run.agent.revision}"
         if workstream.provenance.agent_revision != expected_agent_revision:
             raise ValueError("workstream Agent revision differs from canonical #33 provenance")
+        return batch, workstream, agent_run
 
-        repository = self._repository_provenance.get(agent_run.run_id, batch.repository_id)
+    @staticmethod
+    def _validate_repository_evidence(
+        batch: CodingBatch,
+        workstream: CodingWorkstream,
+        agent_run: AgentRunRecord,
+        repository: RepositoryRunProvenance | None,
+    ) -> tuple[CodingBatch, CodingWorkstream, AgentRunRecord, RepositoryRunProvenance]:
         if repository is None:
             raise ValueError("canonical #82 Run repository provenance is missing")
         if repository.task_id != workstream.work_item.task_id:
             raise ValueError("repository output provenance belongs to another Task")
         if repository.input_revision != workstream.provenance.base_revision:
             raise ValueError("repository input revision differs from workstream base")
+        assert workstream.result is not None
         if repository.output_revision != workstream.result.output_revision:
             raise ValueError("repository output revision differs from workstream result")
         if repository.agent_id is not None and repository.agent_id != agent_run.agent.agent_id:

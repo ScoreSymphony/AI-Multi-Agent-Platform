@@ -17,6 +17,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import TaskStatus
 
 from .agent_workflow import AutomaticReviewerWorkflow, ReviewerRuntimeOptions
+from .async_persistence import AsyncVerificationService, runtime_verification_service
 from .models import VerificationPolicy, VerificationRequest, VerificationRequestStatus, VerifierKind
 from .service import VerificationService
 
@@ -107,10 +108,15 @@ class AutomaticReviewerStartupReconciler:
         agents: AgentRuntime,
         verification: VerificationService,
         tasks: ReviewerTaskReader | None = None,
+        runtime_verification: AsyncVerificationService | None = None,
     ) -> None:
         self._workflow = workflow
         self._agents = agents
         self._verification = verification
+        self._runtime_verification = runtime_verification_service(
+            verification,
+            runtime_service=runtime_verification,
+        )
         self._tasks = tasks
 
     async def reconcile_startup(
@@ -154,7 +160,7 @@ class AutomaticReviewerStartupReconciler:
         *,
         options: ReviewerRuntimeOptions,
     ) -> ReviewerRecoveryRecord:
-        binding_conflict = self._review_binding_conflict(request)
+        binding_conflict = await self._review_binding_conflict(request)
         if binding_conflict is not None:
             conflicting_run, reason = binding_conflict
             return ReviewerRecoveryRecord(
@@ -176,7 +182,7 @@ class AutomaticReviewerStartupReconciler:
             return task_cancelled
         if task_cancelled:
             if request.status is VerificationRequestStatus.PENDING:
-                request = self._verification.cancel_request(
+                request = await self._runtime_verification.cancel_request(
                     request.verification_id,
                     causation_id=_RECOVERY_CAUSATION_ID,
                 )
@@ -387,13 +393,16 @@ class AutomaticReviewerStartupReconciler:
             telemetry=telemetry,
         )
 
-    def _review_binding_conflict(
+    async def _review_binding_conflict(
         self,
         request: VerificationRequest,
     ) -> tuple[AgentRunRecord, str] | None:
         """Reject AgentRuns that claim this Verification without its exact durable binding."""
 
-        policy = self._verification.get_policy(request.policy_id, request.policy_version)
+        policy = await self._runtime_verification.get_policy(
+            request.policy_id,
+            request.policy_version,
+        )
         for record in self._agents.service.repository.list_agent_runs():
             context = record.verification_context
             if context.get("verification_id") != request.verification_id:
