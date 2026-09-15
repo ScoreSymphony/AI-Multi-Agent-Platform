@@ -36,6 +36,21 @@ def test_core_ci_and_optional_compatibility_are_split() -> None:
     assert "\n  push:" not in compatibility_triggers
 
 
+def test_pr_governance_only_emits_dependency_review() -> None:
+    assert _job_ids("governance.yml") == {"dependency-review"}
+    governance_triggers = _trigger_block("governance.yml")
+    assert "pull_request:" in governance_triggers
+    assert "issues:" not in governance_triggers
+    assert "schedule:" not in governance_triggers
+
+    maintenance_triggers = _trigger_block("governance-maintenance.yml")
+    assert "pull_request:" not in maintenance_triggers
+    assert "issues:" in maintenance_triggers
+    assert "schedule:" in maintenance_triggers
+    assert "workflow_dispatch:" in maintenance_triggers
+    assert _job_ids("governance-maintenance.yml") == {"validate", "discover"}
+
+
 def test_duplicate_post_merge_validation_stays_off_main_push() -> None:
     assert "\n  push:" not in _trigger_block("codeql.yml")
     assert "\n  push:" not in _trigger_block("conformance.yml")
