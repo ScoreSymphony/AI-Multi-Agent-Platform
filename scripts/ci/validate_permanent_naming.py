@@ -108,7 +108,9 @@ def source_violations(path: str, source: str) -> tuple[str, ...]:
     try:
         tree = ast.parse(source, filename=path)
     except SyntaxError as exc:
-        return (f"{path}:{exc.lineno or 1}: cannot validate naming because Python syntax is invalid",)
+        return (
+            f"{path}:{exc.lineno or 1}: cannot validate naming because Python syntax is invalid",
+        )
 
     violations: list[str] = []
     for name, line in _identifier_names(tree):
