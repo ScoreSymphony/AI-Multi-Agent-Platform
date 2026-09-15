@@ -27,8 +27,10 @@ explicitly synchronous setup paths.
 
 Runtime SQLite operations follow these rules:
 
-1. blocking catalog calls execute through `asyncio.to_thread()` rather than on the event loop;
-2. a per-adapter semaphore bounds submitted worker operations;
+1. blocking catalog calls execute on a dedicated `repository-catalog-persistence`
+   `ThreadPoolExecutor` rather than on the event loop or asyncio's process-wide default executor;
+2. a per-adapter semaphore bounds submitted worker operations and the executor bounds worker
+   threads to the same configured `max_concurrency`;
 3. durable writes acquire a write lock before consuming shared worker capacity, so queued writers
    do not occupy read slots;
 4. the wrapped SQLite catalog creates, uses and closes each connection inside the worker operation,
@@ -67,11 +69,12 @@ remains synchronous setup work and is outside the runtime awaitable path targete
 
 ## Regression coverage
 
-The integration suite verifies:
+The integration/regression suites verify:
 
 - in-memory/SQLite contract parity for save/get/list/delete semantics;
 - event-loop heartbeat responsiveness during an intentionally slow SQLite catalog operation;
 - SQLite connection creation on worker threads rather than the event-loop thread;
+- dedicated executor ownership without consuming asyncio's default executor;
 - bounded concurrent worker operations;
 - repeated cancellation that does not release the write boundary before persistence settles;
 - restart-visible persistence after a cancelled caller;

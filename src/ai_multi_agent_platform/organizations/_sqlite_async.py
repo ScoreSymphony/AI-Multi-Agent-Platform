@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import TypeVar
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -27,18 +28,26 @@ class AsyncSqliteOffload:
             raise ValueError("max_concurrency must be >= 1")
         self._slots = asyncio.Semaphore(max_concurrency)
         self._write_lock = asyncio.Lock()
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_concurrency,
+            thread_name_prefix="organization-sqlite-persistence",
+        )
 
     async def run(self, operation: Callable[[], _T], *, write: bool = False) -> _T:
         if write:
             async with self._write_lock:
                 async with self._slots:
-                    return await _run_to_transaction_boundary(operation)
+                    return await _run_to_transaction_boundary(self._executor, operation)
         async with self._slots:
-            return await _run_to_transaction_boundary(operation)
+            return await _run_to_transaction_boundary(self._executor, operation)
 
 
-async def _run_to_transaction_boundary[T](operation: Callable[[], T]) -> T:
-    worker = asyncio.create_task(asyncio.to_thread(operation))
+async def _run_to_transaction_boundary[T](
+    executor: ThreadPoolExecutor,
+    operation: Callable[[], T],
+) -> T:
+    loop = asyncio.get_running_loop()
+    worker = loop.run_in_executor(executor, operation)
     try:
         return await asyncio.shield(worker)
     except asyncio.CancelledError:

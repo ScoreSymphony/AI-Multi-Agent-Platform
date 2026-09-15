@@ -188,7 +188,6 @@ jobs:
 
   pinned-core-containment-bypass:
     runs-on: ubuntu-latest
-    services: {}
     steps:
       - name: Check out platform
         uses: actions/checkout@v7
