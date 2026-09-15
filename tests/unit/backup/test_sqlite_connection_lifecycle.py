@@ -58,9 +58,7 @@ def test_sqlite_snapshot_closes_connections_before_sidecar_cleanup(
         return next(connections)
 
     def remove_sidecars(_path: Path) -> None:
-        cleanup_observations.append(
-            (source_connection.closed, destination_connection.closed)
-        )
+        cleanup_observations.append((source_connection.closed, destination_connection.closed))
 
     monkeypatch.setattr(service.sqlite3, "connect", connect)
     monkeypatch.setattr(service, "_remove_sqlite_sidecars", remove_sidecars)
