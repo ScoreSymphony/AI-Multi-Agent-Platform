@@ -246,19 +246,23 @@ class AsyncGovernanceRuntime:
         proposal: Proposal | None = None
         if existing is not None and existing.status is ConversionStatus.COMPLETED:
             task = await self.service.kernel.get_task(existing.task_id)
-            if specification.proposal_id is not None:
-                proposal = await self.get_proposal(specification.proposal_id)
-                if proposal.status in {ProposalStatus.DISMISSED, ProposalStatus.SUPERSEDED}:
+            replay_proposal_id = specification.proposal_id
+            if replay_proposal_id is not None:
+                replay_proposal = await self.get_proposal(replay_proposal_id)
+                if replay_proposal.status in {
+                    ProposalStatus.DISMISSED,
+                    ProposalStatus.SUPERSEDED,
+                }:
                     await self._run(
                         lambda: self.service._audit(
                             "proposal.completed-conversion-state-drift",
                             "proposal",
-                            proposal.id,
+                            replay_proposal.id,
                             context.actor_ref,
-                            proposal.project_id,
-                            revision=proposal.revision,
+                            replay_proposal.project_id,
+                            revision=replay_proposal.revision,
                             metadata={
-                                "status": proposal.status.value,
+                                "status": replay_proposal.status.value,
                                 "task_id": existing.task_id,
                                 "specification_id": specification.id,
                             },
@@ -268,7 +272,7 @@ class AsyncGovernanceRuntime:
                 else:
                     await self._run(
                         lambda: self.service._mark_proposal_converted(
-                            proposal.id,
+                            replay_proposal.id,
                             existing.task_id,
                         ),
                         message="failed to persist converted governance proposal",
@@ -291,8 +295,9 @@ class AsyncGovernanceRuntime:
             )
             return task
 
-        if specification.proposal_id is not None:
-            proposal = await self.get_proposal(specification.proposal_id)
+        proposal_id = specification.proposal_id
+        if proposal_id is not None:
+            proposal = await self.get_proposal(proposal_id)
             self.service._require_non_terminal_proposal(proposal, "be converted to a Task")
 
         action = self.service._conversion_action(
@@ -351,7 +356,7 @@ class AsyncGovernanceRuntime:
                     specification_id=specification.id,
                     specification_revision=specification.revision,
                     specification_digest=specification.content_digest,
-                    proposal_id=specification.proposal_id,
+                    proposal_id=proposal_id,
                     task_id=new_id("task"),
                     approval_id=approval_id,
                 )
@@ -391,10 +396,10 @@ class AsyncGovernanceRuntime:
             ),
             message="failed to complete governance Task conversion",
         )
-        if specification.proposal_id is not None:
+        if proposal_id is not None:
             await self._run(
                 lambda: self.service._mark_proposal_converted(
-                    specification.proposal_id,
+                    proposal_id,
                     completed.task_id,
                 ),
                 message="failed to persist converted governance proposal",
