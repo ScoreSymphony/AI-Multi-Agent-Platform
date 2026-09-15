@@ -256,7 +256,9 @@ async def test_estimated_cost_is_excluded_unless_policy_explicitly_includes_it()
     assert excluded_state.consumed == 0.0
     assert excluded_state.quality_counts[MeasurementQuality.ESTIMATED] == 1
 
-    await service.put_policy(replace(_policy(limit), limits=(replace(limit, include_estimated=True),), version=2))
+    await service.put_policy(
+        replace(_policy(limit), limits=(replace(limit, include_estimated=True),), version=2)
+    )
     included = await service.snapshot("task-a")
     included_state = included.for_dimension(BudgetDimension.EXTERNAL_COST)
     assert included_state is not None
