@@ -86,6 +86,8 @@ def build_application_distribution(
 
     _install_application_policies(authorization, secrets=secrets is not None)
     repository = JsonApplicationReleaseRepository(config.database_dir / "application-releases.json")
+    backend: DistributedApplicationBuildLifecycleBackend | ApplicationBuildLifecycleBackend
+    target_matcher: DistributedBuildTargetMatcher | LocalBuildTargetMatcher
     if enable_distributed_execution and distributed_runtime is not None:
         backend = DistributedApplicationBuildLifecycleBackend(
             repository,
