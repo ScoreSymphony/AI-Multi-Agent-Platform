@@ -53,17 +53,17 @@ from ai_multi_agent_platform.verification.reviewer_recovery import (
     AutomaticReviewerStartupReconciler,
 )
 
-from .composition import (
+from .composition.application_distribution import (
     ApplicationDistributionBundle,
-    ConnectorFoundationBundle,
-    PlanningBundle,
-    ReviewerBundle,
     build_application_distribution,
+)
+from .composition.integrations import (
+    ConnectorFoundationBundle,
     build_connector_foundation,
     build_egress_connectors,
-    build_planning,
-    build_reviewer,
 )
+from .composition.planning import PlanningBundle, build_planning
+from .composition.reviewer import ReviewerBundle, build_reviewer
 from .config import SingleNodeConfig
 from .context_operationalization import (
     SingleNodeContextComposition,
