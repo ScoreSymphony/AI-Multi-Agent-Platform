@@ -22,7 +22,7 @@ _BUSY_MARKERS = (
     "database schema is locked",
     "database is busy",
 )
-_ASYNC_BACKEND_MARKER = "__ai_multi_agent_async_repository_provenance__"
+ASYNC_REPOSITORY_PROVENANCE_BACKEND_MARKER = "__ai_multi_agent_async_repository_provenance__"
 
 
 class RepositoryProvenanceGetReader(Protocol):
@@ -235,7 +235,13 @@ def as_async_repository_provenance_reader(
 def as_async_repository_provenance_store(
     store: RepositoryProvenanceStore | AsyncRepositoryProvenanceStore,
 ) -> AsyncRepositoryProvenanceStore:
-    """Normalize a sync local store or native async backend to the runtime repository contract."""
+    """Normalize one sync or native-async backend to the awaitable runtime contract.
+
+    Native async implementations whose public methods are regular ``def`` functions returning
+    awaitables must set the attribute named by
+    ``ASYNC_REPOSITORY_PROVENANCE_BACKEND_MARKER`` to ``True``. Unmarked regular functions are
+    intentionally treated as synchronous; arbitrary awaitable-returning calls are not probed.
+    """
 
     _require_consistent_async_shape(store, ("record", "upsert", "get", "for_run"))
     if _method_is_async(store, "upsert"):
@@ -253,7 +259,7 @@ def is_async_repository_provenance_store(
 
 
 def _method_is_async(value: object, name: str) -> bool:
-    if bool(getattr(value, _ASYNC_BACKEND_MARKER, False)):
+    if bool(getattr(value, ASYNC_REPOSITORY_PROVENANCE_BACKEND_MARKER, False)):
         return True
     method = getattr(value, name, None)
     if inspect.iscoroutinefunction(method):
@@ -299,6 +305,7 @@ def _map_sqlite_error(exc: sqlite3.Error, message: str) -> ContractError:
 
 
 __all__ = [
+    "ASYNC_REPOSITORY_PROVENANCE_BACKEND_MARKER",
     "AsyncRepositoryProvenanceAdapter",
     "AsyncRepositoryProvenanceGetAdapter",
     "AsyncRepositoryProvenanceGetReader",
