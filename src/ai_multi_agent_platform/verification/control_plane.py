@@ -12,6 +12,12 @@ from ai_multi_agent_platform.control_plane.models import PageQuery, RequestConte
 from ai_multi_agent_platform.control_plane.service import _payload_digest
 from ai_multi_agent_platform.kernel import TaskState
 
+from .async_persistence import (
+    AsyncVerificationCompletionAuthority,
+    AsyncVerificationService,
+    runtime_verification_completion,
+    runtime_verification_service,
+)
 from .evidence import CanonicalVerificationRuntime, VerificationEvidenceResolver
 from .gate import VerificationCompletionAuthority
 from .models import (
@@ -42,7 +48,7 @@ VERIFICATION_COMMANDS = (
 class VerificationPolicyResourceService(ResourceService):
     """Versioned policy discovery with explicit collection-level authorization."""
 
-    def __init__(self, verification: VerificationService) -> None:
+    def __init__(self, verification: AsyncVerificationService) -> None:
         self._verification = verification
 
     async def list_resources(
@@ -52,14 +58,14 @@ class VerificationPolicyResourceService(ResourceService):
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
         return tuple(
-            _policy_resource(policy) for policy in _verification_policies(self._verification)
+            _policy_resource(policy) for policy in await _verification_policies(self._verification)
         )
 
     async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
         """Enumerate safe policy projections for actor-independent Search rebuild."""
 
         return tuple(
-            _policy_resource(policy) for policy in _verification_policies(self._verification)
+            _policy_resource(policy) for policy in await _verification_policies(self._verification)
         )
 
     async def get_resource(
@@ -68,7 +74,7 @@ class VerificationPolicyResourceService(ResourceService):
         resource_id: str,
     ) -> dict[str, JsonValue]:
         del context
-        return _policy_resource(_policy_from_ref(self._verification, resource_id))
+        return _policy_resource(await _policy_from_ref(self._verification, resource_id))
 
 
 class VerificationResourceService(ResourceService):
@@ -77,7 +83,7 @@ class VerificationResourceService(ResourceService):
     def __init__(
         self,
         control_plane: ControlPlane,
-        verification: VerificationService,
+        verification: AsyncVerificationService,
     ) -> None:
         self._control_plane = control_plane
         self._verification = verification
@@ -99,7 +105,7 @@ class VerificationResourceService(ResourceService):
                 resource_ref=task_id,
             ):
                 continue
-            for request, result in self._verification.history(task_id=task_id):
+            for request, result in await self._verification.history(task_id=task_id):
                 resources.append((request, _verification_resource(request, result)))
         resources.sort(key=lambda item: (item[0].created_at, item[0].verification_id))
         return tuple(resource for _request, resource in resources)
@@ -110,7 +116,7 @@ class VerificationResourceService(ResourceService):
         resources: list[tuple[VerificationRequest, dict[str, JsonValue]]] = []
         for task_id in await _task_ids(self._control_plane):
             task = await self._control_plane._kernel.get_task(task_id)
-            for request, result in self._verification.history(task_id=task_id):
+            for request, result in await self._verification.history(task_id=task_id):
                 resources.append(
                     (
                         request,
@@ -128,7 +134,7 @@ class VerificationResourceService(ResourceService):
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        request = self._verification.get_request(resource_id)
+        request = await self._verification.get_request(resource_id)
         task = await self._control_plane._kernel.get_task(request.task_id)
         await _authorize_for_task(
             self._control_plane,
@@ -137,7 +143,10 @@ class VerificationResourceService(ResourceService):
             task,
             resource_ref=request.verification_id,
         )
-        return _verification_resource(request, self._verification.result_for(resource_id))
+        return _verification_resource(
+            request,
+            await self._verification.result_for(resource_id),
+        )
 
 
 class VerificationResultResourceService(ResourceService):
@@ -146,7 +155,7 @@ class VerificationResultResourceService(ResourceService):
     def __init__(
         self,
         control_plane: ControlPlane,
-        verification: VerificationService,
+        verification: AsyncVerificationService,
     ) -> None:
         self._control_plane = control_plane
         self._verification = verification
@@ -168,7 +177,7 @@ class VerificationResultResourceService(ResourceService):
                 resource_ref=task_id,
             ):
                 continue
-            for request, result in self._verification.history(task_id=task_id):
+            for request, result in await self._verification.history(task_id=task_id):
                 if result is not None:
                     resources.append((result, _verification_result_resource(request, result)))
         resources.sort(key=lambda item: (item[0].completed_at, item[0].verification_result_id))
@@ -180,7 +189,7 @@ class VerificationResultResourceService(ResourceService):
         resources: list[tuple[VerificationResult, dict[str, JsonValue]]] = []
         for task_id in await _task_ids(self._control_plane):
             task = await self._control_plane._kernel.get_task(task_id)
-            for request, result in self._verification.history(task_id=task_id):
+            for request, result in await self._verification.history(task_id=task_id):
                 if result is None:
                     continue
                 resources.append(
@@ -218,16 +227,12 @@ class VerificationResultResourceService(ResourceService):
 class VerificationReviewQueueResourceService(ResourceService):
     """Authorized pending-human-review queue derived from canonical requests."""
 
-    # This collection is a filtered navigation view over the same canonical
-    # ``verification`` resources exposed by VERIFICATION_COLLECTION. Indexing it would
-    # duplicate one resource type across two canonical collections and create ambiguous
-    # Search authorization/canonical refs.
     search_indexable = False
 
     def __init__(
         self,
         control_plane: ControlPlane,
-        verification: VerificationService,
+        verification: AsyncVerificationService,
     ) -> None:
         self._control_plane = control_plane
         self._verification = verification
@@ -249,8 +254,8 @@ class VerificationReviewQueueResourceService(ResourceService):
                 resource_ref=task_id,
             ):
                 continue
-            for request, result in self._verification.history(task_id=task_id):
-                current = self._verification.get_request(request.verification_id)
+            for request, result in await self._verification.history(task_id=task_id):
+                current = await self._verification.get_request(request.verification_id)
                 if (
                     current.status is VerificationRequestStatus.PENDING
                     and current.requested_verifier_kind is VerifierKind.HUMAN
@@ -264,7 +269,7 @@ class VerificationReviewQueueResourceService(ResourceService):
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        request = self._verification.get_request(resource_id)
+        request = await self._verification.get_request(resource_id)
         if (
             request.status is not VerificationRequestStatus.PENDING
             or request.requested_verifier_kind is not VerifierKind.HUMAN
@@ -278,7 +283,10 @@ class VerificationReviewQueueResourceService(ResourceService):
             task,
             resource_ref=request.verification_id,
         )
-        return _verification_resource(request, self._verification.result_for(resource_id))
+        return _verification_resource(
+            request,
+            await self._verification.result_for(resource_id),
+        )
 
 
 class VerificationRequirementResourceService(ResourceService):
@@ -287,7 +295,7 @@ class VerificationRequirementResourceService(ResourceService):
     def __init__(
         self,
         control_plane: ControlPlane,
-        completion: VerificationCompletionAuthority,
+        completion: AsyncVerificationCompletionAuthority,
     ) -> None:
         self._control_plane = control_plane
         self._completion = completion
@@ -300,7 +308,7 @@ class VerificationRequirementResourceService(ResourceService):
         del query
         resources: list[dict[str, JsonValue]] = []
         for task_id in await _task_ids(self._control_plane):
-            requirement = self._completion.requirement_for(task_id)
+            requirement = await self._completion.requirement_for(task_id)
             if requirement is None:
                 continue
             task = await self._control_plane._kernel.get_task(task_id)
@@ -312,7 +320,7 @@ class VerificationRequirementResourceService(ResourceService):
                 resource_ref=task_id,
             ):
                 continue
-            resources.append(_requirement_resource(self._completion, task_id))
+            resources.append(await _async_requirement_resource(self._completion, task_id))
         return tuple(resources)
 
     async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
@@ -320,12 +328,12 @@ class VerificationRequirementResourceService(ResourceService):
 
         resources: list[dict[str, JsonValue]] = []
         for task_id in await _task_ids(self._control_plane):
-            if self._completion.requirement_for(task_id) is None:
+            if await self._completion.requirement_for(task_id) is None:
                 continue
             task = await self._control_plane._kernel.get_task(task_id)
             resources.append(
                 _search_scoped_resource(
-                    _requirement_resource(self._completion, task_id),
+                    await _async_requirement_resource(self._completion, task_id),
                     task,
                 )
             )
@@ -336,7 +344,7 @@ class VerificationRequirementResourceService(ResourceService):
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        requirement = self._completion.requirement_for(resource_id)
+        requirement = await self._completion.requirement_for(resource_id)
         if requirement is None:
             raise ContractError(ErrorCode.NOT_FOUND, "verification requirement was not found")
         task = await self._control_plane._kernel.get_task(resource_id)
@@ -347,7 +355,7 @@ class VerificationRequirementResourceService(ResourceService):
             task,
             resource_ref=resource_id,
         )
-        return _requirement_resource(self._completion, resource_id)
+        return await _async_requirement_resource(self._completion, resource_id)
 
 
 class VerificationCommandHandlers:
@@ -356,7 +364,7 @@ class VerificationCommandHandlers:
     def __init__(
         self,
         control_plane: ControlPlane,
-        verification: VerificationService,
+        verification: AsyncVerificationService,
         evidence: VerificationEvidenceResolver | None = None,
         runtime: CanonicalVerificationRuntime | None = None,
     ) -> None:
@@ -416,7 +424,7 @@ class VerificationCommandHandlers:
         outcome: VerificationOutcome,
         action: str,
     ) -> dict[str, JsonValue]:
-        request = self._verification.get_request(verification_id)
+        request = await self._verification.get_request(verification_id)
         if request.requested_verifier_kind is not VerifierKind.HUMAN:
             raise ContractError(
                 ErrorCode.CONFLICT,
@@ -439,7 +447,7 @@ class VerificationCommandHandlers:
                 "Idempotency-Key is required for human verification commands",
             )
 
-        existing = self._verification.result_for(verification_id)
+        existing = await self._verification.result_for(verification_id)
         if existing is not None:
             if _is_same_control_plane_review(
                 existing,
@@ -505,9 +513,12 @@ class VerificationCommandHandlers:
         result = (
             await self._runtime.submit_result(proposed)
             if self._runtime is not None
-            else self._verification.submit_result(proposed)
+            else await self._verification.submit_result(proposed)
         )
-        return _verification_resource(self._verification.get_request(verification_id), result)
+        return _verification_resource(
+            await self._verification.get_request(verification_id),
+            result,
+        )
 
 
 def register_verification_control_plane(
@@ -519,27 +530,38 @@ def register_verification_control_plane(
 ) -> None:
     """Register #86 read/review surfaces on the generic #32 extension seam."""
 
+    runtime_verification = runtime_verification_service(verification)
+    runtime_completion = runtime_verification_completion(completion)
+    effective_evidence = (
+        evidence if evidence is not None else None if runtime is None else runtime.evidence
+    )
+
     control_plane.register_resource_service(
         VERIFICATION_POLICY_COLLECTION,
-        VerificationPolicyResourceService(verification),
+        VerificationPolicyResourceService(runtime_verification),
     )
     control_plane.register_resource_service(
         VERIFICATION_COLLECTION,
-        VerificationResourceService(control_plane, verification),
+        VerificationResourceService(control_plane, runtime_verification),
     )
     control_plane.register_resource_service(
         VERIFICATION_RESULT_COLLECTION,
-        VerificationResultResourceService(control_plane, verification),
+        VerificationResultResourceService(control_plane, runtime_verification),
     )
     control_plane.register_resource_service(
         VERIFICATION_REVIEW_COLLECTION,
-        VerificationReviewQueueResourceService(control_plane, verification),
+        VerificationReviewQueueResourceService(control_plane, runtime_verification),
     )
     control_plane.register_resource_service(
         VERIFICATION_REQUIREMENT_COLLECTION,
-        VerificationRequirementResourceService(control_plane, completion),
+        VerificationRequirementResourceService(control_plane, runtime_completion),
     )
-    handlers = VerificationCommandHandlers(control_plane, verification, evidence, runtime)
+    handlers = VerificationCommandHandlers(
+        control_plane,
+        runtime_verification,
+        effective_evidence,
+        runtime,
+    )
     control_plane.register_command("verification.accept", handlers.accept)
     control_plane.register_command("verification.reject", handlers.reject)
     control_plane.register_command("verification.request-changes", handlers.request_changes)
@@ -555,12 +577,12 @@ async def _task_ids(control_plane: ControlPlane) -> tuple[str, ...]:
 
 async def _verification_result_entry(
     control_plane: ControlPlane,
-    verification: VerificationService,
+    verification: AsyncVerificationService,
     resource_id: str,
 ) -> tuple[TaskState, VerificationRequest, VerificationResult]:
     for task_id in await _task_ids(control_plane):
         task = await control_plane._kernel.get_task(task_id)
-        for request, result in verification.history(task_id=task_id):
+        for request, result in await verification.history(task_id=task_id):
             if result is not None and result.verification_result_id == resource_id:
                 return task, request, result
     raise ContractError(ErrorCode.NOT_FOUND, "verification result was not found")
@@ -617,23 +639,26 @@ def _search_scoped_resource(
     return scoped
 
 
-def _verification_policies(
-    verification: VerificationService,
+async def _verification_policies(
+    verification: AsyncVerificationService,
 ) -> tuple[VerificationPolicy, ...]:
     refs = {
         (event.policy_id, event.policy_version)
-        for event in verification.audit_history()
+        for event in await verification.audit_history()
         if event.policy_id is not None and event.policy_version is not None
     }
-    return tuple(verification.get_policy(policy_id, version) for policy_id, version in sorted(refs))
+    policies: list[VerificationPolicy] = []
+    for policy_id, version in sorted(refs):
+        policies.append(await verification.get_policy(policy_id, version))
+    return tuple(policies)
 
 
 def _policy_ref(policy: VerificationPolicy) -> str:
     return f"{policy.policy_id}@{policy.version}"
 
 
-def _policy_from_ref(
-    verification: VerificationService,
+async def _policy_from_ref(
+    verification: AsyncVerificationService,
     resource_id: str,
 ) -> VerificationPolicy:
     policy_id, separator, raw_version = resource_id.rpartition("@")
@@ -645,7 +670,7 @@ def _policy_from_ref(
         raise ContractError(ErrorCode.NOT_FOUND, "verification policy was not found") from exc
     if version < 1:
         raise ContractError(ErrorCode.NOT_FOUND, "verification policy was not found")
-    return verification.get_policy(policy_id, version)
+    return await verification.get_policy(policy_id, version)
 
 
 def _policy_resource(policy: VerificationPolicy) -> dict[str, JsonValue]:
@@ -818,10 +843,39 @@ def _requirement_resource(
     completion: VerificationCompletionAuthority,
     task_id: str,
 ) -> dict[str, JsonValue]:
+    """Synchronous setup/offline compatibility projection."""
+
     requirement = completion.requirement_for(task_id)
     if requirement is None:
         raise ContractError(ErrorCode.NOT_FOUND, "verification requirement was not found")
     decision = completion.assess_task_completion(task_id)
+    return {
+        "id": task_id,
+        "type": "verification_requirement",
+        "task_id": task_id,
+        "policy": {"id": requirement.policy_id, "version": requirement.policy_version},
+        "subject": None if requirement.subject is None else _subject_resource(requirement.subject),
+        "created_at": requirement.created_at.isoformat(),
+        "updated_at": requirement.updated_at.isoformat(),
+        "completion": {
+            "state": decision.state.value,
+            "reason": decision.reason,
+            "blocking_verification_ids": list(decision.blocking_verification_ids),
+            "repair_attempts_remaining": decision.repair_attempts_remaining,
+        },
+    }
+
+
+async def _async_requirement_resource(
+    completion: AsyncVerificationCompletionAuthority,
+    task_id: str,
+) -> dict[str, JsonValue]:
+    """Awaitable runtime projection over the bounded Verification persistence boundary."""
+
+    requirement = await completion.requirement_for(task_id)
+    if requirement is None:
+        raise ContractError(ErrorCode.NOT_FOUND, "verification requirement was not found")
+    decision = await completion.assess_task_completion(task_id)
     return {
         "id": task_id,
         "type": "verification_requirement",

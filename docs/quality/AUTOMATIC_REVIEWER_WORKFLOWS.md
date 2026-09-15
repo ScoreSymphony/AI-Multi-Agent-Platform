@@ -205,7 +205,7 @@ policy = verification.register_policy(
         },
     )
 )
-verification_runtime.require_task(
+await verification_runtime.async_require_task(
     task_id=task_id,
     policy_id=policy.policy_id,
     policy_version=policy.version,

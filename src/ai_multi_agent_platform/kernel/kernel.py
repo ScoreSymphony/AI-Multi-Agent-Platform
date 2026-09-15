@@ -25,6 +25,7 @@ from ai_multi_agent_platform.domain import (
     new_id,
 )
 from ai_multi_agent_platform.verification import (
+    AsyncOutputChangeAwareCompletionAuthority,
     CompletionAuthority,
     OutputChangeAwareCompletionAuthority,
 )
@@ -65,6 +66,7 @@ class PlatformKernel:
         run_repository: RunRepository | None = None,
         event_sink: EventProvider | None = None,
         completion_authority: CompletionAuthority | None = None,
+        async_completion_authority: AsyncOutputChangeAwareCompletionAuthority | None = None,
     ) -> None:
         self._orchestrator = orchestrator
         self._lifecycle = lifecycle
@@ -78,6 +80,7 @@ class PlatformKernel:
         )
         self._event_sink = event_sink
         self._completion_authority = completion_authority
+        self._async_completion_authority = async_completion_authority
         self._commit_support = KernelCommitSupport(self)
         self._lifecycle_reconciler = KernelLifecycleReconciler(self)
         self._recovery = KernelRecovery(self)
@@ -481,7 +484,10 @@ class PlatformKernel:
             source=source,
         )
 
-    def _invalidate_completion_subject(self, task_id: str) -> None:
+    async def _invalidate_completion_subject(self, task_id: str) -> None:
+        if self._async_completion_authority is not None:
+            await self._async_completion_authority.invalidate_task_subject(task_id)
+            return
         authority = self._completion_authority
         if isinstance(authority, OutputChangeAwareCompletionAuthority):
             authority.invalidate_task_subject(task_id)

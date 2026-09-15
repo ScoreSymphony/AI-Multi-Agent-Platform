@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ai_multi_agent_platform.repositories import RepositoryRunProvenance
+from ai_multi_agent_platform.repositories import (
+    AsyncRepositoryProvenanceGetReader,
+    RepositoryRunProvenance,
+    as_async_repository_provenance_get_reader,
+)
 from ai_multi_agent_platform.verification import (
+    AsyncVerificationService,
     CanonicalVerificationRuntime,
     VerificationOutcome,
     VerificationRequest,
     VerificationRequestStatus,
     VerificationService,
+    runtime_verification_service,
 )
 
 from .models import (
@@ -49,10 +55,20 @@ class CanonicalRepositoryOutputVerifier:
         repository_provenance: RepositoryRunEvidenceReader,
         verification_runtime: CanonicalVerificationRuntime,
         verification: VerificationService,
+        runtime_verification: AsyncVerificationService | None = None,
+        runtime_repository_provenance: AsyncRepositoryProvenanceGetReader | None = None,
     ) -> None:
         self._repository_provenance = repository_provenance
+        self._runtime_repository_provenance = (
+            runtime_repository_provenance
+            or as_async_repository_provenance_get_reader(repository_provenance)
+        )
         self._runtime = verification_runtime
         self._verification = verification
+        self._runtime_verification = runtime_verification_service(
+            verification,
+            runtime_service=runtime_verification,
+        )
 
     def provenance(
         self,
@@ -64,6 +80,38 @@ class CanonicalRepositoryOutputVerifier:
         expected_output_revision: str | None = None,
     ) -> RepositoryRunProvenance:
         record = self._repository_provenance.get(run_id, repository_id)
+        return self._validate_provenance(
+            record,
+            task_id=task_id,
+            expected_input_revision=expected_input_revision,
+            expected_output_revision=expected_output_revision,
+        )
+
+    async def _runtime_provenance(
+        self,
+        *,
+        task_id: str,
+        repository_id: str,
+        run_id: str,
+        expected_input_revision: str,
+        expected_output_revision: str | None = None,
+    ) -> RepositoryRunProvenance:
+        record = await self._runtime_repository_provenance.get(run_id, repository_id)
+        return self._validate_provenance(
+            record,
+            task_id=task_id,
+            expected_input_revision=expected_input_revision,
+            expected_output_revision=expected_output_revision,
+        )
+
+    @staticmethod
+    def _validate_provenance(
+        record: RepositoryRunProvenance | None,
+        *,
+        task_id: str,
+        expected_input_revision: str,
+        expected_output_revision: str | None,
+    ) -> RepositoryRunProvenance:
         if record is None:
             raise ValueError("canonical #82 repository Run provenance is missing")
         if record.task_id != task_id:
@@ -96,7 +144,7 @@ class CanonicalRepositoryOutputVerifier:
         expected_output_revision: str | None = None,
         causation_id: str | None = None,
     ) -> VerificationRequest:
-        repository = self.provenance(
+        repository = await self._runtime_provenance(
             task_id=task_id,
             repository_id=repository_id,
             run_id=run_id,
@@ -112,7 +160,7 @@ class CanonicalRepositoryOutputVerifier:
         )
 
         exact: list[VerificationRequest] = []
-        for request, _result in self._verification.history(task_id=task_id):
+        for request, _result in await self._runtime_verification.history(task_id=task_id):
             same_route = (
                 request.policy_id == policy_id
                 and request.policy_version == policy_version

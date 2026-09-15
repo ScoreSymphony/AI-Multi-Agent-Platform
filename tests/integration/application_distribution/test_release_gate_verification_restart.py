@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
+import threading
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -39,6 +42,19 @@ class _Files:
     async def verify_checksum(self, file_id: str, context: object) -> bool:
         del file_id, context
         return True
+
+
+class _SlowSqliteVerificationService(SqliteVerificationService):
+    def __init__(self, path: Path) -> None:
+        self.delay_seconds = 0.0
+        self.connection_threads: list[str] = []
+        super().__init__(path)
+
+    def _connect(self) -> sqlite3.Connection:
+        self.connection_threads.append(threading.current_thread().name)
+        if self.delay_seconds:
+            time.sleep(self.delay_seconds)
+        return super()._connect()
 
 
 def _release() -> ApplicationRelease:
@@ -152,6 +168,31 @@ def _submit(
             checks_executed=("package_smoke",),
         )
     )
+
+
+def test_release_gate_verification_sqlite_io_stays_off_event_loop(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        release = _release()
+        verification = _SlowSqliteVerificationService(tmp_path / "verification.sqlite3")
+        coordinator, _ = _setup(verification, release)
+        verification.connection_threads.clear()
+        verification.delay_seconds = 0.08
+
+        reconciliation = asyncio.create_task(coordinator.reconcile(release))
+        heartbeat = 0
+        while not reconciliation.done():
+            heartbeat += 1
+            await asyncio.sleep(0.005)
+        gate = (await reconciliation)[0]
+
+        assert gate.status is GateStatus.PENDING
+        assert heartbeat >= 2
+        assert verification.connection_threads
+        assert all(
+            name.startswith("verification-persistence") for name in verification.connection_threads
+        )
+
+    asyncio.run(scenario())
 
 
 def test_completed_verification_is_reconstructed_after_real_sqlite_restart(

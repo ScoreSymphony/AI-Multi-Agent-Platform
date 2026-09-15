@@ -93,6 +93,13 @@ class OutputChangeAwareCompletionAuthority(Protocol):
     def invalidate_task_subject(self, task_id: str) -> object: ...
 
 
+@runtime_checkable
+class AsyncOutputChangeAwareCompletionAuthority(Protocol):
+    """Awaitable output-change hook for persistence-bearing completion authorities."""
+
+    async def invalidate_task_subject(self, task_id: str) -> object: ...
+
+
 class VerificationCompletionAuthority(CompletionAuthority):
     """Own Task→policy/subject binding while VerificationService owns review evidence."""
 

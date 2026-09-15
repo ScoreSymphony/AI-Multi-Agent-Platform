@@ -11,6 +11,12 @@ from ai_multi_agent_platform.domain import TaskStatus, validate_id
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.kernel.models import TaskState
 
+from .async_persistence import (
+    AsyncVerificationCompletionAuthority,
+    AsyncVerificationService,
+    runtime_verification_completion,
+    runtime_verification_service,
+)
 from .gate import VerificationCompletionAuthority
 from .models import (
     CompletionState,
@@ -85,9 +91,19 @@ class VerificationRepairRuntime:
         kernel: PlatformKernel,
         *,
         binding_provider: VerificationRepairBindingProvider | None = None,
+        runtime_verification: AsyncVerificationService | None = None,
+        runtime_completion: AsyncVerificationCompletionAuthority | None = None,
     ) -> None:
         self._verification = verification
         self._completion = completion
+        self._runtime_verification = runtime_verification_service(
+            verification,
+            runtime_service=runtime_verification,
+        )
+        self._runtime_completion = runtime_verification_completion(
+            completion,
+            runtime_completion=runtime_completion,
+        )
         self._kernel = kernel
         self._binding_provider = binding_provider
 
@@ -110,15 +126,15 @@ class VerificationRepairRuntime:
         if not idempotency_key.strip():
             raise ValueError("repair idempotency_key must not be blank")
 
-        request = self._verification.get_request(verification_id)
-        result = self._verification.result_for(verification_id)
+        request = await self._runtime_verification.get_request(verification_id)
+        result = await self._runtime_verification.result_for(verification_id)
         if result is None or result.outcome is not VerificationOutcome.NEEDS_CHANGES:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "repair execution requires a completed needs_changes verification",
             )
 
-        decision = self._completion.assess_task_completion(request.task_id)
+        decision = await self._runtime_completion.assess_task_completion(request.task_id)
         if (
             decision.state is not CompletionState.REPAIR_REQUIRED
             or decision.subject != request.subject
@@ -129,7 +145,10 @@ class VerificationRepairRuntime:
                 "verification is not the current canonical repair requirement",
             )
 
-        policy = self._verification.get_policy(request.policy_id, request.policy_version)
+        policy = await self._runtime_verification.get_policy(
+            request.policy_id,
+            request.policy_version,
+        )
         repair_attempt = request.repair_attempt + 1
         if repair_attempt > policy.max_repair_attempts:
             raise ContractError(ErrorCode.CONFLICT, "verification repair limit exhausted")

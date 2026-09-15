@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.observability import (
@@ -10,12 +10,23 @@ from ai_multi_agent_platform.observability import (
     TimelineReader,
     timeline_entry_resource,
 )
+from ai_multi_agent_platform.observability.models import TimelineEntry
 
 from .models import PageQuery, RequestContext, paginate
 from .run_contract import ControlPlane as _RunControlPlane
 from .run_contract import ControlPlaneHTTP as _RunControlPlaneHTTP
 from .run_contract import build_openapi as _build_run_openapi
 from .service import _event_resource
+
+
+class _AsyncTimelineReader(Protocol):
+    async def query_timeline_async(
+        self,
+        *,
+        task_id: str | None = None,
+        run_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> tuple[TimelineEntry, ...]: ...
 
 
 class ControlPlane(_RunControlPlane):
@@ -39,9 +50,14 @@ class ControlPlane(_RunControlPlane):
         resources = [_event_resource(event) for event in await self._events.read_events(task_id)]
         telemetry = self._observability_timeline
         if telemetry is not None:
+            if hasattr(telemetry, "query_timeline_async"):
+                async_telemetry = cast(_AsyncTimelineReader, telemetry)
+                entries = await async_telemetry.query_timeline_async(task_id=task_id)
+            else:
+                entries = telemetry.query_timeline(task_id=task_id)
             resources.extend(
                 timeline_entry_resource(entry)
-                for entry in telemetry.query_timeline(task_id=task_id)
+                for entry in entries
                 if entry.component is not FailureComponent.DOMAIN_KERNEL
             )
         return paginate(resources, query)
