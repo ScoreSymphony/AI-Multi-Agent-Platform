@@ -102,6 +102,8 @@ line-length = 100
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
+# The stable Hermes facade intentionally re-exports symbols owned by the split sibling modules.
+"src/ai_multi_agent_platform/adapters/hermes.py" = ["F401"]
 "src/ai_multi_agent_platform/control_plane/organization_api.py" = ["UP047"]
 # These collection wrappers intentionally import non-package case modules from tests/.
 "tests/contract/control_plane/test_manifest_openapi_contract.py" = ["I001"]
