@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from ai_multi_agent_platform.agents import (
@@ -67,7 +67,22 @@ def resolve_scope(
     workspace_id: str | None,
 ) -> tuple[str, str]:
     owned_projects = tuple(item for item in scopes.list_projects() if item.owner_ref == owner)
-    selected_project_id = _select_project(owned_projects, project_id)
+    if workspace_id is not None:
+        requested_workspace = scopes.get_workspace(workspace_id)
+        if (
+            requested_workspace.owner_type != owner.type
+            or requested_workspace.owner_id != owner.id
+        ):
+            raise ContractError(ErrorCode.FORBIDDEN, "Selected Workspace is not owned by this actor.")
+        if project_id is not None and requested_workspace.project_id != project_id:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "Selected Workspace does not belong to the selected Project.",
+            )
+        selected_project_id = project_id or requested_workspace.project_id
+    else:
+        selected_project_id = _select_project(owned_projects, project_id)
+
     project = scopes.get_project(selected_project_id)
     if project.owner_ref != owner:
         raise ContractError(ErrorCode.FORBIDDEN, "Selected Project is not owned by this actor.")
@@ -95,7 +110,7 @@ def _select_project(projects: tuple[Any, ...], requested: str | None) -> str:
     if requested is not None:
         return requested
     if len(projects) == 1:
-        return projects[0].id
+        return cast(str, projects[0].id)
     raise ContractError(
         ErrorCode.INVALID_REQUEST,
         "Select an owned Project for the official multi-agent first run.",
@@ -107,7 +122,7 @@ def _select_workspace(workspaces: tuple[Any, ...], requested: str | None) -> str
     if requested is not None:
         return requested
     if len(workspaces) == 1:
-        return workspaces[0].id
+        return cast(str, workspaces[0].id)
     raise ContractError(
         ErrorCode.INVALID_REQUEST,
         "Select an owned Workspace for the official multi-agent first run.",
@@ -336,4 +351,4 @@ def ensure_verification(
         policy_id=policy.policy_id,
         policy_version=policy.version,
     )
-    return policy.policy_id
+    return cast(str, policy.policy_id)
