@@ -13,6 +13,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.data import DataAccessContext
 from ai_multi_agent_platform.domain import OwnerRef, validate_id
 
+from ._retention_async import WorkspaceRetentionPersistenceOffload
 from .contracts import WorkspaceProvider
 from .models import (
     CleanupReport,
@@ -96,19 +97,30 @@ class _RetentionState:
 
 
 class RetentionManagedWorkspaceProvider(WorkspaceProvider):
-    """Add durable retention semantics without deleting canonical snapshots or file objects."""
+    """Add durable retention semantics without deleting canonical snapshots or file objects.
+
+    Database initialization and restart loading are synchronous construction-time seams. Once the
+    provider is live, every durable retention mutation is checkpointed on a dedicated bounded
+    persistence executor so request/runtime coroutines never execute SQLite inline.
+    """
 
     def __init__(
         self,
         delegate: WorkspaceProvider,
         *,
         metadata_db_path: str | Path | None = None,
+        persistence_offload: WorkspaceRetentionPersistenceOffload | None = None,
     ) -> None:
         self._delegate = delegate
         self._lock = asyncio.Lock()
         self._states: dict[str, _RetentionState] = {}
         self._materialization_workspaces: dict[str, str] = {}
         self._db_path = Path(metadata_db_path) if metadata_db_path is not None else None
+        self._persistence_offload = (
+            persistence_offload or WorkspaceRetentionPersistenceOffload()
+            if self._db_path is not None
+            else None
+        )
         if self._db_path is not None:
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
             self._initialize_database()
@@ -166,33 +178,38 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
                 "stored workspace retention metadata is invalid",
             ) from exc
 
-    def _persist_states(self) -> None:
-        if self._db_path is None:
+    def _persist_state_snapshot(
+        self,
+        states: tuple[tuple[str, _RetentionState], ...],
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("DELETE FROM workspace_retention_state")
+            for workspace_id, state in states:
+                connection.execute(
+                    """
+                    INSERT INTO workspace_retention_state (
+                        workspace_id, retention, expires_at, ever_materialized, deleted
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        workspace_id,
+                        state.retention.value,
+                        state.expires_at.isoformat() if state.expires_at else None,
+                        int(state.ever_materialized),
+                        int(state.deleted),
+                    ),
+                )
+
+    async def _persist_states_async(self) -> None:
+        offload = self._persistence_offload
+        if offload is None:
             return
-        try:
-            with self._connect() as connection:
-                connection.execute("BEGIN IMMEDIATE")
-                connection.execute("DELETE FROM workspace_retention_state")
-                for workspace_id, state in self._states.items():
-                    connection.execute(
-                        """
-                        INSERT INTO workspace_retention_state (
-                            workspace_id, retention, expires_at, ever_materialized, deleted
-                        ) VALUES (?, ?, ?, ?, ?)
-                        """,
-                        (
-                            workspace_id,
-                            state.retention.value,
-                            state.expires_at.isoformat() if state.expires_at else None,
-                            int(state.ever_materialized),
-                            int(state.deleted),
-                        ),
-                    )
-        except sqlite3.Error as exc:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "failed to persist workspace retention metadata",
-            ) from exc
+        states = tuple(self._states.items())
+        await offload.run(
+            lambda: self._persist_state_snapshot(states),
+            message="failed to persist workspace retention metadata",
+        )
 
     async def create_workspace(
         self,
@@ -228,7 +245,7 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
                 retention=retention,
                 expires_at=workspace.expires_at,
             )
-            self._persist_states()
+            await self._persist_states_async()
         return self._overlay(workspace, self._states[workspace.id])
 
     async def get_workspace(self, workspace_id: str) -> Workspace:
@@ -281,7 +298,7 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
                 active_materializations=state.active_materializations + 1,
             )
             self._materialization_workspaces[materialization.id] = workspace_id
-            self._persist_states()
+            await self._persist_states_async()
         return materialization
 
     async def capture_changes(
@@ -312,7 +329,7 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
         await self._delegate.release_materialization(materialization_id, outcome)
         async with self._lock:
             self._finish_materialization(materialization_id)
-            self._persist_states()
+            await self._persist_states_async()
 
     async def cleanup(self) -> CleanupReport:
         report = await self._delegate.cleanup()
@@ -321,7 +338,7 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
             async with self._lock:
                 for materialization_id in reconciled:
                     self._finish_materialization(materialization_id)
-                self._persist_states()
+                await self._persist_states_async()
         return report
 
     async def set_retention(
@@ -350,7 +367,7 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
                 raise ContractError(ErrorCode.NOT_FOUND, f"workspace not found: {workspace_id}")
             state = replace(current, retention=retention, expires_at=expires_at)
             self._states[workspace_id] = state
-            self._persist_states()
+            await self._persist_states_async()
         return self._overlay(workspace, state)
 
     async def enforce_retention(
@@ -391,7 +408,7 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
                         deferred.append(workspace.id)
                         continue
                     self._states[workspace.id] = replace(latest, deleted=True)
-                    self._persist_states()
+                    await self._persist_states_async()
                 deleted.append(workspace.id)
             except Exception:
                 failed.append(workspace.id)
@@ -409,7 +426,7 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
             if state is None:
                 state = self._state_from_workspace(workspace)
                 self._states[workspace.id] = state
-                self._persist_states()
+                await self._persist_states_async()
             return state
 
     def _finish_materialization(self, materialization_id: str) -> None:
