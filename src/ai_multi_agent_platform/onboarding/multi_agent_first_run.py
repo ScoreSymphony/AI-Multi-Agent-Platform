@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import NAMESPACE_URL, uuid5
 
 from ai_multi_agent_platform.agents import (
@@ -22,9 +22,6 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode, Operatio
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
-from ai_multi_agent_platform.deployment.reference_multi_agent import (
-    REFERENCE_MULTI_AGENT_CONSTRAINT,
-)
 from ai_multi_agent_platform.domain import OwnerRef, TaskStatus
 from ai_multi_agent_platform.planning import PlanningService, ProposalStatus
 from ai_multi_agent_platform.security import (
@@ -39,6 +36,10 @@ from .first_run_service import FIRST_RUN_RESOURCE_ID, OnboardingService
 
 ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND = "onboarding.run-multi-agent-golden-path"
 
+# Shared wire-level selector consumed by the #889 planner. Keep this product extension independent
+# from the deployment package so onboarding remains importable without a deployment-layer cycle.
+_REFERENCE_MULTI_AGENT_CONSTRAINT = "runtime:reference-multi-agent"
+
 _FIRST_RUN_ROLES = (
     ("researcher", "First-run Researcher"),
     ("developer", "First-run Developer"),
@@ -47,25 +48,25 @@ _FIRST_RUN_ROLES = (
 
 
 class GoldenPathKernel(Protocol):
-    async def create_task(self, **kwargs: object): ...
-    async def ready_task(self, **kwargs: object): ...
-    async def get_task(self, task_id: str): ...
-    async def get_run(self, task_id: str, run_id: str): ...
-    async def attach_artifact(self, **kwargs: object): ...
+    async def create_task(self, **kwargs: object) -> Any: ...
+    async def ready_task(self, **kwargs: object) -> Any: ...
+    async def get_task(self, task_id: str) -> Any: ...
+    async def get_run(self, task_id: str, run_id: str) -> Any: ...
+    async def attach_artifact(self, **kwargs: object) -> Any: ...
 
 
 class GoldenPathScopes(Protocol):
-    def list_projects(self): ...
-    def get_project(self, project_id: str): ...
-    def list_workspaces(self, *, project_id: str | None = None): ...
-    def get_workspace(self, workspace_id: str): ...
+    def list_projects(self) -> Any: ...
+    def get_project(self, project_id: str) -> Any: ...
+    def list_workspaces(self, *, project_id: str | None = None) -> Any: ...
+    def get_workspace(self, workspace_id: str) -> Any: ...
 
 
 class GoldenPathAgents(Protocol):
     @property
-    def repository(self): ...
+    def repository(self) -> Any: ...
 
-    def create_agent(self, profile: AgentProfile, **kwargs: object): ...
+    def create_agent(self, profile: AgentProfile, **kwargs: object) -> Any: ...
 
 
 class GoldenPathAuthorization(Protocol):
@@ -74,12 +75,12 @@ class GoldenPathAuthorization(Protocol):
 
 
 class GoldenPathCoordination(Protocol):
-    def get_plan(self, plan_id: str): ...
-    def list_step_records(self, plan_id: str): ...
+    def get_plan(self, plan_id: str) -> Any: ...
+    def list_step_records(self, plan_id: str) -> Any: ...
 
 
 class GoldenPathVerification(Protocol):
-    def history(self, *, task_id: str): ...
+    def history(self, *, task_id: str) -> Any: ...
 
 
 class MultiAgentFirstRunService:
@@ -125,14 +126,20 @@ class MultiAgentFirstRunService:
         key = context.idempotency_key or context.request_id
 
         status = self._onboarding.status(context)
-        if status.usable_golden_path_model_count < 1:
+        usable_models = status.get("usable_golden_path_model_count")
+        if not isinstance(usable_models, int) or usable_models < 1:
+            installed_adapters = status.get("installed_model_adapter_ids")
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
                 "No usable local/self-hosted text model is configured for the multi-agent first run. "
                 "Configure or repair one in Onboarding, then retry the same goal.",
                 details={
                     "action": "onboarding.configure-model",
-                    "installed_model_adapter_ids": list(status.installed_model_adapter_ids),
+                    "installed_model_adapter_ids": (
+                        list(installed_adapters)
+                        if isinstance(installed_adapters, (list, tuple))
+                        else []
+                    ),
                 },
             )
 
@@ -165,7 +172,7 @@ class MultiAgentFirstRunService:
             task_id=task.task_id,
             idempotency_key=f"{key}:propose",
             workspace_id=workspace_id,
-            task_constraints=(REFERENCE_MULTI_AGENT_CONSTRAINT,),
+            task_constraints=(_REFERENCE_MULTI_AGENT_CONSTRAINT,),
         )
         if proposal.status is not ProposalStatus.VALIDATED:
             raise ContractError(
@@ -265,7 +272,9 @@ class MultiAgentFirstRunService:
         project_id: str,
         workspace_id: str,
     ) -> dict[str, AgentRevisionRef]:
-        existing = {definition.agent_id: definition for definition in self._agents.repository.list_agents()}
+        existing = {
+            definition.agent_id: definition for definition in self._agents.repository.list_agents()
+        }
         refs: dict[str, AgentRevisionRef] = {}
         for role, name in _FIRST_RUN_ROLES:
             agent_id = self._stable_id("agent", owner.type, owner.id, project_id, workspace_id, role)
