@@ -33,6 +33,7 @@ class BudgetDimension(StrEnum):
     RUNTIME_SECONDS = "runtime_seconds"
     REPLANS = "replans"
     PARALLEL_STEPS = "parallel_steps"
+    RETRIES = "retries"
     REPAIRS = "repairs"
 
 
