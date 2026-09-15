@@ -27,7 +27,9 @@ from ai_multi_agent_platform.goals import (
     dispatch_goal_automation_delivery,
 )
 from ai_multi_agent_platform.goals.reconciliation import reconcile_goal_task_terminal_event
-from ai_multi_agent_platform.governance.control_plane_module import governance_control_plane_module
+from ai_multi_agent_platform.governance.async_control_plane_module import (
+    governance_control_plane_module,
+)
 from ai_multi_agent_platform.governance.repository import (
     GovernanceRepository,
     SqliteGovernanceRepository,
