@@ -1,0 +1,112 @@
+name: Milestone governance sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/milestone-sync.yml"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Synchronize milestone names and R&D assignments
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const desiredM4 = 'M4 - Real-World Validation & Multi-Node Operations';
+            const legacyM4 = 'M4 - Distributed & Ecosystem';
+            const rndTitle = 'R&D - Platform Hardening & Applied Research';
+            const rndDescription = [
+              'Applied research and platform-hardening evaluations that may improve the platform',
+              'without redefining canonical runtime, security, governance, or product authorities.',
+            ].join(' ');
+            const rndIssues = [1023, 1024, 1025, 1026];
+
+            let milestones = await github.paginate(
+              github.rest.issues.listMilestones,
+              { owner, repo, state: 'all', per_page: 100 },
+            );
+
+            let m4 = milestones.find((milestone) => milestone.number === 4);
+            if (!m4) {
+              m4 = milestones.find(
+                (milestone) =>
+                  milestone.title === desiredM4 || milestone.title === legacyM4,
+              );
+            }
+            if (!m4) {
+              core.setFailed('Cannot locate the existing M4 milestone safely.');
+              return;
+            }
+            if (![desiredM4, legacyM4].includes(m4.title)) {
+              core.setFailed(
+                `Milestone ${m4.number} has unexpected title: ${m4.title}`,
+              );
+              return;
+            }
+            if (m4.title !== desiredM4) {
+              const updated = await github.rest.issues.updateMilestone({
+                owner,
+                repo,
+                milestone_number: m4.number,
+                title: desiredM4,
+              });
+              m4 = updated.data;
+            }
+
+            milestones = await github.paginate(
+              github.rest.issues.listMilestones,
+              { owner, repo, state: 'all', per_page: 100 },
+            );
+            let rnd = milestones.find((milestone) => milestone.title === rndTitle);
+            if (!rnd) {
+              const created = await github.rest.issues.createMilestone({
+                owner,
+                repo,
+                title: rndTitle,
+                description: rndDescription,
+              });
+              rnd = created.data;
+            } else if (rnd.description !== rndDescription || rnd.state !== 'open') {
+              const updated = await github.rest.issues.updateMilestone({
+                owner,
+                repo,
+                milestone_number: rnd.number,
+                title: rndTitle,
+                description: rndDescription,
+                state: 'open',
+              });
+              rnd = updated.data;
+            }
+
+            for (const issueNumber of rndIssues) {
+              const issue = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number: issueNumber,
+              });
+              if (issue.data.pull_request) {
+                core.setFailed(`#${issueNumber} unexpectedly resolves to a pull request.`);
+                return;
+              }
+              if (issue.data.milestone?.number !== rnd.number) {
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  milestone: rnd.number,
+                });
+              }
+            }
+
+            core.info(`M4 synchronized as: ${desiredM4}`);
+            core.info(`R&D milestone synchronized as #${rnd.number}: ${rndTitle}`);
+            core.info(`R&D issues assigned: ${rndIssues.map((n) => `#${n}`).join(', ')}`);

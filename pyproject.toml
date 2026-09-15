@@ -12,6 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "ScoreSymphony" }]
 dependencies = [
   "jsonschema==4.26.0",
+  "tzdata==2026.4; platform_system == 'Windows'",
 ]
 
 [project.scripts]

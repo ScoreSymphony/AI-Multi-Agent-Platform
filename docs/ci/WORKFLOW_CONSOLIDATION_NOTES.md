@@ -6,16 +6,24 @@ This change deliberately reduces the permanent GitHub Actions surface without ch
 
 The dedicated #862 object-storage evidence campaigns are retired because #862 is completed and their result is recorded in the issue, PR history, research documentation, tests and evidence harnesses. Their workflows were tied to the historical evaluation branch rather than to the ordinary long-lived regression surface.
 
-The three dedicated #859 Bifrost security/performance/DNS-rebinding workflow files are retired as permanent issue-numbered Actions entries, but the remaining live security responsibility is not dropped. Ordinary `CI` retains the pinned Bifrost compatibility lane and now also runs the isolated DNS-rebinding runtime gate through `scripts/ci/bifrost_dns_rebinding_gate.sh`. The authoritative Bifrost evaluation document remains the source of truth for promotion state; specialized historical #859 evidence stays preserved in source history, tests and research records.
+The three dedicated #859 Bifrost security/performance/DNS-rebinding workflow files are retired as permanent issue-numbered Actions entries, but the remaining live security responsibility is not dropped. The maintained `compatibility.yml` pull-request lane retains pinned Bifrost compatibility and the isolated DNS-rebinding runtime gate through `scripts/ci/bifrost_dns_rebinding_gate.sh`. The authoritative Bifrost evaluation document remains the source of truth for promotion state; specialized historical #859 evidence stays preserved in source history, tests and research records.
 
 The standalone Pipelock candidate-compatibility workflow is retired as a separate Actions entry, but its live pinned-runtime responsibilities are not dropped. `pipelock.yml` remains the maintained Pipelock validation suite and now directly exercises the exact reviewed Core pin against the platform adapter, MCP stdio, MCP HTTP/WebSocket transports, and retained adversarial integration cases. This preserves candidate compatibility coverage while keeping Pipelock under one durable workflow.
 
 ## Consolidated durable workflows
 
-`test-layout.yml` and `forge-removal-guard.yml` are consolidated into `repository-quality.yml`. The `forge-sidecar-integration` job ID is preserved because it is still a required branch-protection context.
+`test-layout.yml` and `forge-removal-guard.yml` were consolidated into `repository-quality.yml`. During the initial workflow consolidation, the historical `forge-sidecar-integration` job ID was temporarily preserved only because branch protection still required that context. The later required-check cleanup retires both that artificial job and its branch-protection requirement; Forge retirement remains enforced by the backend-neutral architecture regression in `tests/architecture/test_forge_removal.py`.
 
 `ha-postgres-coordination.yml` and `ha-postgres-persistence.yml` are consolidated into `ha-postgres.yml` while preserving both job IDs and their independent PostgreSQL service databases.
 
+## Routine execution surface
+
+The repository no longer repeats every expensive or specialized lane on each `main` push. Required CodeQL analysis remains on pull requests and on its scheduled scan. Full platform/MCP/acceptance conformance remains path-scoped on relevant pull requests and is exercised completely by the daily scheduled/manual conformance workflow. Repository test-layout reconciliation remains a pull-request validation rather than a duplicate post-merge run.
+
+The canonical `ci.yml` default-branch surface now contains only the three core jobs. LiteLLM, Hermes and Bifrost compatibility moved to `compatibility.yml`, where the same job identities and validation responsibilities remain automatic on pull requests without being repeated after merge. Together with the retained benchmark and extended-performance push workflows, this gives an ordinary `main` push a nine-check baseline.
+
+This keeps the ordinary default-branch push surface at the documented check-count budget while retaining the same validation responsibilities in the lifecycle stage where they provide useful signal.
+
 ## Historical Actions entries
 
-Deleting YAML files alone does not remove old workflow names from the Actions sidebar. `repository-quality.yml` includes a bounded history-cleanup job with an explicit allowlist of workflow paths retired by this consolidation. It deletes only completed runs for those reviewed paths, can be run manually, and is also available for the post-merge consolidation cleanup.
+Deleting YAML files alone does not remove old workflow names from the Actions sidebar. `repository-maintenance.yml` contains the bounded history-cleanup job with an explicit allowlist of workflow paths retired by this consolidation. It deletes only completed runs for those reviewed paths and can be run manually. Keeping that maintenance operation in its own manual-only workflow prevents an otherwise skipped cleanup job from appearing on every ordinary PR or default-branch push.

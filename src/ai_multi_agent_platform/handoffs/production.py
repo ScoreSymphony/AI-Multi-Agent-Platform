@@ -409,8 +409,8 @@ class DurableConsumedHandoffContextAdapter(ContextSourceAdapter):
 
     repository: HandoffRepository
     agents: AgentRepository
-    runtime_repository: AsyncHandoffRepository | None = None
     adapter_id: str = "canonical-agent-handoff-durable"
+    runtime_repository: AsyncHandoffRepository | None = None
 
     async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
         runtime_repository = runtime_handoff_repository(
