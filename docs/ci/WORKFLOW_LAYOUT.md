@@ -7,7 +7,8 @@ The repository keeps durable CI organized by stable responsibility rather than b
 - `ci.yml` — canonical backend/package/install/frontend merge-gate checks.
 - `compatibility.yml` — automatic pull-request compatibility checks for maintained optional integrations such as LiteLLM, Hermes and Bifrost.
 - `codeql.yml` — dedicated CodeQL workflow. Keep this file and its job identities stable because GitHub Advanced Security correlates its configurations by workflow/job identity.
-- `governance.yml` — dependency review and repository/issue governance.
+- `governance.yml` — pull-request dependency review only.
+- `governance-maintenance.yml` — issue metadata validation and scheduled/manual upstream discovery.
 - `repository-quality.yml` — pull-request test-layout policy and collection reconciliation.
 - `repository-maintenance.yml` — manual repository-maintenance operations such as bounded orphaned Actions-history cleanup.
 - `conformance.yml` — path-scoped pull-request conformance plus scheduled/manual platform, MCP and acceptance evidence.
@@ -87,7 +88,7 @@ For ordinary pull requests that do not touch a specialized path-filtered integra
 - `dependency-review`;
 - `validate-test-layout`.
 
-Manual maintenance jobs must not appear as skipped checks on ordinary pull requests.
+Issue validation, upstream discovery and Actions-history cleanup live in workflows that do not subscribe to `pull_request`, so they do not create skipped check entries on ordinary PRs. Manual maintenance jobs must not appear as skipped checks on ordinary pull requests.
 
 The check-count budget is an execution-surface policy, not a license to delete coverage. Expensive or specialized coverage should move to path-scoped pull requests, scheduled runs, manual validation, or release-specific workflows rather than disappearing.
 
