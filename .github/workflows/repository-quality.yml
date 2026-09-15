@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       cleanup_orphaned_history:
-        description: Delete completed Actions runs whose workflow path no longer exists on the default branch
+        description: Delete completed Actions runs for explicitly retired workflow paths
         required: false
         default: false
         type: boolean
@@ -274,51 +274,48 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - name: Delete completed runs for retired workflow paths
+      - name: Delete completed runs for explicitly retired workflow paths
         uses: actions/github-script@v9
         with:
           script: |
             const { owner, repo } = context.repo;
-            const repository = await github.rest.repos.get({ owner, repo });
-            const defaultBranch = repository.data.default_branch;
-            const directory = await github.rest.repos.getContent({
-              owner,
-              repo,
-              path: '.github/workflows',
-              ref: defaultBranch,
-            });
-            if (!Array.isArray(directory.data)) {
-              core.setFailed('Expected .github/workflows to be a directory');
-              return;
-            }
-
-            const activePaths = new Set(
-              directory.data
-                .filter((entry) => entry.type === 'file' && /\.ya?ml$/i.test(entry.name))
-                .map((entry) => entry.path),
-            );
+            const retiredPaths = new Set([
+              '.github/workflows/forge-removal-guard.yml',
+              '.github/workflows/ha-postgres-coordination.yml',
+              '.github/workflows/ha-postgres-persistence.yml',
+              '.github/workflows/issue-862-garage-multinode-evidence.yml',
+              '.github/workflows/issue-862-rustfs-multinode-evidence.yml',
+              '.github/workflows/issue-862-storage-disaster-recovery-evidence.yml',
+              '.github/workflows/issue-862-storage-evidence.yml',
+              '.github/workflows/issue-862-storage-tls-evidence.yml',
+              '.github/workflows/issue-862-storage-upgrade-evidence.yml',
+              '.github/workflows/issue859-bifrost-dns-rebinding.yml',
+              '.github/workflows/issue859-bifrost-performance.yml',
+              '.github/workflows/issue859-bifrost-security.yml',
+              '.github/workflows/pipelock-candidate-compat.yml',
+              '.github/workflows/test-layout.yml',
+            ]);
 
             const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
               owner,
               repo,
               per_page: 100,
             });
-            const orphaned = runs.filter(
+            const retired = runs.filter(
               (run) =>
                 run.status === 'completed' &&
                 run.path &&
-                !activePaths.has(run.path),
+                retiredPaths.has(run.path),
             );
             const byPath = new Map();
-            for (const run of orphaned) {
+            for (const run of retired) {
               const bucket = byPath.get(run.path) || [];
               bucket.push(run);
               byPath.set(run.path, bucket);
             }
 
-            core.info(`default_branch=${defaultBranch}`);
-            core.info(`active_workflow_paths=${activePaths.size}`);
-            core.info(`completed_orphaned_runs=${orphaned.length}`);
+            core.info(`explicit_retired_workflow_paths=${retiredPaths.size}`);
+            core.info(`completed_retired_runs=${retired.length}`);
             for (const [path, pathRuns] of [...byPath.entries()].sort()) {
               core.info(`${path}: ${pathRuns.length} completed run(s)`);
             }
@@ -344,4 +341,4 @@ jobs:
                 }
               }
             }
-            core.info(`deleted_orphaned_runs=${deleted}`);
+            core.info(`deleted_retired_runs=${deleted}`);
