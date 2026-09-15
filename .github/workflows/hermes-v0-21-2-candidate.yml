@@ -5,7 +5,7 @@ on:
     paths:
       - ".github/workflows/hermes-v0-21-2-candidate.yml"
       - "scripts/ci/issue46_external_profile.py"
-      - "scripts/ci/issue959_hermes_v0_21_2_candidate.py"
+      - "scripts/ci/hermes_v0_21_2_candidate_validation.py"
       - "tests/regression/upstreams/test_hermes_v0_21_2.py"
       - "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py"
       - "tests/integration/upstreams/test_hermes_v0_21_2_concurrency.py"
@@ -59,9 +59,9 @@ jobs:
         env:
           HERMES_UPSTREAM_DIR: ${{ github.workspace }}/.upstream/hermes
           HERMES_UPSTREAM_REVISION: 939e45c91d751fadd94dcd1b873ac3cb44846213
-        run: python scripts/ci/issue959_hermes_v0_21_2_candidate.py
+        run: python scripts/ci/hermes_v0_21_2_candidate_validation.py
 
-      - name: Run #46 Hermes Scenario B against candidate
+      - name: Run Hermes Scenario B against candidate
         env:
           HERMES_UPSTREAM_DIR: ${{ github.workspace }}/.upstream/hermes
           HERMES_UPSTREAM_REVISION: 939e45c91d751fadd94dcd1b873ac3cb44846213
@@ -75,7 +75,7 @@ jobs:
             --adapter-version "hermes-agent=$HERMES_UPSTREAM_REVISION" \
             --json-report conformance-hermes-v0.21.2-candidate.json
 
-      - name: Upload #959 candidate conformance evidence
+      - name: Upload candidate conformance evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
