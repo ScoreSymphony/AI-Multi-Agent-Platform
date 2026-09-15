@@ -186,7 +186,9 @@ class MultiAgentFirstRunService:
         activated = await self._planning.activate(
             proposal.proposal.proposal_id,
             idempotency_key=f"{key}:activate",
-            actor=ActorIdentity(context.actor.owner_id or context.actor.principal_ref, ActorType.HUMAN),
+            actor=ActorIdentity(
+                context.actor.owner_id or context.actor.principal_ref, ActorType.HUMAN
+            ),
         )
         if activated.activation_plan_id is None:
             raise ContractError(
