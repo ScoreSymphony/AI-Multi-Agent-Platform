@@ -16,6 +16,12 @@ The standalone Pipelock candidate-compatibility workflow is retired as a separat
 
 `ha-postgres-coordination.yml` and `ha-postgres-persistence.yml` are consolidated into `ha-postgres.yml` while preserving both job IDs and their independent PostgreSQL service databases.
 
+## Routine execution surface
+
+The repository no longer repeats every expensive or specialized lane on each `main` push. Required CodeQL analysis remains on pull requests and on its scheduled scan. Full platform/MCP/acceptance conformance remains path-scoped on relevant pull requests and is exercised completely by the daily scheduled/manual conformance workflow. Repository test-layout reconciliation remains a pull-request validation rather than a duplicate post-merge run.
+
+This keeps the ordinary default-branch push surface at the documented check-count budget while retaining the same validation responsibilities in the lifecycle stage where they provide useful signal.
+
 ## Historical Actions entries
 
-Deleting YAML files alone does not remove old workflow names from the Actions sidebar. `repository-quality.yml` includes a bounded history-cleanup job with an explicit allowlist of workflow paths retired by this consolidation. It deletes only completed runs for those reviewed paths, can be run manually, and is also available for the post-merge consolidation cleanup.
+Deleting YAML files alone does not remove old workflow names from the Actions sidebar. `repository-maintenance.yml` contains the bounded history-cleanup job with an explicit allowlist of workflow paths retired by this consolidation. It deletes only completed runs for those reviewed paths and can be run manually. Keeping that maintenance operation in its own manual-only workflow prevents an otherwise skipped cleanup job from appearing on every ordinary PR or default-branch push.
