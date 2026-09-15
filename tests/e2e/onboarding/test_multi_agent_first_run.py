@@ -183,9 +183,14 @@ def test_official_first_run_executes_real_multi_agent_golden_path_without_option
         assert set(result["result_ids"]).issubset(set(task.result_ids))
         assert set(result["artifact_ids"]).issubset(set(task.artifact_ids))
 
-        generation_calls = [call for call in transport.calls if call[1].endswith("/chat/completions")]
+        generation_calls = [
+            call for call in transport.calls if call[1].endswith("/chat/completions")
+        ]
         assert len(generation_calls) == 4
-        assert all(call[3] is not None and call[3]["model"] == "qwen-first-run" for call in generation_calls)
+        assert all(
+            call[3] is not None and call[3]["model"] == "qwen-first-run"
+            for call in generation_calls
+        )
 
         # Replaying the same idempotency key reuses Task, proposal, Plan, Agents and summary
         # artifact rather than creating duplicate canonical product state.
@@ -207,6 +212,9 @@ def test_official_first_run_executes_real_multi_agent_golden_path_without_option
         assert replay["plan_id"] == result["plan_id"]
         assert replay["artifact_ids"] == result["artifact_ids"]
         assert len(deployment.agents.repository.list_agents()) == 3
-        assert len(generation_calls) == 4
+        replay_generation_calls = [
+            call for call in transport.calls if call[1].endswith("/chat/completions")
+        ]
+        assert len(replay_generation_calls) == 4
 
     asyncio.run(scenario())
