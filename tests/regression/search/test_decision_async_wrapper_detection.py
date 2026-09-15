@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 
 from ai_multi_agent_platform.decisions import AsyncDecisionService, as_async_decision_service
 
-_T = TypeVar("_T")
 
-
-def _regular_async_wrapper(
-    operation: Callable[..., Awaitable[_T]],
-) -> Callable[..., Awaitable[_T]]:
-    def wrapped(*args: Any, **kwargs: Any) -> Awaitable[_T]:
+def _regular_async_wrapper[T](
+    operation: Callable[..., Awaitable[T]],
+) -> Callable[..., Awaitable[T]]:
+    def wrapped(*args: Any, **kwargs: Any) -> Awaitable[T]:
         return operation(*args, **kwargs)
 
     return wrapped
