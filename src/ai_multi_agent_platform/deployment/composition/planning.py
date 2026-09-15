@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.agents import AgentRepository
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.approval_portability_composition import ControlPlane
-from ai_multi_agent_platform.coordination import DurablePlanStepCoordinator, SQLiteCoordinatorRepository
+from ai_multi_agent_platform.coordination import (
+    DurablePlanStepCoordinator,
+    SQLiteCoordinatorRepository,
+)
 from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
 from ai_multi_agent_platform.models import ModelRegistry
 from ai_multi_agent_platform.observability import (
@@ -109,10 +114,12 @@ def build_planning(
     )
 
 
-def _planning_event_sink(telemetry: Telemetry):
+def _planning_event_sink(
+    telemetry: Telemetry,
+) -> Callable[[str, dict[str, JsonValue]], None]:
     """Project safe Planning transition evidence into the canonical timeline."""
 
-    def emit(event_type: str, attributes: dict[str, object]) -> None:
+    def emit(event_type: str, attributes: dict[str, JsonValue]) -> None:
         raw_task_id = attributes.get("task_id")
         task_id = raw_task_id if isinstance(raw_task_id, str) else None
         telemetry.timeline(
