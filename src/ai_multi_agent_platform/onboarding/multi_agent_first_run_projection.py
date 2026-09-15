@@ -42,8 +42,8 @@ async def project_first_run_result(
             ids = _string_list(projected.get("result_ids"))
             execution_result_id = ids[0] if ids else None
         if step.title == _REVIEW_STEP_TITLE:
-            review_status = "passed" if projected["status"] == "succeeded" else str(
-                projected["status"]
+            review_status = (
+                "passed" if projected["status"] == "succeeded" else str(projected["status"])
             )
 
     verification_items = _verification_projection(
