@@ -13,10 +13,10 @@ from .governance import TaskBudgetPolicyMutationService
 from .models import (
     BudgetConsumptionSource,
     BudgetDimension,
+    BudgetDimensionSnapshot,
     BudgetExhaustionAction,
     TaskBudgetLimit,
     TaskBudgetPolicy,
-    TaskBudgetSnapshot,
     UnavailableMetricPolicy,
 )
 from .service import TaskBudgetEnforcementService
@@ -106,7 +106,12 @@ class TaskBudgetCommandHandlers:
         await self._mutations.configure(
             candidate,
             actor=_actor(context),
-            operation=_operation(context, task.task.owner_ref.type, task.task.owner_ref.id, task.task.project_id),
+            operation=_operation(
+                context,
+                task.task.owner_ref.type,
+                task.task.owner_ref.id,
+                task.task.project_id,
+            ),
             approval_id=_optional_string(payload.get("approval_id"), "approval_id"),
         )
         return await _budget_resource(self._budgets, resource_ref)
@@ -135,7 +140,12 @@ class TaskBudgetCommandHandlers:
         await self._mutations.revise(
             candidate,
             actor=_actor(context),
-            operation=_operation(context, task.task.owner_ref.type, task.task.owner_ref.id, task.task.project_id),
+            operation=_operation(
+                context,
+                task.task.owner_ref.type,
+                task.task.owner_ref.id,
+                task.task.project_id,
+            ),
             approval_id=_optional_string(payload.get("approval_id"), "approval_id"),
         )
         return await _budget_resource(self._budgets, resource_ref)
@@ -165,7 +175,7 @@ async def _budget_resource(
     if policy is None:
         raise ContractError(ErrorCode.NOT_FOUND, "Task execution budget policy does not exist")
     snapshot = await budgets.snapshot(task_id)
-    history = await budgets.history(task_id)
+    history = await budgets.policy_history(task_id)
     return {
         "id": task_id,
         "task_id": task_id,
@@ -208,12 +218,7 @@ def _limit_resource(limit: TaskBudgetLimit) -> dict[str, JsonValue]:
     }
 
 
-def _dimension_resource(item: object) -> dict[str, JsonValue]:
-    # Kept local to avoid introducing a second public DTO hierarchy for the projection.
-    from .models import BudgetDimensionSnapshot
-
-    if not isinstance(item, BudgetDimensionSnapshot):
-        raise TypeError("budget snapshot contains an unexpected dimension type")
+def _dimension_resource(item: BudgetDimensionSnapshot) -> dict[str, JsonValue]:
     return {
         "dimension": item.limit.dimension.value,
         "limit": item.limit.limit,
