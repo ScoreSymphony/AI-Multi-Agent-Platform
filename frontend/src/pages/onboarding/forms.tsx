@@ -43,6 +43,35 @@ export function ModelSetupForm({
   );
 }
 
+export function MultiAgentGoalForm({
+  status,
+  busy,
+  onSubmit,
+}: {
+  status: OnboardingStatus;
+  busy: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const projectIds = status.candidate_project_ids;
+  const workspaceIds = status.candidate_workspace_ids;
+  return (
+    <form className="stack" onSubmit={onSubmit}>
+      <div className="form-grid">
+        {projectIds.length > 1 ? <CanonicalSelect label="Project" name="project_id" values={projectIds} /> : null}
+        {workspaceIds.length > 1 ? <CanonicalSelect label="Workspace" name="workspace_id" values={workspaceIds} /> : null}
+        <label>Goal title (optional)<input name="title" placeholder="First multi-agent goal" /></label>
+        <label>Goal<input name="objective" required defaultValue="Research two viable approaches, choose one, produce a concise result, and review it." /></label>
+      </div>
+      <div className="context-summary">
+        <span>Built-in team</span>
+        <strong>researcher · developer · reviewer</strong>
+      </div>
+      <p>The platform creates or reuses these scoped starter roles, builds the canonical Plan, executes its dependency graph, and returns the same Task/Plan/Step/Run/Result/Artifact trace exposed by CLI and API.</p>
+      <button className="primary" disabled={busy}>{busy ? "Running multi-agent goal…" : "Run official multi-agent first run"}</button>
+    </form>
+  );
+}
+
 export function GeneralAssistantCloneForm({
   workspaceIds,
   busy,
@@ -87,7 +116,7 @@ export function FirstTaskForm({
         <label>Task title (optional)<input name="title" placeholder="First General Assistant Task" /></label>
         <label>Objective<input name="objective" required defaultValue="Return one short local response." /></label>
       </div>
-      <button className="primary" disabled={busy}>{busy ? "Running…" : "Run first canonical Task"}</button>
+      <button className="secondary" disabled={busy}>{busy ? "Running…" : "Run legacy single-Agent Task"}</button>
     </form>
   );
 }
