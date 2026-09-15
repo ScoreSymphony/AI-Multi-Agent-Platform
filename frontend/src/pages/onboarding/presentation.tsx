@@ -1,5 +1,5 @@
 import type { CanonicalModel, JsonValue } from "../../api/types";
-import type { FirstRunTaskResult, OnboardingStatus } from "../../api/onboarding";
+import type { FirstRunTaskResult, MultiAgentFirstRunResult, OnboardingStatus } from "../../api/onboarding";
 import { AppLink } from "../../app/router";
 import { CanonicalId, Card, StatusBadge } from "../../components/States";
 import { onboardingStatePresentation } from "./state";
@@ -37,9 +37,44 @@ export function ModelHealthTable({ models }: { models: CanonicalModel[] }) {
   );
 }
 
+export function MultiAgentFirstResult({ result }: { result: MultiAgentFirstRunResult }) {
+  const finalResult = result.result_ids[result.result_ids.length - 1];
+  return (
+    <Card title="Official multi-agent first-run result">
+      <div className="metrics">
+        <Metric label="Task" value={result.task_status} />
+        <Metric label="Plan steps" value={result.steps.length} />
+        <Metric label="Specialized roles" value={Object.keys(result.agents).length} />
+        <Metric label="Review" value={result.review.status} />
+        <Metric label="Artifacts" value={result.artifact_ids.length} />
+      </div>
+      <div className="actions">
+        <AppLink href={`/tasks/${result.task_id}`}>Open Task</AppLink>
+        {finalResult ? <AppLink href={`/results/${finalResult}`}>Open final Result</AppLink> : null}
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Step</th><th>Agent</th><th>Dependencies</th><th>Phase</th><th>Run / Result</th></tr></thead>
+          <tbody>{result.steps.map((step) => (
+            <tr key={step.step_id}>
+              <td>{step.title}<div><CanonicalId value={step.step_id} /></div></td>
+              <td>{step.agent_id ? <CanonicalId value={`${step.agent_id}@${step.agent_revision ?? "?"}`} /> : "—"}</td>
+              <td>{step.dependency_ids.length ? step.dependency_ids.map((id) => <div key={id}><CanonicalId value={id} /></div>) : "root"}</td>
+              <td><StatusBadge value={step.status} /><div><small>{step.phase}</small></div></td>
+              <td>{step.run_id ? <AppLink href={`/runs/${step.run_id}`}>Run</AppLink> : "—"}{step.result_ids.map((id) => <div key={id}><AppLink href={`/results/${id}`}>Result</AppLink></div>)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <div className="context-summary"><span>Canonical trace</span><strong>Task → Plan → Steps → Runs → Results → Artifacts</strong></div>
+      <pre>{JSON.stringify({ trace: result.trace, artifacts: result.artifact_ids, verification: result.verification }, null, 2)}</pre>
+    </Card>
+  );
+}
+
 export function FirstResult({ result }: { result: FirstRunTaskResult }) {
   return (
-    <Card title="First canonical result">
+    <Card title="Legacy single-Agent result">
       <div className="metrics"><Metric label="Task" value={result.task_status} /><Metric label="Run" value={result.run_status} /><Metric label="Agent" value={result.agent_id} /><Metric label="Result" value={result.result_id} /></div>
       <div className="actions"><AppLink href={`/tasks/${result.task_id}`}>Open Task</AppLink><AppLink href={`/runs/${result.run_id}`}>Open Run</AppLink><AppLink href={`/results/${result.result_id}`}>Open Result</AppLink></div>
       <pre>{JSON.stringify(result.output, null, 2)}</pre>
