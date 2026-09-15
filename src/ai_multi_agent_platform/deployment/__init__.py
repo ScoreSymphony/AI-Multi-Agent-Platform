@@ -12,10 +12,6 @@ from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.observability import InMemoryExporter
 from ai_multi_agent_platform.onboarding import OnboardingModelAdapter
-from ai_multi_agent_platform.onboarding.multi_agent_first_run import (
-    ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
-    MultiAgentFirstRunService,
-)
 from ai_multi_agent_platform.repositories import RepositoryDiscoveryResolver
 from ai_multi_agent_platform.verification import CanonicalVerificationAccess
 
@@ -95,6 +91,14 @@ def build_single_node_deployment(
         verification_access=CanonicalVerificationAccess(deployment.verification),
         evaluations=deployment.evaluation_repository,
         evaluation_service=deployment.evaluation,
+    )
+
+    # Import lazily at the outer composition boundary. The onboarding product extension reuses
+    # the deployment-owned #889 reference constraint but must not participate in package import
+    # initialization, otherwise importing ``deployment`` would create a cycle through onboarding.
+    from ai_multi_agent_platform.onboarding.multi_agent_first_run import (
+        ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
+        MultiAgentFirstRunService,
     )
 
     multi_agent_first_run = MultiAgentFirstRunService(
