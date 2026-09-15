@@ -40,7 +40,11 @@ class _MarkedAwaitableProvenanceStore:
 
     def for_run(self, run_id: str) -> Awaitable[tuple[RepositoryRunProvenance, ...]]:
         return _completed(
-            tuple(record for (record_run_id, _), record in self._records.items() if record_run_id == run_id)
+            tuple(
+                record
+                for (record_run_id, _), record in self._records.items()
+                if record_run_id == run_id
+            )
         )
 
 
@@ -54,9 +58,7 @@ def test_explicit_marker_preserves_regular_def_awaitable_backend() -> None:
     )
 
     assert getattr(store, ASYNC_REPOSITORY_PROVENANCE_BACKEND_MARKER) is True
-    resolved = as_async_repository_provenance_store(
-        cast(AsyncRepositoryProvenanceStore, store)
-    )
+    resolved = as_async_repository_provenance_store(cast(AsyncRepositoryProvenanceStore, store))
     assert resolved is store
 
     async def exercise() -> None:
