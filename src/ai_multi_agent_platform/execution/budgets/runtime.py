@@ -7,9 +7,19 @@ from typing import cast
 
 from ai_multi_agent_platform.capabilities import CapabilityInvocation, CapabilityInvocationResult
 from ai_multi_agent_platform.capabilities.invocation import CapabilityInvoker
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, ModelRequest, ModelResponse
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    JsonValue,
+    ModelRequest,
+    ModelResponse,
+)
 from ai_multi_agent_platform.contracts.model_stream import ModelStreamEvent
-from ai_multi_agent_platform.models import CanonicalModelRequest, CanonicalModelResponse, ModelRuntime
+from ai_multi_agent_platform.models import (
+    CanonicalModelRequest,
+    CanonicalModelResponse,
+    ModelRuntime,
+)
 
 from .models import BudgetActionKind, BudgetAdmissionDecision, BudgetDimension
 from .service import TaskBudgetAdmission
@@ -209,9 +219,7 @@ def _require_budget_permitted(decision: BudgetAdmissionDecision) -> None:
             "budget_action": decision.action.value,
             "task_id": decision.task_id,
             "blocking_dimension": (
-                None
-                if decision.blocking_dimension is None
-                else decision.blocking_dimension.value
+                None if decision.blocking_dimension is None else decision.blocking_dimension.value
             ),
         },
     )
