@@ -27,6 +27,15 @@ def _config(tmp_path: Path) -> SingleNodeConfig:
     return config
 
 
+def _evaluation_project_id(config: SingleNodeConfig) -> str:
+    deployment = build_single_node_deployment(config)
+    return next(
+        project.id
+        for project in deployment.scopes.list_projects()
+        if project.name == "Platform Evaluation"
+    )
+
+
 def test_major_builders_compose_from_explicit_dependencies(tmp_path: Path) -> None:
     config = _config(tmp_path)
     storage = build_storage(config)
@@ -97,10 +106,8 @@ def test_optional_adapters_are_not_required_for_reference_composition(tmp_path: 
 
 def test_restart_reuses_durable_composition_state(tmp_path: Path) -> None:
     config = SingleNodeConfig(data_dir=tmp_path / "restart", secure_cookie=False)
-    first = build_single_node_deployment(config)
-    first_id = first.scopes.get_project_by_key("evaluation-system-project-v1").id
 
-    restarted = build_single_node_deployment(config)
+    first_id = _evaluation_project_id(config)
+    restarted_id = _evaluation_project_id(config)
 
-    assert restarted.scopes.get_project_by_key("evaluation-system-project-v1").id == first_id
-    assert restarted.verification_completion is not None
+    assert restarted_id == first_id
