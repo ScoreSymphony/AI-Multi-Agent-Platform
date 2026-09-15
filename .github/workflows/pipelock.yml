@@ -7,6 +7,7 @@ on:
       - "src/ai_multi_agent_platform/adapters/pipelock.py"
       - "tests/integration/security/test_pipelock_evaluation.py"
       - "tests/integration/security/test_pipelock_transports.py"
+      - "tests/fixtures/mcp_*server.py"
       - "tests/integration/pipelock/**"
       - "upstream/pipelock-core.yaml"
       - "tests/integration/security/test_pipelock_security_corpus.py"
@@ -66,6 +67,33 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
           python -m pip install "websockets==15.0.1"
+      - name: Verify reviewed license and build boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "Apache License" .candidate/pipelock/LICENSE
+          grep -q "Elastic License 2.0" .candidate/pipelock/enterprise/LICENSE
+          grep -q '^//go:build enterprise$' .candidate/pipelock/enterprise/edition.go
+          grep -q 'go build -tags enterprise' .candidate/pipelock/Dockerfile
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          makefile = Path(".candidate/pipelock/Makefile").read_text(encoding="utf-8")
+          build = makefile.split("\nbuild:\n", 1)[1].split("\n\n", 1)[0]
+          if "-tags enterprise" in build:
+              raise SystemExit("upstream default make build unexpectedly enables Enterprise tags")
+
+          goreleaser = Path(".candidate/pipelock/.goreleaser.yaml").read_text(encoding="utf-8")
+          release_build = re.search(
+              r"(?ms)^  - id: pipelock\n(?P<body>.*?)(?=^  - id:|^archives:)",
+              goreleaser,
+          )
+          if release_build is None or not re.search(
+              r"(?m)^    tags:\n      - enterprise$", release_build.group("body")
+          ):
+              raise SystemExit("expected pinned GoReleaser pipelock build to be Enterprise-tagged")
+          PY
       - name: Build tag-free Core candidate
         working-directory: .candidate/pipelock
         run: make build
