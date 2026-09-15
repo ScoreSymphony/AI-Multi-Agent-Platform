@@ -31,9 +31,7 @@ class _VerificationStore:
         )
 
     def history(self, *, task_id: str) -> tuple[tuple[Any, None], ...]:
-        return tuple(
-            (request, None) for request in self.requests if request.task_id == task_id
-        )
+        return tuple((request, None) for request in self.requests if request.task_id == task_id)
 
 
 class _VerificationCompletion:
