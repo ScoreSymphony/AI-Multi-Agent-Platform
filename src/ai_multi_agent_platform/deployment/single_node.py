@@ -10,6 +10,7 @@ from ai_multi_agent_platform.agents import AgentRuntime, AgentService
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.capability_assignments import CapabilityAssignmentService
 from ai_multi_agent_platform.configuration import SecretProvider
+from ai_multi_agent_platform.contracts import LifecycleBackend
 from ai_multi_agent_platform.control_plane import AuthenticatedControlPlaneHTTP, ControlPlaneASGI
 from ai_multi_agent_platform.control_plane.approval_portability_composition import ControlPlane
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
@@ -71,6 +72,7 @@ from ai_multi_agent_platform.workspaces import SqliteRunWorkspaceBindingReposito
 from ai_multi_agent_platform.workspaces.compensation import CompensatingSqliteWorkspaceProvider
 
 from .composition import (
+    LifecycleBinding,
     build_control_plane,
     build_evaluation,
     build_execution,
@@ -153,6 +155,8 @@ class SingleNodeDeployment:
     verification: SqliteVerificationService
     verification_completion: SqliteVerificationCompletionAuthority
     verification_runtime: CanonicalVerificationRuntime
+    execution_fallback_lifecycle: LifecycleBackend
+    execution_lifecycle: LifecycleBinding
     kernel: PlatformKernel
     control_plane: ControlPlane
     http: AuthenticatedControlPlaneHTTP
@@ -368,6 +372,8 @@ def build_single_node_deployment(
         verification=verification.service,
         verification_completion=verification.completion_authority,
         verification_runtime=kernel.verification_runtime,
+        execution_fallback_lifecycle=execution.fallback_lifecycle,
+        execution_lifecycle=execution.lifecycle,
         kernel=kernel.kernel,
         control_plane=control_plane.control_plane,
         http=http.http,
