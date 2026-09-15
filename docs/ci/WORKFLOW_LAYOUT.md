@@ -33,6 +33,6 @@ Workflow consolidation must preserve branch-protection check contexts. In partic
 
 ## Actions history cleanup
 
-Deleting a workflow file does not immediately remove its old runs from the Actions sidebar. `repository-quality.yml` therefore contains an explicit cleanup job that compares completed run paths with the current default-branch workflow directory and deletes only runs for paths that no longer exist.
+Deleting a workflow file does not immediately remove its old runs from the Actions sidebar. `repository-quality.yml` therefore contains a bounded cleanup job with an explicit allowlist of workflow paths retired by this consolidation. It deletes only completed runs whose recorded path is in that reviewed retirement set; unrelated historical or active workflow runs are not selected.
 
-The cleanup can be invoked manually through `workflow_dispatch`. A merge commit containing `[actions-history-cleanup]` also triggers it on `main` so a consolidation can remove newly orphaned histories after the workflow-file changes are authoritative on the default branch.
+The cleanup can be invoked manually through `workflow_dispatch`. A merge commit containing `[actions-history-cleanup]` also triggers it on `main` so the newly retired workflow histories can be removed after the consolidation becomes authoritative on the default branch.
