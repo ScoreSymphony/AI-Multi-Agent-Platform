@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ai_multi_agent_platform.coordination import DurablePlanStepCoordinator, SQLiteCoordinatorRepository
+from ai_multi_agent_platform.coordination import (
+    DurablePlanStepCoordinator,
+    SQLiteCoordinatorRepository,
+)
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.observability import ObservabilityEventProvider
 from ai_multi_agent_platform.onboarding import FirstRunTaskService
