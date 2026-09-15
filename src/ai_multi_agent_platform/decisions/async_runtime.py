@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol, TypeVar, cast
+from typing import Protocol, TypeVar
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
@@ -155,7 +155,7 @@ def as_async_decision_service(
 
     if isinstance(decisions, DecisionService):
         return AsyncDecisionRuntime(decisions)
-    return cast(AsyncDecisionService, decisions)
+    return decisions
 
 
 __all__ = [
