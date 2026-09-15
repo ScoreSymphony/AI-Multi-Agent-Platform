@@ -447,8 +447,66 @@ class AsyncVerificationCompletionAuthorityAdapter:
         producer: ProducerIdentity | None = None,
         causation_id: str | None = None,
     ) -> VerificationRequest:
-        return await self._run(
-            lambda: self._completion.request_canonical_reverification_after_repair(
+        def request_or_reuse() -> VerificationRequest:
+            previous = self._completion.verification.get_request(verification_id)
+            next_attempt = previous.repair_attempt + 1
+            candidates = tuple(
+                request
+                for request, _result in self._completion.verification.history(
+                    task_id=previous.task_id
+                )
+                if request.verification_id != previous.verification_id
+                and request.policy_id == previous.policy_id
+                and request.policy_version == previous.policy_version
+                and request.stage_id == previous.stage_id
+                and request.repair_attempt == next_attempt
+            )
+            exact = tuple(
+                request
+                for request in candidates
+                if request.requested_verifier_kind is previous.requested_verifier_kind
+                and request.subject == new_subject
+                and request.run_id == run_id
+                and request.result_id == result_id
+                and request.artifact_ids == artifact_ids
+                and request.project_id == project_id
+                and request.capability_ids == capability_ids
+                and request.producer == producer
+                and request.correlation_id == correlation_id
+                and request.causation_id == causation_id
+            )
+            if len(exact) == 1:
+                return exact[0]
+            if len(exact) > 1:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "repair output maps to multiple canonical reverification requests",
+                    details={
+                        "source_verification_id": previous.verification_id,
+                        "verification_ids": [request.verification_id for request in exact],
+                    },
+                )
+            lineage_conflicts = tuple(
+                request
+                for request in candidates
+                if request.run_id == run_id
+                or (causation_id is not None and request.causation_id == causation_id)
+            )
+            if lineage_conflicts:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "persisted repair reverification conflicts with current canonical evidence",
+                    details={
+                        "source_verification_id": previous.verification_id,
+                        "verification_ids": [
+                            request.verification_id for request in lineage_conflicts
+                        ],
+                        "repair_attempt": next_attempt,
+                        "subject_id": new_subject.subject_id,
+                        "run_id": run_id,
+                    },
+                )
+            return self._completion.request_canonical_reverification_after_repair(
                 verification_id,
                 new_subject=new_subject,
                 correlation_id=correlation_id,
@@ -459,7 +517,10 @@ class AsyncVerificationCompletionAuthorityAdapter:
                 capability_ids=capability_ids,
                 producer=producer,
                 causation_id=causation_id,
-            ),
+            )
+
+        return await self._run(
+            request_or_reuse,
             message="failed to persist repaired Verification request",
         )
 

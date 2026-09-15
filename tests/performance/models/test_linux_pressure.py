@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import ai_multi_agent_platform.distributed.linux_pressure as linux_pressure
 from ai_multi_agent_platform.distributed.linux_pressure import (
     LinuxHostPressureProvider,
     PsiLine,
@@ -91,6 +92,14 @@ def test_parse_meminfo_converts_kib_without_treating_swap_as_ram() -> None:
     assert values["MemTotal"] == 100 * 1024
     assert values["SwapTotal"] == 50 * 1024
     assert values["SwapFree"] == 20 * 1024
+
+
+def test_try_statvfs_returns_none_when_platform_does_not_expose_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delattr(linux_pressure.os, "statvfs", raising=False)
+
+    assert linux_pressure._try_statvfs(tmp_path) is None
 
 
 def test_linux_provider_collects_psi_swap_zram_cgroup_pid_and_descriptor_evidence(

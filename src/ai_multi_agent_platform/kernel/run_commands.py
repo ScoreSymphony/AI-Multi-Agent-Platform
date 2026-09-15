@@ -44,6 +44,23 @@ _OUTCOME_LOCK_STRIPES = 64
 _STALE_REVISION_RETRY_LIMIT = 8
 
 
+async def _await_started_effect[T](operation: asyncio.Task[T]) -> T:
+    """Settle a started cross-domain effect before surfacing caller cancellation."""
+
+    try:
+        return await asyncio.shield(operation)
+    except asyncio.CancelledError:
+        while not operation.done():
+            try:
+                await asyncio.shield(operation)
+            except asyncio.CancelledError:
+                continue
+        failure = operation.exception()
+        if failure is not None:
+            raise failure from None
+        raise
+
+
 class RunCommandKernelHost(Protocol):
     """Internal kernel capabilities required by Run command handling."""
 
@@ -661,24 +678,28 @@ class KernelRunCommands:
             await self._host.get_run(task_id, run_id)
             subject_type = "run"
             subject_id = run_id
-        await self._host._invalidate_completion_subject(task_id)
-        await self._host._commit_task_command(
-            task=task,
-            key=idempotency_key,
-            operation="attach_artifact",
-            event_specs=(
-                (
-                    "artifact.attached",
-                    subject_type,
-                    subject_id,
-                    {"task_id": task_id, "artifact_id": artifact_id},
-                    (),
+
+        async def commit_attachment() -> None:
+            await self._host._invalidate_completion_subject(task_id)
+            await self._host._commit_task_command(
+                task=task,
+                key=idempotency_key,
+                operation="attach_artifact",
+                event_specs=(
+                    (
+                        "artifact.attached",
+                        subject_type,
+                        subject_id,
+                        {"task_id": task_id, "artifact_id": artifact_id},
+                        (),
+                    ),
                 ),
-            ),
-            result_id=subject_id,
-            actor_ref=actor_ref,
-            source=source,
-        )
+                result_id=subject_id,
+                actor_ref=actor_ref,
+                source=source,
+            )
+
+        await _await_started_effect(asyncio.create_task(commit_attachment()))
         return await self._host.get_task(task_id)
 
     async def attach_result(
@@ -701,24 +722,28 @@ class KernelRunCommands:
             await self._host.get_run(task_id, run_id)
             subject_type = "run"
             subject_id = run_id
-        await self._host._invalidate_completion_subject(task_id)
-        await self._host._commit_task_command(
-            task=task,
-            key=idempotency_key,
-            operation="attach_result",
-            event_specs=(
-                (
-                    "result.attached",
-                    subject_type,
-                    subject_id,
-                    {"task_id": task_id, "result_id": result_id},
-                    (),
+
+        async def commit_attachment() -> None:
+            await self._host._invalidate_completion_subject(task_id)
+            await self._host._commit_task_command(
+                task=task,
+                key=idempotency_key,
+                operation="attach_result",
+                event_specs=(
+                    (
+                        "result.attached",
+                        subject_type,
+                        subject_id,
+                        {"task_id": task_id, "result_id": result_id},
+                        (),
+                    ),
                 ),
-            ),
-            result_id=subject_id,
-            actor_ref=actor_ref,
-            source=source,
-        )
+                result_id=subject_id,
+                actor_ref=actor_ref,
+                source=source,
+            )
+
+        await _await_started_effect(asyncio.create_task(commit_attachment()))
         return await self._host.get_task(task_id)
 
 

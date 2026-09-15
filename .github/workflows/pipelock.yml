@@ -4,6 +4,12 @@ on:
   pull_request:
     paths:
       - ".github/workflows/pipelock.yml"
+      - "src/ai_multi_agent_platform/adapters/pipelock.py"
+      - "tests/integration/security/test_pipelock_evaluation.py"
+      - "tests/integration/security/test_pipelock_transports.py"
+      - "tests/fixtures/mcp_*server.py"
+      - "tests/integration/pipelock/**"
+      - "upstream/pipelock-core.yaml"
       - "tests/integration/security/test_pipelock_security_corpus.py"
       - "tests/fixtures/pipelock_adversarial_cases.json"
       - "tests/fixtures/pipelock_websocket_audit.yaml"
@@ -34,6 +40,221 @@ permissions:
   contents: read
 
 jobs:
+  pinned-core-platform-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out platform
+        uses: actions/checkout@v7
+      - name: Check out exact Pipelock Core candidate
+        uses: actions/checkout@v7
+        with:
+          repository: luckyPipewrench/pipelock
+          ref: f7d1816f1a5ad63d501b0c48f36066f836f59022
+          path: .candidate/pipelock
+          persist-credentials: false
+      - name: Set up Go from pinned upstream module
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: .candidate/pipelock/go.mod
+          cache-dependency-path: .candidate/pipelock/go.sum
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install platform compatibility dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install "websockets==15.0.1"
+      - name: Verify reviewed license and build boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "Apache License" .candidate/pipelock/LICENSE
+          grep -q "Elastic License 2.0" .candidate/pipelock/enterprise/LICENSE
+          grep -q '^//go:build enterprise$' .candidate/pipelock/enterprise/edition.go
+          grep -q 'go build -tags enterprise' .candidate/pipelock/Dockerfile
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          makefile = Path(".candidate/pipelock/Makefile").read_text(encoding="utf-8")
+          build = makefile.split("\nbuild:\n", 1)[1].split("\n\n", 1)[0]
+          if "-tags enterprise" in build:
+              raise SystemExit("upstream default make build unexpectedly enables Enterprise tags")
+
+          goreleaser = Path(".candidate/pipelock/.goreleaser.yaml").read_text(encoding="utf-8")
+          release_build = re.search(
+              r"(?ms)^  - id: pipelock\n(?P<body>.*?)(?=^  - id:|^archives:)",
+              goreleaser,
+          )
+          if release_build is None or not re.search(
+              r"(?m)^    tags:\n      - enterprise$", release_build.group("body")
+          ):
+              raise SystemExit("expected pinned GoReleaser pipelock build to be Enterprise-tagged")
+          PY
+      - name: Build tag-free Core candidate
+        working-directory: .candidate/pipelock
+        run: make build
+      - name: Reject Enterprise-tagged candidate binaries
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          go version -m ./pipelock | tee "$RUNNER_TEMP/pipelock-platform-compat-buildinfo.txt"
+          if grep -Eq 'tags=.*enterprise' "$RUNNER_TEMP/pipelock-platform-compat-buildinfo.txt"; then
+            echo "candidate binary contains Enterprise build tag" >&2
+            exit 1
+          fi
+      - name: Generate audit-only evaluation configuration
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pipelock-platform-compat-home"
+          HOME="$RUNNER_TEMP/pipelock-platform-compat-home" ./pipelock init \
+            --scan-home "$RUNNER_TEMP/pipelock-platform-compat-home" \
+            --output "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml" \
+            --preset audit \
+            --skip-canary
+          grep -Eq '^mode:[[:space:]]*audit$' "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml"
+          grep -Eq '^enforce:[[:space:]]*false$' "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml"
+          grep -Eq '^flight_recorder:' "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml"
+          grep -Eq '^[[:space:]]+redact:[[:space:]]*true$' "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml"
+          sha256sum ./pipelock "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml" \
+            > "$RUNNER_TEMP/pipelock-platform-compat-sha256.txt"
+      - name: Exercise platform MCP stdio through pinned Pipelock
+        env:
+          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
+        run: |
+          pytest -q tests/integration/security/test_pipelock_evaluation.py \
+            -k pipelock_mcp_stdio_wraps_canonical_invocation_path \
+            --junitxml="$RUNNER_TEMP/pipelock-platform-mcp-stdio-junit.xml"
+      - name: Exercise platform MCP HTTP and WebSocket upstreams through pinned Pipelock
+        env:
+          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
+        run: |
+          pytest -q tests/integration/security/test_pipelock_transports.py \
+            --junitxml="$RUNNER_TEMP/pipelock-platform-mcp-remote-junit.xml"
+      - name: Exercise retained adversarial Pipelock integration cases
+        env:
+          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
+        run: |
+          pytest -q tests/integration/pipelock/test_adversarial_security.py \
+            --junitxml="$RUNNER_TEMP/pipelock-platform-adversarial-junit.xml"
+      - name: Exercise audit-only HTTP fetch path
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOME="$RUNNER_TEMP/pipelock-platform-compat-home" ./pipelock run \
+            --config "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml" \
+            > "$RUNNER_TEMP/pipelock-platform-audit.log" 2>&1 &
+          pipelock_pid=$!
+          trap 'kill "$pipelock_pid" 2>/dev/null || true' EXIT
+
+          success=0
+          for _ in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 20 \
+              --get --data-urlencode 'url=https://example.com/' \
+              --output "$RUNNER_TEMP/pipelock-platform-fetch-output.txt" \
+              --write-out '%{time_total}\n' \
+              http://127.0.0.1:8888/fetch \
+              > "$RUNNER_TEMP/pipelock-platform-fetch-latency-seconds.txt"; then
+              success=1
+              break
+            fi
+            sleep 1
+          done
+          test "$success" -eq 1
+          test -s "$RUNNER_TEMP/pipelock-platform-fetch-output.txt"
+      - name: Exercise HTTP forward and HTTPS CONNECT paths
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml" "$RUNNER_TEMP/pipelock-platform-forward.yaml"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          path = Path(os.environ["RUNNER_TEMP"]) / "pipelock-platform-forward.yaml"
+          lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+          in_forward = False
+          changed = False
+          for index, line in enumerate(lines):
+              if line.startswith("forward_proxy:"):
+                  in_forward = True
+                  continue
+              if in_forward and line.strip() and not line.startswith((" ", "\t", "#")):
+                  break
+              if in_forward and re.match(r"^[ \t]+enabled:[ \t]*(?:true|false)[ \t]*$", line.rstrip("\n")):
+                  indent = line[: len(line) - len(line.lstrip())]
+                  lines[index] = f"{indent}enabled: true\n"
+                  changed = True
+                  break
+          if not changed:
+              raise SystemExit("generated audit config has no forward_proxy.enabled field")
+          path.write_text("".join(lines), encoding="utf-8")
+          PY
+          grep -A4 '^forward_proxy:' "$RUNNER_TEMP/pipelock-platform-forward.yaml" \
+            | grep -Eq '^[[:space:]]+enabled:[[:space:]]*true$'
+          sha256sum "$RUNNER_TEMP/pipelock-platform-forward.yaml" \
+            > "$RUNNER_TEMP/pipelock-platform-forward-config-sha256.txt"
+
+          HOME="$RUNNER_TEMP/pipelock-platform-compat-home" ./pipelock run \
+            --config "$RUNNER_TEMP/pipelock-platform-forward.yaml" \
+            > "$RUNNER_TEMP/pipelock-platform-forward-connect.log" 2>&1 &
+          pipelock_pid=$!
+          trap 'kill "$pipelock_pid" 2>/dev/null || true' EXIT
+
+          success=0
+          for _ in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 20 \
+              --proxy http://127.0.0.1:8888 --noproxy "" \
+              --output "$RUNNER_TEMP/pipelock-platform-forward-output.txt" \
+              --write-out '%{time_total}\n' \
+              http://example.com/ \
+              > "$RUNNER_TEMP/pipelock-platform-forward-latency-seconds.txt"; then
+              success=1
+              break
+            fi
+            sleep 1
+          done
+          test "$success" -eq 1
+          test -s "$RUNNER_TEMP/pipelock-platform-forward-output.txt"
+
+          curl --fail --silent --show-error --max-time 20 \
+            --proxy http://127.0.0.1:8888 --noproxy "" \
+            --output "$RUNNER_TEMP/pipelock-platform-connect-output.txt" \
+            --write-out '%{time_total}\n' \
+            https://example.com/ \
+            > "$RUNNER_TEMP/pipelock-platform-connect-latency-seconds.txt"
+          test -s "$RUNNER_TEMP/pipelock-platform-connect-output.txt"
+      - name: Upload pinned platform compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pipelock-platform-compatibility-evidence
+          path: |
+            ${{ runner.temp }}/pipelock-platform-compat-buildinfo.txt
+            ${{ runner.temp }}/pipelock-platform-compat-sha256.txt
+            ${{ runner.temp }}/pipelock-platform-mcp-stdio-junit.xml
+            ${{ runner.temp }}/pipelock-platform-mcp-remote-junit.xml
+            ${{ runner.temp }}/pipelock-platform-adversarial-junit.xml
+            ${{ runner.temp }}/pipelock-platform-fetch-latency-seconds.txt
+            ${{ runner.temp }}/pipelock-platform-forward-latency-seconds.txt
+            ${{ runner.temp }}/pipelock-platform-connect-latency-seconds.txt
+            ${{ runner.temp }}/pipelock-platform-forward-config-sha256.txt
+            ${{ runner.temp }}/pipelock-platform-audit.log
+            ${{ runner.temp }}/pipelock-platform-forward-connect.log
+          if-no-files-found: error
+
   pinned-core-adversarial-corpus:
     runs-on: ubuntu-latest
     steps:

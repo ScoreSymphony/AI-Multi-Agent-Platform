@@ -182,24 +182,35 @@ class ControlPlane(_BaseControlPlane):
 
         created: list[Notification] = []
         retry_required = False
-        for budget in await accounting.list_budgets():
-            level = await accounting.get_threshold_level(budget.id)
-            if level is None:
-                continue
-            if budget.owner_type is None or budget.owner_id is None:
-                continue
+        for listed_budget in await accounting.list_budgets():
             try:
-                state = await accounting.budget_state(budget.id)
-                if state.level != level:
+                state = await accounting.budget_state(listed_budget.id)
+                budget = state.budget
+                level = state.level
+                if level is None:
+                    continue
+                if budget.owner_type is None or budget.owner_id is None:
                     continue
                 generation = await accounting.get_threshold_generation(budget.id)
                 if generation < 1:
+                    continue
+                # Re-read after the separate generation lookup. If the durable budget changed
+                # while recovery was awaiting I/O, defer this item to a later recovery pass rather
+                # than combining recipient/scope fields from one revision with another revision's
+                # threshold state.
+                confirmed = await accounting.budget_state(budget.id)
+                if confirmed.budget != budget or confirmed.level != level:
+                    retry_required = True
+                    continue
+                budget = confirmed.budget
+                if budget.owner_type is None or budget.owner_id is None:
+                    retry_required = True
                     continue
                 recipient = RecipientRef(RecipientType(budget.owner_type), budget.owner_id)
                 event = BudgetThresholdEvent(
                     budget_id=budget.id,
                     level=level,
-                    consumed=state.consumed,
+                    consumed=confirmed.consumed,
                     limit=budget.limit,
                     metric_type=budget.metric_type,
                     unit=budget.unit,

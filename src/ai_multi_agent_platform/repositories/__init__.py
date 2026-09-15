@@ -6,6 +6,7 @@ from .async_catalog import (
     RepositoryBindingCatalog,
 )
 from .async_provenance import (
+    ASYNC_REPOSITORY_PROVENANCE_BACKEND_MARKER,
     AsyncRepositoryProvenanceAdapter,
     AsyncRepositoryProvenanceGetAdapter,
     AsyncRepositoryProvenanceGetReader,
@@ -82,6 +83,7 @@ from .service import (
 from .workspace import RepositoryWorkspaceSourceResolver
 
 __all__ = [
+    "ASYNC_REPOSITORY_PROVENANCE_BACKEND_MARKER",
     "AsyncRepositoryProvenanceAdapter",
     "AsyncRepositoryProvenanceGetAdapter",
     "AsyncRepositoryProvenanceGetReader",

@@ -1,10 +1,10 @@
-name: Test layout policy
+name: Repository quality
 
 on:
   pull_request:
   push:
     branches:
-      - main
+      - ci/consolidate-actions-workflows
 
 permissions:
   contents: read

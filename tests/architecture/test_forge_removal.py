@@ -25,8 +25,17 @@ def test_forge_executable_surface_is_absent() -> None:
 
 def test_forge_has_no_active_ci_or_external_conformance_lane() -> None:
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    guard = (ROOT / ".github/workflows/forge-removal-guard.yml").read_text(encoding="utf-8")
+    workflows = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / ".github/workflows").glob("*.yml"))
+    )
     external = (ROOT / "scripts/ci/issue46_external_profile.py").read_text(encoding="utf-8")
+
+    assert "forge-sidecar-integration" not in workflows
+    assert "FORGE_SIDECAR_" not in workflows
+    assert "ScoreSymphony/AI-Agent-VPS" not in workflows
+    assert ".upstream/forge" not in workflows
+    assert "FORGE_EXECUTOR_" not in workflows
 
     assert "forge-sidecar-integration" not in ci
     assert "FORGE_SIDECAR_" not in ci
@@ -34,18 +43,6 @@ def test_forge_has_no_active_ci_or_external_conformance_lane() -> None:
     assert "executor-sidecar" not in ci
     assert "FORGE_SIDECAR_" not in external
     assert "def _forge" not in external
-
-    # main still requires the historical check context. The dedicated guard may
-    # preserve that name and refer to retired tokens in negative grep assertions,
-    # but it must never recreate a Forge runtime/sidecar lane.
-    assert "forge-sidecar-integration" in guard
-    assert ".upstream/forge" not in guard
-    assert "FORGE_EXECUTOR_" not in guard
-    assert "cargo build" not in guard
-    assert "http://127.0.0.1:8787" not in guard
-    assert '! grep -Fq "ScoreSymphony/AI-Agent-VPS" .github/workflows/ci.yml' in guard
-    assert '! grep -Fq "FORGE_SIDECAR_" .github/workflows/ci.yml' in guard
-    assert '! grep -Fq "executor-sidecar" .github/workflows/ci.yml' in guard
 
 
 def test_forge_is_not_a_first_party_or_release_compatibility_claim() -> None:

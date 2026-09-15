@@ -337,6 +337,33 @@ class SqliteGovernanceRepository(GovernanceRepository):
     def reserve_conversion(self, conversion: TaskConversion) -> TaskConversion:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            specification_row = connection.execute(
+                "SELECT revision, digest FROM governance_specifications WHERE specification_id = ?",
+                (conversion.specification_id,),
+            ).fetchone()
+            if specification_row is None:
+                raise ContractError(ErrorCode.NOT_FOUND, "specification was not found")
+            actual_revision = int(specification_row["revision"])
+            if actual_revision != conversion.specification_revision:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "specification revision conflict",
+                    details={
+                        "expected_revision": conversion.specification_revision,
+                        "actual_revision": actual_revision,
+                    },
+                )
+            actual_digest = str(specification_row["digest"])
+            if actual_digest != conversion.specification_digest:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "specification digest conflict",
+                    details={
+                        "expected_digest": conversion.specification_digest,
+                        "actual_digest": actual_digest,
+                    },
+                )
+
             row = connection.execute(
                 "SELECT * FROM governance_conversions WHERE specification_id = ?",
                 (conversion.specification_id,),
