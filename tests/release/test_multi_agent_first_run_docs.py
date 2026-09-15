@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 README = ROOT / "README.md"
 FIRST_RUN = ROOT / "docs" / "product" / "MULTI_AGENT_FIRST_RUN.md"
