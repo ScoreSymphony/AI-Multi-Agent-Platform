@@ -8,6 +8,7 @@ import ast
 import hashlib
 import json
 import tomllib
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -395,13 +396,22 @@ def _active_extreme(entry: Mapping[str, Any]) -> bool:
     return bool(entry["extreme"]) and entry.get("exemption") is None
 
 
-def _active_extreme_fingerprints(entries: Iterable[Mapping[str, Any]]) -> set[str]:
-    return {
-        fingerprint
-        for entry in entries
-        if _active_extreme(entry)
-        if isinstance((fingerprint := entry.get("fingerprint")), str)
-    }
+def _active_extreme_fingerprint_counts(entries: Iterable[Mapping[str, Any]]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for entry in entries:
+        if not _active_extreme(entry):
+            continue
+        fingerprint = entry.get("fingerprint")
+        if isinstance(fingerprint, str):
+            counts[fingerprint] += 1
+    return counts
+
+
+def _consume_fingerprint(counts: Counter[str], fingerprint: object) -> bool:
+    if not isinstance(fingerprint, str) or counts[fingerprint] <= 0:
+        return False
+    counts[fingerprint] -= 1
+    return True
 
 
 def compare_inventories(
@@ -409,7 +419,7 @@ def compare_inventories(
     current: Mapping[str, Any],
 ) -> list[str]:
     baseline_modules = {module["path"]: module for module in baseline["modules"]}
-    baseline_module_fingerprints = _active_extreme_fingerprints(baseline["modules"])
+    baseline_module_fingerprints = _active_extreme_fingerprint_counts(baseline["modules"])
     regressions: list[str] = []
 
     for module in current["modules"]:
@@ -417,8 +427,9 @@ def compare_inventories(
             continue
         previous = baseline_modules.get(module["path"])
         if previous is not None and _active_extreme(previous):
+            _consume_fingerprint(baseline_module_fingerprints, previous.get("fingerprint"))
             continue
-        if module.get("fingerprint") in baseline_module_fingerprints:
+        if _consume_fingerprint(baseline_module_fingerprints, module.get("fingerprint")):
             continue
         regressions.append(
             f"module {module['path']} is a newly introduced extreme ({module['lines']} lines)"
@@ -427,7 +438,7 @@ def compare_inventories(
     baseline_functions = {
         (path, function["qualname"]): function for path, function in _all_functions(baseline)
     }
-    baseline_function_fingerprints = _active_extreme_fingerprints(
+    baseline_function_fingerprints = _active_extreme_fingerprint_counts(
         function for _, function in _all_functions(baseline)
     )
     for path, function in _all_functions(current):
@@ -435,8 +446,9 @@ def compare_inventories(
             continue
         previous = baseline_functions.get((path, function["qualname"]))
         if previous is not None and _active_extreme(previous):
+            _consume_fingerprint(baseline_function_fingerprints, previous.get("fingerprint"))
             continue
-        if function.get("fingerprint") in baseline_function_fingerprints:
+        if _consume_fingerprint(baseline_function_fingerprints, function.get("fingerprint")):
             continue
         regressions.append(
             f"function {path}:{function['qualname']} is a newly introduced extreme "
