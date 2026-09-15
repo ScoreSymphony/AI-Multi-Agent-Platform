@@ -65,7 +65,8 @@ jobs:
               'M1 - Architecture Foundation': 'stage: foundation',
               'M2 - Usable Single-Node Prototype': 'stage: prototype',
               'M3 - Operational v1': 'stage: v1',
-              'M4 - Distributed & Ecosystem': 'stage: optional',
+              'M4 - Real-World Validation & Multi-Node Operations': 'stage: optional',
+              'R&D - Platform Hardening & Applied Research': 'stage: optional',
             };
 
             function escapeRegExp(value) {
