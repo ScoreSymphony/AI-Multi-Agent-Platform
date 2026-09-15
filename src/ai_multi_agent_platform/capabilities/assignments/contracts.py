@@ -13,7 +13,7 @@ from .models import CapabilityAssignmentTarget
 
 
 class CapabilityInventory(Protocol):
-    """Narrow #12 registry seam used for canonical reference validation."""
+    """Narrow capability-registry seam used for canonical reference validation."""
 
     def inventory_capabilities(
         self,
