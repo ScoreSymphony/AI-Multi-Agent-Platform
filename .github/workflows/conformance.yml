@@ -19,7 +19,7 @@ on:
       - "src/ai_multi_agent_platform/workspaces/**"
       - "tests/integration/application_distribution/**"
       - "tests/contract/application_distribution/**"
-      - "scripts/ci/issue749_remote_application_build_acceptance.py"
+      - "scripts/ci/remote_application_build_acceptance.py"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
@@ -262,7 +262,7 @@ jobs:
           path: acceptance-persistence.json
           if-no-files-found: warn
 
-  issue749-acceptance:
+  remote-application-build-acceptance:
     if: >-
       github.event_name == 'pull_request' ||
       github.event_name == 'schedule' ||
@@ -279,4 +279,4 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
       - name: Run complete remote application build acceptance matrix
-        run: python scripts/ci/issue749_remote_application_build_acceptance.py
+        run: python scripts/ci/remote_application_build_acceptance.py

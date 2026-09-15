@@ -1,4 +1,4 @@
-"""Focused acceptance gate for issue #749 remote application builds."""
+"""Run the focused acceptance gate for remote application builds."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ PYTEST_TARGETS = (
 
 
 def main() -> int:
-    """Run the complete maintained #749 acceptance matrix as one explicit gate."""
+    """Run the complete maintained remote-build acceptance matrix."""
 
     command = [sys.executable, "-m", "pytest", "-q", *PYTEST_TARGETS]
     return subprocess.call(command)

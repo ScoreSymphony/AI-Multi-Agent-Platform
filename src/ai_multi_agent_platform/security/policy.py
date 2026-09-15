@@ -1,8 +1,10 @@
 """Compatibility helper for simple secure-default decisions.
 
-Issue #15's canonical policy engine is ``LocalAuthorizationProvider`` plus
-``AuthorizationGate``. This helper remains for older narrow call sites that only need
-an explicit allow/approval boolean without a provider round-trip.
+The canonical policy engine is ``LocalAuthorizationProvider`` plus ``AuthorizationGate``.
+This helper remains for older narrow call sites that only need an explicit allow/approval
+boolean without a provider round-trip.
+
+Historical context: issue #15 introduced the canonical authorization policy boundary.
 """
 
 from __future__ import annotations
