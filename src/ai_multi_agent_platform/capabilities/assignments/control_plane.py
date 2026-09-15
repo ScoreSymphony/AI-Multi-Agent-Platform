@@ -30,7 +30,7 @@ CAPABILITY_ASSIGNMENT_COMMANDS = (
 
 
 class CapabilityAssignmentResourceService:
-    """Authorized northbound projection over the #366 owning service."""
+    """Authorized northbound projection over the canonical assignment service."""
 
     search_indexable = False
 
@@ -130,7 +130,7 @@ def register_capability_assignment_resource_control_plane(
     control_plane: ControlPlane,
     service: CapabilityAssignmentService,
 ) -> None:
-    """Expose #366 reads and safe revision mutations through canonical APIs."""
+    """Expose assignment reads and safe revision mutations through canonical APIs."""
 
     if CAPABILITY_ASSIGNMENT_COLLECTION not in control_plane.registered_collections:
         control_plane.register_resource_service(
