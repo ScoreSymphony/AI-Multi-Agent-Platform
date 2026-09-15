@@ -41,6 +41,7 @@ from .notifications_composition import (
     NOTIFICATION_COLLECTION,
     _recipient_from_context,
 )
+from .stream_preparation import prepare_stream_request
 
 
 class ControlPlane(_BaseControlPlane):
@@ -202,7 +203,8 @@ class ControlPlaneASGI:
         correlation_id = headers.get("x-correlation-id") or request_id
         started = False
         try:
-            prepared = self._http.prepare_stream_request(
+            prepared = await prepare_stream_request(
+                self._http,
                 HTTPRequest(
                     method="GET",
                     path=path,

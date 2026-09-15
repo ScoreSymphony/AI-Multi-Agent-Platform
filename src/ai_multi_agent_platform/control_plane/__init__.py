@@ -5,6 +5,7 @@ from .approval_decision_composition import (
     APPROVAL_DECISION_COMMANDS,
     APPROVAL_DENY_COMMAND,
 )
+from .async_authentication import AuthenticatedControlPlaneHTTP
 from .async_scope import AsyncScopeStore, AsyncScopeStoreAdapter, ScopePersistenceOffload
 from .automation_api import (
     AUTOMATION_COLLECTION,
@@ -90,7 +91,6 @@ from .plugin_api import (
 )
 from .release_api import (
     RELEASE_STATUS_PATH,
-    AuthenticatedControlPlaneHTTP,
     ControlPlane,
     ControlPlaneASGI,
     ControlPlaneHTTP,
@@ -174,9 +174,9 @@ __all__ = [
     "OrganizationAuditLog",
     "PLATFORM_COLLECTIONS",
     "PLUGIN_CANDIDATE_COLLECTION",
-    "PLUGIN_COLLECTION",
     "PLUGIN_COLLECTIONS",
     "PLUGIN_COMMANDS",
+    "PLUGIN_COLLECTION",
     "PageQuery",
     "PluginPermissionResolver",
     "RELEASE_STATUS_PATH",

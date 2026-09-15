@@ -30,6 +30,7 @@ from .http import (
     _send_sse_error,
 )
 from .models import API_VERSION, APIException, RequestContext, api_exception_from_contract
+from .stream_preparation import prepare_stream_request
 
 CONVERSATION_EVENT_STREAM_SUFFIX = ("events", "stream")
 _CURSOR_VERSION = 1
@@ -266,7 +267,8 @@ class ConversationEventASGI:
             stream_headers = dict(headers)
             stream_headers["x-request-id"] = request_id
             stream_headers["x-correlation-id"] = correlation_id
-            prepared = self._http.prepare_stream_request(
+            prepared = await prepare_stream_request(
+                self._http,
                 HTTPRequest(method="GET", path=path, headers=stream_headers, query=query),
                 request_id=request_id,
                 correlation_id=correlation_id,
