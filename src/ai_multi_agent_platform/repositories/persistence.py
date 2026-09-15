@@ -90,7 +90,9 @@ class SqliteRepositoryProvenanceStore(RepositoryProvenanceStore):
                     ),
                 )
         except sqlite3.Error as exc:
-            raise _sqlite_contract_error(exc, "failed to persist repository Run provenance") from exc
+            raise _sqlite_contract_error(
+                exc, "failed to persist repository Run provenance"
+            ) from exc
 
     def upsert(self, provenance: RepositoryRunProvenance) -> None:
         """Replace one Run/repository/input record as output evidence becomes available."""
