@@ -1,0 +1,64 @@
+version = 1
+enforce = true
+
+# Baseline captured for #895 from the repository-wide AST dependency audit.
+# The initial enforced probe found 62 top-level packages, 434 directed import
+# edges and one strongly connected component spanning 47 packages.
+#
+# Before freezing the baseline, the remaining internal Control Plane import of
+# the task_reassignment compatibility namespace was moved to its canonical
+# task_management.reassignment owner. The compatibility package is therefore
+# intentionally excluded from the allowed SCC below.
+#
+# A detected SCC may shrink or split, but it must never grow beyond this
+# explicitly reviewed package set. New SCCs outside this set are rejected.
+
+[[cycle]]
+packages = [
+  "accounting",
+  "agents",
+  "application_distribution",
+  "automation",
+  "backup",
+  "capabilities",
+  "capability_assignments",
+  "coding_batches",
+  "configuration",
+  "connectors",
+  "context",
+  "control_plane",
+  "conversations",
+  "coordination",
+  "data",
+  "decisions",
+  "deployment",
+  "distributed",
+  "evaluation",
+  "goals",
+  "governance",
+  "handoffs",
+  "high_availability",
+  "kernel",
+  "learning",
+  "models",
+  "notifications",
+  "observability",
+  "onboarding",
+  "organizations",
+  "planning",
+  "plugins",
+  "portability",
+  "release",
+  "repositories",
+  "repository_intelligence",
+  "research",
+  "security",
+  "skills",
+  "task_management",
+  "templates",
+  "terminal",
+  "upgrade",
+  "verification",
+  "workflows",
+  "workspaces",
+]

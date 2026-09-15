@@ -1,29 +1,29 @@
-"""Compatibility surface for capability assignments.
+"""Canonical reusable capability-assignment policy resources."""
 
-Canonical implementation lives in :mod:`ai_multi_agent_platform.capabilities.assignments`.
-Remove this namespace only after the repository's public-import deprecation policy permits it.
-"""
-
-from ai_multi_agent_platform.capabilities.assignments import (
-    CAPABILITY_ASSIGNMENT_SCHEMA_VERSION,
-    CallableCapabilityAssignmentTargetResolver,
+from .contracts import (
     CapabilityAssignmentAccessContext,
     CapabilityAssignmentAuthorizationGate,
+    CapabilityAssignmentTargetResolver,
+    CapabilityInventory,
+    ResolvedCapabilityAssignmentTarget,
+)
+from .models import (
+    CAPABILITY_ASSIGNMENT_SCHEMA_VERSION,
     CapabilityAssignmentContent,
     CapabilityAssignmentPolicy,
     CapabilityAssignmentProvenance,
-    CapabilityAssignmentRepository,
     CapabilityAssignmentRevision,
     CapabilityAssignmentRule,
-    CapabilityAssignmentService,
     CapabilityAssignmentTarget,
-    CapabilityAssignmentTargetResolver,
     CapabilityAssignmentTargetType,
-    CapabilityInventory,
-    InMemoryCapabilityAssignmentRepository,
-    JsonCapabilityAssignmentRepository,
-    ResolvedCapabilityAssignmentTarget,
 )
+from .persistence import JsonCapabilityAssignmentRepository
+from .repository import (
+    CapabilityAssignmentRepository,
+    InMemoryCapabilityAssignmentRepository,
+)
+from .service import CapabilityAssignmentService
+from .target_resolver import CallableCapabilityAssignmentTargetResolver
 
 __all__ = [
     "CAPABILITY_ASSIGNMENT_SCHEMA_VERSION",
