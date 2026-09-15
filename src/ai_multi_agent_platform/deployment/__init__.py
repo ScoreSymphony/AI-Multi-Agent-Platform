@@ -63,6 +63,7 @@ from .startup_recovery import (
     reconcile_single_node_startup,
     require_blocked_startup_run,
 )
+from .task_budget_bindings import TaskBudgetRepairRuntime
 
 
 @dataclass(slots=True)
@@ -145,6 +146,13 @@ def build_single_node_deployment(
     reviewer_executor = getattr(base.automatic_reviewer, "_executor", None)
     if reviewer_executor is not None and hasattr(reviewer_executor, "_models"):
         reviewer_executor._models = base.model_runtime  # noqa: SLF001
+
+    repair_runtime = getattr(base.automatic_reviewer, "_repair_runtime", None)
+    if repair_runtime is not None:
+        base.automatic_reviewer._repair_runtime = TaskBudgetRepairRuntime(  # noqa: SLF001
+            repair_runtime,
+            task_budgets,
+        )
 
     base_values: dict[str, Any] = {
         field.name: getattr(base, field.name) for field in fields(DurableSingleNodeDeployment)
