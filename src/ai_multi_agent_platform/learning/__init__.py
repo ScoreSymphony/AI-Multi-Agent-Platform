@@ -10,7 +10,7 @@ from .control_plane import (
     register_learning_control_plane,
 )
 from .governance import GovernedObservedLearningService, LearningPlatformPolicy
-from .governed_learning_workflow import LearningQualityGate, LearningService
+from .governed_learning_workflow import LearningService
 from .models import (
     LEARNING_SCHEMA_VERSION,
     FeedbackRecord,
@@ -38,6 +38,7 @@ from .promotion import (
     RoutingProfilePromotionAdapter,
     SkillPromotionAdapter,
 )
+from .quality_gate import LearningQualityGate
 from .repository import InMemoryLearningRepository, LearningRepository, SQLiteLearningRepository
 from .runtime import (
     EvaluationPostPromotionEvaluator,
