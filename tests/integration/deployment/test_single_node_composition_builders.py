@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from ai_multi_agent_platform.deployment.composition import (
+    LifecycleBinding,
     build_control_plane,
     build_evaluation,
     build_execution,
@@ -92,6 +95,11 @@ def test_major_builders_compose_from_explicit_dependencies(tmp_path: Path) -> No
     assert verification.completion_authority is not None
     assert control_plane.control_plane is not None
     assert http.app is not None
+
+
+def test_missing_required_lifecycle_dependency_fails_clearly() -> None:
+    with pytest.raises(ValueError, match="lifecycle delegate is required"):
+        LifecycleBinding(None)  # type: ignore[arg-type]
 
 
 def test_optional_adapters_are_not_required_for_reference_composition(tmp_path: Path) -> None:
