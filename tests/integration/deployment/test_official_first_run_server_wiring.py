@@ -18,4 +18,7 @@ def test_platform_server_advertises_official_multi_agent_first_run(tmp_path: Pat
         SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
     )
 
-    assert ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND in deployment.control_plane.registered_commands
+    assert (
+        ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND
+        in deployment.control_plane.registered_commands
+    )
