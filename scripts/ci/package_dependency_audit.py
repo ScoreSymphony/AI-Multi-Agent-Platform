@@ -125,9 +125,14 @@ def cyclic_components(graph: dict[str, tuple[str, ...]]) -> tuple[tuple[str, ...
     return tuple(component for component in strongly_connected_components(graph) if len(component) > 1)
 
 
-def _baseline_cycles(path: Path) -> tuple[frozenset[str], ...]:
+def _baseline(path: Path) -> tuple[bool, tuple[frozenset[str], ...]]:
     with path.open("rb") as handle:
         data = tomllib.load(handle)
+
+    enforce = data.get("enforce", True)
+    if not isinstance(enforce, bool):
+        raise ValueError("dependency-cycle baseline enforce must be a boolean")
+
     entries = data.get("cycle", [])
     if not isinstance(entries, list):
         raise ValueError("dependency-cycle baseline must define [[cycle]] entries")
@@ -140,7 +145,7 @@ def _baseline_cycles(path: Path) -> tuple[frozenset[str], ...]:
         ):
             raise ValueError("each dependency-cycle baseline entry needs non-empty packages")
         cycles.append(frozenset(packages))
-    return tuple(cycles)
+    return enforce, tuple(cycles)
 
 
 def _unexpected_cycles(
@@ -188,7 +193,11 @@ def main() -> int:
     if args.baseline is None:
         return 0
 
-    baseline = _baseline_cycles(args.baseline)
+    enforce, baseline = _baseline(args.baseline)
+    if not enforce:
+        print("cycle_baseline_enforcement=disabled")
+        return 0
+
     unexpected = _unexpected_cycles(cyclic_components(graph), baseline)
     if not unexpected:
         return 0
