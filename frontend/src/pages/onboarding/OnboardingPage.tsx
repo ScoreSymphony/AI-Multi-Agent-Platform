@@ -4,12 +4,13 @@ import { ControlPlaneClient } from "../../api/client";
 import {
   OnboardingClient,
   type FirstRunTaskResult,
+  type MultiAgentFirstRunResult,
   type OnboardingStatus,
 } from "../../api/onboarding";
 import type { APImanifest, CanonicalModel } from "../../api/types";
 import { Card, ErrorState, LoadingState } from "../../components/States";
 import { ComponentSetupPanel } from "./ComponentSetupPanel";
-import { FirstResult, Guidance, Metric, OnboardingStateSummary } from "./presentation";
+import { FirstResult, Guidance, Metric, MultiAgentFirstResult, OnboardingStateSummary } from "./presentation";
 import {
   buildConfigureModelInput,
   buildFirstRunTaskInput,
@@ -36,6 +37,7 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
   const [actionError, setActionError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [multiAgentResult, setMultiAgentResult] = useState<MultiAgentFirstRunResult | null>(null);
   const [firstResult, setFirstResult] = useState<FirstRunTaskResult | null>(null);
 
   const load = useCallback(async () => {
@@ -125,6 +127,31 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
     await perform("refresh-provider", async () => { await client.refreshModelProviderHealth(requiredText(form, "provider_id")); }, "Provider health revalidated through the canonical ModelProvider API.");
   };
 
+  const runMultiAgent = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy("run-multi-agent");
+    setActionError(null);
+    setNotice(null);
+    try {
+      const title = optionalText(form, "title");
+      const workspaceId = optionalText(form, "workspace_id");
+      const workspace = workspaceId ? await client.getWorkspace(workspaceId) : null;
+      const result = await onboarding.runMultiAgentGoldenPath({
+        objective: requiredText(form, "objective"),
+        ...(title ? { title } : {}),
+        ...(workspace ? { project_id: workspace.project_id, workspace_id: workspace.id } : {}),
+      });
+      setMultiAgentResult(result);
+      setNotice("The official multi-agent first run completed. Plan, Agents, Results, Artifacts and Verification are shown below.");
+      await load();
+    } catch (error) {
+      setActionError(error);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const runFirstTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -134,7 +161,7 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
     try {
       const result = await onboarding.runFirstTask(buildFirstRunTaskInput(form, status));
       setFirstResult(result);
-      setNotice("The first canonical Task completed and produced a Result.");
+      setNotice("The optional single-Agent Task completed and produced a Result.");
       await load();
     } catch (error) {
       setActionError(error);
@@ -147,7 +174,7 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
     <div className="stack">
       <header className="page-header">
         <p className="eyebrow">First run</p><h1>Guided onboarding</h1>
-        <p>This journey uses the same canonical Control Plane resources and commands as the CLI. It never contacts a model backend directly and never selects a remote or paid provider implicitly.</p>
+        <p>The supported first-run experience is a real multi-agent goal over the canonical Control Plane. It never selects a remote or paid provider implicitly.</p>
       </header>
       {actionError ? <ErrorState error={actionError} /> : null}
       {loadError ? <ErrorState error={loadError} onRetry={() => void load()} /> : null}
@@ -164,7 +191,7 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
         <Metric label="Usable local/self-hosted models" value={status.usable_golden_path_model_count} />
         <Metric label="Projects" value={status.project_count} />
         <Metric label="Workspaces" value={status.workspace_count} />
-        <Metric label="Executable assistants" value={status.executable_general_assistant_count} />
+        <Metric label="Optional assistants" value={status.executable_general_assistant_count} />
       </div>
 
       <OnboardingSteps
@@ -176,6 +203,7 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
         configureAvailable={commandAvailable(manifest, "onboarding.configure-model")}
         bootstrapAvailable={commandAvailable(manifest, "standard-agent.bootstrap")}
         cloneAvailable={commandAvailable(manifest, "standard-agent.clone")}
+        multiAgentAvailable={commandAvailable(manifest, "onboarding.run-multi-agent-golden-path")}
         firstTaskAvailable={commandAvailable(manifest, "onboarding.run-first-task")}
         projectAvailable={manifest?.resources.includes("projects") ?? false}
         workspaceAvailable={manifest?.resources.includes("workspaces") ?? false}
@@ -186,15 +214,18 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
         onCreateWorkspace={(event) => void createWorkspace(event)}
         onBootstrap={() => void bootstrap()}
         onCloneGeneralAssistant={(event) => void cloneGeneralAssistant(event)}
+        onRunMultiAgent={(event) => void runMultiAgent(event)}
         onRunFirstTask={(event) => void runFirstTask(event)}
       />
 
+      {multiAgentResult ? <MultiAgentFirstResult result={multiAgentResult} /> : null}
       {firstResult ? <FirstResult result={firstResult} /> : null}
 
       <Card title="Safety and provider policy">
         <ul>
           <li>Local and self-hosted model configurations are distinct from remote configurations.</li>
           <li>Remote/paid provider auto-selection: <strong>{String(status.automatic_paid_provider_selection)}</strong>.</li>
+          <li>Hermes, Forge and LiteLLM are not required by the official first-run workflow.</li>
           <li>Secret values are never entered here; credential-bearing endpoints use only canonical SecretReference metadata.</li>
           <li>All mutations pass through BrowserSession CSRF handling and Control Plane idempotency keys.</li>
         </ul>
