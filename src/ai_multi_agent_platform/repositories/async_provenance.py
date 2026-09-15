@@ -258,6 +258,8 @@ def _method_is_async(value: object, name: str) -> bool:
     method = getattr(value, name, None)
     if inspect.iscoroutinefunction(method):
         return True
+    if not callable(method):
+        return False
     try:
         unwrapped = inspect.unwrap(method)
     except (TypeError, ValueError):
