@@ -8,10 +8,10 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Protocol, TypeVar
-from weakref import WeakKeyDictionary
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.persistence_offload import SharedPersistenceOffloadRegistry
 
 from .models import (
     AggregationMode,
@@ -138,23 +138,7 @@ class AccountingPersistenceOffload:
             self._capacity.release()
 
 
-_SHARED_ACCOUNTING_OFFLOADS: WeakKeyDictionary[object, AccountingPersistenceOffload] = (
-    WeakKeyDictionary()
-)
-_SHARED_ACCOUNTING_OFFLOADS_LOCK = threading.Lock()
-
-
-def _accounting_offload(
-    store: UsageStore,
-    requested: AccountingPersistenceOffload | None,
-) -> AccountingPersistenceOffload:
-    with _SHARED_ACCOUNTING_OFFLOADS_LOCK:
-        existing = _SHARED_ACCOUNTING_OFFLOADS.get(store)
-        if existing is not None:
-            return existing
-        resolved = requested or AccountingPersistenceOffload()
-        _SHARED_ACCOUNTING_OFFLOADS[store] = resolved
-        return resolved
+_SHARED_ACCOUNTING_OFFLOADS = SharedPersistenceOffloadRegistry[AccountingPersistenceOffload]()
 
 
 async def _await_persistence_boundary[T](worker: asyncio.Future[T]) -> T:
@@ -199,7 +183,12 @@ class AsyncAccountingServiceAdapter:
         offload: AccountingPersistenceOffload | None = None,
     ) -> None:
         self._accounting = accounting
-        self._offload = _accounting_offload(accounting.store, offload)
+        self._offload = _SHARED_ACCOUNTING_OFFLOADS.resolve(
+            accounting.store,
+            owner=self,
+            requested=offload,
+            factory=AccountingPersistenceOffload,
+        )
 
     @property
     def offload(self) -> AccountingPersistenceOffload:
