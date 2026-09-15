@@ -22,6 +22,7 @@ _BUSY_MARKERS = (
     "database schema is locked",
     "database is busy",
 )
+_ASYNC_BACKEND_MARKER = "__ai_multi_agent_async_repository_provenance__"
 
 
 class RepositoryProvenanceGetReader(Protocol):
@@ -252,7 +253,16 @@ def is_async_repository_provenance_store(
 
 
 def _method_is_async(value: object, name: str) -> bool:
-    return inspect.iscoroutinefunction(getattr(value, name, None))
+    if bool(getattr(value, _ASYNC_BACKEND_MARKER, False)):
+        return True
+    method = getattr(value, name, None)
+    if inspect.iscoroutinefunction(method):
+        return True
+    try:
+        unwrapped = inspect.unwrap(method)
+    except (TypeError, ValueError):
+        return False
+    return inspect.iscoroutinefunction(unwrapped)
 
 
 def _require_consistent_async_shape(value: object, names: tuple[str, ...]) -> None:
