@@ -119,6 +119,9 @@ jobs:
             --preset audit \
             --skip-canary
           grep -Eq '^mode:[[:space:]]*audit$' "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml"
+          grep -Eq '^enforce:[[:space:]]*false$' "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml"
+          grep -Eq '^flight_recorder:' "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml"
+          grep -Eq '^[[:space:]]+redact:[[:space:]]*true$' "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml"
           sha256sum ./pipelock "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml" \
             > "$RUNNER_TEMP/pipelock-platform-compat-sha256.txt"
       - name: Exercise platform MCP stdio through pinned Pipelock
@@ -143,6 +146,96 @@ jobs:
         run: |
           pytest -q tests/integration/pipelock/test_adversarial_security.py \
             --junitxml="$RUNNER_TEMP/pipelock-platform-adversarial-junit.xml"
+      - name: Exercise audit-only HTTP fetch path
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOME="$RUNNER_TEMP/pipelock-platform-compat-home" ./pipelock run \
+            --config "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml" \
+            > "$RUNNER_TEMP/pipelock-platform-audit.log" 2>&1 &
+          pipelock_pid=$!
+          trap 'kill "$pipelock_pid" 2>/dev/null || true' EXIT
+
+          success=0
+          for _ in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 20 \
+              --get --data-urlencode 'url=https://example.com/' \
+              --output "$RUNNER_TEMP/pipelock-platform-fetch-output.txt" \
+              --write-out '%{time_total}\n' \
+              http://127.0.0.1:8888/fetch \
+              > "$RUNNER_TEMP/pipelock-platform-fetch-latency-seconds.txt"; then
+              success=1
+              break
+            fi
+            sleep 1
+          done
+          test "$success" -eq 1
+          test -s "$RUNNER_TEMP/pipelock-platform-fetch-output.txt"
+      - name: Exercise HTTP forward and HTTPS CONNECT paths
+        working-directory: .candidate/pipelock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/pipelock-platform-compat-audit.yaml" "$RUNNER_TEMP/pipelock-platform-forward.yaml"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          path = Path(os.environ["RUNNER_TEMP"]) / "pipelock-platform-forward.yaml"
+          lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+          in_forward = False
+          changed = False
+          for index, line in enumerate(lines):
+              if line.startswith("forward_proxy:"):
+                  in_forward = True
+                  continue
+              if in_forward and line.strip() and not line.startswith((" ", "\t", "#")):
+                  break
+              if in_forward and re.match(r"^[ \t]+enabled:[ \t]*(?:true|false)[ \t]*$", line.rstrip("\n")):
+                  indent = line[: len(line) - len(line.lstrip())]
+                  lines[index] = f"{indent}enabled: true\n"
+                  changed = True
+                  break
+          if not changed:
+              raise SystemExit("generated audit config has no forward_proxy.enabled field")
+          path.write_text("".join(lines), encoding="utf-8")
+          PY
+          grep -A4 '^forward_proxy:' "$RUNNER_TEMP/pipelock-platform-forward.yaml" \
+            | grep -Eq '^[[:space:]]+enabled:[[:space:]]*true$'
+          sha256sum "$RUNNER_TEMP/pipelock-platform-forward.yaml" \
+            > "$RUNNER_TEMP/pipelock-platform-forward-config-sha256.txt"
+
+          HOME="$RUNNER_TEMP/pipelock-platform-compat-home" ./pipelock run \
+            --config "$RUNNER_TEMP/pipelock-platform-forward.yaml" \
+            > "$RUNNER_TEMP/pipelock-platform-forward-connect.log" 2>&1 &
+          pipelock_pid=$!
+          trap 'kill "$pipelock_pid" 2>/dev/null || true' EXIT
+
+          success=0
+          for _ in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 20 \
+              --proxy http://127.0.0.1:8888 --noproxy "" \
+              --output "$RUNNER_TEMP/pipelock-platform-forward-output.txt" \
+              --write-out '%{time_total}\n' \
+              http://example.com/ \
+              > "$RUNNER_TEMP/pipelock-platform-forward-latency-seconds.txt"; then
+              success=1
+              break
+            fi
+            sleep 1
+          done
+          test "$success" -eq 1
+          test -s "$RUNNER_TEMP/pipelock-platform-forward-output.txt"
+
+          curl --fail --silent --show-error --max-time 20 \
+            --proxy http://127.0.0.1:8888 --noproxy "" \
+            --output "$RUNNER_TEMP/pipelock-platform-connect-output.txt" \
+            --write-out '%{time_total}\n' \
+            https://example.com/ \
+            > "$RUNNER_TEMP/pipelock-platform-connect-latency-seconds.txt"
+          test -s "$RUNNER_TEMP/pipelock-platform-connect-output.txt"
       - name: Upload pinned platform compatibility evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -154,6 +247,12 @@ jobs:
             ${{ runner.temp }}/pipelock-platform-mcp-stdio-junit.xml
             ${{ runner.temp }}/pipelock-platform-mcp-remote-junit.xml
             ${{ runner.temp }}/pipelock-platform-adversarial-junit.xml
+            ${{ runner.temp }}/pipelock-platform-fetch-latency-seconds.txt
+            ${{ runner.temp }}/pipelock-platform-forward-latency-seconds.txt
+            ${{ runner.temp }}/pipelock-platform-connect-latency-seconds.txt
+            ${{ runner.temp }}/pipelock-platform-forward-config-sha256.txt
+            ${{ runner.temp }}/pipelock-platform-audit.log
+            ${{ runner.temp }}/pipelock-platform-forward-connect.log
           if-no-files-found: error
 
   pinned-core-adversarial-corpus:
