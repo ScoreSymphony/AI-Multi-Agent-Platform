@@ -8,6 +8,7 @@ import os
 import shutil
 import sqlite3
 from collections.abc import Mapping
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -215,7 +216,7 @@ def verify_backup(backup_dir: Path) -> BackupVerification:
     _manifest_store_contract_version(manifest)
 
     entries = manifest["entries"]
-    if not isinstance(entries, list):  # guarded by JSON Schema; retained for type/runtime defense
+    if not isinstance(entries, list):
         raise BackupError("backup manifest entries must be an array")
     sqlite_versions = _manifest_sqlite_versions(manifest)
 
@@ -294,7 +295,7 @@ def restore_single_node_backup(
     manifest = verification.manifest
     source_store_contract = _manifest_store_contract_version(manifest)
     platform = manifest.get("platform")
-    if not isinstance(platform, dict):  # guarded by schema
+    if not isinstance(platform, dict):
         raise BackupError("backup platform metadata is invalid")
     if expected_platform_version is not None:
         backup_version = platform.get("version")
@@ -332,15 +333,12 @@ def restore_single_node_backup(
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
 
-        # Directory-only durable components have no file entry in the manifest. Materialize the
-        # required deployment scope explicitly so an empty files/ or workspaces/ component survives
-        # the round trip without weakening source-side completeness validation.
         for component in ("db", "files", "workspaces"):
             (partial / component).mkdir(parents=True, exist_ok=True)
 
         auth_db = partial / "db" / "authentication.sqlite3"
         if auth_db.is_file():
-            with sqlite3.connect(auth_db) as connection:
+            with closing(sqlite3.connect(auth_db)) as connection:
                 if _sqlite_table_exists(connection, "auth_sessions"):
                     connection.execute("DELETE FROM auth_sessions")
                     connection.commit()
@@ -523,7 +521,7 @@ def _initialize_new_required_single_node_stores(
             )
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with sqlite3.connect(path) as connection:
+            with closing(sqlite3.connect(path)) as connection:
                 connection.execute("PRAGMA user_version = 0")
                 connection.commit()
         except sqlite3.Error as exc:
@@ -552,8 +550,8 @@ def _manifest_sqlite_versions(manifest: dict[str, Any]) -> dict[str, int]:
 
 def _sqlite_snapshot(source: Path, destination: Path) -> None:
     try:
-        with sqlite3.connect(f"file:{source}?mode=ro", uri=True) as src:
-            with sqlite3.connect(destination) as dst:
+        with closing(sqlite3.connect(f"file:{source}?mode=ro", uri=True)) as src:
+            with closing(sqlite3.connect(destination)) as dst:
                 src.backup(dst)
                 row = dst.execute("PRAGMA integrity_check").fetchone()
                 if row is None or row[0] != "ok":
@@ -569,7 +567,7 @@ def _sqlite_snapshot(source: Path, destination: Path) -> None:
 
 def _verify_sqlite_integrity(path: Path) -> None:
     try:
-        with sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True) as connection:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)) as connection:
             row = connection.execute("PRAGMA integrity_check").fetchone()
             foreign_key_violation = connection.execute("PRAGMA foreign_key_check").fetchone()
     except sqlite3.Error as exc:
@@ -612,7 +610,7 @@ def _remove_sqlite_sidecars(path: Path) -> None:
 
 def _sqlite_user_version(path: Path) -> int:
     try:
-        with sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True) as connection:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)) as connection:
             row = connection.execute("PRAGMA user_version").fetchone()
     except sqlite3.Error as exc:
         raise BackupError(f"cannot read SQLite schema version: {path}") from exc

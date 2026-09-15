@@ -71,7 +71,7 @@ Relevant upstream release PRs reviewed for the targeted matrix include #108067,
 The pre-adoption gate was intentionally separate from `hermes-pinned-compat`:
 
 - workflow: `.github/workflows/hermes-v0-21-2-candidate.yml`
-- runner: `scripts/ci/issue959_hermes_v0_21_2_candidate.py`
+- runner: `scripts/ci/hermes_v0_21_2_candidate_validation.py`
 - platform integration test:
   `tests/integration/upstreams/test_hermes_v0_21_2_candidate.py`
 

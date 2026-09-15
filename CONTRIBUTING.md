@@ -15,7 +15,9 @@
 
 Repository decision-making, ownership, triage and release responsibilities are defined in [`GOVERNANCE.md`](GOVERNANCE.md). The release checklist is maintained in [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md).
 
-For project orientation, use [`README.md`](README.md). Curated point-in-time implementation/integration status lives in [`docs/STATUS.md`](docs/STATUS.md); dependency-driven planning and convergence guidance live in [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md). GitHub issue/dependency state, pull-request checks and merged code remain authoritative for live work-item state, so contributors should not add issue-by-issue progress ledgers back to the README.
+For project orientation, use [`README.md`](README.md). Before changing implementation architecture or searching broadly for where a feature belongs, use [`docs/CONTRIBUTOR_ARCHITECTURE.md`](docs/CONTRIBUTOR_ARCHITECTURE.md) for the canonical-owner map, representative lifecycle, “where do I change X?” matrix and targeted validation guidance. Curated point-in-time implementation/integration status lives in [`docs/STATUS.md`](docs/STATUS.md); dependency-driven planning and convergence guidance live in [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md). GitHub issue/dependency state, pull-request checks and merged code remain authoritative for live work-item state, so contributors should not add issue-by-issue progress ledgers back to the README.
+
+Permanent source, test, helper, fixture and CI names must describe behavior or domain responsibility rather than the GitHub issue that introduced them. Historical issue references may remain as secondary provenance. See [`docs/quality/PERMANENT_NAMING_AND_PROVENANCE.md`](docs/quality/PERMANENT_NAMING_AND_PROVENANCE.md) for the naming and migration policy.
 
 When several focused issue branches are being collected through a shared integration branch, keep documentation/status cleanup as a late pass. Reconcile it against the current combined head, preserve newer cross-issue documentation, refresh `docs/STATUS.md` from that combined state, and only then treat the documentation issue as closure-ready.
 
@@ -123,13 +125,13 @@ Runtime resources that must also live inside the installed Python package have o
 Edit only the canonical source, then refresh the package copies with:
 
 ```bash
-python scripts/ci/issue725_materialize_runtime_assets.py
+python scripts/ci/materialize_runtime_assets.py
 ```
 
 Before committing, verify that no generated copy drifted:
 
 ```bash
-python scripts/ci/issue725_materialize_runtime_assets.py --check
+python scripts/ci/materialize_runtime_assets.py --check
 ```
 
 CI rejects stale or missing generated copies, materializes the canonical assets immediately before the package build, and verifies that both the wheel and source distribution contain the canonical bytes.

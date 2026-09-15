@@ -6,7 +6,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-MATERIALIZE_COMMAND = "python scripts/ci/issue725_materialize_runtime_assets.py"
+MATERIALIZE_COMMAND = "python scripts/ci/materialize_runtime_assets.py"
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-SCRIPT = ROOT / "scripts/ci/issue725_materialize_runtime_assets.py"
+SCRIPT = ROOT / "scripts/ci/materialize_runtime_assets.py"
 PAIRS = (
     (
         Path("schemas/backup-manifest-v1.schema.json"),
