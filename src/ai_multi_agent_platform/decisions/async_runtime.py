@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
@@ -12,6 +13,17 @@ from .models import DecisionRecord, DecisionRecordView, DecisionReference
 from .service import DecisionService
 
 _T = TypeVar("_T")
+ASYNC_DECISION_SERVICE_MARKER = "__ai_multi_agent_async_decision_service__"
+_ASYNC_METHODS = (
+    "create",
+    "supersede",
+    "withdraw",
+    "link_downstream_provenance",
+    "action_provenance",
+    "view",
+    "list_views",
+    "supersession_chain",
+)
 
 
 class AsyncDecisionService(Protocol):
@@ -144,21 +156,40 @@ class AsyncDecisionRuntime:
 def as_async_decision_service(
     decisions: DecisionService | AsyncDecisionService,
 ) -> AsyncDecisionService:
-    """Keep native async services native; adapt only the concrete synchronous service.
+    """Resolve the awaitable Decision service without guessing by calling service methods.
 
-    Coroutine-function introspection is intentionally avoided here: a conforming async service
-    may use ordinary tracing/decorator wrappers whose methods are regular functions returning
-    awaitables. ``DecisionService`` is the explicit synchronous compatibility type, so every other
-    value in the supported union is already an async-service implementation and must be preserved
-    as-is.
+    Native coroutine methods are recognized through their coroutine flag (including a usable
+    ``__wrapped__`` chain). Backends whose ordinary ``def`` wrappers return awaitables must opt in
+    with ``ASYNC_DECISION_SERVICE_MARKER``. Unmarked regular methods remain the synchronous
+    compatibility shape and are offloaded instead of being assumed async.
     """
 
-    if isinstance(decisions, DecisionService):
-        return AsyncDecisionRuntime(decisions)
-    return decisions
+    if bool(getattr(decisions, ASYNC_DECISION_SERVICE_MARKER, False)):
+        return cast(AsyncDecisionService, decisions)
+
+    states = tuple(_method_is_async(decisions, name) for name in _ASYNC_METHODS)
+    if any(states) and not all(states):
+        raise TypeError("Decision service must be consistently sync or async")
+    if all(states):
+        return cast(AsyncDecisionService, decisions)
+    return AsyncDecisionRuntime(cast(DecisionService, decisions))
+
+
+def _method_is_async(value: object, name: str) -> bool:
+    method = getattr(value, name, None)
+    if inspect.iscoroutinefunction(method):
+        return True
+    if not callable(method):
+        return False
+    try:
+        unwrapped = inspect.unwrap(method)
+    except (TypeError, ValueError):
+        return False
+    return inspect.iscoroutinefunction(unwrapped)
 
 
 __all__ = [
+    "ASYNC_DECISION_SERVICE_MARKER",
     "AsyncDecisionRuntime",
     "AsyncDecisionService",
     "as_async_decision_service",
