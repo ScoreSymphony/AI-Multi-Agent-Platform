@@ -171,10 +171,13 @@ reason = "Generated mapping fixture is intentionally declarative."
     function = current["modules"][0]["functions"][0]
     assert function["extreme"] is True
     assert function["exemption"] == "Generated mapping fixture is intentionally declarative."
-    assert guard.compare_inventories(
-        guard.build_inventory(baseline_root, config),
-        current,
-    ) == []
+    assert (
+        guard.compare_inventories(
+            guard.build_inventory(baseline_root, config),
+            current,
+        )
+        == []
+    )
 
 
 @pytest.mark.unit
