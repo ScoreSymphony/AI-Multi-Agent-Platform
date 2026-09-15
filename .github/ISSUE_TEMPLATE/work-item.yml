@@ -83,7 +83,8 @@ body:
         - "M1 - Architecture Foundation"
         - "M2 - Usable Single-Node Prototype"
         - "M3 - Operational v1"
-        - "M4 - Distributed & Ecosystem"
+        - "M4 - Real-World Validation & Multi-Node Operations"
+        - "R&D - Platform Hardening & Applied Research"
     validations:
       required: true
 
