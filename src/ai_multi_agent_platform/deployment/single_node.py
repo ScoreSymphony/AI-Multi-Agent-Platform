@@ -14,7 +14,10 @@ from ai_multi_agent_platform.control_plane import AuthenticatedControlPlaneHTTP,
 from ai_multi_agent_platform.control_plane.approval_portability_composition import ControlPlane
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.conversations import ConversationService
-from ai_multi_agent_platform.coordination import DurablePlanStepCoordinator, SQLiteCoordinatorRepository
+from ai_multi_agent_platform.coordination import (
+    DurablePlanStepCoordinator,
+    SQLiteCoordinatorRepository,
+)
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
@@ -26,8 +29,16 @@ from ai_multi_agent_platform.models import (
     ModelRoutingProfileService,
     ModelRuntime,
 )
-from ai_multi_agent_platform.observability import AggregatedHealthProvider, InMemoryExporter, Telemetry
-from ai_multi_agent_platform.onboarding import FirstRunTaskService, OnboardingModelAdapter, OnboardingService
+from ai_multi_agent_platform.observability import (
+    AggregatedHealthProvider,
+    InMemoryExporter,
+    Telemetry,
+)
+from ai_multi_agent_platform.onboarding import (
+    FirstRunTaskService,
+    OnboardingModelAdapter,
+    OnboardingService,
+)
 from ai_multi_agent_platform.repositories import (
     RepositoryDiscoveryResolver,
     RepositoryEventRuntimeIngress,
