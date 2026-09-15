@@ -52,9 +52,7 @@ class _ThreadRecordingSqliteStore(SqliteRepositoryProvenanceStore):
         self.connection_threads.clear()
 
     def _connect(self) -> sqlite3.Connection:
-        self.connection_threads.append(
-            (threading.current_thread().name, threading.get_ident())
-        )
+        self.connection_threads.append((threading.current_thread().name, threading.get_ident()))
         return super()._connect()
 
 
@@ -115,8 +113,7 @@ def test_sqlite_provenance_runs_on_dedicated_worker_not_event_loop(tmp_path: Pat
 
     assert store.connection_threads
     assert all(
-        name.startswith("repository-provenance-persistence")
-        for name, _ in store.connection_threads
+        name.startswith("repository-provenance-persistence") for name, _ in store.connection_threads
     )
     assert all(thread_id != event_loop_thread for _, thread_id in store.connection_threads)
 
@@ -180,23 +177,12 @@ def test_provenance_persistence_does_not_use_asyncio_default_executor() -> None:
             thread_name_prefix="forbidden-default-persistence",
         ) as default_executor:
             loop.set_default_executor(default_executor)
-            return await offload.run(threading.current_thread().name.__class__, message="thread")
-
-    # Use a real callable returning the worker thread name; keep it separate so no work is done
-    # before RepositoryProvenancePersistenceOffload submits it to its dedicated executor.
-    async def actual_scenario() -> str:
-        loop = asyncio.get_running_loop()
-        with ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix="forbidden-default-persistence",
-        ) as default_executor:
-            loop.set_default_executor(default_executor)
             return await offload.run(
                 lambda: threading.current_thread().name,
                 message="thread",
             )
 
-    worker_name = asyncio.run(actual_scenario())
+    worker_name = asyncio.run(scenario())
     assert worker_name.startswith("repository-provenance-persistence")
     assert not worker_name.startswith("forbidden-default-persistence")
 
