@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
 from ai_multi_agent_platform.accounting import (
-    AccountingService,
+    AsyncAccountingService,
     BudgetState,
-    InMemoryUsageStore,
     UsageBudget,
     UsageBudgetResourceService,
 )
@@ -17,17 +17,16 @@ from ai_multi_agent_platform.control_plane.models import ActorContext, RequestCo
 from ai_multi_agent_platform.organizations.accounting import OrganizationUsageBudgetResourceService
 
 
-class _ChangingAccountingService(AccountingService):
+class _ChangingAccountingRuntime:
     def __init__(self, listed: UsageBudget, current: UsageBudget) -> None:
-        super().__init__(InMemoryUsageStore())
         self._listed = listed
         self._current = current
 
-    def get_budget(self, budget_id: str) -> UsageBudget | None:
+    async def get_budget(self, budget_id: str) -> UsageBudget | None:
         assert budget_id == self._listed.id
         return self._listed
 
-    def budget_state(self, budget_id: str) -> BudgetState:
+    async def budget_state(self, budget_id: str) -> BudgetState:
         assert budget_id == self._listed.id
         return BudgetState(
             budget=self._current,
@@ -79,9 +78,13 @@ def _old_owner_context() -> RequestContext:
     )
 
 
+def _runtime(old: UsageBudget, current: UsageBudget) -> AsyncAccountingService:
+    return cast(AsyncAccountingService, _ChangingAccountingRuntime(old, current))
+
+
 def test_budget_resource_reauthorizes_current_budget_state() -> None:
     old, current = _budgets()
-    resource = UsageBudgetResourceService(_ChangingAccountingService(old, current))
+    resource = UsageBudgetResourceService(_runtime(old, current))
 
     async def scenario() -> None:
         with pytest.raises(ContractError) as failure:
@@ -95,7 +98,7 @@ def test_organization_budget_resource_reauthorizes_current_budget_state() -> Non
     old, current = _budgets()
     visibility = _Visibility()
     resource = OrganizationUsageBudgetResourceService(
-        _ChangingAccountingService(old, current),
+        _runtime(old, current),
         visibility,  # type: ignore[arg-type]
     )
 
