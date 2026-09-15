@@ -2,7 +2,7 @@
 
 from .control_plane import ControlPlaneBundle, build_control_plane
 from .evaluation import build_evaluation
-from .execution import ExecutionBundle, build_execution
+from .execution import ExecutionBundle, LifecycleBinding, build_execution
 from .http import HttpBundle, build_http
 from .kernel import KernelBundle, build_kernel
 from .observability import ObservabilityBundle, build_observability
@@ -23,6 +23,7 @@ __all__ = [
     "ExecutionBundle",
     "HttpBundle",
     "KernelBundle",
+    "LifecycleBinding",
     "ObservabilityBundle",
     "PlatformServicesBundle",
     "RepositoryFoundationBundle",
