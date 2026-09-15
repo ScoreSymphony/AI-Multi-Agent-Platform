@@ -4,7 +4,11 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
-from ai_multi_agent_platform.decisions import AsyncDecisionService, as_async_decision_service
+from ai_multi_agent_platform.decisions import (
+    ASYNC_DECISION_SERVICE_MARKER,
+    AsyncDecisionService,
+    as_async_decision_service,
+)
 
 
 def _regular_async_wrapper[T](
@@ -17,6 +21,8 @@ def _regular_async_wrapper[T](
 
 
 class _DecoratedAsyncDecisionService:
+    __ai_multi_agent_async_decision_service__ = True
+
     @_regular_async_wrapper
     async def create(self, record: Any) -> Any:
         raise AssertionError(record)
@@ -50,8 +56,10 @@ class _DecoratedAsyncDecisionService:
         raise AssertionError(decision_record_id)
 
 
-def test_regular_decorators_do_not_force_async_decisions_through_sync_runtime() -> None:
+def test_explicit_marker_preserves_regular_decorator_async_decision_service() -> None:
     service = _DecoratedAsyncDecisionService()
+
+    assert getattr(service, ASYNC_DECISION_SERVICE_MARKER) is True
     resolved = as_async_decision_service(cast(AsyncDecisionService, service))
 
     assert resolved is service
