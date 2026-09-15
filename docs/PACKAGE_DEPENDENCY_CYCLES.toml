@@ -1,5 +1,7 @@
 version = 1
+enforce = false
 
-# Existing cyclic strongly connected components are recorded here only after audit.
-# A detected cycle may shrink or split, but it must not grow beyond one of these
-# explicitly reviewed package sets without an architecture change.
+# The #895 dependency audit is active, but enforcement remains disabled until
+# the current strongly connected components have been captured and reviewed.
+# Once populated, set enforce = true. A detected cycle may then shrink or split,
+# but it must not grow beyond one of the explicitly reviewed package sets.
