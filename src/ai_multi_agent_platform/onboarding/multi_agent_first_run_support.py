@@ -69,11 +69,10 @@ def resolve_scope(
     owned_projects = tuple(item for item in scopes.list_projects() if item.owner_ref == owner)
     if workspace_id is not None:
         requested_workspace = scopes.get_workspace(workspace_id)
-        if (
-            requested_workspace.owner_type != owner.type
-            or requested_workspace.owner_id != owner.id
-        ):
-            raise ContractError(ErrorCode.FORBIDDEN, "Selected Workspace is not owned by this actor.")
+        if requested_workspace.owner_type != owner.type or requested_workspace.owner_id != owner.id:
+            raise ContractError(
+                ErrorCode.FORBIDDEN, "Selected Workspace is not owned by this actor."
+            )
         if project_id is not None and requested_workspace.project_id != project_id:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
