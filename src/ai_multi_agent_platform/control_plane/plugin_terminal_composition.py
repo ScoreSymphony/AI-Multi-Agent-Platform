@@ -1,18 +1,20 @@
-"""Compose optional plugin lifecycle on top of the current terminal Control Plane."""
+"""Compose optional plugin lifecycle with terminal sessions without MRO diamonds."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.plugins import PluginCatalog, PluginRegistry
 
 from .extensions import _singular, _validate_resources
 from .models import PageQuery, RequestContext, paginate
-from .plugin_api import ControlPlane as _PluginControlPlane
-from .terminal_composition import ControlPlane as _TerminalControlPlane
-from .terminal_composition import (
+from .module_registry import install_control_plane_modules
+from .plugin_module import PluginControlPlaneBinding, PluginPermissionResolver
+from .terminal_explicit_composition import ControlPlane as _TerminalControlPlane
+from .terminal_explicit_composition import (
     ControlPlaneASGI,
     ControlPlaneHTTP,
     build_openapi,
@@ -29,8 +31,48 @@ class _AuthorizationScopedResourceService(Protocol):
     ) -> tuple[str | None, str | None, str | None]: ...
 
 
-class ControlPlane(_PluginControlPlane, _TerminalControlPlane):
-    """Current Control Plane with plugin, terminal and scoped-resource composition."""
+class ControlPlane(_TerminalControlPlane):
+    """Terminal composition plus explicitly registered plugin lifecycle."""
+
+    def __init__(
+        self,
+        *args: Any,
+        plugin_registry: PluginRegistry | None = None,
+        plugin_catalog: PluginCatalog | None = None,
+        plugin_permission_resolver: PluginPermissionResolver | None = None,
+        **kwargs: Any,
+    ) -> None:
+        binding = PluginControlPlaneBinding(
+            plugin_registry,
+            plugin_catalog=plugin_catalog,
+            plugin_permission_resolver=plugin_permission_resolver,
+        )
+        super().__init__(*args, **kwargs)
+        self._plugin_binding = binding
+        if plugin_registry is not None:
+            install_control_plane_modules(self, (binding.module(),))
+
+    @property
+    def plugin_registry(self) -> PluginRegistry | None:
+        return self._plugin_binding.plugin_registry
+
+    @property
+    def plugin_catalog(self) -> PluginCatalog | None:
+        return self._plugin_binding.plugin_catalog
+
+    def attach_plugin_runtime(
+        self,
+        plugin_registry: PluginRegistry,
+        *,
+        plugin_catalog: PluginCatalog | None = None,
+        plugin_permission_resolver: PluginPermissionResolver | None = None,
+    ) -> None:
+        module = self._plugin_binding.attach(
+            plugin_registry,
+            plugin_catalog=plugin_catalog,
+            plugin_permission_resolver=plugin_permission_resolver,
+        )
+        install_control_plane_modules(self, (module,))
 
     async def list_extension_resources(
         self,

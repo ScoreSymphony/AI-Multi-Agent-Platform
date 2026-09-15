@@ -11,13 +11,14 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain.models import Event, OwnerRef, Provenance
 from ai_multi_agent_platform.organizations import MembershipStatus, OrganizationService
 
-from .extensions import ResourceService
+from .extensions import ControlPlaneModule, ResourceService
 from .models import PageQuery, RequestContext
-from .organization_runtime_composition import ORGANIZATION_RUNTIME_COMMANDS
-from .organization_runtime_composition import ControlPlane as _OrganizationControlPlane
+from .module_registry import install_control_plane_modules
+from .organization_explicit_composition import ControlPlane as _OrganizationControlPlane
 
 ORGANIZATION_AUDIT_COLLECTION = "organization-audit-events"
 ORGANIZATION_AUDIT_SOURCE = "control-plane.organization-audit"
+ORGANIZATION_AUDIT_MODULE = "organization-audit"
 AUDITED_ORGANIZATION_COMMANDS = frozenset(
     {
         "organization.create",
@@ -137,8 +138,32 @@ class _OrganizationAuditResources(ResourceService):
         )
 
 
+def organization_audit_control_plane_module(
+    service: OrganizationService,
+    audit: OrganizationAuditLog,
+) -> ControlPlaneModule:
+    """Build the explicitly owned Organization audit projection and observer."""
+
+    async def observe(
+        context: RequestContext,
+        command: str,
+        resource_ref: str,
+        result: dict[str, JsonValue],
+    ) -> None:
+        await audit.record_command(context, command, resource_ref, result)
+
+    return ControlPlaneModule(
+        name=ORGANIZATION_AUDIT_MODULE,
+        resource_services={
+            ORGANIZATION_AUDIT_COLLECTION: _OrganizationAuditResources(service, audit),
+        },
+        command_observers=(observe,),
+        requires=frozenset({"organizations"}),
+    )
+
+
 class ControlPlane(_OrganizationControlPlane):
-    """Organization Control Plane plus optional canonical mutation audit history."""
+    """Compatibility façade installing the explicit Organization audit module."""
 
     def __init__(
         self,
@@ -153,34 +178,19 @@ class ControlPlane(_OrganizationControlPlane):
             else OrganizationAuditLog(organization_audit_events)
         )
         if self._organization_audit is not None and self.organization_service is not None:
-            super().register_resource_service(
-                ORGANIZATION_AUDIT_COLLECTION,
-                _OrganizationAuditResources(self.organization_service, self._organization_audit),
+            install_control_plane_modules(
+                self,
+                (
+                    organization_audit_control_plane_module(
+                        self.organization_service,
+                        self._organization_audit,
+                    ),
+                ),
             )
 
     @property
     def organization_audit(self) -> OrganizationAuditLog | None:
         return self._organization_audit
-
-    def register_resource_service(self, collection: str, service: ResourceService) -> None:
-        if collection == ORGANIZATION_AUDIT_COLLECTION:
-            raise ValueError(
-                "extension collection conflicts with canonical organization audit "
-                f"route: {collection}"
-            )
-        super().register_resource_service(collection, service)
-
-    async def execute_command(
-        self,
-        context: RequestContext,
-        command: str,
-        resource_ref: str,
-        payload: dict[str, JsonValue] | None = None,
-    ) -> dict[str, JsonValue]:
-        result = await super().execute_command(context, command, resource_ref, payload)
-        if self._organization_audit is not None and command in ORGANIZATION_RUNTIME_COMMANDS:
-            await self._organization_audit.record_command(context, command, resource_ref, result)
-        return result
 
 
 def _audit_event_id(context: RequestContext, command: str, resource_ref: str) -> str:
@@ -285,3 +295,14 @@ async def _visible_organization_ids(
         if membership.status is MembershipStatus.ACTIVE:
             visible.add(membership.organization_id)
     return frozenset(visible)
+
+
+__all__ = [
+    "AUDITED_ORGANIZATION_COMMANDS",
+    "ControlPlane",
+    "ORGANIZATION_AUDIT_COLLECTION",
+    "ORGANIZATION_AUDIT_MODULE",
+    "ORGANIZATION_AUDIT_SOURCE",
+    "OrganizationAuditLog",
+    "organization_audit_control_plane_module",
+]

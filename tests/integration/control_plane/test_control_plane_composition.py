@@ -21,6 +21,24 @@ from ai_multi_agent_platform.organizations.service import OrganizationService
 from ai_multi_agent_platform.security.authorization import ActorType
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
 
+ACCOUNTING_COLLECTIONS = ("usage-records", "usage-aggregates", "usage-budgets")
+ORGANIZATION_COLLECTIONS = (
+    "organizations",
+    "teams",
+    "memberships",
+    "invitations",
+    "resource-ownerships",
+    "resource-shares",
+    "external-group-mappings",
+)
+ORGANIZATION_COMMANDS = (
+    "organization.create",
+    "organization.archive",
+    "team.create",
+    "membership.add",
+    "resource-share.create",
+)
+
 
 def _context(actor_id: str) -> RequestContext:
     return RequestContext(
@@ -77,9 +95,11 @@ def test_current_control_plane_composes_exact_owner_accounting_without_organizat
             accounting_service=accounting,
         )
 
-        assert {"usage-records", "usage-aggregates", "usage-budgets"}.issubset(
-            control_plane.registered_collections
-        )
+        assert "accounting" in control_plane.registered_modules
+        assert set(ACCOUNTING_COLLECTIONS).issubset(control_plane.registered_collections)
+        for collection in ACCOUNTING_COLLECTIONS:
+            assert control_plane.resource_owner(collection) == "accounting"
+
         result = await control_plane.list_extension_resources(
             _context("alice"),
             "usage-aggregates",
@@ -134,6 +154,15 @@ def test_current_control_plane_upgrades_usage_visibility_when_organizations_are_
             organization_service=organizations,
             accounting_service=accounting,
         )
+
+        assert {"accounting", "organizations"}.issubset(control_plane.registered_modules)
+        for collection in ACCOUNTING_COLLECTIONS:
+            assert control_plane.resource_owner(collection) == "accounting"
+        for collection in ORGANIZATION_COLLECTIONS:
+            assert control_plane.resource_owner(collection) == "organizations"
+        for command in ORGANIZATION_COMMANDS:
+            assert control_plane.command_owner(command) == "organizations"
+
         result = await control_plane.list_extension_resources(
             _context("alice"),
             "usage-aggregates",

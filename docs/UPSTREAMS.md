@@ -64,20 +64,20 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Status:** integrated through #12.
 - **Integration category/categories:** optional adapter/library dependency.
 - **Canonical upstream repository:** `https://github.com/modelcontextprotocol/python-sdk`.
-- **Pinned version/tag/commit or deployed revision:** `2.1.1`.
+- **Pinned version/tag/commit or deployed revision:** `v2.2.0` / `9972c21aa42054fb1450c5fc614761ed11847ec6`.
 - **Verified license:** MIT for the SDK; material dependency set reviewed as permissive (MIT/BSD-3-Clause/Apache-2.0/PSF-2.0 families).
-- **License verification date:** 2026-09-02.
-- **Last review date:** 2026-09-02.
+- **License verification date:** 2026-09-14.
+- **Last review date:** 2026-09-14.
 - **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.mcp_sdk`, implementing the platform-owned `MCPClient` protocol from `ai_multi_agent_platform.adapters.mcp`.
 - **Local source path:** none; normal optional package dependency only.
 - **Source origin/path:** no upstream source copied into this repository.
 - **Modified locally:** no.
 - **Required notices / attribution:** installed packages retain their own upstream license metadata; no SDK source/NOTICE material is vendored or redistributed by this repository.
-- **Known compatibility constraints:** platform Python >=3.12; SDK Python >=3.10; SDK v2.1.1 is the explicit compatibility target. Streamable HTTP replaces new SSE usage; stdio requires a runnable local command.
+- **Known compatibility constraints:** platform Python >=3.12; SDK Python >=3.10; SDK v2.2.0 is the explicit compatibility target. Streamable HTTP replaces new SSE usage; stdio requires a runnable local command. SDK 2.2.0 restricts HTTP redirects to the endpoint origin (with same-host HTTP-to-HTTPS upgrade allowed) and tightens OAuth issuer validation; the retained `2025-11-25` client/tool Streamable-HTTP protocol profile passes with this version.
 - **Security/deployment/resource constraints:** endpoint transport performs configured network access; stdio transport starts a configured process and may receive environment values. Secrets are not copied into canonical adapter metadata or default persistent invocation audit events.
 - **Required for baseline:** no; base/native capability operation and core imports must work without the MCP extra.
 - **Recurring paid service required:** no.
-- **Update/review method:** explicit pinned-version update; review official release/security/licensing changes; run real stdio integration, core optionality architecture test and full repository CI.
+- **Update/review method:** explicit pinned-version update; review official release/security/licensing changes; run real stdio integration, stable official protocol conformance, core optionality architecture tests and full repository CI.
 - **Exit/replacement strategy:** remove/replace `adapters.mcp_sdk` and satisfy the small platform-owned `MCPClient` protocol with another transport implementation; no agent/task or persisted-data migration is required.
 - **ADR:** none required for the SDK choice; the canonical architecture explicitly treats MCP as an optional adapter.
 - **Adoption review:** `docs/upstream/MCP_PYTHON_SDK_ADOPTION.md`.
@@ -113,16 +113,16 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Status:** integrated through #11.
 - **Integration category/categories:** optional adapter/library dependency; optional external service.
 - **Canonical upstream repository:** `https://github.com/BerriAI/litellm`.
-- **Pinned version/tag/commit or deployed revision:** `v1.99.0` / `fa647f742d7baefe8eb1181899d9c81b41559772`.
+- **Pinned version/tag/commit or deployed revision:** `v1.100.1` / `1dba17b10ded12ad0021edb453ba2c54e4637928`.
 - **Verified license:** MIT for content outside `enterprise/`; `enterprise/` is separately licensed and is not used or copied by this integration.
-- **License verification date:** 2026-09-03.
-- **Last review date:** 2026-09-03.
+- **License verification date:** 2026-09-14.
+- **Last review date:** 2026-09-14.
 - **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.litellm.LiteLLMModelProvider` implements the canonical `ModelProvider`; proxy mode reuses the existing OpenAI-compatible provider transport. The platform `ModelRouter` remains authoritative for canonical routing policy.
 - **Local source path:** `src/ai_multi_agent_platform/adapters/litellm.py` contains platform-owned adapter code only.
 - **Source origin/path:** no LiteLLM source is copied; library mode uses the pinned PyPI dependency and proxy mode targets a separately deployed service.
 - **Modified locally:** no upstream source is vendored or modified.
 - **Required notices / attribution:** installed packages retain upstream license metadata. Do not copy or vendor `enterprise/` under the MIT assumption; any future source redistribution requires a new license/notices review.
-- **Known compatibility constraints:** platform Python >=3.12; LiteLLM `1.99.0` is the explicit SDK compatibility target. Canonical model IDs remain platform-owned and map to LiteLLM/native model strings only inside adapter configuration. Baseline library mode uses direct `acompletion` and intentionally does not enable a second hidden routing/fallback layer.
+- **Known compatibility constraints:** platform Python >=3.12; LiteLLM `1.100.1` is the explicit SDK compatibility target. Canonical model IDs remain platform-owned and map to LiteLLM/native model strings only inside adapter configuration. Baseline library mode uses direct `acompletion` and intentionally does not enable a second hidden routing/fallback layer.
 - **Security/deployment/resource constraints:** credential values are resolved from environment-variable references and are not exposed through canonical metadata. Proxy authentication does not replace platform authentication/authorization. No LiteLLM telemetry callbacks are enabled by the baseline adapter. Resource and GPU requirements depend on the selected downstream endpoint, not on platform core.
 - **Required for baseline:** no; core imports, model contracts, reference routing and baseline tests must work without the package or proxy installed.
 - **Recurring paid service required:** no; local/self-hosted endpoints are explicitly supported and covered by configuration/tests.
@@ -130,7 +130,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Exit/replacement strategy:** remove the optional dependency, adapter/configuration and any separately deployed proxy. Canonical Agents, Tasks, model configuration IDs and `ModelRouter` policy remain valid and can target another `ModelProvider` implementation.
 - **ADR:** none required; LiteLLM is deliberately subordinate to the canonical model architecture and is not allowed to redefine routing ownership.
 - **Provenance:** `upstream/litellm.yaml`.
-- **Adoption/mapping review:** `docs/LITELLM_ADAPTER.md`.
+- **Adoption/mapping review:** `docs/integrations/LITELLM_ADAPTER.md`.
 
 ### NousResearch Hermes Agent
 
@@ -268,8 +268,8 @@ These packages are third-party software already declared by `pyproject.toml`. Pa
 | wheel | build requirement | unbounded in build-system manifest | `https://github.com/pypa/wheel` | MIT | no |
 | build | development build tool | `>=1.2,<2` | `https://github.com/pypa/build` | MIT | no |
 | jsonschema | runtime capability schema validation | `==4.26.0` | `https://github.com/python-jsonschema/jsonschema` | MIT | yes; integrated for #12 |
-| mcp | optional MCP transport + CI integration coverage | `==2.1.1` | `https://github.com/modelcontextprotocol/python-sdk` | MIT | yes; optional adapter recorded above |
-| litellm | optional model gateway SDK / proxy compatibility target | `==1.99.0` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed | yes; optional adapter recorded above |
+| mcp | optional MCP transport + CI integration coverage | `==2.2.0` | `https://github.com/modelcontextprotocol/python-sdk` | MIT | yes; optional adapter recorded above |
+| litellm | optional model gateway SDK / proxy compatibility target | `==1.100.1` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed | yes; optional adapter recorded above |
 | uvicorn | optional ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause | no |
 | psycopg | optional PostgreSQL HA coordination transport | `==3.3.5` | `https://github.com/psycopg/psycopg` | LGPL-3.0-only | yes; optional adapter recorded above |
 | pytest | test runner | `>=8.3,<10` | `https://github.com/pytest-dev/pytest` | MIT | no |

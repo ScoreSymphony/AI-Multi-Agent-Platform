@@ -4,9 +4,9 @@ Issue #46 requires retained evidence for optional environment-dependent paths in
 
 ## MCP (`ENV-MCP`)
 
-The MCP platform profile requires the exact optional dependency `mcp==2.1.1`. It starts the maintained real stdio fixture through the official Model Context Protocol Python SDK and invokes `tool.lookup` through the same canonical `CapabilityRegistry` and `CapabilityInvoker` path used by native capabilities.
+The MCP platform profile requires the exact optional dependency `mcp==2.2.0`. It starts the maintained real stdio fixture through the official Model Context Protocol Python SDK and invokes `tool.lookup` through the same canonical `CapabilityRegistry` and `CapabilityInvoker` path used by native capabilities.
 
-The profile fails closed when the MCP distribution is absent or its installed version differs from the repository pin. A passing run produces a normal `ai-multi-agent-platform/platform-conformance/v1` report with deployment profile `mcp-sdk-pinned` and records `mcp-python-sdk=2.1.1` in adapter versions.
+The profile fails closed when the MCP distribution is absent or its installed version differs from the repository pin. A passing run produces a normal `ai-multi-agent-platform/platform-conformance/v1` report with deployment profile `mcp-sdk-pinned` and records `mcp-python-sdk=2.2.0` in adapter versions.
 
 This `ENV-MCP` result is **platform integration evidence**, not wire-level protocol certification. Issue #731 adds a separate official-suite evidence path documented in [`MCP_PROTOCOL_CONFORMANCE.md`](MCP_PROTOCOL_CONFORMANCE.md). For a claimed MCP profile, CI combines both dimensions into `ai-multi-agent-platform/mcp-compatibility/v1`:
 
@@ -25,9 +25,9 @@ The existing required `test` job may continue to run `ENV-MCP` independently as 
 
 ## LiteLLM (`ENV-LITELLM`)
 
-The LiteLLM profile requires the exact optional dependency `litellm==1.99.0`. It runs the repository's pinned real-library integration path. LiteLLM's supported `mock_response` mechanism exercises the installed library's request/response machinery without a paid provider, network credential or external model service, while the platform adapter preserves the canonical `ModelProvider` request/response boundary.
+The LiteLLM profile requires the exact optional dependency `litellm==1.100.1`. It runs the repository's pinned real-library integration path. LiteLLM's supported `mock_response` mechanism exercises the installed library's request/response machinery without a paid provider, network credential or external model service, while the platform adapter preserves the canonical `ModelProvider` request/response boundary.
 
-The profile fails closed when LiteLLM is absent or its installed version differs from the repository pin. A passing run produces the same versioned conformance report with deployment profile `litellm-pinned` and records `litellm=1.99.0` in adapter versions.
+The profile fails closed when LiteLLM is absent or its installed version differs from the repository pin. A passing run produces the same versioned conformance report with deployment profile `litellm-pinned` and records `litellm=1.100.1` in adapter versions.
 
 The existing required `litellm-compat` CI context runs this profile and retains `platform-conformance-litellm` / `conformance-litellm.json`.
 

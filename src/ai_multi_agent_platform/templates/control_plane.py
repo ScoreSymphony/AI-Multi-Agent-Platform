@@ -586,6 +586,29 @@ def register_template_control_plane(
 ) -> None:
     """Register Template resources/commands without changing the Control Plane foundation."""
 
+    existing_handlers = getattr(application, "_control_plane_template_handlers", None)
+    existing_control_plane = getattr(application, "_control_plane_template_control_plane", None)
+    if isinstance(existing_handlers, TemplateCommandHandlers):
+        if existing_control_plane is not control_plane:
+            raise ValueError("Template Control Plane registration is already bound elsewhere")
+        if environment_resolver is not None:
+            existing_handlers.environment_resolver = environment_resolver
+        if agent_exporter is not None:
+            if existing_handlers.agent_exporter is None:
+                control_plane.register_command(
+                    "template.create-from-agent",
+                    existing_handlers.create_from_agent,
+                )
+            existing_handlers.agent_exporter = agent_exporter
+        if automation_exporter is not None:
+            if existing_handlers.automation_exporter is None:
+                control_plane.register_command(
+                    "template.create-from-automation",
+                    existing_handlers.create_from_automation,
+                )
+            existing_handlers.automation_exporter = automation_exporter
+        return
+
     repository = application.repository
     scope_access = TemplateScopeAccess(control_plane)
     control_plane.register_resource_service(
@@ -624,6 +647,8 @@ def register_template_control_plane(
     control_plane.register_command("template.preview", handlers.preview_template)
     control_plane.register_command("template.apply", handlers.apply_template)
     control_plane.register_command("template.reapply", handlers.reapply_template)
+    application.__dict__["_control_plane_template_control_plane"] = control_plane
+    application.__dict__["_control_plane_template_handlers"] = handlers
 
 
 def _template_resource(

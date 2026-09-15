@@ -33,7 +33,7 @@ experimental Tasks surface.
 | SEP | `SEP-2663` — Tasks Extension — Final |
 | Extension identifier | `io.modelcontextprotocol/tasks` |
 | MCP/stateless protocol family | `2026-07-28` |
-| Platform optional Python SDK | `mcp==2.1.1` |
+| Platform optional Python SDK | `mcp==2.2.0` |
 | Platform Tasks transport | `MCPStatelessHTTPClient` |
 
 Normative/evaluation sources:
@@ -47,9 +47,10 @@ this extension. In particular, this implementation does not use the legacy `task
 `tasks/result`, `tasks/list`, or legacy method-level task capability declarations.
 
 At the time of #964 implementation, the repository-pinned official Python SDK line does not provide
-client support for the finalized `io.modelcontextprotocol/tasks` extension. Tasks therefore live
-only behind the existing experimental `2026-07-28` stateless HTTP compatibility client. No MCP
-Tasks code is imported by the platform core or required by baseline/native capability invocation.
+client support for the finalized `io.modelcontextprotocol/tasks` extension. The 2.2.0 release still
+lists SEP-2663 Tasks as a known gap, so Tasks remain only behind the existing experimental
+`2026-07-28` stateless HTTP compatibility client. No MCP Tasks code is imported by the platform core
+or required by baseline/native capability invocation.
 
 ## Negotiation and wire behavior
 

@@ -30,6 +30,9 @@ def test_single_node_release_status_requires_authentication_and_surfaces_candida
             SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
         )
 
+        assert "release-status" in deployment.control_plane.registered_modules
+        assert deployment.control_plane.route_owner("GET", RELEASE_STATUS_PATH) == "release-status"
+
         anonymous = await deployment.http.handle(
             HTTPRequest(method="GET", path=RELEASE_STATUS_PATH)
         )

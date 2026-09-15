@@ -26,11 +26,13 @@ def _control_plane() -> ControlPlane:
     )
 
 
-def test_project_move_commands_are_canonical_not_extension_registrations() -> None:
+def test_project_move_commands_have_explicit_non_extension_ownership() -> None:
     control_plane = _control_plane()
 
-    assert TASK_PROJECT_MOVE_COMMAND not in control_plane.registered_commands
-    assert TASK_PROJECT_BULK_MOVE_COMMAND not in control_plane.registered_commands
+    for command in (TASK_PROJECT_MOVE_COMMAND, TASK_PROJECT_BULK_MOVE_COMMAND):
+        assert command in control_plane.registered_commands
+        assert control_plane.command_owner(command) == "task-project-reassignment"
+        assert command not in control_plane.extension_commands
 
 
 def test_project_move_commands_have_explicit_openapi_contracts() -> None:
