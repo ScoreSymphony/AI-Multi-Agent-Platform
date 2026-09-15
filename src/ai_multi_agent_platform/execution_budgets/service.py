@@ -8,15 +8,12 @@ from datetime import datetime, timedelta
 from math import isfinite
 from typing import Protocol
 
-from ai_multi_agent_platform.accounting import (
-    AccountingService,
+from ai_multi_agent_platform.accounting.async_service import (
     AsyncAccountingService,
-    MeasurementQuality,
-    UsageQuery,
-    UsageScope,
-    aggregate_usage_records,
     runtime_accounting_service,
 )
+from ai_multi_agent_platform.accounting.models import MeasurementQuality, UsageQuery, UsageScope
+from ai_multi_agent_platform.accounting.service import AccountingService, aggregate_usage_records
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
@@ -57,12 +54,8 @@ _ACTION_DIMENSIONS: dict[BudgetActionKind, frozenset[BudgetDimension]] = {
             BudgetDimension.RUNTIME_SECONDS,
         }
     ),
-    BudgetActionKind.REPLAN: frozenset(
-        {BudgetDimension.REPLANS, BudgetDimension.RUNTIME_SECONDS}
-    ),
-    BudgetActionKind.REPAIR: frozenset(
-        {BudgetDimension.REPAIRS, BudgetDimension.RUNTIME_SECONDS}
-    ),
+    BudgetActionKind.REPLAN: frozenset({BudgetDimension.REPLANS, BudgetDimension.RUNTIME_SECONDS}),
+    BudgetActionKind.REPAIR: frozenset({BudgetDimension.REPAIRS, BudgetDimension.RUNTIME_SECONDS}),
     BudgetActionKind.PARALLEL_STEP: frozenset(
         {BudgetDimension.PARALLEL_STEPS, BudgetDimension.RUNTIME_SECONDS}
     ),
@@ -227,7 +220,9 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
         reservations: list[BudgetReservation] = []
         for dimension, quantity in requested.items():
             if not isfinite(quantity) or quantity <= 0:
-                raise ValueError("requested budget reservation quantity must be positive and finite")
+                raise ValueError(
+                    "requested budget reservation quantity must be positive and finite"
+                )
             limit = policy.limit_for(dimension)
             if limit is None:
                 continue
@@ -334,9 +329,7 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
                 self._store.reconcile_reservation,
                 reservation.id,
                 consumed_quantity=quantity,
-                add_to_runtime_counter=(
-                    limit.source is BudgetConsumptionSource.RUNTIME_COUNTER
-                ),
+                add_to_runtime_counter=(limit.source is BudgetConsumptionSource.RUNTIME_COUNTER),
             )
 
     async def release(self, decision: BudgetAdmissionDecision) -> None:
