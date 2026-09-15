@@ -3,17 +3,12 @@
 from collections.abc import Iterable
 
 from ai_multi_agent_platform.accounting import AccountingService
-from ai_multi_agent_platform.application_distribution import (
-    ApplicationReleaseGateCoordinator,
-    ReleaseGatePolicy,
-    StaticReleaseGatePolicy,
-)
+from ai_multi_agent_platform.application_distribution import ReleaseGatePolicy
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.observability import InMemoryExporter
 from ai_multi_agent_platform.onboarding import OnboardingModelAdapter
 from ai_multi_agent_platform.repositories import RepositoryDiscoveryResolver
-from ai_multi_agent_platform.verification import CanonicalVerificationAccess
 
 from .advanced_profiles import (
     AdvancedDeploymentProfile,
@@ -63,15 +58,9 @@ def build_single_node_deployment(
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
     application_release_gate_policy: ReleaseGatePolicy | None = None,
 ) -> SingleNodeDeployment:
-    """Build the public durable profile and attach canonical application release gates.
+    """Build the public durable profile with release policy supplied at construction time."""
 
-    The durable connector composition remains the low-level owner of application build/release
-    infrastructure. This public wrapper binds release-gate projection to the already composed
-    canonical Verification and Evaluation stores. Gate semantics stay explicitly injectable so
-    application distribution does not invent a second policy authority.
-    """
-
-    deployment = _build_single_node_deployment(
+    return _build_single_node_deployment(
         config,
         onboarding_model_adapters=onboarding_model_adapters,
         secret_provider=secret_provider,
@@ -80,20 +69,8 @@ def build_single_node_deployment(
         distributed_runtime=distributed_runtime,
         enable_distributed_execution=enable_distributed_execution,
         repository_discovery_resolver=repository_discovery_resolver,
+        application_release_gate_policy=application_release_gate_policy,
     )
-    gate_policy = (
-        application_release_gate_policy
-        if application_release_gate_policy is not None
-        else StaticReleaseGatePolicy()
-    )
-    deployment.application_releases.gate_coordinator = ApplicationReleaseGateCoordinator(
-        policy=gate_policy,
-        files=deployment.files,
-        verification_access=CanonicalVerificationAccess(deployment.verification),
-        evaluations=deployment.evaluation_repository,
-        evaluation_service=deployment.evaluation,
-    )
-    return deployment
 
 
 __all__ = [
