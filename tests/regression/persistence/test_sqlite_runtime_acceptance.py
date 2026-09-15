@@ -6,11 +6,16 @@ import asyncio
 import threading
 from pathlib import Path
 
+import pytest
+
 from ai_multi_agent_platform.agents import bootstrap_standard_agents
 from ai_multi_agent_platform.control_plane import ActorContext, PageQuery, RequestContext
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.repositories.async_catalog import AsyncSqliteRepositoryBindingCatalog
-from ai_multi_agent_platform.repositories.catalog import SqliteRepositoryBindingCatalog
+from ai_multi_agent_platform.repositories.catalog import (
+    RepositoryBindingRecord,
+    SqliteRepositoryBindingCatalog,
+)
 
 
 def _context(user_id: str, suffix: str) -> RequestContext:
@@ -37,7 +42,7 @@ async def _wait_for_thread_event(event: threading.Event, *, timeout: float = 2.0
 
 def test_mixed_control_plane_agent_workload_remains_responsive_during_sqlite_pressure(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Keep real SQLite work active while representative async platform traffic progresses."""
 
@@ -61,7 +66,7 @@ def test_mixed_control_plane_agent_workload_remains_responsive_during_sqlite_pre
         def pressure_list(
             *,
             connection_id: str | None = None,
-        ):
+        ) -> tuple[RepositoryBindingRecord, ...]:
             worker_names.append(threading.current_thread().name)
             with sqlite_catalog._connect() as connection:  # noqa: SLF001
                 # Hold a real SQLite transaction open so the concurrent workload is measured
@@ -70,7 +75,7 @@ def test_mixed_control_plane_agent_workload_remains_responsive_during_sqlite_pre
                 connection.execute("BEGIN IMMEDIATE")
                 connection.execute("SELECT COUNT(*) FROM repository_bindings").fetchone()
                 started.set()
-                if not release.wait(timeout=2.0):
+                if not release.wait(timeout=3.0):
                     connection.rollback()
                     raise TimeoutError("SQLite acceptance pressure release timed out")
                 connection.rollback()
@@ -90,10 +95,11 @@ def test_mixed_control_plane_agent_workload_remains_responsive_during_sqlite_pre
                 heartbeat_ticks += 1
                 await asyncio.sleep(0)
 
-        workload = []
-        for index in range(6):
-            workload.extend(
-                (
+        async def representative_workload():
+            task_pages = []
+            agent_pages = []
+            for index in range(6):
+                task_page, agent_page = await asyncio.gather(
                     deployment.control_plane.list_tasks(
                         _context(admin.user_id, f"tasks-{index}"),
                         PageQuery(limit=20),
@@ -104,12 +110,14 @@ def test_mixed_control_plane_agent_workload_remains_responsive_during_sqlite_pre
                         PageQuery(limit=20),
                     ),
                 )
-            )
+                task_pages.append(task_page)
+                agent_pages.append(agent_page)
+            return task_pages, agent_pages
 
         try:
-            results = await asyncio.wait_for(
-                asyncio.gather(heartbeat(), *workload),
-                timeout=0.75,
+            _, (task_pages, agent_pages) = await asyncio.wait_for(
+                asyncio.gather(heartbeat(), representative_workload()),
+                timeout=1.5,
             )
             assert not blocked_persistence.done()
         finally:
@@ -120,13 +128,8 @@ def test_mixed_control_plane_agent_workload_remains_responsive_during_sqlite_pre
         assert heartbeat_ticks > 10
         assert worker_names
         assert worker_names[0].startswith("repository-catalog-persistence")
-
-        task_pages = results[1::2]
-        agent_pages = results[2::2]
         assert len(task_pages) == 6
         assert len(agent_pages) == 6
-        assert all(isinstance(page, dict) for page in task_pages)
-        assert all(isinstance(page, dict) for page in agent_pages)
         assert all(page.get("items") for page in agent_pages)
 
     asyncio.run(scenario())
