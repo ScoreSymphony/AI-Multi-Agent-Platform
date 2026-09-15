@@ -1,5 +1,5 @@
 import type { CanonicalModel, JsonValue } from "../../api/types";
-import type { FirstRunTaskResult, OnboardingStatus } from "../../api/onboarding";
+import type { FirstRunTaskResult, MultiAgentFirstRunResult, OnboardingStatus } from "../../api/onboarding";
 import { AppLink } from "../../app/router";
 import { CanonicalId, Card, StatusBadge } from "../../components/States";
 import { onboardingStatePresentation } from "./state";
@@ -34,6 +34,48 @@ export function ModelHealthTable({ models }: { models: CanonicalModel[] }) {
   if (!local.length) return null;
   return (
     <div className="table-wrap"><table><thead><tr><th>Model</th><th>Location</th><th>Provider</th><th>Effective health</th></tr></thead><tbody>{local.map((model) => <tr key={model.id}><td>{model.display_name}<div><CanonicalId value={model.id} /></div></td><td><StatusBadge value={model.location} /></td><td><CanonicalId value={model.provider_id} /></td><td><StatusBadge value={model.effective_health} /></td></tr>)}</tbody></table></div>
+  );
+}
+
+export function MultiAgentFirstResult({ result }: { result: MultiAgentFirstRunResult }) {
+  return (
+    <Card title="Official multi-agent first-run result">
+      <div className="metrics">
+        <Metric label="Task" value={result.task_status} />
+        <Metric label="Plan steps" value={result.steps.length} />
+        <Metric label="Specialized roles" value={Object.keys(result.agents).length} />
+        <Metric label="Verification" value={result.review.verification_status} />
+        <Metric label="Artifacts" value={result.artifact_ids.length} />
+      </div>
+      <div className="actions">
+        <AppLink href={`/tasks/${result.task_id}`}>Open Task</AppLink>
+        {result.result_id ? <AppLink href={`/results/${result.result_id}`}>Open produced Result</AppLink> : null}
+      </div>
+      <p>Plan <CanonicalId value={result.plan_id} /> uses the canonical #889 dependency graph. Root research and approach steps can run independently before execution fans in and the reviewer checks the exact output.</p>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Step</th><th>Agent</th><th>Dependencies</th><th>Status</th><th>Run / Result</th></tr></thead>
+          <tbody>{result.steps.map((step) => (
+            <tr key={step.step_id}>
+              <td>{step.title}<div><CanonicalId value={step.step_id} /></div></td>
+              <td>{step.agent_id ? <CanonicalId value={`${step.agent_id}@${step.agent_revision ?? "?"}`} /> : "—"}</td>
+              <td>{step.depends_on.length ? step.depends_on.map((id) => <div key={id}><CanonicalId value={id} /></div>) : "parallel root"}</td>
+              <td><StatusBadge value={step.status} /><div><small>{step.phase}</small></div></td>
+              <td>{step.run_id ? <AppLink href={`/runs/${step.run_id}`}>Run</AppLink> : "—"}{step.result_ids.map((id) => <div key={id}><AppLink href={`/results/${id}`}>Result</AppLink></div>)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <div className="stack">
+        <strong>Artifacts</strong>
+        <ul>{result.artifact_ids.map((artifactId) => <li key={artifactId}><AppLink href={`/artifacts/${artifactId}`}><CanonicalId value={artifactId} /></AppLink></li>)}</ul>
+      </div>
+      <div className="stack">
+        <strong>Canonical verification</strong>
+        {result.verification.length ? <ul>{result.verification.map((item) => <li key={item.verification_id}><CanonicalId value={item.verification_id} /> · {item.subject_type}:{item.subject_id} · <StatusBadge value={item.outcome ?? item.status} />{item.is_final_result_review ? " · produced result" : ""}</li>)}</ul> : <p>No Verification record was produced.</p>}
+      </div>
+      <pre>{JSON.stringify(result.trace, null, 2)}</pre>
+    </Card>
   );
 }
 
