@@ -122,7 +122,9 @@ def strongly_connected_components(
 
 
 def cyclic_components(graph: dict[str, tuple[str, ...]]) -> tuple[tuple[str, ...], ...]:
-    return tuple(component for component in strongly_connected_components(graph) if len(component) > 1)
+    return tuple(
+        component for component in strongly_connected_components(graph) if len(component) > 1
+    )
 
 
 def _baseline(path: Path) -> tuple[bool, tuple[frozenset[str], ...]]:
@@ -140,8 +142,10 @@ def _baseline(path: Path) -> tuple[bool, tuple[frozenset[str], ...]]:
     cycles: list[frozenset[str]] = []
     for entry in entries:
         packages = entry.get("packages")
-        if not isinstance(packages, list) or not packages or not all(
-            isinstance(package, str) and package for package in packages
+        if (
+            not isinstance(packages, list)
+            or not packages
+            or not all(isinstance(package, str) and package for package in packages)
         ):
             raise ValueError("each dependency-cycle baseline entry needs non-empty packages")
         cycles.append(frozenset(packages))
