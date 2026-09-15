@@ -6,6 +6,7 @@ import asyncio
 import sqlite3
 import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import TypeVar
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -23,10 +24,10 @@ _BUSY_MARKERS = (
 class AsyncDataOffload:
     """Run complete blocking Data persistence operations away from the event loop.
 
-    The worker-side gates are deliberately thread-based rather than asyncio-bound so one local
-    provider remains valid when callers reuse it across multiple event-loop lifetimes. The
-    process' default executor bounds actual threads, while ``_slots`` explicitly bounds active
-    provider operations. Writers queue before consuming a shared slot, preserving read capacity
+    Each provider owns a dedicated bounded executor instead of consuming asyncio's process-wide
+    default executor. The worker-side gates are deliberately thread-based rather than
+    asyncio-bound so one local provider remains valid when callers reuse it across multiple
+    event-loop lifetimes. Writers queue before consuming a shared slot, preserving read capacity
     while one durable mutation is active.
     """
 
@@ -35,9 +36,14 @@ class AsyncDataOffload:
             raise ValueError("max_concurrency must be >= 1")
         self._slots = threading.BoundedSemaphore(max_concurrency)
         self._write_lock = threading.Lock()
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_concurrency,
+            thread_name_prefix="data-persistence",
+        )
 
     async def run(self, operation: Callable[[], _T], *, write: bool = False) -> _T:
-        worker = asyncio.create_task(asyncio.to_thread(self._run_sync, operation, write))
+        loop = asyncio.get_running_loop()
+        worker = loop.run_in_executor(self._executor, self._run_sync, operation, write)
         return await _await_persistence_boundary(worker)
 
     def _run_sync(self, operation: Callable[[], _T], write: bool) -> _T:
@@ -49,7 +55,7 @@ class AsyncDataOffload:
             return operation()
 
 
-async def _await_persistence_boundary[T](worker: asyncio.Task[T]) -> T:
+async def _await_persistence_boundary[T](worker: asyncio.Future[T]) -> T:
     try:
         return await asyncio.shield(worker)
     except asyncio.CancelledError:

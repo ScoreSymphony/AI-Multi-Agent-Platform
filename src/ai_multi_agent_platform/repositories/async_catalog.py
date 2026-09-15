@@ -2,7 +2,7 @@
 
 The durable SQLite catalog remains a dependency-free synchronous implementation for
 constructor/startup tooling. Runtime services use this module so blocking SQLite work is
-bounded and never runs on the asyncio event-loop thread.
+bounded and never runs on the asyncio event-loop thread or process-wide default executor.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -86,9 +87,9 @@ class InMemoryRepositoryBindingCatalog:
 class AsyncSqliteRepositoryBindingCatalog:
     """Event-loop-safe adapter over the synchronous SQLite binding catalog.
 
-    Each blocking call opens, uses and closes its SQLite connection inside the worker thread
-    because the wrapped catalog owns connection creation per operation. Writes are serialized
-    before they consume shared worker capacity; reads may run concurrently up to
+    Each blocking call opens, uses and closes its SQLite connection inside a dedicated catalog
+    worker thread because the wrapped catalog owns connection creation per operation. Writes are
+    serialized before they consume shared worker capacity; reads may run concurrently up to
     ``max_concurrency``. Cancellation is deferred until the synchronous operation reaches its
     commit/rollback boundary.
     """
@@ -104,6 +105,10 @@ class AsyncSqliteRepositoryBindingCatalog:
         self._catalog = catalog
         self._slots = asyncio.Semaphore(max_concurrency)
         self._write_lock = asyncio.Lock()
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_concurrency,
+            thread_name_prefix="repository-catalog-persistence",
+        )
 
     async def save(self, record: RepositoryBindingRecord) -> RepositoryBindingRecord:
         return await self._run(
@@ -148,9 +153,9 @@ class AsyncSqliteRepositoryBindingCatalog:
             if write:
                 async with self._write_lock:
                     async with self._slots:
-                        return await _run_to_transaction_boundary(operation)
+                        return await _run_to_transaction_boundary(self._executor, operation)
             async with self._slots:
-                return await _run_to_transaction_boundary(operation)
+                return await _run_to_transaction_boundary(self._executor, operation)
         except ContractError as exc:
             mapped = _map_contract_sqlite_error(exc, message)
             if mapped is exc:
@@ -175,8 +180,12 @@ def ensure_async_repository_binding_catalog(
     return catalog
 
 
-async def _run_to_transaction_boundary[T](operation: Callable[[], T]) -> T:
-    worker = asyncio.create_task(asyncio.to_thread(operation))
+async def _run_to_transaction_boundary[T](
+    executor: ThreadPoolExecutor,
+    operation: Callable[[], T],
+) -> T:
+    loop = asyncio.get_running_loop()
+    worker = loop.run_in_executor(executor, operation)
     try:
         return await asyncio.shield(worker)
     except asyncio.CancelledError:
