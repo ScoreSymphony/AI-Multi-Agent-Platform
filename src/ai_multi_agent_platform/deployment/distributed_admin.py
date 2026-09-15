@@ -17,12 +17,10 @@ from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.security import (
     ActorType,
     AuthorizationAction,
-    CredentialKind,
     CredentialScope,
     LocalAuthenticationService,
     LocalPrincipalPolicy,
     ResourceType,
-    StoredCredential,
 )
 from ai_multi_agent_platform.security.async_authorization_policy import (
     AsyncAuthorizationPolicyService,
@@ -83,23 +81,23 @@ class DistributedWorkerAdmin:
         await self._ensure_worker_policy(resource_ref)
 
         now = datetime.now(UTC)
-        active = await self._active_worker_credentials(resource_ref, now=now)
-        if active:
-            return {
-                "id": resource_ref,
-                "type": "worker-credential-provisioning",
-                "state": "already_provisioned",
-                "node_id": node.node.node_id,
-                "active_credential_ids": [item.credential_id for item in active],
-                "secret_display": "not_recoverable",
-            }
-
-        issued = await self._runtime_credentials.create_worker_credential(
+        provisioning = await self._runtime_credentials.provision_worker_credential(
             resource_ref,
             purpose=purpose,
             scope=self._credential_scope(node),
             now=now,
         )
+        if provisioning.issued is None:
+            return {
+                "id": resource_ref,
+                "type": "worker-credential-provisioning",
+                "state": "already_provisioned",
+                "node_id": node.node.node_id,
+                "active_credential_ids": list(provisioning.active_credential_ids),
+                "secret_display": "not_recoverable",
+            }
+
+        issued = provisioning.issued
         return {
             "id": resource_ref,
             "type": "worker-credential-provisioning",
@@ -184,18 +182,6 @@ class DistributedWorkerAdmin:
                 allowed_actions=_WORKER_PROTOCOL_ACTIONS,
                 resource_types=_WORKER_PROTOCOL_RESOURCES,
             )
-        )
-
-    async def _active_worker_credentials(
-        self,
-        worker_id: str,
-        *,
-        now: datetime,
-    ) -> tuple[StoredCredential, ...]:
-        return tuple(
-            credential
-            for credential in await self._runtime_credentials.list_credentials(worker_id)
-            if credential.kind is CredentialKind.WORKER and credential.active(now=now)
         )
 
 

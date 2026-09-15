@@ -148,11 +148,13 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
                 request_id=request_id,
                 correlation_id=correlation_id,
             )
-        except (TypeError, ValueError):
-            return self._authentication_error(
-                AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS),
-                request_id,
-                correlation_id,
+        except (TypeError, ValueError) as exc:
+            return self._error(
+                status=400,
+                code="invalid_request",
+                message=str(exc),
+                request_id=request_id,
+                correlation_id=correlation_id,
             )
 
     async def async_prepare_stream_request(

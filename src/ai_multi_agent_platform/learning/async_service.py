@@ -347,6 +347,7 @@ class RuntimeGovernedLearningService(GovernedObservedLearningService):
                     "learning candidate project scope does not match promotion operation",
                 )
 
+            adapter = self.promotion_registry.resolve(current.target.resource_type)
             await self._persistence_offload.run(
                 lambda: self._validate_quality_for_promotion(current),
                 message="failed to validate Learning promotion evidence",
@@ -371,7 +372,6 @@ class RuntimeGovernedLearningService(GovernedObservedLearningService):
                 approval_id=approval_id,
                 risk=current.risk,
             )
-            adapter = self.promotion_registry.resolve(current.target.resource_type)
             receipt = await adapter.promote(
                 current,
                 principal_ref=actor.actor_id,

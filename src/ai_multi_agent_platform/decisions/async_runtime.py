@@ -13,6 +13,7 @@ from .models import DecisionRecord, DecisionRecordView, DecisionReference
 from .service import DecisionService
 
 _T = TypeVar("_T")
+ASYNC_DECISION_SERVICE_MARKER = "__ai_multi_agent_async_decision_service__"
 _ASYNC_METHODS = (
     "create",
     "supersede",
@@ -155,7 +156,16 @@ class AsyncDecisionRuntime:
 def as_async_decision_service(
     decisions: DecisionService | AsyncDecisionService,
 ) -> AsyncDecisionService:
-    """Keep native async services native; adapt the synchronous compatibility service once."""
+    """Resolve the awaitable Decision service without guessing by calling service methods.
+
+    Native coroutine methods are recognized through their coroutine flag (including a usable
+    ``__wrapped__`` chain). Backends whose ordinary ``def`` wrappers return awaitables must opt in
+    with ``ASYNC_DECISION_SERVICE_MARKER``. Unmarked regular methods remain the synchronous
+    compatibility shape and are offloaded instead of being assumed async.
+    """
+
+    if bool(getattr(decisions, ASYNC_DECISION_SERVICE_MARKER, False)):
+        return cast(AsyncDecisionService, decisions)
 
     states = tuple(_method_is_async(decisions, name) for name in _ASYNC_METHODS)
     if any(states) and not all(states):
@@ -166,10 +176,20 @@ def as_async_decision_service(
 
 
 def _method_is_async(value: object, name: str) -> bool:
-    return inspect.iscoroutinefunction(getattr(value, name, None))
+    method = getattr(value, name, None)
+    if inspect.iscoroutinefunction(method):
+        return True
+    if not callable(method):
+        return False
+    try:
+        unwrapped = inspect.unwrap(method)
+    except (TypeError, ValueError):
+        return False
+    return inspect.iscoroutinefunction(unwrapped)
 
 
 __all__ = [
+    "ASYNC_DECISION_SERVICE_MARKER",
     "AsyncDecisionRuntime",
     "AsyncDecisionService",
     "as_async_decision_service",
