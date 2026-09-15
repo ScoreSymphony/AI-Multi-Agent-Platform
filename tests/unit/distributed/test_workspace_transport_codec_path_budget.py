@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
-from ai_multi_agent_platform.distributed.workspace_transport import _entry_token, _ManifestEntry
+from ai_multi_agent_platform.distributed.workspace_transport_codec import _entry_token, _ManifestEntry
 
 
 def _entry(relative_path: str) -> _ManifestEntry:
