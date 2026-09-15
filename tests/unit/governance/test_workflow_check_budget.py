@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -17,12 +18,46 @@ def _trigger_block(name: str) -> str:
     return text.split("\njobs:", 1)[0]
 
 
+def _job_ids(name: str) -> set[str]:
+    jobs = _text(name).split("\njobs:\n", 1)[1]
+    return set(re.findall(r"^  ([A-Za-z0-9_-]+):\s*$", jobs, flags=re.MULTILINE))
+
+
+def test_core_ci_and_optional_compatibility_are_split() -> None:
+    assert _job_ids("ci.yml") == {"test", "single-node-install-smoke", "frontend"}
+    assert _job_ids("compatibility.yml") == {
+        "litellm-compat",
+        "bifrost-pinned-compat",
+        "hermes-pinned-compat",
+    }
+
+    compatibility_triggers = _trigger_block("compatibility.yml")
+    assert "pull_request:" in compatibility_triggers
+    assert "\n  push:" not in compatibility_triggers
+
+
 def test_duplicate_post_merge_validation_stays_off_main_push() -> None:
     assert "\n  push:" not in _trigger_block("codeql.yml")
     assert "\n  push:" not in _trigger_block("conformance.yml")
 
     repository_quality_triggers = _trigger_block("repository-quality.yml")
     assert "main" not in repository_quality_triggers
+
+
+def test_routine_main_push_budget_is_nine_checks() -> None:
+    routine_push_workflows = (
+        "ci.yml",
+        "benchmark-smoke.yml",
+        "performance-extended-smoke.yml",
+    )
+    for workflow in routine_push_workflows:
+        triggers = _trigger_block(workflow)
+        assert "\n  push:" in triggers
+        assert "main" in triggers
+
+    routine_checks = sum(len(_job_ids(workflow)) for workflow in routine_push_workflows)
+    assert routine_checks == 9
+    assert routine_checks <= 10
 
 
 def test_repository_maintenance_is_manual_only() -> None:
