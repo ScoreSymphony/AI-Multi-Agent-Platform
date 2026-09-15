@@ -30,6 +30,7 @@ from .models import (
     BudgetDimensionSnapshot,
     BudgetExhaustionAction,
     BudgetReservation,
+    ReservationState,
     TaskBudgetLimit,
     TaskBudgetPolicy,
     TaskBudgetSnapshot,
@@ -39,6 +40,35 @@ from .models import (
 from .store import ReservationClaim, TaskBudgetStore
 
 AccountingRuntime = AccountingService | AsyncAccountingService
+
+_ACTION_DIMENSIONS: dict[BudgetActionKind, frozenset[BudgetDimension]] = {
+    BudgetActionKind.MODEL_CALL: frozenset(
+        {
+            BudgetDimension.MODEL_CALLS,
+            BudgetDimension.MODEL_TOKENS,
+            BudgetDimension.EXTERNAL_COST,
+            BudgetDimension.RUNTIME_SECONDS,
+        }
+    ),
+    BudgetActionKind.TOOL_CALL: frozenset(
+        {
+            BudgetDimension.TOOL_CALLS,
+            BudgetDimension.EXTERNAL_COST,
+            BudgetDimension.RUNTIME_SECONDS,
+        }
+    ),
+    BudgetActionKind.REPLAN: frozenset(
+        {BudgetDimension.REPLANS, BudgetDimension.RUNTIME_SECONDS}
+    ),
+    BudgetActionKind.REPAIR: frozenset(
+        {BudgetDimension.REPAIRS, BudgetDimension.RUNTIME_SECONDS}
+    ),
+    BudgetActionKind.PARALLEL_STEP: frozenset(
+        {BudgetDimension.PARALLEL_STEPS, BudgetDimension.RUNTIME_SECONDS}
+    ),
+    BudgetActionKind.RETRY: frozenset({BudgetDimension.RUNTIME_SECONDS}),
+    BudgetActionKind.OTHER: frozenset({BudgetDimension.RUNTIME_SECONDS}),
+}
 
 
 class TaskBudgetAdmission(Protocol):
@@ -113,7 +143,8 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
             reserved = sum(
                 reservation.quantity
                 for reservation in reservations
-                if reservation.dimension is limit.dimension and reservation.state.value == "active"
+                if reservation.dimension is limit.dimension
+                and reservation.state is ReservationState.ACTIVE
             )
             dimensions.append(
                 BudgetDimensionSnapshot(
@@ -155,9 +186,11 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
                 reason="no Task execution budget policy configured",
             )
 
+        requested = dict(quantities or {})
+        relevant = _relevant_dimensions(action, requested)
         now = utc_now()
         snapshot = await self.snapshot(task_id, observed_at=now)
-        unavailable = _first_unavailable(snapshot)
+        unavailable = _first_unavailable(snapshot, relevant)
         if unavailable is not None:
             limit = unavailable.limit
             if limit.unavailable_policy is UnavailableMetricPolicy.REQUIRE_APPROVAL:
@@ -179,11 +212,17 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
                     limit.dimension,
                 )
 
-        exhausted = next((item for item in snapshot.dimensions if item.exhausted), None)
+        exhausted = next(
+            (
+                item
+                for item in snapshot.dimensions
+                if item.limit.dimension in relevant and item.exhausted
+            ),
+            None,
+        )
         if exhausted is not None:
             return _exhausted_decision(task_id, action, snapshot, exhausted.limit)
 
-        requested = dict(quantities or {})
         claims: list[ReservationClaim] = []
         reservations: list[BudgetReservation] = []
         for dimension, quantity in requested.items():
@@ -232,21 +271,31 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
         if claims and not await asyncio.to_thread(self._store.try_reserve_many, tuple(claims)):
             current = await self.snapshot(task_id)
             blocking = _blocking_requested_dimension(current, requested)
-            limit = blocking.limit if blocking is not None else claims[0].reservation.dimension
-            if isinstance(limit, TaskBudgetLimit):
-                return _exhausted_decision(task_id, action, current, limit)
+            if blocking is not None:
+                return _exhausted_decision(task_id, action, current, blocking.limit)
             return _decision(
                 task_id,
                 action,
                 BudgetAdmissionOutcome.BLOCKED,
                 "Task budget reservation lost an atomic admission race",
                 current,
-                limit,
+                claims[0].reservation.dimension,
             )
 
         admitted = await self.snapshot(task_id)
-        warning = next((item for item in admitted.dimensions if item.warning), None)
-        outcome = BudgetAdmissionOutcome.WARNING if warning is not None else BudgetAdmissionOutcome.ALLOWED
+        warning = next(
+            (
+                item
+                for item in admitted.dimensions
+                if item.limit.dimension in relevant and item.warning
+            ),
+            None,
+        )
+        outcome = (
+            BudgetAdmissionOutcome.WARNING
+            if warning is not None
+            else BudgetAdmissionOutcome.ALLOWED
+        )
         return BudgetAdmissionDecision(
             task_id=task_id,
             action=action,
@@ -352,19 +401,33 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
             metric_type=limit.metric_type,
             unit=limit.unit,
         )
+        unavailable_count = quality_counts[MeasurementQuality.UNAVAILABLE]
+        if not records and limit.dimension is BudgetDimension.EXTERNAL_COST:
+            unavailable_count = 1
         return BudgetConsumption(
             consumed=0.0 if aggregate.total is None else aggregate.total,
             source=limit.source,
             quality_counts=quality_counts,
-            unavailable_count=quality_counts[MeasurementQuality.UNAVAILABLE],
+            unavailable_count=unavailable_count,
             record_ids=tuple(record.id for record in records),
         )
 
 
-def _first_unavailable(snapshot: TaskBudgetSnapshot) -> BudgetDimensionSnapshot | None:
+def _relevant_dimensions(
+    action: BudgetActionKind,
+    requested: Mapping[BudgetDimension, float],
+) -> frozenset[BudgetDimension]:
+    return _ACTION_DIMENSIONS[action] | frozenset(requested)
+
+
+def _first_unavailable(
+    snapshot: TaskBudgetSnapshot,
+    relevant: frozenset[BudgetDimension],
+) -> BudgetDimensionSnapshot | None:
     for item in snapshot.dimensions:
         if (
-            item.unavailable_count > 0
+            item.limit.dimension in relevant
+            and item.unavailable_count > 0
             and item.limit.unavailable_policy is not UnavailableMetricPolicy.ALLOW
         ):
             return item
@@ -379,7 +442,7 @@ def _blocking_requested_dimension(
         item = snapshot.for_dimension(dimension)
         if item is not None and item.consumed + item.reserved + quantity > item.limit.limit:
             return item
-    return next((item for item in snapshot.dimensions if item.exhausted), None)
+    return None
 
 
 def _exhausted_decision(
