@@ -1,5 +1,7 @@
 """Canonical evidence-backed Decision Records (#598)."""
 
+from .async_persistence import DecisionPersistenceOffload, decision_persistence_offload
+from .async_runtime import AsyncDecisionRuntime, AsyncDecisionService, as_async_decision_service
 from .control_plane import (
     DECISION_COLLECTION,
     DECISION_COMMANDS,
@@ -35,9 +37,12 @@ __all__ = [
     "DECISION_COLLECTION",
     "DECISION_COMMANDS",
     "DECISION_SCHEMA_VERSION",
+    "AsyncDecisionRuntime",
+    "AsyncDecisionService",
     "DecisionAlternative",
     "DecisionAlternativeStatus",
     "DecisionOutcome",
+    "DecisionPersistenceOffload",
     "DecisionRecord",
     "DecisionRecordCommandHandler",
     "DecisionRecordResourceService",
@@ -49,7 +54,9 @@ __all__ = [
     "DecisionStatus",
     "SqliteDecisionRepository",
     "alternative_to_json",
+    "as_async_decision_service",
     "decision_content_digest",
+    "decision_persistence_offload",
     "decision_record_command_handlers",
     "decision_record_resource_services",
     "decision_view_resource",
