@@ -1,0 +1,50 @@
+name: Workflow consolidation helper
+
+on:
+  push:
+    branches:
+      - ci/consolidate-actions-workflows
+    paths:
+      - ".github/workflows/workflow-consolidation-helper.yml"
+      - "scripts/maintenance/consolidate_actions_workflows.py"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-consolidation:
+    if: contains(github.event.head_commit.message, '[apply-actions-consolidation]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ci/consolidate-actions-workflows
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Apply deterministic workflow consolidation
+        run: python scripts/maintenance/consolidate_actions_workflows.py
+      - name: Validate generated diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          count="$(find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | wc -l)"
+          test "$count" -eq 13
+          test ! -e .github/workflows/performance-extended-smoke.yml
+          test ! -e .github/workflows/pipelock-candidate-compat.yml
+          test ! -e .github/workflows/issue859-bifrost-security.yml
+          test ! -e .github/workflows/issue859-bifrost-performance.yml
+          test ! -e .github/workflows/issue859-bifrost-dns-rebinding.yml
+          test -e .github/workflows/bifrost-evaluation.yml
+          git status --short
+      - name: Commit consolidated layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "ci: consolidate benchmark, Pipelock, and Bifrost workflows"
+          git push origin HEAD:ci/consolidate-actions-workflows
