@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime
+from types import MethodType
+
+from ai_multi_agent_platform.coordination import DurablePlanStepCoordinator
+from ai_multi_agent_platform.coordination.models import StepCoordinationRecord
+from ai_multi_agent_platform.domain import Step
 from ai_multi_agent_platform.execution.budgets import (
     BudgetActionKind,
+    BudgetAdmissionDecision,
+    BudgetAdmissionOutcome,
+    BudgetConsumptionSource,
     BudgetDimension,
+    BudgetReservation,
+    ReservationClaim,
+    ReservationState,
     TaskBudgetEnforcementService,
 )
 from ai_multi_agent_platform.verification.repair import (
@@ -81,4 +94,235 @@ class TaskBudgetRepairRuntime:
         return execution
 
 
-__all__ = ["TaskBudgetRepairRuntime"]
+class TaskBudgetCoordinationBindings:
+    """Bind shared retry and concurrent-Step budgets to the durable coordinator lifecycle.
+
+    `parallel_steps` is a semaphore-like Task resource, not a cumulative operation count. Its claim
+    is therefore created without an expiry and remains active until the corresponding canonical Run
+    is observed terminal or cancelled. The durable reservation store makes this restart-safe.
+
+    `retries` is cumulative. A retry unit is reserved before dispatch and reconciled only after the
+    retry attempt starts successfully.
+    """
+
+    def __init__(
+        self,
+        coordinator: DurablePlanStepCoordinator,
+        budgets: TaskBudgetEnforcementService,
+    ) -> None:
+        self._coordinator = coordinator
+        self._budgets = budgets
+        self._installed = False
+
+    def install(self) -> None:
+        if self._installed:
+            return
+        self._installed = True
+        coordinator = self._coordinator
+        original_start = coordinator._start_attempt  # noqa: SLF001
+        original_observe = coordinator.observe_run
+        original_cancel_active = coordinator._cancel_active_run  # noqa: SLF001
+        original_cancel_plan = coordinator.cancel_plan
+
+        async def budgeted_start(
+            _coordinator: DurablePlanStepCoordinator,
+            step: Step,
+            record: StepCoordinationRecord,
+            now: datetime,
+        ) -> bool:
+            retry_decision: BudgetAdmissionDecision | None = None
+            parallel_decision: BudgetAdmissionDecision | None = None
+            try:
+                if record.current_attempt > 0:
+                    retry_decision = await self._budgets.admit(
+                        task_id=record.task_id,
+                        action=BudgetActionKind.RETRY,
+                        quantities={BudgetDimension.RETRIES: 1.0},
+                        step_id=record.step_id,
+                        correlation_id=record.correlation_id or record.task_id,
+                        causation_id=record.latest_run_id,
+                        provenance={
+                            "enforcement_point": "plan_step_retry",
+                            "plan_id": record.plan_id,
+                            "attempt": record.current_attempt + 1,
+                        },
+                    )
+                    await self._budgets.require_permitted(retry_decision)
+
+                parallel_decision = await self._claim_parallel(record)
+                started = await original_start(step, record, now)
+                if not started:
+                    if retry_decision is not None:
+                        await self._budgets.release(retry_decision)
+                    if parallel_decision is not None:
+                        await self._budgets.release(parallel_decision)
+                    return False
+
+                if retry_decision is not None:
+                    retry_result = await self._budgets.reconcile(retry_decision)
+                    await self._budgets.require_permitted(retry_result)
+                return True
+            except BaseException:
+                if retry_decision is not None:
+                    await self._budgets.release(retry_decision)
+                if parallel_decision is not None:
+                    await self._budgets.release(parallel_decision)
+                raise
+
+        async def budgeted_observe(
+            _coordinator: DurablePlanStepCoordinator,
+            *,
+            task_id: str,
+            run_id: str,
+            failure_category: str | None = None,
+            observation_key: str | None = None,
+            now: datetime | None = None,
+        ):
+            step_id = await self._step_for_run(task_id, run_id)
+            try:
+                return await original_observe(
+                    task_id=task_id,
+                    run_id=run_id,
+                    failure_category=failure_category,
+                    observation_key=observation_key,
+                    now=now,
+                )
+            finally:
+                if step_id is not None:
+                    await self._release_parallel(task_id, step_id)
+
+        async def budgeted_cancel_active(
+            _coordinator: DurablePlanStepCoordinator,
+            record: StepCoordinationRecord,
+            key: str,
+        ) -> None:
+            try:
+                await original_cancel_active(record, key)
+            finally:
+                await self._release_parallel(record.task_id, record.step_id)
+
+        async def budgeted_cancel_plan(
+            _coordinator: DurablePlanStepCoordinator,
+            plan_id: str,
+            *,
+            idempotency_key: str,
+            now: datetime | None = None,
+        ):
+            state, records = await coordinator.runtime_repository.get_plan_snapshot(plan_id)
+            try:
+                return await original_cancel_plan(
+                    plan_id,
+                    idempotency_key=idempotency_key,
+                    now=now,
+                )
+            finally:
+                for record in records:
+                    await self._release_parallel(state.plan.task_id, record.step_id)
+
+        coordinator._start_attempt = MethodType(budgeted_start, coordinator)  # type: ignore[method-assign]  # noqa: SLF001
+        coordinator.observe_run = MethodType(budgeted_observe, coordinator)  # type: ignore[method-assign]
+        coordinator._cancel_active_run = MethodType(  # type: ignore[method-assign]  # noqa: SLF001
+            budgeted_cancel_active,
+            coordinator,
+        )
+        coordinator.cancel_plan = MethodType(budgeted_cancel_plan, coordinator)  # type: ignore[method-assign]
+
+    async def _claim_parallel(
+        self,
+        record: StepCoordinationRecord,
+    ) -> BudgetAdmissionDecision | None:
+        # First apply runtime/unavailable checks that affect PARALLEL_STEP even when no explicit
+        # parallel limit is configured.
+        precheck = await self._budgets.admit(
+            task_id=record.task_id,
+            action=BudgetActionKind.PARALLEL_STEP,
+            step_id=record.step_id,
+            correlation_id=record.correlation_id or record.task_id,
+            causation_id=record.causation_id,
+            provenance={
+                "enforcement_point": "plan_step_parallel_precheck",
+                "plan_id": record.plan_id,
+            },
+        )
+        await self._budgets.require_permitted(precheck)
+
+        policy = await self._budgets.policy(record.task_id)
+        if policy is None:
+            return precheck
+        limit = policy.limit_for(BudgetDimension.PARALLEL_STEPS)
+        if limit is None:
+            return precheck
+        if limit.source is BudgetConsumptionSource.CLOCK:
+            raise ValueError("parallel_steps budget cannot use clock consumption")
+
+        snapshot = await self._budgets.snapshot(record.task_id)
+        dimension = snapshot.for_dimension(BudgetDimension.PARALLEL_STEPS)
+        if dimension is None:
+            return precheck
+        reservation = BudgetReservation(
+            task_id=record.task_id,
+            dimension=BudgetDimension.PARALLEL_STEPS,
+            quantity=1.0,
+            action=BudgetActionKind.PARALLEL_STEP,
+            step_id=record.step_id,
+            correlation_id=record.correlation_id or record.task_id,
+            causation_id=record.causation_id,
+            # No TTL: this is a live concurrency claim. Canonical Run terminal/cancel/recovery
+            # releases it; expiring by wall-clock would make long-running Steps bypass the limit.
+            expires_at=None,
+            provenance={
+                "enforcement_point": "plan_step_parallel",
+                "plan_id": record.plan_id,
+                "attempt": record.current_attempt + 1,
+            },
+        )
+        claim = ReservationClaim(
+            reservation=reservation,
+            limit=limit.limit,
+            external_consumed=dimension.consumed,
+            include_runtime_counter=False,
+        )
+        store = self._budgets._store  # noqa: SLF001 - deployment composition seam
+        accepted = await asyncio.to_thread(store.try_reserve_many, (claim,))
+        if not accepted:
+            blocked = BudgetAdmissionDecision(
+                task_id=record.task_id,
+                action=BudgetActionKind.PARALLEL_STEP,
+                outcome=BudgetAdmissionOutcome.BLOCKED,
+                reason="Task parallel-Step budget is exhausted",
+                blocking_dimension=BudgetDimension.PARALLEL_STEPS,
+                snapshot=await self._budgets.snapshot(record.task_id),
+            )
+            await self._budgets.require_permitted(blocked)
+        return BudgetAdmissionDecision(
+            task_id=record.task_id,
+            action=BudgetActionKind.PARALLEL_STEP,
+            outcome=BudgetAdmissionOutcome.ALLOWED,
+            reason="Task parallel-Step budget admitted",
+            reservations=(reservation,),
+            snapshot=await self._budgets.snapshot(record.task_id),
+        )
+
+    async def _release_parallel(self, task_id: str, step_id: str) -> None:
+        store = self._budgets._store  # noqa: SLF001 - deployment composition seam
+        reservations = await asyncio.to_thread(store.list_reservations, task_id)
+        for reservation in reservations:
+            if (
+                reservation.dimension is BudgetDimension.PARALLEL_STEPS
+                and reservation.step_id == step_id
+                and reservation.state is ReservationState.ACTIVE
+            ):
+                await asyncio.to_thread(store.release_reservation, reservation.id)
+
+    async def _step_for_run(self, task_id: str, run_id: str) -> str | None:
+        for state in await self._coordinator.runtime_repository.list_active_plans():
+            if state.plan.task_id != task_id:
+                continue
+            records = await self._coordinator.runtime_repository.list_step_records(state.plan.id)
+            for record in records:
+                if record.latest_run_id == run_id:
+                    return record.step_id
+        return None
+
+
+__all__ = ["TaskBudgetCoordinationBindings", "TaskBudgetRepairRuntime"]
