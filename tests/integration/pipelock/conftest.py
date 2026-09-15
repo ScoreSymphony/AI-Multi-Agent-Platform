@@ -188,9 +188,9 @@ def verify_strict_fetch_receipt_chain(
 
     receipt_files = sorted(recorder.glob("*.jsonl"))
     assert receipt_files, "strict /fetch did not produce recorder evidence"
-    assert any(
-        action_id in path.read_text(encoding="utf-8") for path in receipt_files
-    ), "X-Pipelock-Receipt action id was absent from recorder evidence"
+    assert any(action_id in path.read_text(encoding="utf-8") for path in receipt_files), (
+        "X-Pipelock-Receipt action id was absent from recorder evidence"
+    )
 
     verification = subprocess.run(
         (
