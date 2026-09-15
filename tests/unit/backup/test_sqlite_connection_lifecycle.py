@@ -39,6 +39,8 @@ class _FakeConnection:
             return _Cursor(("wal",))
         if statement == "PRAGMA wal_checkpoint(TRUNCATE)":
             return _Cursor((0, 0, 0))
+        if statement == "PRAGMA user_version":
+            return _Cursor((7,))
         raise AssertionError(f"unexpected SQL in lifecycle regression test: {statement}")
 
     def close(self) -> None:
@@ -66,3 +68,28 @@ def test_sqlite_snapshot_closes_connections_before_sidecar_cleanup(
     service._sqlite_snapshot(tmp_path / "source.sqlite3", tmp_path / "snapshot.sqlite3")
 
     assert cleanup_observations == [(True, True)]
+
+
+def test_sqlite_integrity_verification_closes_read_connection(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    connection = _FakeConnection()
+
+    monkeypatch.setattr(service.sqlite3, "connect", lambda *_args, **_kwargs: connection)
+
+    service._verify_sqlite_integrity(tmp_path / "snapshot.sqlite3")
+
+    assert connection.closed is True
+
+
+def test_sqlite_user_version_closes_read_connection(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    connection = _FakeConnection()
+
+    monkeypatch.setattr(service.sqlite3, "connect", lambda *_args, **_kwargs: connection)
+
+    assert service._sqlite_user_version(tmp_path / "snapshot.sqlite3") == 7
+    assert connection.closed is True

@@ -521,7 +521,7 @@ def _initialize_new_required_single_node_stores(
             )
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with sqlite3.connect(path) as connection:
+            with closing(sqlite3.connect(path)) as connection:
                 connection.execute("PRAGMA user_version = 0")
                 connection.commit()
         except sqlite3.Error as exc:
@@ -567,7 +567,7 @@ def _sqlite_snapshot(source: Path, destination: Path) -> None:
 
 def _verify_sqlite_integrity(path: Path) -> None:
     try:
-        with sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True) as connection:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)) as connection:
             row = connection.execute("PRAGMA integrity_check").fetchone()
             foreign_key_violation = connection.execute("PRAGMA foreign_key_check").fetchone()
     except sqlite3.Error as exc:
@@ -610,7 +610,7 @@ def _remove_sqlite_sidecars(path: Path) -> None:
 
 def _sqlite_user_version(path: Path) -> int:
     try:
-        with sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True) as connection:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)) as connection:
             row = connection.execute("PRAGMA user_version").fetchone()
     except sqlite3.Error as exc:
         raise BackupError(f"cannot read SQLite schema version: {path}") from exc
