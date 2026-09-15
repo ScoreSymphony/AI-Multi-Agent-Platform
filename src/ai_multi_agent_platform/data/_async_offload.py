@@ -24,33 +24,33 @@ _BUSY_MARKERS = (
 class AsyncDataOffload:
     """Run complete blocking Data persistence operations away from the event loop.
 
-    Each provider owns a dedicated bounded executor instead of consuming asyncio's process-wide
-    default executor. The worker-side gates are deliberately thread-based rather than
-    asyncio-bound so one local provider remains valid when callers reuse it across multiple
-    event-loop lifetimes. Writers queue before consuming a shared slot, preserving read capacity
-    while one durable mutation is active.
+    Each provider owns dedicated bounded read/write executors instead of consuming asyncio's
+    process-wide default executor. Writes use a single-worker executor, so queued durable
+    mutations never occupy read workers while waiting for write serialization. A shared slot
+    bound still caps concurrently executing provider operations across both executors and keeps
+    one local provider valid when callers reuse it across multiple event-loop lifetimes.
     """
 
     def __init__(self, *, max_concurrency: int = 4) -> None:
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be >= 1")
         self._slots = threading.BoundedSemaphore(max_concurrency)
-        self._write_lock = threading.Lock()
-        self._executor = ThreadPoolExecutor(
+        self._read_executor = ThreadPoolExecutor(
             max_workers=max_concurrency,
-            thread_name_prefix="data-persistence",
+            thread_name_prefix="data-persistence-read",
+        )
+        self._write_executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="data-persistence-write",
         )
 
     async def run(self, operation: Callable[[], _T], *, write: bool = False) -> _T:
         loop = asyncio.get_running_loop()
-        worker = loop.run_in_executor(self._executor, self._run_sync, operation, write)
+        executor = self._write_executor if write else self._read_executor
+        worker = loop.run_in_executor(executor, self._run_sync, operation)
         return await _await_persistence_boundary(worker)
 
-    def _run_sync(self, operation: Callable[[], _T], write: bool) -> _T:
-        if write:
-            with self._write_lock:
-                with self._slots:
-                    return operation()
+    def _run_sync(self, operation: Callable[[], _T]) -> _T:
         with self._slots:
             return operation()
 
