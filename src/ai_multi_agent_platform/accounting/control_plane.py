@@ -127,8 +127,9 @@ class UsageBudgetResourceService:
         del query
         resources: list[dict[str, JsonValue]] = []
         for budget in await self._accounting.list_budgets():
-            if _budget_visible(budget, context):
-                resources.append(await _budget_resource_runtime(self._accounting, budget))
+            state = await self._accounting.budget_state(budget.id)
+            if _budget_visible(state.budget, context):
+                resources.append(_budget_resource_from_state(state.budget, state))
         return tuple(resources)
 
     async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
@@ -136,7 +137,8 @@ class UsageBudgetResourceService:
 
         resources: list[dict[str, JsonValue]] = []
         for budget in await self._accounting.list_budgets():
-            resources.append(await _budget_resource_runtime(self._accounting, budget))
+            state = await self._accounting.budget_state(budget.id)
+            resources.append(_budget_resource_from_state(state.budget, state))
         return tuple(resources)
 
     async def get_resource(
@@ -147,7 +149,10 @@ class UsageBudgetResourceService:
         budget = await self._accounting.get_budget(resource_id)
         if budget is None or not _budget_visible(budget, context):
             raise ContractError(ErrorCode.NOT_FOUND, f"usage budget not found: {resource_id}")
-        return await _budget_resource_runtime(self._accounting, budget)
+        state = await self._accounting.budget_state(resource_id)
+        if not _budget_visible(state.budget, context):
+            raise ContractError(ErrorCode.NOT_FOUND, f"usage budget not found: {resource_id}")
+        return _budget_resource_from_state(state.budget, state)
 
 
 def accounting_resource_services(
@@ -369,14 +374,16 @@ def _aggregate_resource(
 def _budget_resource(accounting: AccountingService, budget: UsageBudget) -> dict[str, JsonValue]:
     """Synchronous compatibility projection for setup/offline callers."""
 
-    return _budget_resource_from_state(budget, accounting.budget_state(budget.id))
+    state = accounting.budget_state(budget.id)
+    return _budget_resource_from_state(state.budget, state)
 
 
 async def _budget_resource_runtime(
     accounting: AsyncAccountingService,
     budget: UsageBudget,
 ) -> dict[str, JsonValue]:
-    return _budget_resource_from_state(budget, await accounting.budget_state(budget.id))
+    state = await accounting.budget_state(budget.id)
+    return _budget_resource_from_state(state.budget, state)
 
 
 def _budget_resource_from_state(
@@ -388,6 +395,7 @@ def _budget_resource_from_state(
 
     if not isinstance(state, BudgetState):
         raise TypeError("budget state must be a BudgetState")
+    budget = state.budget
     return {
         "id": budget.id,
         "type": "usage-budget",
