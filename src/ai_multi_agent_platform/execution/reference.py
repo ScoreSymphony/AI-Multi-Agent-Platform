@@ -165,11 +165,12 @@ class ReferenceExecutor(Executor):
             if destination != workspace and workspace not in destination.parents:
                 raise ValueError("artifact path escapes execution workspace")
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(content, encoding="utf-8")
+            encoded = content.encode("utf-8")
+            destination.write_bytes(encoded)
             artifact = ExecutionArtifact(
                 relative_path=relative,
                 media_type="text/plain",
-                size_bytes=len(content.encode("utf-8")),
+                size_bytes=len(encoded),
             )
             return _ActionResult(
                 output={"artifact": relative},
