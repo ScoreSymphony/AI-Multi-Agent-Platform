@@ -265,6 +265,181 @@ export type ModelProvider = {
   type: "model-provider";
 };
 
+export type SearchQueryParameters = {
+  agent_assignment_id?: string;
+  assignment_state?: "assigned" | "unassigned";
+  blocked?: boolean;
+  cursor?: string;
+  dependency_id?: string;
+  direction?: "asc" | "desc";
+  due_after?: string;
+  due_before?: string;
+  id?: string;
+  limit?: number;
+  mode?: "exact" | "keyword" | "metadata" | "semantic" | "hybrid";
+  overdue?: boolean;
+  priority?: string;
+  project_id?: string;
+  provider?: string;
+  q?: string;
+  responsible_id?: string;
+  sort?: "relevance" | "id" | "updated_at";
+  source?: string;
+  status?: string;
+  tag?: string;
+  type?: string;
+  updated_after?: string;
+  updated_before?: string;
+  workspace_id?: string;
+};
+
+export type SearchResult = {
+  access: "authorized";
+  canonical_ref: string | null;
+  matched_fields: string[];
+  owner_id: string | null;
+  owner_type: string | null;
+  project_id: string | null;
+  provenance: Record<string, JsonValue>;
+  provider: string;
+  redacted: boolean;
+  relevance: number;
+  resource_id: string;
+  resource_type: string;
+  source: string;
+  status: string | null;
+  summary: string;
+  tags: string[];
+  title: string;
+  updated_at: string | null;
+  version: string | null;
+  workspace_id: string | null;
+};
+
+export type SearchPage = {
+  items: SearchResult[];
+  limit: number;
+  next_cursor: string | null;
+  total: number;
+};
+
+export type CanonicalEvent = {
+  causation_id?: string | null;
+  correlation_id: string;
+  event_type: string;
+  id: string;
+  occurred_at: string;
+  payload: Record<string, JsonValue>;
+  project_id?: string | null;
+  schema_version: string;
+  subject_id: string;
+  subject_type: string;
+  trace_id?: string | null;
+  type: "event";
+};
+
+export type TelemetryFailure = {
+  code: string;
+  component: string;
+  retryable: boolean;
+};
+
+export type TelemetryTimelineEntry = {
+  attributes: Record<string, JsonValue>;
+  component: string;
+  context: Record<string, JsonValue>;
+  duration_seconds: number | null;
+  event_name: string;
+  failure: TelemetryFailure | null;
+  id: string;
+  outcome: string;
+  timestamp: string;
+  type: "telemetry";
+};
+
+export type TimelineItem = CanonicalEvent | TelemetryTimelineEntry;
+
+export type UsageQualityCounts = {
+  estimated: number;
+  measured: number;
+  reported: number;
+  unavailable: number;
+};
+
+export type UsageRecord = {
+  aggregation_mode: "additive" | "latest";
+  causation_id: string | null;
+  confidence: number | null;
+  correlation_id: string | null;
+  cost_amount: number | null;
+  currency: string | null;
+  ended_at: string | null;
+  id: string;
+  metric_type: string;
+  precision: number | null;
+  provenance: Record<string, JsonValue>;
+  provider: string | null;
+  quality: "measured" | "reported" | "estimated" | "unavailable";
+  quantity: number | null;
+  scope: Record<string, string>;
+  source: string;
+  started_at: string | null;
+  timestamp: string;
+  type: "usage-record";
+  unit: string;
+};
+
+export type UsageTrendPoint = {
+  end: string;
+  quality_counts: UsageQualityCounts;
+  record_count: number;
+  start: string;
+  unavailable_count: number;
+  value: number | null;
+};
+
+export type UsageAggregate = {
+  aggregation_mode: "additive" | "latest";
+  id: string;
+  metric_type: string;
+  quality_counts: UsageQualityCounts;
+  record_count: number;
+  scope: Record<string, string>;
+  total: number | null;
+  trend: UsageTrendPoint[];
+  trend_bucket_seconds: number | null;
+  trend_window_end: string | null;
+  trend_window_start: string | null;
+  type: "usage-aggregate";
+  unavailable_count: number;
+  unit: string;
+};
+
+export type UsageBudget = {
+  action: "record_only" | "warn" | "deny" | "require_approval" | "notify";
+  consumed: number | null;
+  fraction: number | null;
+  id: string;
+  include_estimated: boolean;
+  kind: "soft" | "hard";
+  limit: number;
+  metric_type: string;
+  owner_id: string | null;
+  owner_type: string | null;
+  remaining: number | null;
+  scope_id: string;
+  scope_type: string;
+  threshold_level: "warning" | "exceeded" | null;
+  type: "usage-budget";
+  unit: string;
+  version: number;
+  warning_fraction: number;
+  window_end: string | null;
+  window_mode: "lifetime" | "rolling";
+  window_seconds: number | null;
+  window_start: string | null;
+};
+
 export type CreateProjectRequest = {
   name: string;
   owner_id: string;
