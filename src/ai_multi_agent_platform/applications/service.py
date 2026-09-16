@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -67,7 +67,7 @@ class ApplicationRecoveryReport:
 
 
 class ApplicationLifecycleService:
-    """Own persisted desired state and converge it through selected runtime adapters."""
+    """Own persisted desired state and asynchronously converge runtime observations."""
 
     def __init__(
         self,
@@ -77,7 +77,7 @@ class ApplicationLifecycleService:
         self._repository = repository
         self._runtimes = runtimes
 
-    def install(
+    async def install(
         self,
         request: ApplicationInstallRequest,
         *,
@@ -112,7 +112,7 @@ class ApplicationLifecycleService:
                 },
             )
 
-        prepared = runtime.prepare(request)
+        prepared = await runtime.prepare(request)
         if prepared.runtime_id != runtime_id:
             raise ContractError(
                 ErrorCode.INVALID_PROVIDER_RESPONSE,
@@ -146,17 +146,17 @@ class ApplicationLifecycleService:
         self._repository.save_application(application)
         return self._repository.save_instance(prepared)
 
-    def start(self, instance_id: str) -> ApplicationInstance:
+    async def start(self, instance_id: str) -> ApplicationInstance:
         application, instance, runtime = self._load(instance_id)
         intent = self._persist_desired(instance, ApplicationDesiredState.RUNNING)
-        return self._invoke_transition(application, intent, runtime.start)
+        return await self._invoke_transition(application, intent, runtime.start)
 
-    def stop(self, instance_id: str) -> ApplicationInstance:
+    async def stop(self, instance_id: str) -> ApplicationInstance:
         application, instance, runtime = self._load(instance_id)
         intent = self._persist_desired(instance, ApplicationDesiredState.STOPPED)
-        return self._invoke_transition(application, intent, runtime.stop)
+        return await self._invoke_transition(application, intent, runtime.stop)
 
-    def restart(self, instance_id: str) -> ApplicationInstance:
+    async def restart(self, instance_id: str) -> ApplicationInstance:
         application, instance, runtime = self._load(instance_id)
         if instance.desired_state is not ApplicationDesiredState.RUNNING:
             raise ContractError(
@@ -164,21 +164,21 @@ class ApplicationLifecycleService:
                 "only a running application intent can be restarted",
                 details={"instance_id": instance_id},
             )
-        return self._invoke_transition(application, instance, runtime.restart)
+        return await self._invoke_transition(application, instance, runtime.restart)
 
-    def remove(self, instance_id: str) -> ApplicationInstance:
+    async def remove(self, instance_id: str) -> ApplicationInstance:
         application, instance, runtime = self._load(instance_id)
         intent = self._persist_desired(instance, ApplicationDesiredState.REMOVED)
-        return self._invoke_transition(application, intent, runtime.remove)
+        return await self._invoke_transition(application, intent, runtime.remove)
 
-    def status(self, instance_id: str) -> ApplicationInstance:
+    async def status(self, instance_id: str) -> ApplicationInstance:
         application, instance, runtime = self._load(instance_id)
-        observed = runtime.status(application.manifest, instance)
+        observed = await runtime.status(application.manifest, instance)
         return self._persist_observation(instance, observed)
 
-    def health(self, instance_id: str) -> ApplicationHealthStatus:
+    async def health(self, instance_id: str) -> ApplicationHealthStatus:
         application, instance, runtime = self._load(instance_id)
-        health = runtime.health(application.manifest, instance)
+        health = await runtime.health(application.manifest, instance)
         if health is not instance.health:
             updated = replace(
                 instance,
@@ -189,9 +189,9 @@ class ApplicationLifecycleService:
             self._repository.save_instance(updated)
         return health
 
-    def endpoints(self, instance_id: str) -> tuple[ApplicationEndpointResolution, ...]:
+    async def endpoints(self, instance_id: str) -> tuple[ApplicationEndpointResolution, ...]:
         application, instance, runtime = self._load(instance_id)
-        endpoints = runtime.endpoints(application.manifest, instance)
+        endpoints = await runtime.endpoints(application.manifest, instance)
         if endpoints != instance.endpoints:
             updated = replace(
                 instance,
@@ -202,7 +202,7 @@ class ApplicationLifecycleService:
             self._repository.save_instance(updated)
         return endpoints
 
-    def logs(
+    async def logs(
         self,
         instance_id: str,
         *,
@@ -212,18 +212,18 @@ class ApplicationLifecycleService:
         if limit < 1:
             raise ValueError("limit must be >= 1")
         application, instance, runtime = self._load(instance_id)
-        return runtime.logs(
+        return await runtime.logs(
             application.manifest,
             instance,
             service_id=service_id,
             limit=limit,
         )
 
-    def reconcile(self, instance_id: str) -> ApplicationInstance:
+    async def reconcile(self, instance_id: str) -> ApplicationInstance:
         application, instance, runtime = self._load(instance_id)
-        return self._invoke_transition(application, instance, runtime.reconcile)
+        return await self._invoke_transition(application, instance, runtime.reconcile)
 
-    def recover_all(self) -> ApplicationRecoveryReport:
+    async def recover_all(self) -> ApplicationRecoveryReport:
         recovered: list[ApplicationInstance] = []
         failures: list[ApplicationRecoveryFailure] = []
         for instance in self._repository.list_instances():
@@ -236,7 +236,7 @@ class ApplicationLifecycleService:
                     instance.application_version,
                 )
                 runtime = self._runtimes.get(instance.runtime_id)
-                observed = runtime.recover(application.manifest, instance)
+                observed = await runtime.recover(application.manifest, instance)
                 recovered.append(self._persist_observation(instance, observed))
             except (ApplicationRuntimeError, ContractError) as exc:
                 failed = self._persist_failed(instance)
@@ -285,14 +285,16 @@ class ApplicationLifecycleService:
         )
         return self._repository.save_instance(updated)
 
-    def _invoke_transition(
+    async def _invoke_transition(
         self,
         application: Application,
         instance: ApplicationInstance,
-        operation: Callable[[ApplicationManifest, ApplicationInstance], ApplicationInstance],
+        operation: Callable[
+            [ApplicationManifest, ApplicationInstance], Awaitable[ApplicationInstance]
+        ],
     ) -> ApplicationInstance:
         try:
-            observed = operation(application.manifest, instance)
+            observed = await operation(application.manifest, instance)
         except ApplicationRuntimeError:
             self._persist_failed(instance)
             raise

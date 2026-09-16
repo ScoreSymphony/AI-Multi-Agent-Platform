@@ -28,6 +28,8 @@ from ai_multi_agent_platform.applications.service import (
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import new_id
 
+pytestmark = pytest.mark.asyncio
+
 
 class RecordingRuntime:
     def __init__(
@@ -51,7 +53,7 @@ class RecordingRuntime:
     def descriptor(self) -> ApplicationRuntimeDescriptor:
         return self._descriptor
 
-    def prepare(self, request: ApplicationInstallRequest) -> ApplicationInstance:
+    async def prepare(self, request: ApplicationInstallRequest) -> ApplicationInstance:
         return ApplicationInstance(
             application_id=request.manifest.application_id,
             application_version=request.manifest.version,
@@ -64,11 +66,12 @@ class RecordingRuntime:
             volume_bindings=request.volume_bindings,
         )
 
-    def start(
+    async def start(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         self.start_intent = instance.desired_state
         if self.fail_start:
             raise ApplicationRuntimeError("start failed")
@@ -78,61 +81,67 @@ class RecordingRuntime:
             health=ApplicationHealthStatus.HEALTHY,
         )
 
-    def stop(
+    async def stop(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         return replace(
             instance,
             observed_state=ApplicationObservedState.STOPPED,
             health=ApplicationHealthStatus.UNKNOWN,
         )
 
-    def restart(
+    async def restart(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         return replace(
             instance,
             observed_state=ApplicationObservedState.RUNNING,
             health=ApplicationHealthStatus.HEALTHY,
         )
 
-    def remove(
+    async def remove(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         return replace(
             instance,
             observed_state=ApplicationObservedState.REMOVED,
             health=ApplicationHealthStatus.UNKNOWN,
         )
 
-    def status(
+    async def status(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         return instance
 
-    def health(
+    async def health(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationHealthStatus:
+        del manifest
         return instance.health
 
-    def endpoints(
+    async def endpoints(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> tuple[ApplicationEndpointResolution, ...]:
+        del manifest, instance
         return ()
 
-    def logs(
+    async def logs(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
@@ -140,20 +149,22 @@ class RecordingRuntime:
         service_id: str | None = None,
         limit: int = 200,
     ) -> tuple[ApplicationLogEntry, ...]:
+        del manifest, instance, service_id, limit
         return ()
 
-    def reconcile(
+    async def reconcile(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
-        return self.recover(manifest, instance)
+        return await self.recover(manifest, instance)
 
-    def recover(
+    async def recover(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         self.recover_intent = instance.desired_state
         if instance.desired_state is ApplicationDesiredState.RUNNING:
             return replace(
@@ -199,7 +210,7 @@ def _manifest(
     )
 
 
-def _service(
+async def _service(
     manifest: ApplicationManifest,
     runtime: RecordingRuntime,
 ) -> tuple[ApplicationLifecycleService, InMemoryApplicationRepository, str]:
@@ -208,18 +219,18 @@ def _service(
         repository,
         ApplicationRuntimeRegistry((runtime,)),
     )
-    instance = lifecycle.install(
+    instance = await lifecycle.install(
         ApplicationInstallRequest(manifest=manifest),
         runtime_id=runtime.descriptor.runtime_id,
     )
     return lifecycle, repository, instance.instance_id
 
 
-def test_start_persists_running_intent_before_runtime_convergence() -> None:
+async def test_start_persists_running_intent_before_runtime_convergence() -> None:
     runtime = RecordingRuntime()
-    lifecycle, repository, instance_id = _service(_manifest(), runtime)
+    lifecycle, repository, instance_id = await _service(_manifest(), runtime)
 
-    running = lifecycle.start(instance_id)
+    running = await lifecycle.start(instance_id)
 
     assert runtime.start_intent is ApplicationDesiredState.RUNNING
     assert running.desired_state is ApplicationDesiredState.RUNNING
@@ -229,13 +240,13 @@ def test_start_persists_running_intent_before_runtime_convergence() -> None:
     assert running.revision >= 3
 
 
-def test_start_failure_keeps_running_intent_and_persists_failed_observation() -> None:
+async def test_start_failure_keeps_running_intent_and_persists_failed_observation() -> None:
     runtime = RecordingRuntime()
-    lifecycle, repository, instance_id = _service(_manifest(), runtime)
+    lifecycle, repository, instance_id = await _service(_manifest(), runtime)
     runtime.fail_start = True
 
     with pytest.raises(ApplicationRuntimeError, match="start failed"):
-        lifecycle.start(instance_id)
+        await lifecycle.start(instance_id)
 
     failed = repository.get_instance(instance_id)
     assert failed.desired_state is ApplicationDesiredState.RUNNING
@@ -243,9 +254,9 @@ def test_start_failure_keeps_running_intent_and_persists_failed_observation() ->
     assert failed.health is ApplicationHealthStatus.UNHEALTHY
 
 
-def test_recovery_converges_from_persisted_desired_state() -> None:
+async def test_recovery_converges_from_persisted_desired_state() -> None:
     runtime = RecordingRuntime()
-    lifecycle, repository, instance_id = _service(_manifest(), runtime)
+    lifecycle, repository, instance_id = await _service(_manifest(), runtime)
     stopped = repository.get_instance(instance_id)
     repository.save_instance(
         replace(
@@ -255,7 +266,7 @@ def test_recovery_converges_from_persisted_desired_state() -> None:
         )
     )
 
-    report = lifecycle.recover_all()
+    report = await lifecycle.recover_all()
 
     assert report.failures == ()
     assert runtime.recover_intent is ApplicationDesiredState.RUNNING
@@ -264,7 +275,7 @@ def test_recovery_converges_from_persisted_desired_state() -> None:
     assert recovered.health is ApplicationHealthStatus.HEALTHY
 
 
-def test_install_rejects_unsupported_service_runtime() -> None:
+async def test_install_rejects_unsupported_service_runtime() -> None:
     runtime = RecordingRuntime()
     lifecycle = ApplicationLifecycleService(
         InMemoryApplicationRepository(),
@@ -272,7 +283,7 @@ def test_install_rejects_unsupported_service_runtime() -> None:
     )
 
     with pytest.raises(ContractError) as exc_info:
-        lifecycle.install(
+        await lifecycle.install(
             ApplicationInstallRequest(manifest=_manifest(ApplicationServiceRuntime.OCI_IMAGE)),
             runtime_id=runtime.descriptor.runtime_id,
         )

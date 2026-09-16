@@ -1,4 +1,4 @@
-"""Platform-owned Application Runtime contract."""
+"""Platform-owned asynchronous Application Runtime contract."""
 
 from __future__ import annotations
 
@@ -47,69 +47,70 @@ class ApplicationRuntimeDescriptor:
 
 @runtime_checkable
 class ApplicationRuntime(Protocol):
-    """Provider-neutral lifecycle boundary for managed external applications.
+    """Provider-neutral async lifecycle boundary for managed external applications.
 
-    Canonical state is supplied to lifecycle operations instead of requiring the backend
-    to be the durable source of truth. A backend may keep private runtime handles, but
-    restart recovery can always be driven from the persisted manifest and instance.
+    Runtime operations may perform process, network, secret or workspace I/O and are
+    therefore asynchronous. Canonical state is supplied to lifecycle operations instead
+    of requiring the backend to be the durable source of truth. A backend may keep
+    private runtime handles, but those handles never become canonical Application IDs.
     """
 
     @property
     def descriptor(self) -> ApplicationRuntimeDescriptor: ...
 
-    def prepare(self, request: ApplicationInstallRequest) -> ApplicationInstance:
+    async def prepare(self, request: ApplicationInstallRequest) -> ApplicationInstance:
         """Validate/materialize an instance without implicitly starting it."""
 
-    def start(
+    async def start(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
-        """Attempt to converge the persisted running intent to a running instance."""
+        """Attempt to converge persisted running intent to a running instance."""
 
-    def stop(
+    async def stop(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
-        """Attempt to converge the persisted stopped intent to a stopped instance."""
+        """Attempt to converge persisted stopped intent to a stopped instance."""
 
-    def restart(
+    async def restart(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
-        """Restart one prepared instance without changing its canonical identity."""
+        """Restart one prepared instance without changing canonical identity."""
 
-    def remove(
+    async def remove(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
         """Release runtime-owned resources for a persisted removed intent."""
 
-    def status(
+    async def status(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
         """Return canonical observed state without provider-private identifiers."""
 
-    def health(
+    async def health(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationHealthStatus:
         """Return aggregate application health."""
 
-    def endpoints(
+    async def endpoints(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> tuple[ApplicationEndpointResolution, ...]:
         """Return runtime-resolved logical endpoints."""
 
-    def logs(
+    async def logs(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
@@ -119,16 +120,16 @@ class ApplicationRuntime(Protocol):
     ) -> tuple[ApplicationLogEntry, ...]:
         """Return bounded canonical logs for an instance or service."""
 
-    def reconcile(
+    async def reconcile(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
         """Converge observed state toward the persisted desired state."""
 
-    def recover(
+    async def recover(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
-        """Re-adopt persisted canonical state after runtime/platform restart."""
+        """Re-adopt or safely fail persisted canonical state after runtime restart."""
