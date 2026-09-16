@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FirstUserBootstrapStatus } from "../../api/browserSession";
+import { ControlPlaneError } from "../../api/client";
+import type { SetupSessionStatus } from "../../api/setup";
 import type { APImanifest } from "../../api/types";
 import { ErrorState, LoadingState } from "../../components/States";
 import { FirstUserSetupPage } from "../../pages/FirstUserSetupPage";
+import { SignInPage } from "../../pages/SignInPage";
 import { useRouter } from "../router";
 import { useShellClients } from "./clients";
 import { ShellLayout } from "./ShellLayout";
@@ -19,6 +22,9 @@ export function Shell() {
   const [bootstrapStatus, setBootstrapStatus] = useState<FirstUserBootstrapStatus | null>(null);
   const [bootstrapChecked, setBootstrapChecked] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<unknown>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [sessionError, setSessionError] = useState<unknown>(null);
 
   const loadBootstrapStatus = useCallback(async () => {
     if (typeof document === "undefined") return null;
@@ -36,9 +42,41 @@ export function Shell() {
     }
   }, [clients.session]);
 
+  const loadAuthenticatedState = useCallback(async (): Promise<SetupSessionStatus | null> => {
+    if (typeof document === "undefined") return null;
+    try {
+      await clients.session.me();
+      setAuthenticated(true);
+      const setup = await clients.setupClient.status();
+      setSessionError(null);
+      return setup;
+    } catch (error) {
+      if (error instanceof ControlPlaneError && error.status === 401) {
+        clients.session.clearLocalSession();
+        setAuthenticated(false);
+        setSessionError(null);
+      } else {
+        setAuthenticated(false);
+        setSessionError(error);
+      }
+      return null;
+    } finally {
+      setSessionChecked(true);
+    }
+  }, [clients.session, clients.setupClient]);
+
   useEffect(() => {
     void loadBootstrapStatus();
   }, [loadBootstrapStatus]);
+
+  useEffect(() => {
+    if (bootstrapStatus?.state !== "initialized") return;
+    void loadAuthenticatedState().then((setup) => {
+      if (setup !== null && !setup.readiness.ready && path !== "/onboarding") {
+        navigate("/onboarding");
+      }
+    });
+  }, [bootstrapStatus, loadAuthenticatedState, navigate, path]);
 
   useEffect(() => {
     void clients.client.manifest().then((loadedManifest) => {
@@ -66,8 +104,29 @@ export function Shell() {
           status={bootstrapStatus}
           onComplete={() => {
             void loadBootstrapStatus().then((status) => {
-              if (status?.state === "initialized") navigate("/onboarding");
+              if (status?.state !== "initialized") return;
+              setAuthenticated(true);
+              setSessionChecked(true);
+              navigate("/onboarding");
             });
+          }}
+        />
+      );
+    }
+    if (!sessionChecked) {
+      return <LoadingState label="Checking browser session and setup readiness…" />;
+    }
+    if (sessionError) {
+      return <ErrorState error={sessionError} onRetry={() => void loadAuthenticatedState()} />;
+    }
+    if (!authenticated) {
+      return (
+        <SignInPage
+          session={clients.session}
+          onAuthenticated={async () => {
+            const setup = await loadAuthenticatedState();
+            if (setup === null) return;
+            navigate(setup.readiness.ready ? "/" : "/onboarding");
           }}
         />
       );
