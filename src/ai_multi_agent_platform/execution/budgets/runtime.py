@@ -5,7 +5,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Mapping
 from typing import cast
 
-from ai_multi_agent_platform.capabilities import CapabilityInvocation, CapabilityInvocationResult
+from ai_multi_agent_platform.capabilities import (
+    CapabilityInvocation,
+    CapabilityInvocationResult,
+    EgressCapabilityInvoker,
+)
 from ai_multi_agent_platform.capabilities.invocation import CapabilityInvoker
 from ai_multi_agent_platform.contracts import (
     ContractError,
@@ -197,10 +201,10 @@ def as_model_runtime(runtime: TaskBudgetModelRuntime) -> ModelRuntime:
     return cast(ModelRuntime, runtime)
 
 
-def as_capability_invoker(invoker: TaskBudgetCapabilityInvoker) -> CapabilityInvoker:
-    """Narrow compatibility cast for existing Agent runtime constructor annotations."""
+def as_capability_invoker(invoker: TaskBudgetCapabilityInvoker) -> EgressCapabilityInvoker:
+    """Narrow compatibility cast for the public egress-enforced Agent invoker annotation."""
 
-    return cast(CapabilityInvoker, invoker)
+    return cast(EgressCapabilityInvoker, invoker)
 
 
 def _requirement_ref(requirements: Mapping[str, JsonValue], name: str) -> str | None:
