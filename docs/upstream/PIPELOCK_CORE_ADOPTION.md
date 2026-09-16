@@ -151,7 +151,7 @@ See `PIPELOCK_CORE_CONNECT_RECEIPT_EVIDENCE.md` for retained run/artifact finger
 
 ### Performance and operability
 
-The reproducible benchmark is retained in `scripts/benchmarks/issue730_pipelock_benchmark.py` and its
+The reproducible benchmark is retained in `scripts/benchmarks/pipelock_benchmark.py` and its
 measurement contract in `PIPELOCK_CORE_PERFORMANCE_EVIDENCE.md`.
 
 - [x] Direct-versus-mediated HTTP latency is measured on a same-run hosted reference.
