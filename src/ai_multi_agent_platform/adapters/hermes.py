@@ -167,6 +167,7 @@ class HermesOrchestrator(Orchestrator):
                     external_run_id,
                     context=request_data.context,
                     deadline=deadline,
+                    timeout_ceiling=timeout_seconds,
                 )
         except TimeoutError as exc:
             if external_run_id is not None:
@@ -295,9 +296,10 @@ class HermesOrchestrator(Orchestrator):
         *,
         context: OperationContext,
         deadline: float,
+        timeout_ceiling: float,
     ) -> HermesRunSnapshot:
         while True:
-            remaining = deadline - time.monotonic()
+            remaining = min(timeout_ceiling, deadline - time.monotonic())
             if remaining <= 0:
                 self._schedule_stop_best_effort(external_run_id, context)
                 raise self._provider_error(
@@ -313,7 +315,7 @@ class HermesOrchestrator(Orchestrator):
             )
             if snapshot.status not in {"started", "queued", "running"}:
                 return snapshot
-            remaining = deadline - time.monotonic()
+            remaining = min(timeout_ceiling, deadline - time.monotonic())
             if remaining <= 0:
                 continue
             await asyncio.sleep(min(self.config.poll_interval_seconds, remaining))

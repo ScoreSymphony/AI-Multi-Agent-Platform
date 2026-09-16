@@ -140,7 +140,7 @@ class InMemoryTemplateRepository:
         if template_id is not None:
             self.get_template(template_id)
             values = tuple(item for item in values if item.source.template_id == template_id)
-        return tuple(sorted(values, key=lambda item: (item.created_at, item.instance_id)))
+        return tuple(sorted(values, key=lambda item: item.created_at))
 
     def delete_template(self, template_id: str) -> None:
         """Compensate a newly imported Template only while it has no instances."""
