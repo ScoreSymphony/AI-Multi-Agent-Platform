@@ -232,7 +232,9 @@ def validate_changed_tree(root: Path, changes: tuple[ChangedPath, ...]) -> tuple
         if not local_path.is_file():
             continue
         if path.parts[0] in PERMANENT_ROOTS and path.suffix == ".py":
-            violations.extend(source_violations(change.path, local_path.read_text(encoding="utf-8")))
+            violations.extend(
+                source_violations(change.path, local_path.read_text(encoding="utf-8"))
+            )
         elif _is_workflow_path(path) and path.suffix in {".yml", ".yaml"}:
             violations.extend(
                 workflow_violations(change.path, local_path.read_text(encoding="utf-8"))
