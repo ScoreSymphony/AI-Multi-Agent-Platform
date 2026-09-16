@@ -29,7 +29,9 @@ def test_forge_has_no_active_ci_or_external_conformance_lane() -> None:
         path.read_text(encoding="utf-8")
         for path in sorted((ROOT / ".github/workflows").glob("*.yml"))
     )
-    external = (ROOT / "scripts/ci/issue46_external_profile.py").read_text(encoding="utf-8")
+    external = (ROOT / "scripts/ci/external_adapter_conformance_profile.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "forge-sidecar-integration" not in workflows
     assert "FORGE_SIDECAR_" not in workflows

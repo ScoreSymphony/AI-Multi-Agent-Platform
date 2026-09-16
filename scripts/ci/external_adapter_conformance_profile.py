@@ -1,4 +1,4 @@
-"""Fail-closed runner for external optional #46 adapter profiles."""
+"""Fail-closed runner for external optional adapter conformance profiles."""
 
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args != ["B"]:
         print(
-            "usage: python scripts/ci/issue46_external_profile.py B",
+            "usage: python scripts/ci/external_adapter_conformance_profile.py B",
             file=sys.stderr,
         )
         return 2

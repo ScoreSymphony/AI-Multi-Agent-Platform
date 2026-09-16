@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/hermes-v0-21-2-candidate.yml"
-      - "scripts/ci/issue46_external_profile.py"
+      - "scripts/ci/external_adapter_conformance_profile.py"
       - "scripts/ci/hermes_v0_21_2_candidate_validation.py"
       - "tests/regression/upstreams/test_hermes_v0_21_2.py"
       - "tests/integration/upstreams/test_hermes_v0_21_2_candidate.py"
