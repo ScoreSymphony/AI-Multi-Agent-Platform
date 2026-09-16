@@ -222,7 +222,8 @@ class SqliteApplicationRepository(ApplicationRepository):
             except sqlite3.IntegrityError as exc:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    "application instance references an application definition that is not persisted",
+                    "application instance references an application definition "
+                    "that is not persisted",
                     details={
                         "instance_id": instance.instance_id,
                         "application_id": instance.application_id,
