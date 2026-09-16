@@ -1,0 +1,229 @@
+/* Route-scoped presentation for evaluation inventory, suites and run evidence. */
+
+main[data-route="/evaluations"] > .stack,
+main[data-route^="/evaluations/suites/"] > .stack,
+main[data-route^="/evaluations/runs/"] > .stack {
+  gap: 1.4rem;
+}
+
+main[data-route="/evaluations"] .page-header,
+main[data-route^="/evaluations/suites/"] .page-header,
+main[data-route^="/evaluations/runs/"] .page-header {
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(56, 189, 248, .08), transparent 34%),
+    linear-gradient(180deg, rgba(23, 31, 45, .8), rgba(17, 23, 34, .72));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .12);
+}
+
+main[data-route="/evaluations"] .page-header h1,
+main[data-route^="/evaluations/suites/"] .page-header h1,
+main[data-route^="/evaluations/runs/"] .page-header h1 {
+  margin-bottom: .5rem;
+}
+
+main[data-route="/evaluations"] .page-header p:not(.eyebrow),
+main[data-route^="/evaluations/suites/"] .page-header p:not(.eyebrow),
+main[data-route^="/evaluations/runs/"] .page-header p:not(.eyebrow) {
+  max-width: 78ch;
+}
+
+main[data-route="/evaluations"] .stack > .card,
+main[data-route^="/evaluations/suites/"] .stack > .card,
+main[data-route^="/evaluations/runs/"] .stack > .card {
+  position: relative;
+  overflow: hidden;
+}
+
+main[data-route="/evaluations"] .stack > .card::before,
+main[data-route^="/evaluations/suites/"] .stack > .card::before,
+main[data-route^="/evaluations/runs/"] .stack > .card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: linear-gradient(180deg, var(--accent-strong), transparent 78%);
+  opacity: .7;
+}
+
+main[data-route="/evaluations"] .card h2,
+main[data-route^="/evaluations/suites/"] .card h2,
+main[data-route^="/evaluations/runs/"] .card h2 {
+  padding-bottom: .72rem;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route="/evaluations"] .table-wrap,
+main[data-route^="/evaluations/suites/"] .table-wrap,
+main[data-route^="/evaluations/runs/"] .table-wrap {
+  margin-top: .15rem;
+}
+
+main[data-route="/evaluations"] td:first-child,
+main[data-route^="/evaluations/suites/"] td:first-child,
+main[data-route^="/evaluations/runs/"] td:first-child {
+  min-width: 170px;
+}
+
+main[data-route="/evaluations"] td .canonical-id,
+main[data-route^="/evaluations/suites/"] td .canonical-id,
+main[data-route^="/evaluations/runs/"] td .canonical-id {
+  margin-top: .2rem;
+}
+
+main[data-route="/evaluations"] .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .9rem;
+  flex-wrap: wrap;
+  margin-top: .9rem;
+  padding-top: .85rem;
+  border-top: 1px solid var(--line-soft, var(--line));
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+main[data-route="/evaluations"] .pagination .actions {
+  margin-left: auto;
+}
+
+main[data-route^="/evaluations/suites/"] .card > p,
+main[data-route^="/evaluations/runs/"] .card > p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+main[data-route^="/evaluations/suites/"] form.stack,
+main[data-route^="/evaluations/runs/"] form.stack {
+  gap: .85rem;
+  margin-top: 1rem;
+  padding: .95rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 11px;
+  background: rgba(9, 13, 21, .32);
+}
+
+main[data-route^="/evaluations/suites/"] form.stack > label,
+main[data-route^="/evaluations/runs/"] form.stack > label {
+  display: grid;
+  gap: .35rem;
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 600;
+}
+
+main[data-route^="/evaluations/suites/"] form.stack input,
+main[data-route^="/evaluations/suites/"] form.stack select,
+main[data-route^="/evaluations/suites/"] form.stack textarea,
+main[data-route^="/evaluations/runs/"] form.stack input,
+main[data-route^="/evaluations/runs/"] form.stack select,
+main[data-route^="/evaluations/runs/"] form.stack textarea {
+  width: 100%;
+}
+
+main[data-route^="/evaluations/suites/"] form.stack textarea,
+main[data-route^="/evaluations/runs/"] form.stack textarea {
+  min-height: 96px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: .62rem .78rem;
+  font: inherit;
+}
+
+main[data-route^="/evaluations/suites/"] form.stack button,
+main[data-route^="/evaluations/runs/"] form.stack button {
+  justify-self: start;
+}
+
+main[data-route^="/evaluations/runs/"] .card dl {
+  display: grid;
+  grid-template-columns: minmax(150px, .42fr) minmax(0, 1fr);
+  gap: 0 1rem;
+}
+
+main[data-route^="/evaluations/runs/"] .card dl > dt,
+main[data-route^="/evaluations/runs/"] .card dl > dd {
+  margin: 0;
+  padding: .58rem 0;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route^="/evaluations/runs/"] .card dl > dt {
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 650;
+}
+
+main[data-route^="/evaluations/runs/"] .card dl > dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+main[data-route^="/evaluations/runs/"] .card dl > dt:nth-last-of-type(1),
+main[data-route^="/evaluations/runs/"] .card dl > dd:last-child {
+  border-bottom-color: transparent;
+}
+
+main[data-route^="/evaluations/runs/"] .card .stack > div > strong {
+  display: block;
+  margin-bottom: .65rem;
+  font-size: .82rem;
+}
+
+main[data-route^="/evaluations/runs/"] .card .stack > p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+main[data-route^="/evaluations/runs/"] .card .stack ul {
+  margin: .45rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+}
+
+main[data-route^="/evaluations/runs/"] .card .stack li + li {
+  margin-top: .3rem;
+}
+
+@media (max-width: 760px) {
+  main[data-route="/evaluations"] .page-header,
+  main[data-route^="/evaluations/suites/"] .page-header,
+  main[data-route^="/evaluations/runs/"] .page-header {
+    padding: 1rem;
+  }
+
+  main[data-route="/evaluations"] .pagination {
+    align-items: stretch;
+  }
+
+  main[data-route="/evaluations"] .pagination .actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  main[data-route="/evaluations"] .pagination .actions button {
+    flex: 1;
+  }
+
+  main[data-route^="/evaluations/runs/"] .card dl {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  main[data-route^="/evaluations/runs/"] .card dl > dt {
+    padding-bottom: .18rem;
+    border-bottom: 0;
+  }
+
+  main[data-route^="/evaluations/runs/"] .card dl > dd {
+    padding-top: 0;
+    padding-bottom: .7rem;
+  }
+}
