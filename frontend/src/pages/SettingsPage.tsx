@@ -205,7 +205,7 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
             </div>
           </Card>
 
-          <SetupLifecyclePanel setup={setupClient} />
+          <SetupLifecyclePanel setup={setupClient} onboarding={componentSetupClient} />
           <ComponentSetupPanel onboarding={componentSetupClient} surface="settings" />
 
           <Card title="Platform release & upstream updates">
