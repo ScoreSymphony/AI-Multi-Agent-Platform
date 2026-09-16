@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 
 import pytest
 
@@ -173,6 +174,62 @@ def test_registry_duplicate_and_alias_conflicts_are_deterministic() -> None:
             )
         )
     assert alias_conflict.value.code is ErrorCode.CONFLICT
+
+
+def test_registry_update_alias_conflict_preserves_current_aliases() -> None:
+    registry = ModelRegistry()
+    registry.register_provider(LocalProvider())
+    current = model_config(
+        "model-a",
+        "local-openai-compatible",
+        aliases=("model-a-current",),
+        location=ModelLocation.LOCAL,
+    )
+    other = model_config(
+        "model-b",
+        "local-openai-compatible",
+        aliases=("model-b-shared",),
+        location=ModelLocation.LOCAL,
+    )
+    registry.register_model(current)
+    registry.register_model(other)
+
+    with pytest.raises(ContractError) as alias_conflict:
+        registry.update_model(
+            replace(
+                current,
+                aliases=("model-b-shared",),
+                revision=current.revision + 1,
+            )
+        )
+
+    assert alias_conflict.value.code is ErrorCode.CONFLICT
+    assert registry.get_model("model-a-current") is current
+    assert registry.get_model("model-b-shared") is other
+    assert registry.get_model("model-a") is current
+
+
+def test_registry_update_replaces_aliases_after_validation() -> None:
+    registry = ModelRegistry()
+    registry.register_provider(LocalProvider())
+    current = model_config(
+        "model-a",
+        "local-openai-compatible",
+        aliases=("model-a-old",),
+        location=ModelLocation.LOCAL,
+    )
+    registry.register_model(current)
+    updated = replace(
+        current,
+        aliases=("model-a-new",),
+        revision=current.revision + 1,
+    )
+
+    assert registry.update_model(updated) is updated
+    assert registry.get_model("model-a-new") is updated
+    with pytest.raises(ContractError) as old_alias:
+        registry.get_model("model-a-old")
+    assert old_alias.value.code is ErrorCode.NOT_FOUND
 
 
 def test_provider_removal_does_not_destroy_canonical_model_configuration() -> None:

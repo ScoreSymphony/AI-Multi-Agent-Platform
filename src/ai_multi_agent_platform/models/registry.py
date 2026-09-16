@@ -131,16 +131,9 @@ class ModelRegistry:
                 },
             )
 
-        old_aliases = current.aliases
-        for alias in old_aliases:
+        self._assert_aliases_available(config.aliases, config.config_id)
+        for alias in current.aliases:
             self._aliases.pop(alias, None)
-        try:
-            self._assert_aliases_available(config.aliases, config.config_id)
-        except Exception:
-            for alias in old_aliases:
-                self._aliases[alias] = current.config_id
-            raise
-
         self._models[config.config_id] = config
         for alias in config.aliases:
             self._aliases[alias] = config.config_id
