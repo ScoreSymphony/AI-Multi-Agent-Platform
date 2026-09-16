@@ -36,11 +36,15 @@ from ai_multi_agent_platform.distribution import (
     reconcile_registry_plugins,
     register_distribution_control_plane,
 )
+from ai_multi_agent_platform.distribution.control_plane import RegistryCommandHandlers
 from ai_multi_agent_platform.onboarding import (
+    BrowserFirstSetupService,
     JsonSetupProfileStore,
+    JsonSetupSessionStore,
     OnboardingComponentSetupService,
     SingleNodeComponentDiscoverySource,
     register_component_setup_control_plane,
+    register_setup_lifecycle_control_plane,
 )
 from ai_multi_agent_platform.plugins import (
     CapabilityRegistryBinder,
@@ -129,15 +133,26 @@ def build_default_single_node_deployment(
             )
         )
     )
-    _configure_registry(config, deployment)
+    distribution, registry_commands = _configure_registry(config, deployment)
+    setup_lifecycle = BrowserFirstSetupService(
+        component_setup,
+        deployment.onboarding,
+        JsonSetupSessionStore(deployment.config.database_dir / "setup-sessions.json"),
+        distribution=distribution,
+        registry_commands=registry_commands,
+    )
+    register_setup_lifecycle_control_plane(deployment.control_plane, setup_lifecycle)
     return deployment
 
 
-def _configure_registry(config: SingleNodeConfig, deployment: SingleNodeDeployment) -> None:
+def _configure_registry(
+    config: SingleNodeConfig,
+    deployment: SingleNodeDeployment,
+) -> tuple[DistributionService | None, RegistryCommandHandlers | None]:
     """Attach #81 only when an operator explicitly configures a local Registry catalog."""
 
     if config.registry_catalog is None:
-        return
+        return None, None
 
     provider = FilesystemRegistryProvider(config.registry_catalog)
     installations = JsonRegistryInstallationStore(
@@ -209,6 +224,7 @@ def _configure_registry(config: SingleNodeConfig, deployment: SingleNodeDeployme
         distribution,
         validation_context_resolver=validation,
     )
+    return distribution, RegistryCommandHandlers(distribution, validation)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
