@@ -1,0 +1,137 @@
+name: Pytest xdist audit
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  subset-benchmark:
+    name: ${{ matrix.case.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        case:
+          - name: unit-serial
+            path: tests/unit
+            args: ""
+            repeats: 2
+          - name: unit-n4-loadscope
+            path: tests/unit
+            args: "-n 4 --dist=loadscope"
+            repeats: 3
+          - name: unit-n4-loadfile
+            path: tests/unit
+            args: "-n 4 --dist=loadfile"
+            repeats: 3
+          - name: contract-serial
+            path: tests/contract
+            args: ""
+            repeats: 2
+          - name: contract-n4-loadscope
+            path: tests/contract
+            args: "-n 4 --dist=loadscope"
+            repeats: 3
+          - name: contract-n4-loadfile
+            path: tests/contract
+            args: "-n 4 --dist=loadfile"
+            repeats: 3
+          - name: architecture-serial
+            path: tests/architecture
+            args: ""
+            repeats: 1
+          - name: architecture-n2-loadfile
+            path: tests/architecture
+            args: "-n 2 --dist=loadfile"
+            repeats: 2
+          - name: integration-serial
+            path: tests/integration
+            args: ""
+            repeats: 1
+          - name: integration-n2-loadfile
+            path: tests/integration
+            args: "-n 2 --dist=loadfile"
+            repeats: 2
+          - name: regression-serial
+            path: tests/regression
+            args: ""
+            repeats: 1
+          - name: regression-n2-loadfile
+            path: tests/regression
+            args: "-n 2 --dist=loadfile"
+            repeats: 2
+          - name: e2e-serial
+            path: tests/e2e
+            args: ""
+            repeats: 1
+          - name: e2e-n2-loadfile
+            path: tests/e2e
+            args: "-n 2 --dist=loadfile"
+            repeats: 2
+          - name: release-serial
+            path: tests/release
+            args: ""
+            repeats: 1
+          - name: release-n2-loadfile
+            path: tests/release
+            args: "-n 2 --dist=loadfile"
+            repeats: 2
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Bootstrap audit environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install "pytest-xdist>=3.6,<4"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+          pytest --version
+          python - <<'PY'
+          import importlib.metadata
+          print("pytest-xdist", importlib.metadata.version("pytest-xdist"))
+          PY
+      - name: Run measured trials
+        shell: bash
+        env:
+          CASE_NAME: ${{ matrix.case.name }}
+          TEST_PATH: ${{ matrix.case.path }}
+          XDIST_ARGS: ${{ matrix.case.args }}
+          REPEATS: ${{ matrix.case.repeats }}
+        run: |
+          set -euo pipefail
+          for trial in $(seq 1 "$REPEATS"); do
+            echo "::group::${CASE_NAME} trial ${trial}/${REPEATS}"
+            start_ns=$(date +%s%N)
+            set +e
+            pytest $XDIST_ARGS "$TEST_PATH"
+            status=$?
+            set -e
+            end_ns=$(date +%s%N)
+            python - "$CASE_NAME" "$trial" "$status" "$start_ns" "$end_ns" <<'PY'
+          import json
+          import sys
+
+          case_name, trial, status, start_ns, end_ns = sys.argv[1:]
+          duration = (int(end_ns) - int(start_ns)) / 1_000_000_000
+          print("XDIST_AUDIT=" + json.dumps({
+              "case": case_name,
+              "trial": int(trial),
+              "status": int(status),
+              "duration_seconds": round(duration, 3),
+          }, sort_keys=True))
+          PY
+            echo "::endgroup::"
+            if [ "$status" -ne 0 ]; then
+              exit "$status"
+            fi
+          done
