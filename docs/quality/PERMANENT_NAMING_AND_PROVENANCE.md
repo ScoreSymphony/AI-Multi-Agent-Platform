@@ -39,7 +39,7 @@ Issue and pull-request numbers are historical metadata and remain useful in:
 - ADR historical context;
 - changelog and release notes;
 - compatibility/deprecation notes where the external reference is relevant;
-- evidence directories whose identity intentionally records a specific acceptance campaign;
+- issue-scoped evidence directories such as `tests/evidence/issue_<number>/`, whose identity intentionally records a specific acceptance campaign;
 - branch names, commits and pull-request descriptions.
 
 Repository integrations may also use the domain concept of an issue (`issue_id`, `repository.issue.read`, and similar names). The prohibited pattern is an implementation-history number embedded in permanent semantics, not the word `issue` itself.
@@ -52,7 +52,7 @@ The repository contains historical production comments and scripts created befor
 2. When a Python source/test/script file is changed, issue-numbered identifiers in that file must be renamed in the same change.
 3. When a changed Python file retains a useful issue reference in a comment or docstring, the reference must be secondary `Historical context:` or `Provenance:` text.
 4. Changed GitHub workflow files must keep workflow, job and step names behavior-oriented; concrete issue numbers belong in provenance rather than maintained workflow semantics.
-5. Historical/evidence locations keep their provenance-oriented names.
+5. Only explicitly issue-scoped evidence directories under `tests/evidence/issue_<number>/` are exempt from issue-number naming checks; the `tests/evidence/` root is not a blanket allowlist.
 6. Focused cleanup batches should update callers, CI configuration and documentation together when a permanent script/module is renamed.
 
 `scripts/ci/validate_permanent_naming.py` enforces these rules on the changed tree of pull requests. The diff-scoped policy lets existing historical debt be removed in focused batches while preventing new debt from entering the repository.
