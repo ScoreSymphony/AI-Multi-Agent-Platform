@@ -93,6 +93,7 @@ export function SetupLifecyclePanel({
   if (loading && status === null) return <LoadingState label="Loading persistent setup state…" />;
   if (error && status === null) return <ErrorState error={error} onRetry={() => void load()} />;
   if (status === null) return <LoadingState label="Loading persistent setup state…" />;
+  const currentStatus = status;
 
   async function mutate(label: string, operation: () => Promise<SetupSessionStatus>, success: string) {
     setBusy(label);
@@ -115,10 +116,10 @@ export function SetupLifecyclePanel({
     const ref = `${card.technical_id}@${card.version}`;
     const nextSelections = selected
       ? uniqueSelections([
-          ...status.registry_items,
+          ...currentStatus.registry_items,
           { item_id: card.technical_id, version: card.version },
         ])
-      : status.registry_items.filter((item) => registryRef(item) !== ref);
+      : currentStatus.registry_items.filter((item) => registryRef(item) !== ref);
     await mutate(
       `registry:${ref}`,
       () => setup.update({ current_step: "components", registry_items: nextSelections }),
@@ -167,9 +168,9 @@ export function SetupLifecyclePanel({
     );
   }
 
-  const registryCards = status.catalog.filter((card) => card.kind === "registry_item");
-  const groupedCards = groupCards(status.catalog);
-  const pendingMutations = status.plan.actions.filter(
+  const registryCards = currentStatus.catalog.filter((card) => card.kind === "registry_item");
+  const groupedCards = groupCards(currentStatus.catalog);
+  const pendingMutations = currentStatus.plan.actions.filter(
     (action) => action.state === "pending" && (action.kind === "install" || action.kind === "activate"),
   );
 
@@ -183,16 +184,16 @@ export function SetupLifecyclePanel({
         </p>
         {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
         {notice ? <div className="state" role="status"><strong>{notice}</strong></div> : null}
-        <SetupProgress status={status} />
+        <SetupProgress status={currentStatus} />
         <div className="actions">
           <button className="secondary" disabled={busy !== null || loading} onClick={() => void load()}>
             {loading ? "Refreshing…" : "Refresh setup state"}
           </button>
-          {status.current_step !== "ready" ? (
+          {currentStatus.current_step !== "ready" ? (
             <button
               className="secondary"
               disabled={busy !== null || !updateAvailable}
-              onClick={() => void setStep(nextEditableStep(status.current_step))}
+              onClick={() => void setStep(nextEditableStep(currentStatus.current_step))}
             >
               Continue setup
             </button>
@@ -240,14 +241,14 @@ export function SetupLifecyclePanel({
           This preview is computed before mutation. Blocked and manual actions are never silently
           installed, while already available components are explicit no-op reuse actions.
         </p>
-        <PlanTable status={status} />
+        <PlanTable status={currentStatus} />
         <div className="actions">
           <button
             disabled={
               busy !== null
               || !provisionAvailable
               || pendingMutations.length === 0
-              || status.plan.blocking
+              || currentStatus.plan.blocking
             }
             onClick={() => void provision()}
           >
@@ -261,12 +262,12 @@ export function SetupLifecyclePanel({
             {busy === "validate" ? "Validating…" : "Validate readiness"}
           </button>
         </div>
-        {status.plan.blocking ? (
+        {currentStatus.plan.blocking ? (
           <p role="alert">
             Resolve the blocked or manual-required actions before setup can become ready.
           </p>
         ) : null}
-        {!status.plan.mutation_required ? (
+        {!currentStatus.plan.mutation_required ? (
           <p>No pending automatic install or activation operation exists in the current plan.</p>
         ) : null}
       </Card>
@@ -275,25 +276,25 @@ export function SetupLifecyclePanel({
         <dl className="definition-list">
           <div>
             <dt>Setup</dt>
-            <dd><StatusBadge value={status.readiness.ready ? "ready" : "incomplete"} /></dd>
+            <dd><StatusBadge value={currentStatus.readiness.ready ? "ready" : "incomplete"} /></dd>
           </div>
           <div>
             <dt>Canonical onboarding state</dt>
-            <dd><code>{status.readiness.canonical_onboarding_state ?? "unknown"}</code></dd>
+            <dd><code>{currentStatus.readiness.canonical_onboarding_state ?? "unknown"}</code></dd>
           </div>
           <div>
             <dt>Active component profile</dt>
-            <dd><code>{status.active_profile_id ?? "not selected"}</code></dd>
+            <dd><code>{currentStatus.active_profile_id ?? "not selected"}</code></dd>
           </div>
           <div>
             <dt>Dashboard</dt>
-            <dd>{status.readiness.dashboard_allowed ? "Available" : "Blocked until validation succeeds"}</dd>
+            <dd>{currentStatus.readiness.dashboard_allowed ? "Available" : "Blocked until validation succeeds"}</dd>
           </div>
         </dl>
-        {status.readiness.blocking_actions.length > 0 ? (
-          <p>Blocking actions: {status.readiness.blocking_actions.join(", ")}</p>
+        {currentStatus.readiness.blocking_actions.length > 0 ? (
+          <p>Blocking actions: {currentStatus.readiness.blocking_actions.join(", ")}</p>
         ) : null}
-        {status.readiness.dashboard_allowed ? (
+        {currentStatus.readiness.dashboard_allowed ? (
           <div className="actions"><a href="/">Open dashboard</a></div>
         ) : null}
       </Card>
