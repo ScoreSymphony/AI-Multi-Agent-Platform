@@ -11,12 +11,12 @@ from ai_multi_agent_platform.agents.routing_profile_control_plane import (
     register_routing_profile_aware_agent_control_plane,
 )
 from ai_multi_agent_platform.control_plane import (
-    AuthenticatedControlPlaneHTTP,
     ControlPlaneASGI,
     evaluation_command_handlers,
     evaluation_resource_services,
 )
 from ai_multi_agent_platform.control_plane.approval_portability_composition import ControlPlane
+from ai_multi_agent_platform.control_plane.first_user_bootstrap import AuthenticatedControlPlaneHTTP
 from ai_multi_agent_platform.coordination import (
     coordination_command_handlers,
     coordination_resource_services,
@@ -326,6 +326,7 @@ def build_http(
     http = AuthenticatedControlPlaneHTTP(
         control_plane.control_plane,
         security.authentication,
+        authorization=security.authorization,
         secure_cookie=config.secure_cookie,
     )
     return HttpBundle(http=http, app=ControlPlaneASGI(http))
