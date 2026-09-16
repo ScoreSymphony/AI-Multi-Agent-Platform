@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from asyncio import CancelledError
 from collections.abc import AsyncIterator
 from copy import deepcopy
 from typing import Any, cast
@@ -28,6 +29,10 @@ from .http import (
     _send_sse_error,
 )
 from .models import API_VERSION, APIException, RequestContext, api_exception_from_contract
+from .northbound_errors import (
+    log_unexpected_boundary_error,
+    safe_lifespan_failure_message,
+)
 from .notifications_authorized_composition import (
     ControlPlane as _BaseControlPlane,
 )
@@ -155,35 +160,73 @@ class ControlPlaneASGI:
             message_type = message.get("type")
             if message_type == "lifespan.startup":
                 automation_started = False
+
+                async def rollback_started_automation(started: bool) -> Exception | None:
+                    if not started:
+                        return None
+                    try:
+                        await control_plane.stop_automation_runtime()
+                    # error-boundary: allow-broad-catch=cleanup startup rollback failure
+                    except Exception as rollback_exc:
+                        return rollback_exc
+                    return None
+
                 try:
                     await control_plane.start_automation_runtime()
                     automation_started = True
                     await control_plane.start_notification_runtime()
+                except (CancelledError, KeyboardInterrupt, SystemExit):
+                    cleanup_error = await rollback_started_automation(automation_started)
+                    if cleanup_error is not None:
+                        log_unexpected_boundary_error(
+                            cleanup_error,
+                            boundary="notification-startup-rollback",
+                        )
+                    raise
+                # error-boundary: allow-broad-catch=cleanup startup failure settlement
                 except Exception as exc:
-                    if automation_started:
-                        try:
-                            await control_plane.stop_automation_runtime()
-                        except Exception:
-                            pass
-                    await send({"type": "lifespan.startup.failed", "message": str(exc)})
+                    cleanup_error = await rollback_started_automation(automation_started)
+                    await send(
+                        {
+                            "type": "lifespan.startup.failed",
+                            "message": safe_lifespan_failure_message(
+                                "notification runtime startup",
+                                exc,
+                                cleanup_error=cleanup_error,
+                            ),
+                        }
+                    )
                     return
                 await send({"type": "lifespan.startup.complete"})
                 continue
             if message_type == "lifespan.shutdown":
-                failures: list[Exception] = []
+                failures: list[tuple[str, Exception]] = []
+                process_failure: BaseException | None = None
                 try:
                     await control_plane.stop_notification_runtime()
+                except (CancelledError, KeyboardInterrupt, SystemExit) as exc:
+                    process_failure = exc
+                # error-boundary: allow-broad-catch=cleanup settle notification shutdown
                 except Exception as exc:
-                    failures.append(exc)
+                    failures.append(("notification runtime shutdown", exc))
                 try:
                     await control_plane.stop_automation_runtime()
+                except (CancelledError, KeyboardInterrupt, SystemExit) as exc:
+                    if process_failure is None:
+                        process_failure = exc
+                # error-boundary: allow-broad-catch=cleanup settle automation shutdown
                 except Exception as exc:
-                    failures.append(exc)
+                    failures.append(("automation runtime shutdown", exc))
+                if process_failure is not None:
+                    raise process_failure
                 if failures:
                     await send(
                         {
                             "type": "lifespan.shutdown.failed",
-                            "message": "; ".join(str(exc) for exc in failures),
+                            "message": "; ".join(
+                                safe_lifespan_failure_message(operation, error)
+                                for operation, error in failures
+                            ),
                         }
                     )
                     return

@@ -28,6 +28,7 @@ from ai_multi_agent_platform.security.authorization import infer_actor_identity
 from ai_multi_agent_platform.workspaces import RunWorkspaceBindingRepository, WorkspaceProvider
 
 from .models import RequestContext
+from .northbound_errors import safe_lifespan_failure_message
 from .plugin_terminal_composition import ControlPlane as _BaseControlPlane
 from .plugin_terminal_composition import ControlPlaneASGI as _BaseControlPlaneASGI
 from .plugin_terminal_composition import ControlPlaneHTTP as ControlPlaneHTTP
@@ -330,16 +331,34 @@ class ControlPlaneASGI:
             if message_type == "lifespan.startup":
                 try:
                     await self._control_plane.start_automation_runtime()
+                # error-boundary: allow-broad-catch=boundary ASGI automation startup
                 except Exception as exc:
-                    await send({"type": "lifespan.startup.failed", "message": str(exc)})
+                    await send(
+                        {
+                            "type": "lifespan.startup.failed",
+                            "message": safe_lifespan_failure_message(
+                                "automation runtime startup",
+                                exc,
+                            ),
+                        }
+                    )
                     return
                 await send({"type": "lifespan.startup.complete"})
                 continue
             if message_type == "lifespan.shutdown":
                 try:
                     await self._control_plane.stop_automation_runtime()
+                # error-boundary: allow-broad-catch=boundary ASGI automation shutdown
                 except Exception as exc:
-                    await send({"type": "lifespan.shutdown.failed", "message": str(exc)})
+                    await send(
+                        {
+                            "type": "lifespan.shutdown.failed",
+                            "message": safe_lifespan_failure_message(
+                                "automation runtime shutdown",
+                                exc,
+                            ),
+                        }
+                    )
                     return
                 await send({"type": "lifespan.shutdown.complete"})
                 return
