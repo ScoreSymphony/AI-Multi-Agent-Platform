@@ -1,4 +1,4 @@
-"""Dependency-free cross-process MessageTransport adapter for issue #388.
+"""Dependency-free cross-process MessageTransport adapter.
 
 The adapter remains an implementation of the platform-owned #35 transport
 contract.  It never owns canonical Task/Run/Event/Node/Worker identity.  The

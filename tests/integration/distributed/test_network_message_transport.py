@@ -31,7 +31,7 @@ from ai_multi_agent_platform.messaging import (
 )
 from ai_multi_agent_platform.testing.fakes import FakeLifecycleBackend
 
-TEST_AUTHENTICATION_KEY = "issue-388-test-transport-credential"
+TEST_AUTHENTICATION_KEY = "network-transport-test-credential"
 PROCESS_START_TIMEOUT_SECONDS = 15.0
 
 
@@ -43,12 +43,12 @@ class _ProcessReadySignal(Protocol):
 
 def _envelope(sequence: int = 1) -> TransportEnvelope:
     return TransportEnvelope(
-        message_type="issue388.test",
+        message_type="network_transport.test",
         kind=MessageKind.COMMAND,
         payload_schema_version="1",
-        source_component="issue388-tests",
-        correlation_id=f"issue388-{sequence}",
-        idempotency_key=f"issue388-idempotency-{sequence}",
+        source_component="network-transport-tests",
+        correlation_id=f"network-transport-{sequence}",
+        idempotency_key=f"network-transport-idempotency-{sequence}",
         payload={"sequence": sequence},
     )
 
@@ -60,7 +60,7 @@ def _job() -> WorkerJobRequest:
             run_id=new_id("run"),
             subject_type="task",
             subject_id=task_id,
-            context=OperationContext(correlation_id=f"issue388:{task_id}"),
+            context=OperationContext(correlation_id=f"network-transport:{task_id}"),
         )
     )
 
@@ -104,9 +104,13 @@ def test_loopback_transport_preserves_envelope_and_ack_semantics() -> None:
         try:
             assert await transport.check_ready() is True
             envelope = _envelope()
-            receipt = await transport.publish("issue388.loopback", envelope)
+            receipt = await transport.publish("network-transport.loopback", envelope)
             stream = transport.subscribe(
-                Subscription("issue388.loopback", "issue388-consumer", "issue388-group")
+                Subscription(
+                    "network-transport.loopback",
+                    "network-transport-consumer",
+                    "network-transport-group",
+                )
             )
             delivery = await asyncio.wait_for(anext(stream), timeout=2.0)
             assert receipt.message_id == envelope.message_id
@@ -133,13 +137,13 @@ def test_operation_control_idempotency_binding_matches_transport_contract() -> N
         envelope = _envelope()
         try:
             await transport.publish(
-                "issue388.control",
+                "network-transport.control",
                 envelope,
                 control=OperationControl(idempotency_key=envelope.idempotency_key),
             )
             with pytest.raises(ContractError) as error:
                 await transport.publish(
-                    "issue388.control",
+                    "network-transport.control",
                     envelope,
                     control=OperationControl(idempotency_key="different-idempotency-key"),
                 )
@@ -161,12 +165,12 @@ def test_network_transport_preserves_nack_redelivery_and_dead_letter_semantics()
             authentication_key=TEST_AUTHENTICATION_KEY,
         )
         try:
-            await transport.publish("issue388.retry", _envelope())
+            await transport.publish("network-transport.retry", _envelope())
             stream = transport.subscribe(
                 Subscription(
-                    "issue388.retry",
-                    "issue388-retry-consumer",
-                    "issue388-retry-group",
+                    "network-transport.retry",
+                    "network-transport-retry-consumer",
+                    "network-transport-retry-group",
                     retry_policy=RetryPolicy(max_attempts=2),
                 )
             )
@@ -181,8 +185,8 @@ def test_network_transport_preserves_nack_redelivery_and_dead_letter_semantics()
             await transport.nack(second, retry=True, reason="retry-exhausted")
 
             dead_letters = await transport.dead_letters(
-                "issue388.retry",
-                "issue388-retry-group",
+                "network-transport.retry",
+                "network-transport-retry-group",
             )
             assert len(dead_letters) == 1
             assert dead_letters[0].envelope.message_id == first.envelope.message_id
@@ -208,9 +212,9 @@ def test_network_transport_exposes_bounded_backpressure_without_silent_drop() ->
             authentication_key=TEST_AUTHENTICATION_KEY,
         )
         try:
-            await transport.publish("issue388.bounded", _envelope(1))
+            await transport.publish("network-transport.bounded", _envelope(1))
             with pytest.raises(ContractError) as error:
-                await transport.publish("issue388.bounded", _envelope(2))
+                await transport.publish("network-transport.bounded", _envelope(2))
             assert error.value.code is ErrorCode.RESOURCE_EXHAUSTED
             assert error.value.retryable is True
         finally:
@@ -228,23 +232,23 @@ def test_graceful_client_shutdown_keeps_retained_work_available_for_reconnect() 
             broker.host,
             broker.port,
             authentication_key=TEST_AUTHENTICATION_KEY,
-            provider_id="issue388-graceful-first",
+            provider_id="network-transport-graceful-first",
         )
-        await first_transport.publish("issue388.graceful", _envelope())
+        await first_transport.publish("network-transport.graceful", _envelope())
         await first_transport.close(graceful=True)
 
         replacement = TcpMessageTransport(
             broker.host,
             broker.port,
             authentication_key=TEST_AUTHENTICATION_KEY,
-            provider_id="issue388-graceful-replacement",
+            provider_id="network-transport-graceful-replacement",
         )
         try:
             stream = replacement.subscribe(
                 Subscription(
-                    "issue388.graceful",
-                    "issue388-graceful-consumer",
-                    "issue388-graceful-group",
+                    "network-transport.graceful",
+                    "network-transport-graceful-consumer",
+                    "network-transport-graceful-group",
                 )
             )
             delivery = await asyncio.wait_for(anext(stream), timeout=2.0)
@@ -270,7 +274,7 @@ def test_wrong_hmac_credential_is_rejected_without_exposing_secret_in_envelope()
         envelope = _envelope()
         try:
             with pytest.raises(ContractError) as error:
-                await transport.publish("issue388.auth", envelope)
+                await transport.publish("network-transport.auth", envelope)
             assert error.value.code is ErrorCode.UNAUTHORIZED
             assert TEST_AUTHENTICATION_KEY not in repr(envelope.to_dict())
             assert "wrong-credential" not in repr(envelope.to_dict())
@@ -303,13 +307,13 @@ def test_worker_dispatch_uses_real_tcp_boundary() -> None:
             broker.host,
             broker.port,
             authentication_key=TEST_AUTHENTICATION_KEY,
-            provider_id="issue388-control",
+            provider_id="network-transport-control",
         )
         worker_transport = TcpMessageTransport(
             broker.host,
             broker.port,
             authentication_key=TEST_AUTHENTICATION_KEY,
-            provider_id="issue388-worker",
+            provider_id="network-transport-worker",
         )
         endpoint = WorkerTransportEndpoint(
             LocalWorker(worker_id, FakeLifecycleBackend()),
@@ -345,7 +349,7 @@ def test_worker_endpoint_dispatches_across_an_independent_process_and_reconnects
             broker.host,
             broker.port,
             authentication_key=TEST_AUTHENTICATION_KEY,
-            provider_id="issue388-process-control",
+            provider_id="network-transport-process-control",
         )
         dispatcher = TransportWorkerDispatcher(
             worker_id,

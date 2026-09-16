@@ -18,11 +18,13 @@ The standalone Pipelock candidate-compatibility workflow is retired as a separat
 
 ## Routine execution surface
 
-The repository no longer repeats every expensive or specialized lane on each `main` push. Required CodeQL analysis remains on pull requests and on its scheduled scan. Full platform/MCP/acceptance conformance remains path-scoped on relevant pull requests and is exercised completely by the daily scheduled/manual conformance workflow. Repository test-layout reconciliation remains a pull-request validation rather than a duplicate post-merge run.
+The repository no longer repeats every expensive or specialized lane on each `main` push. Full platform/MCP/acceptance conformance remains path-scoped on relevant pull requests and is exercised completely by the daily scheduled/manual conformance workflow. Repository test-layout reconciliation remains a pull-request validation rather than a duplicate post-merge run.
 
-The canonical `ci.yml` default-branch surface now contains only the three core jobs. LiteLLM, Hermes and Bifrost compatibility moved to `compatibility.yml`, where the same job identities and validation responsibilities remain automatic on pull requests without being repeated after merge. Together with the retained benchmark and extended-performance push workflows, this gives an ordinary `main` push a nine-check baseline.
+CodeQL is the deliberate security exception to that routine-push consolidation. It remains required on pull requests, keeps its scheduled scan, supports manual dispatch, and also runs on pushes to `main` so GitHub code scanning re-analyzes the actual default-branch revision immediately after merge instead of waiting for the next schedule.
 
-This keeps the ordinary default-branch push surface at the documented check-count budget while retaining the same validation responsibilities in the lifecycle stage where they provide useful signal.
+The canonical `ci.yml` default-branch surface contains only the three core jobs. LiteLLM, Hermes and Bifrost compatibility live in `compatibility.yml`, where the same job identities and validation responsibilities remain automatic on pull requests without being repeated after merge. Together with the retained benchmark and extended-performance push workflows, this gives an ordinary `main` push a nine-check routine baseline. CodeQL adds two security analysis checks outside that routine budget, for eleven total checks on an ordinary default-branch push.
+
+This keeps the ordinary non-security push surface at the documented routine check-count budget while giving default-branch security state prompt post-merge coverage.
 
 ## Historical Actions entries
 
