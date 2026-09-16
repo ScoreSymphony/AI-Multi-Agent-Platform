@@ -1,0 +1,190 @@
+/* Route-scoped presentation polish for Compute inventory and detail surfaces.
+ * Keep this layer visual only; Compute API and runtime semantics stay in page components.
+ */
+
+main[data-route="/compute"] > .stack {
+  gap: 1.45rem;
+}
+
+main[data-route="/compute"] .page-header {
+  padding: .25rem 0 .55rem;
+}
+
+main[data-route="/compute"] .page-header h1 {
+  max-width: none;
+}
+
+main[data-route="/compute"] > .stack > .card {
+  position: relative;
+  overflow: hidden;
+  padding: 1.2rem;
+}
+
+main[data-route="/compute"] > .stack > .card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--accent-strong), transparent 78%);
+  opacity: .72;
+}
+
+main[data-route="/compute"] > .stack > .card > h2 {
+  margin-bottom: .38rem;
+  font-size: 1.02rem;
+}
+
+main[data-route="/compute"] > .stack > .card > p:first-of-type {
+  margin: 0 0 1rem;
+  max-width: 78ch;
+  color: var(--muted);
+  font-size: .86rem;
+  line-height: 1.5;
+}
+
+main[data-route="/compute"] .table-wrap {
+  border-color: rgba(125, 211, 252, .14);
+  background: rgba(8, 11, 18, .34);
+}
+
+main[data-route="/compute"] table {
+  min-width: 880px;
+}
+
+main[data-route="/compute"] th {
+  background: rgba(8, 11, 18, .68);
+}
+
+main[data-route="/compute"] td:first-child,
+main[data-route="/compute"] td:first-child a {
+  font-weight: 650;
+}
+
+main[data-route^="/compute/"] > .stack {
+  gap: 1.25rem;
+}
+
+main[data-route^="/compute/"] .page-header {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(23, 31, 45, .72), rgba(8, 11, 18, .42));
+}
+
+main[data-route^="/compute/"] .page-header h1 {
+  max-width: 34ch;
+  font-size: clamp(1.55rem, 2.6vw, 2.25rem);
+  overflow-wrap: anywhere;
+}
+
+main[data-route^="/compute/"] .page-header code {
+  color: var(--accent);
+  font-size: .82rem;
+}
+
+main[data-route^="/compute/"] .card {
+  padding: 1.15rem;
+}
+
+main[data-route^="/compute/"] .card h2 {
+  padding-bottom: .72rem;
+  margin-bottom: .15rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+main[data-route^="/compute/"] .detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin-top: .45rem;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(8, 11, 18, .24);
+}
+
+main[data-route^="/compute/"] .detail-grid > div {
+  min-width: 0;
+  grid-template-columns: minmax(100px, .45fr) minmax(0, 1fr);
+  padding: .72rem .8rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+main[data-route^="/compute/"] .detail-grid > div:nth-child(odd) {
+  border-right: 1px solid var(--line-soft);
+}
+
+main[data-route^="/compute/"] .detail-grid dt {
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .025em;
+}
+
+main[data-route^="/compute/"] .detail-grid dd {
+  min-width: 0;
+  font-size: .88rem;
+}
+
+main[data-route^="/compute/"] .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+  align-items: center;
+  margin-top: 1rem;
+  padding-top: .9rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+main[data-route^="/compute/"] .button-row button {
+  min-height: 36px;
+}
+
+main[data-route^="/compute/"] .muted {
+  margin: .75rem 0 0;
+  color: var(--muted);
+  font-size: .79rem;
+  line-height: 1.5;
+}
+
+main[data-route^="/compute/"] .card .table-wrap {
+  margin-top: .75rem;
+}
+
+main[data-route^="/compute/"] .card ul {
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  main[data-route^="/compute/"] .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  main[data-route^="/compute/"] .detail-grid > div:nth-child(odd) {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  main[data-route="/compute"] > .stack > .card,
+  main[data-route^="/compute/"] .card {
+    padding: .95rem;
+  }
+
+  main[data-route^="/compute/"] .page-header {
+    padding: .85rem .9rem;
+  }
+
+  main[data-route^="/compute/"] .detail-grid > div {
+    grid-template-columns: 1fr;
+    gap: .22rem;
+    padding: .65rem .7rem;
+  }
+
+  main[data-route^="/compute/"] .button-row {
+    align-items: stretch;
+  }
+
+  main[data-route^="/compute/"] .button-row button {
+    flex: 1 1 160px;
+  }
+}
