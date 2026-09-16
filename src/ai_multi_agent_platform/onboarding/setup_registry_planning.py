@@ -7,14 +7,18 @@ actual validation and mutation still delegates to the canonical Registry owner d
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.distribution.items import RegistryItem
 from ai_multi_agent_platform.distribution.models import RegistryDependency, version_key
 
 from .components import DiscoveredComponent, SetupProfile
 from .setup_lifecycle import (
+    SETUP_SESSION_RESOURCE_ID,
     BrowserFirstSetupService,
     ProvisioningActionKind,
     ProvisioningActionState,
@@ -26,6 +30,45 @@ from .setup_lifecycle import (
 
 class DependencyAwareBrowserFirstSetupService(BrowserFirstSetupService):
     """Resolve required Registry dependencies into the persisted setup plan before mutation."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        # The base service already serializes mutation of durable setup state. This outer lock also
+        # keeps the final-outcome replay check atomic with the delegated provisioning operation.
+        self._provision_replay_lock = asyncio.Lock()
+
+    async def provision(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        """Replay the final result of a multi-action operation, not its first partial success."""
+
+        async with self._provision_replay_lock:
+            if (
+                resource_ref == SETUP_SESSION_RESOURCE_ID
+                and not (set(payload) - {"action_ids"})
+                and context.idempotency_key is not None
+            ):
+                session = self._session(context)
+                replay = next(
+                    (
+                        outcome
+                        for outcome in reversed(session.outcomes)
+                        if outcome.idempotency_key == context.idempotency_key
+                    ),
+                    None,
+                )
+                if replay is not None:
+                    return {
+                        "id": replay.action_id,
+                        "type": "provisioning_operation",
+                        "replayed": True,
+                        "outcome": replay.to_json(),
+                        "setup": self.status(context),
+                    }
+            return await super().provision(context, resource_ref, payload)
 
     def _plan(
         self,
