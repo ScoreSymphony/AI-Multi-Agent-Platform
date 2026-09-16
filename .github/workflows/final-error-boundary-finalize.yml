@@ -28,7 +28,7 @@ jobs:
           python scripts/ci/broad_exception_audit.py --repository-root . --check
           python -m pip install -e ".[dev]"
           pytest -q tests/unit/quality/test_broad_exception_audit.py
-      - name: Remove temporary migration helpers and commit
+      - name: Remove temporary migration scripts and commit
         shell: bash
         run: |
           git rm -f \
@@ -37,10 +37,7 @@ jobs:
             scripts/maintenance/final_error_boundary_redaction.py \
             scripts/maintenance/final_error_boundary_redaction.trigger \
             scripts/maintenance/final_error_boundary_finalize.py \
-            scripts/maintenance/final_error_boundary_finalize.trigger \
-            .github/workflows/final-error-boundary-cleanup.yml \
-            .github/workflows/final-error-boundary-redaction.yml \
-            .github/workflows/final-error-boundary-finalize.yml
+            scripts/maintenance/final_error_boundary_finalize.trigger
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
