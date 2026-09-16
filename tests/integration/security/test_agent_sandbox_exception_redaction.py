@@ -108,7 +108,7 @@ def test_provider_exception_text_is_not_copied_into_execution_evidence(tmp_path:
     assert result.status is ExecutionStatus.FAILED
     assert result.error is not None
     assert result.error.category is ExecutionErrorCategory.INTERNAL
-    assert result.error.retryable is True
+    assert result.error.retryable is False
     assert result.error.message == "Agent-Sandbox provider execution failed"
     retained = f"{result.stderr} {result.error.message} {result.adapter_metadata}"
     assert _SECRET not in retained

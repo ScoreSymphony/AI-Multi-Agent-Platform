@@ -210,8 +210,9 @@ class HermesOrchestrator(Orchestrator):
             )
         raise self._provider_error(
             ErrorCode.BACKEND_ERROR,
-            snapshot.error or f"Hermes planning run failed with status {snapshot.status}",
+            f"Hermes planning run failed with status {snapshot.status}",
             external_run_id=external_run_id,
+            details={"provider_status": snapshot.status},
         )
 
     async def reconcile_external_run(
@@ -343,7 +344,7 @@ class HermesOrchestrator(Orchestrator):
                     context=context,
                 )
             )
-        except (Exception, asyncio.CancelledError):
+        except ContractError:
             return
 
     async def _request(
@@ -376,12 +377,24 @@ class HermesOrchestrator(Orchestrator):
                 ErrorCode.TIMEOUT,
                 "Hermes API request timed out",
                 retryable=True,
+                details={"exception_type": type(exc).__name__},
             ) from exc
         except (ConnectionError, OSError) as exc:
             raise self._provider_error(
                 ErrorCode.UNAVAILABLE,
-                f"Hermes API server is unavailable: {exc}",
+                "Hermes API server is unavailable",
                 retryable=True,
+                details={"exception_type": type(exc).__name__},
+            ) from exc
+        except ContractError:
+            raise
+        # error-boundary: allow-broad-catch=translation external Hermes transport boundary
+        except Exception as exc:
+            raise self._provider_error(
+                ErrorCode.BACKEND_ERROR,
+                "Hermes API transport failed",
+                retryable=False,
+                details={"exception_type": type(exc).__name__},
             ) from exc
 
     @property
@@ -515,8 +528,9 @@ class HermesOrchestrator(Orchestrator):
         except ValueError as exc:
             raise self._provider_error(
                 ErrorCode.INVALID_PROVIDER_RESPONSE,
-                f"Hermes returned an invalid plan graph: {exc}",
+                "Hermes returned an invalid plan graph",
                 external_run_id=external_run_id,
+                details={"exception_type": type(exc).__name__},
             ) from exc
 
     def _snapshot(self, payload: Mapping[str, JsonValue]) -> HermesRunSnapshot:
@@ -547,6 +561,7 @@ class HermesOrchestrator(Orchestrator):
         *,
         retryable: bool = False,
         external_run_id: str | None = None,
+        details: dict[str, JsonValue] | None = None,
     ) -> ContractError:
         values: dict[str, JsonValue] = {
             "upstream_revision": self.config.pinned_revision,
@@ -560,6 +575,7 @@ class HermesOrchestrator(Orchestrator):
             message,
             retryable=retryable,
             provider_id=HERMES_ADAPTER_ID,
+            details=details,
             adapter_metadata=(AdapterMetadata(namespace="hermes", values=values),),
         )
 
@@ -572,12 +588,11 @@ class HermesOrchestrator(Orchestrator):
         if 200 <= response.status_code < 300:
             return
         code, retryable = self._http_error(response.status_code)
-        detail = self._error_message(response.payload)
-        suffix = f": {detail}" if detail else ""
         raise self._provider_error(
             code,
-            f"Hermes {operation} failed with HTTP {response.status_code}{suffix}",
+            f"Hermes {operation} failed with HTTP {response.status_code}",
             retryable=retryable,
+            details={"http_status": response.status_code},
         )
 
     @staticmethod
@@ -597,21 +612,6 @@ class HermesOrchestrator(Orchestrator):
         if status_code >= 500:
             return ErrorCode.UNAVAILABLE, True
         return ErrorCode.BACKEND_ERROR, False
-
-    @staticmethod
-    def _error_message(payload: JsonValue) -> str | None:
-        if isinstance(payload, str):
-            return payload or None
-        if not isinstance(payload, dict):
-            return None
-        error_value = payload.get("error")
-        if isinstance(error_value, str):
-            return error_value
-        if isinstance(error_value, dict):
-            message = error_value.get("message")
-            return message if isinstance(message, str) else None
-        detail = payload.get("detail")
-        return detail if isinstance(detail, str) else None
 
     def _object(self, value: JsonValue, label: str) -> dict[str, JsonValue]:
         if not isinstance(value, dict):

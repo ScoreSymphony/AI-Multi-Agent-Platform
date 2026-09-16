@@ -43,7 +43,7 @@ from ai_multi_agent_platform.contracts import (
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.testing import FakeOrchestrator
 
-OWNER = OwnerRef(type="user", id="issue-8-test")
+OWNER = OwnerRef(type="user", id="hermes-adapter-test-owner")
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,7 +192,8 @@ def test_hermes_orchestrator_disabled_and_http_errors_are_canonical() -> None:
             await enabled.plan(_plan_request())
         assert auth_error.value.code is ErrorCode.UNAUTHORIZED
         assert auth_error.value.provider_id == HERMES_ADAPTER_ID
-        assert "bad bearer token" in auth_error.value.message
+        assert auth_error.value.message == "Hermes start planning run failed with HTTP 401"
+        assert "bad bearer token" not in auth_error.value.message
 
     asyncio.run(scenario())
 

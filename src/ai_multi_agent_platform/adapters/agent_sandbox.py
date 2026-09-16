@@ -45,6 +45,10 @@ _SAFE_PROVIDER_METADATA_KEYS = frozenset(
 )
 
 
+class _ExecutionCancellationRequested(Exception):
+    """Internal signal for canonical request-token cancellation, not task cancellation."""
+
+
 class AgentSandboxExecutionStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
@@ -211,6 +215,7 @@ class AgentSandboxExecutor(Executor):
     async def health(self) -> ExecutorDescriptor:
         try:
             health = await self._client.health()
+        # error-boundary: allow-broad-catch=boundary external provider health boundary
         except Exception as exc:
             return ExecutorDescriptor(
                 executor_id=self._executor_id,
@@ -266,7 +271,7 @@ class AgentSandboxExecutor(Executor):
                 ExecutionErrorCategory.INVALID_REQUEST,
                 (
                     "direct environment projection to Agent-Sandbox is disabled until a "
-                    "#34-safe environment/secret delivery path is proven"
+                    "safe scoped environment/secret delivery path is proven"
                 ),
             )
 
@@ -297,10 +302,15 @@ class AgentSandboxExecutor(Executor):
                 ExecutionErrorCategory.TIMEOUT,
                 "execution timed out",
                 status=ExecutionStatus.TIMED_OUT,
+                retryable=True,
             )
-        except asyncio.CancelledError:
+        except _ExecutionCancellationRequested:
             await self._cancel_backend(backend_request.request_ref)
             return self._cancelled(request, started_at, started)
+        except asyncio.CancelledError:
+            await self._cancel_backend(backend_request.request_ref)
+            raise
+        # error-boundary: allow-broad-catch=translation external execution provider boundary
         except Exception:
             return self._failure(
                 request,
@@ -308,7 +318,7 @@ class AgentSandboxExecutor(Executor):
                 started,
                 ExecutionErrorCategory.INTERNAL,
                 _PROVIDER_FAILURE_MESSAGE,
-                retryable=True,
+                retryable=False,
             )
 
         return self._translate_result(request, backend_result, started_at, started, workspace)
@@ -337,7 +347,7 @@ class AgentSandboxExecutor(Executor):
             if not done:
                 raise TimeoutError
             if cancel_task in done and request.cancellation.cancelled:
-                raise asyncio.CancelledError
+                raise _ExecutionCancellationRequested
             return result_task.result()
         finally:
             for task in (result_task, cancel_task):
@@ -356,6 +366,7 @@ class AgentSandboxExecutor(Executor):
     async def _cancel_backend(self, request_ref: str) -> None:
         try:
             await self._client.cancel(request_ref)
+        # error-boundary: allow-broad-catch=cleanup best-effort provider cancellation
         except Exception:
             return
 

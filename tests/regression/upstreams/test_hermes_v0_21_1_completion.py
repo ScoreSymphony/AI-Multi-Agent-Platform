@@ -55,9 +55,9 @@ def _request() -> PlanRequest:
         task_id=new_id("task"),
         objective="Complete the Hermes v0.21.1 validation matrix",
         context=OperationContext(
-            correlation_id="issue-733-completion",
+            correlation_id="hermes-v0-21-1-completion",
             control=OperationControl(
-                idempotency_key="issue-733-completion",
+                idempotency_key="hermes-v0-21-1-completion",
                 timeout_seconds=1.0,
             ),
         ),
@@ -89,7 +89,8 @@ def test_v0_21_1_failed_status_maps_to_canonical_backend_error() -> None:
             await orchestrator.plan(_request())
 
         assert error.value.code is ErrorCode.BACKEND_ERROR
-        assert "candidate planner failed" in error.value.message
+        assert error.value.message == "Hermes planning run failed with status failed"
+        assert "candidate planner failed" not in error.value.message
 
     asyncio.run(scenario())
 
@@ -125,7 +126,7 @@ def test_restart_while_waiting_reconciles_and_cancels_same_external_run() -> Non
     async def scenario() -> None:
         external_run_id = "run_waiting_restart"
         context = OperationContext(
-            correlation_id="issue-733-restart",
+            correlation_id="hermes-v0-21-1-restart",
             control=OperationControl(timeout_seconds=1.0),
         )
 
