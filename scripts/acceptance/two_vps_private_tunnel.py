@@ -1,9 +1,11 @@
-"""Sanitized operator acceptance harness for issue #562.
+"""Sanitized operator acceptance harness for the real two-VPS private-tunnel profile.
 
 The harness prepares and validates evidence for the real two-VPS private-tunnel
 acceptance path. It does not provision infrastructure, mutate canonical platform state,
 or replace the #14/#35/#36 runtime contracts. Addresses and credential material are
 runtime-only inputs and are never written to evidence reports.
+
+Provenance: issue #562 introduced the retained evidence/schema lineage used by this harness.
 """
 
 from __future__ import annotations
@@ -131,7 +133,7 @@ def _common_record_arguments(parser: argparse.ArgumentParser) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Prepare sanitized issue #562 two-VPS/private-tunnel acceptance evidence."
+        description="Prepare sanitized two-VPS/private-tunnel acceptance evidence."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -227,7 +229,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     finalize = subparsers.add_parser(
         "finalize",
-        help="Validate all sanitized live evidence and produce the compact #562 report.",
+        help="Validate all sanitized live evidence and produce the compact two-VPS report.",
     )
     finalize.add_argument("--registration", required=True, type=Path)
     finalize.add_argument("--dispatch", required=True, type=Path)
@@ -721,7 +723,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             _record_phase(args)
     except AcceptanceError as exc:
-        print(f"issue #562 acceptance failed: {exc}", file=sys.stderr)
+        print(f"two-VPS acceptance failed: {exc}", file=sys.stderr)
         return 2
     return 0
 
