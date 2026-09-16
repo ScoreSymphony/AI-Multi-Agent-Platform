@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 
 from ai_multi_agent_platform.agents import (
     AgentCapabilityTurn,
+    AgentCapabilityTurnResult,
     AgentRunStatus,
     AgentRuntime,
 )
@@ -30,6 +31,7 @@ from ai_multi_agent_platform.contracts import (
     HealthStatus,
     LifecycleBackend,
     ModelRequest,
+    ModelResponse,
     OperationContext,
     ProviderDescriptor,
 )
@@ -37,6 +39,12 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import TaskRepository
 from ai_multi_agent_platform.models import ModelRuntime, RoutingRequirements
+from ai_multi_agent_platform.observability import (
+    FailureComponent,
+    TelemetryContext,
+    TraceHierarchy,
+    observe_agent_run,
+)
 from ai_multi_agent_platform.onboarding.agent_lifecycle import (
     FIRST_RUN_AGENT_EXECUTION_PROFILE,
     FIRST_RUN_AGENT_ID_KEY,
@@ -116,6 +124,7 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
         actor_resolver: ActorResolver | None = None,
         budget: ContextBudget = _DEFAULT_CONTEXT_BUDGET,
         capability_turn: AgentCapabilityTurn | None = None,
+        trace_hierarchy: TraceHierarchy | None = None,
     ) -> None:
         self._delegate = delegate
         self._tasks = tasks
@@ -128,6 +137,7 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
         self._actor_resolver = actor_resolver or _actor_from_operation
         self._budget = budget
         self._capability_turn = capability_turn
+        self._trace_hierarchy = trace_hierarchy
         self._snapshots: dict[str, ExecutionSnapshot] = {}
         self._backend_refs: dict[str, str] = {}
         self._context_refs: dict[str, tuple[str, str]] = {}
@@ -319,22 +329,44 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
                 ErrorCode.NO_COMPATIBLE_ROUTE,
                 "Context-bound Agent execution did not resolve a canonical model route",
             )
+        model_config_id = agent_run.selected_model_config_id
 
         try:
             if agent_run.capability_ids:
-                turn = await self._resolve_capability_turn().execute(
-                    task_id=task.task_id,
-                    run_id=request.run_id,
-                    agent_id=agent_run.agent.agent_id,
-                    model_config_id=agent_run.selected_model_config_id,
-                    instruction=instruction,
-                    objective=model_objective,
-                    capability_ids=agent_run.capability_ids,
-                    capability_versions=dict(agent_run.capability_versions),
-                    context=request.context,
-                    agent_run_id=agent_run.agent_run_id,
-                    data_classification=data_classification,
-                )
+                capability_turn = self._resolve_capability_turn()
+
+                async def execute_capability_turn() -> AgentCapabilityTurnResult:
+                    return await capability_turn.execute(
+                        task_id=task.task_id,
+                        run_id=request.run_id,
+                        agent_id=agent_run.agent.agent_id,
+                        model_config_id=model_config_id,
+                        instruction=instruction,
+                        objective=model_objective,
+                        capability_ids=agent_run.capability_ids,
+                        capability_versions=dict(agent_run.capability_versions),
+                        context=request.context,
+                        agent_run_id=agent_run.agent_run_id,
+                        data_classification=data_classification,
+                    )
+
+                if self._trace_hierarchy is None:
+                    turn = await execute_capability_turn()
+                else:
+                    turn = await observe_agent_run(
+                        self._trace_hierarchy,
+                        agent_id=agent_run.agent.agent_id,
+                        context=self._trace_context(
+                            task_id=task.task_id,
+                            request=request,
+                            agent_id=agent_run.agent.agent_id,
+                        ),
+                        operation=execute_capability_turn,
+                        attributes={
+                            "agent_run_id": agent_run.agent_run_id,
+                            "context_bundle_id": bundle.context_bundle_id,
+                        },
+                    )
                 text = turn.text
                 model_ref = turn.model_ref
                 model_call_refs = turn.model_call_refs
@@ -353,14 +385,53 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
                 }
                 if self_hosted_only:
                     requirements["self_hosted_only"] = True
-                response = await self._models.generate(
-                    ModelRequest(
-                        request_id=f"{request.run_id}:model",
-                        messages=(instruction, model_objective),
-                        context=request.context,
-                        requirements=requirements,
-                    )
+                model_request = ModelRequest(
+                    request_id=f"{request.run_id}:model",
+                    messages=(instruction, model_objective),
+                    context=request.context,
+                    requirements=requirements,
                 )
+
+                async def invoke_model_runtime() -> ModelResponse:
+                    return await self._models.generate(model_request)
+
+                async def execute_model_turn() -> ModelResponse:
+                    if self._trace_hierarchy is None:
+                        return await invoke_model_runtime()
+                    return await self._trace_hierarchy.observe(
+                        span_name="model.runtime.generate",
+                        metric_prefix="platform.model.runtime",
+                        event_prefix="model.runtime",
+                        component=FailureComponent.MODEL_PROVIDER_ROUTER,
+                        context=self._trace_context(
+                            task_id=task.task_id,
+                            request=request,
+                            agent_id=agent_run.agent.agent_id,
+                            model_call_id=model_request.request_id,
+                            model_config_id=model_config_id,
+                            model_provider_id=agent_run.selected_provider_id,
+                        ),
+                        operation=invoke_model_runtime,
+                        attributes={"model_config_id": model_config_id},
+                    )
+
+                if self._trace_hierarchy is None:
+                    response = await execute_model_turn()
+                else:
+                    response = await observe_agent_run(
+                        self._trace_hierarchy,
+                        agent_id=agent_run.agent.agent_id,
+                        context=self._trace_context(
+                            task_id=task.task_id,
+                            request=request,
+                            agent_id=agent_run.agent.agent_id,
+                        ),
+                        operation=execute_model_turn,
+                        attributes={
+                            "agent_run_id": agent_run.agent_run_id,
+                            "context_bundle_id": bundle.context_bundle_id,
+                        },
+                    )
                 text = response.text
                 model_ref = response.model_ref
                 model_call_refs = (response.request_id,)
@@ -517,6 +588,29 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
         if not values:
             return ()
         return (AdapterMetadata(namespace="canonical-context-agent-lifecycle", values=values),)
+
+    @staticmethod
+    def _trace_context(
+        *,
+        task_id: str,
+        request: ExecutionRequest,
+        agent_id: str,
+        model_call_id: str | None = None,
+        model_config_id: str | None = None,
+        model_provider_id: str | None = None,
+    ) -> TelemetryContext:
+        return TelemetryContext(
+            project_id=request.context.project_id,
+            task_id=task_id,
+            run_id=request.run_id,
+            step_id=request.subject_id if request.subject_type == "step" else None,
+            agent_id=agent_id,
+            model_call_id=model_call_id,
+            model_config_id=model_config_id,
+            model_provider_id=model_provider_id,
+            correlation_id=request.context.correlation_id,
+            causation_id=request.context.causation_id,
+        )
 
     def _resolve_capability_turn(self) -> AgentCapabilityTurn:
         if self._capability_turn is not None:

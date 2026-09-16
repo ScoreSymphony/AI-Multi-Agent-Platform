@@ -85,6 +85,32 @@ class InMemoryExporter(ObservabilityExporter):
         with self._lock:
             self.timeline.append(record)
 
+    def query_spans(
+        self,
+        *,
+        task_id: str | None = None,
+        run_id: str | None = None,
+        trace_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> tuple[SpanRecord, ...]:
+        """Read normalized spans without exposing mutable exporter storage."""
+
+        with self._lock:
+            spans = tuple(self.spans)
+        return tuple(
+            sorted(
+                (
+                    span
+                    for span in spans
+                    if (task_id is None or span.context.task_id == task_id)
+                    and (run_id is None or span.context.run_id == run_id)
+                    and (trace_id is None or span.trace_id == trace_id)
+                    and (correlation_id is None or span.context.correlation_id == correlation_id)
+                ),
+                key=lambda span: (span.started_at, span.span_id),
+            )
+        )
+
     def query_timeline(
         self,
         *,
