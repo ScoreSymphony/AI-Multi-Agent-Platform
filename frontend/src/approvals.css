@@ -1,0 +1,206 @@
+/* Route-scoped presentation for Approval inventory and decision records. */
+
+main[data-route="/approvals"] > .stack,
+main[data-route^="/approvals/"] > .stack {
+  gap: 1.4rem;
+}
+
+main[data-route="/approvals"] .page-header,
+main[data-route^="/approvals/"] .page-header {
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(251, 191, 36, .07), transparent 34%),
+    linear-gradient(180deg, rgba(23, 31, 45, .8), rgba(17, 23, 34, .72));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .12);
+}
+
+main[data-route="/approvals"] .page-header p:not(.eyebrow),
+main[data-route^="/approvals/"] .page-header p:not(.eyebrow) {
+  max-width: 80ch;
+}
+
+main[data-route="/approvals"] .metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+main[data-route="/approvals"] .metric:first-child {
+  border-color: #36536d;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(56, 189, 248, .09), transparent 38%),
+    linear-gradient(180deg, rgba(23, 31, 45, .82), rgba(17, 23, 34, .95));
+}
+
+main[data-route="/approvals"] .stack > .card,
+main[data-route^="/approvals/"] .stack > .card,
+main[data-route^="/approvals/"] .grid-two > .card {
+  min-width: 0;
+}
+
+main[data-route="/approvals"] .card h2,
+main[data-route^="/approvals/"] .card h2 {
+  padding-bottom: .72rem;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route="/approvals"] .card > .actions:first-of-type {
+  justify-content: space-between;
+  margin-bottom: .9rem;
+  padding: .72rem .78rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 10px;
+  background: rgba(9, 13, 21, .28);
+}
+
+main[data-route="/approvals"] .card > .actions:first-of-type label {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 600;
+}
+
+main[data-route="/approvals"] .card > .actions:first-of-type input[type="checkbox"],
+main[data-route^="/approvals/"] input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent-strong);
+}
+
+main[data-route="/approvals"] .table-wrap {
+  margin-top: .15rem;
+}
+
+main[data-route="/approvals"] th:first-child,
+main[data-route="/approvals"] td:first-child {
+  min-width: 180px;
+}
+
+main[data-route="/approvals"] td:nth-child(3) {
+  font-weight: 650;
+}
+
+main[data-route="/approvals"] td:nth-child(4),
+main[data-route="/approvals"] td:nth-child(5) {
+  min-width: 150px;
+}
+
+main[data-route^="/approvals/"] .detail-header {
+  align-items: center;
+}
+
+main[data-route^="/approvals/"] .detail-status {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding: .55rem .65rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 10px;
+  background: rgba(9, 13, 21, .28);
+  color: var(--muted);
+  font-size: .8rem;
+  font-weight: 650;
+}
+
+main[data-route^="/approvals/"] .grid-two {
+  align-items: stretch;
+}
+
+main[data-route^="/approvals/"] .grid-two > .card {
+  height: 100%;
+}
+
+main[data-route^="/approvals/"] .definition-list > div {
+  grid-template-columns: minmax(130px, .42fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding: .58rem 0;
+}
+
+main[data-route^="/approvals/"] .definition-list dt {
+  font-size: .75rem;
+  font-weight: 650;
+  text-transform: capitalize;
+}
+
+main[data-route^="/approvals/"] .definition-list dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+main[data-route^="/approvals/"] .field-wide {
+  display: grid;
+  gap: .4rem;
+}
+
+main[data-route^="/approvals/"] .field-wide > span {
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 650;
+}
+
+main[data-route^="/approvals/"] .field-wide textarea {
+  width: 100%;
+  min-height: 108px;
+  resize: vertical;
+}
+
+main[data-route^="/approvals/"] .stack > label:not(.field) {
+  display: flex;
+  align-items: flex-start;
+  gap: .55rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+main[data-route^="/approvals/"] .stack > .actions {
+  padding-top: .8rem;
+  border-top: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route^="/approvals/"] .stack > .actions button {
+  min-width: 112px;
+}
+
+main[data-route^="/approvals/"] .card > p {
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  main[data-route="/approvals"] .metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  main[data-route="/approvals"] .page-header,
+  main[data-route^="/approvals/"] .page-header {
+    padding: 1rem;
+  }
+
+  main[data-route="/approvals"] .card > .actions:first-of-type {
+    align-items: stretch;
+  }
+
+  main[data-route="/approvals"] .card > .actions:first-of-type button {
+    width: 100%;
+  }
+
+  main[data-route^="/approvals/"] .detail-header {
+    align-items: flex-start;
+  }
+
+  main[data-route^="/approvals/"] .detail-status {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  main[data-route^="/approvals/"] .definition-list > div {
+    grid-template-columns: 1fr;
+    gap: .18rem;
+  }
+
+  main[data-route^="/approvals/"] .stack > .actions button {
+    flex: 1;
+  }
+}

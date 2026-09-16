@@ -122,6 +122,20 @@ td a {
   font-weight: 600;
 }
 
+textarea {
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: .62rem .78rem;
+}
+
+textarea:disabled {
+  opacity: .58;
+  cursor: not-allowed;
+}
+
 button,
 input,
 select,
@@ -165,13 +179,50 @@ textarea:focus {
   font-weight: 650;
 }
 
-.actions {
+.actions,
+.button-row {
+  display: flex;
+  gap: .6rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .actions button,
-.actions-cell button {
+.actions-cell button,
+.button-row button {
   min-height: 36px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .9rem;
+  flex-wrap: wrap;
+  margin-top: .9rem;
+  padding-top: .85rem;
+  border-top: 1px solid var(--line-soft, var(--line));
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+.pagination .actions {
+  margin-left: auto;
+}
+
+.definition-list > div {
+  grid-template-columns: minmax(110px, .38fr) minmax(0, 1fr);
+  gap: .8rem;
+}
+
+.definition-list dt {
+  font-size: .78rem;
+  font-weight: 600;
+}
+
+.definition-list dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 dl > div:last-child,
@@ -206,5 +257,26 @@ dl > div:last-child,
 
   .toolbar {
     align-items: stretch;
+  }
+
+  .detail-header {
+    flex-direction: column;
+  }
+
+  .detail-status {
+    justify-content: flex-start;
+  }
+
+  .pagination {
+    align-items: stretch;
+  }
+
+  .pagination .actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .pagination .actions button {
+    flex: 1;
   }
 }
