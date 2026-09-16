@@ -35,9 +35,7 @@ def test_browser_first_run_bootstrap_creates_admin_session_and_survives_restart(
         config = SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
         first = build_single_node_deployment(config)
 
-        status = await first.http.handle(
-            _request("GET", "/api/v1/auth/bootstrap-status")
-        )
+        status = await first.http.handle(_request("GET", "/api/v1/auth/bootstrap-status"))
         assert status.status == 200
         assert status.body == {
             "state": "uninitialized",
