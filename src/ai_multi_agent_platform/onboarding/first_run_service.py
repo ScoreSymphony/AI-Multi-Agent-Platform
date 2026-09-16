@@ -47,6 +47,7 @@ from .persistence import (
     OnboardingCommandRecord,
 )
 from .providers import OnboardingModelAdapter
+from .setup_contracts import model_setup_contract
 
 
 class OnboardingService:
@@ -167,7 +168,8 @@ class OnboardingService:
             projection=projection,
             inventory=inventory,
         )
-        return build_status_document(
+        adapter_ids = sorted(self.model_adapters)
+        status = build_status_document(
             authenticated_actor_present=context.actor.owner_id is not None,
             project_count=project_count,
             workspace_count=workspace_count,
@@ -177,9 +179,11 @@ class OnboardingService:
             selection_kind=selection_kind,
             candidates=candidate_ids(projection),
             starter_catalog_installed=self._starter_catalog_installed(),
-            installed_model_adapter_ids=sorted(self.model_adapters),
+            installed_model_adapter_ids=adapter_ids,
             guidance=guidance,
         )
+        status["model_setup"] = model_setup_contract(adapter_ids)
+        return status
 
     def first_run_path_projection(self, context: RequestContext) -> FirstRunPathProjection:
         """Project structural and executable first-run paths without mutating canonical state."""
