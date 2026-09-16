@@ -61,7 +61,7 @@ _REVISION = "a" * 40
 def _operation_and_trace() -> tuple[OperationContext, InvocationTrace]:
     project_id = new_id("project")
     operation = OperationContext(
-        correlation_id="issue-502-completion-prep",
+        correlation_id="repository-intelligence-regression",
         owner_type="user",
         owner_id=new_id("user"),
         project_id=project_id,
@@ -121,7 +121,7 @@ def test_runtime_unavailable_provider_falls_back_to_baseline_unless_required() -
         baseline = _BaselinePort()
         coordinator = RepositoryIntelligenceFallbackInvoker(_UnavailablePort(), baseline)
         request = CapabilityInvocation(
-            invocation_id="issue-502-fallback",
+            invocation_id="repository-intelligence-fallback",
             capability_id="repository.text_search",
             arguments={
                 "repository_id": new_id("external_resource"),
@@ -164,8 +164,8 @@ class _RepositoryFixturePort:
         if self.workspace_id:
             provenance["workspace"] = {
                 "workspace_id": self.workspace_id,
-                "workspace_snapshot_id": "snapshot-502",
-                "materialization_id": "materialization-502",
+                "workspace_snapshot_id": "repository-intelligence-snapshot",
+                "materialization_id": "repository-intelligence-materialization",
                 "dirty": True,
             }
 
@@ -288,13 +288,15 @@ def test_projectatlas_source_binding_and_containment_fail_closed() -> None:
         repository_id=new_id("external_resource"),
         requested_revision="HEAD",
         resolved_revision=_REVISION,
-        source_root=Path("/srv/workspaces/issue-502"),
-        database_path=Path("/var/lib/ai-agent/projectatlas/issue-502.sqlite3"),
+        source_root=Path("/srv/workspaces/repository-intelligence-fixture"),
+        database_path=Path(
+            "/var/lib/ai-agent/projectatlas/repository-intelligence-fixture.sqlite3"
+        ),
         freshness=RepositoryIntelligenceFreshness.LIVE_WORKSPACE,
         workspace_id=new_id("workspace"),
-        workspace_snapshot_id="snapshot-502",
-        materialization_id="materialization-502",
-        source_content_checksum="sha256:workspace-502",
+        workspace_snapshot_id="repository-intelligence-snapshot",
+        materialization_id="repository-intelligence-materialization",
+        source_content_checksum="sha256:repository-intelligence-workspace",
         dirty=True,
     )
     provenance = binding.provenance_details()
@@ -312,7 +314,7 @@ def test_projectatlas_source_binding_and_containment_fail_closed() -> None:
         no_new_privileges=True,
         process_boundary="linux-seccomp-pilot",
         platform="linux-x86_64",
-        evidence_ref="issue-502-pending-aggregate-validation",
+        evidence_ref="projectatlas-containment-pending",
     )
     assert incomplete.source_operations_ready is False
     with pytest.raises(ContractError) as blocked:
@@ -329,7 +331,7 @@ def test_projectatlas_source_binding_and_containment_fail_closed() -> None:
         no_new_privileges=True,
         process_boundary="linux-seccomp-pilot",
         platform="linux-x86_64",
-        evidence_ref="issue-502-aggregate-validation",
+        evidence_ref="projectatlas-containment-validated",
     )
     assert ready.source_operations_ready is True
 
@@ -369,7 +371,7 @@ def test_projectatlas_heavy_work_remains_unadmitted_until_measured_bounds_exist(
 def test_evaluation_matrix_preserves_unmeasured_values_and_comparability() -> None:
     baseline = RepositoryIntelligenceEvaluationObservation(
         provider_id="platform.repository-intelligence.baseline",
-        fixture_id="fixture-502",
+        fixture_id="repository-intelligence-comparison",
         source_revision=_REVISION,
         environment_ref="aggregate-env-v1",
         task_success=True,
@@ -380,7 +382,7 @@ def test_evaluation_matrix_preserves_unmeasured_values_and_comparability() -> No
     )
     candidate = RepositoryIntelligenceEvaluationObservation(
         provider_id="candidate.repository-intelligence",
-        fixture_id="fixture-502",
+        fixture_id="repository-intelligence-comparison",
         source_revision=_REVISION,
         environment_ref="aggregate-env-v1",
         task_success=True,
@@ -401,7 +403,7 @@ def test_evaluation_matrix_preserves_unmeasured_values_and_comparability() -> No
 
     incompatible = RepositoryIntelligenceEvaluationObservation(
         provider_id="other",
-        fixture_id="fixture-502",
+        fixture_id="repository-intelligence-comparison",
         source_revision="b" * 40,
         environment_ref="aggregate-env-v1",
     )

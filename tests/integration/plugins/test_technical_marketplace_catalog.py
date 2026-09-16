@@ -20,13 +20,13 @@ from ai_multi_agent_platform.distribution import (
 )
 
 CATALOG = Path(__file__).parents[3] / "catalogs" / "technical-components" / "catalog.json"
-ISSUE_502_ITEMS = {
+REPOSITORY_INTELLIGENCE_REVIEW_ITEMS = {
     "projectatlas",
     "graphify",
     "codegraph",
     "understand-anything",
 }
-EXPECTED_CODE_INTELLIGENCE = ISSUE_502_ITEMS | {
+EXPECTED_CODE_INTELLIGENCE = REPOSITORY_INTELLIGENCE_REVIEW_ITEMS | {
     "serena",
     "ast-grep",
     "semgrep",
@@ -176,7 +176,7 @@ def test_curated_catalog_entries_remain_manual_untrusted_and_fail_closed() -> No
             assert technical.evaluation_status == "required"
             assert technical.evaluation_required is True
 
-        expected_issue = "502" if item.item_id in ISSUE_502_ITEMS else "638"
+        expected_issue = "502" if item.item_id in REPOSITORY_INTELLIGENCE_REVIEW_ITEMS else "638"
         assert item.review_reference == (
             "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/" + expected_issue
         )
@@ -209,7 +209,7 @@ def test_active_external_records_do_not_fake_upstream_revision() -> None:
     provider = FilesystemRegistryProvider(CATALOG)
 
     for item in provider.search(RegistryQuery(technical_only=True, include_deprecated=True)):
-        if item.item_id in ISSUE_502_ITEMS | REFERENCE_ONLY:
+        if item.item_id in REPOSITORY_INTELLIGENCE_REVIEW_ITEMS | REFERENCE_ONLY:
             continue
         assert item.source.revision is None
         assert "project-status:not-archived" in item.tags

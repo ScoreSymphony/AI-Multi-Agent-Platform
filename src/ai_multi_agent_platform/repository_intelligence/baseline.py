@@ -1,4 +1,4 @@
-"""Deterministic read-only repository-intelligence baseline for issue #502."""
+"""Deterministic read-only repository-intelligence baseline."""
 
 from __future__ import annotations
 

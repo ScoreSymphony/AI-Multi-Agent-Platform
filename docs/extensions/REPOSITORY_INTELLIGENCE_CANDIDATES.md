@@ -2,9 +2,9 @@
 
 > Verification snapshot: 2026-09-07
 
-This document records the first fresh upstream audit for issue #502. It deliberately replaces
-name-only assumptions from older architecture notes with current repositories, licenses, release or
-maintenance evidence, local-cost paths and platform-fit risks.
+This document records the first fresh upstream audit for repository intelligence. It deliberately
+replaces name-only assumptions from older architecture notes with current repositories, licenses,
+release or maintenance evidence, local-cost paths and platform-fit risks.
 
 This is **not** an adoption decision. A candidate reaches the platform only after the security,
 resource, correctness and comparative-evaluation gates in `REPOSITORY_INTELLIGENCE.md` pass.
@@ -17,7 +17,7 @@ For each candidate the audit verifies, where available:
 - license from the upstream repository, not a search snippet;
 - recent maintenance/release evidence;
 - local/offline or no-paid-provider path;
-- capability overlap with the #502 taxonomy;
+- capability overlap with the repository-intelligence taxonomy;
 - repository/Workspace lifecycle conflicts;
 - persistent-state and write-scope concerns;
 - model/network/secret requirements;
@@ -60,7 +60,8 @@ telemetry. It states that no hosted index or credentials are required.
 
 ### Platform fit
 
-ProjectAtlas is the closest match to the intended #502 context funnel because it already has:
+ProjectAtlas is the closest match to the intended repository-intelligence context funnel because it
+already has:
 
 - bounded repository orientation;
 - symbols and resolved graph relationships;
@@ -89,9 +90,9 @@ The first pilot should:
 7. compare output revision/freshness against canonical #82/#37 evidence before returning results;
 8. destroy the pilot cache without affecting repository or Workspace state.
 
-The default `.projectatlas/` placement is not sufficient evidence for the #502 requirement that
-provider index writes can be isolated from repository writes. The pilot must prove the external
-cache binding rather than assume it.
+The default `.projectatlas/` placement is not sufficient evidence for the repository-intelligence
+requirement that provider index writes can be isolated from repository writes. The pilot must prove
+the external cache binding rather than assume it.
 
 ### Open questions
 
@@ -191,7 +192,7 @@ Evidence captured at audit time:
 Graphify is attractive as a **specialist structural-graph provider** because its code-only path is
 local, deterministic at the parsing stage and does not require embeddings or a paid model API.
 
-Its useful #502 overlap is primarily:
+Its useful repository-intelligence overlap is primarily:
 
 - symbol/relationship graph;
 - imports/calls/inheritance;
@@ -212,8 +213,8 @@ The platform pilot should use **code-only/local mode**. It must not:
   Workspace policy allows that side effect.
 
 The pilot must first prove that graph state/output can be redirected to provider-owned state or run
-inside an isolated disposable mount. Default `graphify-out/` behavior is not enough for the #502
-write-scope invariant.
+inside an isolated disposable mount. Default `graphify-out/` behavior is not enough for the
+repository-intelligence write-scope invariant.
 
 ### Open questions
 
@@ -296,7 +297,7 @@ This is deliberately an evaluation order, not an adoption order. If ProjectAtlas
 measured structural needs, Graphify or CodeGraph may be rejected as redundant. Conversely, a
 specialist can remain on-demand without becoming an always-on indexer.
 
-## Next evidence required for #502
+## Next evidence required for repository intelligence
 
 Before any candidate is packaged as a platform plugin:
 

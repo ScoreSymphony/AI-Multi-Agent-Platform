@@ -170,7 +170,7 @@ def _search_invocation(
     query: str = "needle",
 ) -> ToolInvocation:
     return ToolInvocation(
-        invocation_id="issue-502-search",
+        invocation_id="repository-intelligence-workspace-search",
         tool_ref="repository.text_search",
         arguments={
             "repository_id": repository_id,

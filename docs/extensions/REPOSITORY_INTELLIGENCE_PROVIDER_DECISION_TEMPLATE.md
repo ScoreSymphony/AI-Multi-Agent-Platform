@@ -1,6 +1,6 @@
 # Repository-intelligence provider decision template
 
-Use this record only after the unified #502 evaluation campaign. Do not mark a provider adopted from repository metadata, upstream claims, or the tiny ProjectAtlas pilot alone.
+Use this record only after the unified repository-intelligence evaluation campaign. Do not mark a provider adopted from repository metadata, upstream claims, or the tiny ProjectAtlas pilot alone.
 
 ## Candidate identity
 

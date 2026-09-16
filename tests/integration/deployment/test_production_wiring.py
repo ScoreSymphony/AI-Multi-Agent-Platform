@@ -73,7 +73,7 @@ def test_authorized_loader_reads_exact_tree_through_repository_policy(tmp_path: 
         project_id = new_id("project")
         actor_ref = new_id("user")
         operation = OperationContext(
-            correlation_id="issue-502-production-wiring",
+            correlation_id="repository-intelligence-production-wiring",
             owner_type="user",
             owner_id=actor_ref,
             project_id=project_id,
@@ -140,7 +140,7 @@ def test_authorized_loader_reads_exact_tree_through_repository_policy(tmp_path: 
 
         result = await invoker.invoke(
             CapabilityInvocation(
-                invocation_id="issue-502-production-map",
+                invocation_id="repository-intelligence-production-map",
                 capability_id="repository.map",
                 arguments={"repository_id": repository.id, "revision": commit.revision},
                 context=operation,
@@ -160,7 +160,7 @@ def test_authorized_loader_reads_exact_tree_through_repository_policy(tmp_path: 
         assert provenance["resolved_revision"] == commit.revision
 
         unauthorized = OperationContext(
-            correlation_id="issue-502-production-denied",
+            correlation_id="repository-intelligence-production-denied",
             owner_type="user",
             owner_id=new_id("user"),
             project_id=project_id,
@@ -175,7 +175,7 @@ def test_authorized_loader_reads_exact_tree_through_repository_policy(tmp_path: 
         with pytest.raises(ContractError) as denied:
             await invoker.invoke(
                 CapabilityInvocation(
-                    invocation_id="issue-502-production-denied-map",
+                    invocation_id="repository-intelligence-production-denied-map",
                     capability_id="repository.map",
                     arguments={"repository_id": repository.id},
                     context=unauthorized,
@@ -193,7 +193,7 @@ def test_tree_read_uses_materialize_policy_and_pre_materialization_bounds(tmp_pa
         project_id = new_id("project")
         actor_ref = new_id("user")
         operation = OperationContext(
-            correlation_id="issue-502-materialize-policy",
+            correlation_id="repository-intelligence-materialize-policy",
             owner_type="user",
             owner_id=actor_ref,
             project_id=project_id,
