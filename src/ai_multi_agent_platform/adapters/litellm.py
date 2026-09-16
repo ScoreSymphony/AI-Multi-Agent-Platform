@@ -1,4 +1,4 @@
-"""Optional LiteLLM model-gateway adapter for issue #11.
+"""Optional LiteLLM model-gateway adapter.
 
 LiteLLM is deliberately kept behind the platform-owned ``ModelProvider``
 contract.  Importing the platform (or this module) does not import LiteLLM;
@@ -360,12 +360,6 @@ class LiteLLMModelProvider(ModelProvider):
                 completion(**payload),
                 timeout=timeout_seconds,
             )
-        except asyncio.CancelledError as exc:
-            raise ContractError(
-                ErrorCode.CANCELLED,
-                "LiteLLM model request was cancelled",
-                provider_id=self.config.provider_id,
-            ) from exc
         except TimeoutError as exc:
             raise ContractError(
                 ErrorCode.TIMEOUT,
@@ -375,6 +369,7 @@ class LiteLLMModelProvider(ModelProvider):
             ) from exc
         except ContractError:
             raise
+        # error-boundary: allow-broad-catch=translation LiteLLM SDK boundary
         except Exception as exc:
             raise self._map_exception(exc) from exc
 

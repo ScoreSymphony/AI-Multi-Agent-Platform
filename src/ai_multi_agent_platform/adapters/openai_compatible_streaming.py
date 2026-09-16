@@ -124,8 +124,6 @@ class UrllibOpenAICompatibleStreamingTransport(UrllibOpenAICompatibleTransport):
                             headers=dict(exc.headers.items()) if exc.headers is not None else {},
                         ),
                     )
-                except Exception as exc:
-                    emit("error", exc)
                 finally:
                     emit("done", None)
 
@@ -134,6 +132,7 @@ class UrllibOpenAICompatibleStreamingTransport(UrllibOpenAICompatibleTransport):
                 while True:
                     tag, value = await queue.get()
                     if tag == "done":
+                        await producer_task
                         break
                     if tag == "error":
                         assert isinstance(value, Exception)
@@ -331,12 +330,6 @@ class OpenAICompatibleModelProvider(_BaseOpenAICompatibleModelProvider):
                     raw_finish = first.get("finish_reason")
                     if isinstance(raw_finish, str):
                         finish_reason = self._normalize_finish_reason(raw_finish)
-        except asyncio.CancelledError as exc:
-            raise ContractError(
-                ErrorCode.CANCELLED,
-                "model request was cancelled",
-                provider_id=self.config.provider_id,
-            ) from exc
         except TimeoutError as exc:
             raise ContractError(
                 ErrorCode.TIMEOUT,
@@ -344,18 +337,32 @@ class OpenAICompatibleModelProvider(_BaseOpenAICompatibleModelProvider):
                 retryable=True,
                 provider_id=self.config.provider_id,
             ) from exc
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ContractError(
+                ErrorCode.INVALID_PROVIDER_RESPONSE,
+                "model provider returned invalid streaming data",
+                retryable=False,
+                provider_id=self.config.provider_id,
+                details={"exception_type": type(exc).__name__},
+            ) from exc
         except OSError as exc:
             raise ContractError(
                 ErrorCode.UNAVAILABLE,
                 "model provider endpoint is unavailable",
                 retryable=True,
                 provider_id=self.config.provider_id,
-                adapter_metadata=(
-                    AdapterMetadata(
-                        namespace="openai-compatible",
-                        values={"exception_type": type(exc).__name__},
-                    ),
-                ),
+                details={"exception_type": type(exc).__name__},
+            ) from exc
+        except ContractError:
+            raise
+        # error-boundary: allow-broad-catch=translation streaming transport boundary
+        except Exception as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "model provider streaming transport failed",
+                retryable=False,
+                provider_id=self.config.provider_id,
+                details={"exception_type": type(exc).__name__},
             ) from exc
 
         if not saw_payload:

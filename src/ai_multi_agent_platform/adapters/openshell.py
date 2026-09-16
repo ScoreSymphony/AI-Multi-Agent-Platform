@@ -47,6 +47,10 @@ _SAFE_PROVIDER_METADATA_KEYS = frozenset(
 )
 
 
+class _ExecutionCancellationRequested(Exception):
+    """Internal signal for canonical request-token cancellation, not task cancellation."""
+
+
 class OpenShellExecutionStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
@@ -219,6 +223,7 @@ class OpenShellExecutor(Executor):
     async def health(self) -> ExecutorDescriptor:
         try:
             health = await self._client.health()
+        # error-boundary: allow-broad-catch=boundary external provider health boundary
         except Exception as exc:
             return ExecutorDescriptor(
                 executor_id=self._executor_id,
@@ -273,7 +278,7 @@ class OpenShellExecutor(Executor):
                 started,
                 ExecutionErrorCategory.INVALID_REQUEST,
                 (
-                    "direct environment projection to OpenShell is disabled until a #34-safe "
+                    "direct environment projection to OpenShell is disabled until a safe scoped "
                     "provider/credential binding path is proven"
                 ),
             )
@@ -304,10 +309,15 @@ class OpenShellExecutor(Executor):
                 ExecutionErrorCategory.TIMEOUT,
                 "execution timed out",
                 status=ExecutionStatus.TIMED_OUT,
+                retryable=True,
             )
-        except asyncio.CancelledError:
+        except _ExecutionCancellationRequested:
             await self._cancel_backend(backend_request.request_ref)
             return self._cancelled(request, started_at, started)
+        except asyncio.CancelledError:
+            await self._cancel_backend(backend_request.request_ref)
+            raise
+        # error-boundary: allow-broad-catch=translation external execution provider boundary
         except Exception:
             return self._failure(
                 request,
@@ -315,7 +325,7 @@ class OpenShellExecutor(Executor):
                 started,
                 ExecutionErrorCategory.INTERNAL,
                 _PROVIDER_FAILURE_MESSAGE,
-                retryable=True,
+                retryable=False,
             )
 
         return self._translate_result(request, backend_result, started_at, started, workspace)
@@ -343,7 +353,7 @@ class OpenShellExecutor(Executor):
             if not done:
                 raise TimeoutError
             if cancel_task in done and request.cancellation.cancelled:
-                raise asyncio.CancelledError
+                raise _ExecutionCancellationRequested
             return result_task.result()
         finally:
             for task in (result_task, cancel_task):
@@ -373,7 +383,8 @@ class OpenShellExecutor(Executor):
             cancel_task.result()
         except asyncio.CancelledError:
             cancel_task.cancel()
-            return
+            raise
+        # error-boundary: allow-broad-catch=cleanup best-effort provider cancellation
         except Exception:
             return
 
