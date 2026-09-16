@@ -1,0 +1,54 @@
+name: Permanent naming remediation preview
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    if: github.event.pull_request.number == 1125
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Generate remediation preview
+        run: python scripts/ci/remediate_permanent_naming.py
+      - name: Validate generated Python syntax and whitespace
+        run: |
+          git diff --check
+          python -m compileall -q src tests scripts
+      - name: Audit preview against permanent naming policy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/ci/validate_permanent_naming.py --full-tree \
+            | tee .naming-remediation-validation.txt
+      - name: Package remediation preview
+        if: always()
+        shell: bash
+        run: |
+          git diff --name-only > .naming-remediation-files.txt
+          git diff --binary > .naming-remediation.patch
+          tar -czf .naming-remediation-files.tar.gz -T .naming-remediation-files.txt
+          printf 'changed_files=%s\n' "$(wc -l < .naming-remediation-files.txt)"
+      - name: Upload remediation preview
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: permanent-naming-remediation-${{ github.event.pull_request.head.sha }}
+          path: |
+            .naming-remediation-files.txt
+            .naming-remediation.patch
+            .naming-remediation-validation.txt
+            .naming-remediation-files.tar.gz
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
