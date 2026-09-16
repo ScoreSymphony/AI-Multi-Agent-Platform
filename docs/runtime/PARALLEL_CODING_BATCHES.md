@@ -39,7 +39,7 @@ The `coding_batches` package records that chain and rejects conflicting retry da
 
 ## Conservative concurrency
 
-`ConservativeOverlapClassifier` distinguishes explicit dependency, exact affected-path/textual conflict, semantic ownership/impact overlap, proven independence and unknown evidence. Only proven independence is parallel-safe. Unknown evidence is serialized deterministically. Optional repository intelligence (#502) may enrich semantic scopes, but the baseline works from deterministic repository/path ownership hints without a hosted or paid service.
+`ConservativeOverlapClassifier` distinguishes explicit dependency, exact affected-path/textual conflict, semantic ownership/impact overlap, proven independence and unknown evidence. Only proven independence is parallel-safe. Unknown evidence is serialized deterministically. Optional repository intelligence may enrich semantic scopes, but the baseline works from deterministic repository/path ownership hints without a hosted or paid service.
 
 ## Productive runtime composition
 
