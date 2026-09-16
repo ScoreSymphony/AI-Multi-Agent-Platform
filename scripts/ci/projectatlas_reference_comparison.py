@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the final #502 ProjectAtlas pilot plus a real deterministic Git baseline comparison."""
+"""Run the ProjectAtlas pilot plus a real deterministic Git baseline comparison."""
 
 from __future__ import annotations
 
@@ -10,17 +10,17 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from issue502_baseline_comparison import (
-    build_provider_comparison,
-    measure_git_reference_baseline,
-)
-from issue502_projectatlas_pilot import (
+from projectatlas_pilot import (
     PINNED_VERSION,
     _make_fixture,
     _make_read_only,
     _provider_environment,
     _restore_writable,
     run_pilot,
+)
+from repository_intelligence_git_baseline import (
+    build_provider_comparison,
+    measure_git_reference_baseline,
 )
 
 _DETERMINISTIC_GIT_DATE = "2000-01-01T00:00:00Z"
@@ -63,7 +63,7 @@ def run_comparison(binary: Path, no_network_wrapper: Path) -> dict[str, Any]:
         candidate_report = run_pilot(binary, no_network_wrapper)
         _normalize_pilot_rss_evidence(candidate_report)
 
-        with tempfile.TemporaryDirectory(prefix="issue502-baseline-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="projectatlas-baseline-") as temporary:
             root = Path(temporary)
             source_root = root / "source"
             state_root = root / "baseline-state"

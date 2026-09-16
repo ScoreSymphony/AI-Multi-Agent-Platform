@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure the deterministic Git reference baseline for issue #502.
+"""Measure the deterministic Git reference baseline for repository-intelligence evaluation.
 
 This module intentionally stays stdlib-only so the ProjectAtlas pilot can compare one real,
 local baseline path against the pinned candidate without adding a paid or hosted dependency.
@@ -192,8 +192,8 @@ def build_provider_comparison(
         ],
         "decision_scope": (
             "This tiny-fixture comparison is sufficient to record real like-for-like timing, "
-            "tool-call and persistent-state measurements for the #502 experimental decision, but "
-            "it is not sufficient evidence to adopt ProjectAtlas as a default or to enable "
-            "production source capabilities."
+            "tool-call and persistent-state measurements for the repository-intelligence "
+            "experimental decision, but it is not sufficient evidence to adopt ProjectAtlas as "
+            "a default or to enable production source capabilities."
         ),
     }

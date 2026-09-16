@@ -39,9 +39,9 @@ All four use the same underlying direct IPv4 socket boundary intentionally: if f
 creation is denied, these child-owned alternate egress paths cannot silently open their own network
 connection around the mediator.
 
-## Why the #502 wrapper is not reused directly
+## Why the broader socket-denied wrapper is not reused directly
 
-The repository's existing `issue502_no_network_exec.py` evaluation helper denies `socketpair()` in
+The repository's existing `socket_denied_exec.py` evaluation helper denies `socketpair()` in
 addition to network sockets. A live #730 attempt showed that this also prevents Python asyncio from
 constructing its internal self-pipe, so the MCP stdio server cannot start. That result is useful
 negative evidence but is not a valid demonstration of a usable protected MCP profile.

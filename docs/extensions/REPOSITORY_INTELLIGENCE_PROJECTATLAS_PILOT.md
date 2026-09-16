@@ -2,8 +2,8 @@
 
 > Verification snapshot: 2026-09-09
 
-This record captures the evaluated third-party repository-intelligence pilot for issue #502. It is
-an evaluation record, **not** an adoption decision.
+This record captures the evaluated third-party repository-intelligence pilot. It is an evaluation
+record, **not** an adoption decision.
 
 ## Pinned upstream
 
@@ -81,8 +81,8 @@ not be generalized to production indexing workloads.
 ## Network evidence: evaluation boundary verified
 
 The earlier statement that network isolation was unverified is obsolete for the **evaluation
-pilot**. The current workflow runs every untrusted ProjectAtlas process through
-`scripts/ci/issue502_no_network_exec.py`, which applies `no_new_privileges` and a seccomp filter that
+pilot**. The current tooling runs every untrusted ProjectAtlas process through
+`scripts/ci/socket_denied_exec.py`, which applies `no_new_privileges` and a seccomp filter that
 denies socket/network syscalls. The harness fails unless an `AF_INET` socket creation attempt is
 blocked with `EPERM` before ProjectAtlas executes.
 
@@ -94,9 +94,9 @@ not established**, not as denial that the evaluation pilot has real no-network e
 
 ## Measured baseline comparison
 
-The final #502 workflow now runs `scripts/ci/issue502_projectatlas_comparison.py`. It creates the same
-deterministic immutable Git fixture for the candidate and the local Git reference baseline and
-fails if the fixture revisions differ.
+The retained evaluation tooling runs `scripts/ci/projectatlas_reference_comparison.py`. It creates
+the same deterministic immutable Git fixture for the candidate and the local Git reference baseline
+and fails if the fixture revisions differ.
 
 The machine-readable artifact compares like-for-like metrics for both paths:
 
@@ -115,16 +115,16 @@ context: ProjectAtlas and Git use different output envelopes. Normalized model-c
 remain explicitly unmeasured until both paths are reduced to the same logical payload. Comparable
 baseline-vs-candidate peak RSS is likewise unmeasured.
 
-The workflow deliberately does **not** convert unmeasured areas to zero. Representative agent
+The tooling deliberately does **not** convert unmeasured areas to zero. Representative agent
 first-pass success, symbol/reference/dependency correctness, architecture/domain/impact usefulness,
 large-repository rebuild cost and dirty-Workspace freshness for ProjectAtlas also remain outside
 this tiny-fixture comparison.
 
-## Final #502 decision
+## Provider decision
 
 ProjectAtlas remains **experimental / deferred**.
 
-The platform carries a #20-compatible candidate plugin shell that:
+The platform carries a plugin-compatible candidate shell that:
 
 - pins the expected runtime and upstream checksum in provenance;
 - probes runtime identity without repository access;
@@ -147,7 +147,8 @@ A future production source-capability issue would still need, at minimum:
 5. a deployment-owned production worker/process containment boundary rather than reusing the CI
    pilot as an implicit production sandbox.
 
-None of those optional provider-adoption steps block completion of the clarified provider-neutral
-#502 v1 core. The explicit scope decision is recorded in
+None of those optional provider-adoption steps block the provider-neutral v1 core. The explicit
+scope decision is recorded in
 `docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md`. The deterministic
 Git/ripgrep/LSP-compatible baseline remains fully usable when ProjectAtlas is absent or disabled.
+For historical completion provenance, see `docs/history/issues/ISSUE_502_COMPLETION.md`.

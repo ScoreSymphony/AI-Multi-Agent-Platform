@@ -146,10 +146,10 @@ def test_projectatlas_provider_rejects_source_operations_until_containment_passe
     health = asyncio.run(
         provider.invoke(
             ToolInvocation(
-                invocation_id="issue502-health",
+                invocation_id="projectatlas-health",
                 tool_ref=RepositoryIntelligenceOperation.HEALTH.value,
                 arguments={},
-                context=OperationContext(correlation_id="issue502"),
+                context=OperationContext(correlation_id="projectatlas"),
             )
         )
     )
@@ -160,10 +160,10 @@ def test_projectatlas_provider_rejects_source_operations_until_containment_passe
     status = asyncio.run(
         provider.invoke(
             ToolInvocation(
-                invocation_id="issue502-status",
+                invocation_id="projectatlas-status",
                 tool_ref=RepositoryIntelligenceOperation.INDEX_STATUS.value,
                 arguments={},
-                context=OperationContext(correlation_id="issue502"),
+                context=OperationContext(correlation_id="projectatlas"),
             )
         )
     )
@@ -176,10 +176,10 @@ def test_projectatlas_provider_rejects_source_operations_until_containment_passe
         asyncio.run(
             provider.invoke(
                 ToolInvocation(
-                    invocation_id="issue502-source",
+                    invocation_id="projectatlas-source",
                     tool_ref=RepositoryIntelligenceOperation.SOURCE_SLICE.value,
                     arguments={"repository_id": "repo", "path": "README.md"},
-                    context=OperationContext(correlation_id="issue502"),
+                    context=OperationContext(correlation_id="projectatlas"),
                 )
             )
         )
