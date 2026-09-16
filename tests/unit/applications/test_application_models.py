@@ -6,8 +6,8 @@ import pytest
 
 from ai_multi_agent_platform.applications.definition import Application
 from ai_multi_agent_platform.applications.models import (
-    ApplicationConfigValueType,
     ApplicationConfigurationField,
+    ApplicationConfigValueType,
     ApplicationEndpoint,
     ApplicationEndpointExposure,
     ApplicationHealthCheck,
