@@ -15,7 +15,6 @@ from dataclasses import dataclass, replace
 
 from .models import (
     ApplicationDesiredState,
-    ApplicationEndpointExposure,
     ApplicationEndpointProtocol,
     ApplicationEndpointResolution,
     ApplicationHealthCheckKind,
