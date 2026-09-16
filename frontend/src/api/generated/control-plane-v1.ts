@@ -324,17 +324,28 @@ export type SearchPage = {
 };
 
 export type CanonicalEvent = {
-  causation_id?: string | null;
+  causation_id: string | null;
   correlation_id: string;
   event_type: string;
+  external_refs: {
+    kind: string;
+    system: string;
+    value: string;
+  }[];
   id: string;
   occurred_at: string;
+  owner_ref: Owner | null;
   payload: Record<string, JsonValue>;
-  project_id?: string | null;
+  project_id: string | null;
+  provenance: {
+    actor_ref: string | null;
+    details: Record<string, JsonValue>;
+    source: string;
+  } | null;
   schema_version: string;
   subject_id: string;
   subject_type: string;
-  trace_id?: string | null;
+  trace_id: string | null;
   type: "event";
 };
 
@@ -417,8 +428,8 @@ export type UsageAggregate = {
 
 export type UsageBudget = {
   action: "record_only" | "warn" | "deny" | "require_approval" | "notify";
-  consumed: number | null;
-  fraction: number | null;
+  consumed: number;
+  fraction: number;
   id: string;
   include_estimated: boolean;
   kind: "soft" | "hard";
@@ -426,7 +437,7 @@ export type UsageBudget = {
   metric_type: string;
   owner_id: string | null;
   owner_type: string | null;
-  remaining: number | null;
+  remaining: number;
   scope_id: string;
   scope_type: string;
   threshold_level: "warning" | "exceeded" | null;
@@ -451,7 +462,7 @@ export type CreateWorkspaceRequest = {
   access_mode?: "read_write" | "read_only";
   files?: WorkspaceFileInput[];
   project_id: string;
-  retention?: "persistent" | "ephemeral" | "until";
+  retention?: "persistent" | "ephemeral";
   source_refs?: WorkspaceSourceRefInput[];
   workspace_id?: string;
   workspace_type?: "persistent_project" | "ephemeral_task" | "isolated_run" | "read_only_source" | "cloned" | "remote";
