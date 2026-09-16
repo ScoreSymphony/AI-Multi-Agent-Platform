@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import multiprocessing
 from contextlib import suppress
+from typing import Protocol
 
 import pytest
 
@@ -31,6 +32,13 @@ from ai_multi_agent_platform.messaging import (
 from ai_multi_agent_platform.testing.fakes import FakeLifecycleBackend
 
 TEST_AUTHENTICATION_KEY = "issue-388-test-transport-credential"
+PROCESS_START_TIMEOUT_SECONDS = 15.0
+
+
+class _ProcessReadySignal(Protocol):
+    def set(self) -> None: ...
+
+    def wait(self, timeout: float | None = None) -> bool: ...
 
 
 def _envelope(sequence: int = 1) -> TransportEnvelope:
@@ -57,7 +65,13 @@ def _job() -> WorkerJobRequest:
     )
 
 
-def _worker_process(host: str, port: int, worker_id: str, authentication_key: str) -> None:
+def _worker_process(
+    host: str,
+    port: int,
+    worker_id: str,
+    authentication_key: str,
+    ready: _ProcessReadySignal,
+) -> None:
     async def serve() -> None:
         transport = TcpMessageTransport(
             host,
@@ -69,6 +83,7 @@ def _worker_process(host: str, port: int, worker_id: str, authentication_key: st
             LocalWorker(worker_id, FakeLifecycleBackend()),
             transport,
         )
+        ready.set()
         try:
             await endpoint.serve()
         finally:
@@ -106,7 +121,7 @@ def test_loopback_transport_preserves_envelope_and_ack_semantics() -> None:
     asyncio.run(scenario())
 
 
-def test_operation_control_idempotency_binding_matches_issue35_contract() -> None:
+def test_operation_control_idempotency_binding_matches_transport_contract() -> None:
     async def scenario() -> None:
         broker = TcpMessageBroker(authentication_key=TEST_AUTHENTICATION_KEY)
         await broker.start()
@@ -340,11 +355,22 @@ def test_worker_endpoint_dispatches_across_an_independent_process_and_reconnects
         context = multiprocessing.get_context("spawn")
 
         def start_worker() -> multiprocessing.Process:
+            ready = context.Event()
             process = context.Process(
                 target=_worker_process,
-                args=(broker.host, broker.port, worker_id, TEST_AUTHENTICATION_KEY),
+                args=(
+                    broker.host,
+                    broker.port,
+                    worker_id,
+                    TEST_AUTHENTICATION_KEY,
+                    ready,
+                ),
             )
             process.start()
+            assert ready.wait(timeout=PROCESS_START_TIMEOUT_SECONDS), (
+                "spawned Worker process did not finish transport initialization"
+            )
+            assert process.is_alive()
             return process
 
         first_process = start_worker()
