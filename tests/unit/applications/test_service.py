@@ -6,9 +6,11 @@ import pytest
 
 from ai_multi_agent_platform.applications.models import (
     ApplicationDesiredState,
+    ApplicationEndpointResolution,
     ApplicationHealthStatus,
     ApplicationInstallRequest,
     ApplicationInstance,
+    ApplicationLogEntry,
     ApplicationManifest,
     ApplicationObservedState,
     ApplicationService,
@@ -123,7 +125,11 @@ class RecordingRuntime:
     ) -> ApplicationHealthStatus:
         return instance.health
 
-    def endpoints(self, manifest: ApplicationManifest, instance: ApplicationInstance) -> tuple[()]:
+    def endpoints(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> tuple[ApplicationEndpointResolution, ...]:
         return ()
 
     def logs(
@@ -133,7 +139,7 @@ class RecordingRuntime:
         *,
         service_id: str | None = None,
         limit: int = 200,
-    ) -> tuple[()]:
+    ) -> tuple[ApplicationLogEntry, ...]:
         return ()
 
     def reconcile(
@@ -168,24 +174,27 @@ class RecordingRuntime:
         )
 
 
-def _manifest(runtime: ApplicationServiceRuntime = ApplicationServiceRuntime.PROCESS) -> ApplicationManifest:
-    kwargs: dict[str, object]
+def _manifest(
+    runtime: ApplicationServiceRuntime = ApplicationServiceRuntime.PROCESS,
+) -> ApplicationManifest:
     if runtime is ApplicationServiceRuntime.PROCESS:
-        kwargs = {"process": ("python", "-m", "example")}
+        service = ApplicationService(
+            service_id="app",
+            runtime=runtime,
+            process=("python", "-m", "example"),
+        )
     else:
-        kwargs = {"image": "example/app:1.0"}
+        service = ApplicationService(
+            service_id="app",
+            runtime=runtime,
+            image="example/app:1.0",
+        )
     return ApplicationManifest(
         application_id=new_id("application"),
         name="Lifecycle example",
         version="1.0.0",
         description="Application lifecycle fixture",
-        services=(
-            ApplicationService(
-                service_id="app",
-                runtime=runtime,
-                **kwargs,  # type: ignore[arg-type]
-            ),
-        ),
+        services=(service,),
         runtime_requirements=("local",),
     )
 
