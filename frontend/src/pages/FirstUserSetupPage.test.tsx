@@ -29,7 +29,7 @@ describe("FirstUserSetupPage", () => {
     expect(html).toContain("Confirm password");
     expect(html).toContain("at least 12 characters");
     expect(html).toContain("1024 UTF-8 bytes");
-    expect(html).toContain('autocomplete="new-password"');
+    expect(html).toContain('autoComplete="new-password"');
   });
 
   it("renders the narrow recovery state without inventing a second account flow", () => {
