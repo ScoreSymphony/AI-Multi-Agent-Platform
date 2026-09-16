@@ -54,9 +54,7 @@ def evaluate_candidate(
         requirements.executor_type is not None
         and requirements.executor_type not in worker.supported_executors
     ):
-        reasons.append(
-            _reason(RejectionCode.EXECUTOR_UNSUPPORTED, "required executor unavailable")
-        )
+        reasons.append(_reason(RejectionCode.EXECUTOR_UNSUPPORTED, "required executor unavailable"))
 
     missing_capabilities = set(requirements.capability_refs) - set(worker.capability_refs)
     if missing_capabilities:
@@ -109,9 +107,7 @@ def evaluate_candidate(
         reasons.append(_reason(RejectionCode.NETWORK_UNAVAILABLE, "network unavailable"))
 
     if requirements.concurrency_units > available_concurrency:
-        reasons.append(
-            _reason(RejectionCode.CONCURRENCY_EXHAUSTED, "worker concurrency exhausted")
-        )
+        reasons.append(_reason(RejectionCode.CONCURRENCY_EXHAUSTED, "worker concurrency exhausted"))
 
     score = (
         score_candidate(worker=worker, node=node, requirements=requirements) if not reasons else 0
