@@ -7,11 +7,17 @@ import {
 } from "../api/browserSession";
 import { ControlPlaneError } from "../api/client";
 import { OnboardingClient } from "../api/onboarding";
+import { SetupClient } from "../api/setup";
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from "../components/States";
 import { ComponentSetupPanel } from "./onboarding/ComponentSetupPanel";
+import { SetupLifecyclePanel } from "./onboarding/SetupLifecyclePanel";
 
 export function SettingsPage({ session }: { session: BrowserSessionClient }) {
-  const componentSetupClient = useMemo(() => new OnboardingClient(), []);
+  const componentSetupClient = useMemo(
+    () => new OnboardingClient({ transport: session.transport }),
+    [session],
+  );
+  const setupClient = useMemo(() => new SetupClient({ transport: session.transport }), [session]);
   const [actor, setActor] = useState<AuthenticatedActor | null>(null);
   const [sessions, setSessions] = useState<BrowserSessionSummary[] | null>(null);
   const [releaseStatus, setReleaseStatus] = useState<ReleaseOperatorStatus | null>(null);
@@ -189,6 +195,17 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
             </Card>
           </div>
 
+          <Card title="Initial setup & diagnostics">
+            <p>
+              The persisted initial-setup state remains available after first run. Reopen the guided
+              flow to change supported component choices without resetting completed setup state.
+            </p>
+            <div className="actions">
+              <a href="/onboarding">Open guided setup</a>
+            </div>
+          </Card>
+
+          <SetupLifecyclePanel setup={setupClient} />
           <ComponentSetupPanel onboarding={componentSetupClient} surface="settings" />
 
           <Card title="Platform release & upstream updates">
