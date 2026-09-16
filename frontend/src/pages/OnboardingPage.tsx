@@ -1,5 +1,5 @@
 export { OnboardingPage } from "./onboarding/OnboardingPage";
-export { FirstResult, OnboardingStateSummary } from "./onboarding/presentation";
+export { FirstResult, MultiAgentFirstResult, OnboardingStateSummary } from "./onboarding/presentation";
 export {
   buildConfigureModelInput,
   buildFirstRunTaskInput,

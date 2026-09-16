@@ -159,6 +159,61 @@ export interface ConfigureOnboardingModelResult {
   credential_mode: "secret_reference" | "none";
 }
 
+export interface MultiAgentFirstRunInput {
+  objective: string;
+  title?: string;
+  project_id?: string;
+  workspace_id?: string;
+}
+
+export interface MultiAgentFirstRunStep {
+  step_id: string;
+  title: string;
+  status: string;
+  phase: string;
+  depends_on: string[];
+  satisfied_dependencies: string[];
+  agent_id: string | null;
+  agent_revision: number | null;
+  run_id: string | null;
+  run_status: string | null;
+  result_ids: string[];
+  artifact_ids: string[];
+}
+
+export interface MultiAgentVerificationRecord {
+  verification_id: string;
+  stage_id: string;
+  status: string;
+  subject_type: string;
+  subject_id: string;
+  outcome: string | null;
+  is_final_result_review: boolean;
+}
+
+export interface MultiAgentFirstRunResult {
+  id: string;
+  type: "multi_agent_first_run_result";
+  workflow: "reference-multi-agent";
+  task_id: string;
+  task_status: string;
+  plan_id: string;
+  project_id: string;
+  workspace_id: string;
+  agents: Record<string, { agent_id: string; revision: number }>;
+  steps: MultiAgentFirstRunStep[];
+  result_id: string | null;
+  result_ids: string[];
+  artifact_ids: string[];
+  review: {
+    step_status: string;
+    verification_status: string;
+    verification_id: string | null;
+  };
+  verification: MultiAgentVerificationRecord[];
+  trace: { task_id: string; plan_id: string; step_ids: string[] };
+}
+
 export interface FirstRunTaskInput {
   objective: string;
   title?: string;
@@ -236,10 +291,7 @@ export class OnboardingClient {
   selectComponentProfile(profileId: string): Promise<ComponentSetupProfileResult> {
     return this.command<ComponentSetupProfileResult>(
       "/commands/onboarding.select-component-profile",
-      {
-        resource_ref: "component-setup",
-        profile_id: profileId,
-      },
+      { resource_ref: "component-setup", profile_id: profileId },
     );
   }
 
@@ -248,6 +300,13 @@ export class OnboardingClient {
       resource_ref: "first-run",
       ...input,
     });
+  }
+
+  runMultiAgentGoldenPath(input: MultiAgentFirstRunInput): Promise<MultiAgentFirstRunResult> {
+    return this.command<MultiAgentFirstRunResult>(
+      "/commands/onboarding.run-multi-agent-golden-path",
+      { resource_ref: "first-run", ...input },
+    );
   }
 
   bootstrapStandardAgents(): Promise<StandardAgentBootstrapResult> {

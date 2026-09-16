@@ -119,6 +119,7 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
                     ),
                     assignment=research_assignment,
                     requires_model=True,
+                    workspace_id=request.workspace_id,
                 ),
                 PlanningStepDraft(
                     key="approach",
@@ -129,6 +130,7 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
                     ),
                     assignment=execution_assignment,
                     requires_model=True,
+                    workspace_id=request.workspace_id,
                 ),
                 PlanningStepDraft(
                     key="execute",
@@ -140,6 +142,7 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
                     depends_on=("research", "approach"),
                     assignment=execution_assignment,
                     requires_model=True,
+                    workspace_id=request.workspace_id,
                     reuse_step_ids=reused,
                 ),
                 PlanningStepDraft(
@@ -152,6 +155,7 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
                     depends_on=("execute",),
                     assignment=review_assignment,
                     requires_model=True,
+                    workspace_id=request.workspace_id,
                 ),
             ),
             constraints=request.task_constraints,

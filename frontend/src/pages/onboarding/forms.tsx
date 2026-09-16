@@ -43,6 +43,29 @@ export function ModelSetupForm({
   );
 }
 
+export function MultiAgentGoalForm({
+  status,
+  busy,
+  onSubmit,
+}: {
+  status: OnboardingStatus;
+  busy: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form className="stack" onSubmit={onSubmit}>
+      <div className="form-grid">
+        {status.candidate_workspace_ids.length ? <CanonicalSelect label="Workspace" name="workspace_id" values={status.candidate_workspace_ids} /> : null}
+        <label>Goal title (optional)<input name="title" placeholder="First multi-agent goal" /></label>
+        <label>Goal<input name="objective" required defaultValue="Research two viable approaches, produce a concise result, and review the exact result." /></label>
+      </div>
+      <div className="context-summary"><span>Built-in team</span><strong>researcher · developer · reviewer</strong></div>
+      <p>The platform builds a visible Plan, runs the independent research and approach branches, fans them into execution, and applies canonical Agent Verification to the produced result.</p>
+      <button className="primary" disabled={busy}>{busy ? "Running multi-agent goal…" : "Run official multi-agent first run"}</button>
+    </form>
+  );
+}
+
 export function GeneralAssistantCloneForm({
   workspaceIds,
   busy,
@@ -61,7 +84,7 @@ export function GeneralAssistantCloneForm({
       <CanonicalSelect label="Workspace" name="workspace_id" values={workspaceIds} />
       <div className="context-summary"><span>Project binding</span><strong>derived from the canonical Workspace</strong></div>
       <label>Name (optional)<input name="name" placeholder="General Assistant" /></label>
-      <button className="primary" disabled={busy}>{busy ? "Creating…" : "Create editable General Assistant"}</button>
+      <button className="secondary" disabled={busy}>{busy ? "Creating…" : "Create editable General Assistant"}</button>
     </form>
   );
 }
@@ -84,10 +107,10 @@ export function FirstTaskForm({
         </div>
       ) : null}
       <div className="form-grid">
-        <label>Task title (optional)<input name="title" placeholder="First General Assistant Task" /></label>
+        <label>Task title (optional)<input name="title" placeholder="General Assistant Task" /></label>
         <label>Objective<input name="objective" required defaultValue="Return one short local response." /></label>
       </div>
-      <button className="primary" disabled={busy}>{busy ? "Running…" : "Run first canonical Task"}</button>
+      <button className="secondary" disabled={busy}>{busy ? "Running…" : "Run optional single-Agent Task"}</button>
     </form>
   );
 }
