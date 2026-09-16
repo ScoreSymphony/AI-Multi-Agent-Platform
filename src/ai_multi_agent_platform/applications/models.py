@@ -373,49 +373,10 @@ class ApplicationManifest:
             raise ValueError("unsupported application manifest schema_version")
         if not self.services:
             raise ValueError("application manifest requires at least one service")
-
-        service_ids = [service.service_id for service in self.services]
-        if len(service_ids) != len(set(service_ids)):
-            raise ValueError("application service ids must be unique")
-        service_id_set = set(service_ids)
-        for service in self.services:
-            unknown = set(service.depends_on) - service_id_set
-            if unknown:
-                raise ValueError(
-                    f"service {service.service_id!r} depends on unknown services: {sorted(unknown)!r}"
-                )
-        _validate_service_dependency_graph(self.services)
-
-        volume_names = [volume.name for volume in self.volumes]
-        if len(volume_names) != len(set(volume_names)):
-            raise ValueError("application volume names must be unique")
-        volume_name_set = set(volume_names)
-        for service in self.services:
-            for mount in service.mounts:
-                if mount.volume_name not in volume_name_set:
-                    raise ValueError(
-                        f"service {service.service_id!r} mounts unknown volume "
-                        f"{mount.volume_name!r}"
-                    )
-
-        config_names = [item.name for item in self.configuration]
-        if len(config_names) != len(set(config_names)):
-            raise ValueError("configuration field names must be unique")
-        secret_names = [item.name for item in self.secrets]
-        if len(secret_names) != len(set(secret_names)):
-            raise ValueError("secret field names must be unique")
-        overlap = set(config_names) & set(secret_names)
-        if overlap:
-            raise ValueError("configuration and secret names must not overlap")
-
-        endpoint_refs = {
-            f"{service.service_id}.{endpoint.name}"
-            for service in self.services
-            for endpoint in service.endpoints
-        }
-        if self.ui is not None and self.ui.endpoint_ref not in endpoint_refs:
-            raise ValueError("ui endpoint_ref must reference a declared service endpoint")
-
+        _validate_manifest_services(self.services)
+        _validate_manifest_volumes(self.services, self.volumes)
+        _validate_manifest_inputs(self.configuration, self.secrets)
+        _validate_manifest_ui(self.services, self.ui)
         object.__setattr__(
             self,
             "runtime_requirements",
@@ -428,6 +389,66 @@ class ApplicationManifest:
             for service in self.services
             for endpoint in service.endpoints
         )
+
+
+def _validate_manifest_services(services: tuple[ApplicationService, ...]) -> None:
+    service_ids = [service.service_id for service in services]
+    if len(service_ids) != len(set(service_ids)):
+        raise ValueError("application service ids must be unique")
+    service_id_set = set(service_ids)
+    for service in services:
+        unknown = set(service.depends_on) - service_id_set
+        if unknown:
+            raise ValueError(
+                f"service {service.service_id!r} depends on unknown services: {sorted(unknown)!r}"
+            )
+    _validate_service_dependency_graph(services)
+
+
+def _validate_manifest_volumes(
+    services: tuple[ApplicationService, ...],
+    volumes: tuple[ApplicationVolume, ...],
+) -> None:
+    volume_names = [volume.name for volume in volumes]
+    if len(volume_names) != len(set(volume_names)):
+        raise ValueError("application volume names must be unique")
+    volume_name_set = set(volume_names)
+    for service in services:
+        for mount in service.mounts:
+            if mount.volume_name not in volume_name_set:
+                raise ValueError(
+                    f"service {service.service_id!r} mounts unknown volume "
+                    f"{mount.volume_name!r}"
+                )
+
+
+def _validate_manifest_inputs(
+    configuration: tuple[ApplicationConfigurationField, ...],
+    secrets: tuple[ApplicationSecretField, ...],
+) -> None:
+    config_names = [item.name for item in configuration]
+    if len(config_names) != len(set(config_names)):
+        raise ValueError("configuration field names must be unique")
+    secret_names = [item.name for item in secrets]
+    if len(secret_names) != len(set(secret_names)):
+        raise ValueError("secret field names must be unique")
+    if set(config_names) & set(secret_names):
+        raise ValueError("configuration and secret names must not overlap")
+
+
+def _validate_manifest_ui(
+    services: tuple[ApplicationService, ...],
+    ui: ApplicationUi | None,
+) -> None:
+    if ui is None:
+        return
+    endpoint_refs = {
+        f"{service.service_id}.{endpoint.name}"
+        for service in services
+        for endpoint in service.endpoints
+    }
+    if ui.endpoint_ref not in endpoint_refs:
+        raise ValueError("ui endpoint_ref must reference a declared service endpoint")
 
 
 def _validate_service_dependency_graph(services: tuple[ApplicationService, ...]) -> None:
@@ -474,6 +495,69 @@ class ApplicationVolumeBinding:
             raise ValueError("ephemeral volumes are runtime-managed and cannot be externally bound")
 
 
+def _validated_install_configuration(
+    manifest: ApplicationManifest,
+    provided: Mapping[str, JsonValue],
+) -> dict[str, JsonValue]:
+    fields = {item.name: item for item in manifest.configuration}
+    configuration = dict(provided)
+    unknown = set(configuration) - set(fields)
+    if unknown:
+        raise ValueError(f"unknown application configuration fields: {sorted(unknown)!r}")
+    for item in fields.values():
+        if item.name in configuration:
+            _validate_configuration_value(configuration[item.name], item.value_type)
+        elif item.required and item.default is None:
+            raise ValueError(f"missing required application configuration field: {item.name}")
+    return configuration
+
+
+def _validated_install_secrets(
+    manifest: ApplicationManifest,
+    provided: Mapping[str, SecretReference],
+) -> dict[str, SecretReference]:
+    fields = {item.name: item for item in manifest.secrets}
+    secrets = dict(provided)
+    unknown = set(secrets) - set(fields)
+    if unknown:
+        raise ValueError(f"unknown application secret bindings: {sorted(unknown)!r}")
+    for name, reference in secrets.items():
+        if not isinstance(reference, SecretReference):
+            raise ValueError(f"secret binding {name!r} must be a SecretReference")
+    missing = [item.name for item in fields.values() if item.required and item.name not in secrets]
+    if missing:
+        raise ValueError(f"missing required application secrets: {sorted(missing)!r}")
+    return secrets
+
+
+def _validate_install_volumes(
+    manifest: ApplicationManifest,
+    bindings: tuple[ApplicationVolumeBinding, ...],
+) -> None:
+    volumes = {item.name: item for item in manifest.volumes}
+    seen: set[str] = set()
+    for binding in bindings:
+        if binding.volume_name in seen:
+            raise ValueError("application volume bindings must be unique by volume_name")
+        seen.add(binding.volume_name)
+        volume = volumes.get(binding.volume_name)
+        if volume is None:
+            raise ValueError(f"unknown application volume binding: {binding.volume_name}")
+        if binding.kind is not volume.kind:
+            raise ValueError(
+                f"volume binding kind for {binding.volume_name!r} does not match manifest"
+            )
+    missing = [
+        volume.name
+        for volume in volumes.values()
+        if volume.required
+        and volume.kind is not ApplicationVolumeKind.EPHEMERAL
+        and volume.name not in seen
+    ]
+    if missing:
+        raise ValueError(f"missing required application volumes: {sorted(missing)!r}")
+
+
 @dataclass(frozen=True, slots=True)
 class ApplicationInstallRequest:
     manifest: ApplicationManifest
@@ -485,59 +569,9 @@ class ApplicationInstallRequest:
     def __post_init__(self) -> None:
         if self.node_id is not None:
             validate_id(self.node_id, "node")
-
-        fields = {item.name: item for item in self.manifest.configuration}
-        configuration = dict(self.configuration)
-        unknown_config = set(configuration) - set(fields)
-        if unknown_config:
-            raise ValueError(
-                f"unknown application configuration fields: {sorted(unknown_config)!r}"
-            )
-        for item in fields.values():
-            if item.name in configuration:
-                _validate_configuration_value(configuration[item.name], item.value_type)
-            elif item.required and item.default is None:
-                raise ValueError(f"missing required application configuration field: {item.name}")
-
-        secret_fields = {item.name: item for item in self.manifest.secrets}
-        secrets = dict(self.secret_bindings)
-        unknown_secrets = set(secrets) - set(secret_fields)
-        if unknown_secrets:
-            raise ValueError(f"unknown application secret bindings: {sorted(unknown_secrets)!r}")
-        for name, reference in secrets.items():
-            if not isinstance(reference, SecretReference):
-                raise ValueError(f"secret binding {name!r} must be a SecretReference")
-        missing_secrets = [
-            item.name
-            for item in secret_fields.values()
-            if item.required and item.name not in secrets
-        ]
-        if missing_secrets:
-            raise ValueError(f"missing required application secrets: {sorted(missing_secrets)!r}")
-
-        volumes = {item.name: item for item in self.manifest.volumes}
-        seen: set[str] = set()
-        for binding in self.volume_bindings:
-            if binding.volume_name in seen:
-                raise ValueError("application volume bindings must be unique by volume_name")
-            seen.add(binding.volume_name)
-            volume = volumes.get(binding.volume_name)
-            if volume is None:
-                raise ValueError(f"unknown application volume binding: {binding.volume_name}")
-            if binding.kind is not volume.kind:
-                raise ValueError(
-                    f"volume binding kind for {binding.volume_name!r} does not match manifest"
-                )
-        missing_volumes = [
-            volume.name
-            for volume in volumes.values()
-            if volume.required
-            and volume.kind is not ApplicationVolumeKind.EPHEMERAL
-            and volume.name not in seen
-        ]
-        if missing_volumes:
-            raise ValueError(f"missing required application volumes: {sorted(missing_volumes)!r}")
-
+        configuration = _validated_install_configuration(self.manifest, self.configuration)
+        secrets = _validated_install_secrets(self.manifest, self.secret_bindings)
+        _validate_install_volumes(self.manifest, self.volume_bindings)
         object.__setattr__(self, "configuration", MappingProxyType(configuration))
         object.__setattr__(self, "secret_bindings", MappingProxyType(secrets))
 
