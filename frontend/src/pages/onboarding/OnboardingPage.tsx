@@ -7,9 +7,11 @@ import {
   type MultiAgentFirstRunResult,
   type OnboardingStatus,
 } from "../../api/onboarding";
+import { SetupClient } from "../../api/setup";
 import type { APImanifest, CanonicalModel } from "../../api/types";
 import { Card, ErrorState, LoadingState } from "../../components/States";
 import { ComponentSetupPanel } from "./ComponentSetupPanel";
+import { SetupLifecyclePanel } from "./SetupLifecyclePanel";
 import { FirstResult, Guidance, Metric, MultiAgentFirstResult, OnboardingStateSummary } from "./presentation";
 import {
   buildConfigureModelInput,
@@ -24,11 +26,12 @@ import { OnboardingSteps } from "./steps";
 interface OnboardingPageProps {
   client: ControlPlaneClient;
   onboarding: OnboardingClient;
+  setup: SetupClient;
   session: BrowserSessionClient;
   manifest: APImanifest | null;
 }
 
-export function OnboardingPage({ client, onboarding, session, manifest }: OnboardingPageProps) {
+export function OnboardingPage({ client, onboarding, setup, session, manifest }: OnboardingPageProps) {
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
   const [actor, setActor] = useState<AuthenticatedActor | null>(null);
   const [models, setModels] = useState<CanonicalModel[]>([]);
@@ -180,7 +183,12 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
       {loadError ? <ErrorState error={loadError} onRetry={() => void load()} /> : null}
       {notice ? <div className="state" role="status"><strong>{notice}</strong></div> : null}
 
-      <ComponentSetupPanel onboarding={onboarding} manifest={manifest} surface="onboarding" />
+      <SetupLifecyclePanel setup={setup} manifest={manifest} />
+
+      <details>
+        <summary>Advanced component profile configuration</summary>
+        <ComponentSetupPanel onboarding={onboarding} manifest={manifest} surface="onboarding" />
+      </details>
 
       <Card title="Current first-run state">
         <div className="detail-header"><OnboardingStateSummary status={status} /><button className="secondary" disabled={loading} onClick={() => void load()}>{loading ? "Refreshing…" : "Refresh status"}</button></div>
@@ -226,7 +234,7 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
           <li>Local and self-hosted model configurations are distinct from remote configurations.</li>
           <li>Remote/paid provider auto-selection: <strong>{String(status.automatic_paid_provider_selection)}</strong>.</li>
           <li>Hermes, Forge and LiteLLM are not required by the official first-run workflow.</li>
-          <li>Secret values are never entered here; credential-bearing endpoints use only canonical SecretReference metadata.</li>
+          <li>Secret values are never entered into setup-session persistence; credential-bearing endpoints use only canonical SecretReference metadata.</li>
           <li>All mutations pass through BrowserSession CSRF handling and Control Plane idempotency keys.</li>
         </ul>
       </Card>
