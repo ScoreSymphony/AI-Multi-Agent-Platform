@@ -104,19 +104,22 @@ class MultiAgentFirstRunService:
             task_id=task.task_id,
             reviewer=agents["reviewer"],
         )
-        if task.status is TaskStatus.DRAFT:
-            await self._kernel.ready_task(
-                idempotency_key=f"{key}:ready-task",
+        if task.plan_ref is not None:
+            plan_id = task.plan_ref
+        else:
+            if task.status is TaskStatus.DRAFT:
+                await self._kernel.ready_task(
+                    idempotency_key=f"{key}:ready-task",
+                    task_id=task.task_id,
+                    actor_ref=context.actor.principal_ref,
+                    source="onboarding.multi-agent-first-run",
+                )
+            plan_id = await self._activate_plan(
+                context=context,
                 task_id=task.task_id,
-                actor_ref=context.actor.principal_ref,
-                source="onboarding.multi-agent-first-run",
+                workspace_id=workspace_id,
+                key=key,
             )
-        plan_id = await self._activate_plan(
-            context=context,
-            task_id=task.task_id,
-            workspace_id=workspace_id,
-            key=key,
-        )
         return await project_first_run_result(
             kernel=self._kernel,
             coordination=self._coordination,
