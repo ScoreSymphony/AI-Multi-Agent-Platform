@@ -12,7 +12,7 @@ from pathlib import Path, PurePosixPath
 
 ISSUE_IDENTIFIER = re.compile(r"(?:^|_)issue_?\d+(?:_|$)", re.IGNORECASE)
 ISSUE_PATH_TOKEN = re.compile(r"(?:^|[._-])issue[-_]?\d+(?:[._-]|$)", re.IGNORECASE)
-ISSUE_REFERENCE = re.compile(r"\bissue\s+#\d+\b", re.IGNORECASE)
+ISSUE_REFERENCE = re.compile(r"(?:(?:\bissue\s+)?#\d+\b)", re.IGNORECASE)
 ISSUE_EVIDENCE_DIRECTORY = re.compile(r"issue_\d+", re.IGNORECASE)
 WORKFLOW_ISSUE_NAME = re.compile(
     r"(?:\bissue\s+#?\d+\b|(?:^|[ _.-])issue[-_]?\d+(?:[ _.-]|$))",
@@ -57,16 +57,12 @@ def repository_targets(root: Path) -> tuple[ChangedPath, ...]:
         if not permanent_root.exists():
             continue
         for local_path in sorted(path for path in permanent_root.rglob("*") if path.is_file()):
-            targets.append(
-                ChangedPath(status="M", path=local_path.relative_to(root).as_posix())
-            )
+            targets.append(ChangedPath(status="M", path=local_path.relative_to(root).as_posix()))
 
     workflow_root = root / Path(*WORKFLOW_PREFIX.parts)
     if workflow_root.exists():
         for local_path in sorted(path for path in workflow_root.rglob("*") if path.is_file()):
-            targets.append(
-                ChangedPath(status="M", path=local_path.relative_to(root).as_posix())
-            )
+            targets.append(ChangedPath(status="M", path=local_path.relative_to(root).as_posix()))
     return tuple(targets)
 
 
@@ -216,8 +212,18 @@ def workflow_violations(path: str, source: str) -> tuple[str, ...]:
                     "not a GitHub issue number"
                 )
 
-        name_match = re.match(r"^\s*(?:-\s*)?name:\s*(.+?)\s*$", line)
-        if name_match and WORKFLOW_ISSUE_NAME.search(name_match.group(1).strip("'\"")):
+        # Only semantic workflow names are guarded here: the top-level workflow
+        # display name, a job-level display name, and list-form step names. A
+        # nested action input such as ``with: name: issue123-evidence`` is an
+        # artifact/evidence value and is not a workflow or step name.
+        name_value: str | None = None
+        if match := re.match(r"^name:\s*(.+?)\s*$", line):
+            name_value = match.group(1)
+        elif match := re.match(r"^    name:\s*(.+?)\s*$", line):
+            name_value = match.group(1)
+        elif match := re.match(r"^\s*-\s*name:\s*(.+?)\s*$", line):
+            name_value = match.group(1)
+        if name_value is not None and WORKFLOW_ISSUE_NAME.search(name_value.strip("'\"")):
             violations.append(
                 f"{path}:{line_number}: workflow and step names must describe behavior, "
                 "not a GitHub issue number"
@@ -254,13 +260,9 @@ def validate_changed_tree(root: Path, changes: tuple[ChangedPath, ...]) -> tuple
         if not local_path.is_file():
             continue
         if path.parts[0] in PERMANENT_ROOTS and path.suffix == ".py":
-            violations.extend(
-                source_violations(change.path, local_path.read_text(encoding="utf-8"))
-            )
+            violations.extend(source_violations(change.path, local_path.read_text(encoding="utf-8")))
         elif _is_workflow_path(path) and path.suffix in {".yml", ".yaml"}:
-            violations.extend(
-                workflow_violations(change.path, local_path.read_text(encoding="utf-8"))
-            )
+            violations.extend(workflow_violations(change.path, local_path.read_text(encoding="utf-8")))
     return tuple(violations)
 
 
