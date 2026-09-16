@@ -120,14 +120,14 @@ def test_zero_byte_workspace_input_and_result_survive_remote_transfer(tmp_path: 
         )
         try:
             receipt = await materializer.materialize(request)
-            materialized_input = (
-                worker_root / workspace.id / snapshot.id / "src" / "empty-input.bin"
-            )
+            execution_workspace = store.execution_workspace(workspace.id, snapshot.id)
+            materialized_root = worker_root / execution_workspace
+            materialized_input = materialized_root / "src" / "empty-input.bin"
             assert materialized_input.is_file()
             assert materialized_input.read_bytes() == b""
             assert materialized_input.stat().st_size == 0
 
-            empty_result = worker_root / workspace.id / snapshot.id / "out" / "empty-result.bin"
+            empty_result = materialized_root / "out" / "empty-result.bin"
             empty_result.parent.mkdir(parents=True, exist_ok=True)
             empty_result.write_bytes(b"")
 

@@ -127,7 +127,8 @@ def test_worker_rejects_symlink_escape_during_result_scan(tmp_path: Path) -> Non
         worker_root = tmp_path / "worker"
         store = WorkerWorkspaceMaterializationStore(new_id("worker"), worker_root)
         receipt = await _materialize(store, request, manifest, data)
-        materialized_root = worker_root / request.workspace_id / request.snapshot_id
+        execution_workspace = store.execution_workspace(request.workspace_id, request.snapshot_id)
+        materialized_root = worker_root / execution_workspace
         outside = tmp_path / "outside.txt"
         outside.write_bytes(b"outside")
         link = materialized_root / "escape-link"
@@ -147,7 +148,8 @@ def test_duplicate_prepare_chunk_and_commit_are_idempotent_and_conflicts_are_rej
 ) -> None:
     async def scenario() -> None:
         request, manifest, data = _transfer_fixture()
-        store = WorkerWorkspaceMaterializationStore(new_id("worker"), tmp_path / "worker")
+        worker_root = tmp_path / "worker"
+        store = WorkerWorkspaceMaterializationStore(new_id("worker"), worker_root)
         first = await store.prepare(request, manifest, chunk_bytes=1024)
         second = await store.prepare(request, manifest, chunk_bytes=1024)
         assert isinstance(first, str)
@@ -179,7 +181,8 @@ def test_duplicate_prepare_chunk_and_commit_are_idempotent_and_conflicts_are_rej
             )
 
         receipt = await store.commit(first)
-        target = tmp_path / "worker" / request.workspace_id / request.snapshot_id / "src/input.txt"
+        execution_workspace = store.execution_workspace(request.workspace_id, request.snapshot_id)
+        target = worker_root / execution_workspace / "src/input.txt"
         assert target.read_bytes() == data
         assert receipt.materialization_ref == first
         assert receipt.cache_hit is False
@@ -212,7 +215,7 @@ def test_cleanup_removes_materialization_for_non_success_outcomes(
         acknowledgement = await store.cleanup(receipt, outcome)
         assert acknowledgement.succeeded is True
         assert acknowledgement.outcome is outcome
-        assert not (worker_root / request.workspace_id / request.snapshot_id).exists()
+        assert not store.has_materialization(request.workspace_id, request.snapshot_id)
 
         repeated = await store.cleanup(receipt, outcome)
         assert repeated.succeeded is True

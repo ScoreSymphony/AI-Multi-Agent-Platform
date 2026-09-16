@@ -60,12 +60,20 @@ class _RawWorkspaceChange:
     data: bytes | None = None
 
 
+def _workspace_path_token(workspace_id: str, snapshot_id: str) -> str:
+    digest = hashlib.sha256(f"{workspace_id}\0{snapshot_id}".encode()).hexdigest()
+    # This token is Worker-local only. 128 bits preserves ample Windows path budget while
+    # keeping collision risk negligible for UUID-backed canonical Workspace/Snapshot identities.
+    return digest[:32]
+
+
 class WorkerWorkspaceMaterializationStore:
     """Worker-local isolated materialization/cache state.
 
-    The deterministic local path is ``root/workspace_id/snapshot_id``. This path is
-    never serialized. A separate hidden state directory records only portable manifest
-    metadata so an interrupted transfer can be restarted safely.
+    The deterministic local path is ``root/<materialization-token>``. The token is derived from
+    canonical Workspace/Snapshot identity but is never serialized or used as transport identity.
+    A separate hidden state directory records portable manifest metadata so an interrupted transfer
+    can be restarted safely.
     """
 
     def __init__(self, worker_id: str, root: str | Path) -> None:
@@ -218,7 +226,12 @@ class WorkerWorkspaceMaterializationStore:
         if not final_root.is_dir():
             raise RegistryError("Worker Workspace snapshot has not been materialized")
         self._reject_symlinks(final_root)
-        return f"{workspace_id}/{snapshot_id}"
+        return final_root.relative_to(self.root).as_posix()
+
+    def has_materialization(self, workspace_id: str, snapshot_id: str) -> bool:
+        """Return whether the exact Worker-local Workspace/Snapshot tree is still present."""
+
+        return self._final_root(workspace_id, snapshot_id).is_dir()
 
     async def result_manifest(
         self,
@@ -349,7 +362,7 @@ class WorkerWorkspaceMaterializationStore:
         raise RegistryError("workspace transfer chunk references an unknown file")
 
     def _final_root(self, workspace_id: str, snapshot_id: str) -> Path:
-        root = self.root / workspace_id / snapshot_id
+        root = self.root / _workspace_path_token(workspace_id, snapshot_id)
         resolved = root.resolve(strict=False)
         if self.root != resolved and self.root not in resolved.parents:
             raise RegistryError("Worker Workspace path escapes configured local root")

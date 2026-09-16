@@ -49,10 +49,8 @@ def test_shipped_multi_local_workers_receive_private_workspace_roots(tmp_path: P
     assert reporter.store.root == reporter.config.workspace_root
     assert sibling.store.root == sibling.config.workspace_root
 
-    workspace_id = "workspace_00000000-0000-4000-8000-000000000240"
-    snapshot_id = "workspace_snapshot_00000000-0000-4000-8000-000000000241"
-    reporter_tree = reporter.store.root / workspace_id / snapshot_id
-    sibling_tree = sibling.store.root / workspace_id / snapshot_id
+    reporter_tree = reporter.store.root / "isolation-probe"
+    sibling_tree = sibling.store.root / "isolation-probe"
     reporter_tree.mkdir(parents=True)
     sibling_tree.mkdir(parents=True)
     (reporter_tree / "marker.txt").write_text("reporter", encoding="utf-8")
@@ -77,6 +75,6 @@ def test_operator_documentation_matches_secret_file_and_artifact_contract() -> N
 
     assert provision_command in text
     assert rotate_command in text
-    assert "<workspace_root>/<worker_id>/<workspace_id>/<snapshot_id>" in text
+    assert "<workspace_root>/<worker_id>/<materialization_token>" in text
     assert "Artifact references are opaque canonical identities" in text
     assert "Artifact content is not inferred from an `artifact_*` identifier" in text

@@ -191,7 +191,8 @@ def test_remote_materializer_transfers_chunks_collects_changes_and_cleans_up(
         )
         try:
             receipt = await materializer.materialize(request)
-            target = worker_root / workspace.id / snapshot.id / "src" / "input.txt"
+            execution_workspace = store.execution_workspace(workspace.id, snapshot.id)
+            target = worker_root / execution_workspace / "src" / "input.txt"
             assert target.read_bytes() == b"a" * 300_000
             assert receipt.worker_ref == worker_id
             assert receipt.cache_hit is False
@@ -213,7 +214,7 @@ def test_remote_materializer_transfers_chunks_collects_changes_and_cleans_up(
             assert cleanup.succeeded is True
             repeated = await materializer.cleanup(receipt, MaterializationOutcome.SUCCEEDED)
             assert repeated.succeeded is True
-            assert not (worker_root / workspace.id / snapshot.id).exists()
+            assert not store.has_materialization(workspace.id, snapshot.id)
 
             serialized = repr([envelope.to_dict() for _, envelope in transport.published])
             assert str(tmp_path / "control-workspaces") not in serialized
@@ -249,7 +250,8 @@ def test_read_only_remote_workspace_detects_worker_side_modification(tmp_path: P
         )
         try:
             receipt = await materializer.materialize(request)
-            target = worker_root / workspace.id / snapshot.id / "src" / "input.txt"
+            execution_workspace = store.execution_workspace(workspace.id, snapshot.id)
+            target = worker_root / execution_workspace / "src" / "input.txt"
             target.chmod(0o600)
             target.write_bytes(b"unauthorized change")
             with pytest.raises(RegistryError, match="read-only remote Workspace was modified"):
@@ -297,8 +299,9 @@ def test_workspace_bound_local_worker_uses_exact_materialized_execution_token(
         )
         try:
             await materializer.materialize(request)
+            expected_token = store.execution_workspace(workspace.id, snapshot.id)
             await worker.dispatch(job)
-            assert tokens == [f"{workspace.id}/{snapshot.id}"]
+            assert tokens == [expected_token]
         finally:
             endpoint_task.cancel()
             with suppress(asyncio.CancelledError):
@@ -346,9 +349,10 @@ def test_tcp_worker_subscription_reconnects_mid_workspace_transfer(tmp_path: Pat
             receipt = await materializer.materialize(request)
             assert worker_transport.disconnected_after_chunk is True
             assert receipt.worker_ref == worker_id
-            assert (
-                worker_root / workspace.id / snapshot.id / "src" / "input.txt"
-            ).read_bytes() == b"r" * 300_000
+            execution_workspace = store.execution_workspace(workspace.id, snapshot.id)
+            assert (worker_root / execution_workspace / "src" / "input.txt").read_bytes() == (
+                b"r" * 300_000
+            )
         finally:
             endpoint_task.cancel()
             with suppress(asyncio.CancelledError):
@@ -400,9 +404,10 @@ def test_tcp_commit_reply_failure_redelivers_without_duplicate_materialization(
             assert worker_transport.dropped_commit_reply is True
             assert receipt.worker_ref == worker_id
             assert receipt.cache_hit is True
-            assert (
-                worker_root / workspace.id / snapshot.id / "src" / "input.txt"
-            ).read_bytes() == b"tcp-redelivery-workspace"
+            execution_workspace = store.execution_workspace(workspace.id, snapshot.id)
+            assert (worker_root / execution_workspace / "src" / "input.txt").read_bytes() == (
+                b"tcp-redelivery-workspace"
+            )
         finally:
             endpoint_task.cancel()
             with suppress(asyncio.CancelledError):
@@ -439,6 +444,7 @@ def test_remote_workspace_materializes_across_independent_worker_process(tmp_pat
         )
         worker_id = new_id("worker")
         worker_root = tmp_path / "process-worker-root"
+        inspection_store = WorkerWorkspaceMaterializationStore(worker_id, worker_root)
         broker = TcpMessageBroker(authentication_key=TEST_TRANSPORT_KEY)
         await broker.start()
         control_transport = TcpMessageTransport(
@@ -463,9 +469,10 @@ def test_remote_workspace_materializes_across_independent_worker_process(tmp_pat
         try:
             receipt = await materializer.materialize(request)
             assert receipt.worker_ref == worker_id
-            assert (
-                worker_root / workspace.id / snapshot.id / "src" / "input.txt"
-            ).read_bytes() == b"cross-process-workspace"
+            execution_workspace = inspection_store.execution_workspace(workspace.id, snapshot.id)
+            assert (worker_root / execution_workspace / "src" / "input.txt").read_bytes() == (
+                b"cross-process-workspace"
+            )
         finally:
             if process.is_alive():
                 process.terminate()

@@ -116,12 +116,13 @@ def test_materializing_dispatcher_uses_concrete_remote_materializer_for_full_lif
             files,
             lambda _workspace: context,
         )
-        materialized_file = worker_root / workspace.id / snapshot.id / "src" / "input.txt"
-        execution_token = f"{workspace.id}/{snapshot.id}"
         lifecycle_by_token: dict[str, FakeLifecycleBackend] = {}
 
         def lifecycle_factory(token: str) -> FakeLifecycleBackend:
-            assert token == execution_token
+            assert token == store.execution_workspace(workspace.id, snapshot.id)
+            assert getattr(token, "workspace_id", None) == workspace.id
+            assert getattr(token, "snapshot_id", None) == snapshot.id
+            materialized_file = worker_root / token / "src" / "input.txt"
             assert materialized_file.read_bytes() == b"before remote execution"
             lifecycle = FakeLifecycleBackend()
             lifecycle_by_token[token] = lifecycle
@@ -141,6 +142,8 @@ def test_materializing_dispatcher_uses_concrete_remote_materializer_for_full_lif
 
         try:
             handle = await dispatcher.dispatch(job)
+            execution_token = store.execution_workspace(workspace.id, snapshot.id)
+            materialized_file = worker_root / execution_token / "src" / "input.txt"
             assert lifecycle_by_token.keys() == {execution_token}
             materialized_file.write_bytes(b"changed by remote execution")
             lifecycle_by_token[execution_token].complete(
@@ -169,7 +172,7 @@ def test_materializing_dispatcher_uses_concrete_remote_materializer_for_full_lif
             assert evidence.cleanup is not None
             assert evidence.cleanup.succeeded is True
             assert evidence.cleanup.outcome is MaterializationOutcome.SUCCEEDED
-            assert not (worker_root / workspace.id / snapshot.id).exists()
+            assert not store.has_materialization(workspace.id, snapshot.id)
         finally:
             endpoint_task.cancel()
             with suppress(asyncio.CancelledError):
@@ -210,7 +213,7 @@ def test_remote_cleanup_filesystem_failure_returns_failed_acknowledgement(
 
         try:
             receipt = await materializer.materialize(request)
-            assert (worker_root / workspace.id / snapshot.id).exists()
+            assert store.has_materialization(workspace.id, snapshot.id)
 
             def fail_remove(_root: Path) -> None:
                 raise OSError("simulated cleanup filesystem failure")
@@ -231,7 +234,7 @@ def test_remote_cleanup_filesystem_failure_returns_failed_acknowledgement(
             assert acknowledgement.workspace_id == workspace.id
             assert acknowledgement.snapshot_id == snapshot.id
             assert acknowledgement.materialization_ref == receipt.materialization_ref
-            assert (worker_root / workspace.id / snapshot.id).exists()
+            assert store.has_materialization(workspace.id, snapshot.id)
         finally:
             endpoint_task.cancel()
             with suppress(asyncio.CancelledError):
