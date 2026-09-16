@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
+
 import pytest
 
 from ai_multi_agent_platform.accounting import AccountingService, InMemoryUsageStore
@@ -81,6 +84,65 @@ def _local_runtime(
         )
     )
     return TaskBudgetModelRuntime(ModelRuntime(registry), budgets), provider
+
+
+class _RecordingBudgetAdmission:
+    def __init__(self) -> None:
+        self.release_calls = 0
+        self.reconcile_calls = 0
+        self.decision = SimpleNamespace(permitted=True)
+
+    async def admit(self, **_: object) -> object:
+        return self.decision
+
+    async def reconcile(self, decision: object, **_: object) -> object:
+        assert decision is self.decision
+        self.reconcile_calls += 1
+        return decision
+
+    async def release(self, decision: object) -> None:
+        assert decision is self.decision
+        self.release_calls += 1
+
+
+class _CancellingModelRuntime:
+    registry = None
+    router = None
+    egress_gate = None
+
+    async def generate(self, request: ModelRequest) -> object:
+        del request
+        raise asyncio.CancelledError
+
+    def stream(self, request: ModelRequest):  # type: ignore[no-untyped-def]
+        del request
+
+        async def iterate():  # type: ignore[no-untyped-def]
+            raise asyncio.CancelledError
+            yield  # pragma: no cover - keeps this an async generator
+
+        return iterate()
+
+
+class _FailingCapabilityInvoker:
+    egress_gate = None
+
+    async def invoke(self, request: object) -> object:
+        del request
+        raise RuntimeError("synthetic capability failure")
+
+
+def _boundary_request(task_id: str) -> ModelRequest:
+    return ModelRequest(
+        request_id=f"{task_id}:request",
+        messages=("hello",),
+        requirements={"task_id": task_id},
+        context=OperationContext(
+            correlation_id=task_id,
+            owner_type="user",
+            owner_id="budget-boundary",
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -233,3 +295,56 @@ async def test_direct_capability_invoker_cannot_bypass_task_tool_call_budget() -
 
     assert exc_info.value.code is ErrorCode.RESOURCE_EXHAUSTED
     assert exc_info.value.details["blocking_dimension"] == BudgetDimension.TOOL_CALLS.value
+
+
+@pytest.mark.asyncio
+async def test_model_cancellation_propagates_and_releases_budget_once() -> None:
+    budgets = _RecordingBudgetAdmission()
+    runtime = TaskBudgetModelRuntime(_CancellingModelRuntime(), budgets)  # type: ignore[arg-type]
+
+    with pytest.raises(asyncio.CancelledError):
+        await runtime.generate(_boundary_request("task-cancel-generate"))
+
+    assert budgets.release_calls == 1
+    assert budgets.reconcile_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_stream_cancellation_propagates_and_releases_budget_once() -> None:
+    budgets = _RecordingBudgetAdmission()
+    runtime = TaskBudgetModelRuntime(_CancellingModelRuntime(), budgets)  # type: ignore[arg-type]
+    stream = runtime.stream(_boundary_request("task-cancel-stream"))
+
+    with pytest.raises(asyncio.CancelledError):
+        await anext(stream)
+
+    assert budgets.release_calls == 1
+    assert budgets.reconcile_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_capability_failure_releases_budget_once_without_broad_catch() -> None:
+    budgets = _RecordingBudgetAdmission()
+    invoker = TaskBudgetCapabilityInvoker(
+        _FailingCapabilityInvoker(),
+        budgets,  # type: ignore[arg-type]
+    )
+    request = SimpleNamespace(
+        trace=SimpleNamespace(
+            task_id="task-tool-failure",
+            run_id="run-tool-failure",
+            agent_id="agent-tool-failure",
+            agent_run_id=None,
+        ),
+        context=OperationContext(
+            correlation_id="task-tool-failure",
+            owner_type="user",
+            owner_id="budget-boundary",
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="synthetic capability failure"):
+        await invoker.invoke(request)
+
+    assert budgets.release_calls == 1
+    assert budgets.reconcile_calls == 0
