@@ -106,6 +106,7 @@ class AgentCapabilityTurn:
             correlation_id=context.correlation_id,
             causation_id=context.causation_id,
         )
+        model_completed = False
         try:
             response = await self._models.generate_canonical(
                 CanonicalModelRequest(
@@ -125,11 +126,11 @@ class AgentCapabilityTurn:
                     },
                 )
             )
-        except BaseException:
-            await self._release_budget(model_budget)
-            raise
-        else:
-            await self._reconcile_budget(model_budget)
+            model_completed = True
+        finally:
+            if not model_completed:
+                await self._release_budget(model_budget)
+        await self._reconcile_budget(model_budget)
 
         invocation_refs: list[str] = []
         artifact_refs: list[str] = []
@@ -160,6 +161,7 @@ class AgentCapabilityTurn:
                 correlation_id=operation.correlation_id,
                 causation_id=operation.causation_id,
             )
+            tool_completed = False
             try:
                 result = await self._invoker.invoke(
                     CapabilityInvocation(
@@ -179,11 +181,11 @@ class AgentCapabilityTurn:
                         ),
                     )
                 )
-            except BaseException:
-                await self._release_budget(tool_budget)
-                raise
-            else:
-                await self._reconcile_budget(tool_budget)
+                tool_completed = True
+            finally:
+                if not tool_completed:
+                    await self._release_budget(tool_budget)
+            await self._reconcile_budget(tool_budget)
             invocation_ref = result.canonical_tool_invocation_id or result.invocation_id
             invocation_refs.append(invocation_ref)
             artifact_refs.extend(result.artifact_refs)
