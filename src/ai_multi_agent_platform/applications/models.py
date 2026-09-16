@@ -355,7 +355,9 @@ class ApplicationManifest:
     volumes: tuple[ApplicationVolume, ...] = ()
     configuration: tuple[ApplicationConfigurationField, ...] = ()
     secrets: tuple[ApplicationSecretField, ...] = ()
-    resources: ApplicationResourceRequirements = field(default_factory=ApplicationResourceRequirements)
+    resources: ApplicationResourceRequirements = field(
+        default_factory=ApplicationResourceRequirements
+    )
     ui: ApplicationUi | None = None
     resource_associations: tuple[ApplicationResourceAssociation, ...] = ()
     maturity: ApplicationMaturity = ApplicationMaturity.BETA
@@ -488,7 +490,9 @@ class ApplicationInstallRequest:
         configuration = dict(self.configuration)
         unknown_config = set(configuration) - set(fields)
         if unknown_config:
-            raise ValueError(f"unknown application configuration fields: {sorted(unknown_config)!r}")
+            raise ValueError(
+                f"unknown application configuration fields: {sorted(unknown_config)!r}"
+            )
         for item in fields.values():
             if item.name in configuration:
                 _validate_configuration_value(configuration[item.name], item.value_type)
@@ -504,7 +508,9 @@ class ApplicationInstallRequest:
             if not isinstance(reference, SecretReference):
                 raise ValueError(f"secret binding {name!r} must be a SecretReference")
         missing_secrets = [
-            item.name for item in secret_fields.values() if item.required and item.name not in secrets
+            item.name
+            for item in secret_fields.values()
+            if item.required and item.name not in secrets
         ]
         if missing_secrets:
             raise ValueError(f"missing required application secrets: {sorted(missing_secrets)!r}")
