@@ -32,11 +32,11 @@ jobs:
       - name: Mypy
         run: mypy
       - name: Fast unit tests
-        run: pytest tests/unit
+        run: pytest -m unit tests/unit
       - name: Verify fast-layer regression detection
         run: python scripts/ci/verify_fast_unit_regression_detection.py
-      - name: Full pytest suite
-        run: pytest
+      - name: Non-unit pytest suite
+        run: pytest -m "not unit"
       - name: Deterministic evaluation gate
         run: python scripts/ci/deterministic_evaluation_regression_gate.py --platform-commit "$GITHUB_SHA"
       - name: Materialize runtime assets
