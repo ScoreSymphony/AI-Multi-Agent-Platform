@@ -45,6 +45,40 @@ function closeServer(server) {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
+function stopProcess(child, label) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    let forceKillTimer;
+    const gracefulTimer = setTimeout(() => {
+      child.kill("SIGKILL");
+      forceKillTimer = setTimeout(() => {
+        cleanup();
+        reject(new Error(`${label} did not exit after SIGTERM/SIGKILL`));
+      }, 2_000);
+    }, 5_000);
+
+    const cleanup = () => {
+      clearTimeout(gracefulTimer);
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+      child.off("close", onClose);
+      child.off("error", onError);
+    };
+    const onClose = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+
+    child.once("close", onClose);
+    child.once("error", onError);
+    child.kill("SIGTERM");
+  });
+}
+
 async function waitForUrl(url, label, logs, predicate = (response) => response.ok) {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     try {
@@ -265,8 +299,8 @@ try {
   );
 } finally {
   if (browser) await browser.close();
-  if (vite) vite.kill("SIGTERM");
-  if (backend) backend.kill("SIGTERM");
+  if (vite) await stopProcess(vite, "Vite");
+  if (backend) await stopProcess(backend, "Single-node backend");
   await closeServer(modelServer).catch(() => undefined);
-  await rm(dataDir, { recursive: true, force: true });
+  await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
