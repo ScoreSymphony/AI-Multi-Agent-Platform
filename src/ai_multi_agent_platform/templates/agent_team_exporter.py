@@ -206,7 +206,7 @@ class AgentTeamTemplateExporter:
                     {
                         "template_id": template_id,
                         "error_type": type(cleanup_error).__name__,
-                        "error": str(cleanup_error),
+                        "error": type(cleanup_error).__name__,
                     }
                 )
         if failures:

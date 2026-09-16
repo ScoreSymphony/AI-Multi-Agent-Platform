@@ -516,7 +516,7 @@ class SingleNodeEnduranceHarness:
         # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:  # endurance evidence records failures by design
             samples.failed += 1
-            samples.errors.append(f"operation {index}: {type(exc).__name__}: {exc}")
+            samples.errors.append(f"operation {index}: {type(exc).__name__}: {type(exc).__name__}")
 
     async def _seed_completed_tasks(
         self,

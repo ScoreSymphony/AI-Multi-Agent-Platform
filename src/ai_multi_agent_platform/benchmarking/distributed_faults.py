@@ -552,7 +552,7 @@ class DistributedWorkerWorkspaceFaultHarness:
                 except Exception as exc:
                     workspace_failure_samples.append(time.perf_counter() - failure_started)
                     errors.append(
-                        f"Workspace fault raised non-canonical error: {type(exc).__name__}: {exc}"
+                        f"Workspace fault raised non-canonical error: {type(exc).__name__}: {type(exc).__name__}"
                     )
                 else:
                     workspace_failure_samples.append(time.perf_counter() - failure_started)
@@ -619,7 +619,7 @@ class DistributedWorkerWorkspaceFaultHarness:
             errors.append("distributed fault benchmark exceeded timeout")
         # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:
-            errors.append(f"distributed fault benchmark failed: {type(exc).__name__}: {exc}")
+            errors.append(f"distributed fault benchmark failed: {type(exc).__name__}: {type(exc).__name__}")
         finally:
             duration = max(0.0, time.perf_counter() - started)
             traced_current, traced_peak = tracemalloc.get_traced_memory()

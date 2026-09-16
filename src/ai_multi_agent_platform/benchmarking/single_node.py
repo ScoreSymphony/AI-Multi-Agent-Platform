@@ -115,7 +115,7 @@ class SingleNodeBenchmarkHarness:
                     )
                 # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
                 except Exception as exc:  # benchmark evidence records failures by design
-                    samples.errors.append(f"operation {index}: {type(exc).__name__}: {exc}")
+                    samples.errors.append(f"operation {index}: {type(exc).__name__}: {type(exc).__name__}")
 
         await asyncio.gather(*(run_one(index) for index in range(spec.operation_count)))
         duration = time.perf_counter() - wall_started

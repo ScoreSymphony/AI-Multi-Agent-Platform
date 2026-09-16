@@ -683,7 +683,7 @@ class ProviderFaultBenchmarkHarness:
                     evidence.unexpected_failures += 1
                     evidence.errors.append(
                         f"{phase} operation {index} failed unexpectedly: "
-                        f"{type(exc).__name__}: {exc}"
+                        f"{type(exc).__name__}: {type(exc).__name__}"
                     )
                     return
 

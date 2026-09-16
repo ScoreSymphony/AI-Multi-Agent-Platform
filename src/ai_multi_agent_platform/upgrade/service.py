@@ -327,7 +327,7 @@ class UpgradeService:
             hook(manifests)
         # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception as exc:
-            raise UpgradeError(f"plugin-owned state migration failed: {exc}") from exc
+            raise UpgradeError(f"plugin-owned state migration failed: {type(exc).__name__}") from exc
 
     def _resume_request(
         self,

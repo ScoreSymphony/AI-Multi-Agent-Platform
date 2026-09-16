@@ -392,7 +392,7 @@ async def _run_writer_async(
             # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
             except Exception as exc:  # pragma: no cover - defensive evidence path
                 unexpected_errors += 1
-                errors.append(f"writer {writer_index} {phase}: {type(exc).__name__}: {exc}")
+                errors.append(f"writer {writer_index} {phase}: {type(exc).__name__}: {type(exc).__name__}")
                 task_succeeded = False
             else:
                 successful_operations += 1
