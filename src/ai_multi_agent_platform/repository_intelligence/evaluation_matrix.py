@@ -1,4 +1,4 @@
-"""Issue #502 comparative evaluation matrix without fabricated measurements.
+"""Repository-intelligence comparative evaluation matrix without fabricated measurements.
 
 The existing #19 executor records schema/provenance/query metrics. This module defines the broader
 representative-workflow evidence required before an enhanced provider can be adopted. Every field is
