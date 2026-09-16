@@ -17,6 +17,7 @@ from ai_multi_agent_platform.control_plane import (
     evaluation_resource_services,
 )
 from ai_multi_agent_platform.control_plane.approval_portability_composition import ControlPlane
+from ai_multi_agent_platform.control_plane.first_run import BrowserFirstRunControlPlaneHTTP
 from ai_multi_agent_platform.coordination import (
     coordination_command_handlers,
     coordination_resource_services,
@@ -323,9 +324,10 @@ def build_http(
 ) -> HttpBundle:
     """Build northbound authenticated HTTP/ASGI only after Control Plane completion."""
 
-    http = AuthenticatedControlPlaneHTTP(
+    http = BrowserFirstRunControlPlaneHTTP(
         control_plane.control_plane,
         security.authentication,
+        security.authorization,
         secure_cookie=config.secure_cookie,
     )
     return HttpBundle(http=http, app=ControlPlaneASGI(http))
