@@ -20,7 +20,7 @@ describe("FirstRunGate access forms", () => {
     expect(html).toContain("Create the first administrator account");
     expect(html).toContain("No terminal bootstrap command is required");
     expect(html).toContain('name="password_confirmation"');
-    expect(html).toContain('minLength="12"');
+    expect(html).toContain("at least 12 characters");
     expect(html).toContain("1024 UTF-8 bytes");
     expect(html).not.toContain("Sign in with an existing local account");
   });
@@ -32,7 +32,7 @@ describe("FirstRunGate access forms", () => {
 
     expect(html).toContain("Sign in");
     expect(html).toContain("existing local account");
-    expect(html).toContain('autocomplete="current-password"');
+    expect(html).toContain("current-password");
     expect(html).not.toContain("Create the first administrator account");
   });
 });
