@@ -9,6 +9,7 @@ from ai_multi_agent_platform.contracts import HealthStatus
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.models import ModelConfiguration, ModelLocation, ModelRegistry
 
+from .first_run_resolution import first_run_selection_kind
 from .first_run_types import FirstRunPathProjection
 
 _ROUTABLE_HEALTH = frozenset({HealthStatus.HEALTHY, HealthStatus.DEGRADED})
@@ -190,21 +191,6 @@ def build_status_document(
         "automatic_paid_provider_selection": False,
         "guidance": guidance,
     }
-
-
-def first_run_selection_kind(paths: tuple[object, ...]) -> str | None:
-    """Return the first canonical identity dimension that remains ambiguous."""
-
-    project_ids = {getattr(path, "project_id") for path in paths}
-    if len(project_ids) > 1:
-        return "project"
-    workspace_ids = {getattr(path, "workspace_id") for path in paths}
-    if len(workspace_ids) > 1:
-        return "workspace"
-    agent_ids = {getattr(path, "agent_id") for path in paths}
-    if len(agent_ids) > 1:
-        return "agent"
-    return None
 
 
 def _model_guidance(inventory: FirstRunModelInventory) -> list[JsonValue]:
