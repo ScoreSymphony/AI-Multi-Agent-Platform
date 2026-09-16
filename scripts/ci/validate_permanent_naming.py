@@ -13,13 +13,14 @@ from pathlib import Path, PurePosixPath
 ISSUE_IDENTIFIER = re.compile(r"(?:^|_)issue_?\d+(?:_|$)", re.IGNORECASE)
 ISSUE_PATH_TOKEN = re.compile(r"(?:^|[._-])issue[-_]?\d+(?:[._-]|$)", re.IGNORECASE)
 ISSUE_REFERENCE = re.compile(r"\bissue\s+#\d+\b", re.IGNORECASE)
+ISSUE_EVIDENCE_DIRECTORY = re.compile(r"issue_\d+", re.IGNORECASE)
 WORKFLOW_ISSUE_NAME = re.compile(
     r"(?:\bissue\s+#?\d+\b|(?:^|[ _.-])issue[-_]?\d+(?:[ _.-]|$))",
     re.IGNORECASE,
 )
 PROVENANCE_PREFIXES = ("historical context:", "provenance:")
 PERMANENT_ROOTS = frozenset({"src", "tests", "scripts"})
-PROVENANCE_PATH_PREFIXES = (PurePosixPath("tests/evidence"),)
+EVIDENCE_ROOT = PurePosixPath("tests/evidence")
 WORKFLOW_PREFIX = PurePosixPath(".github/workflows")
 
 
@@ -48,7 +49,12 @@ def changed_targets(name_status: str) -> tuple[ChangedPath, ...]:
 
 
 def _is_provenance_path(path: PurePosixPath) -> bool:
-    return any(path == prefix or prefix in path.parents for prefix in PROVENANCE_PATH_PREFIXES)
+    parts = path.parts
+    return (
+        len(parts) >= 3
+        and PurePosixPath(*parts[:2]) == EVIDENCE_ROOT
+        and ISSUE_EVIDENCE_DIRECTORY.fullmatch(parts[2]) is not None
+    )
 
 
 def _is_workflow_path(path: PurePosixPath) -> bool:
