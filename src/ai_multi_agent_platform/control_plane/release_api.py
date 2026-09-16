@@ -17,6 +17,9 @@ from .task_project_reassignment import (
 from .task_project_reassignment import ControlPlane, ControlPlaneASGI
 from .task_project_reassignment import ControlPlaneHTTP as _CurrentControlPlaneHTTP
 from .task_project_reassignment import build_openapi as _build_current_openapi
+from .transport_contract_schemas import augment_transport_schemas
+from .transport_request_schemas import augment_transport_request_schemas
+from .transport_schema_composition import preserve_existing_transport_schemas
 
 if TYPE_CHECKING:
     from ai_multi_agent_platform.release.operator import ReleaseOperatorService
@@ -100,6 +103,23 @@ def _filter_extension_discovery(
     return specification
 
 
+def _baseline_schemas(specification: dict[str, Any]) -> dict[str, Any]:
+    components = specification.get("components")
+    if not isinstance(components, dict):
+        return {}
+    schemas = components.get("schemas")
+    if not isinstance(schemas, dict):
+        return {}
+    return deepcopy(schemas)
+
+
+def _augment_generated_transport_contract(specification: dict[str, Any]) -> dict[str, Any]:
+    baseline = _baseline_schemas(specification)
+    augment_transport_schemas(specification)
+    augment_transport_request_schemas(specification)
+    return preserve_existing_transport_schemas(specification, baseline)
+
+
 class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
     """Expose release metadata through an explicitly owned special route."""
 
@@ -133,9 +153,11 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
                 headers=dict(response.headers),
             )
         if normalized_path == f"/api/{API_VERSION}/openapi.json":
+            specification = _filter_extension_discovery(self._control_plane, response.body)
+            _augment_generated_transport_contract(cast(dict[str, Any], specification))
             return HTTPResponse(
                 status=response.status,
-                body=_filter_extension_discovery(self._control_plane, response.body),
+                body=specification,
                 headers=dict(response.headers),
             )
         return response
@@ -197,7 +219,7 @@ def build_openapi(
         include_approval_decisions=include_approval_decisions,
     )
     _augment_openapi(specification)
-    return specification
+    return _augment_generated_transport_contract(specification)
 
 
 __all__ = [

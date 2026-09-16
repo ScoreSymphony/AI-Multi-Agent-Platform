@@ -1,38 +1,44 @@
-export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+import type {
+  AgentAssignment as GeneratedAgentAssignment,
+  APIError as GeneratedAPIError,
+  APIManifest as GeneratedAPIManifest,
+  CanonicalWorkspace as GeneratedCanonicalWorkspace,
+  CreateProjectRequest as GeneratedCreateProjectRequest,
+  CreateTaskRequest as GeneratedCreateTaskRequest,
+  CreateWorkspaceRequest as GeneratedCreateWorkspaceRequest,
+  HealthStatus as GeneratedHealthStatus,
+  IdentityOnlyWorkspace as GeneratedIdentityOnlyWorkspace,
+  JsonPrimitive as GeneratedJsonPrimitive,
+  JsonValue as GeneratedJsonValue,
+  Model as GeneratedModel,
+  ModelCapabilities as GeneratedModelCapabilities,
+  ModelProvider as GeneratedModelProvider,
+  Owner as GeneratedOwner,
+  Project as GeneratedProject,
+  Run as GeneratedRun,
+  RunError as GeneratedRunError,
+  Task as GeneratedTask,
+  TaskDependency as GeneratedTaskDependency,
+  TaskResponsibility as GeneratedTaskResponsibility,
+  Workspace as GeneratedWorkspace,
+  WorkspaceSourceRef as GeneratedWorkspaceSourceRef,
+} from "./generated/control-plane-v1";
 
-export type OwnerType = "user" | "organization" | "team" | "service";
-export type TaskStatus =
-  | "draft"
-  | "ready"
-  | "running"
-  | "waiting"
-  | "succeeded"
-  | "failed"
-  | "cancelled";
-export type RunStatus =
-  | "queued"
-  | "starting"
-  | "running"
-  | "succeeded"
-  | "failed"
-  | "cancelled"
-  | "timed_out";
+export type JsonPrimitive = GeneratedJsonPrimitive;
+export type JsonValue = GeneratedJsonValue;
+
+export type OwnerType = GeneratedOwner["type"];
+export type TaskStatus = GeneratedTask["status"];
+export type RunStatus = GeneratedRun["status"];
 export type MeasurementQuality = "measured" | "reported" | "estimated" | "unavailable";
 export type AggregationMode = "additive" | "latest";
-export type TaskPriority = "low" | "normal" | "high" | "urgent";
-export type TaskResponsibilityKind = "user" | "team" | "organization";
-export type AgentAssignmentKind = "agent" | "agent_team";
-export type TaskDependencyKind = "depends_on" | "related_to";
-export type WorkspaceType =
-  | "persistent_project"
-  | "ephemeral_task"
-  | "isolated_run"
-  | "read_only_source"
-  | "cloned"
-  | "remote";
-export type WorkspaceAccessMode = "read_write" | "read_only";
-export type WorkspaceRetention = "persistent" | "ephemeral" | "until";
+export type TaskPriority = GeneratedTask["priority"];
+export type TaskResponsibilityKind = GeneratedTaskResponsibility["kind"];
+export type AgentAssignmentKind = GeneratedAgentAssignment["kind"];
+export type TaskDependencyKind = GeneratedTaskDependency["kind"];
+export type WorkspaceType = GeneratedCanonicalWorkspace["workspace_type"];
+export type WorkspaceAccessMode = GeneratedCanonicalWorkspace["access_mode"];
+export type WorkspaceRetention = GeneratedCanonicalWorkspace["retention"];
 export type SearchMode = "exact" | "keyword" | "metadata" | "semantic" | "hybrid";
 export type SearchSort = "relevance" | "id" | "updated_at";
 
@@ -87,139 +93,35 @@ export interface SearchResult {
 
 export type SearchPage = Page<SearchResult>;
 
-export interface CanonicalProject {
-  id: string;
-  type: "project";
-  name: string;
-  owner: { type: OwnerType; id: string };
-  created_at: string;
-  updated_at: string;
-}
+export type CanonicalProject = GeneratedProject;
+export type WorkspaceSourceRef = GeneratedWorkspaceSourceRef;
+export type IdentityOnlyWorkspace = GeneratedIdentityOnlyWorkspace;
+export type CanonicalWorkspace = GeneratedCanonicalWorkspace;
+export type CanonicalWorkspaceIdentity = GeneratedWorkspace;
 
-export interface WorkspaceSourceRef {
-  kind: string;
-  ref: string;
-  revision: string | null;
-  checksum: string | null;
-  metadata: Record<string, JsonValue>;
-}
+export type TaskResponsibility = GeneratedTaskResponsibility;
+export type AgentAssignment = GeneratedAgentAssignment;
+export type TaskDependency = GeneratedTaskDependency;
 
-interface WorkspaceIdentityBase {
-  id: string;
-  type: "workspace";
-  project_id: string;
-  owner: { type: OwnerType; id: string };
-  created_at: string | null;
-}
+type TaskManagementField =
+  | "priority"
+  | "due_at"
+  | "deadline_timezone"
+  | "not_before"
+  | "responsibility"
+  | "agent_assignment"
+  | "labels"
+  | "workspace_id"
+  | "parent_task_id"
+  | "dependencies"
+  | "blocking_reason"
+  | "effort_hint"
+  | "resource_hints"
+  | "archived"
+  | "hidden";
 
-export interface IdentityOnlyWorkspace extends WorkspaceIdentityBase {
-  lifecycle: "identity_only";
-}
-
-export interface CanonicalWorkspace extends WorkspaceIdentityBase {
-  lifecycle: "canonical";
-  workspace_type: WorkspaceType;
-  status: string;
-  access_mode: WorkspaceAccessMode;
-  retention: WorkspaceRetention;
-  revision: number;
-  base_snapshot_id: string | null;
-  source_refs: WorkspaceSourceRef[];
-  policy_labels: string[];
-  active_task_ids: string[];
-  active_run_ids: string[];
-  created_at: string;
-  updated_at: string;
-  last_used_at: string;
-  expires_at: string | null;
-}
-
-export type CanonicalWorkspaceIdentity = IdentityOnlyWorkspace | CanonicalWorkspace;
-
-export interface TaskResponsibility {
-  kind: TaskResponsibilityKind;
-  id: string;
-}
-
-export interface AgentAssignment {
-  kind: AgentAssignmentKind;
-  id: string;
-  revision: number | null;
-  required: boolean;
-  policy_ref: string | null;
-}
-
-export interface TaskDependency {
-  task_id: string;
-  kind: TaskDependencyKind;
-}
-
-export interface TaskManagementChanges {
-  priority?: TaskPriority;
-  due_at?: string | null;
-  deadline_timezone?: string | null;
-  not_before?: string | null;
-  responsibility?: TaskResponsibility | null;
-  agent_assignment?: AgentAssignment | null;
-  labels?: string[];
-  workspace_id?: string | null;
-  parent_task_id?: string | null;
-  dependencies?: TaskDependency[];
-  blocking_reason?: string | null;
-  effort_hint?: number | null;
-  resource_hints?: Record<string, JsonValue>;
-  archived?: boolean;
-  hidden?: boolean;
-}
-
-export interface CanonicalTask {
-  id: string;
-  type: "task";
-  title: string;
-  objective: string;
-  status: TaskStatus;
-  owner: { type: OwnerType; id: string };
-  project_id: string | null;
-  revision: number;
-  plan_ref: string | null;
-  step_ids: string[];
-  run_ids: string[];
-  artifact_ids: string[];
-  result_ids: string[];
-  wait_reason: string | null;
-  blocked: boolean;
-  correlation_id: string | null;
-  causation_id: string | null;
-  created_at: string;
-  updated_at: string;
-  priority: TaskPriority;
-  priority_rank: number;
-  due_at: string | null;
-  deadline_timezone: string | null;
-  not_before: string | null;
-  responsibility: TaskResponsibility | null;
-  responsible_type: TaskResponsibilityKind | null;
-  responsible_id: string | null;
-  agent_assignment: AgentAssignment | null;
-  agent_assignment_type: AgentAssignmentKind | null;
-  agent_assignment_id: string | null;
-  labels: string[];
-  workspace_id: string | null;
-  parent_task_id: string | null;
-  dependencies: TaskDependency[];
-  blocking_reason: string | null;
-  effort_hint: number | null;
-  resource_hints: Record<string, JsonValue>;
-  archived: boolean;
-  hidden: boolean;
-  blocking_task_ids: string[];
-  failed_dependency_ids: string[];
-  overdue: boolean;
-  not_before_blocked: boolean;
-  management_blocked: boolean;
-  eligible: boolean;
-  effective_blocking_reason: string | null;
-}
+export type TaskManagementChanges = Pick<GeneratedCreateTaskRequest, TaskManagementField>;
+export type CanonicalTask = GeneratedTask;
 
 export interface BulkTaskManagementResult {
   id: string;
@@ -230,36 +132,16 @@ export interface BulkTaskManagementResult {
   items: Array<{ task_id: string; eligible: boolean }>;
 }
 
-export interface RunError {
-  code: string;
-  category: string;
-  message: string;
-  retryable: boolean;
-}
+export type RunError = GeneratedRunError;
 
-export interface CanonicalRun {
-  id: string;
-  type: "run";
-  task_id: string;
-  subject_type: "task" | "step";
-  subject_id: string;
-  attempt: number;
-  status: RunStatus;
-  project_id: string | null;
-  correlation_id: string;
-  causation_id: string | null;
-  trace_id: string | null;
-  created_at: string;
-  updated_at: string;
-  started_at: string | null;
-  finished_at: string | null;
-  output: Record<string, JsonValue>;
-  artifact_ids: string[];
-  result_ids: string[];
-  recovery_required: boolean;
-  recovery_reason: string | null;
-  error?: RunError | null;
-}
+/**
+ * `error` remains optional at this compatibility export because older frontend
+ * fixtures predate the canonical Run-error projection. The generated wire DTO
+ * itself requires the field and new transport code should use that shape.
+ */
+export type CanonicalRun = Omit<GeneratedRun, "error"> & {
+  error?: GeneratedRun["error"];
+};
 
 export interface CanonicalEvent {
   id: string;
@@ -291,80 +173,12 @@ export interface TelemetryTimelineEntry {
 
 export type TimelineItem = CanonicalEvent | TelemetryTimelineEntry;
 
-export interface APIErrorBody {
-  code: string;
-  category: string;
-  message: string;
-  request_id: string;
-  correlation_id: string;
-  retryable: boolean;
-  details?: Record<string, JsonValue>;
-  diagnostics?: Record<string, Record<string, JsonValue>>;
-}
-
-export interface APImanifest {
-  api_version: string;
-  resources: string[];
-  commands?: string[];
-  openapi: string;
-  live_updates: string;
-}
-
-export interface HealthStatus {
-  status: string;
-  ready: boolean;
-  api_version: string;
-  providers: Array<{
-    id: string;
-    type: string;
-    status: string;
-    available: boolean;
-  }>;
-}
-
-export interface ModelCapabilities {
-  context_window: number | null;
-  tool_calling: boolean;
-  structured_output: boolean;
-  streaming: boolean;
-  modalities: string[];
-  reasoning: string[];
-}
-
-export interface CanonicalModel {
-  id: string;
-  config_id: string;
-  type: "model";
-  display_name: string;
-  provider_id: string;
-  capabilities: ModelCapabilities;
-  revision: number;
-  aliases: string[];
-  location: "local" | "self_hosted" | "remote";
-  node_ref: string | null;
-  health: string;
-  enabled: boolean;
-  priority: number;
-  resource_hints: Record<string, JsonValue>;
-  cost_metadata: Record<string, JsonValue>;
-  adapter_metadata: Array<Record<string, JsonValue>>;
-  effective_health: string;
-}
-
-export interface CanonicalModelProvider {
-  id: string;
-  type: "model-provider";
-  provider_type: string;
-  contract_version: string;
-  supported_operations: string[];
-  capabilities: Array<Record<string, JsonValue>>;
-  health: string;
-  enabled: boolean;
-  available: boolean;
-  limits: Record<string, JsonValue>;
-  resources: Record<string, JsonValue>;
-  adapter_metadata: Array<Record<string, JsonValue>>;
-}
+export type APIErrorBody = GeneratedAPIError;
+export type APImanifest = GeneratedAPIManifest;
+export type HealthStatus = GeneratedHealthStatus;
+export type ModelCapabilities = GeneratedModelCapabilities;
+export type CanonicalModel = GeneratedModel;
+export type CanonicalModelProvider = GeneratedModelProvider;
 
 export interface CanonicalUsageRecord {
   id: string;
@@ -437,26 +251,9 @@ export interface CanonicalUsageBudget {
   threshold_level: "warning" | "exceeded" | null;
 }
 
-export interface CreateProjectInput {
-  name: string;
-  owner_type: OwnerType;
-  owner_id: string;
-}
-
-export interface CreateWorkspaceInput {
-  project_id: string;
-  workspace_type?: WorkspaceType;
-  access_mode?: WorkspaceAccessMode;
-  retention?: WorkspaceRetention;
-}
-
-export interface CreateTaskInput extends TaskManagementChanges {
-  title: string;
-  objective: string;
-  owner_type: OwnerType;
-  owner_id: string;
-  project_id?: string;
-}
+export type CreateProjectInput = Omit<GeneratedCreateProjectRequest, "project_id">;
+export type CreateWorkspaceInput = GeneratedCreateWorkspaceRequest;
+export type CreateTaskInput = Omit<GeneratedCreateTaskRequest, "task_id">;
 
 export interface ListQuery {
   limit?: number;
