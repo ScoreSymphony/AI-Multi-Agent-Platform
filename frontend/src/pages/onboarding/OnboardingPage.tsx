@@ -183,7 +183,7 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
       {loadError ? <ErrorState error={loadError} onRetry={() => void load()} /> : null}
       {notice ? <div className="state" role="status"><strong>{notice}</strong></div> : null}
 
-      <SetupLifecyclePanel setup={setup} manifest={manifest} />
+      <SetupLifecyclePanel setup={setup} onboarding={onboarding} manifest={manifest} />
 
       <details>
         <summary>Advanced component profile configuration</summary>
