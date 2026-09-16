@@ -1,4 +1,4 @@
-"""Private JSON-line wire helpers for the #388 TCP MessageTransport adapter."""
+"""Private JSON-line wire helpers for the TCP MessageTransport adapter."""
 
 from __future__ import annotations
 

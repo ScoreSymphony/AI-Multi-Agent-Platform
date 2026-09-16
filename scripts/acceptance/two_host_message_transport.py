@@ -1,4 +1,4 @@
-"""Operator-run acceptance harness for the real two-host #388 message transport path.
+"""Operator-run acceptance harness for the real two-host message transport path.
 
 The harness consumes the existing #35 TCP MessageTransport adapter and canonical
 #14 Worker command/reply path. It does not introduce another transport or Worker
@@ -54,7 +54,7 @@ class _AcceptanceLifecycle(LifecycleBackend):
     @property
     def descriptor(self) -> ProviderDescriptor:
         return ProviderDescriptor(
-            provider_id="issue388-two-host-acceptance",
+            provider_id="two-host-message-transport-acceptance",
             provider_type="lifecycle",
         )
 
@@ -62,7 +62,7 @@ class _AcceptanceLifecycle(LifecycleBackend):
         self._states.setdefault(request.run_id, RunStatus.SUCCEEDED)
         return ExecutionHandle(
             run_id=request.run_id,
-            backend_ref="issue388-two-host-acceptance",
+            backend_ref="two-host-message-transport-acceptance",
         )
 
     async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
@@ -75,7 +75,7 @@ class _AcceptanceLifecycle(LifecycleBackend):
             run_id=run_id,
             status=status,
             output={
-                "acceptance": "issue388-two-host-message-transport",
+                "acceptance": "two-host-message-transport",
                 "worker_instance_ref": self._worker_instance_ref,
                 "worker_host_label": self._worker_host_label,
             },
@@ -140,7 +140,7 @@ def _add_transport_arguments(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run the real two-host #388 MessageTransport acceptance path."
+        description="Run the real two-host MessageTransport acceptance path."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -250,7 +250,7 @@ async def _run_worker(args: argparse.Namespace) -> None:
     )
     transport, authentication = _transport(
         args,
-        provider_id="issue388-two-host-worker",
+        provider_id="two-host-message-transport-worker",
     )
     if not await transport.check_ready():
         await transport.close(graceful=False)
@@ -302,9 +302,9 @@ async def _run_worker(args: argparse.Namespace) -> None:
 
 def _operation_context(project_id: str, worker_job_id: str) -> OperationContext:
     return OperationContext(
-        correlation_id=f"issue388-two-host:{worker_job_id}",
+        correlation_id=f"two-host-message-transport:{worker_job_id}",
         owner_type="service",
-        owner_id="service:issue388-two-host-acceptance",
+        owner_id="service:two-host-message-transport-acceptance",
         project_id=project_id,
     )
 
@@ -341,7 +341,7 @@ async def _run_control(args: argparse.Namespace) -> dict[str, object]:
 
     transport, authentication = _transport(
         args,
-        provider_id="issue388-two-host-control",
+        provider_id="two-host-message-transport-control",
     )
     try:
         if not await transport.check_ready():
@@ -361,16 +361,16 @@ async def _run_control(args: argparse.Namespace) -> dict[str, object]:
                 subject_type="task",
                 subject_id=task_id,
                 context=context,
-                input={"acceptance": "issue388-two-host-message-transport"},
+                input={"acceptance": "two-host-message-transport"},
             ),
             artifact_refs=(input_artifact_ref,),
             timeout_seconds=float(args.timeout_seconds),
-            idempotency_key=f"{worker_job_id}:issue388-two-host",
+            idempotency_key=f"{worker_job_id}:two-host-message-transport",
         )
         dispatcher = TransportWorkerDispatcher(
             worker_id,
             transport,
-            client_id="issue388-two-host-control",
+            client_id="two-host-message-transport-control",
             response_timeout_seconds=float(args.timeout_seconds),
         )
 
@@ -480,7 +480,7 @@ def _verify_restart(
 ) -> dict[str, object]:
     for report in (first, second):
         if report.get("schema") != REPORT_SCHEMA or report.get("status") != "pass":
-            raise ValueError("both inputs must be passing #388 two-host transport reports")
+            raise ValueError("both inputs must be passing two-host transport reports")
         if not _report_has_secure_transport(report):
             raise ValueError("both inputs must prove authenticated encrypted transport")
         if report.get("repeat_dispatch_same_handle") is not True:
@@ -573,7 +573,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         raise ValueError(f"unsupported command: {args.command}")
     except Exception as exc:
-        print(f"#388 two-host acceptance failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"two-host message transport acceptance failed: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return 2
 
 
