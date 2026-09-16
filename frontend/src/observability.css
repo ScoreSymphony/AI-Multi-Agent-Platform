@@ -1,0 +1,251 @@
+/* Route-scoped presentation for canonical event timelines and observability traces. */
+
+main[data-route="/events"] > .stack,
+main[data-route="/observability"] > .stack {
+  gap: 1.4rem;
+}
+
+main[data-route="/events"] .page-header,
+main[data-route="/observability"] .page-header {
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(56, 189, 248, .08), transparent 34%),
+    linear-gradient(180deg, rgba(23, 31, 45, .8), rgba(17, 23, 34, .72));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .12);
+}
+
+main[data-route="/events"] .page-header p:not(.eyebrow),
+main[data-route="/observability"] .page-header p:not(.eyebrow) {
+  max-width: 82ch;
+}
+
+main[data-route="/events"] .card,
+main[data-route="/observability"] .card {
+  min-width: 0;
+}
+
+main[data-route="/events"] .card > h2,
+main[data-route="/observability"] .card > h2 {
+  padding-bottom: .72rem;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route="/events"] .toolbar,
+main[data-route="/observability"] .toolbar {
+  gap: .72rem .8rem;
+}
+
+main[data-route="/events"] .toolbar label,
+main[data-route="/observability"] .toolbar label {
+  min-width: min(250px, 100%);
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 650;
+}
+
+main[data-route="/events"] .toolbar input,
+main[data-route="/events"] .toolbar select,
+main[data-route="/observability"] .toolbar input,
+main[data-route="/observability"] .toolbar select {
+  width: 100%;
+  min-width: 0;
+}
+
+main[data-route="/events"] .toolbar button,
+main[data-route="/observability"] .toolbar button {
+  min-height: 38px;
+}
+
+main[data-route="/events"] .metrics,
+main[data-route="/observability"] .metrics {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+main[data-route="/events"] .metric,
+main[data-route="/observability"] .metric {
+  min-width: 0;
+}
+
+main[data-route="/events"] .metric strong,
+main[data-route="/observability"] .metric strong {
+  overflow-wrap: anywhere;
+}
+
+main[data-route="/events"] .table-wrap,
+main[data-route="/observability"] .table-wrap {
+  margin-top: .15rem;
+}
+
+main[data-route="/events"] table,
+main[data-route="/observability"] table {
+  min-width: 820px;
+}
+
+main[data-route="/events"] th:first-child,
+main[data-route="/events"] td:first-child,
+main[data-route="/observability"] th:first-child,
+main[data-route="/observability"] td:first-child {
+  white-space: nowrap;
+}
+
+main[data-route="/events"] td:nth-child(2),
+main[data-route="/observability"] td:nth-child(2) {
+  min-width: 190px;
+}
+
+main[data-route="/events"] td,
+main[data-route="/observability"] td {
+  vertical-align: top;
+}
+
+main[data-route="/events"] td .canonical-id,
+main[data-route="/observability"] td .canonical-id {
+  margin-top: .2rem;
+}
+
+main[data-route="/events"] .actions,
+main[data-route="/observability"] .actions {
+  align-items: flex-start;
+}
+
+main[data-route="/observability"] .card > .toolbar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  align-items: end;
+}
+
+main[data-route="/observability"] .card > .toolbar label {
+  min-width: 0;
+}
+
+main[data-route="/observability"] .card > .toolbar button {
+  justify-self: start;
+}
+
+main[data-route="/observability"] .card > .toolbar + p {
+  margin: .85rem 0 0;
+  padding: .65rem .75rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 8px;
+  background: rgba(9, 13, 21, .28);
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+main[data-route="/observability"] .card > .table-wrap table {
+  min-width: 980px;
+}
+
+main[data-route="/observability"] .card > .table-wrap td:first-child {
+  min-width: 260px;
+  white-space: normal;
+}
+
+main[data-route="/observability"] .card > .table-wrap td:first-child > div {
+  min-width: 0;
+}
+
+main[data-route="/observability"] .card > .table-wrap td:first-child button {
+  margin-top: .35rem;
+}
+
+main[data-route="/observability"] .card > .table-wrap td:nth-child(4) {
+  min-width: 220px;
+  overflow-wrap: anywhere;
+}
+
+main[data-route="/observability"] .card > .table-wrap td:nth-child(5) {
+  min-width: 210px;
+}
+
+main[data-route="/observability"] .card > button:last-child {
+  margin-top: .85rem;
+}
+
+main[data-route="/observability"] .card > div:not(.table-wrap):not(.toolbar) > p {
+  line-height: 1.5;
+}
+
+main[data-route="/observability"] .card ul {
+  margin: .5rem 0 0;
+  padding-left: 1.2rem;
+}
+
+main[data-route="/observability"] .card li {
+  margin: .28rem 0;
+  overflow-wrap: anywhere;
+}
+
+main[data-route="/observability"] details {
+  margin-top: .8rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 8px;
+  background: rgba(9, 13, 21, .24);
+}
+
+main[data-route="/observability"] details summary {
+  padding: .65rem .75rem;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+main[data-route="/observability"] details pre {
+  max-width: 100%;
+  margin: 0;
+  padding: .75rem;
+  border-top: 1px solid var(--line-soft, var(--line));
+  overflow: auto;
+  font-size: .76rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+main[data-route="/observability"] .card .table-wrap + .table-wrap {
+  margin-top: .8rem;
+}
+
+@media (max-width: 1180px) {
+  main[data-route="/events"] .metrics,
+  main[data-route="/observability"] .metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  main[data-route="/observability"] .card > .toolbar {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  main[data-route="/events"] .page-header,
+  main[data-route="/observability"] .page-header {
+    padding: 1rem;
+  }
+
+  main[data-route="/events"] .metrics,
+  main[data-route="/observability"] .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  main[data-route="/events"] .toolbar,
+  main[data-route="/observability"] .toolbar,
+  main[data-route="/observability"] .card > .toolbar {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  main[data-route="/events"] .toolbar label,
+  main[data-route="/observability"] .toolbar label {
+    min-width: 0;
+  }
+
+  main[data-route="/events"] .toolbar button,
+  main[data-route="/observability"] .toolbar button,
+  main[data-route="/observability"] .card > .toolbar button,
+  main[data-route="/observability"] .card > button:last-child {
+    width: 100%;
+  }
+}
