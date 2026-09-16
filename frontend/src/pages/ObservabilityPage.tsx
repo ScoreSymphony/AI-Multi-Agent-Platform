@@ -18,6 +18,7 @@ import {
   LoadingState,
   StatusBadge,
 } from "../components/States";
+import { TraceExplorer } from "./observability/TraceExplorer";
 
 export function ObservabilityPage({
   client,
@@ -34,7 +35,11 @@ export function ObservabilityPage({
 
   const loadTasks = useCallback(async () => {
     try {
-      const next = await client.listTasks({ limit: 50, sort: "updated_at", direction: "desc" });
+      const next = await client.listTasks({
+        limit: 50,
+        sort: "updated_at",
+        direction: "desc",
+      });
       setTasks(next);
       setTaskError(null);
       setSelectedTaskId((current) => {
@@ -53,7 +58,10 @@ export function ObservabilityPage({
       return;
     }
     try {
-      const next = await client.timeline(selectedTaskId, { limit: 200, direction: "asc" });
+      const next = await client.timeline(selectedTaskId, {
+        limit: 200,
+        direction: "asc",
+      });
       setTimeline(next.items);
       setTimelineError(null);
     } catch (error) {
@@ -70,24 +78,30 @@ export function ObservabilityPage({
     void loadTimeline();
   }, [loadTimeline]);
 
-  const selectedTask = tasks?.items.find((task) => task.id === selectedTaskId) ?? null;
+  const selectedTask =
+    tasks?.items.find((task) => task.id === selectedTaskId) ?? null;
   const summary = useMemo(() => summarizeTimeline(timeline ?? []), [timeline]);
   const heading = view === "events" ? "Events & activity" : "Observability";
 
   return (
     <div className="stack">
       <header className="page-header">
-        <p className="eyebrow">Canonical Task timeline</p>
+        <p className="eyebrow">Canonical Task telemetry</p>
         <h1>{heading}</h1>
-        <p>Task-scoped domain events and derived #16 telemetry read only through the versioned Control Plane.</p>
+        <p>
+          Task-scoped lifecycle activity and derived #16 telemetry read only through the
+          versioned Control Plane.
+        </p>
       </header>
 
       <DegradedState
         title="Task-scoped view"
-        detail="The current northbound observability contract enriches each canonical Task timeline. This page intentionally does not invent a global event store endpoint or read observability backends directly."
+        detail="The trace explorer is a read projection over canonical spans, timeline events and #76 accounting. It does not create a second lifecycle or telemetry authority."
       />
 
-      {taskError ? <ErrorState error={taskError} onRetry={() => void loadTasks()} /> : null}
+      {taskError ? (
+        <ErrorState error={taskError} onRetry={() => void loadTasks()} />
+      ) : null}
       <Card title="Task scope">
         {!tasks ? (
           <LoadingState />
@@ -97,34 +111,63 @@ export function ObservabilityPage({
           <div className="toolbar">
             <label>
               Task
-              <select value={selectedTaskId} onChange={(event) => setSelectedTaskId(event.target.value)}>
+              <select
+                value={selectedTaskId}
+                onChange={(event) => setSelectedTaskId(event.target.value)}
+              >
                 {tasks.items.map((task) => (
-                  <option key={task.id} value={task.id}>{task.title} — {task.id}</option>
+                  <option key={task.id} value={task.id}>
+                    {task.title} — {task.id}
+                  </option>
                 ))}
               </select>
             </label>
-            <button onClick={() => void loadTimeline()}>Refresh timeline</button>
+            <button onClick={() => void loadTimeline()}>Refresh</button>
           </div>
         )}
-        {selectedTask ? <p><AppLink href={`/tasks/${selectedTask.id}`}>Open Task</AppLink> · <CanonicalId value={selectedTask.id} /></p> : null}
+        {selectedTask ? (
+          <p>
+            <AppLink href={`/tasks/${selectedTask.id}`}>Open Task</AppLink> ·{" "}
+            <CanonicalId value={selectedTask.id} />
+          </p>
+        ) : null}
       </Card>
+
+      {view === "observability" ? (
+        <TraceExplorer client={client} taskId={selectedTaskId} />
+      ) : null}
 
       <div className="metrics">
         <Metric label="Timeline entries" value={timeline ? summary.total : "—"} />
         <Metric label="Domain events" value={timeline ? summary.domainEvents : "—"} />
         <Metric label="Telemetry" value={timeline ? summary.telemetryEntries : "—"} />
         <Metric label="Failures" value={timeline ? summary.failures : "—"} />
-        <Metric label="Components" value={timeline ? summary.components.length : "—"} />
+        <Metric
+          label="Components"
+          value={timeline ? summary.components.length : "—"}
+        />
       </div>
 
-      {timelineError ? <ErrorState error={timelineError} onRetry={() => void loadTimeline()} /> : null}
+      {timelineError ? (
+        <ErrorState error={timelineError} onRetry={() => void loadTimeline()} />
+      ) : null}
       <Card title="Timeline">
-        {timeline === null ? <LoadingState /> : timeline.length === 0 ? <EmptyState title="No timeline entries" /> : <TimelineTable items={timeline} />}
+        {timeline === null ? (
+          <LoadingState />
+        ) : timeline.length === 0 ? (
+          <EmptyState title="No timeline entries" />
+        ) : (
+          <TimelineTable items={timeline} />
+        )}
       </Card>
 
       {summary.components.length > 0 ? (
         <Card title="Observed components">
-          <div className="actions">{summary.components.map((component) => <StatusBadge key={component} value={component} />)}</div>
+          <div className="actions">
+            {summary.components.map((component) => (
+              <StatusBadge key={component} value={component} />
+            ))}
+          </div>
         </Card>
       ) : null}
     </div>
@@ -135,16 +178,44 @@ function TimelineTable({ items }: { items: TimelineItem[] }) {
   return (
     <div className="table-wrap">
       <table>
-        <thead><tr><th>Time</th><th>Entry</th><th>Kind</th><th>Context</th><th>Outcome</th><th>Duration</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Entry</th>
+            <th>Kind</th>
+            <th>Context</th>
+            <th>Outcome</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
         <tbody>
           {items.map((item) => (
             <tr key={item.id}>
               <td>{formatDate(timelineTimestamp(item))}</td>
-              <td><strong>{timelineName(item)}</strong><div><CanonicalId value={item.id} /></div></td>
-              <td><StatusBadge value={item.type === "event" ? "domain event" : "telemetry"} /></td>
+              <td>
+                <strong>{timelineName(item)}</strong>
+                <div>
+                  <CanonicalId value={item.id} />
+                </div>
+              </td>
+              <td>
+                <StatusBadge
+                  value={item.type === "event" ? "domain event" : "telemetry"}
+                />
+              </td>
               <td>{timelineContext(item)}</td>
-              <td>{isTelemetryEntry(item) ? <StatusBadge value={item.outcome} /> : "—"}</td>
-              <td>{isTelemetryEntry(item) ? formatDuration(item.duration_seconds) : "—"}</td>
+              <td>
+                {isTelemetryEntry(item) ? (
+                  <StatusBadge value={item.outcome} />
+                ) : (
+                  "—"
+                )}
+              </td>
+              <td>
+                {isTelemetryEntry(item)
+                  ? formatDuration(item.duration_seconds)
+                  : "—"}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -154,7 +225,12 @@ function TimelineTable({ items }: { items: TimelineItem[] }) {
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) {
-  return <div className="metric"><span>{label}</span><strong>{value}</strong></div>;
+  return (
+    <div className="metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
 }
 
 function formatDate(value: string): string {

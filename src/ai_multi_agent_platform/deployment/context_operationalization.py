@@ -73,6 +73,10 @@ from ai_multi_agent_platform.contracts import (
 )
 from ai_multi_agent_platform.data import LocalKnowledgeProvider, LocalMemoryProvider
 from ai_multi_agent_platform.kernel import EventSourcedRunRepository, EventSourcedTaskRepository
+from ai_multi_agent_platform.observability import (
+    ObservabilityInvocationObserver,
+    TraceHierarchy,
+)
 from ai_multi_agent_platform.research import ResearchService, SqliteResearchRepository
 from ai_multi_agent_platform.security import (
     AuthorizedDataFileProvider,
@@ -424,6 +428,7 @@ def install_single_node_context(
             run_bindings=run_bindings,
         )
 
+    trace_hierarchy = TraceHierarchy(base.telemetry)
     capability_turn = (
         None
         if egress is None
@@ -434,6 +439,7 @@ def install_single_node_context(
                 base.capabilities,
                 canonical_binding_hook=bind_canonical_capability_invocation,
                 classification_resolver=capability_classification,
+                observer=ObservabilityInvocationObserver(base.telemetry),
             ),
         )
     )
@@ -448,6 +454,7 @@ def install_single_node_context(
         binding_factory=binding_factory,
         skill_bundle_resolver=skill_bundle_resolver,
         capability_turn=capability_turn,
+        trace_hierarchy=trace_hierarchy,
     )
     authorized_lifecycle = AuthorizedLifecycleBackend(
         lifecycle,
