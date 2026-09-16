@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from typing import cast
 
+from ai_multi_agent_platform.control_plane import ActorContext, RequestContext
 from ai_multi_agent_platform.distribution import DistributionService
 from ai_multi_agent_platform.distribution.control_plane import RegistryCommandHandlers
 from ai_multi_agent_platform.distribution.items import RegistryItem
@@ -31,6 +33,8 @@ from ai_multi_agent_platform.onboarding.setup_registry_planning import (
 
 
 class _Distribution:
+    enabled = True
+
     def __init__(
         self,
         items: tuple[RegistryItem, ...],
@@ -68,6 +72,38 @@ class _Distribution:
         )
 
 
+class _Components:
+    def discovered_components(self):
+        return ()
+
+    def active_profile(self):
+        return None
+
+
+class _Onboarding:
+    def status(self, context):
+        del context
+        return {
+            "state": "needs_model",
+            "local_model_count": 0,
+            "self_hosted_model_count": 0,
+        }
+
+
+class _Commands:
+    def __init__(self) -> None:
+        self.activations: list[str] = []
+
+    async def preview(self, context, item_id, payload):
+        del context, payload
+        return {"item_id": item_id}
+
+    async def activate(self, context, item_id, payload):
+        del context, payload
+        self.activations.append(item_id)
+        return {"item_id": item_id}
+
+
 def _item(
     item_id: str,
     version: str,
@@ -91,18 +127,37 @@ def _item(
     )
 
 
-def _service(tmp_path, distribution: _Distribution) -> DependencyAwareBrowserFirstSetupService:
+def _service(
+    tmp_path,
+    distribution: _Distribution,
+    *,
+    commands: _Commands | None = None,
+) -> DependencyAwareBrowserFirstSetupService:
     return DependencyAwareBrowserFirstSetupService(
-        cast(OnboardingComponentSetupService, object()),
-        cast(OnboardingService, object()),
+        cast(OnboardingComponentSetupService, _Components()),
+        cast(OnboardingService, _Onboarding()),
         JsonSetupSessionStore(tmp_path / "setup-sessions.json"),
         distribution=cast(DistributionService, distribution),
-        registry_commands=cast(RegistryCommandHandlers, object()),
+        registry_commands=cast(RegistryCommandHandlers, commands or object()),
     )
 
 
 def _session(*selections: RegistrySelection) -> SetupSessionRecord:
     return SetupSessionRecord(principal_ref="user-1", registry_items=selections)
+
+
+def _context(key: str) -> RequestContext:
+    return RequestContext(
+        request_id=f"request:{key}",
+        correlation_id=f"correlation:{key}",
+        idempotency_key=key,
+        actor=ActorContext(
+            principal_ref="user-1",
+            owner_type="user",
+            owner_id="user-1",
+            actor_type="human",
+        ),
+    )
 
 
 def test_transitive_dependencies_are_planned_before_parent(tmp_path) -> None:
@@ -127,6 +182,38 @@ def test_transitive_dependencies_are_planned_before_parent(tmp_path) -> None:
     assert plan[1].dependencies == ("leaf@1.0",)
     assert plan[2].dependencies == ("middle@1.0",)
     assert {action.state for action in plan} == {ProvisioningActionState.PENDING}
+
+
+def test_targeted_parent_retry_expands_required_dependencies_in_plan_order(tmp_path) -> None:
+    leaf = _item("leaf", "1.0")
+    middle = _item(
+        "middle",
+        "1.0",
+        dependencies=(RegistryDependency("leaf"),),
+    )
+    root = _item(
+        "root",
+        "1.0",
+        dependencies=(RegistryDependency("middle"),),
+    )
+    commands = _Commands()
+    service = _service(
+        tmp_path,
+        _Distribution((root, middle, leaf)),
+        commands=commands,
+    )
+    service._sessions["user-1"] = _session(RegistrySelection(item_id="root", version="1.0"))
+
+    result = asyncio.run(
+        service.provision(
+            _context("targeted-root"),
+            "initial-setup",
+            {"action_ids": ["registry:root@1.0"]},
+        )
+    )
+
+    assert commands.activations == ["leaf", "middle", "root"]
+    assert result["outcome"]["state"] == "completed"
 
 
 def test_explicit_dependency_version_conflict_blocks_parent_before_mutation(tmp_path) -> None:
