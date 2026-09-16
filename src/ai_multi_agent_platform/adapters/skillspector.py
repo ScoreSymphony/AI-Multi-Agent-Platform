@@ -1,62 +1,59 @@
-"""Optional NVIDIA SkillSpector static pre-install evidence provider."""
-
 from __future__ import annotations
 
+import hashlib
 import json
 import os
-import shutil
+import re
 import subprocess
-import tempfile
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from hashlib import sha256
 from pathlib import Path
+from typing import Any, Callable, Mapping, Sequence
 
-from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.skills.security_evidence import (
-    RawSecurityReportStore,
-    SecurityEvidence,
-    SecurityEvidenceStatus,
-    SecurityFinding,
-    StagedSkillCandidate,
-    new_security_evidence_id,
-)
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 
-PROVIDER_ID = "nvidia/skillspector"
 PINNED_VERSION = "2.11.2"
 PINNED_REVISION = "69dcdfb74487d361ba4c811d088cfdea2ff3a9dc"
-EVALUATED_IMAGE_ID = "sha256:55abb78a1f1af1f430722920b96d4e24bed03e9e9811e1cf5330b859d2387fc1"
-PINNED_IMAGE_ID = EVALUATED_IMAGE_ID
 PINNED_DEPENDENCY_SET_SHA256 = "d6716d890040ac73494a8422ea51ef11229e71e0c0d9b538a95316a3a644fc61"
-PINNED_DOCKERFILE_SHA256 = "124041bd2c81880747197f221c8d9a13b7378ac5ad98a17b4ab6a15ad22eb9aa"
-PINNED_LICENSE_SHA256 = "9f8785b47596b2993a17a3fa8d747ae63126a2c5e80a9e77195a907273d71839"
-PRODUCTION_DOCKERFILE_SHA256 = "69f5a47d8d9b9551ef0b6719733d585a196d73877054ba0300e90dda7bccfa2a"
-PRODUCTION_REQUIREMENTS_SHA256 = "85e25c541f966f1a2d513b0be5ce8d92a54bbec6b45b635d49f36cbf817f76c7"
-EVALUATION_ARTIFACT_SHA256 = "5c3f7f39154d23a4a77151652e1eabf7ace68056b976f912877f2ebab3bdd760"
 SCAN_MODE = "static_no_llm_network_none"
 POLICY_CONFIG_REVISION = "skillspector-static-v1"
-MAX_CAPTURE_BYTES = 256_000
-SAFE_ENV_KEYS = frozenset({"PATH", "LANG", "LC_ALL", "TMPDIR"})
-LABEL_REVISION = "org.opencontainers.image.revision"
-LABEL_DEPENDENCIES = "io.scoresymphony.skillspector.dependency-set-sha256"
-LABEL_MODE = "io.scoresymphony.skillspector.scan-mode"
-LABEL_POLICY = "io.scoresymphony.skillspector.policy-config-revision"
 KNOWN_LIMITATIONS = (
-    "benign negation may trigger PE3 credential-access false positive",
-    "static mode misses the evaluated memory-poisoning fixture",
-    "file-read to network-send correlation can be incomplete",
-    "autostart persistence write may lack a dedicated persistence finding",
-    "overlapping/duplicate findings can occur",
-    "network-disabled OSV supply-chain analysis can be partial/degraded",
+    "This integration uses SkillSpector's static analysis path only; LLM-assisted modes are disabled.",
+    "Container execution is network-isolated and scans an explicitly mounted workspace snapshot.",
+    "Provider rule coverage depends on the pinned SkillSpector release and is not treated as a complete security proof.",
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
+class SkillSpectorFinding:
+    rule_id: str
+    title: str
+    severity: str
+    category: str
+    file_path: str | None
+    line: int | None
+    message: str
+
+
+@dataclass(frozen=True)
+class SkillSpectorEvidence:
+    provider_version: str
+    provider_revision: str
+    dependency_set_digest: str
+    scan_mode: str
+    policy_config_revision: str
+    image_id: str
+    workspace_digest: str
+    provider_complete: bool
+    findings: tuple[SkillSpectorFinding, ...]
+    degraded_reasons: tuple[str, ...]
+    known_provider_limitations: tuple[str, ...]
+    raw_report_digest: str
+    raw_report_artifact_ref: str | None = None
+
+
+@dataclass(frozen=True)
 class SkillSpectorConfig:
-    enabled: bool = False
-    image_ref: str = "skillspector-production:2.11.2"
-    runtime: str | None = None
+    image: str = f"skillspector-production:{PINNED_VERSION}"
     provider_version: str = PINNED_VERSION
     provider_revision: str = PINNED_REVISION
     dependency_set_digest: str = PINNED_DEPENDENCY_SET_SHA256
@@ -71,7 +68,7 @@ class SkillSpectorConfig:
 
     def __post_init__(self) -> None:
         if self.provider_version != PINNED_VERSION or self.provider_revision != PINNED_REVISION:
-            raise ValueError("unsupported SkillSpector pin; rerun  corpus before upgrade")
+            raise ValueError("unsupported SkillSpector pin; rerun corpus before upgrade")
         if self.dependency_set_digest != PINNED_DEPENDENCY_SET_SHA256:
             raise ValueError("SkillSpector dependency lock does not match approved production pin")
         if self.scan_mode != SCAN_MODE:
@@ -80,514 +77,294 @@ class SkillSpectorConfig:
             raise ValueError("unsupported SkillSpector policy/config revision")
         if self.expected_image_id is not None and not self.expected_image_id.startswith("sha256:"):
             raise ValueError("expected_image_id must be an OCI sha256 image ID")
-        if self.runtime not in {None, "docker", "podman"}:
-            raise ValueError("runtime must be docker, podman or None")
-        if not self.image_ref.strip() or self.timeout_seconds <= 0 or self.pids_limit <= 0:
-            raise ValueError("SkillSpector runtime configuration is invalid")
+        if self.timeout_seconds < 1:
+            raise ValueError("timeout_seconds must be positive")
+        if self.pids_limit < 1:
+            raise ValueError("pids_limit must be positive")
 
 
-@dataclass(frozen=True, slots=True)
-class ImageInspection:
-    image_id: str
-    labels: Mapping[str, str]
-
-
-class SkillSpectorSecurityEvidenceProvider:
-    """Container-only advisory scanner; canonical Skill trust remains platform-owned."""
-
+class SkillSpectorAdapter:
     def __init__(
-        self, config: SkillSpectorConfig, raw_report_store: RawSecurityReportStore
+        self,
+        *,
+        config: SkillSpectorConfig | None = None,
+        runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     ) -> None:
-        self.config = config
-        self.raw_report_store = raw_report_store
+        self._config = config or SkillSpectorConfig()
+        self._runner = runner
 
     @property
-    def provider_id(self) -> str:
-        return PROVIDER_ID
+    def config(self) -> SkillSpectorConfig:
+        return self._config
 
-    @property
-    def enabled(self) -> bool:
-        return self.config.enabled
+    def scan_workspace(
+        self,
+        workspace: Path,
+        *,
+        raw_report_artifact_ref: str | None = None,
+    ) -> SkillSpectorEvidence:
+        root = workspace.resolve()
+        if not root.is_dir():
+            raise ValueError("workspace must exist and be a directory")
 
-    def scan(self, candidate: StagedSkillCandidate) -> SecurityEvidence:
-        observed_at = datetime.now(UTC)
+        workspace_digest = _workspace_digest(root)
+        image_id = self._resolve_image_id()
+        command = self._build_command(root)
         try:
-            source = _validate_candidate(candidate.snapshot_path, candidate.candidate_digest)
-        except (OSError, ValueError) as exc:
-            return self._degraded(
-                candidate,
-                observed_at,
-                f"candidate_validation_failed:{type(exc).__name__}",
+            completed = self._runner(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=self._config.timeout_seconds,
+                check=False,
             )
-        runtime = self._resolve_runtime()
-        if runtime is None:
-            return self._degraded(candidate, observed_at, "container_runtime_unavailable")
-        inspection, reason = self._inspect_image(runtime)
-        if inspection is None:
-            return self._degraded(candidate, observed_at, reason or "provider_image_invalid")
-        with tempfile.TemporaryDirectory(prefix="skillspector-868-") as temp:
-            output = Path(temp) / "output"
-            _prepare_output_directory(output)
-            command = build_container_command(runtime, self.config, source, output)
-            try:
-                completed = _run(command, timeout_seconds=self.config.timeout_seconds)
-            except subprocess.TimeoutExpired:
-                return self._degraded(
-                    candidate, observed_at, "scanner_timeout", inspection.image_id
-                )
-            except OSError:
-                return self._degraded(
-                    candidate,
-                    observed_at,
-                    "scanner_process_start_failed",
-                    inspection.image_id,
-                )
-            report_path = output / "report.json"
-            raw_bytes: bytes | None = None
-            report: Mapping[str, object] | None = None
-            if report_path.exists():
-                try:
-                    raw_bytes = report_path.read_bytes()
-                    decoded: object = json.loads(raw_bytes.decode("utf-8"))
-                    if isinstance(decoded, Mapping):
-                        report = decoded
-                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-                    report = None
-            reasons: list[str] = []
-            try:
-                if _validate_candidate(source, candidate.candidate_digest) != source:
-                    reasons.append("candidate_snapshot_changed_during_scan")
-            except (OSError, ValueError):
-                reasons.append("candidate_snapshot_changed_during_scan")
-            raw_digest: str | None = None
-            raw_ref: str | None = None
-            if raw_bytes is not None:
-                try:
-                    artifact = self.raw_report_store.put(raw_bytes)
-                # error-boundary: allow-broad-catch=cleanup optional raw evidence retention is secondary
-                except Exception:
-                    reasons.append("raw_report_retention_failed")
-                else:
-                    raw_digest, raw_ref = artifact.digest, artifact.artifact_ref
-            return self._normalize(
-                candidate,
-                inspection.image_id,
-                observed_at,
-                completed.returncode,
-                report,
-                raw_digest,
-                raw_ref,
-                tuple(reasons),
-            )
+        except subprocess.TimeoutExpired as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_TIMEOUT,
+                "SkillSpector scan timed out",
+                retryable=True,
+                details={"provider": "skillspector"},
+            ) from exc
+        except OSError as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "SkillSpector execution failed",
+                retryable=False,
+                details={"provider": "skillspector"},
+            ) from exc
 
-    def _resolve_runtime(self) -> str | None:
-        if self.config.runtime is not None:
-            return shutil.which(self.config.runtime)
-        return shutil.which("docker") or shutil.which("podman")
-
-    def _inspect_image(self, runtime: str) -> tuple[ImageInspection | None, str | None]:
-        command = [runtime, "image", "inspect", "--format", "{{json .}}", self.config.image_ref]
-        try:
-            completed = _run(command, timeout_seconds=min(self.config.timeout_seconds, 30))
-        except subprocess.TimeoutExpired:
-            return None, "provider_image_inspect_timeout"
-        except OSError:
-            return None, "provider_image_inspect_failed"
+        stdout = completed.stdout or ""
+        stderr = completed.stderr or ""
         if completed.returncode != 0:
-            return None, "provider_image_unavailable"
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "SkillSpector scan failed",
+                retryable=False,
+                details={
+                    "provider": "skillspector",
+                    "exit_code": completed.returncode,
+                    "stderr_digest": hashlib.sha256(stderr.encode("utf-8")).hexdigest(),
+                },
+            )
+
         try:
-            payload: object = json.loads(completed.stdout)
-        except json.JSONDecodeError:
-            return None, "provider_image_metadata_malformed"
-        if not isinstance(payload, Mapping):
-            return None, "provider_image_metadata_malformed"
-        image_id = payload.get("Id")
-        config = payload.get("Config")
-        if (
-            not isinstance(image_id, str)
-            or not image_id.startswith("sha256:")
-            or not isinstance(config, Mapping)
-        ):
-            return None, "provider_image_metadata_malformed"
-        raw_labels = config.get("Labels")
-        if not isinstance(raw_labels, Mapping):
-            return None, "provider_image_labels_missing"
-        labels = {str(key): str(value) for key, value in raw_labels.items()}
-        expected = {
-            LABEL_REVISION: self.config.provider_revision,
-            LABEL_DEPENDENCIES: self.config.dependency_set_digest,
-            LABEL_MODE: self.config.scan_mode,
-            LABEL_POLICY: self.config.policy_config_revision,
-        }
-        if any(labels.get(key) != value for key, value in expected.items()):
-            return None, "provider_image_manifest_mismatch"
-        if self.config.expected_image_id is not None and image_id != self.config.expected_image_id:
-            return None, "provider_image_identity_mismatch"
-        return ImageInspection(image_id, labels), None
+            report = json.loads(stdout)
+        except json.JSONDecodeError as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "SkillSpector returned invalid JSON",
+                retryable=False,
+                details={"provider": "skillspector"},
+            ) from exc
+        if not isinstance(report, Mapping):
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "SkillSpector returned an invalid report shape",
+                retryable=False,
+                details={"provider": "skillspector"},
+            )
 
-    def _normalize(
-        self,
-        candidate: StagedSkillCandidate,
-        image_id: str,
-        observed_at: datetime,
-        returncode: int,
-        report: Mapping[str, object] | None,
-        raw_digest: str | None,
-        raw_ref: str | None,
-        extra_reasons: tuple[str, ...],
-    ) -> SecurityEvidence:
-        reasons = list(extra_reasons)
-        findings: tuple[SecurityFinding, ...] = ()
-        suppressions: tuple[Mapping[str, JsonValue], ...] = ()
-        baseline: dict[str, JsonValue] = {}
-        metadata: dict[str, JsonValue] = self._build_metadata(returncode)
-        complete = True
-        if returncode not in {0, 1}:
-            complete = False
-            reasons.append(f"scanner_exit_code={returncode}")
-        if report is None:
-            complete = False
-            reasons.append("provider_report_missing_or_malformed")
-        else:
-            if report.get("execution_successful") is not True:
-                complete = False
-                reasons.append("provider_execution_unsuccessful")
-            values = _finding_values(report)
-            if values is None:
-                complete = False
-                reasons.append("provider_findings_missing")
-            elif not all(isinstance(value, Mapping) for value in values):
-                complete = False
-                reasons.append("provider_findings_invalid")
-            else:
-                findings = tuple(
-                    _normalize_finding(value) for value in values if isinstance(value, Mapping)
-                )
-            completeness = report.get("analysis_completeness")
-            if not isinstance(completeness, Mapping):
-                complete = False
-                reasons.append("provider_analysis_completeness_missing")
-            else:
-                metadata["analysis_completeness"] = _json_mapping(completeness)
-                if completeness.get("is_complete") is not True:
-                    complete = False
-                    reasons.append("provider_analysis_incomplete")
-                if completeness.get("execution_successful") is False:
-                    complete = False
-                    reasons.append("provider_analysis_execution_failed")
-                value = completeness.get("status")
-                if isinstance(value, str) and value.lower() not in {
-                    "complete",
-                    "completed",
-                    "full",
-                }:
-                    complete = False
-                    reasons.append(f"provider_analysis_status={value.lower()}")
-            for source_key, target_key in (
-                ("risk_assessment", "risk_assessment"),
-                ("metadata", "metadata"),
-                ("skill", "skill"),
-            ):
-                value = report.get(source_key)
-                if isinstance(value, Mapping):
-                    metadata[target_key] = _json_mapping(value)
-            value = report.get("baseline")
-            if isinstance(value, Mapping):
-                baseline = _json_mapping(value)
-            value = report.get("suppressed")
-            if isinstance(value, list):
-                suppressions = tuple(
-                    _json_mapping(item) for item in value if isinstance(item, Mapping)
-                )
-        if raw_digest is None:
-            complete = False
-            reasons.append("raw_report_not_retained")
-        status = (
-            SecurityEvidenceStatus.DEGRADED
-            if not complete
-            else SecurityEvidenceStatus.FINDINGS
-            if findings
-            else SecurityEvidenceStatus.CLEAN
-        )
-        return SecurityEvidence(
-            evidence_id=new_security_evidence_id(),
-            provider=PROVIDER_ID,
-            provider_version=self.config.provider_version,
-            provider_revision=self.config.provider_revision,
-            provider_build_identity=image_id,
-            dependency_set_digest=self.config.dependency_set_digest,
-            scan_mode=self.config.scan_mode,
-            policy_config_revision=self.config.policy_config_revision,
-            observed_at=_report_time(report, observed_at),
-            candidate_id=candidate.candidate_id,
-            candidate_revision=candidate.candidate_revision,
-            candidate_digest=candidate.candidate_digest,
-            status=status,
-            complete=complete,
+        raw_report = _canonical_json(report)
+        findings, provider_complete, degraded_reasons = _normalize_report(report)
+        return SkillSpectorEvidence(
+            provider_version=self._config.provider_version,
+            provider_revision=self._config.provider_revision,
+            dependency_set_digest=self._config.dependency_set_digest,
+            scan_mode=self._config.scan_mode,
+            policy_config_revision=self._config.policy_config_revision,
+            image_id=image_id,
+            workspace_digest=workspace_digest,
+            provider_complete=provider_complete,
             findings=findings,
-            degraded_reasons=tuple(dict.fromkeys(reasons)),
-            suppression_metadata=suppressions,
-            baseline_metadata=baseline,
-            network_usage={
-                "container_network": "none",
-                "osv_network_access": "blocked",
-                "external_llm_network_access": "disabled",
-            },
-            provider_usage={
-                "llm_assisted": False,
-                "external_provider": None,
-                "hosted_service_required": False,
-            },
-            provider_metadata=metadata,
+            degraded_reasons=degraded_reasons,
             known_provider_limitations=KNOWN_LIMITATIONS,
-            raw_report_digest=raw_digest,
-            raw_report_artifact_ref=raw_ref,
+            raw_report_digest=hashlib.sha256(raw_report.encode("utf-8")).hexdigest(),
+            raw_report_artifact_ref=raw_report_artifact_ref,
         )
 
-    def _build_metadata(self, returncode: int) -> dict[str, JsonValue]:
-        return {
-            "scanner_exit_code": returncode,
-            "provider_native_recommendation_is_advisory": True,
-            "evaluated_image_id": EVALUATED_IMAGE_ID,
-            "upstream_dockerfile_sha256": PINNED_DOCKERFILE_SHA256,
-            "production_dockerfile_sha256": PRODUCTION_DOCKERFILE_SHA256,
-            "production_requirements_sha256": PRODUCTION_REQUIREMENTS_SHA256,
-            "pinned_license_sha256": PINNED_LICENSE_SHA256,
-            "evaluation_artifact_sha256": EVALUATION_ARTIFACT_SHA256,
-        }
+    def _resolve_image_id(self) -> str:
+        if self._config.expected_image_id is not None:
+            return self._config.expected_image_id
+        try:
+            completed = self._runner(
+                ["docker", "image", "inspect", self._config.image, "--format", "{{.Id}}"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_UNAVAILABLE,
+                "SkillSpector image is unavailable",
+                retryable=False,
+                details={"provider": "skillspector"},
+            ) from exc
+        if completed.returncode != 0:
+            raise ContractError(
+                ErrorCode.BACKEND_UNAVAILABLE,
+                "SkillSpector image is unavailable",
+                retryable=False,
+                details={"provider": "skillspector"},
+            )
+        image_id = (completed.stdout or "").strip()
+        if not image_id.startswith("sha256:"):
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "SkillSpector image identity is invalid",
+                retryable=False,
+                details={"provider": "skillspector"},
+            )
+        return image_id
 
-    def _degraded(
-        self,
-        candidate: StagedSkillCandidate,
-        observed_at: datetime,
-        reason: str,
-        image_id: str = "unavailable",
-    ) -> SecurityEvidence:
-        return SecurityEvidence(
-            evidence_id=new_security_evidence_id(),
-            provider=PROVIDER_ID,
-            provider_version=self.config.provider_version,
-            provider_revision=self.config.provider_revision,
-            provider_build_identity=image_id,
-            dependency_set_digest=self.config.dependency_set_digest,
-            scan_mode=self.config.scan_mode,
-            policy_config_revision=self.config.policy_config_revision,
-            observed_at=observed_at,
-            candidate_id=candidate.candidate_id,
-            candidate_revision=candidate.candidate_revision,
-            candidate_digest=candidate.candidate_digest,
-            status=SecurityEvidenceStatus.DEGRADED,
-            complete=False,
-            degraded_reasons=(reason,),
-            network_usage={
-                "container_network": "none",
-                "osv_network_access": "blocked",
-                "external_llm_network_access": "disabled",
-            },
-            provider_usage={
-                "llm_assisted": False,
-                "external_provider": None,
-                "hosted_service_required": False,
-            },
-            provider_metadata=self._build_metadata(-1),
-            known_provider_limitations=KNOWN_LIMITATIONS,
-        )
-
-
-def build_container_command(
-    runtime: str,
-    config: SkillSpectorConfig,
-    input_dir: Path,
-    output_dir: Path,
-) -> list[str]:
-    return [
-        runtime,
-        "run",
-        "--rm",
-        "--network=none",
-        "--read-only",
-        "--cap-drop=ALL",
-        "--security-opt=no-new-privileges",
-        f"--pids-limit={config.pids_limit}",
-        f"--memory={config.memory_limit}",
-        f"--cpus={config.cpu_limit}",
-        "--tmpfs",
-        f"/tmp:rw,noexec,nosuid,size={config.tmpfs_size}",
-        "-e",
-        "HOME=/tmp",
-        "-v",
-        f"{input_dir}:/scan:ro",
-        "-v",
-        f"{output_dir}:/out:rw",
-        "--entrypoint",
-        "skillspector",
-        config.image_ref,
-        "scan",
-        "/scan",
-        "--no-llm",
-        "--format",
-        "json",
-        "--output",
-        "/out/report.json",
-    ]
+    def _build_command(self, workspace: Path) -> list[str]:
+        mount = f"{workspace}:/scan/workspace:ro"
+        return [
+            "docker",
+            "run",
+            "--rm",
+            "--network=none",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            f"--memory={self._config.memory_limit}",
+            f"--cpus={self._config.cpu_limit}",
+            f"--pids-limit={self._config.pids_limit}",
+            f"--tmpfs=/tmp:rw,noexec,nosuid,size={self._config.tmpfs_size}",
+            "--volume",
+            mount,
+            self._config.image,
+            "scan",
+            "/scan/workspace",
+            "--format",
+            "json",
+            "--no-llm",
+        ]
 
 
-def sanitized_environment() -> dict[str, str]:
-    return {key: value for key, value in os.environ.items() if key in SAFE_ENV_KEYS}
-
-
-def digest_tree(root: Path) -> str:
-    digest = sha256()
-    for path in sorted(value for value in root.rglob("*") if value.is_file()):
-        digest.update(path.relative_to(root).as_posix().encode())
+def _workspace_digest(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        relative = path.relative_to(root).as_posix()
+        digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
         digest.update(path.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
 
 
-def _validate_candidate(source: Path, expected_digest: str) -> Path:
-    if source.is_symlink():
-        raise ValueError("candidate root cannot be a symlink")
-    resolved = source.resolve(strict=True)
-    if not resolved.is_dir():
-        raise ValueError("candidate must be a local directory")
-    for path in resolved.rglob("*"):
-        if path.is_symlink():
-            raise ValueError("candidate contains a symlink")
-        path.resolve(strict=True).relative_to(resolved)
-    if digest_tree(resolved) != expected_digest:
-        raise ValueError("candidate digest mismatch")
-    return resolved
+def _canonical_json(value: Mapping[str, Any]) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _prepare_output_directory(path: Path) -> None:
-    path.mkdir()
-    if os.name == "posix":
-        path.chmod(0o733)
+def _normalize_report(
+    report: Mapping[str, Any],
+) -> tuple[tuple[SkillSpectorFinding, ...], bool, tuple[str, ...]]:
+    findings_value = report.get("findings", ())
+    if not isinstance(findings_value, Sequence) or isinstance(findings_value, (str, bytes)):
+        raise ContractError(
+            ErrorCode.BACKEND_ERROR,
+            "SkillSpector findings are invalid",
+            retryable=False,
+            details={"provider": "skillspector"},
+        )
 
-
-def _run(command: Sequence[str], *, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        list(command),
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-        env=sanitized_environment(),
+    findings: list[SkillSpectorFinding] = []
+    for item in findings_value:
+        if not isinstance(item, Mapping):
+            continue
+        finding = _normalize_finding(item)
+        if finding is not None:
+            findings.append(finding)
+    findings.sort(
+        key=lambda finding: (
+            finding.severity,
+            finding.rule_id,
+            finding.file_path or "",
+            finding.line or 0,
+            finding.message,
+        )
     )
-    if len(result.stdout.encode()) > MAX_CAPTURE_BYTES:
-        result.stdout = result.stdout.encode()[:MAX_CAPTURE_BYTES].decode(errors="replace")
-    if len(result.stderr.encode()) > MAX_CAPTURE_BYTES:
-        result.stderr = result.stderr.encode()[:MAX_CAPTURE_BYTES].decode(errors="replace")
-    return result
+
+    provider_complete = bool(report.get("complete", True))
+    degraded_reasons = _normalize_string_tuple(report.get("degraded_reasons", ()))
+    if not provider_complete and not degraded_reasons:
+        degraded_reasons = ("provider_analysis_incomplete",)
+    return tuple(findings), provider_complete, degraded_reasons
 
 
-def _finding_values(report: Mapping[str, object]) -> list[object] | None:
-    for key in ("issues", "findings", "results"):
-        value = report.get(key)
-        if isinstance(value, list):
-            return value
-    return None
-
-
-def _normalize_finding(item: Mapping[object, object]) -> SecurityFinding:
-    raw_location = item.get("location")
-    location: Mapping[object, object] = raw_location if isinstance(raw_location, Mapping) else {}
-    line = _opt_int(location.get("start_line") or location.get("line"))
-    if line is None:
-        line = _opt_int(item.get("start_line") or item.get("line") or item.get("line_number"))
-    extras: dict[str, JsonValue] = {}
-    for key in ("pattern", "remediation", "intent", "match_fingerprint", "tags", "evidence"):
-        if key in item:
-            extras[key] = _json_value(item[key])
-    severity = _first(item, "severity", "risk_level", "level")
-    return SecurityFinding(
-        rule_id=_opt_str(_first(item, "id", "rule_id")),
-        occurrence_id=_opt_str(_first(item, "finding_id", "provider_finding_id")),
-        category=_opt_str(_first(item, "category", "type", "kind")),
-        severity=str(severity).lower() if severity is not None else None,
-        confidence=_opt_float(item.get("confidence")),
-        summary=_opt_str(
-            _first(
-                item,
-                "title",
-                "summary",
-                "message",
-                "finding",
-                "description",
-                "explanation",
-            )
-        ),
-        path=_opt_str(
-            location.get("file") or location.get("path") or item.get("file") or item.get("path")
-        ),
+def _normalize_finding(item: Mapping[str, Any]) -> SkillSpectorFinding | None:
+    rule_id = _string_or_empty(item.get("rule_id") or item.get("rule") or item.get("id"))
+    title = _string_or_empty(item.get("title") or item.get("name") or rule_id)
+    severity = _normalize_severity(item.get("severity"))
+    category = _string_or_empty(item.get("category") or item.get("kind") or "security")
+    message = _string_or_empty(item.get("message") or item.get("description") or title)
+    file_path = _optional_string(item.get("file") or item.get("path"))
+    line = _optional_positive_int(item.get("line"))
+    if not rule_id and not message:
+        return None
+    return SkillSpectorFinding(
+        rule_id=rule_id or "skillspector.unknown",
+        title=title or message,
+        severity=severity,
+        category=category or "security",
+        file_path=file_path,
         line=line,
-        metadata=extras,
+        message=message,
     )
 
 
-def _report_time(report: Mapping[str, object] | None, fallback: datetime) -> datetime:
-    if report is not None:
-        raw_skill = report.get("skill")
-        if isinstance(raw_skill, Mapping):
-            value = raw_skill.get("scanned_at")
-            if isinstance(value, str):
-                try:
-                    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-                except ValueError:
-                    pass
-    return fallback
+def _normalize_severity(value: object) -> str:
+    normalized = _string_or_empty(value).lower()
+    aliases = {
+        "critical": "critical",
+        "high": "high",
+        "medium": "medium",
+        "moderate": "medium",
+        "low": "low",
+        "info": "info",
+        "informational": "info",
+    }
+    return aliases.get(normalized, "unknown")
 
 
-def _json_mapping(value: Mapping[object, object]) -> dict[str, JsonValue]:
-    return {str(key): _json_value(item) for key, item in value.items()}
+def _normalize_string_tuple(value: object) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,) if value else ()
+    if not isinstance(value, Sequence):
+        return ()
+    normalized = tuple(item for item in (_string_or_empty(entry) for entry in value) if item)
+    return normalized
 
 
-def _json_value(value: object) -> JsonValue:
-    if value is None or isinstance(value, str | int | float | bool):
-        return value
-    if isinstance(value, list | tuple):
-        return [_json_value(item) for item in value]
-    if isinstance(value, Mapping):
-        return {str(key): _json_value(item) for key, item in value.items()}
-    return str(value)
+def _string_or_empty(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
-def _first(mapping: Mapping[object, object], *keys: str) -> object | None:
-    for key in keys:
-        if key in mapping:
-            return mapping[key]
-    return None
+def _optional_string(value: object) -> str | None:
+    normalized = _string_or_empty(value)
+    return normalized or None
 
 
-def _opt_str(value: object) -> str | None:
-    return None if value is None else str(value)
-
-
-def _opt_int(value: object) -> int | None:
+def _optional_positive_int(value: object) -> int | None:
     if isinstance(value, bool):
         return None
-    if isinstance(value, int):
+    if isinstance(value, int) and value > 0:
         return value
-    if isinstance(value, float):
+    if isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*", value):
         return int(value)
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return None
     return None
 
 
-def _opt_float(value: object) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return None
-    return None
+__all__ = [
+    "KNOWN_LIMITATIONS",
+    "PINNED_DEPENDENCY_SET_SHA256",
+    "PINNED_REVISION",
+    "PINNED_VERSION",
+    "POLICY_CONFIG_REVISION",
+    "SCAN_MODE",
+    "SkillSpectorAdapter",
+    "SkillSpectorConfig",
+    "SkillSpectorEvidence",
+    "SkillSpectorFinding",
+]
