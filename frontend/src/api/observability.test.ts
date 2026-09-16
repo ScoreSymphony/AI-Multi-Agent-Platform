@@ -24,9 +24,9 @@ const items: TimelineItem[] = [
     id: "telemetry_123e4567-e89b-42d3-a456-426614174021",
     type: "telemetry",
     event_name: "executor.completed",
-    component: "executor",
+    component: "execution",
     timestamp: "2026-09-03T02:00:01+00:00",
-    outcome: "success",
+    outcome: "succeeded",
     duration_seconds: 0.25,
     failure: null,
     context: {},
@@ -36,11 +36,15 @@ const items: TimelineItem[] = [
     id: "telemetry_123e4567-e89b-42d3-a456-426614174022",
     type: "telemetry",
     event_name: "model.failed",
-    component: "model",
+    component: "model_provider_router",
     timestamp: "2026-09-03T02:00:02+00:00",
     outcome: "failed",
     duration_seconds: 1.5,
-    failure: { component: "model", code: "provider_error", retryable: true },
+    failure: {
+      component: "model_provider_router",
+      code: "provider_error",
+      retryable: true,
+    },
     context: {},
     attributes: {},
   },
@@ -53,13 +57,13 @@ describe("task timeline observability helpers", () => {
       domainEvents: 1,
       telemetryEntries: 2,
       failures: 1,
-      components: ["executor", "model"],
+      components: ["execution", "model_provider_router"],
     });
   });
 
   it("normalizes display metadata without exposing payloads or adapter fields", () => {
     expect(timelineName(items[0]!)).toBe("task.created");
     expect(timelineTimestamp(items[1]!)).toBe("2026-09-03T02:00:01+00:00");
-    expect(timelineContext(items[2]!)).toBe("model");
+    expect(timelineContext(items[2]!)).toBe("model_provider_router");
   });
 });
