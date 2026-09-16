@@ -5,9 +5,12 @@ on:
   pull_request:
     paths:
       - ".github/workflows/swe-rex-evaluation.yml"
-      - "scripts/benchmarks/issue861_swe_rex_live.py"
-      - "scripts/benchmarks/issue861_swe_rex_canonical.py"
-      - "scripts/benchmarks/issue861_swe_rex_remote.py"
+      - "scripts/benchmarks/swe_rex_live_evidence.py"
+      - "scripts/benchmarks/swe_rex_canonical_evidence.py"
+      - "scripts/benchmarks/swe_rex_remote_evidence.py"
+      - "tests/evidence/issue_861/swe_rex_live_harness.py"
+      - "tests/evidence/issue_861/swe_rex_canonical_harness.py"
+      - "tests/evidence/issue_861/swe_rex_remote_harness.py"
       - "src/ai_multi_agent_platform/adapters/swe_rex.py"
       - "tests/contract/execution/test_swe_rex_executor.py"
       - "docs/upstream/SWE_REX_*.md"
@@ -47,7 +50,7 @@ jobs:
       - name: Run supported local runtime evidence
         if: ${{ !matrix.experimental }}
         run: >-
-          python scripts/benchmarks/issue861_swe_rex_live.py
+          python scripts/benchmarks/swe_rex_live_evidence.py
           --backend local
           --output "swe-rex-local-${{ runner.os }}.json"
       - name: Run supported canonical Executor bridge evidence
@@ -55,7 +58,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: >-
-          python scripts/benchmarks/issue861_swe_rex_canonical.py
+          python scripts/benchmarks/swe_rex_canonical_evidence.py
           --backend local
           --output "swe-rex-canonical-local-${{ runner.os }}.json"
       - name: Assert native Windows local unsupported evidence
@@ -63,10 +66,10 @@ jobs:
         shell: pwsh
         run: |
           $output = "swe-rex-local-${{ runner.os }}.json"
-          python scripts/benchmarks/issue861_swe_rex_live.py --backend local --output $output
+          python scripts/benchmarks/swe_rex_live_evidence.py --backend local --output $output
           $probeExit = $LASTEXITCODE
           if ($probeExit -eq 0) {
-            throw "Native Windows LocalDeployment unexpectedly passed; update #861 evidence before merging."
+            throw "Native Windows LocalDeployment unexpectedly passed; update SWE-ReX Windows support evidence before merging."
           }
 
           $evidence = Get-Content $output -Raw | ConvertFrom-Json
@@ -98,7 +101,7 @@ jobs:
     timeout-minutes: 10
     continue-on-error: true
     env:
-      ISSUE861_SWEREX_IMAGE: issue861-swerex:5c995c365dfb1fd5bc56fda688be5d8538f9931f
+      SWEREX_EVIDENCE_IMAGE: swe-rex-evidence:5c995c365dfb1fd5bc56fda688be5d8538f9931f
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -114,7 +117,7 @@ jobs:
       - name: Build pinned SWE-ReX server image
         shell: bash
         run: |
-          cat > /tmp/issue861-swe-rex.Dockerfile <<'EOF'
+          cat > /tmp/swe-rex-evidence.Dockerfile <<'EOF'
           FROM python:3.11-slim
           ARG SWE_REX_REVISION
           RUN python -m pip install --no-cache-dir \
@@ -123,20 +126,20 @@ jobs:
           EOF
           docker build \
             --build-arg SWE_REX_REVISION=5c995c365dfb1fd5bc56fda688be5d8538f9931f \
-            --tag "$ISSUE861_SWEREX_IMAGE" \
-            --file /tmp/issue861-swe-rex.Dockerfile \
+            --tag "$SWEREX_EVIDENCE_IMAGE" \
+            --file /tmp/swe-rex-evidence.Dockerfile \
             .
-          docker image inspect "$ISSUE861_SWEREX_IMAGE" --format '{{.Id}}'
+          docker image inspect "$SWEREX_EVIDENCE_IMAGE" --format '{{.Id}}'
       - name: Run Docker runtime evidence
         run: >-
-          python scripts/benchmarks/issue861_swe_rex_live.py
+          python scripts/benchmarks/swe_rex_live_evidence.py
           --backend docker
           --output swe-rex-docker.json
       - name: Run canonical Executor bridge evidence
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: >-
-          python scripts/benchmarks/issue861_swe_rex_canonical.py
+          python scripts/benchmarks/swe_rex_canonical_evidence.py
           --backend docker
           --output swe-rex-canonical-docker.json
       - name: Upload Docker evidence
@@ -168,7 +171,7 @@ jobs:
           "aiohttp>=3.11,<4"
       - name: Run remote loopback evidence
         run: >-
-          python scripts/benchmarks/issue861_swe_rex_remote.py
+          python scripts/benchmarks/swe_rex_remote_evidence.py
           --output swe-rex-remote-loopback.json
       - name: Upload remote evidence
         if: always()
