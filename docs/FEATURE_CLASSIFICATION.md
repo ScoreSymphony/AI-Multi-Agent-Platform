@@ -115,7 +115,7 @@ Role, stability, enablement and conformance evidence are separate dimensions.
 
 A Stable Optional / Advanced capability can still be absent from the baseline profile. Conversely, a Core Beta capability can be required by an operational profile while its public contract is still evolving.
 
-Compatibility must never be inferred from a role label alone. #46-style evidence remains required for concrete profile/version claims.
+Compatibility must never be inferred from a role label alone. Profile-specific conformance evidence remains required for concrete profile/version claims.
 
 ## Current major public-surface audit
 

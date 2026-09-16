@@ -137,4 +137,4 @@ This startup slice does **not** close #707. Remaining reliability work includes,
 - health/readiness integration while reconciliation is in progress;
 - operator diagnostics beyond the startup report;
 - repeated hard-kill/restart endurance testing;
-- reusable failure-injection fixtures and #46 reliability evidence.
+- reusable failure-injection fixtures and platform-conformance reliability evidence.

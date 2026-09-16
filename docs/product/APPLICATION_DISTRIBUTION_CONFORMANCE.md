@@ -1,6 +1,6 @@
 # Application distribution conformance
 
-This document defines the maintained application-distribution acceptance evidence introduced by issue #751. It is intentionally narrower than the platform-wide #46 conformance suite: #46 should consume this fixture set rather than reimplement provider, Control Plane, authorization, distributed-build or release-gate semantics.
+This document defines the maintained application-distribution acceptance evidence introduced by issue #751. It is intentionally narrower than the platform-wide conformance suite, historically tracked under issue #46; that suite should consume this fixture set rather than reimplement provider, Control Plane, authorization, distributed-build or release-gate semantics.
 
 The required suite is network-independent, uses no production credential and requires no paid external service.
 
@@ -83,7 +83,7 @@ The #751 Control Plane fixture additionally proves that admitted Worker/Node run
 
 ## Consumed #750 release-gate evidence
 
-#750 is complete. The canonical Verification/Evaluation release-gate fixtures remain authoritative and are consumed by #751/#46 rather than mocked away:
+#750 is complete. The canonical Verification/Evaluation release-gate fixtures remain authoritative and are consumed by #751 and the platform-wide conformance suite rather than mocked away:
 
 - `tests/integration/application_distribution/test_release_gate_provenance.py`
 - `tests/integration/application_distribution/test_release_gate_verification_restart.py`
@@ -104,9 +104,9 @@ The acceptance suite uses recognizable fixture secrets. Required evidence is spl
 
 The GitHub reference provider does not emit a separate application-domain event or structured log containing the resolved token. If future provider instrumentation adds such surfaces, the recognizable-value scan must be extended to those emitted records rather than relying only on field-name assertions.
 
-## #46 consumption
+## Platform-conformance consumption
 
-The platform-wide #46 suite should treat the following as the application-distribution acceptance bundle:
+The platform-wide conformance suite should treat the following as the application-distribution acceptance bundle:
 
 ```text
 tests/integration/application_distribution/test_github_conformance.py

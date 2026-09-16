@@ -21,7 +21,7 @@ Removing or demoting an adapter must never make a surviving vendor/runtime canon
 | Tier | Meaning | Compatibility expectation |
 | --- | --- | --- |
 | `reference` | Platform-owned deterministic/local baseline used to prove a contract and keep the reference product functional. | Must have maintained deterministic evidence and must not require a recurring paid service. |
-| `supported` | Maintained optional implementation with a real product use/profile and an identified contract, integration, or #46-style conformance path. | The compatibility claim is valid only for the concrete profile/version whose evidence passes. |
+| `supported` | Maintained optional implementation with a real product use/profile and an identified contract, integration, or platform-conformance path. | The compatibility claim is valid only for the concrete profile/version whose evidence passes. |
 | `experimental` | First-party implementation kept for evaluation, prerelease protocol work, or evidence gathering. | Opt-in. Existence and unit/contract tests do **not** constitute a production compatibility claim. |
 | `deprecated` | First-party implementation scheduled for removal or consolidation. | Must publish a migration path and removal criterion/target before deletion. |
 | `external` | Public-contract implementation maintained outside core. | Core preserves the public contract under its versioning policy but does not own implementation compatibility. |
@@ -153,7 +153,7 @@ Treating these as separate providers would inflate the support matrix without cr
 
 An implementation can be `supported` only when the matrix names an evidence path. For external/upstream-backed implementations, the claim is scoped to the tested profile/revision; “adapter exists” is not enough.
 
-The platform-wide #46 layer remains the aggregator for end-to-end compatibility claims. Focused contract/integration tests remain owned by their subsystem. #904 does not duplicate those suites: it maps support claims to them and fails closed when a supported entry lacks evidence.
+The platform-wide conformance layer remains the aggregator for end-to-end compatibility claims. Issue #46 is retained as the historical tracking record for that gate. Focused contract/integration tests remain owned by their subsystem. #904 does not duplicate those suites: it maps support claims to them and fails closed when a supported entry lacks evidence.
 
 In particular:
 

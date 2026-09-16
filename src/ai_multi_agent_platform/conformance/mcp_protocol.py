@@ -319,7 +319,7 @@ def missing_mcp_protocol_evidence(
     platform: MCPPlatformProfileEvidence,
     additional_profiles: tuple[MCPCompatibilityProfileEvidence, ...] = (),
 ) -> MCPCompatibilityEvidence:
-    """Represent a #46 MCP platform result with no official proof for that exact profile."""
+    """Represent an MCP conformance result with no official proof for that exact profile."""
 
     evidence = MCPCompatibilityEvidence(
         schema=MCP_COMPATIBILITY_EVIDENCE_SCHEMA,
