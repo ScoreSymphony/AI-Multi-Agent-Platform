@@ -275,6 +275,7 @@ class ControlPlaneASGI:
             nonlocal started, event_stream, send_failed
             try:
                 await send(message)
+            # error-boundary: allow-broad-catch=boundary ASGI send passthrough
             except Exception:
                 send_failed = True
                 raise
