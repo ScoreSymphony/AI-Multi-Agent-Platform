@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
+from importlib import import_module
 from math import isfinite
 from typing import Any
 from uuid import uuid4
@@ -249,6 +250,16 @@ class BudgetAdmissionDecision:
     @property
     def permitted(self) -> bool:
         return self.outcome in {BudgetAdmissionOutcome.ALLOWED, BudgetAdmissionOutcome.WARNING}
+
+
+def __getattr__(name: str) -> Any:
+    """Compatibility-load store-owned claims for dynamic deployment bindings."""
+
+    if name != "ReservationClaim":
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(".store", __package__), name)
+    globals()[name] = value
+    return value
 
 
 __all__ = [
