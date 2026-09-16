@@ -103,9 +103,9 @@ This does not make any object-store product canonical. Local filesystem remains 
 
 The repository contains the deterministic capture, summarization and verification tooling prepared by #862:
 
-- `scripts/benchmarks/run_issue862_storage_vps_capture.sh`;
-- `scripts/benchmarks/summarize_issue862_storage_vps_capture.py`;
-- `scripts/benchmarks/verify_issue862_storage_vps_capture.py`.
+- `scripts/benchmarks/run_storage_vps_capture.sh`;
+- `scripts/benchmarks/summarize_storage_vps_capture.py`;
+- `scripts/benchmarks/verify_storage_vps_capture.py`.
 
 Those tools compare local filesystem, RustFS, Garage and SeaweedFS; capture host/runtime identity, resource observations, workload timing and disk state; pin exact runtime repository digests; reject stale evidence directories; verify evidence/archive hashes; and refuse GitHub-hosted Actions runs as ordinary reference-host evidence.
 

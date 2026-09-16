@@ -12,6 +12,7 @@ from scripts.ci.validate_permanent_naming import (  # noqa: E402
     changed_targets,
     path_violations,
     source_violations,
+    workflow_violations,
 )
 
 
@@ -40,6 +41,7 @@ def test_issue_numbered_permanent_path_is_rejected() -> None:
     changes = (
         ChangedPath("A", "scripts/ci/issue123_release_gate.py"),
         ChangedPath("A", "src/package/issue_123/__init__.py"),
+        ChangedPath("A", ".github/workflows/issue-123-release.yml"),
     )
 
     assert path_violations(changes) == (
@@ -47,14 +49,30 @@ def test_issue_numbered_permanent_path_is_rejected() -> None:
         "not a GitHub issue number",
         "src/package/issue_123/__init__.py: permanent paths must describe behavior, "
         "not a GitHub issue number",
+        ".github/workflows/issue-123-release.yml: permanent paths must describe behavior, "
+        "not a GitHub issue number",
     )
 
 
-def test_evidence_path_may_keep_issue_provenance() -> None:
+def test_issue_scoped_evidence_path_may_keep_issue_provenance() -> None:
     changes = (ChangedPath("A", "tests/evidence/issue_123/report.py"),)
 
     assert path_violations(changes) == ()
     assert source_violations(changes[0].path, "def test_issue_123_evidence():\n    pass\n") == ()
+
+
+def test_evidence_allowlist_does_not_cover_unscoped_files() -> None:
+    changes = (ChangedPath("A", "tests/evidence/issue123_report.py"),)
+
+    assert path_violations(changes) == (
+        "tests/evidence/issue123_report.py: permanent paths must describe behavior, "
+        "not a GitHub issue number",
+    )
+    violations = source_violations(
+        "tests/evidence/shared.py",
+        "def test_issue_123_evidence():\n    pass\n",
+    )
+    assert any("test_issue_123_evidence" in violation for violation in violations)
 
 
 def test_behavior_oriented_python_identifiers_are_allowed() -> None:
@@ -118,3 +136,36 @@ def test_runtime_strings_with_domain_issue_numbers_are_not_mistaken_for_provenan
     source = 'message = "Repository issue #42 is open"\n'
 
     assert source_violations("src/package/repository_connector.py", source) == ()
+
+
+def test_workflow_job_and_step_names_reject_concrete_issue_numbers() -> None:
+    source = """
+name: Release validation
+jobs:
+  issue730-gate:
+    name: Stable release gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Issue #730 final validation
+        run: echo ok
+"""
+
+    violations = workflow_violations(".github/workflows/release.yml", source)
+
+    assert len(violations) == 2
+    assert any("workflow job ids" in violation for violation in violations)
+    assert any("workflow and step names" in violation for violation in violations)
+
+
+def test_workflow_repository_issue_domain_vocabulary_remains_allowed() -> None:
+    source = """
+name: Repository issue synchronization
+jobs:
+  sync-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync repository issues
+        run: echo "${{ github.event.issue.number }}"
+"""
+
+    assert workflow_violations(".github/workflows/issues.yml", source) == ()

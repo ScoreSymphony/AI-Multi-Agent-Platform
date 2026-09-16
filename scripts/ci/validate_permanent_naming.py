@@ -13,9 +13,15 @@ from pathlib import Path, PurePosixPath
 ISSUE_IDENTIFIER = re.compile(r"(?:^|_)issue_?\d+(?:_|$)", re.IGNORECASE)
 ISSUE_PATH_TOKEN = re.compile(r"(?:^|[._-])issue[-_]?\d+(?:[._-]|$)", re.IGNORECASE)
 ISSUE_REFERENCE = re.compile(r"\bissue\s+#\d+\b", re.IGNORECASE)
+ISSUE_EVIDENCE_DIRECTORY = re.compile(r"issue_\d+", re.IGNORECASE)
+WORKFLOW_ISSUE_NAME = re.compile(
+    r"(?:\bissue\s+#?\d+\b|(?:^|[ _.-])issue[-_]?\d+(?:[ _.-]|$))",
+    re.IGNORECASE,
+)
 PROVENANCE_PREFIXES = ("historical context:", "provenance:")
 PERMANENT_ROOTS = frozenset({"src", "tests", "scripts"})
-PROVENANCE_PATH_PREFIXES = (PurePosixPath("tests/evidence"),)
+EVIDENCE_ROOT = PurePosixPath("tests/evidence")
+WORKFLOW_PREFIX = PurePosixPath(".github/workflows")
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +49,16 @@ def changed_targets(name_status: str) -> tuple[ChangedPath, ...]:
 
 
 def _is_provenance_path(path: PurePosixPath) -> bool:
-    return any(path == prefix or prefix in path.parents for prefix in PROVENANCE_PATH_PREFIXES)
+    parts = path.parts
+    return (
+        len(parts) >= 3
+        and PurePosixPath(*parts[:2]) == EVIDENCE_ROOT
+        and ISSUE_EVIDENCE_DIRECTORY.fullmatch(parts[2]) is not None
+    )
+
+
+def _is_workflow_path(path: PurePosixPath) -> bool:
+    return WORKFLOW_PREFIX in (path, *path.parents)
 
 
 def path_violations(changes: tuple[ChangedPath, ...]) -> tuple[str, ...]:
@@ -52,9 +67,13 @@ def path_violations(changes: tuple[ChangedPath, ...]) -> tuple[str, ...]:
     violations: list[str] = []
     for change in changes:
         path = PurePosixPath(change.path)
-        if not path.parts or path.parts[0] not in PERMANENT_ROOTS or _is_provenance_path(path):
+        if not path.parts or _is_provenance_path(path):
             continue
-        if any(ISSUE_PATH_TOKEN.search(part) for part in path.parts[1:]):
+        permanent_path = path.parts[0] in PERMANENT_ROOTS or _is_workflow_path(path)
+        if not permanent_path:
+            continue
+        relevant_parts = path.parts[1:] if path.parts[0] in PERMANENT_ROOTS else path.parts
+        if any(ISSUE_PATH_TOKEN.search(part) for part in relevant_parts):
             violations.append(
                 f"{change.path}: permanent paths must describe behavior, not a GitHub issue number"
             )
@@ -148,6 +167,43 @@ def source_violations(path: str, source: str) -> tuple[str, ...]:
     return tuple(violations)
 
 
+def workflow_violations(path: str, source: str) -> tuple[str, ...]:
+    """Reject concrete issue numbers used as maintained workflow/job/step names."""
+
+    repository_path = PurePosixPath(path)
+    if not _is_workflow_path(repository_path) or repository_path.suffix not in {".yml", ".yaml"}:
+        return ()
+
+    violations: list[str] = []
+    in_jobs = False
+    for line_number, line in enumerate(source.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if line == "jobs:":
+            in_jobs = True
+            continue
+        if in_jobs and line and not line.startswith((" ", "\t")):
+            in_jobs = False
+
+        if in_jobs:
+            job_match = re.match(r"^  ([^\s][^:]*):\s*$", line)
+            if job_match and WORKFLOW_ISSUE_NAME.search(job_match.group(1)):
+                violations.append(
+                    f"{path}:{line_number}: workflow job ids must describe behavior, "
+                    "not a GitHub issue number"
+                )
+
+        name_match = re.match(r"^\s*(?:-\s*)?name:\s*(.+?)\s*$", line)
+        if name_match and WORKFLOW_ISSUE_NAME.search(name_match.group(1).strip("'\"")):
+            violations.append(
+                f"{path}:{line_number}: workflow and step names must describe behavior, "
+                "not a GitHub issue number"
+            )
+
+    return tuple(violations)
+
+
 def git_name_status(base: str, head: str) -> str:
     completed = subprocess.run(
         [
@@ -170,21 +226,27 @@ def validate_changed_tree(root: Path, changes: tuple[ChangedPath, ...]) -> tuple
     violations = list(path_violations(changes))
     for change in changes:
         path = PurePosixPath(change.path)
-        if not path.parts or path.parts[0] not in PERMANENT_ROOTS or path.suffix != ".py":
-            continue
-        if _is_provenance_path(path):
+        if not path.parts or _is_provenance_path(path):
             continue
         local_path = root / Path(*path.parts)
         if not local_path.is_file():
             continue
-        violations.extend(source_violations(change.path, local_path.read_text(encoding="utf-8")))
+        if path.parts[0] in PERMANENT_ROOTS and path.suffix == ".py":
+            violations.extend(
+                source_violations(change.path, local_path.read_text(encoding="utf-8"))
+            )
+        elif _is_workflow_path(path) and path.suffix in {".yml", ".yaml"}:
+            violations.extend(
+                workflow_violations(change.path, local_path.read_text(encoding="utf-8"))
+            )
     return tuple(violations)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Reject GitHub issue numbers used as permanent code/test semantics in changed files."
+            "Reject GitHub issue numbers used as permanent code/test/workflow "
+            "semantics in changed files."
         )
     )
     parser.add_argument("--base", required=True, help="Base commit SHA/ref")

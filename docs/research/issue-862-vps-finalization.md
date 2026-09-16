@@ -23,7 +23,7 @@ The authoritative runtime digests already exercised by the #862 CI storage campa
 From the repository root on the reference host, run:
 
 ```bash
-scripts/benchmarks/run_issue862_storage_vps_capture.sh
+scripts/benchmarks/run_storage_vps_capture.sh
 ```
 
 The default output directory is `artifacts/issue862-storage-vps`. The capture must finish successfully for the local-filesystem baseline and all three object stores. Keep the raw files, generated summaries, `SHA256SUMS`, archive and archive SHA-256 together as #829 evidence.
@@ -33,7 +33,7 @@ The default output directory is `artifacts/issue862-storage-vps`. The capture mu
 Immediately after the capture, run:
 
 ```bash
-python3 scripts/benchmarks/verify_issue862_storage_vps_capture.py \
+python3 scripts/benchmarks/verify_storage_vps_capture.py \
   artifacts/issue862-storage-vps \
   | tee artifacts/issue862-storage-vps-verification.json
 ```

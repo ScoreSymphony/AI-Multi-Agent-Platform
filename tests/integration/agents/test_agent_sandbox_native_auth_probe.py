@@ -5,11 +5,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-SCRIPT = Path("scripts/benchmarks/issue798_agent_sandbox_native_auth_probe.py")
+SCRIPT = Path("tests/evidence/issue_798/agent_sandbox_native_auth_probe.py")
 
 
 def _module() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("issue798_native_auth_probe", SCRIPT)
+    spec = importlib.util.spec_from_file_location("agent_sandbox_native_auth_probe", SCRIPT)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)

@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT = Path("scripts/benchmarks/issue798_agent_sandbox_evidence_gate.py")
+SCRIPT = Path("scripts/benchmarks/agent_sandbox_evidence_gate.py")
 REVISION = "d1b7ac007debcb1ba8de91c76afb49bee90d096a"
 REQUIRED_SCENARIOS = (
     "benign_shell_artifact_roundtrip",
@@ -48,7 +48,7 @@ def _environment() -> dict[str, object]:
         "platform_commit": "0123456789abcdef0123456789abcdef01234567",
         "cni": "cilium",
         "profile_kind": "platform-hardened-derivative",
-        "profile_revision": "issue798-eval-profile-v1",
+        "profile_revision": "agent-sandbox-eval-profile-v1",
     }
 
 
