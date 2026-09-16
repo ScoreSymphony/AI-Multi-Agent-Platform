@@ -164,10 +164,7 @@ class JsonSetupSessionStore:
     def save(self, sessions: dict[str, SetupSessionRecord]) -> None:
         document: dict[str, JsonValue] = {
             "schema_version": SETUP_SESSION_SCHEMA_VERSION,
-            "sessions": [
-                sessions[key].to_json()
-                for key in sorted(sessions)
-            ],
+            "sessions": [sessions[key].to_json() for key in sorted(sessions)],
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_name(f".{self.path.name}.tmp")
@@ -243,10 +240,7 @@ class BrowserFirstSetupService:
             "id": SETUP_SESSION_RESOURCE_ID,
             "type": "setup_session",
             "current_step": SetupStep.READY.value if ready else session.current_step.value,
-            "steps": [
-                {"id": step.value, "state": state.value}
-                for step, state in steps
-            ],
+            "steps": [{"id": step.value, "state": state.value} for step, state in steps],
             "catalog": self._catalog(components),
             "registry_items": [item.to_json() for item in session.registry_items],
             "active_profile_id": profile.profile_id if profile else None,
@@ -295,7 +289,9 @@ class BrowserFirstSetupService:
                 try:
                     step = SetupStep(raw_step)
                 except ValueError as exc:
-                    raise ContractError(ErrorCode.INVALID_REQUEST, "unsupported setup step") from exc
+                    raise ContractError(
+                        ErrorCode.INVALID_REQUEST, "unsupported setup step"
+                    ) from exc
                 if step in {SetupStep.IDENTITY, SetupStep.READY}:
                     raise ContractError(
                         ErrorCode.INVALID_REQUEST,
@@ -347,7 +343,8 @@ class BrowserFirstSetupService:
                 action
                 for action in plan
                 if action.kind in {ProvisioningActionKind.INSTALL, ProvisioningActionKind.ACTIVATE}
-                and action.state in {ProvisioningActionState.PENDING, ProvisioningActionState.FAILED}
+                and action.state
+                in {ProvisioningActionState.PENDING, ProvisioningActionState.FAILED}
                 and (not requested or action.action_id in requested)
             )
             if requested:
@@ -455,7 +452,9 @@ class BrowserFirstSetupService:
                     )
                     continue
                 compatibility = self.component_setup.resolver.resolve(component, environment)
-                actions.append(self._component_action(component, compatibility.state, compatibility.reasons))
+                actions.append(
+                    self._component_action(component, compatibility.state, compatibility.reasons)
+                )
 
         for selection in session.registry_items:
             actions.append(self._registry_action(session, selection))
@@ -480,7 +479,9 @@ class BrowserFirstSetupService:
                 component_ref=component.component_id,
                 display_name=component.display_name,
                 category=component.category.value,
-                dependencies=tuple(req.capability for req in component.requirements if req.required),
+                dependencies=tuple(
+                    req.capability for req in component.requirements if req.required
+                ),
                 owner=_component_owner(component),
                 version=component.version,
             )
@@ -559,7 +560,8 @@ class BrowserFirstSetupService:
             action_id=action_id,
             kind=(
                 ProvisioningActionKind.INSTALL
-                if state not in {ProvisioningActionState.MANUAL_REQUIRED, ProvisioningActionState.BLOCKED}
+                if state
+                not in {ProvisioningActionState.MANUAL_REQUIRED, ProvisioningActionState.BLOCKED}
                 else ProvisioningActionKind.MANUAL
             ),
             state=state,
@@ -653,7 +655,9 @@ class BrowserFirstSetupService:
             "compatibility": compatibility.state.value,
             "recommendation": component.lifecycle.value,
             "dependencies": [
-                requirement.capability for requirement in component.requirements if requirement.required
+                requirement.capability
+                for requirement in component.requirements
+                if requirement.required
             ],
             "blockers": list(compatibility.reasons),
             "delivery": "local" if local else "external",
@@ -690,7 +694,9 @@ class BrowserFirstSetupService:
                 else "installable"
             ),
             "compatibility": "blocked" if blocked else "compatible",
-            "recommendation": _registry_recommendation(technical.lifecycle_status if technical else None),
+            "recommendation": _registry_recommendation(
+                technical.lifecycle_status if technical else None
+            ),
             "dependencies": [dependency.item_id for dependency in item.dependencies],
             "blockers": (
                 ["registry item is deprecated or yanked"]
@@ -720,7 +726,11 @@ class BrowserFirstSetupService:
             for key in ("local_model_count", "self_hosted_model_count")
         )
         blockers = _plan_blocked(plan)
-        ready = onboarding_status.get("state") == "ready_for_task" and profile is not None and not blockers
+        ready = (
+            onboarding_status.get("state") == "ready_for_task"
+            and profile is not None
+            and not blockers
+        )
         completed = {
             SetupStep.IDENTITY,
             SetupStep.ENVIRONMENT,
@@ -844,7 +854,9 @@ def _registry_selections(value: JsonValue) -> tuple[RegistrySelection, ...]:
     seen: set[str] = set()
     for raw in value:
         if not isinstance(raw, dict):
-            raise ContractError(ErrorCode.INVALID_REQUEST, "registry item selections must be objects")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "registry item selections must be objects"
+            )
         item_id = raw.get("item_id")
         version = raw.get("version")
         if not isinstance(item_id, str) or not item_id.strip():
@@ -862,8 +874,12 @@ def _registry_selections(value: JsonValue) -> tuple[RegistrySelection, ...]:
 def _action_ids(value: JsonValue | None) -> set[str]:
     if value is None:
         return set()
-    if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
-        raise ContractError(ErrorCode.INVALID_REQUEST, "action_ids must be a list of non-blank strings")
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() for item in value
+    ):
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST, "action_ids must be a list of non-blank strings"
+        )
     return set(cast(list[str], value))
 
 
