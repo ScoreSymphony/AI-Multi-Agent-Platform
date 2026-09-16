@@ -8,8 +8,8 @@ from .manifest import (
 )
 from .models import (
     APPLICATION_MANIFEST_SCHEMA_VERSION,
-    ApplicationConfigValueType,
     ApplicationConfigurationField,
+    ApplicationConfigValueType,
     ApplicationDesiredState,
     ApplicationEndpoint,
     ApplicationEndpointExposure,
