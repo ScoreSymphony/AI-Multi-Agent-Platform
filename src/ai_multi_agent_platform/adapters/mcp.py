@@ -177,16 +177,21 @@ class MCPToolProvider(CapabilityToolProvider):
     async def health(self) -> HealthStatus:
         try:
             return HealthStatus.HEALTHY if await self._client.ping() else HealthStatus.UNAVAILABLE
+        # error-boundary: allow-broad-catch=boundary MCP health result boundary
         except Exception:
             return HealthStatus.UNAVAILABLE
 
     async def capability_registrations(self) -> tuple[CapabilityRegistration, ...]:
         try:
             tools = await self._client.list_tools()
+        except ContractError:
+            raise
+        # error-boundary: allow-broad-catch=translation MCP discovery client boundary
         except Exception as exc:
             raise ContractError(
                 ErrorCode.UNAVAILABLE,
                 f"MCP server {self._config.server_id!r} discovery failed",
+                retryable=True,
                 provider_id=self.descriptor.provider_id,
                 adapter_metadata=self.descriptor.adapter_metadata,
             ) from exc
@@ -243,6 +248,7 @@ class MCPToolProvider(CapabilityToolProvider):
             raise
         except ContractError:
             raise
+        # error-boundary: allow-broad-catch=translation MCP invocation client boundary
         except Exception as exc:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
@@ -558,6 +564,7 @@ class MCPToolProvider(CapabilityToolProvider):
             current = await self._task_binding_store.save(current)
             self._active_task_bindings[invocation.invocation_id] = current
             return
+        # error-boundary: allow-broad-catch=cleanup MCP cancellation is best-effort evidence
         except Exception:
             current = mark_cancellation_result(
                 current,
