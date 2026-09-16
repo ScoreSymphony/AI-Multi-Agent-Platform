@@ -48,6 +48,28 @@ def changed_targets(name_status: str) -> tuple[ChangedPath, ...]:
     return tuple(changes)
 
 
+def repository_targets(root: Path) -> tuple[ChangedPath, ...]:
+    """Return every maintained path covered by the permanent-naming policy."""
+
+    targets: list[ChangedPath] = []
+    for root_name in sorted(PERMANENT_ROOTS):
+        permanent_root = root / root_name
+        if not permanent_root.exists():
+            continue
+        for local_path in sorted(path for path in permanent_root.rglob("*") if path.is_file()):
+            targets.append(
+                ChangedPath(status="M", path=local_path.relative_to(root).as_posix())
+            )
+
+    workflow_root = root / Path(*WORKFLOW_PREFIX.parts)
+    if workflow_root.exists():
+        for local_path in sorted(path for path in workflow_root.rglob("*") if path.is_file()):
+            targets.append(
+                ChangedPath(status="M", path=local_path.relative_to(root).as_posix())
+            )
+    return tuple(targets)
+
+
 def _is_provenance_path(path: PurePosixPath) -> bool:
     parts = path.parts
     return (
@@ -62,7 +84,7 @@ def _is_workflow_path(path: PurePosixPath) -> bool:
 
 
 def path_violations(changes: tuple[ChangedPath, ...]) -> tuple[str, ...]:
-    """Reject new permanent paths whose semantic name is a GitHub issue number."""
+    """Reject permanent paths whose semantic name is a GitHub issue number."""
 
     violations: list[str] = []
     for change in changes:
@@ -120,7 +142,7 @@ def _provenance_line(line: str) -> bool:
 
 
 def source_violations(path: str, source: str) -> tuple[str, ...]:
-    """Return semantic naming violations for one changed Python source file."""
+    """Return semantic naming violations for one maintained Python source file."""
 
     repository_path = PurePosixPath(path)
     if repository_path.suffix != ".py" or _is_provenance_path(repository_path):
@@ -245,17 +267,31 @@ def validate_changed_tree(root: Path, changes: tuple[ChangedPath, ...]) -> tuple
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Reject GitHub issue numbers used as permanent code/test/workflow "
-            "semantics in changed files."
+            "Reject GitHub issue numbers used as permanent code/test/workflow semantics "
+            "in a diff or across the maintained repository tree."
         )
     )
-    parser.add_argument("--base", required=True, help="Base commit SHA/ref")
-    parser.add_argument("--head", required=True, help="Head commit SHA/ref")
+    parser.add_argument("--base", help="Base commit SHA/ref for diff-scoped validation")
+    parser.add_argument("--head", help="Head commit SHA/ref for diff-scoped validation")
+    parser.add_argument(
+        "--full-tree",
+        action="store_true",
+        help="Validate all maintained source/test/script/workflow paths instead of a diff.",
+    )
     parser.add_argument("--repository-root", type=Path, default=Path.cwd())
     args = parser.parse_args()
 
-    changes = changed_targets(git_name_status(args.base, args.head))
-    violations = validate_changed_tree(args.repository_root.resolve(), changes)
+    root = args.repository_root.resolve()
+    if args.full_tree:
+        if args.base is not None or args.head is not None:
+            parser.error("--full-tree cannot be combined with --base/--head")
+        changes = repository_targets(root)
+    else:
+        if args.base is None or args.head is None:
+            parser.error("--base and --head are required unless --full-tree is used")
+        changes = changed_targets(git_name_status(args.base, args.head))
+
+    violations = validate_changed_tree(root, changes)
     if not violations:
         return 0
 
