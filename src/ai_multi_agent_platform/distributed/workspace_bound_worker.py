@@ -18,6 +18,25 @@ class WorkspaceLifecycleFactory(Protocol):
     def __call__(self, execution_workspace: str) -> LifecycleBackend: ...
 
 
+class _WorkspaceExecutionToken(str):
+    """Opaque local token carrying canonical Workspace binding metadata in-process only."""
+
+    workspace_id: str
+    snapshot_id: str
+
+    def __new__(
+        cls,
+        value: str,
+        *,
+        workspace_id: str,
+        snapshot_id: str,
+    ) -> _WorkspaceExecutionToken:
+        token = str.__new__(cls, value)
+        token.workspace_id = workspace_id
+        token.snapshot_id = snapshot_id
+        return token
+
+
 class WorkspaceBoundLocalWorker:
     """Bind canonical Worker jobs to an already-materialized Worker-local Workspace.
 
@@ -62,9 +81,14 @@ class WorkspaceBoundLocalWorker:
         elif job.workspace_ref is None or job.snapshot_ref is None:
             raise RegistryError("Workspace Worker jobs require both workspace_ref and snapshot_ref")
         else:
-            execution_workspace = self._store.execution_workspace(
+            local_token = self._store.execution_workspace(
                 job.workspace_ref,
                 job.snapshot_ref,
+            )
+            execution_workspace = _WorkspaceExecutionToken(
+                local_token,
+                workspace_id=job.workspace_ref,
+                snapshot_id=job.snapshot_ref,
             )
             route = LocalWorker(
                 self.worker_id,

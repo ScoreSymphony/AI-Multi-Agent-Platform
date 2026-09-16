@@ -215,9 +215,11 @@ Workspace identity.
 
 The profile's `workspace_root` is a host-level parent only. The shipped Worker composition derives a
 private root for every process, so the actual materialization path is
-`<workspace_root>/<worker_id>/<workspace_id>/<snapshot_id>`. Two sibling Worker processes can
-therefore materialize the same canonical Workspace/snapshot concurrently without sharing the same
-filesystem tree or deleting each other's cleanup target.
+`<workspace_root>/<worker_id>/<materialization_token>`. The deterministic token is Worker-local,
+derived from the canonical Workspace/Snapshot pair, and never becomes a transport identifier. This
+keeps filesystem paths bounded on Windows while allowing two sibling Worker processes to materialize
+the same canonical Workspace/snapshot concurrently without sharing the same filesystem tree or
+deleting each other's cleanup target.
 
 `TransportRemoteWorkspaceMaterializer` streams the exact canonical Workspace snapshot through #35.
 The Worker validates paths/checksums, executes in its machine-local root, and returns a result
