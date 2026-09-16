@@ -370,6 +370,13 @@ export type TelemetryTimelineEntry = {
 
 export type TimelineItem = CanonicalEvent | TelemetryTimelineEntry;
 
+export type TimelinePage = {
+  items: TimelineItem[];
+  limit: number;
+  next_cursor: string | null;
+  total: number;
+};
+
 export type UsageQualityCounts = {
   estimated: number;
   measured: number;
@@ -400,6 +407,13 @@ export type UsageRecord = {
   unit: string;
 };
 
+export type UsageRecordPage = {
+  items: UsageRecord[];
+  limit: number;
+  next_cursor: string | null;
+  total: number;
+};
+
 export type UsageTrendPoint = {
   end: string;
   quality_counts: UsageQualityCounts;
@@ -426,6 +440,13 @@ export type UsageAggregate = {
   unit: string;
 };
 
+export type UsageAggregatePage = {
+  items: UsageAggregate[];
+  limit: number;
+  next_cursor: string | null;
+  total: number;
+};
+
 export type UsageBudget = {
   action: "record_only" | "warn" | "deny" | "require_approval" | "notify";
   consumed: number;
@@ -449,6 +470,13 @@ export type UsageBudget = {
   window_mode: "lifetime" | "rolling";
   window_seconds: number | null;
   window_start: string | null;
+};
+
+export type UsageBudgetPage = {
+  items: UsageBudget[];
+  limit: number;
+  next_cursor: string | null;
+  total: number;
 };
 
 export type CreateProjectRequest = {
