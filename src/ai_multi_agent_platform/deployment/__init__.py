@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable
 
-from ai_multi_agent_platform.accounting import AccountingService
+from ai_multi_agent_platform.accounting import AccountingService, SQLiteUsageStore
 from ai_multi_agent_platform.application_distribution import ReleaseGatePolicy
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.distributed import DistributedRuntime
@@ -25,7 +25,7 @@ from .distributed_control_plane import (
     DeploymentWorkerProtocolService,
     build_worker_protocol_app,
 )
-from .durable_connectors import SingleNodeDeployment, SingleNodeSmokeResult
+from .durable_connectors import SingleNodeSmokeResult
 from .durable_connectors import (
     build_single_node_deployment as _build_single_node_deployment,
 )
@@ -41,6 +41,10 @@ from .startup_recovery import (
     reconcile_single_node_startup,
     require_blocked_startup_run,
 )
+from .task_budget_composition import (
+    TaskBudgetSingleNodeDeployment as SingleNodeDeployment,
+)
+from .task_budget_composition import extend_single_node_with_task_budgets
 
 
 def build_single_node_deployment(
@@ -55,18 +59,27 @@ def build_single_node_deployment(
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
     application_release_gate_policy: ReleaseGatePolicy | None = None,
 ) -> SingleNodeDeployment:
-    """Build the public durable profile through the typed single-node composition."""
+    """Build the durable profile and attach one canonical #902 Task-budget authority."""
 
-    return _build_single_node_deployment(
+    config.prepare_directories()
+    effective_accounting = accounting_service or AccountingService(
+        SQLiteUsageStore(config.database_dir / "accounting.sqlite3")
+    )
+    base = _build_single_node_deployment(
         config,
         onboarding_model_adapters=onboarding_model_adapters,
         secret_provider=secret_provider,
-        accounting_service=accounting_service,
+        accounting_service=effective_accounting,
         observability_exporter=observability_exporter,
         distributed_runtime=distributed_runtime,
         enable_distributed_execution=enable_distributed_execution,
         repository_discovery_resolver=repository_discovery_resolver,
         application_release_gate_policy=application_release_gate_policy,
+    )
+    return extend_single_node_with_task_budgets(
+        base,
+        config=config,
+        accounting_service=effective_accounting,
     )
 
 
