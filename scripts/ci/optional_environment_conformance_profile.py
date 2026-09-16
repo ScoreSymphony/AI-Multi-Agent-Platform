@@ -1,4 +1,4 @@
-"""Fail-closed #46 conformance reports for optional MCP and LiteLLM environments."""
+"""Fail-closed conformance reports for optional MCP and LiteLLM environments."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ _PROFILES: dict[str, OptionalEnvironmentProfile] = {
     "mcp": OptionalEnvironmentProfile(
         name="mcp",
         scenario_id="ENV-MCP",
-        owner="#12 MCP capability adapter",
+        owner="MCP capability adapter",
         criterion=(
             "the pinned official MCP Python SDK executes the exact 2025-11-25 client/tool "
             "Streamable-HTTP profile through CapabilityRegistry/CapabilityInvoker"
@@ -68,7 +68,7 @@ _PROFILES: dict[str, OptionalEnvironmentProfile] = {
     "litellm": OptionalEnvironmentProfile(
         name="litellm",
         scenario_id="ENV-LITELLM",
-        owner="#11 LiteLLM model adapter",
+        owner="LiteLLM model adapter",
         criterion=(
             "the pinned real LiteLLM library executes behind the canonical ModelProvider "
             "adapter without requiring a paid provider or credential"
@@ -97,7 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--json-report",
         type=Path,
-        help="Destination for the machine-readable #46 conformance report.",
+        help="Destination for the machine-readable optional-environment conformance report.",
     )
     parser.add_argument(
         "--protocol-evidence",
