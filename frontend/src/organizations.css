@@ -1,0 +1,262 @@
+/* Route-scoped presentation for organization, team and collaboration administration. */
+
+main[data-route="/organizations"] > .stack {
+  gap: 1.4rem;
+}
+
+main[data-route="/organizations"] .page-header {
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(59, 130, 246, .08), transparent 34%),
+    linear-gradient(180deg, rgba(23, 31, 45, .8), rgba(17, 23, 34, .72));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .12);
+}
+
+main[data-route="/organizations"] .page-header p:not(.eyebrow) {
+  max-width: 82ch;
+}
+
+main[data-route="/organizations"] .card {
+  min-width: 0;
+}
+
+main[data-route="/organizations"] .card > h2 {
+  padding-bottom: .72rem;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route="/organizations"] .form-grid {
+  align-items: end;
+  gap: .8rem .9rem;
+}
+
+main[data-route="/organizations"] .form-grid > label {
+  min-width: 0;
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 650;
+}
+
+main[data-route="/organizations"] .form-grid input,
+main[data-route="/organizations"] .form-grid select,
+main[data-route="/organizations"] .form-grid textarea {
+  width: 100%;
+}
+
+main[data-route="/organizations"] .form-grid textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+main[data-route="/organizations"] .form-grid > button {
+  min-height: 38px;
+  justify-self: start;
+}
+
+main[data-route="/organizations"] .context-summary {
+  display: grid;
+  gap: .25rem;
+  align-content: center;
+  min-height: 64px;
+  padding: .65rem .75rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 9px;
+  background: rgba(9, 13, 21, .3);
+}
+
+main[data-route="/organizations"] .context-summary span {
+  color: var(--muted);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+main[data-route="/organizations"] .context-summary strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: .9rem;
+}
+
+main[data-route="/organizations"] .metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+main[data-route="/organizations"] .metric strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+main[data-route="/organizations"] .metric-action {
+  align-content: space-between;
+}
+
+main[data-route="/organizations"] .metric-action button {
+  width: 100%;
+}
+
+main[data-route="/organizations"] .two-column {
+  align-items: stretch;
+}
+
+main[data-route="/organizations"] .two-column > .card {
+  height: 100%;
+}
+
+main[data-route="/organizations"] .two-column .card > p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+main[data-route="/organizations"] .two-column .card > form + form {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route="/organizations"] .muted {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+main[data-route="/organizations"] .checkbox-field {
+  display: flex !important;
+  align-items: center;
+  gap: .55rem;
+  min-height: 38px;
+  padding: .5rem .6rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 8px;
+  background: rgba(9, 13, 21, .24);
+}
+
+main[data-route="/organizations"] .checkbox-field input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  accent-color: var(--accent-strong);
+}
+
+main[data-route="/organizations"] .table-wrap {
+  margin-top: .15rem;
+}
+
+main[data-route="/organizations"] table {
+  min-width: 760px;
+}
+
+main[data-route="/organizations"] td:first-child {
+  min-width: 180px;
+}
+
+main[data-route="/organizations"] td small {
+  display: block;
+  margin-top: .15rem;
+  color: var(--muted);
+  font-size: .72rem;
+}
+
+main[data-route="/organizations"] td .canonical-id {
+  margin-top: .18rem;
+}
+
+main[data-route="/organizations"] .compact-field {
+  display: grid;
+  gap: .35rem;
+  min-width: 180px;
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 600;
+}
+
+main[data-route="/organizations"] td .compact-field + .compact-field {
+  margin-top: .45rem;
+}
+
+main[data-route="/organizations"] .compact-field input,
+main[data-route="/organizations"] .compact-field select {
+  width: 100%;
+  min-width: 0;
+}
+
+main[data-route="/organizations"] td > .compact-field {
+  min-width: 230px;
+}
+
+main[data-route="/organizations"] td > .compact-field button {
+  justify-self: start;
+}
+
+main[data-route="/organizations"] .actions-cell {
+  min-width: 170px;
+}
+
+main[data-route="/organizations"] .actions-cell button {
+  width: 100%;
+  margin: 0 0 .4rem;
+}
+
+main[data-route="/organizations"] .actions-cell button:last-child {
+  margin-bottom: 0;
+}
+
+main[data-route="/organizations"] .stack > .stack {
+  gap: 1.1rem;
+}
+
+main[data-route="/organizations"] .stack > .stack > .two-column,
+main[data-route="/organizations"] .stack > .stack > .card {
+  min-width: 0;
+}
+
+main[data-route="/organizations"] .card > form + p {
+  margin-top: .9rem;
+  padding-top: .75rem;
+  border-top: 1px solid var(--line-soft, var(--line));
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 1080px) {
+  main[data-route="/organizations"] .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  main[data-route="/organizations"] .page-header {
+    padding: 1rem;
+  }
+
+  main[data-route="/organizations"] .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  main[data-route="/organizations"] .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  main[data-route="/organizations"] .form-grid > label,
+  main[data-route="/organizations"] .form-grid > button,
+  main[data-route="/organizations"] .form-grid > p,
+  main[data-route="/organizations"] .context-summary {
+    grid-column: 1 / -1;
+  }
+
+  main[data-route="/organizations"] .form-grid > button {
+    width: 100%;
+  }
+
+  main[data-route="/organizations"] .metric-action button {
+    width: 100%;
+  }
+
+  main[data-route="/organizations"] .actions-cell button {
+    min-height: 38px;
+  }
+}
