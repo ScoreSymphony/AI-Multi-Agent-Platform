@@ -156,7 +156,7 @@ def _pending(scenario_id: str, owner: str, criterion: str) -> ConformanceScenari
         command=None,
         required=True,
         unavailable_status=ConformanceStatus.NOT_IMPLEMENTED,
-        unavailable_reason="the #46 end-to-end acceptance path is not registered yet",
+        unavailable_reason="the end-to-end acceptance path is not registered yet",
     )
 
 
@@ -164,7 +164,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
     return (
         ConformanceScenario(
             "A",
-            "#39/#252 reference baseline",
+            "reference baseline",
             (
                 "reference-only authenticated Task/Run/Result execution remains retry-safe "
                 "across service reconstruction"
@@ -176,7 +176,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ),
         ConformanceScenario(
             "D-model",
-            "#10/#250/#252 local model",
+            "local model",
             "local/self-hosted model invocation works without a paid external service",
             _pytest(
                 "tests/integration/files/test_acceptance_gate.py::"
@@ -185,13 +185,13 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ),
         ConformanceScenario(
             "D-capability",
-            "#12 capability boundary",
+            "capability boundary",
             "capability discovery and invocation remain contract-driven and replaceable",
             _pytest("tests/unit/capabilities/test_registry_discovery_and_compatibility.py"),
         ),
         ConformanceScenario(
             "D-vertical",
-            "#46/#10/#12 local model + capability",
+            "local model + capability",
             (
                 "one authenticated AgentRun crosses a real loopback local-model HTTP boundary "
                 "and executes its pinned native capability through CapabilityInvoker"
@@ -203,7 +203,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ),
         ConformanceScenario(
             "MA",
-            "#889/#46 reference multi-agent baseline",
+            "reference multi-agent baseline",
             (
                 "the maintained Hermes/Forge-free single-node multi-agent golden path preserves "
                 "canonical Plan/Step/Run/AgentRun, Handoff, ContextBundle, Result and Verification "
@@ -216,7 +216,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ),
         ConformanceScenario(
             "F",
-            "#15 authorization/approval",
+            "authorization/approval",
             "approval is exact-action bound and changed-payload reuse is rejected",
             _pytest(
                 "tests/integration/security/test_authorization_final_boundaries.py",
@@ -226,7 +226,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ),
         ConformanceScenario(
             "H",
-            "#46 canonical kernel/control-plane recovery",
+            "canonical kernel/control-plane recovery",
             (
                 "an unfinished canonical Run survives Control Plane/process reconstruction on the "
                 "same identity without duplicate dispatch while preserving Workspace binding and "
@@ -243,7 +243,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ),
         ConformanceScenario(
             "J-cli",
-            "#17/#46 CLI client",
+            "CLI client",
             (
                 "CLI reads shared canonical Task/Run/Result state through the versioned "
                 "Control Plane resource paths"
@@ -255,7 +255,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ),
         ConformanceScenario(
             "J-web",
-            "#17/#395 Web client",
+            "Web client",
             (
                 "Web reads the same canonical Task/Run/Result fixtures through the same "
                 "versioned API paths"
@@ -272,7 +272,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ),
         ConformanceScenario(
             "U",
-            "#86 runtime verification",
+            "runtime verification",
             (
                 "required Verification gates completion, binds exact revisions, works "
                 "deterministically without an LLM, enforces reviewer independence and keeps "
@@ -297,7 +297,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
         ),
         ConformanceScenario(
             "ARCH",
-            "#46 architecture invariants",
+            "architecture invariants",
             "canonical core remains independent from optional backend implementations",
             _pytest("tests/contract/portability/test_architecture_invariants.py"),
         ),
@@ -312,31 +312,31 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
     integration = fast + (
         _optional(
             "B",
-            "#8 Hermes adapter",
+            "Hermes adapter",
             "Hermes orchestration maps through canonical contracts with a non-Hermes executor",
             "Hermes integration profile is not enabled by the reference conformance run",
         ),
         _optional(
             "C",
-            "#9 Forge adapter",
+            "Forge adapter",
             "Forge executes behind the canonical Executor boundary without lifecycle authority",
             "Forge integration profile is not enabled by the reference conformance run",
         ),
         _optional(
             "E",
-            "#14 distributed Worker",
+            "distributed Worker",
             "a second Worker/Node preserves canonical IDs, authorization and trace context",
             "distributed Worker profile is optional and not enabled",
         ),
         _optional(
             "S",
-            "#81 optional Registry",
+            "optional Registry",
             "Registry-disabled baseline works and a local catalog can be validated when enabled",
             "Registry is optional and disabled",
         ),
         _optional(
             "X",
-            "#89 optional Control Plane HA",
+            "optional Control Plane HA",
             "HA failover fences stale authority without changing single-node semantics",
             "HA is optional and disabled",
         ),
@@ -347,7 +347,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
     return integration + (
         ConformanceScenario(
             "REL-BACKUP",
-            "#40 backup/restore",
+            "backup/restore",
             (
                 "replacement-machine restore preserves canonical identity/history and reaches "
                 "service readiness"
@@ -359,7 +359,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         ConformanceScenario(
             "REL-UPGRADE",
-            "#41 upgrade lifecycle",
+            "upgrade lifecycle",
             (
                 "supported schema upgrade uses preflight, recorded migrations, backup semantics "
                 "and explicit recovery"
@@ -384,7 +384,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         ConformanceScenario(
             "REL-VERTICAL",
-            "#46 authenticated full reference vertical slice",
+            "authenticated full reference vertical slice",
             (
                 "one authenticated canonical Task/Run crosses Agent/Model, Capability/Tool, "
                 "Executor/Worker/Node, Workspace/File/Artifact, Verification and returns through "
@@ -399,7 +399,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         ConformanceScenario(
             "G",
-            "#46 failure/retry",
+            "failure/retry",
             "controlled failures preserve canonical retries and telemetry",
             _pytest(
                 "tests/e2e/observability/test_failure_retry_e2e.py::"
@@ -408,7 +408,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         ConformanceScenario(
             "I",
-            "#18 automation",
+            "automation",
             "automation creates a normal canonical Task lifecycle",
             _pytest(
                 "tests/unit/automation/test_automation.py::"
@@ -417,7 +417,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         ConformanceScenario(
             "K",
-            "#72 Chat",
+            "Chat",
             "Chat creates durable canonical work without becoming lifecycle truth",
             _pytest(
                 "tests/integration/context/test_conversation_control_plane.py::"
@@ -426,7 +426,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         ConformanceScenario(
             "L",
-            "#73 Terminal",
+            "Terminal",
             "terminal/session access remains authorized and Workspace-bounded",
             _pytest(
                 "tests/e2e/control_plane/test_control_plane_e2e.py::"
@@ -436,7 +436,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         ConformanceScenario(
             "M",
-            "#74 Browser",
+            "Browser",
             "browser work uses replaceable Capability/File/security boundaries",
             _pytest(
                 "tests/unit/browser/test_browser_capability.py::"
@@ -447,7 +447,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         _optional(
             "N",
-            "#75 Notifications",
+            "Notifications",
             (
                 "Task completion/failure, approval-required and verification-required "
                 "notifications remain recipient-scoped, deduplicated and source-linked"
@@ -456,7 +456,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         ConformanceScenario(
             "O",
-            "#76 Usage/resources",
+            "Usage/resources",
             (
                 "Task/model/Worker/Node usage remains attributable through canonical IDs without "
                 "fabricating unavailable measurements"
@@ -476,7 +476,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         ConformanceScenario(
             "P",
-            "#77 Standard Agents/Teams",
+            "Standard Agents/Teams",
             (
                 "bundled Agent/Team definitions remain discoverable configuration while user "
                 "clones are scoped, customizable and independently removable"
@@ -494,13 +494,13 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         _optional(
             "Q",
-            "#78 Templates",
+            "Templates",
             "template preview/instantiate preserves permissions and immutable instance intent",
             "Template conformance profile is optional and not enabled",
         ),
         _optional(
             "R",
-            "#79 Import/export",
+            "Import/export",
             (
                 "portable round-trip preserves references/checksums while excluding "
                 "secrets/runtime state"
@@ -509,19 +509,19 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         _optional(
             "T",
-            "#82 Repository/Git",
+            "Repository/Git",
             "exact Git revision provenance remains canonical-Workspace bounded",
             "Repository/Git conformance profile is optional and not enabled",
         ),
         _optional(
             "V",
-            "#87 Organizations/Teams",
+            "Organizations/Teams",
             "organization isolation and membership revocation preserve historical provenance",
             "organization collaboration conformance profile is optional and not enabled",
         ),
         ConformanceScenario(
             "W",
-            "#88 Task management",
+            "Task management",
             (
                 "priority/deadline/assignment/dependencies remain metadata over canonical "
                 "lifecycle; authorization and Worker admission remain mandatory"
@@ -540,13 +540,13 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         _optional(
             "Y",
-            "#384 durable Plan/Step coordination",
+            "durable Plan/Step coordination",
             "durable fan-out/fan-in, waits, retries and cancellation advance exactly once",
             "durable Plan/Step coordination profile is optional and not enabled",
         ),
         ConformanceScenario(
             "Z",
-            "#872/#46 parallel coding integration",
+            "parallel coding integration",
             (
                 "two independent coding Steps fan out concurrently, a dependent Step waits, "
                 "isolated workstreams integrate only after exact validation/authorization, and "
