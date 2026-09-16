@@ -13,6 +13,9 @@ from pathlib import Path, PurePosixPath
 ISSUE_IDENTIFIER = re.compile(r"(?:^|_)issue_?\d+(?:_|$)", re.IGNORECASE)
 ISSUE_PATH_TOKEN = re.compile(r"(?:^|[._-])issue[-_]?\d+(?:[._-]|$)", re.IGNORECASE)
 ISSUE_REFERENCE = re.compile(r"\bissue\s+#\d+\b", re.IGNORECASE)
+ISSUE_STRING_TOKEN = re.compile(r"(?<![A-Za-z0-9])issue[-_]?\d+(?![A-Za-z0-9])", re.IGNORECASE)
+HASH_ISSUE_REFERENCE = re.compile(r"(?<!\w)#\d+\b")
+DOMAIN_ISSUE_STRING = re.compile(r"\b(?:repository|github)\s+issue\s+#\d+\b", re.IGNORECASE)
 ISSUE_EVIDENCE_DIRECTORY = re.compile(r"issue_\d+", re.IGNORECASE)
 WORKFLOW_ISSUE_NAME = re.compile(
     r"(?:\bissue\s+#?\d+\b|(?:^|[ _.-])issue[-_]?\d+(?:[ _.-]|$))",
@@ -22,6 +25,18 @@ PROVENANCE_PREFIXES = ("historical context:", "provenance:")
 PERMANENT_ROOTS = frozenset({"src", "tests", "scripts"})
 EVIDENCE_ROOT = PurePosixPath("tests/evidence")
 WORKFLOW_PREFIX = PurePosixPath(".github/workflows")
+STRING_LITERAL_FIXTURE_PATH = PurePosixPath("tests/unit/governance/test_permanent_naming_policy.py")
+LEGACY_COMPATIBILITY_STRINGS = frozenset(
+    {
+        "ai-multi-agent-platform/issue-388-two-host-transport/v1",
+        "ai-multi-agent-platform/issue-388-two-host-restart/v1",
+        "evidence:issue388-two-host",
+        "ai-multi-agent-platform/issue-562-network-probe/v1",
+        "ai-multi-agent-platform/issue-562-platform-phase/v1",
+        "ai-multi-agent-platform/issue-562-two-vps-private-tunnel/v1",
+    }
+)
+LEGACY_COMPATIBILITY_PREFIXES = ("issue562:",)
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +134,44 @@ def _provenance_line(line: str) -> bool:
     return normalized.startswith(PROVENANCE_PREFIXES)
 
 
+def _legacy_compatibility_string(value: str) -> bool:
+    return value in LEGACY_COMPATIBILITY_STRINGS or value.startswith(LEGACY_COMPATIBILITY_PREFIXES)
+
+
+def _semantic_string_violations(
+    path: PurePosixPath,
+    tree: ast.AST,
+    docstrings: tuple[ast.Constant, ...],
+) -> tuple[str, ...]:
+    """Reject issue-number tokens used as maintained semantic string identifiers or messages."""
+
+    if path == STRING_LITERAL_FIXTURE_PATH:
+        return ()
+
+    docstring_ids = {id(node) for node in docstrings}
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        if id(node) in docstring_ids:
+            continue
+        value = node.value
+        if _legacy_compatibility_string(value):
+            continue
+        compact_issue_token = ISSUE_STRING_TOKEN.search(value) is not None
+        internal_hash_reference = (
+            HASH_ISSUE_REFERENCE.search(value) is not None
+            and DOMAIN_ISSUE_STRING.search(value) is None
+        )
+        if not compact_issue_token and not internal_hash_reference:
+            continue
+        violations.append(
+            f"{path}:{getattr(node, 'lineno', 1)}: string value {value!r} embeds a GitHub issue "
+            "number as maintained semantics"
+        )
+    return tuple(violations)
+
+
 def source_violations(path: str, source: str) -> tuple[str, ...]:
     """Return semantic naming violations for one changed Python source file."""
 
@@ -141,7 +194,8 @@ def source_violations(path: str, source: str) -> tuple[str, ...]:
                 "not a GitHub issue number"
             )
 
-    for node in _docstring_nodes(tree):
+    docstrings = _docstring_nodes(tree)
+    for node in docstrings:
         value = str(node.value)
         start = getattr(node, "lineno", 1)
         for offset, line in enumerate(value.splitlines()):
@@ -150,6 +204,8 @@ def source_violations(path: str, source: str) -> tuple[str, ...]:
                     f"{path}:{start + offset}: issue provenance in docstrings must be secondary "
                     "'Historical context:' or 'Provenance:' text"
                 )
+
+    violations.extend(_semantic_string_violations(repository_path, tree, docstrings))
 
     try:
         tokens = tokenize.generate_tokens(io.StringIO(source).readline)

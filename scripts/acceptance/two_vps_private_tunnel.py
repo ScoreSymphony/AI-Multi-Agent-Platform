@@ -23,6 +23,7 @@ from pathlib import Path
 PROBE_SCHEMA = "ai-multi-agent-platform/issue-562-network-probe/v1"
 PHASE_SCHEMA = "ai-multi-agent-platform/issue-562-platform-phase/v1"
 REPORT_SCHEMA = "ai-multi-agent-platform/issue-562-two-vps-private-tunnel/v1"
+# Stable compatibility/provenance schema from the retained two-host transport evidence contract.
 TRANSPORT_SCHEMA = "ai-multi-agent-platform/issue-388-two-host-transport/v1"
 
 _ENDPOINT_LABELS = {"worker-protocol", "message-broker"}
@@ -500,19 +501,21 @@ def _validate_transport_report(
     if report is None:
         return None
     if report.get("schema") != TRANSPORT_SCHEMA or report.get("status") != "pass":
-        raise AcceptanceError("optional #388 transport evidence is not a passing supported report")
+        raise AcceptanceError(
+            "optional two-host transport evidence is not a passing supported report"
+        )
     if report.get("worker_id") != expected_worker_id:
-        raise AcceptanceError("#388 transport evidence uses a different canonical Worker")
+        raise AcceptanceError("two-host transport evidence uses a different canonical Worker")
     transport = report.get("transport")
     if not isinstance(transport, Mapping) or transport.get("tls") is not True:
-        raise AcceptanceError("#388 transport evidence is not encrypted")
+        raise AcceptanceError("two-host transport evidence is not encrypted")
     authentication = transport.get("authentication")
     if not isinstance(authentication, str) or not authentication:
-        raise AcceptanceError("#388 transport evidence is missing service authentication")
+        raise AcceptanceError("two-host transport evidence is missing service authentication")
     if report.get("broker_address_recorded") is not False:
-        raise AcceptanceError("#388 transport evidence retained a broker address")
+        raise AcceptanceError("two-host transport evidence retained a broker address")
     if report.get("credential_material_recorded") is not False:
-        raise AcceptanceError("#388 transport evidence retained credential material")
+        raise AcceptanceError("two-host transport evidence retained credential material")
     return {
         "status": "pass",
         "schema": TRANSPORT_SCHEMA,

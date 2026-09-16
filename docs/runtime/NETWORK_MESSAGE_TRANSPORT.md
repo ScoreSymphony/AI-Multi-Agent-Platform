@@ -1,9 +1,10 @@
 # Self-hosted network MessageTransport
 
-Issue #388 adds a dependency-free network-capable implementation of the existing #35
-`MessageTransport` contract. It exists to let canonical Worker transport cross process and host
-boundaries without making a broker product, cloud provider, VPS class or orchestration system
-part of platform identity.
+The platform provides a dependency-free network-capable implementation of the existing
+`MessageTransport` contract. It lets canonical Worker transport cross process and host boundaries
+without making a broker product, cloud provider, VPS class or orchestration system part of platform
+identity. Historical context: issue #388 introduced this adapter and its real two-host acceptance
+campaign.
 
 ## Components
 
@@ -12,10 +13,10 @@ consumer-group, retry and dead-letter state by composing the existing determinis
 `InProcessMessageTransport`. It does not own canonical Task, Run, Event, Node, Worker, Workspace
 or Artifact state.
 
-`TcpMessageTransport` is the client-side #35 adapter used by Control Plane and Worker processes.
-`TransportWorkerDispatcher` and `WorkerTransportEndpoint` remain the canonical distributed Worker
-command/reply adapters. Replacing this TCP implementation with another conforming #35 adapter must
-not change Worker or Task/Run identity.
+`TcpMessageTransport` is the client-side MessageTransport adapter used by Control Plane and Worker
+processes. `TransportWorkerDispatcher` and `WorkerTransportEndpoint` remain the canonical
+distributed Worker command/reply adapters. Replacing this TCP implementation with another conforming
+MessageTransport adapter must not change Worker or Task/Run identity.
 
 ## Network exposure
 
@@ -61,7 +62,8 @@ never secret values. Logging and error responses must not include the authentica
 
 ## Delivery semantics
 
-The adapter preserves the #35 baseline rather than introducing stronger claims:
+The adapter preserves the baseline MessageTransport contract rather than introducing stronger
+claims:
 
 - at-least-once delivery;
 - duplicates are possible;
@@ -85,8 +87,9 @@ after a successful connection.
 
 A Worker-side subscription automatically retries a short bounded reconnect sequence for retryable
 connection failures. When a Worker process disappears abruptly, the broker detects the closed TCP
-stream while waiting for work, closes the underlying #35 subscription, and releases that consumer
-group. A restarted Worker can therefore subscribe again with the same canonical Worker identity.
+stream while waiting for work, closes the underlying MessageTransport subscription, and releases
+that consumer group. A restarted Worker can therefore subscribe again with the same canonical
+Worker identity.
 
 The distributed registry/heartbeat layer remains responsible for deciding whether a Worker is
 online, degraded or offline. Transport reconnect never fabricates Worker health or successful
@@ -94,9 +97,9 @@ execution.
 
 ## Backpressure and limits
 
-`TcpMessageBroker(max_queue_size=...)` delegates retained-queue bounds to the #35 reference
-transport. Full queues fail explicitly with retryable `ErrorCode.RESOURCE_EXHAUSTED`; messages are
-not silently dropped.
+`TcpMessageBroker(max_queue_size=...)` delegates retained-queue bounds to the deterministic
+reference transport. Full queues fail explicitly with retryable `ErrorCode.RESOURCE_EXHAUSTED`;
+messages are not silently dropped.
 
 `max_frame_bytes` bounds every JSON-line frame. Oversized or malformed frames fail instead of being
 accepted into unbounded memory. Operators should set queue/frame limits together with Worker
@@ -118,14 +121,14 @@ Run the broker and Worker under dedicated unprivileged process identities. Worke
 access should be limited to its machine-local workspace root and explicitly configured executor
 resources. TLS private keys and transport credentials should be readable only by the service that
 needs them. Do not mount Control Plane data directories into remote Workers merely to make paths
-line up; #37 Workspace references/materialization own that boundary.
+line up; Workspace references/materialization own that boundary.
 
 ## Reference scope
 
 This adapter is intentionally small and dependency-free so the advanced self-hosted deployment has
 no paid-service requirement. It is not a permanent broker selection. Redis, NATS, RabbitMQ, Kafka
-or another implementation may later satisfy the same #35 contract without becoming canonical
-architecture.
+or another implementation may later satisfy the same MessageTransport contract without becoming
+canonical architecture.
 
 The current reference does not provision certificates, DNS, firewall policy, service discovery or
 external durable broker storage. Those remain deployment/operator responsibilities and must be
