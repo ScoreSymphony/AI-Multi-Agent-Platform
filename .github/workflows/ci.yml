@@ -34,7 +34,7 @@ jobs:
       - name: Pytest
         run: pytest
       - name: Deterministic evaluation gate
-        run: python scripts/ci/issue19_evaluation_gate.py --platform-commit "$GITHUB_SHA"
+        run: python scripts/ci/deterministic_evaluation_regression_gate.py --platform-commit "$GITHUB_SHA"
       - name: Materialize runtime assets
         run: python scripts/ci/materialize_runtime_assets.py
       - name: Build package

@@ -24,7 +24,7 @@ def test_conformance_profiles_are_explicit_and_scenario_ids_are_unique() -> None
         scenarios = profile_scenarios(profile)
         assert scenarios
         assert len({scenario.scenario_id for scenario in scenarios}) == len(scenarios)
-        assert all(scenario.owner.startswith("#") for scenario in scenarios)
+        assert all(scenario.owner.strip() for scenario in scenarios)
         assert all(scenario.criterion for scenario in scenarios)
 
 
@@ -111,7 +111,7 @@ def test_release_lifecycle_checks_are_required_and_bound_to_real_evidence() -> N
     expected_evidence = {
         "REL-BACKUP": "test_clean_replacement_machine_restore_preserves_canonical_history",
         "REL-UPGRADE": "test_upgrade_from_previous_schema_fixture_records_history",
-        "REL-EVAL": "scripts/ci/issue19_evaluation_gate.py",
+        "REL-EVAL": "scripts/ci/deterministic_evaluation_regression_gate.py",
     }
 
     for scenario_id, marker in expected_evidence.items():

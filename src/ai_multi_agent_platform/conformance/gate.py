@@ -375,12 +375,12 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         ConformanceScenario(
             "REL-EVAL",
-            "#19 evaluation/regression",
+            "evaluation/regression",
             (
                 "checked-in deterministic evaluation baseline rejects regressions "
                 "without paid services"
             ),
-            (sys.executable, "scripts/ci/issue19_evaluation_gate.py"),
+            (sys.executable, "scripts/ci/deterministic_evaluation_regression_gate.py"),
         ),
         ConformanceScenario(
             "REL-VERTICAL",
