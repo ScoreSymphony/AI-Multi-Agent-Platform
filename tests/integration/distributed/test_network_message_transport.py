@@ -121,7 +121,7 @@ def test_loopback_transport_preserves_envelope_and_ack_semantics() -> None:
     asyncio.run(scenario())
 
 
-def test_operation_control_idempotency_binding_matches_issue35_contract() -> None:
+def test_operation_control_idempotency_binding_matches_transport_contract() -> None:
     async def scenario() -> None:
         broker = TcpMessageBroker(authentication_key=TEST_AUTHENTICATION_KEY)
         await broker.start()
