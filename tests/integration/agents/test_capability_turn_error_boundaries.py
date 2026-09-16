@@ -15,6 +15,8 @@ from ai_multi_agent_platform.capabilities import (
 )
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
+    ContractError,
+    ErrorCode,
     HealthStatus,
     ModelRequest,
     ModelResponse,
@@ -142,7 +144,7 @@ def _context(task_id: str, project_id: str) -> OperationContext:
 
 
 @pytest.mark.asyncio
-async def test_model_cancellation_propagates_and_releases_budget_once() -> None:
+async def test_model_cancellation_is_canonical_and_releases_budget_once() -> None:
     task_id = new_id("task")
     run_id = new_id("run")
     agent_id = new_id("agent")
@@ -156,7 +158,7 @@ async def test_model_cancellation_propagates_and_releases_budget_once() -> None:
         budget_admission=budgets,
     )
 
-    with pytest.raises(asyncio.CancelledError):
+    with pytest.raises(ContractError) as cancelled:
         await turn.execute(
             task_id=task_id,
             run_id=run_id,
@@ -169,6 +171,8 @@ async def test_model_cancellation_propagates_and_releases_budget_once() -> None:
             context=_context(task_id, project_id),
         )
 
+    assert cancelled.value.code is ErrorCode.CANCELLED
+    assert isinstance(cancelled.value.__cause__, asyncio.CancelledError)
     assert [decision.action for decision in budgets.admitted] == [BudgetActionKind.MODEL_CALL]
     assert budgets.released == budgets.admitted
     assert budgets.reconciled == []
