@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute one #502 pilot command with Linux x86-64 networking syscalls denied.
+"""Execute one contained command with Linux x86-64 socket syscalls denied.
 
 This helper is intentionally narrow evaluation infrastructure, not a general platform process
 sandbox. It installs an unprivileged seccomp filter after ``PR_SET_NO_NEW_PRIVS`` and then execs the
@@ -88,7 +88,7 @@ def _jump(code: int, value: int, *, on_true: int, on_false: int) -> _SockFilter:
 
 def _install_no_network_filter() -> None:
     if platform.system() != "Linux" or platform.machine().lower() not in {"x86_64", "amd64"}:
-        raise RuntimeError("issue #502 seccomp pilot wrapper supports Linux x86-64 only")
+        raise RuntimeError("socket-denied evaluation wrapper supports Linux x86-64 only")
 
     deny = _SECCOMP_RET_ERRNO | errno.EPERM
     instructions: list[_SockFilter] = [

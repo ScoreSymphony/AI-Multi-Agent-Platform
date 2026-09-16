@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Run the pinned #502 ProjectAtlas pilot without granting repository ownership.
+"""Run the pinned ProjectAtlas pilot without granting repository ownership.
 
 The harness deliberately does not install ProjectAtlas or call ``projectatlas init``. The caller
 supplies an already verified executable. ProjectAtlas receives a read-only fixture repository and a
 separate writable state directory, plus a deliberately minimal environment with no platform or CI
 secrets. On Linux x86-64 every untrusted ProjectAtlas process is executed through the supplied
-seccomp no-network wrapper. The report is reproducible evaluation evidence, not an adoption
+seccomp socket-denied wrapper. The report is reproducible evaluation evidence, not an adoption
 decision.
 """
 
@@ -104,9 +104,9 @@ def _make_fixture(root: Path) -> str:
         [
             "git",
             "-c",
-            "user.name=Issue 502 Pilot",
+            "user.name=Repository Intelligence Pilot",
             "-c",
-            "user.email=issue502@example.invalid",
+            "user.email=repository-intelligence@example.invalid",
             "commit",
             "-qm",
             "fixture",
@@ -279,7 +279,7 @@ def run_pilot(binary: Path, no_network_wrapper: Path) -> dict[str, Any]:
     if not no_network_wrapper.is_file():
         raise FileNotFoundError(no_network_wrapper)
 
-    with tempfile.TemporaryDirectory(prefix="issue502-projectatlas-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="projectatlas-pilot-") as temporary:
         root = Path(temporary)
         source_root = root / "source"
         state_dir = root / "provider-state"

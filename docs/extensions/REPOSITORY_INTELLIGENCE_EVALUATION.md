@@ -1,17 +1,17 @@
 # Repository-intelligence provider evaluation
 
-Issue #502 requires optional repository/code-intelligence providers to prove measurable value over
-the deterministic platform baseline before adoption. This document defines the common evidence path.
-It does not make any third-party provider part of the required runtime.
+Optional repository/code-intelligence providers must prove measurable value over the deterministic
+platform baseline before adoption. This document defines the common evidence path. It does not make
+any third-party provider part of the required runtime.
 
 ## Canonical evaluation boundary
 
-`RepositoryIntelligenceEvaluationCaseExecutor` adapts the #502 `CapabilityToolProvider` boundary into
-the existing #19 `EvaluationRunner`. A versioned `EvaluationCase` supplies only:
+`RepositoryIntelligenceEvaluationCaseExecutor` adapts the canonical `CapabilityToolProvider`
+boundary into the existing `EvaluationRunner`. A versioned `EvaluationCase` supplies only:
 
 - the canonical repository-intelligence operation;
 - provider-neutral operation arguments;
-- ordinary #19 deterministic assertions and/or metric rules.
+- ordinary deterministic assertions and/or metric rules.
 
 The executor records provider output unchanged under `observation.data.output` and adds:
 
@@ -25,8 +25,9 @@ The executor records provider output unchanged under `observation.data.output` a
 - schema-error count.
 
 The same suite can therefore run against the deterministic baseline and an optional provider once
-that provider exposes normalized canonical source capabilities. #19 baseline comparison/regression
-policy remains the comparison authority; #502 does not introduce a second durable benchmark store.
+that provider exposes normalized canonical source capabilities. The platform Evaluation baseline
+comparison/regression policy remains the comparison authority; repository intelligence does not
+introduce a second durable benchmark store.
 
 Source-derived provider output is considered current only for `live_revision`,
 `workspace_snapshot`, `live_workspace` or `fresh_index`. `stale_index` and `unknown` remain valid
@@ -93,10 +94,10 @@ capabilities remain disabled.
 
 ## Real baseline-vs-candidate comparison
 
-The final #502 workflow runs `scripts/ci/issue502_projectatlas_comparison.py`. The wrapper forces a
-deterministic Git commit timestamp so the ProjectAtlas pilot and the local Git reference baseline
-operate on byte-identical fixtures with the same immutable commit revision. The workflow fails if
-the revisions differ.
+The retained evaluation tooling runs `scripts/ci/projectatlas_reference_comparison.py`. The wrapper
+forces a deterministic Git commit timestamp so the ProjectAtlas pilot and the local Git reference
+baseline operate on byte-identical fixtures with the same immutable commit revision. The comparison
+fails if the revisions differ.
 
 The local reference path measures bounded repository navigation/search/slice work with Git and owns
 no persistent index. The ProjectAtlas path measures the pinned candidate on the same source.
@@ -129,15 +130,15 @@ That distinction matters: the tiny fixture supplies real baseline-vs-candidate e
 conservative decision, but it cannot justify claims about ProjectAtlas's differentiated graph or
 semantic value.
 
-## Final #502 provider decision
+## Provider decision
 
-ProjectAtlas is **experimental/deferred** for the #502 completion boundary.
+ProjectAtlas is **experimental/deferred**.
 
 The current evidence is sufficient to:
 
-- retain the pinned candidate and its #20-compatible health/index-status plugin shell;
+- retain the pinned candidate and its plugin-compatible health/index-status shell;
 - demonstrate reversible install/enable/disable/remove behavior;
-- demonstrate evaluation-only read-only/no-network containment;
+- demonstrate evaluation-only read-only/socket-denied containment;
 - demonstrate a real measured comparison against the deterministic local baseline;
 - represent the candidate safely in the optional technical Registry/catalog.
 
@@ -151,8 +152,8 @@ A future adoption issue must add strict version-pinned raw-output normalization,
 correctness/resource/freshness evidence and a production process boundary before source capabilities
 can outrank the baseline.
 
-This deferred candidate decision does not block #502 itself. The clarified v1 requirement is the
-provider-neutral repository/code-intelligence core and deterministic local baseline, both of which
-remain usable without any third-party provider. The architecture decision is recorded in
+The deferred candidate decision does not block the provider-neutral repository/code-intelligence
+core or deterministic local baseline, both of which remain usable without any third-party provider.
+The architecture decision is recorded in
 `docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md`; see
-`docs/history/issues/ISSUE_502_COMPLETION.md` for the final acceptance record.
+`docs/history/issues/ISSUE_502_COMPLETION.md` for the historical acceptance record.

@@ -70,7 +70,7 @@ def _suite() -> EvaluationSuite:
         suite_id="suite.repository-intelligence-contract",
         name="Repository intelligence provider contract",
         version="1",
-        tags=("repository-intelligence", "issue-502", "no-paid-service"),
+        tags=("repository-intelligence", "provider-evaluation", "no-paid-service"),
         cases=(
             EvaluationCase(
                 case_id="case.repository-map",
@@ -190,7 +190,7 @@ def test_executor_records_schema_provenance_and_resource_metrics() -> None:
         executor = RepositoryIntelligenceEvaluationCaseExecutor(provider)
         case = _suite().cases[1]
         attempt = EvaluationAttempt(
-            evaluation_run_id="evaluation_run_issue502",
+            evaluation_run_id="evaluation_run_repository_intelligence",
             case_id=case.case_id,
             case_version=case.version,
             repetition_index=0,
@@ -222,7 +222,7 @@ def test_executor_marks_malformed_source_output_as_noncompliant() -> None:
         executor = RepositoryIntelligenceEvaluationCaseExecutor(MalformedProvider(_snapshot))
         case = _suite().cases[0]
         attempt = EvaluationAttempt(
-            evaluation_run_id="evaluation_run_issue502_malformed",
+            evaluation_run_id="evaluation_run_repository_intelligence_malformed",
             case_id=case.case_id,
             case_version=case.version,
             repetition_index=0,
