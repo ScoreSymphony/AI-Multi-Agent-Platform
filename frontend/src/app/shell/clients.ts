@@ -18,6 +18,7 @@ import { OrganizationClient } from "../../api/organizations";
 import { PluginsClient } from "../../api/plugins";
 import { RegistryClient } from "../../api/registry";
 import { RepositoryCollectionClient } from "../../api/repositories";
+import { SetupClient } from "../../api/setup";
 import { TemplateClient } from "../../api/templates";
 import { VerificationClient } from "../../api/verification";
 
@@ -26,6 +27,7 @@ export function useShellClients(baseUrl: string) {
   const transport = session.transport;
   const client = useMemo(() => new ControlPlaneClient({ transport }), [transport]);
   const onboardingClient = useMemo(() => new OnboardingClient({ transport }), [transport]);
+  const setupClient = useMemo(() => new SetupClient({ transport }), [transport]);
   const collections = useMemo(() => new ControlPlaneCollectionClient({ transport }), [transport]);
   const approvalClient = useMemo(() => new ApprovalClient({ transport }), [transport]);
   const repositoryClient = useMemo(() => new RepositoryCollectionClient({ transport }), [transport]);
@@ -49,6 +51,7 @@ export function useShellClients(baseUrl: string) {
     session,
     client,
     onboardingClient,
+    setupClient,
     collections,
     approvalClient,
     repositoryClient,
