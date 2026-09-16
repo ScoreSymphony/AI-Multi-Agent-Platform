@@ -9,6 +9,7 @@ from typing import Literal, Protocol, cast, runtime_checkable
 
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
+    ContractError,
     ExecutionHandle,
     ExecutionRequest,
     ExecutionSnapshot,
@@ -27,6 +28,7 @@ from ai_multi_agent_platform.messaging import (
 )
 from ai_multi_agent_platform.security import redact_exception
 
+from ._error_boundary import delivery_failure_retryable
 from .models import (
     JobRequirements,
     JobResultStatus,
@@ -395,11 +397,12 @@ class WorkerTransportEndpoint:
             async for delivery in subscription:
                 try:
                     await self._handle(delivery.envelope)
-                except Exception:
+                # error-boundary: allow-broad-catch=boundary delivery owner must ACK/NACK once
+                except Exception as exc:
                     await self._transport.nack(
                         delivery,
-                        retry=True,
-                        reason="worker_transport_reply_publish_failed",
+                        retry=delivery_failure_retryable(exc),
+                        reason="worker_transport_boundary_failed",
                     )
                 else:
                     await self._transport.ack(delivery)
@@ -472,6 +475,7 @@ class WorkerTransportEndpoint:
                 await self._publish_reply(command, reply_topic, "worker.result", payload)
                 return
             raise RegistryError(f"unsupported Worker transport operation: {operation}")
+        # error-boundary: allow-broad-catch=translation Worker execution -> transport error contract
         except Exception as exc:
             category, retryable = _error_category(exc)
             await self._publish_error(
@@ -673,6 +677,8 @@ def _decode_adapter_metadata(value: object, name: str) -> tuple[AdapterMetadata,
 
 
 def _error_category(error: Exception) -> tuple[str, bool]:
+    if isinstance(error, ContractError):
+        return error.code.value, error.retryable
     if isinstance(error, RemoteWorkerTransportError):
         return error.category, error.retryable
     if isinstance(error, (RegistryError, ValueError)):
@@ -683,6 +689,8 @@ def _error_category(error: Exception) -> tuple[str, bool]:
 
 
 def _safe_error_message(error: Exception, category: str) -> str:
+    if isinstance(error, ContractError):
+        return redact_exception(error)
     if isinstance(error, RemoteWorkerTransportError):
         return redact_exception(error)
     if isinstance(error, RegistryError):

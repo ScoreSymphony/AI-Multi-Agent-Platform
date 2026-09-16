@@ -337,6 +337,7 @@ class CapabilityInvoker:
                 adapter_metadata=exc.adapter_metadata,
             )
             raise
+        # error-boundary: allow-broad-catch=boundary provider invocation outer boundary
         except Exception as exc:
             await self._record(
                 request,
@@ -511,5 +512,5 @@ class CapabilityInvoker:
         except (SchemaError, ValidationError) as exc:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST if stage == "input" else ErrorCode.CONTRACT_VIOLATION,
-                f"{stage} schema validation failed for capability {capability_id!r}: {exc.message}",
+                f"{stage} schema validation failed for capability {capability_id!r}",
             ) from exc

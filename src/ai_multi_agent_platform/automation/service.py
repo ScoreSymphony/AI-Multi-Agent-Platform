@@ -598,13 +598,14 @@ class AutomationService:
                 started=started,
             )
             return failed
+        # error-boundary: allow-broad-catch=boundary delivery owns TaskCreator implementation faults
         except Exception as exc:
             failed = await self._persist_failure(
                 automation,
                 processing,
                 error_code="automation_task_creation_failed",
-                error_message=str(exc),
-                retryable_hint=True,
+                error_message=f"automation task creation failed ({type(exc).__name__})",
+                retryable_hint=False,
                 started=started,
             )
             return failed
