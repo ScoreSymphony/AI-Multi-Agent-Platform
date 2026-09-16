@@ -45,7 +45,7 @@ class _FixtureProvider(ModelProvider):
     def descriptor(self) -> ProviderDescriptor:
         return ProviderDescriptor(
             provider_id=self._provider_id,
-            provider_type="issue-859-fixture",
+            provider_type="model-gateway-evaluation-fixture",
             supported_operations=("generate",),
             capabilities=(),
             health=HealthStatus.HEALTHY,
@@ -159,12 +159,12 @@ def test_gateway_benchmark_records_canonical_error_category_without_secret_messa
 
 def test_bifrost_can_be_absent_without_changing_platform_model_runtime_path() -> None:
     registry = ModelRegistry()
-    registry.register_provider(_FixtureProvider("issue-859-direct-only"))
+    registry.register_provider(_FixtureProvider("bifrost-absence-direct-provider"))
     registry.register_model(
         ModelConfiguration(
-            config_id="issue-859-direct-model",
-            display_name="Issue 859 direct-only model",
-            provider_id="issue-859-direct-only",
+            config_id="bifrost-absence-direct-model",
+            display_name="Direct-only model without Bifrost",
+            provider_id="bifrost-absence-direct-provider",
             capabilities=ModelCapabilities(context_window=8_192),
             location=ModelLocation.LOCAL,
             health=HealthStatus.HEALTHY,
@@ -175,24 +175,24 @@ def test_bifrost_can_be_absent_without_changing_platform_model_runtime_path() ->
     response = asyncio.run(
         ModelRuntime(registry).generate(
             ModelRequest(
-                request_id="issue-859-no-bifrost",
+                request_id="bifrost-absence-request",
                 messages=("Reply with the single word: ready",),
-                context=OperationContext(correlation_id="issue-859:no-bifrost"),
-                requirements={"model_config_id": "issue-859-direct-model"},
+                context=OperationContext(correlation_id="bifrost-absence:direct-only"),
+                requirements={"model_config_id": "bifrost-absence-direct-model"},
             )
         )
     )
 
     assert response.text == "ready"
-    assert response.model_ref == "issue-859-direct-model"
+    assert response.model_ref == "bifrost-absence-direct-model"
     runtime_metadata = [
         metadata
         for metadata in response.adapter_metadata
         if metadata.namespace == "platform-model-runtime"
     ]
     assert len(runtime_metadata) == 1
-    assert runtime_metadata[0].values["provider_id"] == "issue-859-direct-only"
-    assert runtime_metadata[0].values["model_config_id"] == "issue-859-direct-model"
+    assert runtime_metadata[0].values["provider_id"] == "bifrost-absence-direct-provider"
+    assert runtime_metadata[0].values["model_config_id"] == "bifrost-absence-direct-model"
 
 
 def test_bifrost_provenance_keeps_gateway_candidate_optional_and_pinned() -> None:
