@@ -93,7 +93,7 @@ export function ShellLayout({
               {apiStatusLabel(manifestState, manifest)}
             </div>
           </header>
-          <main id="main" data-route={path} tabIndex={-1}>
+          <main id="main" tabIndex={-1} data-route={path}>
             {path !== "/onboarding" && onboardingAvailable ? <OnboardingCallout client={clients.onboardingClient} /> : null}
             {content}
           </main>
