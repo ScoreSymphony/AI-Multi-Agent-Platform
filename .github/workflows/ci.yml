@@ -6,51 +6,7 @@ on:
   pull_request:
 
 jobs:
-  python_tests:
-    name: python-tests / ${{ matrix.shard }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - shard: fast-structural
-            marker: unit or contract
-            paths: tests/unit tests/contract
-          - shard: system
-            marker: integration or e2e
-            paths: tests/integration tests/e2e
-          - shard: qualification
-            marker: regression or performance or release
-            paths: tests/regression tests/performance tests/release
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-      - name: Bootstrap documented environment
-        shell: bash
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
-      - name: Run ${{ matrix.shard }} pytest shard
-        env:
-          PYTEST_MARKER: ${{ matrix.marker }}
-          PYTEST_PATHS: ${{ matrix.paths }}
-        run: pytest -m "$PYTEST_MARKER" $PYTEST_PATHS
-      - name: Run architecture tests
-        if: matrix.shard == 'fast-structural'
-        run: pytest tests/architecture
-      - name: Verify fast-layer regression detection
-        if: matrix.shard == 'fast-structural'
-        run: python scripts/ci/verify_fast_unit_regression_detection.py
-
-  backend_gates:
-    name: backend-gates
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -75,6 +31,12 @@ jobs:
         run: ruff check .
       - name: Mypy
         run: mypy
+      - name: Fast unit tests
+        run: pytest tests/unit
+      - name: Verify fast-layer regression detection
+        run: python scripts/ci/verify_fast_unit_regression_detection.py
+      - name: Non-unit pytest suite
+        run: pytest -m "not unit"
       - name: Deterministic evaluation gate
         run: python scripts/ci/deterministic_evaluation_regression_gate.py --platform-commit "$GITHUB_SHA"
       - name: Materialize runtime assets
@@ -95,25 +57,6 @@ jobs:
           name: platform-conformance-mcp
           path: conformance-mcp.json
           if-no-files-found: warn
-
-  test:
-    runs-on: ubuntu-latest
-    if: always()
-    needs:
-      - python_tests
-      - backend_gates
-    steps:
-      - name: Verify Python CI shards succeeded
-        env:
-          PYTHON_TESTS_RESULT: ${{ needs.python_tests.result }}
-          BACKEND_GATES_RESULT: ${{ needs.backend_gates.result }}
-        shell: bash
-        run: |
-          if [[ "$PYTHON_TESTS_RESULT" != "success" || "$BACKEND_GATES_RESULT" != "success" ]]; then
-            echo "python_tests=$PYTHON_TESTS_RESULT"
-            echo "backend_gates=$BACKEND_GATES_RESULT"
-            exit 1
-          fi
 
   single-node-install-smoke:
     runs-on: ubuntu-latest
