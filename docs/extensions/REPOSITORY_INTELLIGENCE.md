@@ -1,9 +1,9 @@
 # Repository / Code Intelligence
 
-Issue #502 makes repository/code intelligence part of the **required operational v1 core**. The
-required core is provider-neutral and ships with a deterministic local baseline. Optional
-third-party indexers/providers may improve navigation, symbol/graph/semantic analysis or latency,
-but they are enhancements rather than prerequisites for a usable platform.
+Repository/code intelligence is part of the **required operational v1 core**. The required core is
+provider-neutral and ships with a deterministic local baseline. Optional third-party
+indexers/providers may improve navigation, symbol/graph/semantic analysis or latency, but they are
+enhancements rather than prerequisites for a usable platform.
 
 Repository intelligence does not create a second Repository, Git, Workspace, Search, Task, Agent
 or authorization authority.
@@ -170,7 +170,7 @@ provider-owned cache/index directory, no repository writes, no worktree ownershi
 no unrestricted Docker socket, no global secrets, egress denied unless explicitly required,
 bounded resources, recorded provenance, and a deterministic disable/remove/rebuild path.
 
-## #502 completion boundary
+## Repository-intelligence v1 completion boundary
 
 The clarified provider-neutral v1 core is complete. The repository contains:
 
@@ -186,15 +186,15 @@ The clarified provider-neutral v1 core is complete. The repository contains:
 - safe optional technical Registry/catalog representation.
 
 ProjectAtlas v0.4.5 has also completed a pinned checksum-verified, read-only, external-state,
-no-network **evaluation** pilot. The final #502 workflow compares it against a real deterministic Git
-reference baseline on the same immutable tiny fixture and records like-for-like timing, tool-call
-and persistent-state deltas without fabricating unmeasured correctness, normalized context-size or
-comparable memory metrics.
+no-network **evaluation** pilot. The final repository-intelligence workflow compares it against a
+real deterministic Git reference baseline on the same immutable tiny fixture and records
+like-for-like timing, tool-call and persistent-state deltas without fabricating unmeasured
+correctness, normalized context-size or comparable memory metrics.
 
-The final provider decision for #502 is **experimental/deferred**. ProjectAtlas is not the default
-provider and its production repository map/search/source-slice/symbol/graph capabilities remain
-disabled. The CI seccomp wrapper proves the evaluation boundary only; it is not treated as a generic
-production sandbox.
+The final repository-intelligence provider decision is **experimental/deferred**. ProjectAtlas is
+not the default provider and its production repository map/search/source-slice/symbol/graph
+capabilities remain disabled. The CI seccomp wrapper proves the evaluation boundary only; it is not
+treated as a generic production sandbox.
 
 That conservative provider decision does not keep the v1 core issue open. Future third-party
 provider adoption, richer graph/semantic capability activation, version-pinned output normalizers,
