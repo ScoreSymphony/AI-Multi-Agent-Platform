@@ -13,6 +13,7 @@ from jsonschema.exceptions import SchemaError, ValidationError  # type: ignore[i
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
+from ._settlement import settle_awaitable
 from .models import (
     PLUGIN_MANIFEST_VERSION,
     CompatibilityState,
@@ -161,19 +162,17 @@ class PluginRegistry:
                     await binder.register(extension)
                     registered.append(extension)
             report = await runtime.health()
-        except Exception:
-            rollback_failed = False
-            for extension in reversed(registered):
-                binder = self._binders.get(extension.spec.extension_type)
-                if binder is not None:
-                    try:
-                        await binder.unregister(extension)
-                    except Exception:
-                        rollback_failed = True
-            try:
-                await runtime.shutdown()
-            except Exception:
-                rollback_failed = True
+        # error-boundary: allow-broad-catch=cleanup plugin enable must roll back partial bindings
+        except BaseException as enable_error:
+            rollback_failed, settlement_error = await settle_awaitable(
+                self._rollback_enable(runtime, registered)
+            )
+            rollback_failed = bool(rollback_failed) or settlement_error is not None
+            if settlement_error is not None:
+                enable_error.add_note(
+                    "plugin enable rollback did not settle cleanly: "
+                    f"{type(settlement_error).__name__}"
+                )
             record.runtime = None
             record.extensions = ()
             record.granted_permissions = frozenset()
@@ -196,6 +195,27 @@ class PluginRegistry:
         record.health_detail = report.detail
         return self.get(plugin_id)
 
+    async def _rollback_enable(
+        self,
+        runtime: PluginRuntime,
+        registered: list[ExtensionRegistration],
+    ) -> bool:
+        rollback_failed = False
+        for extension in reversed(registered):
+            binder = self._binders.get(extension.spec.extension_type)
+            if binder is not None:
+                try:
+                    await binder.unregister(extension)
+                # error-boundary: allow-broad-catch=cleanup continue rollback for other bindings
+                except Exception:
+                    rollback_failed = True
+        try:
+            await runtime.shutdown()
+        # error-boundary: allow-broad-catch=cleanup preserve the primary enable failure
+        except Exception:
+            rollback_failed = True
+        return rollback_failed
+
     async def disable(self, plugin_id: str) -> PluginSnapshot:
         record = self._record(plugin_id)
         if record.runtime is None and not record.extensions:
@@ -216,15 +236,17 @@ class PluginRegistry:
             if runtime is not None:
                 shutdown_started = True
                 await runtime.shutdown()
-        except Exception:
-            rollback_failed = False
-            for extension in reversed(unregistered):
-                binder = self._binders.get(extension.spec.extension_type)
-                if binder is not None:
-                    try:
-                        await binder.register(extension)
-                    except Exception:
-                        rollback_failed = True
+        # error-boundary: allow-broad-catch=cleanup plugin disable must restore removed bindings
+        except BaseException as disable_error:
+            rollback_failed, settlement_error = await settle_awaitable(
+                self._restore_unregistered(unregistered)
+            )
+            rollback_failed = bool(rollback_failed) or settlement_error is not None
+            if settlement_error is not None:
+                disable_error.add_note(
+                    "plugin disable rollback did not settle cleanly: "
+                    f"{type(settlement_error).__name__}"
+                )
             if shutdown_started or rollback_failed:
                 record.state = PluginState.FAILED
                 record.health = PluginHealth.UNAVAILABLE
@@ -244,12 +266,28 @@ class PluginRegistry:
         record.health_detail = None
         return self.get(plugin_id)
 
+    async def _restore_unregistered(
+        self,
+        unregistered: list[ExtensionRegistration],
+    ) -> bool:
+        rollback_failed = False
+        for extension in reversed(unregistered):
+            binder = self._binders.get(extension.spec.extension_type)
+            if binder is not None:
+                try:
+                    await binder.register(extension)
+                # error-boundary: allow-broad-catch=cleanup continue rollback for other bindings
+                except Exception:
+                    rollback_failed = True
+        return rollback_failed
+
     async def refresh_health(self, plugin_id: str) -> PluginSnapshot:
         record = self._record(plugin_id)
         if record.runtime is None or record.state is not PluginState.ENABLED:
             return self.get(plugin_id)
         try:
             report = await record.runtime.health()
+        # error-boundary: allow-broad-catch=boundary health state owns plugin-local health faults
         except Exception:
             record.health = PluginHealth.UNAVAILABLE
             record.health_detail = "plugin health check failed"
@@ -459,7 +497,7 @@ class PluginRegistry:
         except ValidationError as exc:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                f"invalid configuration for plugin {manifest.plugin_id!r}: {exc.message}",
+                f"invalid configuration for plugin {manifest.plugin_id!r}",
             ) from exc
 
     def _validate_dependencies(self, manifest: PluginManifest) -> None:

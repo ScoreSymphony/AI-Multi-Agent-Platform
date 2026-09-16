@@ -359,7 +359,7 @@ def test_safe_evaluator_turns_evaluator_exception_into_canonical_error_result() 
             observation: EvaluationObservation,
         ) -> EvaluationResult:
             del evaluation_run_id, case, observation
-            raise RuntimeError("judge unavailable")
+            raise RuntimeError("judge unavailable: private-token")
 
     result = SafeEvaluator(BrokenEvaluator()).evaluate(
         evaluation_run_id="evaluation_run_error",
@@ -369,7 +369,8 @@ def test_safe_evaluator_turns_evaluator_exception_into_canonical_error_result() 
 
     assert result.outcome is EvaluationOutcome.ERROR
     assert result.error_category == "evaluator_failure"
-    assert result.error_message == "judge unavailable"
+    assert result.error_message == "evaluator execution failed (RuntimeError)"
+    assert "private-token" not in result.error_message
 
 
 def test_reference_repository_persists_runs_and_results() -> None:

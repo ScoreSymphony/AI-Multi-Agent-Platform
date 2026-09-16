@@ -8,9 +8,15 @@ from typing import Protocol
 
 import pytest
 
-from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext, OperationControl
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    ExecutionRequest,
+    OperationContext,
+    OperationControl,
+)
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
-from ai_multi_agent_platform.distributed import RegistryError, WorkerJobRequest
+from ai_multi_agent_platform.distributed import WorkerJobRequest
 from ai_multi_agent_platform.distributed.workspace import WorkspaceJobMaterializationResolver
 from ai_multi_agent_platform.distributed.workspace_transport import (
     TransportRemoteWorkspaceMaterializer,
@@ -37,7 +43,7 @@ from ai_multi_agent_platform.workspaces import (
 )
 from ai_multi_agent_platform.workspaces.reference import LocalWorkspaceProvider
 
-TEST_TRANSPORT_KEY = "issue-433-test-transport-key"
+TEST_TRANSPORT_KEY = "workspace-transport-test-key"
 PROCESS_START_TIMEOUT_SECONDS = 15.0
 
 
@@ -49,7 +55,7 @@ class _ProcessReadySignal(Protocol):
 
 class _RecordingTransport(InProcessMessageTransport):
     def __init__(self) -> None:
-        super().__init__(provider_id="issue-433-recording")
+        super().__init__(provider_id="workspace-recording")
         self.published: list[tuple[str, TransportEnvelope]] = []
 
     async def _publish_once(
@@ -67,7 +73,7 @@ class _DropFirstCommitReplyTransport(TcpMessageTransport):
             host,
             port,
             authentication_key=authentication_key,
-            provider_id="issue-433-drop-commit-reply",
+            provider_id="workspace-drop-commit-reply",
         )
         self.dropped_commit_reply = False
 
@@ -90,7 +96,7 @@ class _DisconnectAfterFirstChunkAckTransport(TcpMessageTransport):
             host,
             port,
             authentication_key=authentication_key,
-            provider_id="issue-433-disconnect-after-chunk",
+            provider_id="workspace-disconnect-after-chunk",
         )
         self.disconnected_after_chunk = False
 
@@ -111,12 +117,12 @@ class _DisconnectAfterFirstChunkAckTransport(TcpMessageTransport):
 def _context(project_id: str) -> DataAccessContext:
     return DataAccessContext(
         operation=OperationContext(
-            correlation_id="issue-433",
+            correlation_id="workspace-transport",
             owner_type="service",
-            owner_id="issue-433",
+            owner_id="workspace-transport",
             project_id=project_id,
         ),
-        actor_ref="service:issue-433",
+        actor_ref="service:workspace-transport",
     )
 
 
@@ -133,7 +139,7 @@ async def _canonical_workspace(
     workspaces = LocalWorkspaceProvider(tmp_path / "control-workspaces", files)
     workspace = await workspaces.create_workspace(
         project_id=project_id,
-        owner_ref=OwnerRef(type="service", id="issue-433"),
+        owner_ref=OwnerRef(type="service", id="workspace-transport"),
         workspace_type=WorkspaceType.REMOTE,
         context=context,
         access_mode=access_mode,
@@ -165,7 +171,7 @@ def _execution_request(project_id: str) -> ExecutionRequest:
         subject_type="task",
         subject_id=task_id,
         context=OperationContext(
-            correlation_id=f"issue-433:{task_id}",
+            correlation_id=f"workspace-transport:{task_id}",
             project_id=project_id,
         ),
     )
@@ -244,7 +250,7 @@ def test_read_only_remote_workspace_detects_worker_side_modification(tmp_path: P
         )
         worker_id = new_id("worker")
         worker_root = tmp_path / "worker-root"
-        transport = InProcessMessageTransport(provider_id="issue-433-read-only")
+        transport = InProcessMessageTransport(provider_id="workspace-read-only")
         store = WorkerWorkspaceMaterializationStore(worker_id, worker_root)
         endpoint_task = asyncio.create_task(
             WorkerWorkspaceTransportEndpoint(store, transport).serve()
@@ -262,8 +268,13 @@ def test_read_only_remote_workspace_detects_worker_side_modification(tmp_path: P
             target = worker_root / execution_workspace / "src" / "input.txt"
             target.chmod(0o600)
             target.write_bytes(b"unauthorized change")
-            with pytest.raises(RegistryError, match="read-only remote Workspace was modified"):
+            with pytest.raises(
+                ContractError,
+                match="read-only remote Workspace was modified",
+            ) as modified:
                 await materializer.collect_result(receipt)
+            assert modified.value.code is ErrorCode.FORBIDDEN
+            assert modified.value.retryable is False
         finally:
             endpoint_task.cancel()
             with suppress(asyncio.CancelledError):
@@ -281,7 +292,7 @@ def test_workspace_bound_local_worker_uses_exact_materialized_execution_token(
             tmp_path
         )
         worker_id = new_id("worker")
-        transport = InProcessMessageTransport(provider_id="issue-433-bound-worker")
+        transport = InProcessMessageTransport(provider_id="workspace-bound-worker")
         store = WorkerWorkspaceMaterializationStore(worker_id, tmp_path / "worker-root")
         endpoint_task = asyncio.create_task(
             WorkerWorkspaceTransportEndpoint(store, transport).serve()
@@ -333,7 +344,7 @@ def test_tcp_worker_subscription_reconnects_mid_workspace_transfer(tmp_path: Pat
             broker.host,
             broker.port,
             authentication_key=TEST_TRANSPORT_KEY,
-            provider_id="issue-433-reconnect-control",
+            provider_id="workspace-reconnect-control",
         )
         worker_transport = _DisconnectAfterFirstChunkAckTransport(
             broker.host,
@@ -388,7 +399,7 @@ def test_tcp_commit_reply_failure_redelivers_without_duplicate_materialization(
             broker.host,
             broker.port,
             authentication_key=TEST_TRANSPORT_KEY,
-            provider_id="issue-433-redelivery-control",
+            provider_id="workspace-redelivery-control",
         )
         worker_transport = _DropFirstCommitReplyTransport(
             broker.host,
@@ -439,7 +450,7 @@ def _workspace_endpoint_process(
             host,
             port,
             authentication_key=TEST_TRANSPORT_KEY,
-            provider_id=f"issue-433-process:{worker_id}",
+            provider_id=f"workspace-process:{worker_id}",
         )
         store = WorkerWorkspaceMaterializationStore(worker_id, root)
         try:
@@ -468,7 +479,7 @@ def test_remote_workspace_materializes_across_independent_worker_process(tmp_pat
             broker.host,
             broker.port,
             authentication_key=TEST_TRANSPORT_KEY,
-            provider_id="issue-433-process-control",
+            provider_id="workspace-process-control",
         )
         process_context = multiprocessing.get_context("spawn")
         ready = process_context.Event()

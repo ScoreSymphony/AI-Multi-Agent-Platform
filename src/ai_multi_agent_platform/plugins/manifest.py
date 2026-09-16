@@ -143,5 +143,5 @@ def validate_manifest_document(document: object) -> None:
         detail = f" at {path}" if path else ""
         raise ContractError(
             ErrorCode.INVALID_CONFIGURATION,
-            f"invalid plugin manifest{detail}: {exc.message}",
+            f"invalid plugin manifest{detail}",
         ) from exc

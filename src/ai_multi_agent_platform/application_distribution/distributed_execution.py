@@ -45,6 +45,7 @@ from ai_multi_agent_platform.execution import (
 )
 from ai_multi_agent_platform.workspaces import RunWorkspaceBindingRepository
 
+from ._error_boundary import registry_error
 from .contracts import ApplicationReleaseRepository
 from .execution import APPLICATION_BUILD_ACTION
 from .models import ApplicationRelease, BuildTargetState
@@ -168,7 +169,8 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
         except ContractError:
             raise
         except RegistryError as exc:
-            raise _registry_error(exc, provider_id=self.descriptor.provider_id) from exc
+            raise registry_error(exc, provider_id=self.descriptor.provider_id) from exc
+        # error-boundary: allow-broad-catch=boundary dispatch ownership may be uncertain on failure
         except Exception as exc:
             uncertain: DispatchRecord | None = None
             try:
@@ -189,7 +191,12 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
                     retryable=True,
                     provider_id=self.descriptor.provider_id,
                 ) from exc
-            raise
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "distributed application build dispatch failed",
+                retryable=False,
+                provider_id=self.descriptor.provider_id,
+            ) from exc
 
         if (
             record.handle is None
@@ -219,7 +226,7 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
             await self.runtime.reconcile()
             record = self.runtime.get_record(worker_job_id)
         except RegistryError as exc:
-            raise _registry_error(
+            raise registry_error(
                 exc,
                 provider_id=self.descriptor.provider_id,
                 unknown_is_not_found=True,
@@ -247,14 +254,15 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
         try:
             result = await self.runtime.result(worker_job_id)
         except RegistryError as exc:
-            raise _registry_error(exc, provider_id=self.descriptor.provider_id) from exc
+            raise registry_error(exc, provider_id=self.descriptor.provider_id) from exc
         except ContractError:
             raise
+        # error-boundary: allow-broad-catch=boundary lifecycle contains Worker faults
         except Exception as exc:
             raise ContractError(
-                ErrorCode.UNAVAILABLE,
-                f"distributed application build result is temporarily unavailable: {run_id}",
-                retryable=True,
+                ErrorCode.BACKEND_ERROR,
+                "distributed application build result retrieval failed",
+                retryable=False,
                 provider_id=self.descriptor.provider_id,
             ) from exc
         if result is None or result.execution is None:
@@ -291,7 +299,7 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
         try:
             record = await self.runtime.cancel(worker_job_id)
         except RegistryError as exc:
-            raise _registry_error(
+            raise registry_error(
                 exc,
                 provider_id=self.descriptor.provider_id,
                 unknown_is_not_found=True,
@@ -938,29 +946,6 @@ def _string_mapping(payload: Mapping[str, object], key: str) -> dict[str, str]:
             )
         result[name] = value
     return result
-
-
-def _registry_error(
-    exc: RegistryError,
-    *,
-    provider_id: str,
-    unknown_is_not_found: bool = False,
-) -> ContractError:
-    message = str(exc)
-    if unknown_is_not_found and "unknown dispatched worker job" in message:
-        return ContractError(ErrorCode.NOT_FOUND, message, provider_id=provider_id)
-    if (
-        "no attached dispatcher" in message
-        or "not currently reachable" in message
-        or "worker result is not currently reachable" in message
-    ):
-        return ContractError(
-            ErrorCode.UNAVAILABLE,
-            message,
-            retryable=True,
-            provider_id=provider_id,
-        )
-    return ContractError(ErrorCode.CONFLICT, message, provider_id=provider_id)
 
 
 __all__ = [
