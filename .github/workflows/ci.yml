@@ -6,7 +6,8 @@ on:
   pull_request:
 
 jobs:
-  test:
+  quality:
+    name: Python quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -31,20 +32,133 @@ jobs:
         run: ruff check .
       - name: Mypy
         run: mypy
-      - name: Fast unit tests
-        run: pytest tests/unit
+
+  python_tests:
+    name: Python tests (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: architecture
+            command: pytest tests/architecture
+          - suite: unit
+            command: pytest tests/unit -m unit
+          - suite: contract
+            command: pytest tests/contract -m contract
+          - suite: integration
+            command: pytest tests/integration -m integration
+          - suite: e2e
+            command: pytest tests/e2e -m e2e
+          - suite: performance
+            command: pytest tests/performance -m performance
+          - suite: regression
+            command: pytest tests/regression -m regression
+          - suite: release
+            command: pytest tests/release -m release
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Bootstrap documented environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Run ${{ matrix.suite }} test shard
+        run: ${{ matrix.command }}
+
+  fast_regression_detection:
+    name: Fast-layer regression detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Bootstrap documented environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
       - name: Verify fast-layer regression detection
         run: python scripts/ci/verify_fast_unit_regression_detection.py
-      - name: Full pytest suite
-        run: pytest
+
+  deterministic_evaluation:
+    name: Deterministic evaluation gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Bootstrap documented environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
       - name: Deterministic evaluation gate
         run: python scripts/ci/deterministic_evaluation_regression_gate.py --platform-commit "$GITHUB_SHA"
+
+  package:
+    name: Package build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Bootstrap documented environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
       - name: Materialize runtime assets
         run: python scripts/ci/materialize_runtime_assets.py
       - name: Build package
         run: python -m build
       - name: Verify built runtime assets
         run: python scripts/ci/verify_distribution_runtime_assets.py dist
+
+  mcp_conformance:
+    name: MCP environment conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Bootstrap documented environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
       - name: Run MCP environment conformance
         run: |
           python scripts/ci/optional_environment_conformance_profile.py \
@@ -57,6 +171,47 @@ jobs:
           name: platform-conformance-mcp
           path: conformance-mcp.json
           if-no-files-found: warn
+
+  test:
+    name: test
+    if: always()
+    needs:
+      - quality
+      - python_tests
+      - fast_regression_detection
+      - deterministic_evaluation
+      - package
+      - mcp_conformance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all Python CI gates succeeded
+        shell: bash
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          PYTHON_TESTS_RESULT: ${{ needs.python_tests.result }}
+          FAST_REGRESSION_RESULT: ${{ needs.fast_regression_detection.result }}
+          EVALUATION_RESULT: ${{ needs.deterministic_evaluation.result }}
+          PACKAGE_RESULT: ${{ needs.package.result }}
+          MCP_CONFORMANCE_RESULT: ${{ needs.mcp_conformance.result }}
+        run: |
+          printf '%s\n' \
+            "quality=$QUALITY_RESULT" \
+            "python_tests=$PYTHON_TESTS_RESULT" \
+            "fast_regression_detection=$FAST_REGRESSION_RESULT" \
+            "deterministic_evaluation=$EVALUATION_RESULT" \
+            "package=$PACKAGE_RESULT" \
+            "mcp_conformance=$MCP_CONFORMANCE_RESULT"
+          for result in \
+            "$QUALITY_RESULT" \
+            "$PYTHON_TESTS_RESULT" \
+            "$FAST_REGRESSION_RESULT" \
+            "$EVALUATION_RESULT" \
+            "$PACKAGE_RESULT" \
+            "$MCP_CONFORMANCE_RESULT"; do
+            if [[ "$result" != "success" ]]; then
+              exit 1
+            fi
+          done
 
   single-node-install-smoke:
     runs-on: ubuntu-latest
