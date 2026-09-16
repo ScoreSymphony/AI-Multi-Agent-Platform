@@ -285,11 +285,12 @@ def application_manifest_from_document(document: Mapping[str, Any]) -> Applicati
         resources=_resources_from_document(_object(raw.get("resources", {}), "resources")),
         ui=_ui_from_document(raw.get("ui")),
         resource_associations=tuple(
-            _association_from_document(item)
-            for item in _object_list(raw, "resource_associations")
+            _association_from_document(item) for item in _object_list(raw, "resource_associations")
         ),
         maturity=ApplicationMaturity(str(raw.get("maturity", "beta"))),
-        runtime_requirements=_string_tuple(raw.get("runtime_requirements", []), "runtime_requirements"),
+        runtime_requirements=_string_tuple(
+            raw.get("runtime_requirements", []), "runtime_requirements"
+        ),
         schema_version=str(raw["schema_version"]),
     )
 
@@ -302,10 +303,7 @@ def _service_from_document(raw: dict[str, Any]) -> ApplicationService:
         process=_string_tuple(raw.get("process", []), "service process"),
         command=_string_tuple(raw.get("command", []), "service command"),
         depends_on=_string_tuple(raw.get("depends_on", []), "service depends_on"),
-        endpoints=tuple(
-            _endpoint_from_document(item)
-            for item in _object_list(raw, "endpoints")
-        ),
+        endpoints=tuple(_endpoint_from_document(item) for item in _object_list(raw, "endpoints")),
         mounts=tuple(
             ApplicationVolumeMount(
                 volume_name=str(item["volume_name"]),
