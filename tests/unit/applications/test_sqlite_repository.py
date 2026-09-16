@@ -254,9 +254,7 @@ def _manifest() -> ApplicationManifest:
             endpoint_ref="app.web",
             open_mode=ApplicationUiOpenMode.EXTERNAL,
         ),
-        resource_associations=(
-            ApplicationResourceAssociation(media_types=("text/plain",)),
-        ),
+        resource_associations=(ApplicationResourceAssociation(media_types=("text/plain",)),),
         runtime_requirements=("local",),
     )
 
