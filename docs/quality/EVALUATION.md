@@ -1,6 +1,6 @@
 # Evaluation and Regression Framework
 
-Issue #19 owns the platform-level evaluation and regression layer. The framework is provider-neutral, orchestrator-neutral and evaluator-neutral. Unit, integration and contract tests remain separate concerns; evaluations measure repeatable platform, agent, model, tool and workflow behavior across versioned scenarios.
+The platform owns the evaluation and regression layer. The framework is provider-neutral, orchestrator-neutral and evaluator-neutral. Unit, integration and contract tests remain separate concerns; evaluations measure repeatable platform, agent, model, tool and workflow behavior across versioned scenarios.
 
 ## Canonical ownership
 
@@ -221,7 +221,7 @@ The gate therefore evaluates the same canonical Task/Run lifecycle as ordinary p
 
 The checked-in reference case verifies canonical Task and Run success, one dispatch attempt, output presence, required lifecycle events and the versioned dispatch-attempt metric threshold. Tests also run a deliberately regressed suite and verify that the normal `RegressionEngine` reports deterministic pass-to-fail, score-drop and critical-case regressions against the accepted baseline.
 
-The executable CI entry point is `scripts/ci/issue19_evaluation_gate.py`. It emits a compact JSON summary containing suite/policy/baseline/current-run identity and regression counts. Its exit contract is:
+The executable CI entry point is `scripts/ci/deterministic_evaluation_regression_gate.py`. It emits a compact JSON summary containing suite/policy/baseline/current-run identity and regression counts. Its exit contract is:
 
 - `0` when the deterministic run and accepted-baseline comparison pass;
 - `1` for a failed EvaluationResult or classified regression;
@@ -309,7 +309,7 @@ Only approved top-level discovery metadata is indexed. Nested case content, fixt
 
 Search remains a derived navigation layer and links callers back to the canonical `/api/v1/evaluation-suites/{suite-ref}` and `/api/v1/evaluation-runs/{run-id}` resources. It does not read `EvaluationHistoryRepository`, `EvaluationRunner` internals or provider state directly, and it requires no external Search backend or paid service.
 
-## Current issue #19 implementation status
+## Current implementation status
 
 The implementation is being landed progressively from canonical contracts/reference behavior outward through persistence and northbound surfaces.
 
@@ -371,10 +371,10 @@ Implemented:
 - tests for the API-first Evaluation CLI request/payload/validation and aggregation-policy forwarding contract;
 - tests for strict Evaluation configuration loading, real reference CI-gate execution and deliberate baseline regression detection.
 
-Remaining work for full issue completion:
+Remaining work for full framework completion:
 
 - richer telemetry, accounting and log references in observations and stored results;
-- final acceptance audit across all issue #19 requirements and required tests.
+- final acceptance audit across all evaluation framework requirements and required tests.
 
 ## CI principle
 

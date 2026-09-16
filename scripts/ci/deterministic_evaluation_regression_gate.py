@@ -1,4 +1,4 @@
-"""Run the checked-in deterministic #19 evaluation gate."""
+"""Run the checked-in deterministic evaluation regression gate."""
 
 from __future__ import annotations
 
