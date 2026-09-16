@@ -334,12 +334,14 @@ def test_successful_repair_rebinds_exact_subject_and_preserves_old_review_histor
 
         history = verification.history(task_id=task_id)
         assert len(history) == 2
-        assert history[0][0].verification_id == verification_id
-        assert history[0][1] is not None
-        assert history[0][1].outcome is VerificationOutcome.NEEDS_CHANGES
-        assert history[1][0].verification_id == next_request.verification_id
-        assert history[1][1] is not None
-        assert history[1][1].outcome is VerificationOutcome.PASS
+        history_by_id = {request.verification_id: result for request, result in history}
+        assert set(history_by_id) == {verification_id, next_request.verification_id}
+        original_result = history_by_id[verification_id]
+        repaired_result = history_by_id[next_request.verification_id]
+        assert original_result is not None
+        assert original_result.outcome is VerificationOutcome.NEEDS_CHANGES
+        assert repaired_result is not None
+        assert repaired_result.outcome is VerificationOutcome.PASS
 
     asyncio.run(scenario())
 

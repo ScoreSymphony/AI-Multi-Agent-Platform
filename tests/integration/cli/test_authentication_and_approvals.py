@@ -432,14 +432,21 @@ def test_approval_cli_deny_and_expired_conflict_paths(tmp_path: Path) -> None:
     assert code == 0 and not error
     assert output["data"]["status"] == "rejected"
 
-    expiring_gate, _, expiring_id = _pending_gate(lifetime=timedelta(microseconds=1))
+    expiring_gate, _, expiring_id = _pending_gate()
     expiring_transport = _approval_transport(expiring_gate)
     expired = expiring_gate.approvals.get(expiring_id)
-    if expired.status is ApprovalStatus.PENDING:
-        expiring_gate.approvals._records[expiring_id] = replace(
-            expired,
-            expires_at=datetime.now(UTC) - timedelta(microseconds=1),
-        )
+    assert expired.status is ApprovalStatus.PENDING
+    now = datetime.now(UTC)
+    created_at = now - timedelta(minutes=1)
+    expiring_gate.approvals._records[expiring_id] = replace(
+        expired,
+        approval=replace(
+            expired.approval,
+            created_at=created_at,
+            updated_at=created_at,
+        ),
+        expires_at=now - timedelta(seconds=1),
+    )
     code, output, error = _invoke(
         config,
         expiring_transport,
