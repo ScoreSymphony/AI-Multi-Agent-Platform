@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
-from typing import Any
+from typing import Any, Protocol
 
 from ai_multi_agent_platform.contracts import (
     ContractError,
@@ -13,16 +13,33 @@ from ai_multi_agent_platform.contracts import (
     ModelResponse,
 )
 from ai_multi_agent_platform.contracts.model_stream import ModelStreamEvent
-from ai_multi_agent_platform.models.runtime import ModelRuntime
 
 from .models import BudgetActionKind, BudgetAdmissionDecision, BudgetDimension
 from .service import TaskBudgetAdmission
 
 
+class _ModelRuntimeBoundary(Protocol):
+    """Structural model-runtime seam needed by the budget decorator."""
+
+    registry: Any
+    router: Any
+    egress_gate: Any
+
+    async def select(self, request: ModelRequest) -> Any: ...
+
+    async def generate(self, request: ModelRequest) -> ModelResponse: ...
+
+    def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]: ...
+
+    async def generate_canonical(self, request: Any) -> Any: ...
+
+    def stream_canonical(self, request: Any) -> AsyncIterator[ModelStreamEvent]: ...
+
+
 class TaskBudgetModelRuntime:
     """Decorate the canonical ModelRuntime so autonomous callers cannot skip #902 admission."""
 
-    def __init__(self, inner: ModelRuntime, budgets: TaskBudgetAdmission) -> None:
+    def __init__(self, inner: _ModelRuntimeBoundary, budgets: TaskBudgetAdmission) -> None:
         self._inner = inner
         self._budgets = budgets
         # Preserve the operational attributes consumed by existing composition code.
