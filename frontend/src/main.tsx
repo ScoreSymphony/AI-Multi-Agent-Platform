@@ -15,6 +15,7 @@ import "./notifications.css";
 import "./organizations.css";
 import "./observability.css";
 import "./usage.css";
+import "./settings.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
