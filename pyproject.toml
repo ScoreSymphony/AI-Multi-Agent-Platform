@@ -104,6 +104,8 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.ruff.lint.per-file-ignores]
 # The stable Hermes facade intentionally re-exports symbols owned by the split sibling modules.
 "src/ai_multi_agent_platform/adapters/hermes.py" = ["F401"]
+# The stable Context source-adapter facade intentionally preserves split-owner compatibility imports.
+"src/ai_multi_agent_platform/context/source_adapters.py" = ["F401", "I001"]
 "src/ai_multi_agent_platform/control_plane/organization_api.py" = ["UP047"]
 # These collection wrappers intentionally import non-package case modules from tests/.
 "tests/contract/control_plane/test_manifest_openapi_contract.py" = ["I001"]
@@ -123,6 +125,8 @@ select = ["E", "F", "I", "UP", "B"]
 "tests/unit/notifications/test_event_projection.py" = ["I001"]
 "tests/unit/search/test_registered_resource_mapping.py" = ["I001"]
 "tests/unit/search/test_search_index_checkpoint.py" = ["I001"]
+# This identity regression intentionally imports the same public classes through three surfaces.
+"tests/architecture/test_context_source_adapter_responsibility_boundaries.py" = ["I001"]
 
 [tool.mypy]
 python_version = "3.12"
