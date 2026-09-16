@@ -156,3 +156,28 @@ def test_parallel_first_user_attempts_allow_exactly_one_success(tmp_path) -> Non
     assert len(authentication.store.users) == 1
     account = next(iter(authentication.store.users.values()))
     assert authorization.has_policy(account.user_id)
+
+
+def test_setup_resources_and_mutations_remain_authenticated_during_bootstrap(tmp_path) -> None:
+    http, _authentication, _authorization = _http(tmp_path)
+
+    setup_status = _run(
+        http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/setup-sessions/initial-setup",
+            )
+        )
+    )
+    provision = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/onboarding.provision-setup",
+                body={"resource_ref": "initial-setup"},
+            )
+        )
+    )
+
+    assert setup_status.status == 401
+    assert provision.status == 401
