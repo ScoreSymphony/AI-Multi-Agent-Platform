@@ -29,9 +29,63 @@ jobs:
           python scripts/ci/broad_exception_audit.py --repository-root . --format text | tee broad-exception-inventory.txt
           python scripts/ci/broad_exception_audit.py --repository-root . --format json > broad-exception-inventory.json
           python scripts/ci/broad_exception_audit.py --repository-root . --format markdown > broad-exception-inventory.md
+          python - <<'PY' | tee broad-exception-runtime-summary.txt
+          from collections import Counter
+          from pathlib import Path
+
+          rows = []
+          for line in Path("broad-exception-inventory.txt").read_text(encoding="utf-8").splitlines():
+              if not line.startswith(("ALLOWED", "REVIEW", "PROHIBITED")):
+                  continue
+              if "/benchmarking/" in line or "/testing/" in line:
+                  continue
+              rows.append(line)
+
+          broad_rows = [
+              line
+              for line in rows
+              if (
+                  " BaseException " in line
+                  or " Exception " in line
+                  or " (Exception," in line
+                  or " bare except " in line
+                  or " suppress(Exception" in line
+                  or " suppress(BaseException" in line
+              )
+          ]
+          classes = (
+              "boundary catch",
+              "cleanup / best effort",
+              "domain error translation",
+              "unexpected swallowing",
+              "needs review",
+          )
+          counter = Counter()
+          for line in broad_rows:
+              for classification in classes:
+                  if f" {classification} [" in line:
+                      counter[classification] += 1
+                      break
+
+          base_exception = sum(" BaseException " in line for line in broad_rows)
+          bare_except = sum(" bare except " in line for line in broad_rows)
+          broad_suppress = sum(
+              " suppress(Exception" in line or " suppress(BaseException" in line
+              for line in broad_rows
+          )
+
+          print(f"runtime_broad_findings={len(broad_rows)}")
+          print(f"runtime_base_exception_findings={base_exception}")
+          print(f"runtime_bare_except_findings={bare_except}")
+          print(f"runtime_broad_suppress_findings={broad_suppress}")
+          for classification in classes:
+              print(f"runtime_classification[{classification}]={counter[classification]}")
+          PY
           {
             echo '## Broad exception inventory'
             echo '```text'
+            cat broad-exception-runtime-summary.txt
+            echo
             cat broad-exception-inventory.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
@@ -44,4 +98,5 @@ jobs:
             broad-exception-inventory.txt
             broad-exception-inventory.json
             broad-exception-inventory.md
+            broad-exception-runtime-summary.txt
           if-no-files-found: error
