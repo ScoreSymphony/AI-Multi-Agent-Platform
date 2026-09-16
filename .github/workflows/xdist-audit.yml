@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: xdist-audit-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   benchmark:
     runs-on: ubuntu-latest
@@ -35,6 +39,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          failures=0
 
           run_case() {
             local case_name="$1"
@@ -69,7 +74,7 @@ jobs:
           PY
               echo "::endgroup::"
               if [ "$status" -ne 0 ]; then
-                return "$status"
+                failures=$((failures + 1))
               fi
             done
           }
@@ -100,3 +105,8 @@ jobs:
           # Performance tests are intentionally measured serially only: running
           # benchmarks under worker contention would invalidate timing semantics.
           run_case performance-serial tests/performance "" 1
+
+          echo "XDIST_AUDIT_FAILURES=$failures"
+          if [ "$failures" -ne 0 ]; then
+            exit 1
+          fi
