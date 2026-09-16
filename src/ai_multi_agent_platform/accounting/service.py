@@ -329,7 +329,7 @@ def trend_usage_records(
                 for record in records
                 if record.metric_type == metric_type and record.unit == unit
             ),
-            key=lambda record: (record.timestamp, record.id),
+            key=lambda record: record.timestamp,
         )
     )
     modes = {record.aggregation_mode for record in metric_records}
@@ -375,13 +375,15 @@ def _latest_records_by_scope(records: tuple[UsageRecord, ...]) -> tuple[UsageRec
     A broad query may contain many Workers, Nodes or other scoped resources. Choosing one
     globally latest row would drop every other resource. Exact scope grouping preserves
     resource identity while still preventing historical snapshots from being summed.
+    Equal timestamps preserve the store's ingestion order, so the later sample wins even on
+    platforms whose wall clock cannot distinguish consecutive observations.
     """
 
     latest: dict[tuple[tuple[str, str], ...], UsageRecord] = {}
     for record in records:
         key = tuple(sorted(record.scope.fields().items()))
         current = latest.get(key)
-        if current is None or (record.timestamp, record.id) > (current.timestamp, current.id):
+        if current is None or record.timestamp >= current.timestamp:
             latest[key] = record
     return tuple(latest[key] for key in sorted(latest))
 

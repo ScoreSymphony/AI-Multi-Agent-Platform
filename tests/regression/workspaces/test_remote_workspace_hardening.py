@@ -198,6 +198,40 @@ def test_duplicate_prepare_chunk_and_commit_are_idempotent_and_conflicts_are_rej
     asyncio.run(scenario())
 
 
+def test_worker_compacts_local_staging_and_state_paths(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        request, manifest, data = _transfer_fixture()
+        worker_root = tmp_path / "worker"
+        store = WorkerWorkspaceMaterializationStore(new_id("worker"), worker_root)
+
+        prepared = await store.prepare(request, manifest, chunk_bytes=1024)
+        assert isinstance(prepared, str)
+        incoming = tuple((worker_root / ".remote-workspace-incoming").iterdir())
+        assert len(incoming) == 1
+        assert len(incoming[0].name) == 32
+        assert incoming[0].name != prepared
+
+        await store.put_chunk(
+            prepared,
+            manifest[0].relative_path,
+            chunk_index=0,
+            total_chunks=1,
+            data=data,
+        )
+        receipt = await store.commit(prepared)
+
+        state_files = tuple((worker_root / ".remote-workspace-state").glob("*.json"))
+        assert len(state_files) == 1
+        assert len(state_files[0].stem) == 32
+        assert state_files[0].stem != receipt.materialization_ref
+
+        repeated_commit = await store.commit(receipt.materialization_ref)
+        assert repeated_commit.materialization_ref == receipt.materialization_ref
+        assert repeated_commit.cache_hit is True
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize(
     "outcome",
     [MaterializationOutcome.FAILED, MaterializationOutcome.CANCELLED],

@@ -67,6 +67,14 @@ def _workspace_path_token(workspace_id: str, snapshot_id: str) -> str:
     return digest[:32]
 
 
+def _materialization_path_token(materialization_ref: str) -> str:
+    _validate_opaque(materialization_ref, "materialization_ref")
+    digest = hashlib.sha256(materialization_ref.encode("utf-8")).hexdigest()
+    # Materialization refs remain canonical transport identities; only Worker-local staging
+    # and state filenames are compacted to retain Windows path budget.
+    return digest[:32]
+
+
 class WorkerWorkspaceMaterializationStore:
     """Worker-local isolated materialization/cache state.
 
@@ -111,7 +119,7 @@ class WorkerWorkspaceMaterializationStore:
                 cache_hit=True,
             )
 
-        incoming_root = self._incoming_root / materialization_ref
+        incoming_root = self._incoming_root / _materialization_path_token(materialization_ref)
         async with self._lock:
             existing = self._transfers.get(materialization_ref)
             if existing is not None:
@@ -369,8 +377,7 @@ class WorkerWorkspaceMaterializationStore:
         return resolved
 
     def _state_path(self, materialization_ref: str) -> Path:
-        _validate_opaque(materialization_ref, "materialization_ref")
-        return self._state_root / f"{materialization_ref}.json"
+        return self._state_root / f"{_materialization_path_token(materialization_ref)}.json"
 
     def _write_state(self, transfer: _IncomingTransfer) -> None:
         document = {

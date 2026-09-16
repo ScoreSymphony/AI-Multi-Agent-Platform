@@ -211,7 +211,7 @@ class SQLiteUsageStore(UsageStore):
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         with self._lock, self._connect() as connection:
             rows = connection.execute(
-                f"SELECT payload FROM usage_records{where} ORDER BY timestamp, id",
+                f"SELECT payload FROM usage_records{where} ORDER BY timestamp, rowid",
                 parameters,
             ).fetchall()
         records = tuple(_record_from_json(str(row["payload"])) for row in rows)
