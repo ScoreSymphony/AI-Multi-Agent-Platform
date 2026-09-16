@@ -53,6 +53,30 @@ class OnboardingComponentSetupService:
         self.resolver = resolver or ComponentCompatibilityResolver()
         self._state = self.profile_store.load()
 
+    def discovered_components(self) -> tuple[DiscoveredComponent, ...]:
+        """Return the same deterministic read-only component inventory used by status()."""
+
+        return self._components()
+
+    def environment(self) -> CompatibilityEnvironment:
+        """Return current environment facts from the configured read-only discovery source."""
+
+        return self.discovery.environment()
+
+    def active_profile(self) -> SetupProfile | None:
+        """Return the active persisted profile without inventing a second selection store."""
+
+        if self._state.active_profile_id is None:
+            return None
+        return next(
+            (
+                profile
+                for profile in self._state.profiles
+                if profile.profile_id == self._state.active_profile_id
+            ),
+            None,
+        )
+
     def status(self) -> dict[str, JsonValue]:
         """Return current discovery/compatibility facts plus persisted profile state.
 
