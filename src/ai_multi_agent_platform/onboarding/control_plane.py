@@ -22,8 +22,16 @@ from .service import (
     ONBOARDING_CONFIGURE_MODEL_COMMAND,
     OnboardingService,
 )
+from .setup_lifecycle import (
+    ONBOARDING_PROVISION_SETUP_COMMAND,
+    ONBOARDING_UPDATE_SETUP_SESSION_COMMAND,
+    ONBOARDING_VALIDATE_SETUP_COMMAND,
+    SETUP_SESSION_RESOURCE_ID,
+    BrowserFirstSetupService,
+)
 
 COMPONENT_SETUP_COLLECTION = "component-setup"
+SETUP_SESSION_COLLECTION = "setup-sessions"
 
 
 class OnboardingControlPlane(Protocol):
@@ -99,11 +107,38 @@ class ComponentSetupResourceService:
         return self.component_setup.status()
 
 
+class SetupSessionResourceService:
+    """Expose resumable browser setup state derived from canonical owner-domain state."""
+
+    def __init__(self, setup: BrowserFirstSetupService) -> None:
+        self.setup = setup
+
+    async def list_resources(
+        self,
+        context: RequestContext,
+        query: PageQuery,
+    ) -> tuple[dict[str, JsonValue], ...]:
+        del query
+        return (self.setup.status(context),)
+
+    async def get_resource(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> dict[str, JsonValue]:
+        if resource_id != SETUP_SESSION_RESOURCE_ID:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"setup session resource not found: {resource_id}",
+            )
+        return self.setup.status(context)
+
+
 def register_component_setup_control_plane(
     control_plane: OnboardingControlPlane,
     component_setup: OnboardingComponentSetupService,
 ) -> None:
-    """Register #799 discovery/profile surfaces without replacing owner-domain APIs."""
+    """Register discovery/profile surfaces without replacing owner-domain APIs."""
 
     control_plane.register_resource_service(
         COMPONENT_SETUP_COLLECTION,
@@ -116,6 +151,30 @@ def register_component_setup_control_plane(
     control_plane.register_command(
         ONBOARDING_SELECT_COMPONENT_PROFILE_COMMAND,
         component_setup.select_profile,
+    )
+
+
+def register_setup_lifecycle_control_plane(
+    control_plane: OnboardingControlPlane,
+    setup: BrowserFirstSetupService,
+) -> None:
+    """Register persistent setup coordination while owner domains retain all mutations."""
+
+    control_plane.register_resource_service(
+        SETUP_SESSION_COLLECTION,
+        SetupSessionResourceService(setup),
+    )
+    control_plane.register_command(
+        ONBOARDING_UPDATE_SETUP_SESSION_COMMAND,
+        setup.update_session,
+    )
+    control_plane.register_command(
+        ONBOARDING_PROVISION_SETUP_COMMAND,
+        setup.provision,
+    )
+    control_plane.register_command(
+        ONBOARDING_VALIDATE_SETUP_COMMAND,
+        setup.validate,
     )
 
 
