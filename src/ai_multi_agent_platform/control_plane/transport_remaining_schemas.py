@@ -43,10 +43,19 @@ def augment_remaining_transport_schemas(specification: dict[str, Any]) -> dict[s
 
     schemas = specification.setdefault("components", {}).setdefault("schemas", {})
     _complete_search_schemas(specification, schemas)
-    schemas.update(_telemetry_schemas())
-    schemas.update(_accounting_schemas())
+    page_schema = schemas.get("Page")
+    if not isinstance(page_schema, dict):
+        raise RuntimeError("canonical OpenAPI is missing the Page schema")
+    schemas.update(_telemetry_schemas(page_schema))
+    schemas.update(_accounting_schemas(page_schema))
 
-    _bind_response_schema(specification, f"/api/{API_VERSION}/search", "get", "200", "SearchPage")
+    _bind_response_schema(
+        specification,
+        f"/api/{API_VERSION}/search",
+        "get",
+        "200",
+        "SearchPage",
+    )
     _bind_response_schema(
         specification,
         f"/api/{API_VERSION}/tasks/{{task_id}}/timeline",
@@ -117,7 +126,7 @@ def _complete_search_schemas(
             search_result["additionalProperties"] = False
 
 
-def _telemetry_schemas() -> dict[str, Any]:
+def _telemetry_schemas(page_schema: dict[str, Any]) -> dict[str, Any]:
     external_ref = {
         "type": "object",
         "required": ["system", "kind", "value"],
@@ -231,7 +240,7 @@ def _telemetry_schemas() -> dict[str, Any]:
                 {"$ref": "#/components/schemas/TelemetryTimelineEntry"},
             ]
         },
-        "TimelinePage": _page_schema("TimelineItem"),
+        "TimelinePage": _page_schema(page_schema, "TimelineItem"),
     }
 
 
@@ -246,16 +255,16 @@ def _quality_counts_schema() -> dict[str, Any]:
     }
 
 
-def _accounting_schemas() -> dict[str, Any]:
+def _accounting_schemas(page_schema: dict[str, Any]) -> dict[str, Any]:
     return {
         "UsageQualityCounts": _quality_counts_schema(),
         "UsageRecord": _usage_record_schema(),
         "UsageTrendPoint": _usage_trend_point_schema(),
         "UsageAggregate": _usage_aggregate_schema(),
         "UsageBudget": _usage_budget_schema(),
-        "UsageRecordPage": _page_schema("UsageRecord"),
-        "UsageAggregatePage": _page_schema("UsageAggregate"),
-        "UsageBudgetPage": _page_schema("UsageBudget"),
+        "UsageRecordPage": _page_schema(page_schema, "UsageRecord"),
+        "UsageAggregatePage": _page_schema(page_schema, "UsageAggregate"),
+        "UsageBudgetPage": _page_schema(page_schema, "UsageBudget"),
     }
 
 
@@ -363,21 +372,16 @@ def _closed_required_object(properties: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _page_schema(item_schema: str) -> dict[str, Any]:
-    return {
-        "allOf": [
-            {"$ref": "#/components/schemas/Page"},
-            {
-                "type": "object",
-                "properties": {
-                    "items": {
-                        "type": "array",
-                        "items": {"$ref": f"#/components/schemas/{item_schema}"},
-                    }
-                },
-            },
-        ]
+def _page_schema(base_page: dict[str, Any], item_schema: str) -> dict[str, Any]:
+    page = deepcopy(base_page)
+    properties = page.get("properties")
+    if not isinstance(properties, dict):
+        raise RuntimeError("canonical Page schema has no properties")
+    properties["items"] = {
+        "type": "array",
+        "items": {"$ref": f"#/components/schemas/{item_schema}"},
     }
+    return page
 
 
 def _bind_response_schema(
