@@ -31,21 +31,6 @@ def main() -> int:
         '    )\n',
     )
 
-    workflow = ROOT / ".github" / "workflows" / "repository-quality.yml"
-    _replace(
-        workflow,
-        "    branches:\n      - ci/consolidate-actions-workflows\n",
-        "    branches:\n      - main\n      - ci/consolidate-actions-workflows\n",
-    )
-    _replace(
-        workflow,
-        '          } >> "$GITHUB_STEP_SUMMARY"\n      - name: Materialize pull request base\n',
-        '          } >> "$GITHUB_STEP_SUMMARY"\n'
-        '      - name: Enforce classified production error boundaries\n'
-        '        run: python scripts/ci/broad_exception_audit.py --repository-root . --check\n'
-        '      - name: Materialize pull request base\n',
-    )
-
     tests = ROOT / "tests" / "unit" / "quality" / "test_broad_exception_audit.py"
     marker = "\ndef test_development_tools_are_classified_separately(tmp_path: Path) -> None:\n"
     addition = '''\n\ndef test_check_rejects_unclassified_production_catch(tmp_path: Path) -> None:\n    code, findings, _ = _scan(\n        tmp_path,\n        "def boundary():\\n"\n        "    try:\\n"\n        "        work()\\n"\n        "    except Exception as exc:\\n"\n        "        record(type(exc).__name__)\\n",\n        check=True,\n    )\n    assert code == 1\n    assert findings[0]["recommended_classification"] == "needs review"\n    assert findings[0]["severity"] == "review"\n'''
