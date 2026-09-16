@@ -5,9 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-_SCRIPT = (
-    Path(__file__).resolve().parents[3] / "scripts" / "ci" / "issue562_real_two_vps_conformance.py"
-)
+_SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "ci" / "real_two_vps_conformance.py"
 
 
 def _repository_root() -> Path:
@@ -46,7 +44,7 @@ def _probe(endpoint: str, scope: str) -> dict[str, object]:
     }
 
 
-def _valid_issue562_report() -> dict[str, object]:
+def _valid_two_vps_report() -> dict[str, object]:
     worker_id = "worker_00000000-0000-4000-8000-000000000562"
     probes = [
         _probe(endpoint, scope)
@@ -126,7 +124,7 @@ def _write_and_run(
     tmp_path: Path,
     payload: dict[str, object],
 ) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
-    evidence_path = tmp_path / "issue562.json"
+    evidence_path = tmp_path / "two-vps-evidence.json"
     evidence_path.write_text(json.dumps(payload), encoding="utf-8")
     report_path = tmp_path / "conformance.json"
     completed = _run(
@@ -158,7 +156,7 @@ def test_profile_without_live_evidence_is_explicitly_unsupported(tmp_path: Path)
 
 
 def test_profile_accepts_finalized_live_evidence_from_exact_commit(tmp_path: Path) -> None:
-    completed, report = _write_and_run(tmp_path, _valid_issue562_report())
+    completed, report = _write_and_run(tmp_path, _valid_two_vps_report())
 
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert report["passed"] is True
@@ -181,7 +179,7 @@ def test_profile_accepts_finalized_live_evidence_from_exact_commit(tmp_path: Pat
 
 
 def test_profile_rejects_live_evidence_from_different_platform_commit(tmp_path: Path) -> None:
-    payload = _valid_issue562_report()
+    payload = _valid_two_vps_report()
     payload["platform_commit"] = "0" * 40
 
     completed, report = _write_and_run(tmp_path, payload)
@@ -194,7 +192,7 @@ def test_profile_rejects_live_evidence_from_different_platform_commit(tmp_path: 
 
 
 def test_profile_rejects_secret_bearing_or_non_sanitized_final_report(tmp_path: Path) -> None:
-    payload = _valid_issue562_report()
+    payload = _valid_two_vps_report()
     payload["credential_material_recorded"] = True
 
     completed, report = _write_and_run(tmp_path, payload)
@@ -206,7 +204,7 @@ def test_profile_rejects_secret_bearing_or_non_sanitized_final_report(tmp_path: 
 
 
 def test_profile_rejects_nested_secret_key_even_if_flag_claims_sanitized(tmp_path: Path) -> None:
-    payload = _valid_issue562_report()
+    payload = _valid_two_vps_report()
     payload["unexpected"] = {"token_value": "must-not-survive"}
 
     completed, report = _write_and_run(tmp_path, payload)
@@ -218,7 +216,7 @@ def test_profile_rejects_nested_secret_key_even_if_flag_claims_sanitized(tmp_pat
 
 
 def test_profile_rejects_forged_optional_transport_evidence(tmp_path: Path) -> None:
-    payload = _valid_issue562_report()
+    payload = _valid_two_vps_report()
     transport = payload["transport_evidence"]
     assert isinstance(transport, dict)
     transport["tls"] = False
@@ -232,7 +230,7 @@ def test_profile_rejects_forged_optional_transport_evidence(tmp_path: Path) -> N
 
 
 def test_profile_rejects_network_probe_with_wrong_schema(tmp_path: Path) -> None:
-    payload = _valid_issue562_report()
+    payload = _valid_two_vps_report()
     network = payload["network"]
     assert isinstance(network, dict)
     probes = network["probes"]
@@ -250,7 +248,7 @@ def test_profile_rejects_network_probe_with_wrong_schema(tmp_path: Path) -> None
 
 
 def test_profile_rejects_public_probe_that_is_actually_reachable(tmp_path: Path) -> None:
-    payload = _valid_issue562_report()
+    payload = _valid_two_vps_report()
     network = payload["network"]
     assert isinstance(network, dict)
     probes = network["probes"]
@@ -275,7 +273,7 @@ def test_profile_rejects_public_probe_that_is_actually_reachable(tmp_path: Path)
 
 
 def test_profile_rejects_transport_without_artifact_round_trip(tmp_path: Path) -> None:
-    payload = _valid_issue562_report()
+    payload = _valid_two_vps_report()
     transport = payload["transport_evidence"]
     assert isinstance(transport, dict)
     transport["artifact_refs"] = ["artifact_input"]
@@ -289,7 +287,7 @@ def test_profile_rejects_transport_without_artifact_round_trip(tmp_path: Path) -
 
 
 def test_profile_rejects_non_compact_transport_evidence(tmp_path: Path) -> None:
-    payload = _valid_issue562_report()
+    payload = _valid_two_vps_report()
     transport = payload["transport_evidence"]
     assert isinstance(transport, dict)
     transport["broker_address_recorded"] = False
@@ -299,4 +297,4 @@ def test_profile_rejects_non_compact_transport_evidence(tmp_path: Path) -> None:
     assert completed.returncode == 1
     scenario = report["scenarios"][0]
     assert scenario["status"] == "fail"
-    assert "does not match the compact #388 schema" in scenario["stderr"]
+    assert "does not match the compact two-host schema" in scenario["stderr"]

@@ -1,7 +1,7 @@
-"""Bridge sanitized #562 live evidence into an explicit #46 compatibility report.
+"""Bridge sanitized live two-VPS evidence into an explicit compatibility report.
 
 This profile is intentionally separate from the simulated Scenario E fixture. It only
-claims real two-VPS/private-tunnel compatibility when a finalized #562 report from the
+claims real two-VPS/private-tunnel compatibility when a finalized live report from the
 same platform commit is supplied and validates fail-closed.
 """
 
@@ -23,9 +23,9 @@ from ai_multi_agent_platform.conformance import (
 )
 from ai_multi_agent_platform.conformance.evidence import emit_runtime_evidence
 
-ISSUE562_REPORT_SCHEMA = "ai-multi-agent-platform/issue-562-two-vps-private-tunnel/v1"
-ISSUE562_PROBE_SCHEMA = "ai-multi-agent-platform/issue-562-network-probe/v1"
-ISSUE388_TRANSPORT_SCHEMA = "ai-multi-agent-platform/issue-388-two-host-transport/v1"
+TWO_VPS_REPORT_SCHEMA = "ai-multi-agent-platform/issue-562-two-vps-private-tunnel/v1"
+TWO_VPS_NETWORK_PROBE_SCHEMA = "ai-multi-agent-platform/issue-562-network-probe/v1"
+TWO_HOST_TRANSPORT_SCHEMA = "ai-multi-agent-platform/issue-388-two-host-transport/v1"
 DEPLOYMENT_PROFILE = "real-two-vps-private-tunnel"
 SCENARIO_ID = "ENV-DISTRIBUTED-REAL"
 _REQUIRED_PHASES = {
@@ -78,13 +78,13 @@ class EvidenceError(ValueError):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Produce #46 conformance evidence for the optional #562 real two-VPS profile."
+        description="Produce conformance evidence for the optional real two-VPS profile."
     )
     parser.add_argument(
         "--acceptance-evidence",
         type=Path,
         help=(
-            "Finalized sanitized #562 acceptance report. Omit it to record the profile as "
+            "Finalized sanitized two-VPS acceptance report. Omit it to record the profile as "
             "unsupported/not claimed rather than inferring compatibility from simulated fixtures."
         ),
     )
@@ -97,7 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--json-report",
         type=Path,
-        help="Destination for the machine-readable #46 conformance report.",
+        help="Destination for the machine-readable conformance report.",
     )
     parser.add_argument("--probe", action="store_true", help=argparse.SUPPRESS)
     return parser
@@ -119,24 +119,24 @@ def _load_json(path: Path) -> dict[str, object]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise EvidenceError(f"unable to load #562 acceptance evidence: {exc}") from exc
+        raise EvidenceError(f"unable to load two-VPS acceptance evidence: {exc}") from exc
     if not isinstance(payload, dict):
-        raise EvidenceError("#562 acceptance evidence must be a JSON object")
-    _reject_sensitive_keys(payload, path="issue562-report")
+        raise EvidenceError("two-VPS acceptance evidence must be a JSON object")
+    _reject_sensitive_keys(payload, path="two-vps-report")
     return payload
 
 
 def _non_empty_string(payload: Mapping[str, object], key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value.strip():
-        raise EvidenceError(f"#562 acceptance evidence is missing non-empty field {key}")
+        raise EvidenceError(f"two-VPS acceptance evidence is missing non-empty field {key}")
     return value.strip()
 
 
 def _mapping(payload: Mapping[str, object], key: str) -> Mapping[str, object]:
     value = payload.get(key)
     if not isinstance(value, Mapping):
-        raise EvidenceError(f"#562 acceptance evidence field {key} must be an object")
+        raise EvidenceError(f"two-VPS acceptance evidence field {key} must be an object")
     return value
 
 
@@ -164,43 +164,43 @@ def _validate_network(
     worker_host_label: str,
 ) -> None:
     if network.get("status") != "pass":
-        raise EvidenceError("#562 network acceptance did not pass")
+        raise EvidenceError("two-VPS network acceptance did not pass")
     if network.get("addresses_recorded") is not False:
-        raise EvidenceError("#562 network evidence retained private/public addresses")
+        raise EvidenceError("two-VPS network evidence retained private/public addresses")
     probes = network.get("probes")
     if not isinstance(probes, list):
-        raise EvidenceError("#562 network evidence is missing probe results")
+        raise EvidenceError("two-VPS network evidence is missing probe results")
 
     observed: dict[tuple[str, str], Mapping[str, object]] = {}
     for raw_probe in probes:
         if not isinstance(raw_probe, Mapping):
-            raise EvidenceError("#562 network probe evidence must contain objects")
-        if raw_probe.get("schema") != ISSUE562_PROBE_SCHEMA:
-            raise EvidenceError("#562 network probe uses an unsupported schema")
+            raise EvidenceError("two-VPS network probe evidence must contain objects")
+        if raw_probe.get("schema") != TWO_VPS_NETWORK_PROBE_SCHEMA:
+            raise EvidenceError("two-VPS network probe uses an unsupported schema")
         label = raw_probe.get("endpoint_label")
         scope = raw_probe.get("scope")
         if not isinstance(label, str) or not isinstance(scope, str):
-            raise EvidenceError("#562 network probe is missing endpoint label/scope")
+            raise EvidenceError("two-VPS network probe is missing endpoint label/scope")
         key = (label, scope)
         if key not in _REQUIRED_PROBES:
-            raise EvidenceError(f"#562 network probe has unsupported endpoint/scope: {key}")
+            raise EvidenceError(f"two-VPS network probe has unsupported endpoint/scope: {key}")
         if key in observed:
-            raise EvidenceError(f"#562 network evidence contains duplicate probe: {key}")
+            raise EvidenceError(f"two-VPS network evidence contains duplicate probe: {key}")
         if raw_probe.get("status") != "pass":
-            raise EvidenceError("#562 network evidence contains a non-passing probe")
+            raise EvidenceError("two-VPS network evidence contains a non-passing probe")
         if raw_probe.get("platform_commit") != platform_commit:
-            raise EvidenceError("#562 network probe uses a different platform commit")
+            raise EvidenceError("two-VPS network probe uses a different platform commit")
         if raw_probe.get("source_host_label") != worker_host_label:
-            raise EvidenceError("#562 network probe was not recorded from the Worker host")
+            raise EvidenceError("two-VPS network probe was not recorded from the Worker host")
         if raw_probe.get("target_address_recorded") is not False:
-            raise EvidenceError("#562 network probe retained a tested address")
+            raise EvidenceError("two-VPS network probe retained a tested address")
         if raw_probe.get("credential_material_recorded") is not False:
-            raise EvidenceError("#562 network probe retained credential material")
+            raise EvidenceError("two-VPS network probe retained credential material")
         observed[key] = raw_probe
 
     missing = sorted(_REQUIRED_PROBES - observed.keys())
     if missing:
-        raise EvidenceError(f"#562 network evidence is missing required probes: {missing}")
+        raise EvidenceError(f"two-VPS network evidence is missing required probes: {missing}")
 
     for label in ("worker-protocol", "message-broker"):
         private_probe = observed[(label, "private")]
@@ -213,21 +213,21 @@ def _validate_network(
             or private_port <= 0
             or private_port > 65535
         ):
-            raise EvidenceError(f"#562 private {label} probe has an invalid service port")
+            raise EvidenceError(f"two-VPS private {label} probe has an invalid service port")
         if public_port != private_port:
-            raise EvidenceError(f"#562 public/private {label} probes use different ports")
+            raise EvidenceError(f"two-VPS public/private {label} probes use different ports")
         if (
             private_probe.get("expected") != "reachable"
             or private_probe.get("reachable") is not True
             or private_probe.get("outcome") != "connected"
         ):
-            raise EvidenceError(f"#562 private {label} probe did not prove tunnel reachability")
+            raise EvidenceError(f"two-VPS private {label} probe did not prove tunnel reachability")
         if (
             public_probe.get("expected") != "closed"
             or public_probe.get("reachable") is not False
             or public_probe.get("outcome") not in {"refused", "timeout"}
         ):
-            raise EvidenceError(f"#562 public {label} probe did not prove non-exposure")
+            raise EvidenceError(f"two-VPS public {label} probe did not prove non-exposure")
 
 
 def _validate_canonical_ids(canonical: Mapping[str, object]) -> None:
@@ -238,9 +238,9 @@ def _validate_canonical_ids(canonical: Mapping[str, object]) -> None:
         values["post_restart_run_id"],
     }
     if len(run_ids) != 3:
-        raise EvidenceError("#562 dispatch/recovery/restart evidence reuses a canonical Run ID")
+        raise EvidenceError("two-VPS dispatch/recovery/restart evidence reuses a canonical Run ID")
     if values["worker_job_id"] == values["post_recovery_worker_job_id"]:
-        raise EvidenceError("#562 recovery evidence reuses the original canonical WorkerJob ID")
+        raise EvidenceError("two-VPS recovery evidence reuses the original canonical WorkerJob ID")
 
 
 def _string_list(
@@ -255,10 +255,10 @@ def _string_list(
         or len(value) < minimum
         or not all(isinstance(item, str) and item.strip() for item in value)
     ):
-        raise EvidenceError(f"#562 transport evidence field {key} is incomplete")
+        raise EvidenceError(f"two-VPS transport evidence field {key} is incomplete")
     normalized = [item.strip() for item in value]
     if len(set(normalized)) != len(normalized):
-        raise EvidenceError(f"#562 transport evidence field {key} contains duplicate references")
+        raise EvidenceError(f"two-VPS transport evidence field {key} contains duplicate references")
     return normalized
 
 
@@ -271,18 +271,18 @@ def _validate_transport(
     if transport is None:
         return False
     if not isinstance(transport, Mapping):
-        raise EvidenceError("#562 transport evidence must be an object when present")
+        raise EvidenceError("two-VPS transport evidence must be an object when present")
     if set(transport.keys()) != _TRANSPORT_KEYS:
-        raise EvidenceError("#562 transport evidence does not match the compact #388 schema")
-    if transport.get("status") != "pass" or transport.get("schema") != ISSUE388_TRANSPORT_SCHEMA:
-        raise EvidenceError("#562 transport evidence is not a passing supported #388 report")
+        raise EvidenceError("two-VPS transport evidence does not match the compact two-host schema")
+    if transport.get("status") != "pass" or transport.get("schema") != TWO_HOST_TRANSPORT_SCHEMA:
+        raise EvidenceError("two-VPS transport evidence is not a passing supported two-host report")
     if transport.get("worker_id") != worker_id:
-        raise EvidenceError("#562 transport evidence uses a different canonical Worker")
+        raise EvidenceError("two-VPS transport evidence uses a different canonical Worker")
     if transport.get("tls") is not True:
-        raise EvidenceError("#562 transport evidence did not retain encrypted-transport proof")
+        raise EvidenceError("two-VPS transport evidence did not retain encrypted-transport proof")
     authentication = transport.get("authentication")
     if not isinstance(authentication, str) or not authentication.strip():
-        raise EvidenceError("#562 transport evidence is missing service authentication")
+        raise EvidenceError("two-VPS transport evidence is missing service authentication")
     _string_list(transport, "artifact_refs", minimum=2)
     _string_list(transport, "evidence_refs")
     return True
@@ -290,35 +290,35 @@ def _validate_transport(
 
 def _validate_evidence(path: Path, *, repository_root: Path) -> dict[str, object]:
     payload = _load_json(path)
-    if payload.get("schema") != ISSUE562_REPORT_SCHEMA:
-        raise EvidenceError("#562 acceptance evidence uses an unsupported schema")
+    if payload.get("schema") != TWO_VPS_REPORT_SCHEMA:
+        raise EvidenceError("two-VPS acceptance evidence uses an unsupported schema")
     if payload.get("status") != "pass":
-        raise EvidenceError("#562 acceptance evidence is not a passing result")
+        raise EvidenceError("two-VPS acceptance evidence is not a passing result")
     if payload.get("deployment_profile") != DEPLOYMENT_PROFILE:
-        raise EvidenceError("#562 acceptance evidence uses a different deployment profile")
+        raise EvidenceError("two-VPS acceptance evidence uses a different deployment profile")
     if payload.get("credential_material_recorded") is not False:
-        raise EvidenceError("#562 acceptance evidence retained credential material")
+        raise EvidenceError("two-VPS acceptance evidence retained credential material")
     if payload.get("provider_or_tunnel_identity_canonicalized") is not False:
-        raise EvidenceError("#562 acceptance evidence canonicalized provider/tunnel identity")
+        raise EvidenceError("two-VPS acceptance evidence canonicalized provider/tunnel identity")
 
     evidence_commit = _non_empty_string(payload, "platform_commit")
     current_commit = _current_commit(repository_root)
     if evidence_commit != current_commit:
         raise EvidenceError(
-            "#562 evidence platform commit does not match the repository checkout being claimed"
+            "two-VPS evidence platform commit does not match the repository checkout being claimed"
         )
 
     control_host = _non_empty_string(payload, "control_host_label")
     worker_host = _non_empty_string(payload, "worker_host_label")
     if control_host == worker_host:
-        raise EvidenceError("#562 evidence does not prove two distinct host roles")
+        raise EvidenceError("two-VPS evidence does not prove two distinct host roles")
 
     phases = _mapping(payload, "phases")
     missing_phases = sorted(_REQUIRED_PHASES - phases.keys())
     if missing_phases:
-        raise EvidenceError(f"#562 evidence is missing required phases: {missing_phases}")
+        raise EvidenceError(f"two-VPS evidence is missing required phases: {missing_phases}")
     if any(phases.get(phase) != "pass" for phase in _REQUIRED_PHASES):
-        raise EvidenceError("#562 evidence contains a non-passing required phase")
+        raise EvidenceError("two-VPS evidence contains a non-passing required phase")
 
     canonical = _mapping(payload, "canonical")
     _validate_canonical_ids(canonical)
@@ -329,7 +329,7 @@ def _validate_evidence(path: Path, *, repository_root: Path) -> dict[str, object
         or not capabilities
         or not all(isinstance(value, str) and value.strip() for value in capabilities)
     ):
-        raise EvidenceError("#562 evidence is missing advertised Worker capabilities")
+        raise EvidenceError("two-VPS evidence is missing advertised Worker capabilities")
 
     _validate_network(
         _mapping(payload, "network"),
@@ -339,15 +339,15 @@ def _validate_evidence(path: Path, *, repository_root: Path) -> dict[str, object
 
     conformance = _mapping(payload, "conformance")
     if conformance.get("scenario_id") != "E":
-        raise EvidenceError("#562 evidence is not bound to distributed Scenario E")
+        raise EvidenceError("two-VPS evidence is not bound to distributed Scenario E")
     if conformance.get("profile") != DEPLOYMENT_PROFILE:
         raise EvidenceError(
-            "#562 conformance evidence uses a different real-infrastructure profile"
+            "two-VPS conformance evidence uses a different real-infrastructure profile"
         )
     if conformance.get("status") != "pass":
-        raise EvidenceError("#562 conformance evidence did not pass")
+        raise EvidenceError("two-VPS conformance evidence did not pass")
     if conformance.get("optional_real_infrastructure") is not True:
-        raise EvidenceError("#562 evidence is not marked as optional real infrastructure")
+        raise EvidenceError("two-VPS evidence is not marked as optional real infrastructure")
 
     worker_id = _non_empty_string(canonical, "worker_id")
     _validate_transport(payload, worker_id=worker_id)
@@ -391,7 +391,7 @@ def run_profile(
     if acceptance_evidence is None:
         scenario = ConformanceScenario(
             scenario_id=SCENARIO_ID,
-            owner="#562 real distributed acceptance",
+            owner="real distributed acceptance",
             criterion=(
                 "two independent VPS hosts pass the private-tunnel distributed runtime, "
                 "failure/recovery and security acceptance on the exact claimed platform commit"
@@ -400,7 +400,7 @@ def run_profile(
             required=True,
             unavailable_status=ConformanceStatus.UNSUPPORTED,
             unavailable_reason=(
-                "no finalized #562 live acceptance report was supplied; simulated Scenario E "
+                "no finalized live two-VPS acceptance report was supplied; simulated Scenario E "
                 "evidence cannot establish a real-infrastructure compatibility claim"
             ),
         )
@@ -408,7 +408,7 @@ def run_profile(
         evidence_path = acceptance_evidence.resolve()
         scenario = ConformanceScenario(
             scenario_id=SCENARIO_ID,
-            owner="#562 real distributed acceptance",
+            owner="real distributed acceptance",
             criterion=(
                 "two independent VPS hosts pass the private-tunnel distributed runtime, "
                 "failure/recovery and security acceptance on the exact claimed platform commit"
