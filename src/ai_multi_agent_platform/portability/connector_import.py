@@ -1,4 +1,4 @@
-"""Rollback-safe Connection import for issue #79."""
+"""Rollback-safe Connection import for the owning subsystem."""
 
 from __future__ import annotations
 

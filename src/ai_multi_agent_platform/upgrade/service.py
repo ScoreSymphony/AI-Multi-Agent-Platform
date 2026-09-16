@@ -1,4 +1,4 @@
-"""Coordinated, fail-closed upgrade application service for issue #41."""
+"""Coordinated, fail-closed upgrade application service for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -322,7 +322,7 @@ class UpgradeService:
             manifest for manifest in request.plugins if manifest.plugin_id in required
         )
         try:
-            # The deployment wrapper must call the deterministic #20 PluginStateMigrator. That
+            # The deployment wrapper must call the deterministic  PluginStateMigrator. That
             # migrator is version-aware and therefore safe to invoke again during explicit resume.
             hook(manifests)
         # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation

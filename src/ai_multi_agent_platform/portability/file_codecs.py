@@ -1,4 +1,4 @@
-"""Portable File/Artifact codecs and provider-neutral file materialization for issue #79."""
+"""Portable File/Artifact codecs and provider-neutral file materialization for the owning subsystem."""
 
 from __future__ import annotations
 

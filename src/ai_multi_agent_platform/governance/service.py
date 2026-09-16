@@ -1,4 +1,4 @@
-"""Application service for optional Proposal/Specification governance (#501)."""
+"""Application service for optional Proposal/Specification governance ()."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ class GovernanceCallContext:
 
 @dataclass(frozen=True, slots=True)
 class ApprovedSpecificationPlanningInput:
-    """Immutable #439-facing view; planning consumes but cannot rewrite governance state."""
+    """Immutable -facing view; planning consumes but cannot rewrite governance state."""
 
     specification_id: str
     revision: int

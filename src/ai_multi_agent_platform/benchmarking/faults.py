@@ -1,4 +1,4 @@
-"""Deterministic fault-under-load benchmark profiles for issue #440."""
+"""Deterministic fault-under-load benchmark profiles for the owning subsystem."""
 
 from __future__ import annotations
 

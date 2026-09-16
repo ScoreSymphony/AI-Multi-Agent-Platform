@@ -111,7 +111,7 @@ class SkillBundleImportMutationHandler:
         del resource, context
         bundle = _require_bundle(value)
         _require_missing_bundle(self._repository, bundle.skill_bundle_id)
-        # Do not require member Skill revisions in preflight. #79 preflights every
+        # Do not require member Skill revisions in preflight.  preflights every
         # package resource before applying any of them, so same-package Skill
         # dependencies are not present in the destination yet. The import preview
         # owns dependency completeness/order; apply re-validates exact revisions

@@ -17,7 +17,7 @@ from .authorization import (
 
 
 class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
-    """Persist deterministic #15 local principal policies across restarts."""
+    """Persist deterministic  local principal policies across restarts."""
 
     def __init__(self, path: str | Path, *, provider_id: str = "local-authorization") -> None:
         self.path = Path(path)

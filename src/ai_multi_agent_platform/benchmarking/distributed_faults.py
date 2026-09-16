@@ -1,4 +1,4 @@
-"""Distributed Worker loss/rejoin and remote Workspace failure evidence for issue #440."""
+"""Distributed Worker loss/rejoin and remote Workspace failure evidence for the owning subsystem."""
 
 from __future__ import annotations
 

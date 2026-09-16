@@ -1,4 +1,4 @@
-"""Canonical runtime-evidence bridge for bounded autonomous replanning (#439).
+"""Canonical runtime-evidence bridge for bounded autonomous replanning ().
 
 The bridge deliberately resolves runtime facts from platform-owned stores before asking the
 PlanningService for a replacement Plan. It never executes a Step, invokes a capability, changes a
@@ -34,13 +34,13 @@ ReplanningEventSink = Callable[[str, dict[str, JsonValue]], Awaitable[None] | No
 
 
 class CoordinationEvidenceRepository(Protocol):
-    """Minimum #384 state needed to prove retry exhaustion server-side."""
+    """Minimum  state needed to prove retry exhaustion server-side."""
 
     def get_step_record(self, step_id: str) -> StepCoordinationRecord: ...
 
 
 class VerificationEvidenceRepository(Protocol):
-    """Minimum #86 audit history needed to prove Verification evidence server-side."""
+    """Minimum  audit history needed to prove Verification evidence server-side."""
 
     def audit_history(
         self,
@@ -104,7 +104,7 @@ class ReplanningEvidenceBridge:
         step_id: str,
         workspace_id: str | None = None,
     ) -> ProposalRecord:
-        """Request replanning only when #384 durably proves retry exhaustion for the Step."""
+        """Request replanning only when  durably proves retry exhaustion for the Step."""
 
         if self._coordination_repository is None:
             raise ContractError(
@@ -150,7 +150,7 @@ class ReplanningEvidenceBridge:
         """Request replanning from one server-resolved canonical Verification audit event.
 
         The supplied object is used only as a lookup reference. Outcome, Task identity and all
-        evidence references are taken from #86's canonical append-only audit history. When the
+        evidence references are taken from 's canonical append-only audit history. When the
         repository is the canonical VerificationService, production reads automatically share its
         bounded async persistence boundary; narrow synchronous repositories remain supported for
         explicit offline/test composition.
@@ -159,7 +159,7 @@ class ReplanningEvidenceBridge:
         if self._verification_repository is None:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                "Verification replanning requires canonical #86 audit history",
+                "Verification replanning requires canonical  audit history",
             )
         if event.task_id is None:
             raise ContractError(
@@ -184,7 +184,7 @@ class ReplanningEvidenceBridge:
         if canonical is None:
             raise ContractError(
                 ErrorCode.NOT_FOUND,
-                "Verification audit event was not found in canonical #86 history",
+                "Verification audit event was not found in canonical  history",
                 details={"verification_audit_event_id": event.event_id},
             )
         if canonical.event_type is not VerificationAuditEventType.RESULT_RECORDED:

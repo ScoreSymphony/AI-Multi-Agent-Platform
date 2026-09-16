@@ -1,4 +1,4 @@
-"""Concurrent multi-Plan and coordinator claim-contention evidence for issue #440."""
+"""Concurrent multi-Plan and coordinator claim-contention evidence for the owning subsystem."""
 
 from __future__ import annotations
 

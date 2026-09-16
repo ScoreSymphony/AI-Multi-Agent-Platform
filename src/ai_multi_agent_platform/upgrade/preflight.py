@@ -1,4 +1,4 @@
-"""Mutation-free upgrade preflight checks for issue #41."""
+"""Mutation-free upgrade preflight checks for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -376,7 +376,7 @@ def _plugin_state_migration_checks(request: PreflightRequest) -> tuple[Preflight
                 code="plugin.state_migration.hook_missing",
                 severity=CheckSeverity.ERROR,
                 message=(
-                    "plugin-owned state requires migration but no controlled #20 hook is available"
+                    "plugin-owned state requires migration but no controlled  hook is available"
                 ),
                 details={"plugin_ids": sorted(required)},
             ),
@@ -385,7 +385,7 @@ def _plugin_state_migration_checks(request: PreflightRequest) -> tuple[Preflight
         PreflightCheck(
             code="plugin.state_migration.ready",
             severity=CheckSeverity.INFO,
-            message="required plugin-owned state migrations have a controlled #20 hook",
+            message="required plugin-owned state migrations have a controlled  hook",
             details={"plugin_ids": sorted(required)},
         ),
     )

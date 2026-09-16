@@ -1,4 +1,4 @@
-"""Deterministic transient persistence-fault benchmarks for issue #440."""
+"""Deterministic transient persistence-fault benchmarks for the owning subsystem."""
 
 from __future__ import annotations
 

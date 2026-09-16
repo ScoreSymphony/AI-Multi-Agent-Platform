@@ -1,4 +1,4 @@
-"""Privacy-aware KnowledgeSource import and destination index rebuild for issue #79."""
+"""Privacy-aware KnowledgeSource import and destination index rebuild for the owning subsystem."""
 
 from __future__ import annotations
 

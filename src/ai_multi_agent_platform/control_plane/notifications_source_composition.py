@@ -1,4 +1,4 @@
-"""Completed source-domain integrations for canonical Notifications (#75 hardening)."""
+"""Completed source-domain integrations for canonical Notifications ( hardening)."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ class ControlPlane(_BaseControlPlane):
         now: datetime | None = None,
         approaching_window: timedelta | None = None,
     ) -> tuple[Notification, ...]:
-        """Evaluate #88 reminders and completed-domain attention projections."""
+        """Evaluate  reminders and completed-domain attention projections."""
 
         created = list(
             await super().evaluate_task_attention_reminders(
@@ -128,7 +128,7 @@ class ControlPlane(_BaseControlPlane):
         return tuple(created)
 
     async def _project_approval_event(self, event: str, approval: ApprovalRecord) -> None:
-        """Project #15 Approval lifecycle after #15 has committed its authoritative state."""
+        """Project  Approval lifecycle after  has committed its authoritative state."""
 
         resolver = self._approval_recipient_resolver
         if resolver is None:
@@ -154,7 +154,7 @@ class ControlPlane(_BaseControlPlane):
         accounting: AccountingService,
         event: BudgetThresholdEvent,
     ) -> None:
-        """Queue a synchronous #76 threshold event for the autonomous Notification runtime."""
+        """Queue a synchronous  threshold event for the autonomous Notification runtime."""
 
         try:
             budget = accounting.store.get_budget(event.budget_id)
@@ -181,7 +181,7 @@ class ControlPlane(_BaseControlPlane):
         *,
         now: datetime | None,
     ) -> tuple[tuple[Notification, ...], bool]:
-        """Reconstruct lost #76 attention from durable budget/threshold state after restart."""
+        """Reconstruct lost  attention from durable budget/threshold state after restart."""
 
         created: list[Notification] = []
         retry_required = False
@@ -254,7 +254,7 @@ class ControlPlane(_BaseControlPlane):
         previous: Connection,
         current: Connection,
     ) -> None:
-        """Project #44 degraded/error health after Connection state is committed."""
+        """Project  degraded/error health after Connection state is committed."""
 
         del previous
         try:
@@ -286,7 +286,7 @@ class ControlPlane(_BaseControlPlane):
             return
 
     async def _project_automation_event(self, event: dict[str, JsonValue]) -> None:
-        """Project #18 failures without allowing attention failure to fail Automation."""
+        """Project  failures without allowing attention failure to fail Automation."""
 
         try:
             if event.get("type") != "automation.delivery":

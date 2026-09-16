@@ -1,4 +1,4 @@
-"""Autonomous restart-safe notification projection runtime for issue #75."""
+"""Autonomous restart-safe notification projection runtime for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ class NotificationRuntimeTick:
 
 
 class NotificationRuntime:
-    """Continuously project canonical Events and #88 reminder state into Notifications.
+    """Continuously project canonical Events and  reminder state into Notifications.
 
     The runtime never owns source lifecycle state. Canonical Events remain in ``EventRepository``;
     runtime state only checkpoints successful projection so restarts do not inflate duplicate

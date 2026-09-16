@@ -1,4 +1,4 @@
-"""Canonical Control Plane composition for notifications and user attention (#75)."""
+"""Canonical Control Plane composition for notifications and user attention ()."""
 
 from __future__ import annotations
 
@@ -141,7 +141,7 @@ class _PreferenceResources(ResourceService):
 
 
 class ControlPlane(_BaseControlPlane):
-    """Current platform Control Plane plus the canonical #75 notification subsystem."""
+    """Current platform Control Plane plus the canonical  notification subsystem."""
 
     def __init__(
         self,
@@ -247,7 +247,7 @@ class ControlPlane(_BaseControlPlane):
         now: datetime | None = None,
         approaching_window: timedelta = DEFAULT_DEADLINE_APPROACHING_WINDOW,
     ) -> tuple[Notification, ...]:
-        """Project current #88 deadline/dependency attention without owning planning state."""
+        """Project current  deadline/dependency attention without owning planning state."""
 
         active: list[Notification] = []
         for task_id in await self._task_ids():
@@ -290,7 +290,7 @@ class ControlPlane(_BaseControlPlane):
         # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
         except Exception:
             # The canonical task update is already committed. Notification projection must never
-            # become source-of-truth authority or turn a successful #88 update into a failure.
+            # become source-of-truth authority or turn a successful  update into a failure.
             return
 
     async def _mark_read(

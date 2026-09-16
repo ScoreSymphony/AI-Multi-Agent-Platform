@@ -1,4 +1,4 @@
-"""Idle-footprint and bounded soak/endurance benchmarks for issue #440."""
+"""Idle-footprint and bounded soak/endurance benchmarks for the owning subsystem."""
 
 from __future__ import annotations
 

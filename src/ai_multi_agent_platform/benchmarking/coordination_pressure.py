@@ -1,4 +1,4 @@
-"""Retry, wait and reconciliation pressure evidence for issue #440."""
+"""Retry, wait and reconciliation pressure evidence for the owning subsystem."""
 
 from __future__ import annotations
 

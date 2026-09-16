@@ -1,4 +1,4 @@
-"""Single-node API workload profiles for issue #440."""
+"""Single-node API workload profiles for the owning subsystem."""
 
 from __future__ import annotations
 

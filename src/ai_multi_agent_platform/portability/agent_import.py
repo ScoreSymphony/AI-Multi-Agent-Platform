@@ -204,7 +204,7 @@ def _routing_profile_assignments(
                     "portable Agent routing-profile reference must pin an exact canonical revision",
                     details={"routing_profile_ref": raw_ref},
                 ) from exc
-            # Preserve pre-#309 compatibility routing keys unchanged.
+            # Preserve pre- compatibility routing keys unchanged.
             continue
         if (reference.profile_id, reference.revision) not in declared:
             raise ContractError(

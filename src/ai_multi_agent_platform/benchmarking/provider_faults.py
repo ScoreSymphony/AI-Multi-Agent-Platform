@@ -1,4 +1,4 @@
-"""Deterministic model/tool/provider degradation benchmarks for issue #440."""
+"""Deterministic model/tool/provider degradation benchmarks for the owning subsystem."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Deterministic single-node performance benchmark harness for issue #440."""
+"""Deterministic single-node performance benchmark harness for the owning subsystem."""
 
 from __future__ import annotations
 

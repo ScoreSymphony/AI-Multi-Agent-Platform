@@ -1,4 +1,4 @@
-"""Authenticated Control Plane API pressure evidence for issue #440."""
+"""Authenticated Control Plane API pressure evidence for the owning subsystem."""
 
 from __future__ import annotations
 

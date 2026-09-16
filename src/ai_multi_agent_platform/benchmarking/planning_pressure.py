@@ -1,4 +1,4 @@
-"""Deterministic autonomous-planning pressure evidence for issue #440 after #439."""
+"""Deterministic autonomous-planning pressure evidence for the owning subsystem after ."""
 
 from __future__ import annotations
 

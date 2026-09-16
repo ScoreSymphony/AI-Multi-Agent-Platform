@@ -1,4 +1,4 @@
-"""Issue #36 hardening composition for scoped credentials and request controls.
+"""hardening composition for scoped credentials and request controls.
 
 The primitives in :mod:`security.authentication` remain provider-neutral. This module
 adds the public self-hosted composition used by the platform: credential scopes are a
@@ -41,10 +41,10 @@ _SCOPE_FIELDS = {"actions", "resource_types", "resource_ids"}
 
 @dataclass(frozen=True, slots=True)
 class CredentialScope:
-    """Credential-local authorization ceiling expressed in canonical #15 vocabulary.
+    """Credential-local authorization ceiling expressed in canonical  vocabulary.
 
     Empty dimensions mean "not additionally restricted". A scope can only reduce what
-    #15 may allow; it never grants a permission on its own.
+     may allow; it never grants a permission on its own.
     """
 
     actions: frozenset[AuthorizationAction] = frozenset()
@@ -105,7 +105,7 @@ class CredentialScope:
             actions = frozenset(AuthorizationAction(item) for item in actions_value)
             resource_types = frozenset(ResourceType(item) for item in resource_types_value)
         except ValueError as exc:
-            raise ValueError("credential scope uses unknown #15 vocabulary") from exc
+            raise ValueError("credential scope uses unknown  vocabulary") from exc
         return cls(
             actions=actions,
             resource_types=resource_types,
@@ -160,7 +160,7 @@ class InMemoryRequestRateLimiter:
 
 
 class LocalAuthenticationService(_BaseLocalAuthenticationService):
-    """Public #36 self-hosted composition with scoped credentials and complete audit hooks."""
+    """Public  self-hosted composition with scoped credentials and complete audit hooks."""
 
     def __init__(
         self,

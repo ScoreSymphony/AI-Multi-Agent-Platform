@@ -1,4 +1,4 @@
-"""Durable Plan/Step scale evidence for issue #440 after #384."""
+"""Durable Plan/Step scale evidence for the owning subsystem after ."""
 
 from __future__ import annotations
 
@@ -176,7 +176,7 @@ class _GraphOrchestrator(FakeOrchestrator):
 
 
 class PlanStepBenchmarkHarness:
-    """Exercise canonical kernel + durable #384 coordinator paths with SQLite persistence."""
+    """Exercise canonical kernel + durable  coordinator paths with SQLite persistence."""
 
     def __init__(self, data_dir: Path, *, platform_commit: str = "unknown") -> None:
         self._data_dir = data_dir

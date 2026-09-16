@@ -1,4 +1,4 @@
-"""Canonical #19 Evaluation orchestration for application release gates (#750).
+"""Canonical  Evaluation orchestration for application release gates ().
 
 Application distribution owns only the release requirement and projection. Missing configured
 Evaluation evidence is obtained through the canonical EvaluationService and then read back through
@@ -41,7 +41,7 @@ from .models import ApplicationArtifact, ApplicationRelease, GateEvidence, GateS
 
 
 class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinator):
-    """Drive and project only exact-configuration #19 Evaluation evidence.
+    """Drive and project only exact-configuration  Evaluation evidence.
 
     The coordinator deliberately does not own Evaluation lifecycle state. It asks the canonical
     EvaluationService to complete the exact ConfigurationSnapshot and execute an exact suite

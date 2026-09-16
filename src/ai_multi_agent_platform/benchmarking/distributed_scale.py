@@ -1,4 +1,4 @@
-"""Distributed Worker and remote Workspace scale evidence for issue #440."""
+"""Distributed Worker and remote Workspace scale evidence for the owning subsystem."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Real SQLite writer-contention benchmark evidence for issue #440."""
+"""Real SQLite writer-contention benchmark evidence for the owning subsystem."""
 
 from __future__ import annotations
 

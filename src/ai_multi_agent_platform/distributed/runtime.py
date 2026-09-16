@@ -55,7 +55,7 @@ class DispatchState(StrEnum):
 
 
 class DispatchAuthorizationError(RegistryError):
-    """Raised when canonical #15 policy rejects an exact-Worker dispatch."""
+    """Raised when canonical  policy rejects an exact-Worker dispatch."""
 
 
 @runtime_checkable

@@ -1,4 +1,4 @@
-"""Automatic reviewer-Agent workflow coordination for issue #711.
+"""Automatic reviewer-Agent workflow coordination for the owning subsystem.
 
 This module productively wires canonical Verification to the normal Agent runtime.
 Provider/orchestrator-specific reviewer execution remains replaceable, and repair

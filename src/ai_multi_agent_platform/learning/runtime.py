@@ -1,4 +1,4 @@
-"""Observable governed-Learning runtime and optional post-promotion evaluation (#595)."""
+"""Observable governed-Learning runtime and optional post-promotion evaluation ()."""
 
 from __future__ import annotations
 
@@ -127,7 +127,7 @@ class PostPromotionEvaluator(Protocol):
 
 
 class EvaluationPostPromotionEvaluator:
-    """Run configured #19 suites against the newly promoted canonical owner revision."""
+    """Run configured  suites against the newly promoted canonical owner revision."""
 
     def __init__(
         self,

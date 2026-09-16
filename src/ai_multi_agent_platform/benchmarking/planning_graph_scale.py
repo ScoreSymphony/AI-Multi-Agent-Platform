@@ -1,4 +1,4 @@
-"""Deterministic large-Plan graph scale evidence for issue #440 after #439."""
+"""Deterministic large-Plan graph scale evidence for the owning subsystem after ."""
 
 from __future__ import annotations
 
