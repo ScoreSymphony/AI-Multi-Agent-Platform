@@ -6,9 +6,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from math import isfinite
+from typing import Any
 from uuid import uuid4
 
-from ai_multi_agent_platform.accounting.models import MeasurementQuality
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 
@@ -192,7 +192,7 @@ class BudgetReservation:
 class BudgetConsumption:
     consumed: float
     source: BudgetConsumptionSource
-    quality_counts: dict[MeasurementQuality, int] = field(default_factory=dict)
+    quality_counts: dict[Any, int] = field(default_factory=dict)
     unavailable_count: int = 0
     record_ids: tuple[str, ...] = ()
 
@@ -203,7 +203,7 @@ class BudgetDimensionSnapshot:
     consumed: float
     reserved: float
     remaining: float
-    quality_counts: dict[MeasurementQuality, int] = field(default_factory=dict)
+    quality_counts: dict[Any, int] = field(default_factory=dict)
     unavailable_count: int = 0
 
     @property
