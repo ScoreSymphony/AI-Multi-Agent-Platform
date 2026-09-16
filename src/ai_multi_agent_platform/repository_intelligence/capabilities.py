@@ -1,4 +1,4 @@
-"""Canonical repository-intelligence capability taxonomy for issue #502."""
+"""Canonical repository-intelligence capability taxonomy."""
 
 from __future__ import annotations
 
