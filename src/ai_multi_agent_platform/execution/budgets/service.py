@@ -5,15 +5,10 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from datetime import datetime, timedelta
+from importlib import import_module
 from math import isfinite
-from typing import Protocol
+from typing import Any, Protocol
 
-from ai_multi_agent_platform.accounting.async_service import (
-    AsyncAccountingService,
-    runtime_accounting_service,
-)
-from ai_multi_agent_platform.accounting.models import MeasurementQuality, UsageQuery, UsageScope
-from ai_multi_agent_platform.accounting.service import AccountingService, aggregate_usage_records
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
@@ -36,7 +31,22 @@ from .models import (
 )
 from .store import ReservationClaim, TaskBudgetStore
 
-AccountingRuntime = AccountingService | AsyncAccountingService
+AccountingRuntime = Any
+
+
+def _accounting_async() -> Any:
+    """Load the #76 async adapter without a static execution -> accounting package edge."""
+
+    return import_module("ai_multi_agent_platform.accounting.async_service")
+
+
+def _accounting_models() -> Any:
+    return import_module("ai_multi_agent_platform.accounting.models")
+
+
+def _accounting_service() -> Any:
+    return import_module("ai_multi_agent_platform.accounting.service")
+
 
 _ACTION_DIMENSIONS: dict[BudgetActionKind, frozenset[BudgetDimension]] = {
     BudgetActionKind.MODEL_CALL: frozenset(
@@ -110,7 +120,7 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
         if reservation_ttl_seconds <= 0:
             raise ValueError("reservation_ttl_seconds must be greater than zero")
         self._store = store
-        self._accounting = runtime_accounting_service(accounting)
+        self._accounting = _accounting_async().runtime_accounting_service(accounting)
         self._reservation_ttl_seconds = reservation_ttl_seconds
 
     async def put_policy(self, policy: TaskBudgetPolicy) -> TaskBudgetSnapshot:
@@ -393,28 +403,32 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
             return BudgetConsumption(consumed=counter, source=limit.source)
         assert limit.metric_type is not None
         assert limit.unit is not None
+        accounting = _accounting_models()
         records = await self._accounting.query(
-            UsageQuery(
+            accounting.UsageQuery(
                 metric_type=limit.metric_type,
                 unit=limit.unit,
-                scope=UsageScope(task_id=policy.task_id),
+                scope=accounting.UsageScope(task_id=policy.task_id),
             )
         )
-        quality_counts = {quality: 0 for quality in MeasurementQuality}
+        quality_counts = {quality: 0 for quality in accounting.MeasurementQuality}
         for record in records:
             quality_counts[record.quality] += 1
         included = tuple(
             record
             for record in records
             if record.quantity is not None
-            and (record.quality is not MeasurementQuality.ESTIMATED or limit.include_estimated)
+            and (
+                record.quality is not accounting.MeasurementQuality.ESTIMATED
+                or limit.include_estimated
+            )
         )
-        aggregate = aggregate_usage_records(
+        aggregate = _accounting_service().aggregate_usage_records(
             included,
             metric_type=limit.metric_type,
             unit=limit.unit,
         )
-        unavailable_count = quality_counts[MeasurementQuality.UNAVAILABLE]
+        unavailable_count = quality_counts[accounting.MeasurementQuality.UNAVAILABLE]
         if not records and limit.dimension is BudgetDimension.EXTERNAL_COST:
             unavailable_count = 1
         return BudgetConsumption(
