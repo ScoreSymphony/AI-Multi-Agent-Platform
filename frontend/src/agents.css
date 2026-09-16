@@ -1,0 +1,138 @@
+/* Route-scoped presentation polish for canonical Agent inventory/detail surfaces. */
+
+main[data-route="/agents"] > .stack {
+  gap: 1.15rem;
+}
+
+main[data-route="/agents"] .page-header {
+  align-items: center;
+  padding-bottom: .55rem;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route="/agents"] .page-header > div:first-child {
+  min-width: 0;
+}
+
+main[data-route="/agents"] .page-header .primary {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding-inline: 1rem;
+}
+
+main[data-route="/agents"] > .stack > .metrics {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+main[data-route="/agents"] > .stack > .metrics .metric:first-child {
+  border-color: #315b70;
+  background: linear-gradient(180deg, rgba(22, 54, 70, .56), rgba(17, 23, 34, .94));
+}
+
+main[data-route="/agents"] > .stack > .metrics .metric:nth-child(2),
+main[data-route="/agents"] > .stack > .metrics .metric:nth-child(4) {
+  background: linear-gradient(180deg, rgba(28, 48, 45, .48), rgba(17, 23, 34, .94));
+}
+
+main[data-route="/agents"] > .stack > .card {
+  padding: 0;
+  overflow: hidden;
+}
+
+main[data-route="/agents"] > .stack > .card > h2 {
+  margin: 0;
+  padding: .95rem 1.15rem;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+  background: rgba(9, 13, 21, .34);
+}
+
+main[data-route="/agents"] > .stack > .card > .state {
+  margin: 1rem 1.15rem 0;
+}
+
+main[data-route="/agents"] > .stack > .card > .table-wrap {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+main[data-route="/agents"] > .stack > .card > .table-wrap th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+main[data-route="/agents"] > .stack > .card > .table-wrap td:first-child {
+  min-width: 220px;
+}
+
+main[data-route="/agents"] > .stack > .card > .table-wrap td:first-child a {
+  font-weight: 700;
+}
+
+main[data-route="/agents"] > .stack > .card > :last-child:not(.table-wrap) {
+  margin: .85rem 1.15rem 1rem;
+}
+
+main[data-route^="/agents/"] .page-header {
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route^="/agents/"] .detail-status {
+  flex: 0 0 auto;
+  padding: .45rem .6rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 10px;
+  background: rgba(17, 23, 34, .6);
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+main[data-route^="/agents/"] > .stack > .actions {
+  padding: .65rem .75rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 10px;
+  background: rgba(17, 23, 34, .42);
+}
+
+main[data-route^="/agents/"] .grid-two .card {
+  min-width: 0;
+}
+
+main[data-route^="/agents/"] .grid-two .card h2 {
+  padding-bottom: .7rem;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route^="/agents/"] dl > div {
+  grid-template-columns: minmax(120px, .72fr) minmax(0, 1.6fr);
+}
+
+@media (max-width: 1100px) {
+  main[data-route="/agents"] > .stack > .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  main[data-route="/agents"] .page-header {
+    align-items: stretch;
+  }
+
+  main[data-route="/agents"] .page-header .primary {
+    width: 100%;
+  }
+
+  main[data-route="/agents"] > .stack > .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  main[data-route="/agents"] > .stack > .card > h2 {
+    padding-inline: .95rem;
+  }
+
+  main[data-route^="/agents/"] dl > div {
+    grid-template-columns: 1fr;
+  }
+}
