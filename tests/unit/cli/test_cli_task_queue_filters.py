@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Mapping
-from io import StringIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
+from cli_test_helpers import invoke_cli_json as _invoke
+from cli_test_helpers import page_items as _items
+
 from ai_multi_agent_platform.cli.client import RawResponse
-from ai_multi_agent_platform.cli.main import run_cli
 from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
@@ -64,24 +65,6 @@ def _transport() -> ControlPlaneTransport:
     return ControlPlaneTransport(ControlPlaneHTTP(control_plane))
 
 
-def _invoke(
-    config: Path,
-    transport: ControlPlaneTransport,
-    *arguments: str,
-) -> tuple[int, dict[str, Any], str]:
-    stdout = StringIO()
-    stderr = StringIO()
-    code = run_cli(
-        ["--config", str(config), "--json", *arguments],
-        transport=transport,
-        stdout=stdout,
-        stderr=stderr,
-    )
-    payload = json.loads(stdout.getvalue()) if stdout.getvalue() else {}
-    assert isinstance(payload, dict)
-    return code, payload, stderr.getvalue()
-
-
 def _create_task(config: Path, transport: ControlPlaneTransport, title: str) -> str:
     code, payload, error = _invoke(
         config,
@@ -125,15 +108,6 @@ def _update(
         key,
     )
     assert code == 0 and not error
-
-
-def _items(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    data = payload["data"]
-    assert isinstance(data, dict)
-    items = data["items"]
-    assert isinstance(items, list)
-    assert all(isinstance(item, dict) for item in items)
-    return items
 
 
 def test_task_list_filters_use_canonical_task_management_queue_contract(tmp_path: Path) -> None:

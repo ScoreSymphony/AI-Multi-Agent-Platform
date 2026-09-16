@@ -129,7 +129,7 @@ def test_extension_resources_are_read_only_and_require_registration(tmp_path: Pa
     code, payload, error = _invoke(config, transport, "extension", "list", "workers")
     assert code == 2
     assert not payload
-    assert "not registered" in error
+    assert "canonical extension collection is not registered: workers" in error
     assert len(transport.calls) == previous_calls + 1
     assert transport.calls[-1] == ("GET", "/api/v1/openapi.json")
 

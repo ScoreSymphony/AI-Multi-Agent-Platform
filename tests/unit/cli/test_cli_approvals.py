@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Mapping
-from io import StringIO
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qsl, urlsplit
 
+from cli_test_helpers import invoke_cli_json as _invoke
+from cli_test_helpers import page_items as _items
+
 from ai_multi_agent_platform.cli.client import RawResponse
-from ai_multi_agent_platform.cli.main import run_cli
 from ai_multi_agent_platform.contracts import AuthorizationOutcome, OperationContext
 from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
 from ai_multi_agent_platform.domain import new_id
@@ -85,24 +86,6 @@ def _http(*, gate: AuthorizationGate | None = None) -> ControlPlaneHTTP:
     return ControlPlaneHTTP(control_plane)
 
 
-def _invoke(
-    config: Path,
-    transport: RecordingTransport,
-    *arguments: str,
-) -> tuple[int, dict[str, Any], str]:
-    stdout = StringIO()
-    stderr = StringIO()
-    code = run_cli(
-        ["--config", str(config), "--json", *arguments],
-        transport=transport,
-        stdout=stdout,
-        stderr=stderr,
-    )
-    payload = json.loads(stdout.getvalue()) if stdout.getvalue() else {}
-    assert isinstance(payload, dict)
-    return code, payload, stderr.getvalue()
-
-
 def _pending_gate() -> tuple[AuthorizationGate, ProposedAction, str]:
     policy = LocalPrincipalPolicy(
         principal_ref="user:requester",
@@ -135,15 +118,6 @@ def _pending_gate() -> tuple[AuthorizationGate, ProposedAction, str]:
     assert decision.outcome is AuthorizationOutcome.REQUIRE_APPROVAL
     approval_id = cast(str, decision.constraints["approval_id"])
     return gate, action, approval_id
-
-
-def _items(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    data = payload["data"]
-    assert isinstance(data, dict)
-    items = data["items"]
-    assert isinstance(items, list)
-    assert all(isinstance(item, dict) for item in items)
-    return cast(list[dict[str, Any]], items)
 
 
 def test_cli_lists_and_shows_pending_approval_without_payload_leak(tmp_path: Path) -> None:
@@ -204,21 +178,3 @@ def test_cli_lists_and_shows_pending_approval_without_payload_leak(tmp_path: Pat
         ("GET", "/api/v1/openapi.json", {}),
         ("GET", f"/api/v1/approvals/{approval_id}", {}),
     ]
-
-
-def test_cli_has_no_approval_backend_fallback_when_collection_is_absent(tmp_path: Path) -> None:
-    transport = RecordingTransport(_http())
-    config = tmp_path / "cli.json"
-
-    code, payload, error = _invoke(
-        config,
-        transport,
-        "extension",
-        "list",
-        "approvals",
-    )
-
-    assert code == 2
-    assert payload == {}
-    assert "canonical extension collection is not registered: approvals" in error
-    assert transport.calls == [("GET", "/api/v1/openapi.json", {})]
