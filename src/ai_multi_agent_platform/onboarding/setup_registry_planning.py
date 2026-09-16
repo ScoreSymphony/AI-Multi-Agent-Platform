@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -62,7 +63,7 @@ class DependencyAwareBrowserFirstSetupService(BrowserFirstSetupService):
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        """Replay the final result of a multi-action operation, not its first partial success."""
+        """Replay final results and preserve dependency ordering for targeted retries."""
 
         async with self._provision_replay_lock:
             if (
@@ -87,7 +88,54 @@ class DependencyAwareBrowserFirstSetupService(BrowserFirstSetupService):
                         "outcome": replay.to_json(),
                         "setup": self.status(context),
                     }
-            return await super().provision(context, resource_ref, payload)
+            expanded_payload = self._expand_targeted_dependencies(
+                context,
+                resource_ref,
+                payload,
+            )
+            return await super().provision(context, resource_ref, expanded_payload)
+
+    def _expand_targeted_dependencies(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        """Include required dependency actions when a caller retries selected Registry actions."""
+
+        if resource_ref != SETUP_SESSION_RESOURCE_ID or set(payload) - {"action_ids"}:
+            return payload
+        raw_action_ids = payload.get("action_ids")
+        if not isinstance(raw_action_ids, list) or not raw_action_ids:
+            return payload
+        if any(not isinstance(action_id, str) or not action_id.strip() for action_id in raw_action_ids):
+            return payload
+
+        requested = set(cast(list[str], raw_action_ids))
+        plan = self._plan(
+            self._session(context),
+            self.component_setup.discovered_components(),
+            self.component_setup.active_profile(),
+        )
+        actions_by_id = {action.action_id: action for action in plan}
+        actions_by_ref = {action.component_ref: action for action in plan}
+        expanded = set(requested)
+        pending = list(requested)
+        while pending:
+            action_id = pending.pop()
+            action = actions_by_id.get(action_id)
+            if action is None:
+                continue
+            for dependency_ref in action.dependencies:
+                dependency_action = actions_by_ref.get(dependency_ref)
+                if dependency_action is None or dependency_action.action_id in expanded:
+                    continue
+                expanded.add(dependency_action.action_id)
+                pending.append(dependency_action.action_id)
+
+        ordered = [action.action_id for action in plan if action.action_id in expanded]
+        ordered.extend(sorted(expanded - set(ordered)))
+        return {**payload, "action_ids": cast(JsonValue, ordered)}
 
     def _plan(
         self,
