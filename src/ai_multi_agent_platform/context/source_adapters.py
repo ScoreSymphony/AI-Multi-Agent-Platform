@@ -6,26 +6,14 @@ Source domains remain authoritative. These adapters only project exact canonical
 
 from __future__ import annotations
 
-import hashlib
-import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import cast
 
 from ai_multi_agent_platform.agents import AgentService
-from ai_multi_agent_platform.agents.execution_profile import (
-    decode_agent_execution_binding,
-    decode_agent_step_execution_binding,
-)
-from ai_multi_agent_platform.contracts import (
-    ContractError,
-    DataClassification,
-    ErrorCode,
-    OperationContext,
-)
-from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
-from ai_multi_agent_platform.data.contracts import FileProvider, KnowledgeProvider, MemoryProvider
+from ai_multi_agent_platform.data.contracts import KnowledgeProvider, MemoryProvider
 from ai_multi_agent_platform.data.models import (
     DataAccessContext,
     KnowledgeSearchMode,
@@ -34,15 +22,10 @@ from ai_multi_agent_platform.data.models import (
     MemoryScope,
 )
 from ai_multi_agent_platform.kernel.repository import RunRepository, TaskRepository
-from ai_multi_agent_platform.repositories.async_provenance import (
-    AsyncRepositoryProvenanceReader,
-    RepositoryProvenanceReader,
-    as_async_repository_provenance_reader,
-)
-from ai_multi_agent_platform.repositories.service import RepositoryCallContext, RepositoryService
 from ai_multi_agent_platform.research import EvidenceFreshness, ResearchService
 from ai_multi_agent_platform.skills import ReferenceSkillRenderer, SkillBundle, SkillRepository
 
+from .file_source_adapter import FileArtifactResultContextSourceAdapter
 from .models import (
     ContextBundle,
     ContextCandidate,
@@ -53,11 +36,18 @@ from .models import (
     ContextSourceType,
     ContextTrust,
 )
+from .repository_source_adapter import RepositoryContextSourceAdapter
 from .resolver import (
     ContextAssemblyRequest,
     ContextAssemblyService,
     ContextSourceAdapter,
     ContextSourceRequest,
+)
+from .source_adapter_normalization import (
+    canonical_json as _canonical_json,
+    content_digest as _digest,
+    normalize_classification as _classification,
+    operational_request as _operational_request,
 )
 
 _UNAVAILABLE_CODES = frozenset(
@@ -69,55 +59,6 @@ _UNAVAILABLE_CODES = frozenset(
         ErrorCode.TRANSIENT_FAILURE,
     }
 )
-_MAX_REPOSITORY_SLICE_LINES = 500
-_MAX_REPOSITORY_TREE_ENTRIES = 5000
-_MAX_REPOSITORY_TREE_BYTES = 8 * 1024 * 1024
-_MAX_INLINE_FILE_BYTES = 64 * 1024
-
-
-def _canonical_json(value: JsonValue) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
-def _digest(value: str | bytes) -> str:
-    raw = value if isinstance(value, bytes) else value.encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
-
-
-def _classification(value: DataClassification | str | None) -> ContextDataClassification:
-    if value is None:
-        return ContextDataClassification.INTERNAL
-    try:
-        normalized = value if isinstance(value, DataClassification) else DataClassification(value)
-    except ValueError:
-        return ContextDataClassification.RESTRICTED
-    if normalized is DataClassification.PUBLIC:
-        return ContextDataClassification.PUBLIC
-    if normalized is DataClassification.INTERNAL:
-        return ContextDataClassification.INTERNAL
-    if normalized in {DataClassification.CONFIDENTIAL, DataClassification.PRIVATE}:
-        return ContextDataClassification.CONFIDENTIAL
-    if normalized in {DataClassification.RESTRICTED}:
-        return ContextDataClassification.RESTRICTED
-    return ContextDataClassification.SECRET_REFERENCE
-
-
-def _operational_request(
-    request: ContextSourceRequest,
-) -> tuple[OperationContext, str]:
-    operation = getattr(request, "operation", None)
-    actor_ref = getattr(request, "actor_ref", None)
-    if not isinstance(operation, OperationContext):
-        raise ContractError(
-            ErrorCode.INVALID_CONFIGURATION,
-            "operational Context source adapter requires OperationContext",
-        )
-    if not isinstance(actor_ref, str) or not actor_ref.strip():
-        raise ContractError(
-            ErrorCode.INVALID_CONFIGURATION,
-            "operational Context source adapter requires actor_ref",
-        )
-    return operation, actor_ref
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,9 +140,9 @@ class OperationalContextAssemblyService:
                 candidates.append(
                     _unavailable_candidate(
                         binding,
-                        availability="missing"
-                        if exc.code is ErrorCode.NOT_FOUND
-                        else "unavailable",
+                        availability=(
+                            "missing" if exc.code is ErrorCode.NOT_FOUND else "unavailable"
+                        ),
                         detail=exc.message,
                     )
                 )
@@ -586,310 +527,6 @@ class ResearchEvidenceContextSourceAdapter:
                         conflict_key=f"research-claim:{claim.claim_id}",
                     )
                 )
-        return tuple(candidates)
-
-
-class RepositoryContextSourceAdapter:
-    adapter_id = "platform.repository-context/v1"
-
-    def __init__(
-        self,
-        provenance: RepositoryProvenanceReader | AsyncRepositoryProvenanceReader,
-        *,
-        repositories: RepositoryService | None = None,
-        tasks: TaskRepository | None = None,
-    ) -> None:
-        self.provenance = as_async_repository_provenance_reader(provenance)
-        self.repositories = repositories
-        self.tasks = tasks
-
-    async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
-        candidates: list[ContextCandidate] = []
-        provenance = tuple(
-            sorted(
-                await self.provenance.for_run(request.run_id),
-                key=lambda x: x.repository_id,
-            )
-        )
-        for record in provenance:
-            content = _canonical_json(
-                {
-                    "repository_id": record.repository_id,
-                    "input_revision": record.input_revision,
-                    "branch_ref": record.branch_ref,
-                    "output_revision": record.output_revision,
-                    "diff_artifact_ids": list(record.diff_artifact_ids),
-                    "provider_resource_ids": list(record.provider_resource_ids),
-                }
-            )
-            digest = _digest(content)
-            candidates.append(
-                ContextCandidate(
-                    source=ContextSourceRef(
-                        ContextSourceType.REPOSITORY,
-                        record.repository_id,
-                        revision=record.input_revision,
-                        digest=digest,
-                    ),
-                    role=ContextEntryRole.CONTEXT,
-                    selection_reason="exact repository Run input provenance",
-                    inline_content=content,
-                    content_digest=digest,
-                    trust=ContextTrust.TRUSTED,
-                    data_classification=ContextDataClassification.INTERNAL,
-                    priority=60,
-                    relevance=0.7,
-                    project_id=request.project_id,
-                )
-            )
-        if self.repositories is None or self.tasks is None:
-            return tuple(candidates)
-        state = await self.tasks.get_task(request.task_id)
-        raw_slices = state.task.metadata.get("context.repository_slices")
-        if not isinstance(raw_slices, tuple | list):
-            return tuple(candidates)
-        operation, actor_ref = _operational_request(request)
-        by_repository = {item.repository_id: item for item in provenance}
-        for raw in raw_slices:
-            if not isinstance(raw, Mapping):
-                raise ContractError(
-                    ErrorCode.INVALID_CONFIGURATION,
-                    "context.repository_slices entries must be objects",
-                )
-            repository_id = raw.get("repository_id")
-            path = raw.get("path")
-            start_line = raw.get("start_line", 1)
-            end_line = raw.get("end_line", start_line + 199 if isinstance(start_line, int) else 200)
-            if not isinstance(repository_id, str) or not repository_id.strip():
-                raise ContractError(
-                    ErrorCode.INVALID_CONFIGURATION, "repository slice requires repository_id"
-                )
-            if not isinstance(path, str) or not path.strip():
-                raise ContractError(
-                    ErrorCode.INVALID_CONFIGURATION, "repository slice requires path"
-                )
-            if isinstance(start_line, bool) or not isinstance(start_line, int) or start_line < 1:
-                raise ContractError(
-                    ErrorCode.INVALID_CONFIGURATION, "repository slice start_line invalid"
-                )
-            if isinstance(end_line, bool) or not isinstance(end_line, int) or end_line < start_line:
-                raise ContractError(
-                    ErrorCode.INVALID_CONFIGURATION, "repository slice end_line invalid"
-                )
-            if end_line - start_line + 1 > _MAX_REPOSITORY_SLICE_LINES:
-                raise ContractError(
-                    ErrorCode.INVALID_CONFIGURATION, "repository slice exceeds line limit"
-                )
-            explicit_revision = raw.get("revision")
-            if explicit_revision is not None and (
-                not isinstance(explicit_revision, str) or not explicit_revision.strip()
-            ):
-                raise ContractError(
-                    ErrorCode.INVALID_CONFIGURATION, "repository slice revision invalid"
-                )
-            bound = by_repository.get(repository_id)
-            revision = explicit_revision or (None if bound is None else bound.input_revision)
-            if revision is None:
-                raise ContractError(
-                    ErrorCode.UNAVAILABLE,
-                    "repository slice has no exact Run provenance or explicit immutable revision",
-                )
-            tree = await self.repositories.read_tree(
-                repository_id,
-                revision,
-                RepositoryCallContext(
-                    operation=operation,
-                    actor_ref=actor_ref,
-                    task_id=request.task_id,
-                    run_id=request.run_id,
-                    agent_id=request.agent_id,
-                ),
-                max_entries=_MAX_REPOSITORY_TREE_ENTRIES,
-                max_total_bytes=_MAX_REPOSITORY_TREE_BYTES,
-            )
-            entry = next((item for item in tree.entries if item.relative_path == path), None)
-            if entry is None:
-                raise ContractError(
-                    ErrorCode.NOT_FOUND, f"repository source path not found: {path}"
-                )
-            try:
-                text = entry.data.decode("utf-8")
-            except UnicodeDecodeError as exc:
-                raise ContractError(
-                    ErrorCode.UNSUPPORTED_CAPABILITY,
-                    "repository Context source slice must be UTF-8 text",
-                ) from exc
-            lines = text.splitlines()
-            selected = "\n".join(lines[start_line - 1 : end_line])
-            if not selected:
-                raise ContractError(ErrorCode.NOT_FOUND, "repository source slice is empty")
-            digest = _digest(selected)
-            candidates.append(
-                ContextCandidate(
-                    source=ContextSourceRef(
-                        ContextSourceType.REPOSITORY,
-                        repository_id,
-                        revision=tree.resolved_revision,
-                        digest=digest,
-                        locator=f"{path}:{start_line}-{end_line}",
-                    ),
-                    role=ContextEntryRole.CONTEXT,
-                    selection_reason="explicit exact Repository Intelligence source slice",
-                    inline_content=selected,
-                    content_digest=digest,
-                    trust=ContextTrust.UNTRUSTED,
-                    data_classification=ContextDataClassification.INTERNAL,
-                    priority=55,
-                    relevance=0.9,
-                    project_id=request.project_id,
-                )
-            )
-        return tuple(candidates)
-
-
-class FileArtifactResultContextSourceAdapter:
-    adapter_id = "platform.file-artifact-result-context/v1"
-
-    def __init__(
-        self,
-        files: FileProvider,
-        tasks: TaskRepository,
-        runs: RunRepository,
-        *,
-        max_inline_file_bytes: int = _MAX_INLINE_FILE_BYTES,
-    ) -> None:
-        self.files = files
-        self.tasks = tasks
-        self.runs = runs
-        self.max_inline_file_bytes = max_inline_file_bytes
-
-    async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
-        operation, actor_ref = _operational_request(request)
-        task = await self.tasks.get_task(request.task_id)
-        run = await self.runs.get_run(request.task_id, request.run_id)
-        access = DataAccessContext(
-            operation=operation,
-            actor_ref=actor_ref,
-            task_id=request.task_id,
-            run_id=request.run_id,
-            agent_id=request.agent_id,
-        )
-        refs: set[str] = (
-            set(task.artifact_ids)
-            | set(task.result_ids)
-            | set(run.artifact_ids)
-            | set(run.result_ids)
-        )
-        binding = (
-            decode_agent_step_execution_binding(task.task.metadata, request.step_id)
-            if request.step_id is not None
-            else None
-        ) or decode_agent_execution_binding(task.task.metadata)
-        if binding is not None:
-            refs.update(binding.input_refs)
-            refs.update(binding.output_refs)
-
-        candidates: list[ContextCandidate] = []
-        files = await self.files.list_files(access)
-        for file in sorted(files, key=lambda item: item.file_id):
-            if file.file_id not in refs and not set(file.artifact_ids).intersection(refs):
-                continue
-            classification = _classification(file.classification)
-            if classification is ContextDataClassification.SECRET_REFERENCE:
-                continue
-            if file.size_bytes <= self.max_inline_file_bytes:
-                raw = bytearray()
-                async for chunk in self.files.stream_file(file.file_id, access):
-                    raw.extend(chunk)
-                    if len(raw) > self.max_inline_file_bytes:
-                        break
-                try:
-                    body = bytes(raw).decode("utf-8")
-                except UnicodeDecodeError:
-                    body = _canonical_json(
-                        {
-                            "file_id": file.file_id,
-                            "sha256": file.sha256,
-                            "size_bytes": file.size_bytes,
-                            "content_type": file.content_type,
-                            "artifact_ids": list(file.artifact_ids),
-                            "payload": "binary-not-inlined",
-                        }
-                    )
-            else:
-                body = _canonical_json(
-                    {
-                        "file_id": file.file_id,
-                        "sha256": file.sha256,
-                        "size_bytes": file.size_bytes,
-                        "content_type": file.content_type,
-                        "artifact_ids": list(file.artifact_ids),
-                        "payload": "large-file-not-inlined",
-                    }
-                )
-            digest = _digest(body)
-            candidates.append(
-                ContextCandidate(
-                    source=ContextSourceRef(
-                        ContextSourceType.FILE,
-                        file.file_id,
-                        digest=file.sha256,
-                    ),
-                    role=ContextEntryRole.CONTEXT,
-                    selection_reason=(
-                        "Run/Task-referenced canonical File content or bounded metadata"
-                    ),
-                    inline_content=body,
-                    content_digest=digest,
-                    trust=ContextTrust.UNTRUSTED,
-                    data_classification=classification,
-                    priority=35,
-                    relevance=0.75,
-                    project_id=file.project_id,
-                )
-            )
-        for artifact_id in sorted(ref for ref in refs if ref.startswith("artifact_")):
-            linked_files = sorted(
-                file.file_id for file in files if artifact_id in file.artifact_ids
-            )
-            body = _canonical_json(
-                {
-                    "artifact_id": artifact_id,
-                    "file_ids": cast(JsonValue, linked_files),
-                }
-            )
-            digest = _digest(body)
-            candidates.append(
-                ContextCandidate(
-                    source=ContextSourceRef(ContextSourceType.ARTIFACT, artifact_id, digest=digest),
-                    role=ContextEntryRole.EVIDENCE,
-                    selection_reason="canonical Artifact reference linked to this Task/Run",
-                    inline_content=body,
-                    content_digest=digest,
-                    trust=ContextTrust.TRUSTED,
-                    data_classification=ContextDataClassification.INTERNAL,
-                    priority=30,
-                    relevance=0.65,
-                    project_id=request.project_id,
-                )
-            )
-        for result_id in sorted(ref for ref in refs if ref.startswith("result_")):
-            body = _canonical_json({"result_id": result_id, "run_id": request.run_id})
-            digest = _digest(body)
-            candidates.append(
-                ContextCandidate(
-                    source=ContextSourceRef(ContextSourceType.RESULT, result_id, digest=digest),
-                    role=ContextEntryRole.EVIDENCE,
-                    selection_reason="canonical Result reference linked to this Task/Run",
-                    inline_content=body,
-                    content_digest=digest,
-                    trust=ContextTrust.TRUSTED,
-                    data_classification=ContextDataClassification.INTERNAL,
-                    priority=30,
-                    relevance=0.65,
-                    project_id=request.project_id,
-                )
-            )
         return tuple(candidates)
 
 
