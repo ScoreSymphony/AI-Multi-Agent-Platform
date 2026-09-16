@@ -98,13 +98,24 @@ context. The Control Plane HA contracts are already canonical at `distributed.co
 telemetry and worker-transport code still has active runtime consumers, so its migration must remain
 staged and evidence-driven rather than forcing a new directory shape.
 
-### 8. Distribution and application delivery
+### 8. Distribution, application delivery and managed applications
 
-**Durable owners:** `distribution`, `application_distribution`.
+**Durable owners:** `distribution`, `application_distribution`, `applications`.
 
-The names are related to delivery/catalog concerns, not distributed execution. They remain distinct
-from the distributed-runtime context and may remain separate durable owners even when documented
-under one navigation group.
+The names are related to application/component delivery, but their state authorities remain separate:
+
+- `distribution` owns registry/catalog discovery, validation, install routing and generic Marketplace
+  distribution semantics;
+- `application_distribution` owns application build/distribution state, artifacts and release-gate
+  integration;
+- `applications` owns provider-neutral installed Application definitions, Application Instances,
+  desired/observed runtime lifecycle, health, logical endpoints and recovery/reconciliation.
+
+`applications` consumes existing placement, workspace/storage, security and catalog authorities rather
+than redefining them. Concrete Docker/Podman/process/Kubernetes/remote-worker runtimes implement the
+Application Runtime boundary without becoming canonical owners. ADR 0015 records this ownership
+split. None of these three owners belongs to the distributed-compute context merely because an
+Application may eventually run on a Node/Worker.
 
 ### 9. Integrations and extension infrastructure
 
@@ -118,7 +129,9 @@ They must remain distinguishable from canonical domain code and cannot become li
 **Operator infrastructure:** `configuration`, `deployment`, `backup`, `release`, `upgrade`.
 
 These packages configure, deploy, protect, upgrade and release the platform. They consume canonical
-state/contracts; they do not own replacement runtime semantics.
+state/contracts; they do not own replacement runtime semantics. `deployment` may compose an
+Application Runtime backend at startup, but the managed Application lifecycle remains owned by
+`applications`.
 
 ### 11. Client surfaces
 
@@ -155,8 +168,8 @@ Additional rules:
    behavior. The canonical owner must never import the compatibility namespace.
 2. Adapters, connectors and plugins depend inward on platform-owned contracts. Canonical domains must
    not depend on a named optional adapter to define their semantics.
-3. Operations may compose canonical domains but may not redefine Node/Worker/Task/Run/security
-   ownership.
+3. Operations may compose canonical domains but may not redefine Node/Worker/Task/Run/security or
+   Application lifecycle ownership.
 4. Security-sensitive boundaries remain explicit even when they share a primary navigation context.
 5. Package moves must not change serialized resource/schema identity merely to make folders symmetric.
 6. New root packages remain exceptional under `PACKAGE_BOUNDARIES.md`; normal growth happens inside an
@@ -230,6 +243,9 @@ The following separations are valuable even inside a smaller navigation model:
   is operator composition;
 - `distribution` from `distributed`, because component catalog/distribution is not distributed
   compute;
+- `applications` from `application_distribution` and `deployment`, because an installed external
+  application's desired/observed lifecycle remains canonical regardless of its build/release source or
+  concrete runtime backend;
 - `control_plane` from domain services, because northbound composition must not become domain
   ownership;
 - adapters/integrations from canonical domains.
