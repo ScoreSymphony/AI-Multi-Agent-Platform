@@ -81,9 +81,7 @@ def test_fresh_install_bootstrap_creates_admin_policy_and_authenticated_browser_
     assert me.status == 200
     assert me.body["actor_id"] == user_id
 
-    initialized = _run(
-        http.handle(HTTPRequest(method="GET", path="/api/v1/auth/bootstrap-status"))
-    )
+    initialized = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/auth/bootstrap-status")))
     assert initialized.body["state"] == "initialized"
     assert initialized.body["bootstrap_available"] is False
 
