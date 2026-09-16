@@ -10,8 +10,10 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-_PASSWORD = "issue-240-operator-entrypoint-password"
-_TRANSPORT_KEY = "issue-240-operator-entrypoint-hmac"
+from ai_multi_agent_platform.cli.credentials import CredentialStore
+
+_PASSWORD = "operator-entrypoint-password"
+_TRANSPORT_KEY = "operator-entrypoint-hmac"
 _TIMEOUT_SECONDS = 20.0
 _PROFILE = Path("deploy/distributed/profiles/multi-local-workers.json")
 
@@ -77,16 +79,15 @@ def _wait_for_readiness(port: int, process: subprocess.Popen[str], log_path: Pat
 
 
 def _wait_for_worker(
-    platform: str,
     *,
-    env: dict[str, str],
-    cli_config: Path,
     endpoint: str,
+    session_cookie: str,
     worker_id: str,
     worker_process: subprocess.Popen[str],
     worker_log: Path,
 ) -> dict[str, object]:
     deadline = time.monotonic() + _TIMEOUT_SECONDS
+    url = f"{endpoint}/api/v1/workers/{worker_id}"
     while time.monotonic() < deadline:
         return_code = worker_process.poll()
         if return_code is not None:
@@ -94,28 +95,18 @@ def _wait_for_worker(
                 f"platform-worker exited before healthy registration ({return_code}):\n"
                 f"{worker_log.read_text(encoding='utf-8')}"
             )
-        shown = _run(
-            platform,
-            "--config",
-            str(cli_config),
-            "--endpoint",
-            endpoint,
-            "--json",
-            "worker",
-            "show",
-            worker_id,
-            env=env,
-            check=False,
-        )
-        if shown.returncode == 0:
-            try:
-                payload = json.loads(shown.stdout)
-            except json.JSONDecodeError:
-                payload = None
-            if isinstance(payload, dict):
-                data = payload.get("data")
-                if isinstance(data, dict) and data.get("status") == "healthy":
-                    return data
+        request = urllib.request.Request(url, headers={"Cookie": session_cookie})
+        try:
+            with urllib.request.urlopen(request, timeout=1.0) as response:
+                payload = json.load(response)
+            if (
+                response.status == 200
+                and isinstance(payload, dict)
+                and payload.get("status") == "healthy"
+            ):
+                return payload
+        except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError):
+            pass
         time.sleep(0.1)
     raise AssertionError(
         f"platform-worker did not become healthy:\n{worker_log.read_text(encoding='utf-8')}"
@@ -199,7 +190,7 @@ def test_shipped_broker_server_cli_and_worker_entrypoints_register_worker(tmp_pa
                 str(profile_path),
                 "bootstrap-admin",
                 "--username",
-                "issue240-operator-admin",
+                "operator-admin",
                 "--password-stdin",
                 env=env,
                 stdin=f"{_PASSWORD}\n",
@@ -223,11 +214,16 @@ def test_shipped_broker_server_cli_and_worker_entrypoints_register_worker(tmp_pa
                 "auth",
                 "login",
                 "--username",
-                "issue240-operator-admin",
+                "operator-admin",
                 "--password-stdin",
                 env=env,
                 stdin=f"{_PASSWORD}\n",
             )
+            credential_store = CredentialStore.load(cli_config)
+            assert len(credential_store.profiles) == 1
+            credential_state = next(iter(credential_store.profiles.values()))
+            assert credential_state.mode == "session"
+            assert credential_state.session_cookie is not None
             provisioned = _run(
                 platform_executable,
                 "--config",
@@ -272,16 +268,31 @@ def test_shipped_broker_server_cli_and_worker_entrypoints_register_worker(tmp_pa
                 text=True,
             )
 
-            shown = _wait_for_worker(
-                platform_executable,
-                env=env,
-                cli_config=cli_config,
+            _wait_for_worker(
                 endpoint=endpoint,
+                session_cookie=credential_state.session_cookie,
                 worker_id=reporter_id,
                 worker_process=worker,
                 worker_log=worker_log,
             )
-            assert shown.get("id") == reporter_id
+            shown = _run(
+                platform_executable,
+                "--config",
+                str(cli_config),
+                "--endpoint",
+                endpoint,
+                "--json",
+                "worker",
+                "show",
+                reporter_id,
+                env=env,
+            )
+            shown_payload = json.loads(shown.stdout)
+            assert isinstance(shown_payload, dict)
+            shown_data = shown_payload.get("data")
+            assert isinstance(shown_data, dict)
+            assert shown_data.get("id") == reporter_id
+            assert shown_data.get("status") == "healthy"
             assert (host_root / reporter_id).is_dir()
         finally:
             if worker is not None:
