@@ -56,12 +56,33 @@ export type WorkspaceRetention = GeneratedCanonicalWorkspace["retention"];
 export type SearchMode = NonNullable<GeneratedSearchQueryParameters["mode"]>;
 export type SearchSort = NonNullable<GeneratedSearchQueryParameters["sort"]>;
 
-export interface Page<T> {
+type GenericPage<T> = {
   items: T[];
   next_cursor: string | null;
   total: number;
   limit: number;
-}
+};
+
+type IsSameType<Left, Right> = [Left] extends [Right]
+  ? [Right] extends [Left]
+    ? true
+    : false
+  : false;
+
+/**
+ * Compatibility page helper. The migrated #1159 wire surfaces resolve to their
+ * generated concrete response pages; unrelated collection/view models retain the
+ * established generic helper until their own canonical transport migration.
+ */
+export type Page<T> = IsSameType<T, GeneratedTimelineItem> extends true
+  ? GeneratedTimelinePage
+  : IsSameType<T, GeneratedUsageRecord> extends true
+    ? GeneratedUsageRecordPage
+    : IsSameType<T, GeneratedUsageAggregate> extends true
+      ? GeneratedUsageAggregatePage
+      : IsSameType<T, GeneratedUsageBudget> extends true
+        ? GeneratedUsageBudgetPage
+        : GenericPage<T>;
 
 /**
  * Frontend query-builder model. Array fields are intentionally mapped to the
