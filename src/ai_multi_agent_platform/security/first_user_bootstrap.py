@@ -128,9 +128,7 @@ class FirstUserBootstrapService:
             elif len(accounts) == 1:
                 account = accounts[0]
                 if await self.runtime_authorization_policies.has_policy(account.user_id):
-                    raise FirstUserBootstrapUnavailable(
-                        "first-user bootstrap is already complete"
-                    )
+                    raise FirstUserBootstrapUnavailable("first-user bootstrap is already complete")
                 # A prior attempt may have persisted the identity but failed before policy/session
                 # completion. Recovery is allowed only by proving the existing account password.
                 login = await self.runtime_authentication.login(
