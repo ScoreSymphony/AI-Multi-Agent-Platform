@@ -54,7 +54,9 @@ def evaluate_candidate(
         requirements.executor_type is not None
         and requirements.executor_type not in worker.supported_executors
     ):
-        reasons.append(_reason(RejectionCode.EXECUTOR_UNSUPPORTED, "required executor unavailable"))
+        reasons.append(
+            _reason(RejectionCode.EXECUTOR_UNSUPPORTED, "required executor unavailable")
+        )
 
     missing_capabilities = set(requirements.capability_refs) - set(worker.capability_refs)
     if missing_capabilities:
@@ -92,7 +94,10 @@ def evaluate_candidate(
     models = set(node.model_refs) | set(worker.model_refs)
     if requirements.model_ref is not None and requirements.model_ref not in models:
         reasons.append(_reason(RejectionCode.MODEL_UNAVAILABLE, "required model unavailable"))
-    if requirements.allowed_trust_levels and node.trust_level not in requirements.allowed_trust_levels:
+    if (
+        requirements.allowed_trust_levels
+        and node.trust_level not in requirements.allowed_trust_levels
+    ):
         reasons.append(_reason(RejectionCode.TRUST_INSUFFICIENT, "node trust level not allowed"))
 
     labels = set(node.labels)
@@ -108,7 +113,9 @@ def evaluate_candidate(
             _reason(RejectionCode.CONCURRENCY_EXHAUSTED, "worker concurrency exhausted")
         )
 
-    score = score_candidate(worker=worker, node=node, requirements=requirements) if not reasons else 0
+    score = (
+        score_candidate(worker=worker, node=node, requirements=requirements) if not reasons else 0
+    )
     return CandidateEvaluation(
         worker_id=worker.worker_id,
         node_id=node.node_id,
@@ -145,7 +152,11 @@ def select_worker(evaluations: tuple[CandidateEvaluation, ...]) -> str | None:
     """Select the highest-scoring accepted worker with stable ID tie-breaking."""
 
     accepted = (evaluation for evaluation in evaluations if evaluation.accepted)
-    selected = min(accepted, key=lambda evaluation: (-evaluation.score, evaluation.worker_id), default=None)
+    selected = min(
+        accepted,
+        key=lambda evaluation: (-evaluation.score, evaluation.worker_id),
+        default=None,
+    )
     return None if selected is None else selected.worker_id
 
 
