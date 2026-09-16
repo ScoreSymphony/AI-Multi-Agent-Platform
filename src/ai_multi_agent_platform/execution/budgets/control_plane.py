@@ -5,7 +5,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
-from ai_multi_agent_platform.control_plane.extensions import ControlPlane, ResourceService
+from ai_multi_agent_platform.control_plane.extensions import (
+    ControlPlane,
+    ControlPlaneModule,
+    ResourceService,
+)
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 from ai_multi_agent_platform.security import ActorIdentity, ActorType, infer_actor_identity
 
@@ -21,6 +25,7 @@ from .models import (
 )
 from .service import TaskBudgetEnforcementService
 
+TASK_BUDGET_MODULE = "task-execution-budgets"
 TASK_BUDGET_COLLECTION = "task-execution-budgets"
 TASK_BUDGET_CONFIGURE_COMMAND = "task-budget.configure"
 TASK_BUDGET_REVISE_COMMAND = "task-budget.revise"
@@ -151,6 +156,16 @@ class TaskBudgetCommandHandlers:
         return await _budget_resource(self._budgets, resource_ref)
 
 
+async def _handler_owned_authorization(
+    context: RequestContext,
+    resource_ref: str,
+    payload: dict[str, JsonValue],
+) -> None:
+    """Defer mutation authorization to the exact payload-bound #15 budget handler."""
+
+    del context, resource_ref, payload
+
+
 def register_task_budget_control_plane(
     control_plane: ControlPlane,
     budgets: TaskBudgetEnforcementService,
@@ -158,13 +173,25 @@ def register_task_budget_control_plane(
 ) -> None:
     """Register the canonical #902 read and mutation surface on #32."""
 
-    control_plane.register_resource_service(
-        TASK_BUDGET_COLLECTION,
-        TaskBudgetResourceService(control_plane, budgets),
-    )
     handlers = TaskBudgetCommandHandlers(control_plane, budgets, mutations)
-    control_plane.register_command(TASK_BUDGET_CONFIGURE_COMMAND, handlers.configure)
-    control_plane.register_command(TASK_BUDGET_REVISE_COMMAND, handlers.revise)
+    control_plane.register_modules(
+        (
+            ControlPlaneModule(
+                name=TASK_BUDGET_MODULE,
+                resource_services={
+                    TASK_BUDGET_COLLECTION: TaskBudgetResourceService(control_plane, budgets),
+                },
+                command_handlers={
+                    TASK_BUDGET_CONFIGURE_COMMAND: handlers.configure,
+                    TASK_BUDGET_REVISE_COMMAND: handlers.revise,
+                },
+                command_authorizers={
+                    TASK_BUDGET_CONFIGURE_COMMAND: _handler_owned_authorization,
+                    TASK_BUDGET_REVISE_COMMAND: _handler_owned_authorization,
+                },
+            ),
+        )
+    )
 
 
 async def _budget_resource(
@@ -349,6 +376,7 @@ __all__ = [
     "TASK_BUDGET_COLLECTION",
     "TASK_BUDGET_COMMANDS",
     "TASK_BUDGET_CONFIGURE_COMMAND",
+    "TASK_BUDGET_MODULE",
     "TASK_BUDGET_REVISE_COMMAND",
     "TaskBudgetCommandHandlers",
     "TaskBudgetResourceService",
