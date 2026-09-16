@@ -52,6 +52,7 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
         "repositories",
     ),
     DurableStoreSpec("connectors", "db/connectors.sqlite3", "sqlite", True, "connectors"),
+    DurableStoreSpec("applications", "db/applications.sqlite3", "sqlite", False, "applications"),
     DurableStoreSpec("memory", "db/memory.sqlite3", "sqlite", True, "context"),
     DurableStoreSpec("knowledge", "db/knowledge.sqlite3", "sqlite", True, "context"),
     DurableStoreSpec("research", "db/research.sqlite3", "sqlite", True, "research"),
