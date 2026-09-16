@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproducible #730 Pipelock performance and classification evidence harness."""
+"""Reproducible Pipelock performance and classification evidence harness."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures"
 MCP_STDIO_FIXTURE = FIXTURE_DIR / "mcp_stdio_server.py"
 WEBSOCKET_FIXTURE = FIXTURE_DIR / "websocket_echo_server.py"
 CORPUS_PATH = FIXTURE_DIR / "pipelock_adversarial_cases.json"
-HTTP_SENTINEL = b"issue-730-benchmark-ok"
+HTTP_SENTINEL = b"pipelock-benchmark-ok"
 
 
 def _args() -> argparse.Namespace:
@@ -254,7 +254,7 @@ async def _websocket_roundtrip(url: str, payload: str) -> None:
 
 
 async def _measure_websocket(url: str, *, warmups: int, iterations: int) -> list[float]:
-    payload = "issue-730-websocket-benchmark"
+    payload = "pipelock-websocket-benchmark"
     for _ in range(warmups):
         await _websocket_roundtrip(url, payload)
     values: list[float] = []
@@ -282,7 +282,7 @@ async def _measure_mcp_command(
     from ai_multi_agent_platform.domain import new_id
 
     config = MCPServerConfig(
-        server_id="issue-730-benchmark-" + str(abs(hash(command))),
+        server_id="pipelock-benchmark-" + str(abs(hash(command))),
         command=command,
         read_timeout_seconds=15,
         capability_id_overrides={"lookup": "tool.lookup"},
@@ -302,7 +302,7 @@ async def _measure_mcp_command(
             context=OperationContext(
                 correlation_id=correlation_id,
                 owner_type="user",
-                owner_id="issue-730-benchmark",
+                owner_id="pipelock-benchmark",
                 project_id=project_id,
             ),
             trace=InvocationTrace(
@@ -347,7 +347,7 @@ def _classification_measurement(
     benign = [
         ("benign-plain", "ordinary-project-reference"),
         ("benign-date", "release-2026-09-11"),
-        ("benign-numeric", "ticket-730-12345"),
+        ("benign-numeric", "ticket-12345"),
         ("benign-path", "docs-upstream-pipelock"),
     ]
     cases: list[tuple[str, bool, str]] = [
@@ -408,7 +408,7 @@ def _main() -> int:
     if args.iterations < 2 or args.mcp_iterations < 1 or args.warmups < 0:
         raise SystemExit("invalid benchmark iteration count")
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    workdir = args.output.parent / "issue730-pipelock-benchmark-work"
+    workdir = args.output.parent / "pipelock-benchmark-work"
     workdir.mkdir(parents=True, exist_ok=True)
 
     with _http_target() as http_port, _websocket_target() as websocket_port:

@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-SENTINEL = "issue-730-network-target-ok"
+SENTINEL = "pipelock-network-target-ok"
 
 
 def main() -> None:

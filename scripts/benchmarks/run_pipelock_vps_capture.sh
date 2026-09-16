@@ -5,13 +5,13 @@ PIPELOCK_REVISION="f7d1816f1a5ad63d501b0c48f36066f836f59022"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/benchmarks/run_issue730_pipelock_vps_capture.sh [OUTPUT_DIR]
+Usage: scripts/benchmarks/run_pipelock_vps_capture.sh [OUTPUT_DIR]
 
-Run the #730 Pipelock benchmark on an ordinary Linux x86-64 VPS and retain a
+Run the Pipelock benchmark on an ordinary Linux x86-64 VPS and retain a
 self-describing evidence bundle. The script intentionally refuses GitHub-hosted
 Actions so hosted-runner measurements cannot be mislabeled as VPS evidence.
 
-Default OUTPUT_DIR: artifacts/issue730-pipelock-vps
+Default OUTPUT_DIR: artifacts/pipelock-vps
 EOF
 }
 
@@ -21,14 +21,14 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 fi
 
 if [[ "$(uname -s)" != "Linux" ]]; then
-  echo "#730 VPS evidence capture requires Linux" >&2
+  echo "Pipelock VPS evidence capture requires Linux" >&2
   exit 2
 fi
 
 case "$(uname -m)" in
   x86_64|amd64) ;;
   *)
-    echo "#730 VPS evidence capture currently requires x86-64" >&2
+    echo "Pipelock VPS evidence capture currently requires x86-64" >&2
     exit 2
     ;;
 esac
@@ -47,11 +47,11 @@ done
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 PLATFORM_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD)"
-OUTPUT_DIR="${1:-$REPO_ROOT/artifacts/issue730-pipelock-vps}"
+OUTPUT_DIR="${1:-$REPO_ROOT/artifacts/pipelock-vps}"
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 
-WORK_DIR="$(mktemp -d -t issue730-pipelock-vps-XXXXXX)"
+WORK_DIR="$(mktemp -d -t pipelock-vps-XXXXXX)"
 cleanup() {
   rm -rf "$WORK_DIR"
 }
@@ -88,7 +88,7 @@ if grep -Eq 'tags=.*enterprise' "$BUILDINFO"; then
 fi
 
 BENCHMARK_JSON="$OUTPUT_DIR/pipelock-performance-vps.json"
-python "$REPO_ROOT/scripts/benchmarks/issue730_pipelock_benchmark.py" \
+python "$REPO_ROOT/scripts/benchmarks/pipelock_benchmark.py" \
   --pipelock-bin "$PIPELOCK_BIN" \
   --config "$REPO_ROOT/tests/fixtures/pipelock_websocket_audit.yaml" \
   --output "$BENCHMARK_JSON" \
@@ -117,7 +117,7 @@ from pathlib import Path
 benchmark_path = Path(os.environ["BENCHMARK_JSON"])
 benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
 if benchmark.get("issue") != 730:
-    raise SystemExit("benchmark issue identity mismatch")
+    raise SystemExit("benchmark provenance mismatch")
 if benchmark.get("pipelock_revision") != os.environ["PIPELOCK_REVISION"]:
     raise SystemExit("benchmark Pipelock revision mismatch")
 if benchmark.get("environment", {}).get("label") != "ordinary-vps-reference":
@@ -188,15 +188,15 @@ PY
     pipelock-buildinfo.txt \
     pipelock-vps-evidence-manifest.json \
     > SHA256SUMS
-  tar -czf issue730-pipelock-vps-evidence.tar.gz \
+  tar -czf pipelock-vps-evidence.tar.gz \
     pipelock-performance-vps.json \
     pipelock-buildinfo.txt \
     pipelock-vps-evidence-manifest.json \
     SHA256SUMS
-  sha256sum issue730-pipelock-vps-evidence.tar.gz \
-    > issue730-pipelock-vps-evidence.tar.gz.sha256
+  sha256sum pipelock-vps-evidence.tar.gz \
+    > pipelock-vps-evidence.tar.gz.sha256
 )
 
-echo "#730 ordinary-VPS evidence written to: $OUTPUT_DIR"
-echo "bundle: $OUTPUT_DIR/issue730-pipelock-vps-evidence.tar.gz"
-echo "bundle SHA-256: $(cat "$OUTPUT_DIR/issue730-pipelock-vps-evidence.tar.gz.sha256")"
+echo "Pipelock ordinary-VPS evidence written to: $OUTPUT_DIR"
+echo "bundle: $OUTPUT_DIR/pipelock-vps-evidence.tar.gz"
+echo "bundle SHA-256: $(cat "$OUTPUT_DIR/pipelock-vps-evidence.tar.gz.sha256")"

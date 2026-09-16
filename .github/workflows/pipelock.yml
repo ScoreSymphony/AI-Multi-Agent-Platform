@@ -16,7 +16,7 @@ on:
       - "docs/upstream/PIPELOCK_CORE_*.md"
       - "tests/integration/security/test_pipelock_containment.py"
       - "tests/fixtures/mcp_stdio_network_probe_server.py"
-      - "scripts/ci/issue730_inet_socket_deny_exec.py"
+      - "scripts/ci/inet_socket_deny_exec.py"
       - "tests/integration/security/test_pipelock_mcp_adversarial.py"
       - "tests/fixtures/mcp_adversarial_http_server.py"
       - "tests/fixtures/pipelock_mcp_adversarial.yaml"
@@ -26,14 +26,14 @@ on:
       - "tests/integration/security/test_pipelock_outage_recovery.py"
       - "tests/fixtures/pipelock_outage_enforced.yaml"
       - "tests/fixtures/pipelock_outage_target_server.py"
-      - "scripts/benchmarks/issue730_pipelock_benchmark.py"
+      - "scripts/benchmarks/pipelock_benchmark.py"
       - "tests/fixtures/mcp_stdio_server.py"
       - "tests/fixtures/websocket_echo_server.py"
       - "tests/integration/files/test_pipelock_profile_bypass.py"
       - "tests/fixtures/pipelock_profile_bypass_target.py"
       - "tests/fixtures/websocket_adversarial_server.py"
       - "src/ai_multi_agent_platform/adapters/hermes.py"
-      - "scripts/benchmarks/run_issue730_pipelock_vps_capture.sh"
+      - "scripts/benchmarks/run_pipelock_vps_capture.sh"
   workflow_dispatch:
 
 permissions:
@@ -126,23 +126,23 @@ jobs:
             > "$RUNNER_TEMP/pipelock-platform-compat-sha256.txt"
       - name: Exercise platform MCP stdio through pinned Pipelock
         env:
-          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
-          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
+          PIPELOCK_TEST_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_TEST_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
         run: |
           pytest -q tests/integration/security/test_pipelock_evaluation.py \
             -k pipelock_mcp_stdio_wraps_canonical_invocation_path \
             --junitxml="$RUNNER_TEMP/pipelock-platform-mcp-stdio-junit.xml"
       - name: Exercise platform MCP HTTP and WebSocket upstreams through pinned Pipelock
         env:
-          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
-          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
+          PIPELOCK_TEST_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_TEST_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
         run: |
           pytest -q tests/integration/security/test_pipelock_transports.py \
             --junitxml="$RUNNER_TEMP/pipelock-platform-mcp-remote-junit.xml"
       - name: Exercise retained adversarial Pipelock integration cases
         env:
-          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
-          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
+          PIPELOCK_TEST_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_TEST_CONFIG: ${{ runner.temp }}/pipelock-platform-compat-audit.yaml
         run: |
           pytest -q tests/integration/pipelock/test_adversarial_security.py \
             --junitxml="$RUNNER_TEMP/pipelock-platform-adversarial-junit.xml"
@@ -297,7 +297,7 @@ jobs:
           fi
       - name: Exercise adversarial security corpus
         env:
-          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_TEST_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
         run: |
           pytest -q tests/integration/security/test_pipelock_security_corpus.py \
             --basetemp="$RUNNER_TEMP/pipelock-security" \
@@ -368,8 +368,8 @@ jobs:
             > "$RUNNER_TEMP/pipelock-containment-sha256.txt"
       - name: Exercise direct-bypass and contained MCP stdio profiles
         env:
-          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
-          PIPELOCK_730_CONFIG: ${{ runner.temp }}/pipelock-audit.yaml
+          PIPELOCK_TEST_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_TEST_CONFIG: ${{ runner.temp }}/pipelock-audit.yaml
         run: |
           pytest -q tests/integration/security/test_pipelock_containment.py \
             --junitxml="$RUNNER_TEMP/pipelock-containment-junit.xml"
@@ -425,7 +425,7 @@ jobs:
           fi
       - name: Exercise MCP adversarial cases
         env:
-          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_TEST_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
         run: |
           pytest -q tests/integration/security/test_pipelock_mcp_adversarial.py \
             --basetemp="$RUNNER_TEMP/pipelock-mcp-adversarial" \
@@ -484,9 +484,9 @@ jobs:
         run: sudo ip address add 192.0.2.123/32 dev lo
       - name: Exercise network and multi-stage exfiltration cases
         env:
-          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
-          PIPELOCK_730_ALLOW_HOSTS_MUTATION: "1"
-          PIPELOCK_730_TEST_NET_IP: "192.0.2.123"
+          PIPELOCK_TEST_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_ALLOW_HOSTS_MUTATION: "1"
+          PIPELOCK_TEST_NET_IP: "192.0.2.123"
         run: |
           pytest -q tests/integration/security/test_pipelock_network_exfiltration.py \
             --basetemp="$RUNNER_TEMP/pipelock-network" \
@@ -547,7 +547,7 @@ jobs:
           fi
       - name: Exercise enforced outage and recovery
         env:
-          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_TEST_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
         run: |
           pytest -q tests/integration/security/test_pipelock_outage_recovery.py \
             --basetemp="$RUNNER_TEMP/pipelock-outage" \
@@ -609,7 +609,7 @@ jobs:
             > "$RUNNER_TEMP/pipelock-performance-sha256.txt"
       - name: Run hosted-runner reference benchmark
         run: |
-          python scripts/benchmarks/issue730_pipelock_benchmark.py \
+          python scripts/benchmarks/pipelock_benchmark.py \
             --pipelock-bin "$GITHUB_WORKSPACE/.candidate/pipelock/pipelock" \
             --config "$GITHUB_WORKSPACE/tests/fixtures/pipelock_websocket_audit.yaml" \
             --output "$RUNNER_TEMP/pipelock-performance-reference.json" \
@@ -651,7 +651,7 @@ jobs:
             ${{ runner.temp }}/pipelock-performance-buildinfo.txt
             ${{ runner.temp }}/pipelock-performance-sha256.txt
             ${{ runner.temp }}/pipelock-performance-reference.json
-            ${{ runner.temp }}/issue730-pipelock-benchmark-work/pipelock.log
+            ${{ runner.temp }}/pipelock-benchmark-work/pipelock.log
           if-no-files-found: warn
 
   pinned-core-profile-bypass:
@@ -699,7 +699,7 @@ jobs:
             > "$RUNNER_TEMP/pipelock-profile-bypass-sha256.txt"
       - name: Exercise direct application and Hermes bypass paths
         env:
-          PIPELOCK_730_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
+          PIPELOCK_TEST_BIN: ${{ github.workspace }}/.candidate/pipelock/pipelock
         run: |
           pytest -q tests/integration/files/test_pipelock_profile_bypass.py \
             --basetemp="$RUNNER_TEMP/pipelock-profile-bypass" \
@@ -724,16 +724,16 @@ jobs:
       - uses: actions/checkout@v7
       - name: Validate shell syntax and help path
         run: |
-          bash -n scripts/benchmarks/run_issue730_pipelock_vps_capture.sh
-          bash scripts/benchmarks/run_issue730_pipelock_vps_capture.sh --help
+          bash -n scripts/benchmarks/run_pipelock_vps_capture.sh
+          bash scripts/benchmarks/run_pipelock_vps_capture.sh --help
       - name: Verify evidence pin and hosted-runner refusal
         shell: bash
         run: |
           set -euo pipefail
           grep -F 'f7d1816f1a5ad63d501b0c48f36066f836f59022' \
-            scripts/benchmarks/run_issue730_pipelock_vps_capture.sh
+            scripts/benchmarks/run_pipelock_vps_capture.sh
           set +e
-          GITHUB_ACTIONS=true bash scripts/benchmarks/run_issue730_pipelock_vps_capture.sh \
+          GITHUB_ACTIONS=true bash scripts/benchmarks/run_pipelock_vps_capture.sh \
             "$RUNNER_TEMP/should-not-run" >"$RUNNER_TEMP/refusal.log" 2>&1
           status=$?
           set -e

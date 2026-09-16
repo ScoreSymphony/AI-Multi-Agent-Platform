@@ -13,12 +13,12 @@ from pathlib import Path
 
 import pytest
 
-PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
-PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_730_CONFIG")
+PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_TEST_BIN")
+PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_TEST_CONFIG")
 FIXTURE_DIR = Path(__file__).parents[2] / "fixtures"
 MCP_NETWORK_PROBE = FIXTURE_DIR / "mcp_stdio_network_probe_server.py"
 INET_SOCKET_WRAPPER = (
-    Path(__file__).parents[2] / ".." / "scripts" / "ci" / "issue730_inet_socket_deny_exec.py"
+    Path(__file__).parents[2] / ".." / "scripts" / "ci" / "inet_socket_deny_exec.py"
 )
 
 
@@ -116,7 +116,7 @@ async def _invoke_probe(
             context=OperationContext(
                 correlation_id=correlation_id,
                 owner_type="user",
-                owner_id="user-730-containment",
+                owner_id="user-pipelock-containment",
                 project_id=project_id,
             ),
             trace=InvocationTrace(
@@ -142,7 +142,7 @@ async def _invoke_probe(
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None or PIPELOCK_TEST_CONFIG is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_pipelock_mcp_proxy_alone_does_not_contain_stdio_child_direct_socket() -> None:
     with _tcp_target() as (target_port, records):
@@ -153,13 +153,13 @@ def test_pipelock_mcp_proxy_alone_does_not_contain_stdio_child_direct_socket() -
 
     assert results == [{"protocol": "raw", "connected": True, "errno": None}]
     assert len(records) == 1
-    assert records[0].startswith(b"issue-730-raw")
+    assert records[0].startswith(b"pipelock-containment-raw")
 
 
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None or PIPELOCK_TEST_CONFIG is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_seccomp_contained_stdio_child_blocks_direct_network_protocols() -> None:
     protocols = ("raw", "http", "mcp_http", "websocket")

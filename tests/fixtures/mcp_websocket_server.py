@@ -20,7 +20,7 @@ async def handle(connection: ServerConnection) -> None:
             result: dict[str, Any] = {
                 "protocolVersion": "2025-11-25",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "issue-730-websocket-test", "version": "1.0.0"},
+                "serverInfo": {"name": "pipelock-websocket-test", "version": "1.0.0"},
             }
         elif method == "tools/list":
             result = {

@@ -18,7 +18,7 @@ import pytest
 
 from ai_multi_agent_platform.adapters.hermes import UrllibHermesHttpTransport
 
-PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
+PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_TEST_BIN")
 FIXTURE_DIR = Path(__file__).parents[2] / "fixtures"
 PIPELOCK_CONFIG = FIXTURE_DIR / "pipelock_websocket_audit.yaml"
 HTTP_TARGET = FIXTURE_DIR / "pipelock_profile_bypass_target.py"
@@ -162,7 +162,7 @@ def _direct_post(url: str, payload: bytes, content_type: str) -> bytes:
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_in_process_http_mcp_http_and_redirect_paths_bypass_running_pipelock(
     tmp_path: Path,
@@ -170,29 +170,29 @@ def test_in_process_http_mcp_http_and_redirect_paths_bypass_running_pipelock(
     with _http_target(tmp_path) as (target_port, marker):
         base = f"http://127.0.0.1:{target_port}"
         with _running_pipelock(tmp_path) as pipelock_log:
-            ordinary = _direct_get(f"{base}/issue-730-direct-http")
+            ordinary = _direct_get(f"{base}/pipelock-direct-http")
             mcp_http = _direct_post(
                 f"{base}/mcp",
                 b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}',
                 "application/json",
             )
-            redirected = _direct_get(f"{base}/issue-730-redirect")
+            redirected = _direct_get(f"{base}/pipelock-redirect")
 
         assert b'"ok":true' in ordinary
         assert b'"ok":true' in mcp_http
-        assert b'"path":"/issue-730-redirect-target"' in redirected
+        assert b'"path":"/pipelock-redirect-target"' in redirected
 
     records = _records(marker)
     paths = [record["path"] for record in records]
-    assert "/issue-730-direct-http" in paths
+    assert "/pipelock-direct-http" in paths
     assert "/mcp" in paths
-    assert "/issue-730-redirect" in paths
-    assert "/issue-730-redirect-target" in paths
+    assert "/pipelock-redirect" in paths
+    assert "/pipelock-redirect-target" in paths
     log_text = pipelock_log.read_text(encoding="utf-8")
     for marker_text in (
-        "issue-730-direct-http",
-        "issue-730-redirect",
-        "issue-730-redirect-target",
+        "pipelock-direct-http",
+        "pipelock-redirect",
+        "pipelock-redirect-target",
         "tools/list",
     ):
         assert marker_text not in log_text
@@ -201,7 +201,7 @@ def test_in_process_http_mcp_http_and_redirect_paths_bypass_running_pipelock(
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_direct_websocket_path_bypasses_running_pipelock(tmp_path: Path) -> None:
     websockets = pytest.importorskip("websockets")
@@ -209,28 +209,28 @@ def test_direct_websocket_path_bypasses_running_pipelock(tmp_path: Path) -> None
         with _running_pipelock(tmp_path) as pipelock_log:
 
             async def scenario() -> None:
-                url = f"ws://127.0.0.1:{target_port}/issue-730-direct-websocket"
+                url = f"ws://127.0.0.1:{target_port}/pipelock-direct-websocket"
                 async with websockets.connect(
                     url,
                     compression=None,
                     open_timeout=5,
                     close_timeout=2,
                 ) as websocket:
-                    await websocket.send("issue-730-direct-websocket-payload")
+                    await websocket.send("pipelock-direct-websocket-payload")
                     assert await asyncio.wait_for(websocket.recv(), timeout=5) == "ack"
 
             asyncio.run(scenario())
 
     lines = marker.read_text(encoding="utf-8").splitlines()
-    assert "recv:issue-730-direct-websocket-payload" in lines
+    assert "recv:pipelock-direct-websocket-payload" in lines
     log_text = pipelock_log.read_text(encoding="utf-8")
-    assert "issue-730-direct-websocket-payload" not in log_text
+    assert "pipelock-direct-websocket-payload" not in log_text
 
 
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_current_hermes_http_transport_bypasses_running_pipelock(tmp_path: Path) -> None:
     with _http_target(tmp_path) as (target_port, marker):
@@ -240,7 +240,7 @@ def test_current_hermes_http_transport_bypasses_running_pipelock(tmp_path: Path)
                 UrllibHermesHttpTransport().request_json(
                     "POST",
                     target,
-                    payload={"prompt": "issue-730-hermes-direct-path"},
+                    payload={"prompt": "pipelock-hermes-direct-path"},
                     headers={},
                     timeout_seconds=5,
                 )
@@ -251,5 +251,5 @@ def test_current_hermes_http_transport_bypasses_running_pipelock(tmp_path: Path)
 
     records = _records(marker)
     hermes_record = next(record for record in records if record["path"] == "/v1/runs")
-    assert "issue-730-hermes-direct-path" in hermes_record["body"]
-    assert "issue-730-hermes-direct-path" not in pipelock_log.read_text(encoding="utf-8")
+    assert "pipelock-hermes-direct-path" in hermes_record["body"]
+    assert "pipelock-hermes-direct-path" not in pipelock_log.read_text(encoding="utf-8")

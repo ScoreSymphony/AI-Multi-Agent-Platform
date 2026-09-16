@@ -81,8 +81,8 @@ def verify_strict_fetch_receipt_chain(
 ) -> None:
     """Preserve the pinned candidate's signed-receipt gate for the /fetch path."""
 
-    binary_value = os.getenv("PIPELOCK_730_BIN")
-    config_value = os.getenv("PIPELOCK_730_CONFIG")
+    binary_value = os.getenv("PIPELOCK_TEST_BIN")
+    config_value = os.getenv("PIPELOCK_TEST_CONFIG")
     if not binary_value or not config_value:
         return
 

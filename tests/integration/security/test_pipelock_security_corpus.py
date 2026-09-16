@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
+PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_TEST_BIN")
 FIXTURE_DIR = Path(__file__).parents[2] / "fixtures"
 CORPUS_PATH = FIXTURE_DIR / "pipelock_adversarial_cases.json"
 WEBSOCKET_CONFIG = FIXTURE_DIR / "pipelock_websocket_audit.yaml"
@@ -142,7 +142,7 @@ def _transform(case: dict[str, Any]) -> str:
     raise AssertionError(f"unsupported live transform: {case['transform']}")
 
 
-def test_adversarial_corpus_tracks_every_required_issue_730_attack_class() -> None:
+def test_adversarial_corpus_tracks_every_required_attack_class() -> None:
     cases = _corpus()
 
     assert {case["category"] for case in cases} == REQUIRED_CATEGORIES
@@ -165,7 +165,7 @@ def test_live_secret_fixtures_are_explicitly_synthetic() -> None:
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 @pytest.mark.parametrize("case_id", ["secret-dlp-plain-query", "secret-dlp-base64-path"])
 def test_pipelock_detects_synthetic_secret_in_http_url_variants(
@@ -192,7 +192,7 @@ def test_pipelock_detects_synthetic_secret_in_http_url_variants(
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_pipelock_detects_synthetic_secret_in_websocket_text_frame(tmp_path: Path) -> None:
     websockets = pytest.importorskip("websockets")

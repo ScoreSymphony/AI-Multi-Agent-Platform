@@ -5,7 +5,7 @@ import socket
 
 from mcp.server import MCPServer
 
-mcp = MCPServer("issue-730-stdio-network-probe")
+mcp = MCPServer("pipelock-stdio-network-probe")
 _TARGET_HOST = "127.0.0.1"
 _TARGET_PORT = 0
 
@@ -25,14 +25,19 @@ def probe_direct_network(protocol: str) -> dict[str, object]:
         raise ValueError(f"unsupported probe protocol: {protocol}")
 
     request = {
-        "raw": b"issue-730-raw\n",
-        "http": b"GET /issue-730-http HTTP/1.1\r\nHost: fixture\r\nConnection: close\r\n\r\n",
+        "raw": b"pipelock-containment-raw\n",
+        "http": b"".join(
+            (
+                b"GET /pipelock-containment-http HTTP/1.1\r\n",
+                b"Host: fixture\r\nConnection: close\r\n\r\n",
+            )
+        ),
         "mcp_http": (
             b"POST /mcp HTTP/1.1\r\nHost: fixture\r\nContent-Type: application/json\r\n"
             b"Content-Length: 2\r\nConnection: close\r\n\r\n{}"
         ),
         "websocket": (
-            b"GET /issue-730-ws HTTP/1.1\r\nHost: fixture\r\nUpgrade: websocket\r\n"
+            b"GET /pipelock-containment-ws HTTP/1.1\r\nHost: fixture\r\nUpgrade: websocket\r\n"
             b"Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
             b"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
         ),

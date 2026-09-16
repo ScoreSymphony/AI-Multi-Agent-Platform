@@ -15,11 +15,11 @@ from typing import TextIO
 
 import pytest
 
-PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
+PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_TEST_BIN")
 FIXTURE_DIR = Path(__file__).parents[2] / "fixtures"
 PIPELOCK_CONFIG = FIXTURE_DIR / "pipelock_outage_enforced.yaml"
 TARGET_FIXTURE = FIXTURE_DIR / "pipelock_outage_target_server.py"
-TARGET_SENTINEL = "issue-730-outage-target-ok"
+TARGET_SENTINEL = "pipelock-outage-target-ok"
 
 
 def _free_loopback_port() -> int:
@@ -127,7 +127,7 @@ def _target_count(path: Path) -> int:
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_live_enforced_mediation_fails_closed_during_runtime_outage_and_recovers(
     tmp_path: Path,
