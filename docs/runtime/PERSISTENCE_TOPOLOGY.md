@@ -13,7 +13,7 @@ The authoritative machine-readable durable-store inventory remains `src/ai_multi
 
 ## Current SQLite inventory
 
-The single-node durable-store contract is currently version 2. It declares 25 SQLite stores: 21 required stores and 4 optional stores. The backup contract also includes JSON stores and the deployment owns filesystem-backed content/workspaces, so SQLite is only one part of the durable-state boundary.
+The single-node durable-store contract is currently version 2. It declares 26 SQLite stores: 21 required stores and 5 optional stores. The backup contract also includes JSON stores and the deployment owns filesystem-backed content/workspaces, so SQLite is only one part of the durable-state boundary.
 
 There is no platform-wide contract that assigns an independent `PRAGMA user_version` value to every SQLite file. Physical schema evolution is repository-owned and upgrade history is tracked by the platform upgrade subsystem. Consequently the table below records the **schema-version authority** accurately as repository-local rather than inventing per-file version numbers that do not exist as a canonical contract. If a future topology migration is implemented, explicit source/target schema versions must be part of that migration.
 
@@ -28,6 +28,7 @@ There is no platform-wide contract that assigns an independent `PRAGMA user_vers
 | `repository-bindings` | `db/repository-bindings.sqlite3` | yes | repositories | repository-local; backup store contract v2 inventories the file |
 | `repository-provenance` | `db/repository-provenance.sqlite3` | yes | repositories | repository-local; backup store contract v2 inventories the file |
 | `connectors` | `db/connectors.sqlite3` | yes | connectors | repository-local; backup store contract v2 inventories the file |
+| `applications` | `db/applications.sqlite3` | no | applications | repository-local; optional store in backup contract v2 |
 | `memory` | `db/memory.sqlite3` | yes | context | repository-local; backup store contract v2 inventories the file |
 | `knowledge` | `db/knowledge.sqlite3` | yes | context | repository-local; backup store contract v2 inventories the file |
 | `research` | `db/research.sqlite3` | yes | research | repository-local; backup store contract v2 inventories the file |
@@ -96,7 +97,7 @@ The current multi-file topology therefore has a real operational cost, but one-f
 
 The repository already contains `PersistenceContentionBenchmarkHarness`, which drives synchronized concurrent canonical Task mutations through independent `SqliteKernelRepository` instances sharing one SQLite database. It records mutation latency, throughput, peak in-flight work, SQLite busy/locked failures, canonical conflicts, resource use and reopen correctness.
 
-That harness establishes an important boundary for #891: shared-file SQLite writer contention is measurable through the canonical path and must not be dismissed by assumption. It does **not** compare the complete 25-file topology with a hypothetical consolidated schema, and the repository currently contains no retained representative benchmark proving that either physical topology is faster for the platform-wide workload.
+That harness establishes an important boundary for #891: shared-file SQLite writer contention is measurable through the canonical path and must not be dismissed by assumption. It does **not** compare the complete 26-file topology with a hypothetical consolidated schema, and the repository currently contains no retained representative benchmark proving that either physical topology is faster for the platform-wide workload.
 
 Accordingly ADR 0012 does not use an unmeasured performance claim to justify either consolidation or retention. The v1 decision is based on transaction semantics, failure/blast-radius properties, backup scope, migration cost and provider neutrality. A future proposal to consolidate on performance grounds must add a topology-comparative workload rather than extrapolating from the kernel-only contention benchmark.
 
@@ -144,12 +145,12 @@ Some stores nevertheless have distinct lifecycle or audit properties, especially
 
 ADR 0012 keeps the current domain-separated SQLite topology for the supported single-node v1 profile. This is a deliberate decision rather than an accidental accumulation of files.
 
-The decision does **not** declare the current 25-file layout permanently optimal. It declares that physical consolidation is not justified yet because:
+The decision does **not** declare the current 26-file layout permanently optimal. It declares that physical consolidation is not justified yet because:
 
 1. there is no demonstrated platform operation whose correctness currently requires a cross-domain native SQLite transaction;
 2. a single SQLite file would not include filesystem, JSON, remote-provider or external-side-effect state, so it would not remove the platform's need for idempotency, compensation, reconciliation or quiesced whole-platform backups;
 3. consolidation would widen the relational writer/failure blast radius and couple independent repository schema evolution;
-4. backup store contract v2 already makes the 25 SQLite paths part of supported recovery compatibility, so changing them is a real upgrade/migration event rather than a path cleanup;
+4. backup store contract v2 already makes the SQLite paths part of supported recovery compatibility, so changing required paths is a real upgrade/migration event rather than a path cleanup;
 5. repository/provider neutrality already preserves a future central SQL/Postgres implementation without first forcing local SQLite domains into one file;
 6. no retained platform-wide comparative benchmark proves a performance advantage that would outweigh those costs.
 
@@ -186,7 +187,7 @@ Downgrade support must be declared rather than assumed. If reverse migration can
 
 The physical v1 choice must not become a provider lock-in. A future central SQL provider should continue to implement platform-owned repository contracts and canonical ID semantics. If it offers a multi-repository transaction/unit-of-work feature, that feature must be an explicit platform contract used only by operations that own a real atomicity invariant.
 
-Callers must not receive raw database handles and must not issue ad-hoc cross-domain joins/mutations. Domain services and repositories remain the authority boundary whether tables are in 25 SQLite files, one SQLite file, or a central Postgres deployment.
+Callers must not receive raw database handles and must not issue ad-hoc cross-domain joins/mutations. Domain services and repositories remain the authority boundary whether tables are in 26 SQLite files, one SQLite file, or a central Postgres deployment.
 
 ## Evidence and related contracts
 

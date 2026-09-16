@@ -102,6 +102,15 @@ gate = "Disable connector-backed HA actions until connector state uses shared pe
 reason = "Connector definitions and delivery state cannot remain host-local when connector capabilities are enabled."
 
 [[state]]
+id = "applications"
+source = "db/applications.sqlite3"
+owner = "applications"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Disable managed Application lifecycle in HA until Application state uses shared persistence."
+reason = "Desired/observed Application lifecycle state must not diverge between active and standby hosts."
+
+[[state]]
 id = "memory"
 source = "db/memory.sqlite3"
 owner = "context"
