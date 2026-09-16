@@ -1,0 +1,255 @@
+/* Route-scoped presentation for Proposal and Specification governance surfaces. */
+
+main[data-route="/governance"] > .stack,
+main[data-route^="/governance/proposals/"] > .stack,
+main[data-route^="/governance/specifications/"] > .stack {
+  gap: 1.4rem;
+}
+
+main[data-route="/governance"] .page-header,
+main[data-route^="/governance/proposals/"] .page-header,
+main[data-route^="/governance/specifications/"] .page-header {
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(167, 139, 250, .08), transparent 34%),
+    linear-gradient(180deg, rgba(23, 31, 45, .8), rgba(17, 23, 34, .72));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .12);
+}
+
+main[data-route="/governance"] .page-header p:not(.eyebrow),
+main[data-route^="/governance/proposals/"] .page-header p:not(.eyebrow),
+main[data-route^="/governance/specifications/"] .page-header p:not(.eyebrow) {
+  max-width: 80ch;
+}
+
+main[data-route="/governance"] .card,
+main[data-route^="/governance/proposals/"] .card,
+main[data-route^="/governance/specifications/"] .card {
+  min-width: 0;
+}
+
+main[data-route="/governance"] .card h2,
+main[data-route^="/governance/proposals/"] .card h2,
+main[data-route^="/governance/specifications/"] .card h2 {
+  padding-bottom: .72rem;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route="/governance"] .card > .stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem 1rem;
+}
+
+main[data-route="/governance"] .card > .stack > label,
+main[data-route^="/governance/proposals/"] .card > label,
+main[data-route^="/governance/proposals/"] .card .stack > label,
+main[data-route^="/governance/specifications/"] .card > label,
+main[data-route^="/governance/specifications/"] .card .stack > label {
+  display: grid;
+  gap: .38rem;
+  color: var(--muted);
+  font-size: .8rem;
+  font-weight: 650;
+}
+
+main[data-route="/governance"] .card > .stack > label:nth-of-type(2),
+main[data-route="/governance"] .card > .stack > label:nth-of-type(3),
+main[data-route="/governance"] .card > .stack > .actions {
+  grid-column: 1 / -1;
+}
+
+main[data-route="/governance"] .card > .stack input,
+main[data-route="/governance"] .card > .stack textarea,
+main[data-route^="/governance/proposals/"] input,
+main[data-route^="/governance/proposals/"] select,
+main[data-route^="/governance/proposals/"] textarea,
+main[data-route^="/governance/specifications/"] input,
+main[data-route^="/governance/specifications/"] select,
+main[data-route^="/governance/specifications/"] textarea {
+  width: 100%;
+}
+
+main[data-route="/governance"] textarea,
+main[data-route^="/governance/proposals/"] textarea,
+main[data-route^="/governance/specifications/"] textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+
+main[data-route="/governance"] small,
+main[data-route^="/governance/proposals/"] small,
+main[data-route^="/governance/specifications/"] small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+main[data-route="/governance"] .card > .stack > .actions,
+main[data-route^="/governance/proposals/"] .card .actions,
+main[data-route^="/governance/specifications/"] .card .actions {
+  padding-top: .8rem;
+  border-top: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route="/governance"] .table-wrap {
+  margin-top: .15rem;
+}
+
+main[data-route="/governance"] th:first-child,
+main[data-route="/governance"] td:first-child {
+  min-width: 220px;
+}
+
+main[data-route="/governance"] td:first-child .canonical-id {
+  margin-top: .22rem;
+}
+
+main[data-route="/governance"] td:nth-child(4) {
+  white-space: nowrap;
+}
+
+main[data-route^="/governance/proposals/"] .page-header p:last-child,
+main[data-route^="/governance/specifications/"] .page-header p:last-child {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  flex-wrap: wrap;
+}
+
+main[data-route^="/governance/proposals/"] .detail-list,
+main[data-route^="/governance/specifications/"] .detail-list {
+  display: grid;
+  grid-template-columns: minmax(150px, .4fr) minmax(0, 1fr);
+  gap: 0 1rem;
+  margin: 0 0 1rem;
+}
+
+main[data-route^="/governance/proposals/"] .detail-list dt,
+main[data-route^="/governance/proposals/"] .detail-list dd,
+main[data-route^="/governance/specifications/"] .detail-list dt,
+main[data-route^="/governance/specifications/"] .detail-list dd {
+  margin: 0;
+  padding: .58rem 0;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route^="/governance/proposals/"] .detail-list dt,
+main[data-route^="/governance/specifications/"] .detail-list dt {
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 650;
+}
+
+main[data-route^="/governance/proposals/"] .detail-list dd,
+main[data-route^="/governance/specifications/"] .detail-list dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+main[data-route^="/governance/proposals/"] .card > label + label,
+main[data-route^="/governance/specifications/"] .card > label + label {
+  margin-top: .8rem;
+}
+
+main[data-route^="/governance/proposals/"] .card > .stack,
+main[data-route^="/governance/specifications/"] .card > .stack {
+  gap: .85rem;
+}
+
+main[data-route^="/governance/proposals/"] .card .stack > p,
+main[data-route^="/governance/specifications/"] .card > p,
+main[data-route^="/governance/specifications/"] .card .stack > p {
+  margin-top: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+main[data-route^="/governance/proposals/"] .card .stack > button,
+main[data-route^="/governance/specifications/"] .card .stack > button {
+  justify-self: start;
+}
+
+main[data-route^="/governance/specifications/"] .card > div > strong {
+  display: block;
+  margin-top: .85rem;
+  margin-bottom: .35rem;
+  font-size: .8rem;
+}
+
+main[data-route^="/governance/specifications/"] .card > div > ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+}
+
+main[data-route^="/governance/specifications/"] .card > div > ul li + li {
+  margin-top: .25rem;
+}
+
+main[data-route^="/governance/specifications/"] .card code {
+  overflow-wrap: anywhere;
+}
+
+main[data-route^="/governance/specifications/"] .stack > .card:last-child > ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+main[data-route^="/governance/specifications/"] .stack > .card:last-child > ul li {
+  padding: .62rem 0;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+main[data-route^="/governance/specifications/"] .stack > .card:last-child > ul li:last-child {
+  border-bottom: 0;
+}
+
+main[data-route^="/governance/specifications/"] .stack > .card:last-child > ul strong {
+  color: var(--text);
+  font-size: .82rem;
+}
+
+@media (max-width: 760px) {
+  main[data-route="/governance"] .page-header,
+  main[data-route^="/governance/proposals/"] .page-header,
+  main[data-route^="/governance/specifications/"] .page-header {
+    padding: 1rem;
+  }
+
+  main[data-route="/governance"] .card > .stack {
+    grid-template-columns: 1fr;
+  }
+
+  main[data-route="/governance"] .card > .stack > label,
+  main[data-route="/governance"] .card > .stack > .actions {
+    grid-column: 1;
+  }
+
+  main[data-route^="/governance/proposals/"] .detail-list,
+  main[data-route^="/governance/specifications/"] .detail-list {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  main[data-route^="/governance/proposals/"] .detail-list dt,
+  main[data-route^="/governance/specifications/"] .detail-list dt {
+    padding-bottom: .16rem;
+    border-bottom: 0;
+  }
+
+  main[data-route^="/governance/proposals/"] .detail-list dd,
+  main[data-route^="/governance/specifications/"] .detail-list dd {
+    padding-top: 0;
+    padding-bottom: .72rem;
+  }
+
+  main[data-route^="/governance/proposals/"] .card .actions button,
+  main[data-route^="/governance/specifications/"] .card .actions button {
+    flex: 1;
+  }
+}
