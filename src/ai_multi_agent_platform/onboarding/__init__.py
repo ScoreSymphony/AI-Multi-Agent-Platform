@@ -37,10 +37,13 @@ from .components import (
 )
 from .control_plane import (
     COMPONENT_SETUP_COLLECTION,
+    SETUP_SESSION_COLLECTION,
     ComponentSetupResourceService,
     OnboardingResourceService,
+    SetupSessionResourceService,
     register_component_setup_control_plane,
     register_onboarding_control_plane,
+    register_setup_lifecycle_control_plane,
 )
 from .first_run_service import (
     FIRST_RUN_RESOURCE_ID,
@@ -59,8 +62,22 @@ from .persistence import (
 )
 from .providers import OnboardingModelAdapter, OnboardingModelEndpoint
 from .runtime_discovery import SingleNodeComponentDiscoverySource
+from .setup_lifecycle import (
+    ONBOARDING_PROVISION_SETUP_COMMAND,
+    ONBOARDING_UPDATE_SETUP_SESSION_COMMAND,
+    ONBOARDING_VALIDATE_SETUP_COMMAND,
+    SETUP_SESSION_RESOURCE_ID,
+    BrowserFirstSetupService,
+    JsonSetupSessionStore,
+    ProvisioningActionKind,
+    ProvisioningActionState,
+    RegistrySelection,
+    SetupStep,
+    SetupStepState,
+)
 
 __all__ = [
+    "BrowserFirstSetupService",
     "COMPONENT_SETUP_COLLECTION",
     "COMPONENT_SETUP_RESOURCE_ID",
     "FIRST_RUN_AGENT_EXECUTION_PROFILE",
@@ -68,14 +85,23 @@ __all__ = [
     "FIRST_RUN_EXECUTION_PROFILE_KEY",
     "FIRST_RUN_RESOURCE_ID",
     "FIRST_RUN_WORKSPACE_ID_KEY",
+    "JsonSetupSessionStore",
     "ONBOARDING_COLLECTION",
     "ONBOARDING_COMMANDS",
     "ONBOARDING_CONFIGURE_MODEL_COMMAND",
     "ONBOARDING_PROVIDER_SCHEMA_VERSION",
+    "ONBOARDING_PROVISION_SETUP_COMMAND",
     "ONBOARDING_RUN_FIRST_TASK_COMMAND",
     "ONBOARDING_SAVE_COMPONENT_PROFILE_COMMAND",
     "ONBOARDING_SELECT_COMPONENT_PROFILE_COMMAND",
+    "ONBOARDING_UPDATE_SETUP_SESSION_COMMAND",
+    "ONBOARDING_VALIDATE_SETUP_COMMAND",
+    "ProvisioningActionKind",
+    "ProvisioningActionState",
+    "RegistrySelection",
     "SETUP_PROFILE_SCHEMA_VERSION",
+    "SETUP_SESSION_COLLECTION",
+    "SETUP_SESSION_RESOURCE_ID",
     "CompatibilityEnvironment",
     "CompatibilityResult",
     "CompatibilityState",
@@ -105,9 +131,13 @@ __all__ = [
     "SetupMode",
     "SetupProfile",
     "SetupProfileState",
+    "SetupSessionResourceService",
+    "SetupStep",
+    "SetupStepState",
     "SingleNodeComponentDiscoverySource",
     "recommend_setup_profile",
     "register_component_setup_control_plane",
     "register_onboarding_control_plane",
+    "register_setup_lifecycle_control_plane",
     "resolve_component_selection",
 ]

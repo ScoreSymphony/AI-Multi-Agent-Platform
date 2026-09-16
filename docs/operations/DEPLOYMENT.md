@@ -38,7 +38,8 @@ Stage 1 currently targets a host with:
 - Python 3.12 or newer;
 - Git;
 - local write access for the platform data directory;
-- enough storage for the operator's canonical state, files and workspaces.
+- enough storage for the operator's canonical state, files and workspaces;
+- for the browser-first UI, Node.js 22.22.2+ and npm 11.6.x.
 
 No GPU is required. CPU-only is the reference baseline.
 
@@ -100,11 +101,43 @@ credentials.
 exposure should keep secure cookies enabled and terminate TLS at an explicitly configured
 reverse proxy or equivalent trusted boundary.
 
-## First administrator bootstrap
+## Browser-first initial setup
 
-Authentication and authorization remain separate by design. The bootstrap command creates
-or verifies the first local human identity and separately installs an explicit #15 local
-administrator policy:
+The normal first-run path starts the Control Plane without requiring a pre-created account:
+
+```bash
+platform-server serve
+```
+
+For a source checkout, start the Web UI in a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. On a fresh data directory the server-owned bootstrap status
+routes the browser to **Create your administrator account**. The browser submits the username
+and password directly to the one-time bootstrap boundary; the server creates the first local
+human identity, installs the explicit administrator authorization policy, establishes the
+HttpOnly browser session and continues into the persistent setup wizard.
+
+The wizard discovers the environment, lets the administrator choose the desired setup mode and
+components, previews compatibility and dependency actions before mutation, configures only the
+required backend-owned fields, validates live backend state and enables the dashboard only after
+readiness succeeds. Setup progress and redacted provisioning outcomes are persisted server-side,
+so reloads and process restarts resume incomplete setup instead of repeating completed operations.
+
+For a production deployment, serve the built frontend through the same-origin composition
+described below instead of running the Vite development server. The first-run semantics are the
+same.
+
+### Operator/recovery account bootstrap
+
+`platform-server bootstrap-admin` remains available when browser bootstrap cannot be used or an
+operator needs the explicit recovery path. It is not a prerequisite for the normal browser-first
+installation:
 
 ```bash
 platform-server bootstrap-admin --username admin
@@ -117,7 +150,8 @@ arguments.
 
 The operation is retry-safe for the same first username/password. If a process interruption
 occurs after identity creation but before policy creation, re-running the command repairs the
-missing policy instead of creating another user.
+missing policy instead of creating another user. After recovery bootstrap, start or restart the
+Control Plane normally and sign in through the browser or CLI.
 
 ## Canonical Task/Run smoke test
 
@@ -135,7 +169,7 @@ The smoke uses stable idempotency keys. Re-running it, including after a process
 reuses the same canonical smoke Task/Run instead of duplicating work. Success prints the
 canonical Task/Run IDs and terminal statuses.
 
-## Start
+## Start and subsequent restarts
 
 ```bash
 platform-server serve
@@ -143,7 +177,9 @@ platform-server serve
 
 The default listener is `127.0.0.1:8000`. This is deliberate minimal exposure. Binding an
 externally reachable address is an operator decision and should be paired with TLS/reverse
-proxy policy appropriate to that environment.
+proxy policy appropriate to that environment. Existing installations retain their account and
+setup state; logged-out browser users sign in normally, incomplete setup resumes, and completed
+setup routes to the dashboard.
 
 ## Health and readiness
 

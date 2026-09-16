@@ -42,10 +42,11 @@ The platform owns the canonical state in that path. Orchestrators, executors, mo
 - Python 3.12 or newer
 - Git
 - local write access for the platform data directory
+- for the browser UI: Node.js 22.22.2+ and npm 11.6.x
 
-No GPU, paid AI/API service, Hermes, Forge, LiteLLM, MCP server or remote Worker is required to install, start and smoke-test the reference single-node platform.
+No GPU, paid AI/API service, Hermes, Forge, LiteLLM, MCP server or remote Worker is required for the reference single-node first run.
 
-From a clean checkout on Linux/macOS:
+From a clean checkout on Linux/macOS, install and start the Control Plane:
 
 ```bash
 git clone https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git
@@ -58,16 +59,24 @@ cp config/single-node.env.example .env.single-node
 set -a
 . ./.env.single-node
 set +a
-platform-server bootstrap-admin --username admin
-platform-server smoke
 platform-server serve
 ```
 
-`bootstrap-admin` asks for the administrator password without putting it in shell history. `platform-server smoke` runs a canonical Task/Run with the in-process reference orchestrator/executor and requires no model endpoint or external service.
+In a second terminal, start the Web UI:
 
-On Windows PowerShell, use `.\.venv\Scripts\Activate.ps1` and set the `AI_MAP_*` values from `config/single-node.env.example` in the current process instead of sourcing the POSIX env file. The maintained deployment guide contains the complete Windows and operator instructions.
+```bash
+cd AI-Multi-Agent-Platform/frontend
+npm install
+npm run dev
+```
 
-With the server running, check the public Control Plane from a second terminal:
+Open `http://127.0.0.1:5173`. On a fresh installation the server-owned bootstrap state routes directly to **Create your administrator account**. Creating the account installs the explicit initial administrator policy, establishes the browser session, and continues into the persistent setup wizard. The wizard discovers the environment, lets you review component/application choices, previews compatibility and dependency actions before mutation, resumes persisted progress after reload/restart, validates the actual backend state, and only then enables the dashboard.
+
+`platform-server bootstrap-admin --username ...` remains available as an operator/recovery alternative, but it is not a prerequisite for the normal browser-first flow. `platform-server smoke` remains available after an administrator exists and runs a canonical Task/Run with the in-process reference orchestrator/executor without requiring a model endpoint or external service.
+
+On Windows PowerShell, use `.\.venv\Scripts\Activate.ps1` and set the `AI_MAP_*` values from `config/single-node.env.example` in the current process instead of sourcing the POSIX env file. Run the same `platform-server serve` command and start the frontend from a second PowerShell window. The maintained deployment guide contains the complete Windows and operator instructions.
+
+With the server running, the public health surfaces remain available from another terminal:
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/health
@@ -75,20 +84,20 @@ curl http://127.0.0.1:8000/api/v1/readiness
 platform --endpoint http://127.0.0.1:8000 doctor
 ```
 
-The reference listener is `127.0.0.1:8000`. For configuration, restart behavior, secure exposure and the supported single-server topology, continue with [`docs/operations/DEPLOYMENT.md`](docs/operations/DEPLOYMENT.md).
+The reference Control Plane listener is `127.0.0.1:8000`; the local Vite Web UI is `127.0.0.1:5173` and proxies `/api` to that Control Plane. For configuration, restart behavior, secure exposure and the supported single-server topology, continue with [`docs/operations/DEPLOYMENT.md`](docs/operations/DEPLOYMENT.md). Frontend-specific development and production-build details are in [`frontend/README.md`](frontend/README.md).
 
 ## Run your first multi-agent task
 
 The maintained first product workflow is a real multi-agent run, not a UI-only demo. It uses the same canonical Control Plane state as the rest of the platform.
 
-First authenticate and inspect onboarding readiness:
+The browser-first setup routes incomplete installations back into `/onboarding` after authentication. CLI users can inspect the same canonical onboarding state after authenticating:
 
 ```bash
 platform auth login --username admin
 platform onboarding status
 ```
 
-The server and baseline smoke above need no model. The multi-agent workflow does need one explicitly configured, healthy text model at location `local` or `self_hosted`, plus one owned Project and Workspace. Onboarding never selects a remote or paid provider implicitly. Use the `/onboarding` Web flow when the optional frontend is deployed, or follow [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md) for the exact CLI/API setup against your actual local model endpoint.
+The server baseline needs no model. The multi-agent workflow does need one explicitly configured, healthy text model at location `local` or `self_hosted`, plus one owned Project and Workspace. Onboarding never selects a remote or paid provider implicitly. Use the `/onboarding` Web flow, or follow [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md) for the exact CLI/API setup against your actual local model endpoint.
 
 Once onboarding reports a usable scope, run the official scenario:
 

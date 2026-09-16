@@ -27,6 +27,15 @@ export interface BrowserSessionSummary {
   active: boolean;
 }
 
+export interface FirstUserBootstrapStatus {
+  state: "uninitialized" | "incomplete" | "initialized";
+  bootstrap_available: boolean;
+  password_policy: {
+    min_length: number;
+    max_bytes: number;
+  };
+}
+
 export interface ReleaseVersionSnapshot {
   platform_release: string;
   domain_schema: string;
@@ -162,6 +171,10 @@ export interface LoginResult {
   expires_at: string;
 }
 
+export interface FirstUserBootstrapResult extends LoginResult {
+  authorization_granted: boolean;
+}
+
 export interface SessionRenewal {
   csrf_token: string;
   expires_at: string;
@@ -225,6 +238,20 @@ export class BrowserSessionClient {
     }
     return this.fetchImpl(input, { ...init, headers });
   };
+
+  bootstrapStatus(): Promise<FirstUserBootstrapStatus> {
+    return this.request<FirstUserBootstrapStatus>("/auth/bootstrap-status");
+  }
+
+  bootstrapAdmin(username: string, password: string): Promise<FirstUserBootstrapResult> {
+    return this.request<FirstUserBootstrapResult>("/auth/bootstrap-admin", {
+      method: "POST",
+      body: { username, password },
+    }).then((result) => {
+      this.setCsrfToken(result.csrf_token);
+      return result;
+    });
+  }
 
   login(username: string, password: string): Promise<LoginResult> {
     return this.request<LoginResult>("/auth/login", {

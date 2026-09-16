@@ -128,6 +128,7 @@ def build_runtime_services(
         provider_store=JsonModelProviderSetupStore(database_dir / "model-providers.json"),
         command_store=JsonOnboardingCommandStore(database_dir / "onboarding-commands.json"),
         scopes=storage.scopes,
+        workspace_provider=storage.workspaces,
         agents=agents,
         agent_runtime=agent_runtime,
         model_adapters=onboarding_model_adapters,

@@ -1,46 +1,157 @@
 import type { FormEvent } from "react";
-import type { OnboardingStatus } from "../../api/onboarding";
+import type {
+  ModelSetupContract,
+  ModelSetupFieldContract,
+  OnboardingStatus,
+} from "../../api/onboarding";
 import { UnavailableAction } from "./presentation";
 
 export function ModelSetupForm({
   adapterIds,
+  contract,
   busy,
   onSubmit,
 }: {
   adapterIds: string[];
+  contract?: ModelSetupContract;
   busy: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const fields = contract?.fields ?? legacyModelSetupFields(adapterIds);
+  const ordinaryFields = fields.filter(
+    (field) => !field.secret_reference && field.input_kind !== "boolean",
+  );
+  const booleanFields = fields.filter(
+    (field) => !field.secret_reference && field.input_kind === "boolean",
+  );
+  const secretReferenceFields = fields.filter((field) => field.secret_reference);
+
   return (
     <form className="stack" onSubmit={onSubmit}>
+      {contract ? (
+        <p>
+          Configuration fields are supplied by the Control Plane contract version {contract.version}.
+        </p>
+      ) : (
+        <p>
+          This Control Plane predates the setup-field projection; compatibility fields are shown
+          using the legacy browser mapping.
+        </p>
+      )}
       <div className="form-grid">
-        <label>Installed adapter<select name="adapter_id" defaultValue={adapterIds[0]} required>{adapterIds.map((adapterId) => <option value={adapterId} key={adapterId}>{adapterId}</option>)}</select></label>
-        <label>Location<select name="location" defaultValue="local" required><option value="local">local — loopback endpoint on this device</option><option value="self_hosted">self_hosted — explicitly managed endpoint</option></select></label>
-        <label>Provider ID<input name="provider_id" required placeholder="local-provider" /></label>
-        <label>Model configuration ID<input name="model_config_id" required placeholder="model-local" /></label>
-        <label>Provider-native model name<input name="provider_model" required /></label>
-        <label>Display name<input name="display_name" /></label>
-        <label>Base URL<input name="base_url" required placeholder="http://127.0.0.1:PORT/..." /></label>
-        <label>Context window<input name="context_window" inputMode="numeric" /></label>
+        {ordinaryFields.map((field) => (
+          <ModelSetupField field={field} key={field.path} />
+        ))}
       </div>
-      <div className="actions">
-        <label><input type="checkbox" name="tool_calling" /> Tool calling</label>
-        <label><input type="checkbox" name="structured_output" /> Structured output</label>
-        <label><input type="checkbox" name="streaming" /> Streaming</label>
-      </div>
-      <fieldset className="card">
-        <legend>Optional SecretReference metadata</legend>
-        <p>Enter only the canonical reference that identifies an already provisioned secret. Do not enter an API key, token or password value.</p>
-        <div className="form-grid">
-          <label>Secret provider<input name="secret_provider" placeholder="local-secrets" /></label>
-          <label>Secret ID<input name="secret_id" /></label>
-          <label>Scope<input name="secret_scope" placeholder="platform" /></label>
-          <label>Version<input name="secret_version" /></label>
+      {booleanFields.length > 0 ? (
+        <div className="actions">
+          {booleanFields.map((field) => (
+            <label key={field.path}>
+              <input type="checkbox" name={formName(field.path)} /> {field.label}
+            </label>
+          ))}
         </div>
-      </fieldset>
-      <button className="primary" disabled={busy}>{busy ? "Validating…" : "Validate and save model"}</button>
+      ) : null}
+      {secretReferenceFields.length > 0 ? (
+        <fieldset className="card">
+          <legend>Optional SecretReference metadata</legend>
+          <p>
+            Enter only the canonical reference that identifies an already provisioned secret. Do
+            not enter an API key, token or password value.
+          </p>
+          <div className="form-grid">
+            {secretReferenceFields.map((field) => (
+              <ModelSetupField field={field} key={field.path} />
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+      <button className="primary" disabled={busy}>
+        {busy ? "Validating…" : "Validate and save model"}
+      </button>
     </form>
   );
+}
+
+function ModelSetupField({ field }: { field: ModelSetupFieldContract }) {
+  const name = formName(field.path);
+  if (field.input_kind === "select") {
+    return (
+      <label>
+        {field.label}
+        <select name={name} defaultValue={field.options[0] ?? ""} required={field.required}>
+          {field.options.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  return (
+    <label>
+      {field.label}
+      <input
+        name={name}
+        inputMode={field.input_kind === "integer" ? "numeric" : undefined}
+        placeholder={field.placeholder ?? undefined}
+        required={field.required}
+        type={field.input_kind === "url" ? "url" : "text"}
+      />
+    </label>
+  );
+}
+
+function formName(path: string): string {
+  return {
+    "capabilities.context_window": "context_window",
+    "capabilities.tool_calling": "tool_calling",
+    "capabilities.structured_output": "structured_output",
+    "capabilities.streaming": "streaming",
+    "credential_ref.provider": "secret_provider",
+    "credential_ref.secret_id": "secret_id",
+    "credential_ref.scope": "secret_scope",
+    "credential_ref.version": "secret_version",
+  }[path] ?? path;
+}
+
+function legacyModelSetupFields(adapterIds: string[]): ModelSetupFieldContract[] {
+  return [
+    setupField("adapter_id", "Installed adapter", "select", true, adapterIds),
+    setupField("location", "Location", "select", true, ["local", "self_hosted"]),
+    setupField("provider_id", "Provider ID", "text", true),
+    setupField("model_config_id", "Model configuration ID", "text", true),
+    setupField("provider_model", "Provider-native model name", "text", true),
+    setupField("display_name", "Display name", "text", false),
+    setupField("base_url", "Base URL", "url", true, [], "http://127.0.0.1:PORT/..."),
+    setupField("capabilities.context_window", "Context window", "integer", false),
+    setupField("capabilities.tool_calling", "Tool calling", "boolean", false),
+    setupField("capabilities.structured_output", "Structured output", "boolean", false),
+    setupField("capabilities.streaming", "Streaming", "boolean", false),
+    setupField("credential_ref.provider", "Secret provider", "text", false, [], undefined, true),
+    setupField("credential_ref.secret_id", "Secret ID", "text", false, [], undefined, true),
+    setupField("credential_ref.scope", "Secret scope", "text", false, [], "platform", true),
+    setupField("credential_ref.version", "Secret version", "text", false, [], undefined, true),
+  ];
+}
+
+function setupField(
+  path: string,
+  label: string,
+  inputKind: ModelSetupFieldContract["input_kind"],
+  required: boolean,
+  options: string[] = [],
+  placeholder?: string,
+  secretReference = false,
+): ModelSetupFieldContract {
+  return {
+    path,
+    label,
+    input_kind: inputKind,
+    required,
+    options,
+    placeholder: placeholder ?? null,
+    secret_reference: secretReference,
+  };
 }
 
 export function MultiAgentGoalForm({

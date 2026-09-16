@@ -45,9 +45,22 @@ cp config/single-node.env.example .env.single-node
 set -a
 . ./.env.single-node
 set +a
-platform-server bootstrap-admin --username admin
 platform-server serve
 ```
+
+In a second terminal, start the Web UI:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. On a fresh installation the server-owned bootstrap state routes to
+**Create your administrator account**. Creating the account in the browser installs the initial
+administrator policy, establishes the canonical HttpOnly session and continues into the persistent
+setup wizard. A reload or restart resumes the stored setup state instead of requiring bootstrap to be
+repeated.
 
 On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` and set the corresponding
 `AI_MAP_*` environment variables in the process instead of sourcing the POSIX env file. The server
@@ -56,6 +69,18 @@ listens on the configured Control Plane address; the reference default is `127.0
 The installation and server commands above are the same supported single-node path documented in
 [`../operations/DEPLOYMENT.md`](../operations/DEPLOYMENT.md). The first-run feature does not add a
 second deployment mode.
+
+### Operator/recovery account bootstrap
+
+`platform-server bootstrap-admin` remains available for operator and recovery workflows when browser
+bootstrap cannot be used. It is not a prerequisite for the normal browser-first startup:
+
+```bash
+platform-server bootstrap-admin --username admin
+```
+
+The password is requested without placing it in shell history. After this recovery path, start the
+server normally and sign in through the browser or CLI.
 
 ## Minimum product setup
 
@@ -66,8 +91,11 @@ After authentication, `/onboarding` guides only the prerequisites that the offic
 3. create or select one owned Workspace in that Project;
 4. submit the multi-agent goal.
 
-No General Assistant or standard Agent catalog bootstrap is required. The product command creates or
-reuses three scoped canonical Agent revisions for `researcher`, `developer`, and `reviewer`.
+No General Assistant or standard Agent catalog bootstrap is required by the multi-agent command
+itself. The product command creates or reuses three scoped canonical Agent revisions for
+`researcher`, `developer`, and `reviewer`. The browser-first setup wizard may establish additional
+standard product readiness state before enabling the dashboard; that state does not change the
+runtime requirements of this command.
 
 For an OpenAI-compatible local endpoint, the existing onboarding model setup can be used. The
 provider must pass its normal health/model-inventory validation before it becomes eligible. Remote
@@ -93,13 +121,15 @@ After execution the same page exposes:
 - Task/Plan/Step trace identifiers.
 
 The existing General Assistant journey remains available as an optional single-Agent path, but it is
-not the definition of first-run success.
+not the definition of first-run success for the multi-agent command.
 
 ## CLI workflow
 
-The CLI calls the same Control Plane command used by Web:
+The CLI calls the same Control Plane command used by Web. Authenticate first, then inspect onboarding
+state and run the maintained scenario:
 
 ```bash
+platform auth login --username admin
 platform onboarding status
 platform onboarding run-multi-agent \
   --objective "Research two viable approaches, produce a concise result from both inputs, and review the exact result."

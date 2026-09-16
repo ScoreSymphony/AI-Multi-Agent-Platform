@@ -8,6 +8,7 @@ from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 from ai_multi_agent_platform.kernel import PlatformKernel
+from ai_multi_agent_platform.workspaces import WorkspaceProvider
 
 from .agent_lifecycle import (
     FIRST_RUN_AGENT_EXECUTION_PROFILE,
@@ -30,11 +31,13 @@ class FirstRunTaskService:
         kernel: PlatformKernel,
         scopes: ScopeStore,
         agents: AgentService,
+        workspace_provider: WorkspaceProvider | None = None,
     ) -> None:
         self.onboarding = onboarding
         self.kernel = kernel
         self.scopes = scopes
         self.agents = agents
+        self.workspace_provider = workspace_provider
 
     async def run_first_task(
         self,
@@ -62,14 +65,14 @@ class FirstRunTaskService:
             )
 
         objective = _required_string(payload, "objective")
-        path = self.onboarding.resolve_first_run_path(
+        path = await self.onboarding.resolve_first_run_path_async(
             context,
             project_id=_optional_string(payload, "project_id"),
             workspace_id=_optional_string(payload, "workspace_id"),
             agent_id=_optional_string(payload, "agent_id"),
         )
         project = self.scopes.get_project(path.project_id)
-        workspace = self.scopes.get_workspace(path.workspace_id)
+        workspace_id = await self._resolve_workspace_id(path.workspace_id)
         agent_id = path.agent_id
 
         task = await self.kernel.create_task(
@@ -88,7 +91,7 @@ class FirstRunTaskService:
             metadata={
                 FIRST_RUN_EXECUTION_PROFILE_KEY: FIRST_RUN_AGENT_EXECUTION_PROFILE,
                 FIRST_RUN_AGENT_ID_KEY: agent_id,
-                FIRST_RUN_WORKSPACE_ID_KEY: workspace.id,
+                FIRST_RUN_WORKSPACE_ID_KEY: workspace_id,
             },
             actor_ref=context.actor.principal_ref,
             source="onboarding",
@@ -144,11 +147,22 @@ class FirstRunTaskService:
             "run_id": persisted_run.run_id,
             "run_status": persisted_run.status.value,
             "agent_id": agent_id,
-            "workspace_id": workspace.id,
+            "workspace_id": workspace_id,
             "project_id": project.id,
             "result_id": result_id,
             "output": dict(persisted_run.output),
         }
+
+    async def _resolve_workspace_id(self, workspace_id: str) -> str:
+        provider = self.workspace_provider
+        if provider is None:
+            return self.scopes.get_workspace(workspace_id).id
+        try:
+            return (await provider.get_workspace(workspace_id)).id
+        except ContractError as exc:
+            if exc.code is not ErrorCode.NOT_FOUND:
+                raise
+        return self.scopes.get_workspace(workspace_id).id
 
 
 def _required_string(payload: dict[str, JsonValue], key: str) -> str:
