@@ -625,8 +625,8 @@ jobs:
           import os
           from pathlib import Path
           result = json.loads((Path(os.environ["RUNNER_TEMP"]) / "pipelock-performance-reference.json").read_text(encoding="utf-8"))
-          assert result["schema_version"] == 1
-          assert result["issue"] == 730
+          assert result["schema_version"] == 2
+          assert result["evidence_suite"] == "pipelock-core-evaluation"
           assert result["environment"]["label"] == "github-hosted-ubuntu-reference"
           assert result["measurement_scope"]["hosted_runner_is_vps_evidence"] is False
           for surface in ("http", "websocket_roundtrip", "mcp_stdio_call_total"):

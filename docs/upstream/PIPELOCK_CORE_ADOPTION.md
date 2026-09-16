@@ -1,9 +1,9 @@
 # Pipelock Core adoption checklist
 
-This is the repository decision-readiness record for issue #730. Pipelock remains an evaluated
-**Candidate**, not an adopted canonical dependency. The platform's #15 authorization and #591 egress
-policy remain authoritative; Pipelock is evaluated only as an optional downstream technical
-mediation/evidence layer.
+This is the repository decision-readiness record for the Pipelock Core candidate evaluation. Historical
+provenance: the evaluation originated in issue #730. Pipelock remains an evaluated **Candidate**, not
+an adopted canonical dependency. The platform's #15 authorization and #591 egress policy remain
+authoritative; Pipelock is evaluated only as an optional downstream technical mediation/evidence layer.
 
 ## Candidate identity
 
@@ -12,13 +12,13 @@ mediation/evidence layer.
 - **Reviewed revision:** `f7d1816f1a5ad63d501b0c48f36066f836f59022`
 - **Evaluated build:** tag-free source build through `make build`
 - **Integration category:** optional external self-hosted enforcement/evidence adapter
-- **Reviewer:** ScoreSymphony platform evaluation / issue #730
+- **Reviewer:** ScoreSymphony platform evaluation (historical tracking: issue #730)
 - **Review date:** 2026-09-11
 
 ## Current decision state
 
-Final #730 outcome is **not yet recorded**. Exactly one of these must be selected after the remaining
-hard evidence gate is resolved:
+Final Pipelock adoption outcome is **not yet recorded**. Exactly one of these must be selected after the
+remaining hard evidence gate is resolved:
 
 - `adopt`
 - `optional_provider`
@@ -241,9 +241,9 @@ These maintenance-risk items should influence lifecycle management if the final 
 - [x] Hosted-reference latency, CPU, RAM, log/disk and maintained-subset FP/FN behavior are measured.
 - [x] Platform local/reference operation remains green without Pipelock as a mandatory runtime.
 - [ ] Representative ordinary-VPS/single-node evidence is retained.
-- [ ] Exactly one final #730 recommendation is recorded and backed by the completed evidence set.
+- [ ] Exactly one final Pipelock recommendation is recorded and backed by the completed evidence set.
 
-## Required follow-up before final #730 outcome
+## Required follow-up before final Pipelock outcome
 
 1. Run the existing benchmark harness on the representative ordinary Linux x86-64 VPS/single-node
    profile and retain JSON plus exact binary/config hashes and environment metadata.
@@ -256,4 +256,5 @@ These maintenance-risk items should influence lifecycle management if the final 
    `main`.
 
 Until those steps are complete, the safe repository status remains **Candidate / final decision
-pending**, with `optional_provider` a plausible direction but not yet the recorded #730 outcome.
+pending**, with `optional_provider` a plausible direction but not yet the recorded Pipelock adoption
+outcome.

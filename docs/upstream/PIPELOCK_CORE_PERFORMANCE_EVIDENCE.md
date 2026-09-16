@@ -11,7 +11,9 @@ binary whose Go build metadata contains the Enterprise build tag.
 ## Harness
 
 `scripts/benchmarks/pipelock_benchmark.py` runs a deterministic local comparison with the
-same platform fixtures used by the Pipelock transport/security evaluation. It records JSON evidence for:
+same platform fixtures used by the Pipelock transport/security evaluation. The current report
+contract is schema version 2 and identifies the domain-owned `pipelock-core-evaluation` evidence
+suite rather than a GitHub issue number. It records JSON evidence for:
 
 - direct HTTP versus Pipelock `/fetch` latency;
 - direct WebSocket echo versus Pipelock `/ws` round-trip latency;
@@ -104,4 +106,6 @@ containment work separately demonstrates whether traffic can bypass mediation. T
 recommendation must consider both the measured operational cost and the independently demonstrated
 containment limitations.
 
-Historical context: issue #730 owns the original candidate evaluation and the retained issue-number field in generated evidence manifests.
+Historical context: issue #730 owns the original candidate evaluation. Older retained artifacts may
+still contain the historical issue-number field; current generated benchmark evidence uses the
+`pipelock-core-evaluation` evidence-suite identity.

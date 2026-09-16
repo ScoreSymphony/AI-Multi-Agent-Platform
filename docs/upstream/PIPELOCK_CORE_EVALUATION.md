@@ -1,7 +1,7 @@
 # Pipelock Core evaluation
 
-Status: **candidate / proof of concept for #730**. This document does not approve or integrate
-Pipelock as a required platform component.
+Status: **candidate / Pipelock Core proof of concept**. Historical tracking: issue #730. This document
+does not approve or integrate Pipelock as a required platform component.
 
 ## Candidate identity
 
@@ -58,9 +58,9 @@ Consequences:
 2. **The normal GoReleaser binary/archive is not a Core-only build path at this revision.** Published
    release/container packaging derived from that binary must not be assumed Apache-Core-only merely
    because paid features are inactive.
-3. The no-paid-service #730 baseline uses the exact pinned source revision and tag-free `make build`
-   path. The compatibility workflow also inspects the built binary metadata for an Enterprise build
-   tag.
+3. The no-paid-service Pipelock evaluation baseline uses the exact pinned source revision and tag-free
+   `make build` path. The compatibility workflow also inspects the built binary metadata for an
+   Enterprise build tag.
 4. No Pipelock source is copied, vendored or selectively ported into this repository.
 
 This is intentionally stricter than a repository-level license summary: the build path of the actual
@@ -87,8 +87,8 @@ A future/unmapped canonical outcome fails closed. Approval stays owned by #15; a
 platform re-evaluates the canonical request rather than delegating approval state to Pipelock.
 
 The projection preserves `policy_version` and creates a deterministic `decision_digest` binding the
-payload digest, target, profile reference and canonical result. The digest is #730 evidence binding,
-not a replacement for #591 policy identity.
+payload digest, target, profile reference and canonical result. The digest is Pipelock evaluation
+evidence binding, not a replacement for #591 policy identity.
 
 ## Reproducible audit-only Core pilot
 
@@ -142,7 +142,7 @@ marked live-validated only where the platform candidate workflow has exercised t
 | MCP Streamable HTTP upstream | MCP scanning/remote-upstream wrapper | **validated for canonical platform fixture** (`34577649075`) |
 | MCP WebSocket upstream | MCP scanning/remote-upstream wrapper | **validated for canonical platform fixture** (`34577649075`) |
 | Redirect/private target | documented scanner/proxy decision points | pending |
-| DNS/rebinding/hostname-IP | explicit #730 security-corpus target | pending |
+| DNS/rebinding/hostname-IP | explicit Pipelock security-corpus target | pending |
 
 The CONNECT result must be interpreted narrowly. TLS interception was off, so Pipelock did not inspect
 inner HTTPS headers, request bodies or response content. The run proved successful tunnel admission
@@ -176,8 +176,8 @@ Run `34577649075` independently verified another strict `/fetch` writer chain:
 - root hash: `89777ad5822ebd60e84ea50ff06e35bc9e293f91e935ffd95cb8a8698a114413`;
 - signer: `b634a7019e61d9476a9aaa4e1b55268a13dafe44a4b250cf7707f87c89c6f47a`.
 
-Both verifier runs report containment as **UNKNOWN**. This is the intended #730 interpretation: receipt
-validity is evidence integrity/provenance, not complete-mediation evidence.
+Both verifier runs report containment as **UNKNOWN**. This is the intended Pipelock evaluation
+interpretation: receipt validity is evidence integrity/provenance, not complete-mediation evidence.
 
 The second transport run also exposes an evidence-quality caveat: its successful CONNECT tunnel logged
 a best-effort receipt-emission failure (`chain sealed: transcript root already emitted`). The strict
@@ -277,10 +277,10 @@ The decision criterion is added enforcement strength and verifiable evidence, no
 
 ## Current decision status
 
-**No final #730 adoption outcome yet.** Pipelock remains `candidate` until the remaining generic
+**No final Pipelock adoption outcome yet.** Pipelock remains `candidate` until the remaining generic
 WebSocket, redirect/private-target, bypass, failure, adversarial and performance evidence is executed
-and the CONNECT receipt anomaly is understood. The final issue decision must be exactly one of
-`adopt`, `optional_provider`, `reference_only` or `reject` and cite the measured evidence.
+and the CONNECT receipt anomaly is understood. The final Pipelock adoption decision must be exactly
+one of `adopt`, `optional_provider`, `reference_only` or `reject` and cite the measured evidence.
 
 The current evidence supports continuing the proof of concept: the canonical architecture remains
 independent, a tag-free Apache-2.0 source path exists, HTTP fetch/forward and CONNECT transport work in

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 PIPELOCK_REVISION="f7d1816f1a5ad63d501b0c48f36066f836f59022"
+EVIDENCE_SUITE="pipelock-core-evaluation"
 
 usage() {
   cat <<'EOF'
@@ -101,7 +102,7 @@ PIPELOCK_SHA256="$(sha256sum "$PIPELOCK_BIN" | awk '{print $1}')"
 CONFIG_PATH="$REPO_ROOT/tests/fixtures/pipelock_websocket_audit.yaml"
 CONFIG_SHA256="$(sha256sum "$CONFIG_PATH" | awk '{print $1}')"
 BENCHMARK_SHA256="$(sha256sum "$BENCHMARK_JSON" | awk '{print $1}')"
-export PIPELOCK_REVISION PLATFORM_COMMIT PIPELOCK_SHA256 CONFIG_SHA256 BENCHMARK_SHA256
+export PIPELOCK_REVISION EVIDENCE_SUITE PLATFORM_COMMIT PIPELOCK_SHA256 CONFIG_SHA256 BENCHMARK_SHA256
 export BENCHMARK_JSON OUTPUT_DIR
 
 python - <<'PY'
@@ -116,8 +117,10 @@ from pathlib import Path
 
 benchmark_path = Path(os.environ["BENCHMARK_JSON"])
 benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
-if benchmark.get("issue") != 730:
-    raise SystemExit("benchmark provenance mismatch")
+if benchmark.get("schema_version") != 2:
+    raise SystemExit("benchmark schema mismatch")
+if benchmark.get("evidence_suite") != os.environ["EVIDENCE_SUITE"]:
+    raise SystemExit("benchmark evidence-suite mismatch")
 if benchmark.get("pipelock_revision") != os.environ["PIPELOCK_REVISION"]:
     raise SystemExit("benchmark Pipelock revision mismatch")
 if benchmark.get("environment", {}).get("label") != "ordinary-vps-reference":
@@ -152,8 +155,8 @@ if cpuinfo_path.exists():
             break
 
 manifest = {
-    "schema_version": 1,
-    "issue": 730,
+    "schema_version": 2,
+    "evidence_suite": os.environ["EVIDENCE_SUITE"],
     "evidence_class": "ordinary-vps-reference",
     "captured_at_utc": datetime.now(timezone.utc).isoformat(),
     "platform_commit": os.environ["PLATFORM_COMMIT"],

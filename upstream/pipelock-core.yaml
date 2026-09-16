@@ -34,10 +34,10 @@ deployment_constraints:
   - "Audit-only evaluation begins before any production blocking recommendation."
   - "Source-built Core is required for the evaluation baseline because both the repository Dockerfile and GoReleaser pipelock release build enable Enterprise tags at the reviewed revision."
 resource_constraints:
-  - "Latency, CPU, RAM, startup and log/disk overhead remain to be measured by the live #730 pilot."
+  - "Latency, CPU, RAM, startup and log/disk overhead remain to be measured by the live Pipelock ordinary-VPS pilot."
 required_for_baseline: false
 recurring_paid_service_required: false
 update_review_method: "Pin every evaluated revision; re-check root and enterprise license boundaries, Dockerfile/GoReleaser/build tags, receipt/transport behavior, then rerun mapping, security, bypass, failure and performance evidence before promotion."
 exit_replacement_strategy: "Disable/remove the optional adapter and external runtime. Canonical authorization, egress policy, Task/Run lifecycle and provider identities require no migration because Pipelock owns none of them."
 adr: ""
-notes: "Candidate only. Final #730 decision must be adopt, optional_provider, reference_only or reject after measured live evidence. Evaluation details: docs/upstream/PIPELOCK_CORE_EVALUATION.md"
+notes: "Candidate only. Final Pipelock adoption decision must be adopt, optional_provider, reference_only or reject after measured live evidence. Evaluation details: docs/upstream/PIPELOCK_CORE_EVALUATION.md"
