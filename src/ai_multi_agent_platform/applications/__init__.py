@@ -1,6 +1,11 @@
 """Canonical managed Application definitions, lifecycle and runtime contracts."""
 
 from .definition import Application
+from .local_process import (
+    LocalProcessApplicationRuntime,
+    SecretMaterialResolver,
+    VolumePathResolver,
+)
 from .manifest import (
     APPLICATION_MANIFEST_SCHEMA,
     application_manifest_from_document,
@@ -46,12 +51,20 @@ from .runtime import (
     ApplicationRuntimeError,
     ApplicationRuntimeUnavailableError,
 )
+from .serialization import (
+    application_from_document,
+    application_to_document,
+    instance_from_document,
+    instance_to_document,
+    manifest_to_document,
+)
 from .service import (
     ApplicationLifecycleService,
     ApplicationRecoveryFailure,
     ApplicationRecoveryReport,
     ApplicationRuntimeRegistry,
 )
+from .sqlite_repository import SqliteApplicationRepository
 
 __all__ = [
     "APPLICATION_MANIFEST_SCHEMA",
@@ -97,6 +110,15 @@ __all__ = [
     "ApplicationVolumeKind",
     "ApplicationVolumeMount",
     "InMemoryApplicationRepository",
+    "LocalProcessApplicationRuntime",
+    "SecretMaterialResolver",
+    "SqliteApplicationRepository",
+    "VolumePathResolver",
+    "application_from_document",
     "application_manifest_from_document",
+    "application_to_document",
+    "instance_from_document",
+    "instance_to_document",
+    "manifest_to_document",
     "validate_application_manifest_document",
 ]
