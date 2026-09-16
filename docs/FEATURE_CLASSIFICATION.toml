@@ -356,6 +356,17 @@ compatibility = "Application distribution is a supported advanced canonical doma
 user_signaling = "documentation"
 
 [[feature]]
+id = "application-adapters"
+name = "Managed Application Adapters"
+owners = ["applications"]
+role = "optional_advanced"
+stability = "beta"
+public_surfaces = ["Application manifest/schema", "Application and ApplicationInstance lifecycle", "Application Runtime adapter contract"]
+docs = ["docs/extensions/APPLICATION_ADAPTERS.md", "docs/adr/0015-application-adapter-runtime-ownership.md", "docs/PACKAGE_BOUNDARIES.md"]
+compatibility = "Managed Applications are a Beta optional advanced capability; canonical Application and ApplicationInstance identity, provider-neutral lifecycle semantics and manifest schema evolution remain platform-owned while backend-private runtime identifiers are never public compatibility contracts."
+user_signaling = "documentation_and_ui_contextual"
+
+[[feature]]
 id = "backup-restore"
 name = "Backup, restore and disaster recovery"
 owners = ["repository"]
