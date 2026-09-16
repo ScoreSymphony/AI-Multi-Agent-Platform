@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 
@@ -199,7 +200,12 @@ async def test_revision_cannot_reset_runtime_origin() -> None:
     budgets, mutations = _runtime(gate)
     first = _policy()
     await budgets.put_policy(first)
-    candidate = replace(first, version=2, started_at=utc_now(), updated_at=utc_now())
+    candidate = replace(
+        first,
+        version=2,
+        started_at=first.started_at + timedelta(microseconds=1),
+        updated_at=utc_now(),
+    )
 
     with pytest.raises(ContractError) as exc_info:
         await mutations.revise(
