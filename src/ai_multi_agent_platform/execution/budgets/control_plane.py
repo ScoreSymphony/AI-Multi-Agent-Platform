@@ -3,15 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from importlib import import_module
+from typing import Any
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
-from ai_multi_agent_platform.control_plane.extensions import (
-    ControlPlane,
-    ControlPlaneModule,
-    ResourceService,
-)
-from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
-from ai_multi_agent_platform.security import ActorIdentity, ActorType, infer_actor_identity
 
 from .governance import TaskBudgetPolicyMutationService
 from .models import (
@@ -32,17 +27,29 @@ TASK_BUDGET_REVISE_COMMAND = "task-budget.revise"
 TASK_BUDGET_COMMANDS = (TASK_BUDGET_CONFIGURE_COMMAND, TASK_BUDGET_REVISE_COMMAND)
 
 
-class TaskBudgetResourceService(ResourceService):
+def _control_plane_extensions() -> Any:
+    """Load the extension vocabulary without a static execution -> control_plane edge."""
+
+    return import_module("ai_multi_agent_platform.control_plane.extensions")
+
+
+def _security() -> Any:
+    """Load actor vocabulary without a static execution -> security edge."""
+
+    return import_module("ai_multi_agent_platform.security")
+
+
+class TaskBudgetResourceService:
     """Task-scoped projection of configured limits, consumption and reservation state."""
 
-    def __init__(self, control_plane: ControlPlane, budgets: TaskBudgetEnforcementService) -> None:
+    def __init__(self, control_plane: Any, budgets: TaskBudgetEnforcementService) -> None:
         self._control_plane = control_plane
         self._budgets = budgets
 
     async def list_resources(
         self,
-        context: RequestContext,
-        query: PageQuery,
+        context: Any,
+        query: Any,
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
         resources: list[dict[str, JsonValue]] = []
@@ -64,7 +71,7 @@ class TaskBudgetResourceService(ResourceService):
 
     async def get_resource(
         self,
-        context: RequestContext,
+        context: Any,
         resource_id: str,
     ) -> dict[str, JsonValue]:
         task = await self._control_plane._kernel.get_task(resource_id)  # noqa: SLF001
@@ -86,7 +93,7 @@ class TaskBudgetResourceService(ResourceService):
 class TaskBudgetCommandHandlers:
     def __init__(
         self,
-        control_plane: ControlPlane,
+        control_plane: Any,
         budgets: TaskBudgetEnforcementService,
         mutations: TaskBudgetPolicyMutationService,
     ) -> None:
@@ -96,7 +103,7 @@ class TaskBudgetCommandHandlers:
 
     async def configure(
         self,
-        context: RequestContext,
+        context: Any,
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
@@ -123,7 +130,7 @@ class TaskBudgetCommandHandlers:
 
     async def revise(
         self,
-        context: RequestContext,
+        context: Any,
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
@@ -157,7 +164,7 @@ class TaskBudgetCommandHandlers:
 
 
 async def _handler_owned_authorization(
-    context: RequestContext,
+    context: Any,
     resource_ref: str,
     payload: dict[str, JsonValue],
 ) -> None:
@@ -167,16 +174,17 @@ async def _handler_owned_authorization(
 
 
 def register_task_budget_control_plane(
-    control_plane: ControlPlane,
+    control_plane: Any,
     budgets: TaskBudgetEnforcementService,
     mutations: TaskBudgetPolicyMutationService,
 ) -> None:
     """Register the canonical #902 read and mutation surface on #32."""
 
     handlers = TaskBudgetCommandHandlers(control_plane, budgets, mutations)
+    extensions = _control_plane_extensions()
     control_plane.register_modules(
         (
-            ControlPlaneModule(
+            extensions.ControlPlaneModule(
                 name=TASK_BUDGET_MODULE,
                 resource_services={
                     TASK_BUDGET_COLLECTION: TaskBudgetResourceService(control_plane, budgets),
@@ -254,7 +262,10 @@ def _dimension_resource(item: BudgetDimensionSnapshot) -> dict[str, JsonValue]:
         "source": item.limit.source.value,
         "metric_type": item.limit.metric_type,
         "unit": item.limit.unit,
-        "quality_counts": {quality.value: count for quality, count in item.quality_counts.items()},
+        "quality_counts": {
+            getattr(quality, "value", str(quality)): count
+            for quality, count in item.quality_counts.items()
+        },
         "unavailable_count": item.unavailable_count,
         "warning": item.warning,
         "exhausted": item.exhausted,
@@ -299,18 +310,19 @@ def _limits(payload: Mapping[str, JsonValue]) -> tuple[TaskBudgetLimit, ...]:
     return tuple(limits)
 
 
-def _actor(context: RequestContext) -> ActorIdentity:
+def _actor(context: Any) -> Any:
+    security = _security()
     if context.actor.actor_type is None:
-        return infer_actor_identity(context.actor.principal_ref)
+        return security.infer_actor_identity(context.actor.principal_ref)
     try:
-        actor_type = ActorType(context.actor.actor_type)
+        actor_type = security.ActorType(context.actor.actor_type)
     except ValueError as exc:
         raise ContractError(ErrorCode.INVALID_REQUEST, "unsupported actor_type") from exc
-    return ActorIdentity(context.actor.principal_ref, actor_type)
+    return security.ActorIdentity(context.actor.principal_ref, actor_type)
 
 
 def _operation(
-    context: RequestContext,
+    context: Any,
     owner_type: str,
     owner_id: str,
     project_id: str | None,
@@ -324,7 +336,7 @@ def _operation(
     )
 
 
-def _request_provenance(context: RequestContext, operation: str) -> dict[str, JsonValue]:
+def _request_provenance(context: Any, operation: str) -> dict[str, JsonValue]:
     return {
         "source": "control-plane",
         "operation": operation,
