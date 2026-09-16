@@ -462,7 +462,7 @@ export type CreateWorkspaceRequest = {
   access_mode?: "read_write" | "read_only";
   files?: WorkspaceFileInput[];
   project_id: string;
-  retention?: "persistent" | "ephemeral";
+  retention?: "persistent" | "ephemeral" | "until";
   source_refs?: WorkspaceSourceRefInput[];
   workspace_id?: string;
   workspace_type?: "persistent_project" | "ephemeral_task" | "isolated_run" | "read_only_source" | "cloned" | "remote";
