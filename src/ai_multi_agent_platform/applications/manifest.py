@@ -9,8 +9,8 @@ from jsonschema import Draft202012Validator, ValidationError  # type: ignore[imp
 
 from .models import (
     APPLICATION_MANIFEST_SCHEMA_VERSION,
-    ApplicationConfigValueType,
     ApplicationConfigurationField,
+    ApplicationConfigValueType,
     ApplicationEndpoint,
     ApplicationEndpointExposure,
     ApplicationEndpointProtocol,
