@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  OnboardingClient,
+  type ComponentSetupMode,
+  type ComponentSetupStatus,
+} from "../../api/onboarding";
+import {
   SetupClient,
   type SetupProductCard,
   type SetupRegistrySelection,
@@ -28,21 +33,43 @@ const CATEGORY_LABELS: Record<string, string> = {
   compute: "Compute",
 };
 
+const MODE_LABELS: Record<ComponentSetupMode, string> = {
+  auto: "Recommended / Auto",
+  local: "Local only",
+  multi_node: "Existing servers / Multi-node",
+  advanced: "Advanced / Custom",
+};
+
+const MODE_DETAILS: Record<ComponentSetupMode, string> = {
+  auto: "Select the compatible recommended defaults discovered for this environment.",
+  local: "Prefer compatible components that run on this local node.",
+  multi_node: "Prefer the existing multi-node or distributed runtime components when available.",
+  advanced: "Choose explicit component defaults in the advanced component profile editor.",
+};
+
 interface SetupLifecyclePanelProps {
   setup: SetupClient;
+  onboarding: OnboardingClient;
   manifest?: APImanifest | null;
   onStateChange?: (status: SetupSessionStatus) => void;
 }
 
 export function SetupLifecyclePanel({
   setup,
+  onboarding,
   manifest,
   onStateChange,
 }: SetupLifecyclePanelProps) {
   const manifestKnown = manifest !== undefined && manifest !== null;
   const available = manifestKnown ? manifest.resources.includes("setup-sessions") : true;
+  const componentSetupAvailable = manifestKnown
+    ? manifest.resources.includes("component-setup")
+    : true;
   const updateAvailable = manifestKnown
     ? (manifest.commands?.includes("onboarding.update-setup-session") ?? false)
+    : true;
+  const profileSaveAvailable = manifestKnown
+    ? (manifest.commands?.includes("onboarding.save-component-profile") ?? false)
     : true;
   const provisionAvailable = manifestKnown
     ? (manifest.commands?.includes("onboarding.provision-setup") ?? false)
@@ -51,6 +78,7 @@ export function SetupLifecyclePanel({
     ? (manifest.commands?.includes("onboarding.validate-setup") ?? false)
     : true;
   const [status, setStatus] = useState<SetupSessionStatus | null>(null);
+  const [componentSetupStatus, setComponentSetupStatus] = useState<ComponentSetupStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -60,8 +88,12 @@ export function SetupLifecyclePanel({
     if (!available) return;
     setLoading(true);
     try {
-      const next = await setup.status();
+      const [next, nextComponentSetup] = await Promise.all([
+        setup.status(),
+        componentSetupAvailable ? onboarding.componentSetup() : Promise.resolve(null),
+      ]);
       setStatus(next);
+      setComponentSetupStatus(nextComponentSetup);
       setError(null);
       onStateChange?.(next);
     } catch (nextError) {
@@ -69,7 +101,7 @@ export function SetupLifecyclePanel({
     } finally {
       setLoading(false);
     }
-  }, [available, onStateChange, setup]);
+  }, [available, componentSetupAvailable, onStateChange, onboarding, setup]);
 
   useEffect(() => {
     void load();
@@ -93,7 +125,7 @@ export function SetupLifecyclePanel({
   if (loading && status === null) return <LoadingState label="Loading persistent setup state…" />;
   if (error && status === null) return <ErrorState error={error} onRetry={() => void load()} />;
   if (status === null) return <LoadingState label="Loading persistent setup state…" />;
-  const currentStatus = status;
+  const loadedStatus = status;
 
   async function mutate(label: string, operation: () => Promise<SetupSessionStatus>, success: string) {
     setBusy(label);
@@ -111,15 +143,38 @@ export function SetupLifecyclePanel({
     }
   }
 
+  async function selectSetupMode(mode: ComponentSetupMode) {
+    if (!profileSaveAvailable || mode === "advanced") return;
+    await mutate(
+      `mode:${mode}`,
+      async () => {
+        await onboarding.saveComponentProfile({
+          profile_id: "browser-first",
+          mode,
+          activate: true,
+        });
+        const [nextSetup, nextComponentSetup] = await Promise.all([
+          updateAvailable
+            ? setup.update({ current_step: "components" })
+            : setup.status(),
+          onboarding.componentSetup(),
+        ]);
+        setComponentSetupStatus(nextComponentSetup);
+        return nextSetup;
+      },
+      `${MODE_LABELS[mode]} profile selected and persisted. The setup plan was recalculated.`,
+    );
+  }
+
   async function selectRegistryItem(card: SetupProductCard, selected: boolean) {
     if (!updateAvailable || card.kind !== "registry_item" || card.version === null) return;
     const ref = `${card.technical_id}@${card.version}`;
     const nextSelections = selected
       ? uniqueSelections([
-          ...currentStatus.registry_items,
+          ...loadedStatus.registry_items,
           { item_id: card.technical_id, version: card.version },
         ])
-      : currentStatus.registry_items.filter((item) => registryRef(item) !== ref);
+      : loadedStatus.registry_items.filter((item) => registryRef(item) !== ref);
     await mutate(
       `registry:${ref}`,
       () => setup.update({ current_step: "components", registry_items: nextSelections }),
@@ -168,11 +223,14 @@ export function SetupLifecyclePanel({
     );
   }
 
-  const registryCards = currentStatus.catalog.filter((card) => card.kind === "registry_item");
-  const groupedCards = groupCards(currentStatus.catalog);
-  const pendingMutations = currentStatus.plan.actions.filter(
+  const registryCards = loadedStatus.catalog.filter((card) => card.kind === "registry_item");
+  const groupedCards = groupCards(loadedStatus.catalog);
+  const pendingMutations = loadedStatus.plan.actions.filter(
     (action) => action.state === "pending" && (action.kind === "install" || action.kind === "activate"),
   );
+  const activeProfile = componentSetupStatus?.profiles.find(
+    (profile) => profile.profile_id === componentSetupStatus.active_profile_id,
+  ) ?? null;
 
   return (
     <div className="stack">
@@ -184,21 +242,66 @@ export function SetupLifecyclePanel({
         </p>
         {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
         {notice ? <div className="state" role="status"><strong>{notice}</strong></div> : null}
-        <SetupProgress status={currentStatus} />
+        <SetupProgress status={loadedStatus} />
         <div className="actions">
           <button className="secondary" disabled={busy !== null || loading} onClick={() => void load()}>
             {loading ? "Refreshing…" : "Refresh setup state"}
           </button>
-          {currentStatus.current_step !== "ready" ? (
+          {loadedStatus.current_step !== "ready" ? (
             <button
               className="secondary"
               disabled={busy !== null || !updateAvailable}
-              onClick={() => void setStep(nextEditableStep(currentStatus.current_step))}
+              onClick={() => void setStep(nextEditableStep(loadedStatus.current_step))}
             >
               Continue setup
             </button>
           ) : null}
         </div>
+      </Card>
+
+      <Card title="Setup mode">
+        <p>
+          Choose how the canonical component-profile service should select defaults for this
+          deployment. The choice is persisted server-side and feeds the same dependency and
+          compatibility plan shown below.
+        </p>
+        {!componentSetupAvailable ? (
+          <p>The component-profile service is unavailable in this deployment.</p>
+        ) : componentSetupStatus === null ? (
+          <LoadingState label="Loading setup modes…" />
+        ) : (
+          <>
+            <div className="grid-two">
+              {componentSetupStatus.available_setup_modes.map((mode) => {
+                const active = activeProfile?.mode === mode;
+                const advanced = mode === "advanced";
+                return (
+                  <article className="state" key={mode}>
+                    <div className="detail-header">
+                      <strong>{MODE_LABELS[mode]}</strong>
+                      {active ? <StatusBadge value="active" /> : null}
+                    </div>
+                    <p>{MODE_DETAILS[mode]}</p>
+                    {advanced ? (
+                      <p>Use the Advanced component profile configuration below to provide explicit defaults.</p>
+                    ) : (
+                      <button
+                        className={active ? "secondary" : "primary"}
+                        disabled={busy !== null || !profileSaveAvailable || active}
+                        onClick={() => void selectSetupMode(mode)}
+                      >
+                        {active ? "Selected" : `Use ${MODE_LABELS[mode]}`}
+                      </button>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+            <p>
+              Active profile: <code>{componentSetupStatus.active_profile_id ?? "not selected"}</code>
+            </p>
+          </>
+        )}
       </Card>
 
       <Card title="Applications & components">
@@ -241,14 +344,13 @@ export function SetupLifecyclePanel({
           This preview is computed before mutation. Blocked and manual actions are never silently
           installed, while already available components are explicit no-op reuse actions.
         </p>
-        <PlanTable status={currentStatus} />
+        <PlanTable status={loadedStatus} />
         <div className="actions">
           <button
             disabled={
               busy !== null
               || !provisionAvailable
               || pendingMutations.length === 0
-              || currentStatus.plan.blocking
             }
             onClick={() => void provision()}
           >
@@ -262,12 +364,13 @@ export function SetupLifecyclePanel({
             {busy === "validate" ? "Validating…" : "Validate readiness"}
           </button>
         </div>
-        {currentStatus.plan.blocking ? (
+        {loadedStatus.plan.blocking ? (
           <p role="alert">
-            Resolve the blocked or manual-required actions before setup can become ready.
+            Blocked or manual-required actions keep final readiness incomplete. Independent safe
+            pending actions may still be provisioned and retried individually.
           </p>
         ) : null}
-        {!currentStatus.plan.mutation_required ? (
+        {!loadedStatus.plan.mutation_required ? (
           <p>No pending automatic install or activation operation exists in the current plan.</p>
         ) : null}
       </Card>
@@ -276,25 +379,25 @@ export function SetupLifecyclePanel({
         <dl className="definition-list">
           <div>
             <dt>Setup</dt>
-            <dd><StatusBadge value={currentStatus.readiness.ready ? "ready" : "incomplete"} /></dd>
+            <dd><StatusBadge value={loadedStatus.readiness.ready ? "ready" : "incomplete"} /></dd>
           </div>
           <div>
             <dt>Canonical onboarding state</dt>
-            <dd><code>{currentStatus.readiness.canonical_onboarding_state ?? "unknown"}</code></dd>
+            <dd><code>{loadedStatus.readiness.canonical_onboarding_state ?? "unknown"}</code></dd>
           </div>
           <div>
             <dt>Active component profile</dt>
-            <dd><code>{currentStatus.active_profile_id ?? "not selected"}</code></dd>
+            <dd><code>{loadedStatus.active_profile_id ?? "not selected"}</code></dd>
           </div>
           <div>
             <dt>Dashboard</dt>
-            <dd>{currentStatus.readiness.dashboard_allowed ? "Available" : "Blocked until validation succeeds"}</dd>
+            <dd>{loadedStatus.readiness.dashboard_allowed ? "Available" : "Blocked until validation succeeds"}</dd>
           </div>
         </dl>
-        {currentStatus.readiness.blocking_actions.length > 0 ? (
-          <p>Blocking actions: {currentStatus.readiness.blocking_actions.join(", ")}</p>
+        {loadedStatus.readiness.blocking_actions.length > 0 ? (
+          <p>Blocking actions: {loadedStatus.readiness.blocking_actions.join(", ")}</p>
         ) : null}
-        {currentStatus.readiness.dashboard_allowed ? (
+        {loadedStatus.readiness.dashboard_allowed ? (
           <div className="actions"><a href="/">Open dashboard</a></div>
         ) : null}
       </Card>
