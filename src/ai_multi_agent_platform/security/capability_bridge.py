@@ -1,4 +1,4 @@
-"""Bridge issue-#12 capability hooks to the canonical issue-#15 authorization gate."""
+"""Bridge capability policy hooks to the canonical authorization gate."""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ class CapabilityAuthorizationBridge:
         return self._gate.approvals.pending_for(action)
 
     def pending_approval_id(self, invocation_id: str) -> str | None:
-        """Return the canonical #15 approval ID for a blocked capability invocation."""
+        """Return the canonical approval ID for a blocked capability invocation."""
 
         record = self.pending_approval(invocation_id)
         return None if record is None else record.approval_id

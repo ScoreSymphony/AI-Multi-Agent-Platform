@@ -27,7 +27,7 @@ class _BlockingBuildExecutor(Executor):
     @property
     def descriptor(self) -> ExecutorDescriptor:
         return ExecutorDescriptor(
-            executor_id="issue749-blocking-build",
+            executor_id="remote-build-blocking-executor",
             capabilities=(APPLICATION_BUILD_ACTION,),
         )
 
@@ -54,7 +54,7 @@ def _worker_request() -> KernelExecutionRequest:
         run_id=run_id,
         subject_type="task",
         subject_id=task_id,
-        context=OperationContext(correlation_id="issue-749-worker-cancel"),
+        context=OperationContext(correlation_id="remote-build-worker-cancel"),
         input={
             APPLICATION_BUILD_WORKER_INPUT_KEY: {
                 "schema": APPLICATION_BUILD_WORKER_SCHEMA,

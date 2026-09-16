@@ -1,4 +1,4 @@
-"""Issue-#745 hardening for refined scoped-memory provider conformance."""
+"""Hardening helpers for refined scoped-memory provider conformance."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from .scoped_memory import (
     assert_scoped_memory_provider_contract as _assert_base_scoped_memory_provider_contract,
 )
 
-_FILTER_MARKER = "issue-745-filter-marker"
+_FILTER_MARKER = "scoped-memory-filter-marker"
 
 
 def _filter_entry(
@@ -43,7 +43,7 @@ def _filter_entry(
         created_at=created_at,
         retention=RetentionPolicy.TASK_LIFETIME,
         origin=MemoryOrigin.IMPORTED,
-        provenance=(SourceRef(kind="conformance", ref=f"issue-745:{label}"),),
+        provenance=(SourceRef(kind="conformance", ref=f"scoped-memory-filter:{label}"),),
         memory_type=memory_type,
     )
 
@@ -142,11 +142,10 @@ async def assert_scoped_memory_provider_contract(
 ) -> None:
     """Verify the complete refined scoped-Memory provider contract.
 
-    The original reusable suite introduced by #746 proves canonical ``MemoryType``
-    round-tripping, exact/multi-type filtering, search parity and lifecycle semantics.
-    Issue #745 additionally requires filter composition: scope and ownership remain
-    independent authorization/visibility dimensions, and the result limit is applied only
-    after canonical scope/owner/type filters.
+    The reusable base suite proves canonical ``MemoryType`` round-tripping, exact/multi-type
+    filtering, search parity and lifecycle semantics. This hardening layer additionally proves
+    filter composition: scope and ownership remain independent authorization/visibility
+    dimensions, and the result limit is applied only after canonical scope/owner/type filters.
     """
 
     await _assert_base_scoped_memory_provider_contract(provider, context)

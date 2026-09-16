@@ -1,4 +1,4 @@
-"""Opt-in deployment composition for issue-#500 host-pressure admission."""
+"""Opt-in deployment composition for host-pressure admission."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class HostPressureDeploymentConfig:
 
     @classmethod
     def from_environment(cls, environ: Mapping[str, str]) -> HostPressureDeploymentConfig:
-        """Resolve the explicit #39/#240 pressure opt-in without hidden host tuning."""
+        """Resolve the explicit deployment pressure opt-in without hidden host tuning."""
 
         return cls(
             enabled=_bool(environ.get("PLATFORM_HOST_PRESSURE_ENABLED"), default=False),
@@ -89,7 +89,7 @@ def configure_distributed_host_pressure(
     *,
     provider: PressureSnapshotProvider | None = None,
 ) -> PressureSnapshotProvider | None:
-    """Opt one canonical distributed runtime into pressure admission and #16 telemetry."""
+    """Opt one canonical distributed runtime into pressure admission and telemetry."""
 
     if not config.enabled:
         return None

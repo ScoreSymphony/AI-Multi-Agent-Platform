@@ -1,4 +1,4 @@
-"""Issue-#500 pressure instrumentation over the canonical #16 Telemetry facade."""
+"""Host-pressure instrumentation over the canonical Telemetry facade."""
 
 from __future__ import annotations
 

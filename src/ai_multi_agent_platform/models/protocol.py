@@ -1,8 +1,8 @@
-"""Rich provider-neutral model request/response structures for issue #10.
+"""Rich provider-neutral model request/response structures.
 
-The core provider interface from issue #5 remains source-compatible. These
-structures encode into that stable ``ModelRequest`` envelope without importing
-provider SDK types or provider-native model identifiers.
+The core provider interface remains source-compatible. These structures encode into that
+stable ``ModelRequest`` envelope without importing provider SDK types or provider-native
+model identifiers.
 """
 
 from __future__ import annotations
@@ -230,7 +230,7 @@ class CanonicalModelRequest:
                 raise ValueError(f"{name} must not be blank")
 
     def to_contract_request(self) -> ModelRequest:
-        """Encode rich semantics into the stable issue-#5 request envelope."""
+        """Encode rich semantics into the stable provider request envelope."""
 
         canonical_messages = list(self.messages)
         if self.system_instruction is not None:

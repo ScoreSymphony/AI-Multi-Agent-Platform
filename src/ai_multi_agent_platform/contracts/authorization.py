@@ -22,7 +22,7 @@ class AuthorizationOutcome(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class AuthorizationRequest(LegacyAuthorizationRequest):
-    """Richer issue-#15 request while remaining an issue-#5 request subtype."""
+    """Rich authorization request extending the stable legacy request contract."""
 
     actor_type: str = "service"
     resource_type: str = "generic"
@@ -126,7 +126,7 @@ class AuthorizationDecision(LegacyAuthorizationDecision):
 def normalize_authorization_decision(
     decision: LegacyAuthorizationDecision,
 ) -> AuthorizationDecision:
-    """Upgrade an issue-#5 boolean decision at the issue-#15 boundary."""
+    """Normalize a legacy boolean decision into the canonical tri-state contract."""
 
     if isinstance(decision, AuthorizationDecision):
         return decision
