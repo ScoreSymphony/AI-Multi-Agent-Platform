@@ -11,9 +11,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  benchmark:
+  stress:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -35,7 +35,7 @@ jobs:
           import importlib.metadata
           print("pytest-xdist", importlib.metadata.version("pytest-xdist"))
           PY
-      - name: Run measured trials
+      - name: Run higher-concurrency stress trials
         shell: bash
         run: |
           set -euo pipefail
@@ -43,19 +43,13 @@ jobs:
 
           run_case() {
             local case_name="$1"
-            local test_path="$2"
-            local args="$3"
-            local repeats="$4"
-            local extra_args=()
-            if [ -n "$args" ]; then
-              read -r -a extra_args <<< "$args"
-            fi
-
+            local repeats="$2"
+            shift 2
             for trial in $(seq 1 "$repeats"); do
               echo "::group::${case_name} trial ${trial}/${repeats}"
               start_ns=$(date +%s%N)
               set +e
-              pytest "${extra_args[@]}" "$test_path"
+              pytest -n 4 --dist=loadfile "$@"
               status=$?
               set -e
               end_ns=$(date +%s%N)
@@ -79,32 +73,28 @@ jobs:
             done
           }
 
-          run_case unit-serial tests/unit "" 2
-          run_case unit-n4-loadfile tests/unit "-n 4 --dist=loadfile" 3
-          run_case unit-n4-loadscope tests/unit "-n 4 --dist=loadscope" 2
+          # Whole integration suite at higher concurrency. Optional live PostgreSQL/Pipelock
+          # resources are absent in normal PR CI, so this probes the default suite only.
+          run_case integration-n4-loadfile 3 tests/integration
 
-          run_case contract-serial tests/contract "" 2
-          run_case contract-n4-loadfile tests/contract "-n 4 --dist=loadfile" 3
-          run_case contract-n4-loadscope tests/contract "-n 4 --dist=loadscope" 2
+          # Concentrate the highest process/server/socket density into one xdist pool so
+          # port hand-off, subprocess lifecycle and worker cleanup races are more likely
+          # to surface than in the broad integration run.
+          run_case process-heavy-n4-loadfile 5 \
+            tests/integration/distributed \
+            tests/integration/workspaces \
+            tests/integration/mcp \
+            tests/integration/control_plane \
+            tests/e2e/files
 
-          run_case architecture-serial tests/architecture "" 1
-          run_case architecture-n2-loadfile tests/architecture "-n 2 --dist=loadfile" 2
-
-          run_case integration-serial tests/integration "" 1
-          run_case integration-n2-loadfile tests/integration "-n 2 --dist=loadfile" 2
-
-          run_case regression-serial tests/regression "" 1
-          run_case regression-n2-loadfile tests/regression "-n 2 --dist=loadfile" 2
-
-          run_case e2e-serial tests/e2e "" 1
-          run_case e2e-n2-loadfile tests/e2e "-n 2 --dist=loadfile" 2
-
-          run_case release-serial tests/release "" 1
-          run_case release-n2-loadfile tests/release "-n 2 --dist=loadfile" 2
-
-          # Performance tests are intentionally measured serially only: running
-          # benchmarks under worker contention would invalidate timing semantics.
-          run_case performance-serial tests/performance "" 1
+          # Cross-suite scheduling probe: prove that otherwise isolated files do not
+          # depend on suite execution order or process-global state leaking from prior runs.
+          run_case cross-suite-n4-loadfile 3 \
+            tests/unit \
+            tests/contract \
+            tests/architecture \
+            tests/regression \
+            tests/release
 
           echo "XDIST_AUDIT_FAILURES=$failures"
           if [ "$failures" -ne 0 ]; then
