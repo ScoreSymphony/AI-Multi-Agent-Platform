@@ -86,6 +86,31 @@ def test_human_success_recursively_redacts_nested_sensitive_response_fields() ->
     assert '"safe":"visible"' in rendered
 
 
+def test_human_table_redacts_sensitive_fields_before_column_rendering() -> None:
+    stdout = StringIO()
+    renderer = Renderer(json_mode=False, verbose=False, stdout=stdout)
+
+    renderer.local_success(
+        {
+            "items": [
+                {
+                    "database_password": "plaintext-database-password",
+                    "authorization": "Bearer plaintext-token",
+                    "safe": "visible",
+                }
+            ]
+        }
+    )
+
+    rendered = stdout.getvalue()
+    assert "plaintext-database-password" not in rendered
+    assert "plaintext-token" not in rendered
+    assert "database_password" in rendered
+    assert "authorization" in rendered
+    assert REDACTED in rendered
+    assert "visible" in rendered
+
+
 def test_json_error_redacts_nested_sensitive_details() -> None:
     stderr = StringIO()
     renderer = Renderer(json_mode=True, verbose=False, stderr=stderr)
