@@ -21,9 +21,7 @@ from ai_multi_agent_platform.distributed.placement_policy import (
 from ai_multi_agent_platform.domain import new_id
 
 
-def _resources(
-    *, cpu: float = 8.0, ram: int = 16_000, vram: int = 16_000
-) -> ResourceSnapshot:
+def _resources(*, cpu: float = 8.0, ram: int = 16_000, vram: int = 16_000) -> ResourceSnapshot:
     accelerators = (
         (
             AcceleratorResource(
