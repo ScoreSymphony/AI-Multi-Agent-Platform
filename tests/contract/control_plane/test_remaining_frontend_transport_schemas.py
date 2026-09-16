@@ -56,10 +56,38 @@ def test_observability_timeline_contract_covers_events_and_telemetry() -> None:
         "value",
     ]
 
+    failure_components = [
+        "domain_kernel",
+        "orchestration",
+        "agent",
+        "execution",
+        "model_provider_router",
+        "capability_tool",
+        "persistence_storage",
+        "authorization_approval",
+        "verification",
+        "scheduler_worker_node",
+        "automation",
+        "control_plane_ha",
+        "connector_browser",
+        "plugin_adapter",
+        "infrastructure_unknown",
+    ]
     telemetry = schemas["TelemetryTimelineEntry"]
+    assert telemetry["properties"]["component"]["enum"] == failure_components
+    assert telemetry["properties"]["outcome"]["enum"] == [
+        "unknown",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "timed_out",
+    ]
+    assert telemetry["properties"]["context"]["additionalProperties"] == {"type": "string"}
     assert telemetry["properties"]["duration_seconds"]["type"] == ["number", "null"]
     assert telemetry["properties"]["failure"]["oneOf"][-1] == {"type": "null"}
-    assert schemas["TelemetryFailure"]["required"] == ["component", "code", "retryable"]
+    failure = schemas["TelemetryFailure"]
+    assert failure["required"] == ["component", "code", "retryable"]
+    assert failure["properties"]["component"]["enum"] == failure_components
 
     timeline_response = specification["paths"]["/api/v1/tasks/{task_id}/timeline"]["get"][
         "responses"
