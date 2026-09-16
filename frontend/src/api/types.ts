@@ -26,9 +26,13 @@ import type {
   TaskResponsibility as GeneratedTaskResponsibility,
   TelemetryTimelineEntry as GeneratedTelemetryTimelineEntry,
   TimelineItem as GeneratedTimelineItem,
+  TimelinePage as GeneratedTimelinePage,
   UsageAggregate as GeneratedUsageAggregate,
+  UsageAggregatePage as GeneratedUsageAggregatePage,
   UsageBudget as GeneratedUsageBudget,
+  UsageBudgetPage as GeneratedUsageBudgetPage,
   UsageRecord as GeneratedUsageRecord,
+  UsageRecordPage as GeneratedUsageRecordPage,
   UsageTrendPoint as GeneratedUsageTrendPoint,
   Workspace as GeneratedWorkspace,
   WorkspaceSourceRef as GeneratedWorkspaceSourceRef,
@@ -139,6 +143,7 @@ export type CanonicalRun = Omit<GeneratedRun, "error"> & {
 export type CanonicalEvent = GeneratedCanonicalEvent;
 export type TelemetryTimelineEntry = GeneratedTelemetryTimelineEntry;
 export type TimelineItem = GeneratedTimelineItem;
+export type TimelinePage = GeneratedTimelinePage;
 
 export type APIErrorBody = GeneratedAPIError;
 export type APImanifest = GeneratedAPIManifest;
@@ -148,9 +153,12 @@ export type CanonicalModel = GeneratedModel;
 export type CanonicalModelProvider = GeneratedModelProvider;
 
 export type CanonicalUsageRecord = GeneratedUsageRecord;
+export type CanonicalUsageRecordPage = GeneratedUsageRecordPage;
 export type CanonicalUsageTrendPoint = GeneratedUsageTrendPoint;
 export type CanonicalUsageAggregate = GeneratedUsageAggregate;
+export type CanonicalUsageAggregatePage = GeneratedUsageAggregatePage;
 export type CanonicalUsageBudget = GeneratedUsageBudget;
+export type CanonicalUsageBudgetPage = GeneratedUsageBudgetPage;
 
 export type CreateProjectInput = Omit<GeneratedCreateProjectRequest, "project_id">;
 export type CreateWorkspaceInput = GeneratedCreateWorkspaceRequest;
