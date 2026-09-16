@@ -151,13 +151,14 @@ def score_candidate(
 def select_worker(evaluations: tuple[CandidateEvaluation, ...]) -> str | None:
     """Select the highest-scoring accepted worker with stable ID tie-breaking."""
 
-    accepted = (evaluation for evaluation in evaluations if evaluation.accepted)
+    accepted = [evaluation for evaluation in evaluations if evaluation.accepted]
+    if not accepted:
+        return None
     selected = min(
         accepted,
         key=lambda evaluation: (-evaluation.score, evaluation.worker_id),
-        default=None,
     )
-    return None if selected is None else selected.worker_id
+    return selected.worker_id
 
 
 def _reason(code: RejectionCode, message: str) -> RejectionReason:
