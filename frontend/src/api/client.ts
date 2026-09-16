@@ -33,6 +33,7 @@ import type {
   CanonicalCapabilityProvider,
 } from "./capabilities";
 import type { CanonicalReference, ReferenceCollection } from "./references";
+import type { TaskExecutionBudgetProjection } from "./taskBudgets";
 import {
   buildTerminalStreamUrl,
   type CanonicalTerminalSession,
@@ -109,6 +110,12 @@ export class ControlPlaneClient {
 
   getTask(taskId: string): Promise<CanonicalTask> {
     return this.request<CanonicalTask>(`/tasks/${encodeURIComponent(taskId)}`);
+  }
+
+  getTaskExecutionBudget(taskId: string): Promise<TaskExecutionBudgetProjection> {
+    return this.request<TaskExecutionBudgetProjection>(
+      `/task-execution-budgets/${encodeURIComponent(taskId)}`,
+    );
   }
 
   createTask(input: CreateTaskInput): Promise<CanonicalTask> {

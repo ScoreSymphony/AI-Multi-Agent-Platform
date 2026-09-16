@@ -14,6 +14,8 @@ from ai_multi_agent_platform.contracts import (
     OperationContext,
     PlatformEvent,
 )
+from ai_multi_agent_platform.execution.budgets.models import BudgetActionKind, BudgetDimension
+from ai_multi_agent_platform.execution.budgets.service import TaskBudgetAdmission
 from ai_multi_agent_platform.kernel.models import RunState, TaskState
 from ai_multi_agent_platform.models import ModelRegistry, RoutingRequirements
 from ai_multi_agent_platform.security import ActorIdentity, AuthorizationGate, ProposedAction
@@ -96,6 +98,7 @@ class PlanningService:
         coordinator: ActivatedPlanCoordinator | None = None,
         replan_policy: ReplanPolicy | None = None,
         event_sink: PlanningEventSink | None = None,
+        budget_admission: TaskBudgetAdmission | None = None,
     ) -> None:
         self.planner = planner
         self.repository = repository
@@ -107,6 +110,7 @@ class PlanningService:
         self.coordinator = coordinator
         self.replan_policy = replan_policy or ReplanPolicy()
         self._event_sink = event_sink
+        self._budget_admission = budget_admission
 
     async def propose(
         self,
@@ -157,7 +161,7 @@ class PlanningService:
         duplicate_trigger = self.repository.get_by_trigger(task_id, fingerprint)
         if duplicate_trigger is not None:
             return duplicate_trigger
-        self._enforce_replan_budget(task_id, trigger)
+        await self._admit_replan_budget(task_id, trigger)
 
         request = PlanningRequest(
             task_id=task_id,
@@ -279,6 +283,36 @@ class PlanningService:
             kernel=self.kernel,
             policy=self.replan_policy,
         )
+
+    async def _admit_replan_budget(self, task_id: str, trigger: PlanningTrigger) -> None:
+        if trigger is PlanningTrigger.INITIAL:
+            return
+        if self._budget_admission is None:
+            self._enforce_replan_budget(task_id, trigger)
+            return
+        decision = await self._budget_admission.admit(
+            task_id=task_id,
+            action=BudgetActionKind.REPLAN,
+            quantities={BudgetDimension.REPLANS: 1.0},
+            correlation_id=task_id,
+            provenance={"enforcement_point": "planning_replan"},
+        )
+        if not decision.permitted:
+            raise ContractError(
+                ErrorCode.RESOURCE_EXHAUSTED,
+                decision.reason,
+                details={
+                    "budget_outcome": decision.outcome.value,
+                    "budget_action": decision.action.value,
+                    "task_id": task_id,
+                    "blocking_dimension": (
+                        None
+                        if decision.blocking_dimension is None
+                        else decision.blocking_dimension.value
+                    ),
+                },
+            )
+        await self._budget_admission.reconcile(decision)
 
     def _enforce_replan_budget(self, task_id: str, trigger: PlanningTrigger) -> None:
         self._replan_support().enforce_budget(task_id, trigger)
