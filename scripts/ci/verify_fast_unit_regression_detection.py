@@ -68,7 +68,8 @@ def main() -> int:
     if EXPECTED_FAILURE_FRAGMENT not in output or "1 failed" not in output:
         print(output)
         raise RuntimeError(
-            "regression probe failed for an unexpected reason instead of the targeted unit invariant"
+            "regression probe failed for an unexpected reason instead of the targeted "
+            "unit invariant"
         )
 
     print(
