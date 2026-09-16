@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from ai_multi_agent_platform.contracts.errors import ContractError
+from ai_multi_agent_platform.security.async_authorization_policy import LocalAuthorizationPolicyStore
 from ai_multi_agent_platform.security.authentication import safe_actor
 from ai_multi_agent_platform.security.first_user_bootstrap import (
     FirstUserBootstrapService,
@@ -28,9 +29,12 @@ class AuthenticatedControlPlaneHTTP(_AuthenticatedControlPlaneHTTP):
         control_plane: Any,
         authentication: Any,
         *,
+        authorization: LocalAuthorizationPolicyStore | None = None,
         first_user_bootstrap: FirstUserBootstrapService | None = None,
         **kwargs: Any,
     ) -> None:
+        if first_user_bootstrap is None and authorization is not None:
+            first_user_bootstrap = FirstUserBootstrapService(authentication, authorization)
         if first_user_bootstrap is not None:
             kwargs.setdefault("runtime_authentication", first_user_bootstrap.runtime_authentication)
         super().__init__(control_plane, authentication, **kwargs)
