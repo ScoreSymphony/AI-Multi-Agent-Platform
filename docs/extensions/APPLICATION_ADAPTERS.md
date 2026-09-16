@@ -49,6 +49,16 @@ health: unhealthy
 
 That distinction is required for crash recovery, runtime restart, node loss and reconciliation.
 
+## Durable state and restart recovery
+
+The single-node reference persistence adapter is `SqliteApplicationRepository`. It stores canonical installed Application definitions and Application Instance state in `db/applications.sqlite3` when Application Adapters are used.
+
+The Application store is optional in the single-node backup inventory because Application Adapters are an optional/beta capability; deployments that never install an Application do not need an empty database. Once the store exists, backup/restore includes it like the platform's other optional durable stores.
+
+Persistence contains canonical metadata only. Secret bindings are serialized as `SecretReference` objects and resolved secret values are never written to the Application repository. Provider-private process/container/runtime handles also remain outside canonical persistence.
+
+`ApplicationLifecycleService` persists desired state before invoking an external runtime transition. A failed start can therefore leave `desired=running` with an observed failure. After a platform restart, reopening the repository and calling `recover_all()` supplies that persisted intent to the selected runtime adapter, which can reconcile the observed state without changing canonical instance identity.
+
 ## Runtime boundary
 
 `ApplicationRuntime` is the platform-owned lifecycle boundary. A concrete backend implements preparation, start, stop, restart, removal, status, health, endpoint resolution, logs and reconciliation/recovery.
