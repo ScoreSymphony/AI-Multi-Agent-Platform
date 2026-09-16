@@ -47,7 +47,7 @@ an immutable `SourceObservation` containing the strongest source identity availa
 The same URL or repository can therefore have many observations. Changed content creates a new
 observation; the previous observation is not rewritten.
 
-Repository Intelligence (#502) is a first-class source producer. Research consumes its existing
+Repository Intelligence is a first-class source producer. Research consumes its existing
 `RepositoryIntelligenceProvenance` (`repository_id`, requested/resolved revision, provider and
 freshness) rather than inventing a second code-intelligence provenance model. Git/source state and
 captured snapshots remain authoritative for exact source identity.
