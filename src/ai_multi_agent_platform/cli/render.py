@@ -38,8 +38,8 @@ class Renderer:
         self.stderr = stderr or sys.stderr
 
     def success(self, response: ClientResponse) -> None:
-        safe_body = _redacted(response.body)
         if self.json_mode:
+            safe_body = _redacted(response.body)
             payload = {
                 "data": safe_body,
                 "meta": {
@@ -51,7 +51,7 @@ class Renderer:
             }
             self.stdout.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
             return
-        self._human(safe_body)
+        self._human(response.body)
         if self.verbose:
             if response.request_id:
                 self.stdout.write(f"Request ID: {response.request_id}\n")
@@ -59,12 +59,12 @@ class Renderer:
                 self.stdout.write(f"Correlation ID: {response.correlation_id}\n")
 
     def local_success(self, data: JsonValue) -> None:
-        safe_data = _redacted(data)
         if self.json_mode:
+            safe_data = _redacted(data)
             payload = {"data": safe_data, "meta": {"local": True}}
             self.stdout.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
         else:
-            self._human(safe_data)
+            self._human(data)
 
     def error(self, error: APIClientError | TransportError | ProfileError | LocalCLIError) -> None:
         normalized = _redacted(_normalize_error(error))
@@ -82,35 +82,45 @@ class Renderer:
             self.stderr.write(f"Correlation ID: {correlation_id}\n")
 
     def _human(self, value: JsonValue) -> None:
-        if isinstance(value, dict):
-            items = value.get("items")
+        # Keep the redaction boundary adjacent to human output so a future internal
+        # caller cannot bypass it by invoking the renderer with a raw payload.
+        safe_value = _redacted(value)
+        if isinstance(safe_value, dict):
+            items = safe_value.get("items")
             if isinstance(items, list):
                 for key in ("task_id", "plan_id", "plan_revision"):
-                    if key in value:
-                        self.stdout.write(f"{key}: {_display(value.get(key))}\n")
+                    if key in safe_value:
+                        self.stdout.write(f"{key}: {_display(safe_value.get(key))}\n")
                 self._table(items)
-                total = value.get("total")
-                next_cursor = value.get("next_cursor")
+                total = safe_value.get("total")
+                next_cursor = safe_value.get("next_cursor")
                 if isinstance(total, int):
                     self.stdout.write(f"Total: {total}\n")
                 if isinstance(next_cursor, str):
                     self.stdout.write(f"Next cursor: {next_cursor}\n")
                 return
-            for key, item in value.items():
-                self.stdout.write(f"{key}: {_display(item)}\n")
+            for key, item in safe_value.items():
+                safe_item = _redacted_field(key, item)
+                # `safe_item` has been key-aware redacted immediately above; CodeQL's
+                # generic sensitive-data flow does not model this project-local sanitizer.
+                # codeql[py/clear-text-logging-sensitive-data]
+                self.stdout.write(f"{key}: {_display(safe_item)}\n")
             return
-        if isinstance(value, list):
-            self._table(value)
+        if isinstance(safe_value, list):
+            self._table(safe_value)
             return
-        self.stdout.write(f"{_display(value)}\n")
+        self.stdout.write(f"{_display(safe_value)}\n")
 
     def _table(self, items: list[JsonValue]) -> None:
-        if not items:
+        safe_items = _redacted(items)
+        if not isinstance(safe_items, list):
+            raise TypeError("redacted CLI table input must remain a JSON list")
+        if not safe_items:
             self.stdout.write("No items.\n")
             return
-        rows = [item for item in items if isinstance(item, dict)]
-        if len(rows) != len(items):
-            for item in items:
+        rows = [item for item in safe_items if isinstance(item, dict)]
+        if len(rows) != len(safe_items):
+            for item in safe_items:
                 self.stdout.write(f"{_display(item)}\n")
             return
         preferred = [
@@ -195,6 +205,13 @@ def _normalize_error(
 
 def _redacted(value: JsonValue) -> JsonValue:
     return redact_sensitive(value)
+
+
+def _redacted_field(key: str, value: JsonValue) -> JsonValue:
+    redacted = redact_sensitive({key: value})
+    if not isinstance(redacted, dict):
+        raise TypeError("redacted CLI field must remain a JSON object")
+    return redacted[key]
 
 
 def _display(value: object) -> str:
