@@ -52,6 +52,7 @@ from .service import (
     ApplicationRecoveryReport,
     ApplicationRuntimeRegistry,
 )
+from .sqlite_repository import SqliteApplicationRepository
 
 __all__ = [
     "APPLICATION_MANIFEST_SCHEMA",
@@ -97,6 +98,7 @@ __all__ = [
     "ApplicationVolumeKind",
     "ApplicationVolumeMount",
     "InMemoryApplicationRepository",
+    "SqliteApplicationRepository",
     "application_manifest_from_document",
     "validate_application_manifest_document",
 ]
