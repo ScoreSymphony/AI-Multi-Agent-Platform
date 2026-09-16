@@ -58,6 +58,31 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **ADR:** none required for the library choice; canonical architecture remains implementation-neutral.
 - **Adoption review:** `docs/upstream/JSONSCHEMA_ADOPTION.md`.
 
+### tzdata
+
+- **Purpose:** first-party IANA time-zone data fallback for Python `zoneinfo` on supported Windows runtimes.
+- **Status:** integrated through #1031; provenance and release-policy review completed by #1032.
+- **Integration category/categories:** library dependency.
+- **Canonical upstream repository:** `https://github.com/python/tzdata`.
+- **Pinned version/tag/commit or deployed revision:** `2026.4` / tag `2026.4` / `b4d2086cb5a5ca5032ef8f6955057c49e5e12903`.
+- **Verified license:** Apache-2.0 for the package; bundled IANA time-zone source data identifies itself as public domain.
+- **License verification date:** 2026-09-16.
+- **Last review date:** 2026-09-16.
+- **Platform adapter/boundary:** Python standard-library `zoneinfo` fallback data source; no `tzdata` types appear in canonical platform contracts.
+- **Local source path:** none; normal package dependency only.
+- **Source origin/path:** no upstream package source or data is copied into this repository.
+- **Modified locally:** no.
+- **Required notices / attribution:** the installed package retains its Apache-2.0 license metadata; no package source is vendored or redistributed by this repository. The bundled IANA source data is marked public domain.
+- **Known compatibility constraints:** platform Python >=3.12; pinned `tzdata==2026.4`; declared only for `platform_system == 'Windows'`. `zoneinfo` uses system IANA data when available and falls back to `tzdata`, so the normal non-Windows dependency/install path is unchanged.
+- **Security/deployment/resource constraints:** data-only package; no network access, credentials, subprocess, service, database, GPU or external infrastructure is required.
+- **Required for baseline:** yes on the supported Windows baseline; the environment marker keeps it uninstalled on platforms that use system IANA data.
+- **Recurring paid service required:** no.
+- **Update/review method:** explicit pinned dependency update; verify the `python/tzdata` release, PyPI provenance, package license and bundled IANA data treatment; preserve the Windows marker; run Windows timezone regression coverage, declared/resolved dependency inventory tests and full repository CI.
+- **Exit/replacement strategy:** remove the package if the supported Windows baseline gains a reliable IANA system data source, or replace it with another `zoneinfo`-compatible data source while preserving canonical platform contracts and timezone behavior.
+- **ADR:** none required because the existing Python standard-library timezone boundary is unchanged.
+- **Provenance:** `upstream/tzdata.yaml`.
+- **Adoption review:** `docs/upstream/TZDATA_ADOPTION.md`.
+
 ### Model Context Protocol Python SDK
 
 - **Purpose:** optional concrete MCP transport for stdio subprocess and Streamable HTTP tool providers.
@@ -262,21 +287,22 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 
 These packages are third-party software already declared by `pyproject.toml`. Packages promoted to required or architecture-significant production use must also appear in the registry above when required by `LICENSE_POLICY.md`.
 
-| Package | Role | Manifest constraint | Canonical upstream | License reviewed 2026-09-02 | Architecture-significant now? |
+| Package | Role | Manifest constraint | Canonical upstream | License reviewed | Architecture-significant now? |
 | --- | --- | --- | --- | --- | --- |
-| setuptools | build backend requirement | `>=75` | `https://github.com/pypa/setuptools` | MIT | no |
-| wheel | build requirement | unbounded in build-system manifest | `https://github.com/pypa/wheel` | MIT | no |
-| build | development build tool | `>=1.2,<2` | `https://github.com/pypa/build` | MIT | no |
-| jsonschema | runtime capability schema validation | `==4.26.0` | `https://github.com/python-jsonschema/jsonschema` | MIT | yes; integrated for #12 |
-| mcp | optional MCP transport + CI integration coverage | `==2.2.0` | `https://github.com/modelcontextprotocol/python-sdk` | MIT | yes; optional adapter recorded above |
-| litellm | optional model gateway SDK / proxy compatibility target | `==1.100.1` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed | yes; optional adapter recorded above |
-| uvicorn | optional ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause | no |
-| psycopg | optional PostgreSQL HA coordination transport | `==3.3.5` | `https://github.com/psycopg/psycopg` | LGPL-3.0-only | yes; optional adapter recorded above |
-| pytest | test runner | `>=8.3,<10` | `https://github.com/pytest-dev/pytest` | MIT | no |
-| ruff | linting | `>=0.12,<1` | `https://github.com/astral-sh/ruff` | MIT | no |
-| mypy | static type checking | `>=1.17,<3` | `https://github.com/python/mypy` | MIT | no |
+| setuptools | build backend requirement | `>=75` | `https://github.com/pypa/setuptools` | MIT (2026-09-02) | no |
+| wheel | build requirement | unbounded in build-system manifest | `https://github.com/pypa/wheel` | MIT (2026-09-02) | no |
+| build | development build tool | `>=1.2,<2` | `https://github.com/pypa/build` | MIT (2026-09-02) | no |
+| jsonschema | runtime capability schema validation | `==4.26.0` | `https://github.com/python-jsonschema/jsonschema` | MIT (2026-09-02) | yes; integrated for #12 |
+| tzdata | Windows runtime IANA time-zone data fallback for `zoneinfo` | `==2026.4; platform_system == 'Windows'` | `https://github.com/python/tzdata` | Apache-2.0 (2026-09-16) | yes; required only for supported Windows baseline |
+| mcp | optional MCP transport + CI integration coverage | `==2.2.0` | `https://github.com/modelcontextprotocol/python-sdk` | MIT (2026-09-14) | yes; optional adapter recorded above |
+| litellm | optional model gateway SDK / proxy compatibility target | `==1.100.1` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed (2026-09-14) | yes; optional adapter recorded above |
+| uvicorn | optional ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause (2026-09-02) | no |
+| psycopg | optional PostgreSQL HA coordination transport | `==3.3.5` | `https://github.com/psycopg/psycopg` | LGPL-3.0-only (2026-09-13) | yes; optional adapter recorded above |
+| pytest | test runner | `>=8.3,<10` | `https://github.com/pytest-dev/pytest` | MIT (2026-09-02) | no |
+| ruff | linting | `>=0.12,<1` | `https://github.com/astral-sh/ruff` | MIT (2026-09-02) | no |
+| mypy | static type checking | `>=1.17,<3` | `https://github.com/python/mypy` | MIT (2026-09-02) | no |
 
-The manifest currently uses version constraints rather than a repository lockfile for most packages, so exact resolved tool versions are environment-dependent. Architecture-significant #11/#12 dependencies are pinned directly; their transitive packages still resolve from upstream metadata until a repository-wide lock/reproducible-build policy is introduced.
+The manifest currently uses version constraints rather than a repository lockfile for most packages, so exact resolved tool versions are environment-dependent. Governed production dependencies are pinned where required; release evidence records both the concrete resolved Python environment and the declared runtime requirements without evaluating PEP 508 environment markers, so platform-conditional pins remain visible. Transitive packages still resolve from upstream metadata until a repository-wide lock/reproducible-build policy is introduced.
 
 ## Architecture-upstream entry template
 

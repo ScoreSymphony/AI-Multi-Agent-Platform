@@ -6,6 +6,7 @@
   "sbom_ref": "REPLACE_WITH_IMMUTABLE_SBOM_REF",
   "provenance_ref": "REPLACE_WITH_IMMUTABLE_PROVENANCE_REF",
   "dependency_sets": [
+    {"name": "python-declared", "ecosystem": "python", "kind": "declared_set", "path": "../.release-evidence/python-declared.txt", "source_ref": "git:${SOURCE_COMMIT}:pyproject.toml#project.dependencies"},
     {"name": "python-resolved", "ecosystem": "python", "kind": "resolved_set", "path": "../.release-evidence/python-resolved.txt", "source_ref": "artifact:python-resolved.txt"},
     {"name": "frontend-lock", "ecosystem": "npm", "kind": "lockfile", "path": "../frontend/package-lock.json", "source_ref": "git:${SOURCE_COMMIT}:frontend/package-lock.json"}
   ],

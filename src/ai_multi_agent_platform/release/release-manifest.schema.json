@@ -108,7 +108,7 @@
       "properties": {
         "name": {"type": "string", "minLength": 1},
         "ecosystem": {"type": "string", "minLength": 1},
-        "kind": {"enum": ["lockfile", "resolved_set"]},
+        "kind": {"enum": ["lockfile", "resolved_set", "declared_set"]},
         "source_ref": {"$ref": "#/$defs/reference"},
         "digest": {"$ref": "#/$defs/digest"}
       }

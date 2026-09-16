@@ -1,0 +1,32 @@
+name: "tzdata"
+purpose: "Windows runtime fallback provider for IANA time zone data used by Python zoneinfo"
+status: integrated
+integration_categories:
+  - "library dependency"
+canonical_upstream: "https://github.com/python/tzdata"
+pinned_revision: "2026.4"
+verified_license: "Apache-2.0"
+license_verification_date: "2026-09-16"
+last_review_date: "2026-09-16"
+platform_adapter_or_boundary: "Python standard-library zoneinfo data-source fallback; no tzdata types are exposed through canonical platform contracts"
+local_source_path: ""
+source_origin_path: ""
+modified_locally: false
+modification_summary: ""
+required_notices: []
+compatibility_constraints:
+  - "Platform Python baseline is >=3.12; tzdata 2026.4 supports Python >=2 and is consumed by the standard-library zoneinfo fallback path."
+  - "Declared only when platform_system == 'Windows' because supported Windows environments do not normally provide an IANA zoneinfo database in the standard search path."
+  - "The dependency is pinned as tzdata==2026.4 for the supported Windows baseline."
+security_constraints:
+  - "Package is data-only for zoneinfo lookup and requires no network access, credentials, subprocesses or external service at runtime."
+deployment_constraints:
+  - "Installed only on Windows through the PEP 508 environment marker in pyproject.toml; non-Windows installations continue to use system IANA data when available."
+resource_constraints:
+  - "No service, port, database, GPU or recurring paid service is required."
+required_for_baseline: true
+recurring_paid_service_required: false
+update_review_method: "Explicit dependency update PR; verify the python/tzdata release, PyPI provenance, package license and bundled IANA data treatment, then run Windows timezone regression coverage, dependency inventory validation and full CI."
+exit_replacement_strategy: "Remove the package only if the supported Windows baseline gains a reliable IANA time-zone data source or replace it with another zoneinfo-compatible data source while preserving platform timezone behavior and public contracts."
+adr: ""
+notes: "PyPI release 2026.4 was published 2026-09-12 from python/tzdata tag 2026.4 (commit b4d2086cb5a5ca5032ef8f6955057c49e5e12903). The package is Apache-2.0; the bundled IANA tzdata source declares its data public domain. No upstream source is vendored by this repository."

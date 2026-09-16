@@ -19,11 +19,19 @@ This directory contains operator-facing, machine-readable release metadata for i
   release candidate can pass validation.
 - Runtime release manifests use release-manifest schema v2 shipped with
   `ai_multi_agent_platform.release`.
-- Manifest v2 binds exact dependency lockfiles/resolved dependency sets, typed gate evidence,
-  source commit, artifact digests, SBOM and provenance references into one release snapshot.
+- Manifest v2 binds declared dependency sets, exact dependency lockfiles/resolved dependency sets,
+  typed gate evidence, source commit, artifact digests, SBOM and provenance references into one
+  release snapshot.
 - Authoritative integration provenance remains in `upstream/*.yaml`; release artifacts copy the
   exact reviewed revision and attach release-specific hashes/SBOM/provenance rather than replacing
   those governance records.
+
+For Python, the release workflow records two complementary dependency views. The resolved set in
+`.release-evidence/python-resolved.txt` captures packages installed in the release runner's concrete
+environment. The declared set in `.release-evidence/python-declared.txt` is generated directly from
+`[project].dependencies` without evaluating PEP 508 environment markers. Both are bound into the
+release manifest. This prevents a Linux release runner from silently omitting platform-conditional
+requirements such as the Windows-only `tzdata` baseline from release evidence.
 
 Use `platform-release generate --source-commit <sha> --input <path> --output <path>` to assemble a
 manifest from the exact source commit, canonical `VersionSnapshot`, reviewed compatibility inventory,
@@ -49,8 +57,8 @@ rewrites production pins, commits changes or deploys an update.
 
 The repository CI also treats `upstream/*.yaml` as the governance authority for important upstream
 pins. Tests fail if the reviewed compatibility snapshot, packaged snapshot, Hermes runtime pin,
-Hermes/Forge CI checkout revisions, LiteLLM optional dependency pin or the pinned LiteLLM integration
-test drift away from the governed revisions.
+Hermes/Forge CI checkout revisions, LiteLLM optional dependency pin or governed direct dependency
+pins drift away from the reviewed revisions.
 
 `platform-release upstream-discover-git` is an optional provider-neutral Git-remote discovery
 adapter. It uses immutable remote HEADs only as advisory observations. A changed revision is
