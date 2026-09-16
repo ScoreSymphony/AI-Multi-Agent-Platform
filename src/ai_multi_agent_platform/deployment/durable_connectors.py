@@ -2,142 +2,64 @@
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass, fields
-from typing import Any
+from collections.abc import Iterable
+from dataclasses import dataclass
 
-from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.accounting import AccountingService
 from ai_multi_agent_platform.application_distribution import (
-    ApplicationBuildLifecycleBackend,
-    ApplicationCommandExecutor,
     ApplicationDistributionService,
-    DistributedApplicationBuildLifecycleBackend,
-    DistributedBuildTargetMatcher,
-    GitHubReleasePublisher,
     JsonApplicationReleaseRepository,
-    LocalBuildTargetMatcher,
-)
-from ai_multi_agent_platform.application_distribution.control_plane import (
-    register_application_distribution_control_plane,
+    ReleaseGatePolicy,
 )
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.connectors import (
     ConnectorRegistry,
     ConnectorService,
-    DurableGitHubReleaseConnectorProvider,
     SqliteConnectorRepository,
 )
-from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
-from ai_multi_agent_platform.context import (
-    ContextEntryRole,
-    ContextSourceAdapterBinding,
-    ContextSourceType,
-)
-from ai_multi_agent_platform.context.lifecycle import ContextLifecycleSourceRequest
-from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import DistributedRuntime
-from ai_multi_agent_platform.kernel import (
-    EventSourcedRunRepository,
-    EventSourcedTaskRepository,
-    PlatformKernel,
-)
-from ai_multi_agent_platform.learning.single_node import (
-    SingleNodeLearningComposition,
-    build_single_node_learning,
-)
-from ai_multi_agent_platform.models import ModelRoutingProfileRef
-from ai_multi_agent_platform.observability import (
-    EgressTelemetryAuditSink,
-    FailureComponent,
-    InMemoryExporter,
-    Telemetry,
-    TelemetryContext,
-)
+from ai_multi_agent_platform.kernel import PlatformKernel
+from ai_multi_agent_platform.learning.single_node import SingleNodeLearningComposition
+from ai_multi_agent_platform.observability import InMemoryExporter
 from ai_multi_agent_platform.onboarding import OnboardingModelAdapter
-from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.planning import (
     JsonPlanningRepository,
-    PlanningOrchestratorAdapter,
     PlanningService,
-    PolicyAwarePlanningEnvironmentResolver,
     ReplanningEvidenceBridge,
-    planning_command_handlers,
-    planning_resource_services,
-)
-from ai_multi_agent_platform.planning.composition import (
-    PlanningBindingCoordinator,
-    PlanningOnlyLifecycleBackend,
-    ReferencePlanningService,
 )
 from ai_multi_agent_platform.repositories import RepositoryDiscoveryResolver
-from ai_multi_agent_platform.repositories.connector_bootstrap import (
-    connector_repository_discovery_resolver,
-)
-from ai_multi_agent_platform.security import (
-    ActorType,
-    AuthorizationAction,
-    AuthorizedLifecycleBackend,
-    LocalPrincipalPolicy,
-    ResourceType,
-    build_durable_egress_runtime,
-)
-from ai_multi_agent_platform.templates import (
-    AgentTemplateExporter,
-    AutomationTemplateExporter,
-    PlatformTemplateEnvironmentResolver,
-    register_template_control_plane,
-)
-from ai_multi_agent_platform.verification.agent_repair import (
-    KernelAgentRepairExecutor,
-    ProducerAgentRepairBindingProvider,
-)
 from ai_multi_agent_platform.verification.async_agent_workflow import (
     AsyncAutomaticReviewerWorkflow,
-)
-from ai_multi_agent_platform.verification.gate import VerificationCompletionAuthority
-from ai_multi_agent_platform.verification.output_workflow import (
-    AutomaticReviewerOutputCoordinator,
-    PolicyMetadataReviewerResolver,
-    install_automatic_reviewer_output_observer,
-)
-from ai_multi_agent_platform.verification.reference_reviewer import ModelRuntimeReviewerExecutor
-from ai_multi_agent_platform.verification.repair import VerificationRepairRuntime
-from ai_multi_agent_platform.verification.reviewer_input import (
-    KernelFileReviewerSubjectInputProvider,
 )
 from ai_multi_agent_platform.verification.reviewer_recovery import (
     AutomaticReviewerStartupReconciler,
 )
 
+from .composition.durable import (
+    ApplicationDistributionBundle,
+    AutomaticReviewBundle,
+    ConnectorFoundationBundle,
+    EgressConnectorBundle,
+    PlanningBundle,
+    build_application_distribution,
+    build_automatic_review,
+    build_connector_foundation,
+    build_connector_services,
+    build_egress_foundation,
+    build_planning,
+)
+from .composition.durable_extensions import (
+    DurableExtensionBundle,
+    build_durable_extensions,
+    register_durable_template_environment,
+)
+from .composition.foundation import build_single_node_foundation
 from .config import SingleNodeConfig
-from .context_operationalization import (
-    SingleNodeContextComposition,
-    install_single_node_context,
-)
+from .context_operationalization import SingleNodeContextComposition
 from .egress_bindings import EgressDeploymentBindings
-from .handoff_composition import (
-    HandoffDeploymentComposition,
-    build_single_node_handoff_composition,
-)
-from .reference_multi_agent import (
-    ReferenceIncomingHandoffContextAdapter,
-    ReferenceMultiAgentPlanner,
-)
-from .single_node import (
-    SingleNodeDeployment as BaseSingleNodeDeployment,
-)
-from .single_node import (
-    SingleNodeSmokeResult,
-)
-from .single_node import (
-    build_single_node_deployment as _build_base_single_node_deployment,
-)
-
-_APPLICATION_BUILD_PRINCIPAL = "service:application-distribution"
-_APPLICATION_BUILD_SECRET_PRINCIPAL = "service:application-build-secrets"
-_GITHUB_RELEASE_CONNECTOR_PRINCIPAL = "connector.github-releases"
+from .handoff_composition import HandoffDeploymentComposition
+from .single_node import SingleNodeDeployment as BaseSingleNodeDeployment
+from .single_node import SingleNodeSmokeResult, build_single_node_deployment_from_foundation
 
 
 @dataclass(slots=True)
@@ -172,373 +94,143 @@ def build_single_node_deployment(
     distributed_runtime: DistributedRuntime | None = None,
     enable_distributed_execution: bool = False,
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
+    application_release_gate_policy: ReleaseGatePolicy | None = None,
 ) -> SingleNodeDeployment:
-    """Build the normal durable single-node profile.
+    """Build the durable profile with egress established before ModelRuntime."""
 
-    The lower-level ``deployment.single_node`` composition remains usable by focused tests and
-    explicitly minimal/ephemeral profiles. Public deployment/server composition comes through this
-    wrapper so Connector Definitions, Connections, application releases, planning proposals,
-    canonical Context Bundle/Run-binding evidence, one durable egress policy runtime, governed
-    Learning, automatic reviewer workflows and Agent Handoffs survive process restarts without
-    requiring hosted services.
-    """
-
-    config.prepare_directories()
-    connector_repository = SqliteConnectorRepository(config.database_dir / "connectors.sqlite3")
-    connector_registry = ConnectorRegistry()
-    effective_repository_resolver = repository_discovery_resolver or (
-        connector_repository_discovery_resolver(connector_repository, connector_registry)
-    )
-
-    base = _build_base_single_node_deployment(
+    foundation = build_single_node_foundation(
         config,
-        onboarding_model_adapters=onboarding_model_adapters,
         secret_provider=secret_provider,
-        accounting_service=accounting_service,
         observability_exporter=observability_exporter,
+    )
+    connector_foundation = build_connector_foundation(
+        config,
+        repository_discovery_resolver=repository_discovery_resolver,
+    )
+    egress = build_egress_foundation(
+        config,
+        foundation.security,
+        foundation.observability,
+    )
+    base = build_single_node_deployment_from_foundation(
+        config,
+        foundation,
+        onboarding_model_adapters=onboarding_model_adapters,
+        accounting_service=accounting_service,
         distributed_runtime=distributed_runtime,
         enable_distributed_execution=enable_distributed_execution,
-        repository_discovery_resolver=effective_repository_resolver,
+        repository_discovery_resolver=connector_foundation.repository_discovery_resolver,
+        model_runtime_factory=egress.model_runtime,
+    )
+    automatic_review = build_automatic_review(base)
+    egress_connectors = build_connector_services(base, connector_foundation, egress)
+    application = build_application_distribution(
+        config,
+        base,
+        connector_foundation,
+        egress_connectors,
+        enable_distributed_execution=enable_distributed_execution,
+        release_gate_policy=application_release_gate_policy,
+    )
+    planning = build_planning(config, base)
+    extensions = build_durable_extensions(
+        base,
+        egress=egress,
+        planning=planning,
+    )
+    register_durable_template_environment(base, connector_foundation.registry)
+    return _extend_base_deployment(
+        base,
+        connector_foundation=connector_foundation,
+        automatic_review=automatic_review,
+        egress_connectors=egress_connectors,
+        application=application,
+        planning=planning,
+        extensions=extensions,
     )
 
-    # Compose #711 on the normal durable kernel. Ordinary attach_result/attach_artifact calls stay
-    # the only producer API; automatic review remains explicit opt-in in versioned Verification
-    # policy metadata. A needs_changes result routes one bounded canonical repair Step back through
-    # the exact producer Agent before a fresh exact-subject review.
-    completion = base.kernel._completion_authority  # noqa: SLF001
-    if not isinstance(completion, VerificationCompletionAuthority):
-        raise RuntimeError("normal single-node kernel is missing Verification completion authority")
-    reviewer_inputs = KernelFileReviewerSubjectInputProvider(
-        tasks=EventSourcedTaskRepository(base.kernel_repository),
-        runs=EventSourcedRunRepository(base.kernel_repository),
-        files=base.files,
-    )
-    repair_runtime = VerificationRepairRuntime(
-        base.verification,
-        completion,
-        base.kernel,
-        binding_provider=ProducerAgentRepairBindingProvider(),
-    )
-    automatic_reviewer = AsyncAutomaticReviewerWorkflow(
-        runtime=base.verification_runtime,
-        completion=completion,
-        agents=base.agent_runtime,
-        resolver=PolicyMetadataReviewerResolver(completion),
-        executor=ModelRuntimeReviewerExecutor(
-            agents=base.agent_runtime,
-            models=base.model_runtime,
-            inputs=reviewer_inputs,
-        ),
-        repair_runtime=repair_runtime,
-        repair_executor=KernelAgentRepairExecutor(base.kernel),
-    )
-    reviewer_recovery = AutomaticReviewerStartupReconciler(
-        workflow=automatic_reviewer,
-        agents=base.agent_runtime,
-        verification=base.verification,
-        tasks=base.kernel,
-    )
-    automatic_review_output = AutomaticReviewerOutputCoordinator(
-        kernel=base.kernel,
-        runtime=base.verification_runtime,
-        completion=completion,
-        reviewer=automatic_reviewer,
-    )
-    install_automatic_reviewer_output_observer(base.kernel, automatic_review_output)
 
-    egress_runtime = build_durable_egress_runtime(
-        config.database_dir / "egress-profiles.json",
-        authorization=base.authorization,
-        approval_gate=base.approval_gate,
-        audit_sink=EgressTelemetryAuditSink(base.telemetry),
-    )
-    egress = EgressDeploymentBindings(egress_runtime)
-    base.model_runtime.egress_gate = egress.runtime.gate
+def _extend_base_deployment(
+    base: BaseSingleNodeDeployment,
+    *,
+    connector_foundation: ConnectorFoundationBundle,
+    automatic_review: AutomaticReviewBundle,
+    egress_connectors: EgressConnectorBundle,
+    application: ApplicationDistributionBundle,
+    planning: PlanningBundle,
+    extensions: DurableExtensionBundle,
+) -> SingleNodeDeployment:
+    """Promote the base deployment to the durable public profile explicitly."""
 
-    connectors = egress.connector_service(
-        connector_repository,
-        connector_registry,
-        authorization_gate=base.approval_gate,
-    )
-    register_connector_control_plane(base.control_plane, connectors)
-    egress.register_control_plane(base.control_plane)
-
-    if not base.authorization.has_policy(_APPLICATION_BUILD_PRINCIPAL):
-        base.authorization.register(
-            LocalPrincipalPolicy(
-                principal_ref=_APPLICATION_BUILD_PRINCIPAL,
-                actor_types=frozenset({ActorType.SERVICE}),
-                allowed_actions=frozenset(
-                    {
-                        AuthorizationAction.EXECUTE,
-                        AuthorizationAction.READ,
-                        AuthorizationAction.MODIFY,
-                    }
-                ),
-                resource_types=frozenset({ResourceType.RUN}),
-            )
-        )
-    if base.secrets is not None and not base.authorization.has_policy(
-        _APPLICATION_BUILD_SECRET_PRINCIPAL
-    ):
-        base.authorization.register(
-            LocalPrincipalPolicy(
-                principal_ref=_APPLICATION_BUILD_SECRET_PRINCIPAL,
-                actor_types=frozenset({ActorType.SERVICE}),
-                allowed_actions=frozenset({AuthorizationAction.INVOKE_SENSITIVE_CAPABILITY}),
-                resource_types=frozenset({ResourceType.SECRET_REFERENCE}),
-            )
-        )
-
-    application_release_repository = JsonApplicationReleaseRepository(
-        config.database_dir / "application-releases.json"
-    )
-    application_build_backend: (
-        DistributedApplicationBuildLifecycleBackend | ApplicationBuildLifecycleBackend
-    )
-    application_target_matcher: DistributedBuildTargetMatcher | LocalBuildTargetMatcher
-    if enable_distributed_execution and base.distributed_runtime is not None:
-        application_build_backend = DistributedApplicationBuildLifecycleBackend(
-            application_release_repository,
-            base.files,
-            base.run_workspace_bindings,
-            base.distributed_runtime,
-        )
-        application_target_matcher = DistributedBuildTargetMatcher(
-            base.distributed_runtime.registry,
-            scheduler=base.distributed_runtime.scheduler,
-        )
-    else:
-        application_build_backend = ApplicationBuildLifecycleBackend(
-            application_release_repository,
-            base.workspaces,
-            base.files,
-            base.run_workspace_bindings,
-            ApplicationCommandExecutor(base.workspaces.materialization_root),
-            secret_provider=base.secrets,
-            secret_consumer_ref=_APPLICATION_BUILD_SECRET_PRINCIPAL,
-        )
-        application_target_matcher = LocalBuildTargetMatcher()
-    application_build_lifecycle = AuthorizedLifecycleBackend(
-        application_build_backend,
-        base.approval_gate,
-        allow_internal_service_reads=True,
-    )
-    application_build_kernel = PlatformKernel(
-        orchestrator=ReferenceOrchestrator(),
-        lifecycle=application_build_lifecycle,
-        repository=base.kernel_repository,
-    )
-    application_releases = ApplicationDistributionService(
-        application_release_repository,
-        kernel=application_build_kernel,
+    return SingleNodeDeployment(
+        config=base.config,
+        kernel_repository=base.kernel_repository,
+        scopes=base.scopes,
         files=base.files,
         workspaces=base.workspaces,
         run_workspace_bindings=base.run_workspace_bindings,
-        authorization_gate=base.approval_gate,
-        target_matcher=application_target_matcher,
-    )
-    if base.secrets is not None:
-        if not base.authorization.has_policy(_GITHUB_RELEASE_CONNECTOR_PRINCIPAL):
-            base.authorization.register(
-                LocalPrincipalPolicy(
-                    principal_ref=_GITHUB_RELEASE_CONNECTOR_PRINCIPAL,
-                    actor_types=frozenset({ActorType.SERVICE}),
-                    allowed_actions=frozenset({AuthorizationAction.INVOKE_SENSITIVE_CAPABILITY}),
-                    resource_types=frozenset({ResourceType.SECRET_REFERENCE}),
-                )
-            )
-        github_releases = DurableGitHubReleaseConnectorProvider(
-            base.secrets,
-            base.files,
-            connector_repository,
-        )
-        asyncio.run(connectors.register_provider(github_releases))
-        application_releases.register_publisher(GitHubReleasePublisher(connectors))
-    register_application_distribution_control_plane(
-        base.control_plane,
-        application_releases,
-    )
-
-    planning_repository = JsonPlanningRepository(config.database_dir / "planning.json")
-    planning_kernel = PlatformKernel(
-        orchestrator=PlanningOrchestratorAdapter(planning_repository),
-        lifecycle=PlanningOnlyLifecycleBackend(),
-        repository=base.kernel_repository,
-    )
-    planning_coordinator = PlanningBindingCoordinator(
-        repository=planning_repository,
-        kernel=base.kernel,
-        delegate=base.coordination,
-    )
-    planning_environment = PolicyAwarePlanningEnvironmentResolver(
-        agents=base.agents.repository,
-        capabilities=base.capabilities,
-        authorization=base.approval_gate,
-    )
-    planning = ReferencePlanningService(
-        planner=ReferenceMultiAgentPlanner(),
-        repository=planning_repository,
-        kernel=planning_kernel,
-        agents=base.agents.repository,
-        capabilities=base.capabilities,
-        models=base.models,
-        authorization=base.approval_gate,
-        coordinator=planning_coordinator,
-        event_sink=_planning_event_sink(base.telemetry),
-        environment_resolver=planning_environment,
-    )
-    replanning = ReplanningEvidenceBridge(
-        planning,
-        coordination_repository=base.coordination_repository,
-        verification_repository=base.verification,
-        event_sink=_planning_event_sink(base.telemetry),
-    )
-    for collection, service in planning_resource_services(planning).items():
-        base.control_plane.register_resource_service(collection, service)
-    for command, handler in planning_command_handlers(planning).items():
-        base.control_plane.register_command(command, handler)
-
-    context = install_single_node_context(base, egress=egress)
-
-    learning = build_single_node_learning(
-        database_dir=config.database_dir,
+        repository_registry=base.repository_registry,
+        repository_catalog=base.repository_catalog,
+        repository_provenance=base.repository_provenance,
+        repositories=base.repositories,
+        repository_management=base.repository_management,
+        repository_run_integration=base.repository_run_integration,
+        repository_workspace_execution=base.repository_workspace_execution,
+        repository_event_ingress=base.repository_event_ingress,
         agents=base.agents,
-        routing_profiles=base.routing_profiles,
-        evaluation=base.evaluation,
-        verification=base.verification,
-        approval_gate=base.approval_gate,
-        kernel=base.kernel,
-        planning=planning,
-        telemetry=base.telemetry,
-        skills=context.skills,
-        research=context.research,
-    )
-    learning.register_control_plane(base.control_plane)
-
-    handoffs = build_single_node_handoff_composition(
-        database_dir=config.database_dir,
-        control_plane=base.control_plane,
-        agents=base.agents.repository,
+        conversations=base.conversations,
         agent_runtime=base.agent_runtime,
-        coordinator=base.coordination_repository,
-        tasks=EventSourcedTaskRepository(base.kernel_repository),
-        authorization=base.approval_gate.provider,
-        verification=base.verification_runtime.evidence,
-        telemetry=base.telemetry,
-        research_repository=context.research_repository,
-        skill_repository=context.skills_repository,
-        context_bundle_repository=context.bundles,
-        context_binding_repository=context.run_bindings,
-        egress_gate=egress.runtime.gate,
+        capabilities=base.capabilities,
+        capability_assignments=base.capability_assignments,
+        models=base.models,
+        routing_profile_repository=base.routing_profile_repository,
+        routing_profiles=base.routing_profiles,
         model_runtime=base.model_runtime,
-    )
-
-    # #889 adds no second Context lifecycle. It contributes one additional #590 source factory
-    # through the public Context composition seam. Root Steps simply contribute no Handoff source.
-    incoming_handoffs = ReferenceIncomingHandoffContextAdapter(
-        handoffs,
-        coordinator=base.coordination_repository,
+        onboarding=base.onboarding,
+        first_task=base.first_task,
+        secrets=base.secrets,
+        templates=base.templates,
+        workflows=base.workflows,
+        coordination_repository=base.coordination_repository,
+        coordination=base.coordination,
+        research=base.research,
+        evaluation_repository=base.evaluation_repository,
+        evaluation=base.evaluation,
+        accounting_service=base.accounting_service,
+        observability_exporter=base.observability_exporter,
+        telemetry=base.telemetry,
+        health_provider=base.health_provider,
+        distributed_runtime=base.distributed_runtime,
+        pre_authorization_lifecycle=base.pre_authorization_lifecycle,
+        lifecycle_binding=base.lifecycle_binding,
+        authentication=base.authentication,
+        authorization=base.authorization,
+        authorization_audit=base.authorization_audit,
+        approval_gate=base.approval_gate,
+        verification=base.verification,
+        verification_completion=base.verification_completion,
+        verification_runtime=base.verification_runtime,
         kernel=base.kernel,
+        control_plane=base.control_plane,
+        http=base.http,
+        app=base.app,
+        connector_repository=connector_foundation.repository,
+        connector_registry=connector_foundation.registry,
+        connectors=egress_connectors.connectors,
+        application_release_repository=application.repository,
+        application_build_kernel=application.kernel,
+        application_releases=application.service,
+        planning_repository=planning.repository,
+        planning_kernel=planning.kernel,
+        planning=planning.service,
+        replanning=planning.replanning,
+        egress=egress_connectors.egress,
+        context=extensions.context,
+        learning=extensions.learning,
+        handoffs=extensions.handoffs,
+        automatic_reviewer=automatic_review.workflow,
+        reviewer_recovery=automatic_review.recovery,
     )
-
-    def reference_binding_factory(
-        source: ContextLifecycleSourceRequest,
-    ) -> tuple[ContextSourceAdapterBinding, ...]:
-        if source.step_id is None:
-            return ()
-        return (
-            ContextSourceAdapterBinding(
-                adapter=incoming_handoffs,
-                source_type=ContextSourceType.AGENT_HANDOFF,
-                source_id=f"run:{source.run_id}:incoming-handoffs",
-                role=ContextEntryRole.CONTEXT,
-                project_id=source.project_id,
-                workspace_id=source.workspace_id,
-            ),
-        )
-
-    context.lifecycle.register_source_binding_factory(reference_binding_factory)
-
-    template_environment = PlatformTemplateEnvironmentResolver(
-        workspaces=base.workspaces,
-        capabilities=lambda: (
-            capability.capability_id
-            for capability in base.capabilities.inventory_capabilities(include_unavailable=False)
-        ),
-        capability_versions=lambda: (
-            (capability.capability_id, capability.version)
-            for capability in base.capabilities.inventory_capabilities(include_unavailable=False)
-        ),
-        connectors=lambda: (definition.id for definition in connector_registry.definitions()),
-        model_policies=lambda: (
-            ModelRoutingProfileRef(definition.profile_id, definition.current_revision).canonical_ref
-            for definition in base.routing_profile_repository.list_definitions()
-            if definition.enabled
-        ),
-        grantable_permissions=lambda context: (
-            action.value
-            for action in base.authorization.globally_grantable_actions(
-                context.actor.principal_ref,
-                actor_type=context.actor.actor_type,
-            )
-        ),
-        platform_version=__version__,
-    )
-    register_template_control_plane(
-        base.control_plane,
-        base.templates,
-        environment_resolver=template_environment,
-        agent_exporter=AgentTemplateExporter(base.agents, base.templates.templates),
-        automation_exporter=AutomationTemplateExporter(
-            base.control_plane.automation_service,
-            base.templates.templates,
-        ),
-    )
-
-    base_values: dict[str, Any] = {
-        field.name: getattr(base, field.name) for field in fields(BaseSingleNodeDeployment)
-    }
-    return SingleNodeDeployment(
-        **base_values,
-        connector_repository=connector_repository,
-        connector_registry=connector_registry,
-        connectors=connectors,
-        application_release_repository=application_release_repository,
-        application_build_kernel=application_build_kernel,
-        application_releases=application_releases,
-        planning_repository=planning_repository,
-        planning_kernel=planning_kernel,
-        planning=planning,
-        replanning=replanning,
-        egress=egress,
-        context=context,
-        learning=learning,
-        handoffs=handoffs,
-        automatic_reviewer=automatic_reviewer,
-        reviewer_recovery=reviewer_recovery,
-    )
-
-
-def _planning_event_sink(
-    telemetry: Telemetry,
-) -> Callable[[str, dict[str, JsonValue]], None]:
-    """Project safe planning transition evidence into the canonical observability timeline."""
-
-    def emit(event_type: str, attributes: dict[str, JsonValue]) -> None:
-        raw_task_id = attributes.get("task_id")
-        task_id = raw_task_id if isinstance(raw_task_id, str) else None
-        telemetry.timeline(
-            event_name=event_type,
-            component=FailureComponent.ORCHESTRATION,
-            context=TelemetryContext(
-                task_id=task_id,
-                correlation_id=task_id,
-            ),
-            attributes=attributes,
-        )
-
-    return emit
 
 
 __all__ = [

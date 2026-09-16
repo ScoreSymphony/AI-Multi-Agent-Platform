@@ -1,103 +1,45 @@
-"""Production-shaped single-node composition for issue #39 and first-run onboarding."""
+"""Production-shaped single-node composition and first-run onboarding."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.accounting import AccountingService
-from ai_multi_agent_platform.agents import (
-    AgentRuntime,
-    AgentService,
-    DurableRoutingProfileAgentRuntime,
-    JsonAgentRepository,
-    register_standard_agent_control_plane,
-)
-from ai_multi_agent_platform.agents.routing_profile_control_plane import (
-    register_routing_profile_aware_agent_control_plane,
-)
+from ai_multi_agent_platform.agents import AgentRuntime, AgentService
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
-from ai_multi_agent_platform.capability_assignments import (
-    CallableCapabilityAssignmentTargetResolver,
-    CapabilityAssignmentService,
-    JsonCapabilityAssignmentRepository,
-)
+from ai_multi_agent_platform.capabilities.assignments import CapabilityAssignmentService
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.contracts import LifecycleBackend
-from ai_multi_agent_platform.control_plane import (
-    AuthenticatedControlPlaneHTTP,
-    ControlPlaneASGI,
-    evaluation_command_handlers,
-    evaluation_resource_services,
-)
+from ai_multi_agent_platform.control_plane import AuthenticatedControlPlaneHTTP, ControlPlaneASGI
 from ai_multi_agent_platform.control_plane.approval_portability_composition import ControlPlane
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
-from ai_multi_agent_platform.conversations import (
-    ConversationService,
-    DurableRoutingProfileConversationResponseProvider,
-    JsonConversationRepository,
-)
+from ai_multi_agent_platform.conversations import ConversationService
 from ai_multi_agent_platform.coordination import (
     DurablePlanStepCoordinator,
     SQLiteCoordinatorRepository,
-    coordination_command_handlers,
-    coordination_resource_services,
 )
 from ai_multi_agent_platform.data import LocalFileProvider
-from ai_multi_agent_platform.distributed import (
-    DistributedLifecycleBackend,
-    DistributedRegistry,
-    DistributedRuntime,
-    JobRequirements,
-)
+from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
-from ai_multi_agent_platform.evaluation import (
-    AccountingEvaluationEvidenceProvider,
-    CoordinationEvaluationEvidenceProvider,
-    EvaluationEvidenceProvider,
-    EvaluationService,
-    InMemoryObservabilityEvaluationEvidenceProvider,
-    SqliteEvaluationRepository,
-)
-from ai_multi_agent_platform.evaluation.single_node import build_single_node_evaluation
-from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, ReferenceExecutor
-from ai_multi_agent_platform.kernel import (
-    EventSourcedTaskRepository,
-    PlatformKernel,
-    SqliteKernelRepository,
-)
+from ai_multi_agent_platform.evaluation import EvaluationService, SqliteEvaluationRepository
+from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
 from ai_multi_agent_platform.models import (
-    JsonModelRegistryStore,
     JsonModelRoutingProfileRepository,
     ModelRegistry,
-    ModelRoutingProfileAssignmentGate,
-    ModelRoutingProfileRef,
     ModelRoutingProfileService,
     ModelRuntime,
 )
 from ai_multi_agent_platform.observability import (
     AggregatedHealthProvider,
     InMemoryExporter,
-    ObservabilityEventProvider,
-    ObservedAuthorizationProvider,
-    ObservedExecutor,
-    ObservedOrchestrator,
-    ProviderHealthDependency,
     Telemetry,
 )
-from ai_multi_agent_platform.observability.composite import CompositeTimelineReader
 from ai_multi_agent_platform.onboarding import (
-    FirstRunAgentLifecycleBackend,
     FirstRunTaskService,
-    JsonModelProviderSetupStore,
-    JsonOnboardingCommandStore,
     OnboardingModelAdapter,
     OnboardingService,
-    register_onboarding_control_plane,
 )
-from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
-from ai_multi_agent_platform.portability.composition import build_agent_portability_workflow
 from ai_multi_agent_platform.repositories import (
     RepositoryDiscoveryResolver,
     RepositoryEventRuntimeIngress,
@@ -106,90 +48,67 @@ from ai_multi_agent_platform.repositories import (
     RepositoryRunIntegration,
     RepositoryService,
     RepositoryWorkspaceExecutionCoordinator,
-    RepositoryWorkspaceSourceResolver,
     SqliteRepositoryBindingCatalog,
     SqliteRepositoryProvenanceStore,
-    restore_managed_local_repositories,
 )
-from ai_multi_agent_platform.repositories.control_plane import register_repository_control_plane
-from ai_multi_agent_platform.research import (
-    ResearchService,
-    SqliteResearchRepository,
-    register_searchable_research_control_plane,
-)
+from ai_multi_agent_platform.research import ResearchService
 from ai_multi_agent_platform.security import (
     ActorType,
-    AuthorizationAction,
     AuthorizationGate,
-    AuthorizedLifecycleBackend,
-    AuthorizedSecretProvider,
-    ControlPlaneAuthorizationBridge,
     LocalAuthenticationService,
     LocalPrincipalPolicy,
     LocalUserAccount,
-    ResourceType,
-    SqliteApprovalService,
     SqliteAuthorizationAuditSink,
 )
-from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
-from ai_multi_agent_platform.templates import (
-    AgentTeamTemplateExporter,
-    AgentTemplateExporter,
-    AutomationTemplateExporter,
-    ContextualTemplateHandlerRegistry,
-    JsonTemplateRepository,
-    PlatformTemplateEnvironmentResolver,
-    ProjectTemplateExporter,
-    TemplateApplicationService,
-    WorkspaceStructureTemplateExporter,
-    register_agent_template_handlers,
-    register_automation_template_handler,
-    register_capability_assignment_template_handler,
-    register_project_template_handler,
-    register_template_control_plane,
-    register_workflow_template_handler,
-    register_workspace_structure_template_handler,
-)
-from ai_multi_agent_platform.templates.agent_team_control_plane import (
-    register_agent_team_template_control_plane,
-)
-from ai_multi_agent_platform.templates.compensation import register_template_compensators
-from ai_multi_agent_platform.templates.project_control_plane import (
-    register_project_template_control_plane,
-)
-from ai_multi_agent_platform.templates.workspace_structure_control_plane import (
-    register_workspace_structure_template_control_plane,
-)
+from ai_multi_agent_platform.templates import TemplateApplicationService
 from ai_multi_agent_platform.verification import (
     CanonicalVerificationRuntime,
-    KernelFileVerificationEvidenceResolver,
     SqliteVerificationCompletionAuthority,
     SqliteVerificationService,
-    runtime_verification_completion,
 )
-from ai_multi_agent_platform.verification.control_plane import register_verification_control_plane
-from ai_multi_agent_platform.verification.observability import VerificationTimelineReader
-from ai_multi_agent_platform.workflows import (
-    AuthorizedWorkflowService,
-    JsonWorkflowRepository,
-    WorkflowService,
-)
+from ai_multi_agent_platform.workflows import AuthorizedWorkflowService
 from ai_multi_agent_platform.workspaces import SqliteRunWorkspaceBindingRepository
 from ai_multi_agent_platform.workspaces.compensation import CompensatingSqliteWorkspaceProvider
 
+from .composition import (
+    build_control_plane,
+    build_evaluation,
+    build_execution,
+    build_health,
+    build_http,
+    build_kernel,
+    build_platform_services,
+    build_repository_foundation,
+    build_repository_runtime,
+    build_runtime_services,
+    build_verification,
+)
+from .composition.control_plane import ControlPlaneBundle, HealthBundle, HttpBundle
+from .composition.execution import (
+    EvaluationBundle,
+    ExecutionBundle,
+    KernelBundle,
+    StartupLifecycleBinding,
+    VerificationBundle,
+)
+from .composition.foundation import (
+    SingleNodeFoundationBundle,
+    build_single_node_foundation,
+)
+from .composition.repositories import RepositoryFoundationBundle, RepositoryRuntimeBundle
+from .composition.services import (
+    ModelRuntimeFactory,
+    PlatformServicesBundle,
+    RuntimeServicesBundle,
+)
 from .config import SingleNodeConfig
 
-_REFERENCE_EXECUTION_WORKSPACE = "reference"
 _SMOKE_PROJECT_KEY = "deployment-smoke-project-v1"
 _SMOKE_TASK_KEY = "deployment-smoke-task-v1"
 _SMOKE_READY_KEY = "deployment-smoke-ready-v1"
 _SMOKE_START_KEY = "deployment-smoke-start-v1"
 _SMOKE_REFRESH_KEY = "deployment-smoke-refresh-v1"
-_EVALUATION_PROJECT_KEY = "evaluation-system-project-v1"
-_EVALUATION_OWNER_ID = "evaluation-single-node"
-_EVALUATION_PRINCIPAL = f"service:{_EVALUATION_OWNER_ID}"
-_PLATFORM_SERVICE_PRINCIPAL = "service:platform"
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,11 +163,14 @@ class SingleNodeDeployment:
     telemetry: Telemetry
     health_provider: AggregatedHealthProvider
     distributed_runtime: DistributedRuntime | None
+    pre_authorization_lifecycle: LifecycleBackend
+    lifecycle_binding: StartupLifecycleBinding
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
     authorization_audit: SqliteAuthorizationAuditSink
     approval_gate: AuthorizationGate
     verification: SqliteVerificationService
+    verification_completion: SqliteVerificationCompletionAuthority
     verification_runtime: CanonicalVerificationRuntime
     kernel: PlatformKernel
     control_plane: ControlPlane
@@ -256,13 +178,7 @@ class SingleNodeDeployment:
     app: ControlPlaneASGI
 
     def bootstrap_admin(self, username: str, password: str) -> LocalUserAccount:
-        """Create or recover the first local user and explicitly grant #15 admin policy.
-
-        Authentication and authorization remain separate durable records. Re-running this
-        operation after an interruption is safe when the same first username/password is
-        supplied: the existing identity is verified and a missing administrator policy is
-        repaired rather than creating a second user.
-        """
+        """Create or recover the first local user and explicitly grant #15 admin policy."""
 
         if not self.authentication.store.users:
             account = self.authentication.bootstrap_first_admin(username, password)
@@ -311,10 +227,7 @@ class SingleNodeDeployment:
             owner_id=account.user_id,
             project_id=project.id,
         )
-        await self.kernel.ready_task(
-            idempotency_key=_SMOKE_READY_KEY,
-            task_id=task.task_id,
-        )
+        await self.kernel.ready_task(idempotency_key=_SMOKE_READY_KEY, task_id=task.task_id)
         run = await self.kernel.start_task(
             idempotency_key=_SMOKE_START_KEY,
             task_id=task.task_id,
@@ -350,503 +263,201 @@ def build_single_node_deployment(
     enable_distributed_execution: bool = False,
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
 ) -> SingleNodeDeployment:
-    """Build the durable Stage-1 profile without optional external services.
+    """Build the base profile through explicit foundation and runtime stages."""
 
-    ``enable_distributed_execution`` is opt-in. The ordinary #39 profile therefore keeps its local
-    reference LifecycleBackend unchanged, while advanced deployment may bind the same canonical
-    Task/Run kernel seam to #14 scheduling and Worker dispatch.
-    """
-
-    config.prepare_directories()
-    database_dir = config.database_dir
-
-    kernel_repository = SqliteKernelRepository(database_dir / "kernel.sqlite3")
-    scopes = SqliteScopeStore(database_dir / "scopes.sqlite3")
-    files = LocalFileProvider(config.files_dir, database_dir / "files.sqlite3")
-    workspaces = CompensatingSqliteWorkspaceProvider(
-        config.workspaces_dir,
-        files,
-        database_dir / "workspaces.sqlite3",
+    foundation = build_single_node_foundation(
+        config,
+        secret_provider=secret_provider,
+        observability_exporter=observability_exporter,
     )
-    run_workspace_bindings = SqliteRunWorkspaceBindingRepository(
-        database_dir / "run-workspace-bindings.sqlite3"
-    )
-    repository_catalog = SqliteRepositoryBindingCatalog(
-        database_dir / "repository-bindings.sqlite3"
-    )
-    repository_registry = RepositoryRegistry()
-    restore_managed_local_repositories(repository_catalog, repository_registry)
-    repository_provenance = SqliteRepositoryProvenanceStore(
-        database_dir / "repository-provenance.sqlite3"
-    )
-    repository_workspace_execution = RepositoryWorkspaceExecutionCoordinator(
-        run_workspace_bindings,
-        workspaces,
-        repository_provenance,
-        fallback_workspace=_REFERENCE_EXECUTION_WORKSPACE,
-    )
-    repository_event_ingress = RepositoryEventRuntimeIngress(
-        repository_registry,
-        kernel_repository,
-    )
-    evaluation_project = scopes.create_project(
-        key=_EVALUATION_PROJECT_KEY,
-        name="Platform Evaluation",
-        owner_type="service",
-        owner_id=_EVALUATION_OWNER_ID,
-    )
-    agents = AgentService(JsonAgentRepository(database_dir / "agents.json"))
-    conversations = ConversationService(
-        JsonConversationRepository(database_dir / "conversations.json")
-    )
-    capabilities = CapabilityRegistry()
-    models = ModelRegistry()
-    routing_profile_repository = JsonModelRoutingProfileRepository(
-        database_dir / "model-routing-profiles.json"
-    )
-    agent_runtime = DurableRoutingProfileAgentRuntime(
-        agents,
-        routing_profile_repository=routing_profile_repository,
-        model_registry=models,
-        capability_registry=capabilities,
-    )
-    onboarding = OnboardingService(
-        models=models,
-        model_store=JsonModelRegistryStore(database_dir / "models.json"),
-        provider_store=JsonModelProviderSetupStore(database_dir / "model-providers.json"),
-        command_store=JsonOnboardingCommandStore(database_dir / "onboarding-commands.json"),
-        scopes=scopes,
-        agents=agents,
-        agent_runtime=agent_runtime,
-        model_adapters=onboarding_model_adapters,
-    )
-    onboarding.restore()
-    model_runtime = ModelRuntime(models)
-    conversation_response_provider = DurableRoutingProfileConversationResponseProvider(
-        model_runtime,
-        agents,
-        routing_profile_repository=routing_profile_repository,
-    )
-
-    effective_observability_exporter = observability_exporter or InMemoryExporter()
-    telemetry = Telemetry(effective_observability_exporter)
-    authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
-    authentication = LocalAuthenticationService(store=authentication_store)
-    authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
-    effective_distributed_runtime = distributed_runtime
-    if enable_distributed_execution and effective_distributed_runtime is None:
-        effective_distributed_runtime = DistributedRuntime(
-            DistributedRegistry(),
-            authorization=authorization,
-        )
-    routing_profiles = ModelRoutingProfileService(
-        routing_profile_repository,
-        authorization=authorization,
-    )
-    routing_profile_assignment_gate = ModelRoutingProfileAssignmentGate(
-        routing_profile_repository,
-        authorization=authorization,
-    )
-    if not authorization.has_policy(_EVALUATION_PRINCIPAL):
-        authorization.register(
-            LocalPrincipalPolicy(
-                principal_ref=_EVALUATION_PRINCIPAL,
-                actor_types=frozenset({ActorType.SERVICE}),
-                allowed_actions=frozenset(
-                    {
-                        AuthorizationAction.EXECUTE,
-                        AuthorizationAction.READ,
-                        AuthorizationAction.VIEW,
-                        AuthorizationAction.MODIFY,
-                    }
-                ),
-                resource_types=frozenset(
-                    {
-                        ResourceType.RUN,
-                        ResourceType.TASK,
-                        ResourceType.AGENT,
-                        ResourceType.FILE,
-                        ResourceType.MEMORY,
-                    }
-                ),
-            )
-        )
-    if not authorization.has_policy(_PLATFORM_SERVICE_PRINCIPAL):
-        authorization.register(
-            LocalPrincipalPolicy(
-                principal_ref=_PLATFORM_SERVICE_PRINCIPAL,
-                actor_types=frozenset({ActorType.SERVICE}),
-                allowed_actions=frozenset(
-                    {
-                        AuthorizationAction.READ,
-                        AuthorizationAction.MANAGE_CREDENTIALS,
-                    }
-                ),
-                resource_types=frozenset({ResourceType.SECRET_REFERENCE}),
-            )
-        )
-    observed_authorization = ObservedAuthorizationProvider(authorization, telemetry)
-    approval_service = SqliteApprovalService(database_dir / "approvals.sqlite3")
-    authorization_audit = SqliteAuthorizationAuditSink(database_dir / "authorization-audit.sqlite3")
-    approval_gate = AuthorizationGate(
-        observed_authorization,
-        approvals=approval_service,
-        audit_sink=authorization_audit,
-    )
-    control_plane_authorization = ControlPlaneAuthorizationBridge(approval_gate)
-    protected_secret_provider: SecretProvider | None = (
-        AuthorizedSecretProvider(secret_provider, approval_gate)
-        if secret_provider is not None
-        else None
-    )
-    workflow_service = WorkflowService(JsonWorkflowRepository(database_dir / "workflows.json"))
-    workflows = AuthorizedWorkflowService(workflow_service, approval_gate)
-    research = ResearchService(
-        SqliteResearchRepository(database_dir / "research.sqlite3"),
-        authorization=approval_gate,
-    )
-
-    template_handlers = ContextualTemplateHandlerRegistry()
-    register_agent_template_handlers(template_handlers, agents)
-    register_project_template_handler(template_handlers, scopes)
-    register_workspace_structure_template_handler(template_handlers, workspaces, scopes)
-    register_workflow_template_handler(template_handlers, workflows, agents=agents)
-    register_template_compensators(
-        template_handlers,
-        agents=agents,
-        scopes=scopes,
-        workspaces=workspaces,
-    )
-    templates = TemplateApplicationService(
-        JsonTemplateRepository(database_dir / "templates.json"),
-        template_handlers,
-    )
-    agent_template_exporter = AgentTemplateExporter(agents, templates.templates)
-    agent_team_template_exporter = AgentTeamTemplateExporter(agents, templates.templates)
-    project_template_exporter = ProjectTemplateExporter(scopes, templates.templates)
-    workspace_template_exporter = WorkspaceStructureTemplateExporter(
-        workspaces,
-        templates.templates,
-    )
-
-    execution_workspace = workspaces.materialization_root / _REFERENCE_EXECUTION_WORKSPACE
-    execution_workspace.mkdir(parents=True, exist_ok=True)
-    reference_orchestrator = ReferenceOrchestrator()
-    reference_executor = ReferenceExecutor(workspaces.materialization_root)
-    orchestrator = ObservedOrchestrator(reference_orchestrator, telemetry)
-    observed_executor = ObservedExecutor(reference_executor, telemetry)
-    reference_lifecycle = ExecutorLifecycleBackend(
-        observed_executor,
-        workspace=_REFERENCE_EXECUTION_WORKSPACE,
-        action="echo",
-        workspace_resolver=repository_workspace_execution.resolve_execution_workspace,
-        terminal_result_observer=repository_workspace_execution.observe_terminal_result,
-    )
-    execution_lifecycle: LifecycleBackend = reference_lifecycle
-    if enable_distributed_execution:
-        if effective_distributed_runtime is None:
-            raise AssertionError("distributed execution enabled without a distributed runtime")
-        execution_lifecycle = DistributedLifecycleBackend(
-            effective_distributed_runtime,
-            requirements=JobRequirements(executor_type="reference"),
-            workspace_bindings=run_workspace_bindings,
-        )
-    lifecycle = AuthorizedLifecycleBackend(
-        FirstRunAgentLifecycleBackend(
-            delegate=execution_lifecycle,
-            tasks=EventSourcedTaskRepository(kernel_repository),
-            agents=agent_runtime,
-            models=model_runtime,
-        ),
-        approval_gate,
-        allow_internal_service_reads=True,
-    )
-    verification_path = database_dir / "verification.sqlite3"
-    verification = SqliteVerificationService(
-        verification_path,
-        require_canonical_subjects=True,
-        require_canonical_results=True,
-    )
-    verification_completion = SqliteVerificationCompletionAuthority(verification, verification_path)
-    observability_events = ObservabilityEventProvider(telemetry)
-    kernel = PlatformKernel(
-        orchestrator=orchestrator,
-        lifecycle=lifecycle,
-        repository=kernel_repository,
-        event_sink=observability_events,
-        completion_authority=verification_completion,
-        async_completion_authority=runtime_verification_completion(verification_completion),
-    )
-    coordination_repository = SQLiteCoordinatorRepository(database_dir / "coordination.sqlite3")
-    coordination = DurablePlanStepCoordinator(
-        repository=coordination_repository,
-        kernel=kernel,
-        coordinator_id="single-node",
-        telemetry=telemetry,
-    )
-    verification_evidence = KernelFileVerificationEvidenceResolver(
-        kernel, kernel_repository, files, agents.repository
-    )
-    verification_runtime = CanonicalVerificationRuntime(
-        verification_completion, verification_evidence
-    )
-    first_task = FirstRunTaskService(
-        onboarding=onboarding,
-        kernel=kernel,
-        scopes=scopes,
-        agents=agents,
-    )
-
-    repositories = RepositoryService(repository_registry, approval_gate)
-    repository_management = RepositoryManagementService(
-        repository_registry,
-        repository_catalog,
-        approval_gate,
-        managed_local_root=config.repositories_dir,
-        discovery_resolver=repository_discovery_resolver,
-    )
-    repository_run_integration = RepositoryRunIntegration(
-        repository_registry,
-        repository_provenance,
-        workspaces,
-        files,
-        kernel,
-    )
-    repository_workspace_execution.configure_run_integration(repository_run_integration)
-    capability_assignments = CapabilityAssignmentService(
-        repository=JsonCapabilityAssignmentRepository(database_dir / "capability-assignments.json"),
-        capabilities=capabilities,
-        targets=CallableCapabilityAssignmentTargetResolver(
-            get_agent=agents.repository.get_agent,
-            get_team=agents.repository.get_team,
-            get_project=scopes.get_project,
-        ),
-        authorization=approval_gate,
-    )
-    register_capability_assignment_template_handler(template_handlers, capability_assignments)
-
-    evaluation_evidence_providers: list[EvaluationEvidenceProvider] = [
-        CoordinationEvaluationEvidenceProvider(coordination_repository)
-    ]
-    if accounting_service is not None:
-        evaluation_evidence_providers.append(
-            AccountingEvaluationEvidenceProvider(accounting_service)
-        )
-    evaluation_evidence_providers.append(
-        InMemoryObservabilityEvaluationEvidenceProvider(effective_observability_exporter)
-    )
-    evaluation_composition = build_single_node_evaluation(
-        database_path=database_dir / "evaluation.sqlite3",
-        asset_dir=config.evaluation_dir,
-        kernel=kernel,
-        agents=agents.repository,
-        agent_runtime=agent_runtime,
-        models=models,
-        model_runtime=model_runtime,
-        orchestrator=reference_orchestrator,
-        executor=reference_executor,
-        files=files,
-        workspaces=workspaces,
-        project_id=evaluation_project.id,
-        run_workspace_bindings=run_workspace_bindings,
-        evidence_providers=tuple(evaluation_evidence_providers),
-        approval_reader=approval_gate.runtime_approvals,
-        distributed_runtime=effective_distributed_runtime,
-    )
-
-    portability_workflow = build_agent_portability_workflow(
-        agents=agents.repository,
-        models=models,
-        scopes=scopes,
-        platform_version=__version__,
-        capabilities=capabilities,
-        templates=templates.repository,
-        routing_profiles=routing_profile_repository,
-        evaluation=evaluation_composition.service,
-        evaluation_fixture_exists=evaluation_composition.fixture_exists,
-        research=research,
-    )
-
-    health_provider = AggregatedHealthProvider(
-        (
-            ProviderHealthDependency(orchestrator, required=True, name="orchestrator"),
-            ProviderHealthDependency(lifecycle, required=True, name="lifecycle"),
-            ProviderHealthDependency(files, required=True, name="files"),
-        )
-    )
-    control_plane = ControlPlane(
-        kernel=kernel,
-        events=kernel_repository,
-        scopes=scopes,
-        authorization=control_plane_authorization,
-        workspace_provider=workspaces,
-        run_workspace_bindings=run_workspace_bindings,
-        health_providers=(health_provider,),
-        model_registry=models,
-        automation_state_path=database_dir / "automation.sqlite3",
-        notification_state_path=database_dir / "notifications.sqlite3",
-        conversation_service=conversations,
-        conversation_agent_service=agents,
-        conversation_file_provider=files,
-        conversation_response_provider=conversation_response_provider,
-        portability_workflow=portability_workflow,
-        approval_gate=approval_gate,
+    return build_single_node_deployment_from_foundation(
+        config,
+        foundation,
+        onboarding_model_adapters=onboarding_model_adapters,
         accounting_service=accounting_service,
+        distributed_runtime=distributed_runtime,
+        enable_distributed_execution=enable_distributed_execution,
+        repository_discovery_resolver=repository_discovery_resolver,
     )
-    resolvers = control_plane.workspace_source_resolvers
-    if resolvers is None:
-        raise RuntimeError(
-            "single-node Control Plane did not initialize Workspace source resolvers"
-        )
-    resolvers.register(RepositoryWorkspaceSourceResolver(repository_registry, files))
-    control_plane.configure_repository_run_integration(repository_run_integration)
-    register_repository_control_plane(
-        control_plane,
-        repositories,
-        management=repository_management,
+
+
+def build_single_node_deployment_from_foundation(
+    config: SingleNodeConfig,
+    foundation: SingleNodeFoundationBundle,
+    *,
+    onboarding_model_adapters: Iterable[OnboardingModelAdapter] = (),
+    accounting_service: AccountingService | None = None,
+    distributed_runtime: DistributedRuntime | None = None,
+    enable_distributed_execution: bool = False,
+    repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
+    model_runtime_factory: ModelRuntimeFactory | None = None,
+) -> SingleNodeDeployment:
+    """Continue composition from a pre-runtime foundation with explicit runtime factories."""
+
+    storage = foundation.storage
+    observability = foundation.observability
+    security = foundation.security
+    runtime = build_runtime_services(
+        config,
+        storage,
+        security,
+        onboarding_model_adapters=onboarding_model_adapters,
+        model_runtime_factory=model_runtime_factory,
     )
-    register_searchable_research_control_plane(control_plane, research)
-    for collection, service in evaluation_resource_services(evaluation_composition.service).items():
-        control_plane.register_resource_service(collection, service)
-    for command, handler in evaluation_command_handlers(evaluation_composition.service).items():
-        control_plane.register_command(command, handler)
-    for collection, service in coordination_resource_services(coordination).items():
-        control_plane.register_resource_service(collection, service)
-    for command, handler in coordination_command_handlers(coordination).items():
-        control_plane.register_command(command, handler)
-    register_routing_profile_aware_agent_control_plane(
-        control_plane,
-        agents,
-        routing_profile_assignment_gate,
-        runtime=agent_runtime,
+    platform_services = build_platform_services(config, storage, security, runtime)
+    repository_foundation = build_repository_foundation(
+        config,
+        storage,
+        security,
+        repository_discovery_resolver=repository_discovery_resolver,
     )
-    register_standard_agent_control_plane(control_plane, agents)
-    register_onboarding_control_plane(control_plane, onboarding, first_task=first_task)
-    register_automation_template_handler(template_handlers, control_plane.automation_service)
-    register_template_compensators(
-        template_handlers,
-        automations=control_plane.automation_service,
+    execution = build_execution(
+        config,
+        storage,
+        security,
+        observability,
+        runtime,
+        repository_foundation,
+        distributed_runtime=distributed_runtime,
+        enable_distributed_execution=enable_distributed_execution,
     )
-    automation_template_exporter = AutomationTemplateExporter(
-        control_plane.automation_service,
-        templates.templates,
-    )
-    template_environment = PlatformTemplateEnvironmentResolver(
-        workspaces=workspaces,
-        capabilities=lambda: (
-            capability.capability_id
-            for capability in capabilities.inventory_capabilities(include_unavailable=False)
-        ),
-        capability_versions=lambda: (
-            (capability.capability_id, capability.version)
-            for capability in capabilities.inventory_capabilities(include_unavailable=False)
-        ),
-        model_policies=lambda: (
-            ModelRoutingProfileRef(definition.profile_id, definition.current_revision).canonical_ref
-            for definition in routing_profile_repository.list_definitions()
-            if definition.enabled
-        ),
-        grantable_permissions=lambda context: (
-            action.value
-            for action in authorization.globally_grantable_actions(
-                context.actor.principal_ref,
-                actor_type=context.actor.actor_type,
-            )
-        ),
-        platform_version=__version__,
-    )
-    register_template_control_plane(
-        control_plane,
-        templates,
-        environment_resolver=template_environment,
-        agent_exporter=agent_template_exporter,
-        automation_exporter=automation_template_exporter,
-    )
-    register_agent_team_template_control_plane(
-        control_plane,
-        templates.repository,
-        agent_team_template_exporter,
-    )
-    register_project_template_control_plane(
-        control_plane,
-        templates.repository,
-        project_template_exporter,
-    )
-    register_workspace_structure_template_control_plane(
-        control_plane,
-        templates.repository,
-        workspace_template_exporter,
-    )
-    register_verification_control_plane(
-        control_plane,
+    verification = build_verification(config)
+    kernel = build_kernel(
+        config,
+        storage,
+        observability,
+        runtime,
+        execution,
         verification,
-        verification_completion,
-        verification_evidence,
-        verification_runtime,
     )
-    control_plane.bind_observability_timeline(
-        CompositeTimelineReader(
-            (
-                effective_observability_exporter,
-                VerificationTimelineReader(verification),
-            )
-        )
+    repository_runtime = build_repository_runtime(
+        storage,
+        repository_foundation,
+        kernel.kernel,
     )
-
-    http = AuthenticatedControlPlaneHTTP(
-        control_plane,
-        authentication,
-        secure_cookie=config.secure_cookie,
-    )
-    app = ControlPlaneASGI(http)
-
-    return SingleNodeDeployment(
-        config=config,
-        kernel_repository=kernel_repository,
-        scopes=scopes,
-        files=files,
-        workspaces=workspaces,
-        run_workspace_bindings=run_workspace_bindings,
-        repository_registry=repository_registry,
-        repository_catalog=repository_catalog,
-        repository_provenance=repository_provenance,
-        repositories=repositories,
-        repository_management=repository_management,
-        repository_run_integration=repository_run_integration,
-        repository_workspace_execution=repository_workspace_execution,
-        repository_event_ingress=repository_event_ingress,
-        agents=agents,
-        conversations=conversations,
-        agent_runtime=agent_runtime,
-        capabilities=capabilities,
-        capability_assignments=capability_assignments,
-        models=models,
-        routing_profile_repository=routing_profile_repository,
-        routing_profiles=routing_profiles,
-        model_runtime=model_runtime,
-        onboarding=onboarding,
-        first_task=first_task,
-        secrets=protected_secret_provider,
-        templates=templates,
-        workflows=workflows,
-        coordination_repository=coordination_repository,
-        coordination=coordination,
-        research=research,
-        evaluation_repository=evaluation_composition.repository,
-        evaluation=evaluation_composition.service,
+    evaluation = build_evaluation(
+        config,
+        storage,
+        security,
+        observability,
+        runtime,
+        execution,
+        kernel,
         accounting_service=accounting_service,
-        observability_exporter=effective_observability_exporter,
-        telemetry=telemetry,
-        health_provider=health_provider,
-        distributed_runtime=effective_distributed_runtime,
-        authentication=authentication,
-        authorization=authorization,
-        authorization_audit=authorization_audit,
-        approval_gate=approval_gate,
+    )
+    health = build_health(storage, execution)
+    control_plane = build_control_plane(
+        config,
+        storage,
+        security,
+        observability,
+        runtime,
+        platform_services,
+        repository_foundation,
+        repository_runtime,
+        verification,
+        kernel,
+        evaluation,
+        health,
+        accounting_service=accounting_service,
+    )
+    http = build_http(config, security, control_plane)
+    return _assemble_deployment(
+        config=config,
+        foundation=foundation,
+        runtime=runtime,
+        platform_services=platform_services,
+        repositories=repository_foundation,
+        repository_runtime=repository_runtime,
+        execution=execution,
         verification=verification,
-        verification_runtime=verification_runtime,
         kernel=kernel,
+        evaluation=evaluation,
+        health=health,
         control_plane=control_plane,
         http=http,
-        app=app,
+        accounting_service=accounting_service,
     )
+
+
+def _assemble_deployment(
+    *,
+    config: SingleNodeConfig,
+    foundation: SingleNodeFoundationBundle,
+    runtime: RuntimeServicesBundle,
+    platform_services: PlatformServicesBundle,
+    repositories: RepositoryFoundationBundle,
+    repository_runtime: RepositoryRuntimeBundle,
+    execution: ExecutionBundle,
+    verification: VerificationBundle,
+    kernel: KernelBundle,
+    evaluation: EvaluationBundle,
+    health: HealthBundle,
+    control_plane: ControlPlaneBundle,
+    http: HttpBundle,
+    accounting_service: AccountingService | None,
+) -> SingleNodeDeployment:
+    storage = foundation.storage
+    observability = foundation.observability
+    security = foundation.security
+    return SingleNodeDeployment(
+        config=config,
+        kernel_repository=storage.kernel_repository,
+        scopes=storage.scopes,
+        files=storage.files,
+        workspaces=storage.workspaces,
+        run_workspace_bindings=storage.run_workspace_bindings,
+        repository_registry=storage.repository_registry,
+        repository_catalog=storage.repository_catalog,
+        repository_provenance=storage.repository_provenance,
+        repositories=repositories.repositories,
+        repository_management=repositories.repository_management,
+        repository_run_integration=repository_runtime.repository_run_integration,
+        repository_workspace_execution=repositories.repository_workspace_execution,
+        repository_event_ingress=repositories.repository_event_ingress,
+        agents=runtime.agents,
+        conversations=runtime.conversations,
+        agent_runtime=runtime.agent_runtime,
+        capabilities=runtime.capabilities,
+        capability_assignments=platform_services.capability_assignments,
+        models=runtime.models,
+        routing_profile_repository=runtime.routing_profile_repository,
+        routing_profiles=runtime.routing_profiles,
+        model_runtime=runtime.model_runtime,
+        onboarding=runtime.onboarding,
+        first_task=kernel.first_task,
+        secrets=security.secrets,
+        templates=platform_services.templates,
+        workflows=platform_services.workflows,
+        coordination_repository=kernel.coordination_repository,
+        coordination=kernel.coordination,
+        research=platform_services.research,
+        evaluation_repository=evaluation.composition.repository,
+        evaluation=evaluation.composition.service,
+        accounting_service=accounting_service,
+        observability_exporter=observability.exporter,
+        telemetry=observability.telemetry,
+        health_provider=health.provider,
+        distributed_runtime=execution.distributed_runtime,
+        pre_authorization_lifecycle=execution.pre_authorization_lifecycle,
+        lifecycle_binding=execution.lifecycle,
+        authentication=security.authentication,
+        authorization=security.authorization,
+        authorization_audit=security.authorization_audit,
+        approval_gate=security.approval_gate,
+        verification=verification.verification,
+        verification_completion=verification.completion_authority,
+        verification_runtime=kernel.verification_runtime,
+        kernel=kernel.kernel,
+        control_plane=control_plane.control_plane,
+        http=http.http,
+        app=http.app,
+    )
+
+
+__all__ = [
+    "SingleNodeDeployment",
+    "SingleNodeSmokeResult",
+    "build_single_node_deployment",
+    "build_single_node_deployment_from_foundation",
+]
