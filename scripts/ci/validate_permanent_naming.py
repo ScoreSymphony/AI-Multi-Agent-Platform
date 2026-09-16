@@ -245,7 +245,8 @@ def validate_changed_tree(root: Path, changes: tuple[ChangedPath, ...]) -> tuple
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Reject GitHub issue numbers used as permanent code/test/workflow semantics in changed files."
+            "Reject GitHub issue numbers used as permanent code/test/workflow "
+            "semantics in changed files."
         )
     )
     parser.add_argument("--base", required=True, help="Base commit SHA/ref")
