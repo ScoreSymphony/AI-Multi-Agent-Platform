@@ -153,11 +153,12 @@ class DependencyAwareBrowserFirstSetupService(BrowserFirstSetupService):
     ) -> tuple[_PlanAction, ...]:
         if not session.registry_items:
             return ()
-        if self.distribution is None:
+        distribution = self.distribution
+        if distribution is None:
             return tuple(self._base_registry_action(session, item) for item in session.registry_items)
 
         try:
-            catalog = self.distribution.search()
+            catalog = distribution.search()
         except RuntimeError:
             return tuple(self._base_registry_action(session, item) for item in session.registry_items)
 
@@ -179,7 +180,7 @@ class DependencyAwareBrowserFirstSetupService(BrowserFirstSetupService):
                 return existing
 
             try:
-                registry_item = self.distribution.get(selection.item_id, selection.version)
+                registry_item = distribution.get(selection.item_id, selection.version)
             except (LookupError, RuntimeError):
                 action = replace(
                     self._base_registry_action(session, selection),
@@ -229,7 +230,7 @@ class DependencyAwareBrowserFirstSetupService(BrowserFirstSetupService):
             resolving.pop()
 
             action = self._base_registry_action(session, selection)
-            installation = self.distribution.installed(selection.item_id)
+            installation = distribution.installed(selection.item_id)
             if (
                 installation is not None
                 and installation.current.version != selection.version
