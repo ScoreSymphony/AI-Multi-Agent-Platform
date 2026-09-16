@@ -27,6 +27,25 @@ class _FakeConnectedClient:
         self.exited += 1
 
 
+class _GroupedConnectionFailure:
+    async def __aenter__(self) -> _GroupedConnectionFailure:
+        raise ExceptionGroup(
+            "MCP client connection failed",
+            [RuntimeError("synthetic provider detail")],
+        )
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+
+class _CancelledConnection:
+    async def __aenter__(self) -> _CancelledConnection:
+        raise asyncio.CancelledError
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+
 @pytest.mark.parametrize(
     "negotiated_revision",
     ("2024-11-05", "2026-07-28", "not-a-protocol-revision", ""),
@@ -63,6 +82,31 @@ def test_stable_sdk_profile_accepts_exact_revision_and_closes_session() -> None:
     assert asyncio.run(client.ping()) is True
     assert fake.entered == 1
     assert fake.exited == 1
+
+
+def test_sdk_ping_contains_grouped_connection_failure_as_unhealthy() -> None:
+    client = MCPPythonSDKClient(
+        MCPServerConfig(
+            server_id="grouped-connection-failure",
+            endpoint="http://127.0.0.1:1/mcp",
+        )
+    )
+    client._client = lambda: _GroupedConnectionFailure()  # type: ignore[method-assign]
+
+    assert asyncio.run(client.ping()) is False
+
+
+def test_sdk_ping_does_not_convert_cancellation_to_unhealthy() -> None:
+    client = MCPPythonSDKClient(
+        MCPServerConfig(
+            server_id="cancelled-connection",
+            endpoint="http://127.0.0.1:1/mcp",
+        )
+    )
+    client._client = lambda: _CancelledConnection()  # type: ignore[method-assign]
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(client.ping())
 
 
 def test_mcp_config_rejects_ambiguous_transport_targets() -> None:
