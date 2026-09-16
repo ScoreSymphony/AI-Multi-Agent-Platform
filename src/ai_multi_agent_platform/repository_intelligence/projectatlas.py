@@ -1,4 +1,4 @@
-"""Experimental ProjectAtlas plugin shell for issue #502.
+"""Experimental ProjectAtlas repository-intelligence plugin shell.
 
 This module deliberately exposes only provider health and index-status capabilities. The pinned
 ProjectAtlas runtime passed the contained functional pilot, but repository/source/graph operations
