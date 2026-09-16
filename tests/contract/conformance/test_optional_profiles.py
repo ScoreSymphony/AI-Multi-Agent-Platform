@@ -60,7 +60,7 @@ def test_retired_forge_profile_has_no_maintained_acceptance_command() -> None:
     assert scenario.required is True
     assert scenario.command is None
     assert scenario.unavailable_status is ConformanceStatus.NOT_IMPLEMENTED
-    assert "no maintained #46 acceptance command" in (scenario.unavailable_reason or "")
+    assert "no maintained acceptance command" in (scenario.unavailable_reason or "")
 
 
 def test_enabling_supported_optional_claim_makes_it_required_and_executable() -> None:

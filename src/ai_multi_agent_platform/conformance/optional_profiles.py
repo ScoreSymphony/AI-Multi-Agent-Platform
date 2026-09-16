@@ -1,4 +1,4 @@
-"""Explicit activation of optional #46 compatibility profiles.
+"""Explicit activation of optional compatibility profiles.
 
 Optional scenarios remain non-claims by default. Once a caller explicitly enables one,
 that scenario becomes required for the selected deployment claim and must execute its
@@ -26,7 +26,7 @@ def _pytest(*nodes: str) -> tuple[str, ...]:
 def _external(profile_id: str) -> tuple[str, ...]:
     return (
         sys.executable,
-        "scripts/ci/issue46_external_profile.py",
+        "scripts/ci/external_adapter_conformance_profile.py",
         profile_id,
     )
 
@@ -178,7 +178,7 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
 
 
 def optional_evidence_ids() -> tuple[str, ...]:
-    """Return optional scenario IDs with maintained executable #46 evidence."""
+    """Return optional scenario IDs with maintained executable evidence."""
 
     return tuple(sorted(_OPTIONAL_EVIDENCE))
 
@@ -220,7 +220,7 @@ def activate_optional_scenarios(
                     required=True,
                     unavailable_status=ConformanceStatus.NOT_IMPLEMENTED,
                     unavailable_reason=(
-                        "the optional profile was explicitly enabled, but no maintained #46 "
+                        "the optional profile was explicitly enabled, but no maintained "
                         "acceptance command is registered for this compatibility claim"
                     ),
                 )
