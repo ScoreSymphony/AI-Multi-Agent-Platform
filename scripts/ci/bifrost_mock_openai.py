@@ -22,7 +22,7 @@ class _State:
 
 
 class _Handler(BaseHTTPRequestHandler):
-    server_version = "Issue859MockOpenAI/1.0"
+    server_version = "BifrostMockOpenAI/1.0"
     protocol_version = "HTTP/1.1"
     state: ClassVar[_State] = _State()
 
@@ -40,7 +40,7 @@ class _Handler(BaseHTTPRequestHandler):
                             "id": "fixture-model",
                             "object": "model",
                             "created": 0,
-                            "owned_by": "issue-859",
+                            "owned_by": "bifrost-fixture",
                         }
                     ],
                 },
@@ -102,7 +102,7 @@ class _Handler(BaseHTTPRequestHandler):
                 "content": None,
                 "tool_calls": [
                     {
-                        "id": "call_issue859",
+                        "id": "call_bifrost_fixture",
                         "type": "function",
                         "function": {
                             "name": "report_status",
@@ -118,7 +118,7 @@ class _Handler(BaseHTTPRequestHandler):
         self._json(
             HTTPStatus.OK,
             {
-                "id": "chatcmpl-issue859",
+                "id": "chatcmpl-bifrost-fixture",
                 "object": "chat.completion",
                 "created": int(time.time()),
                 "model": model,
@@ -142,7 +142,7 @@ class _Handler(BaseHTTPRequestHandler):
         created = int(time.time())
         chunks = (
             {
-                "id": "chatcmpl-issue859-stream",
+                "id": "chatcmpl-bifrost-fixture-stream",
                 "object": "chat.completion.chunk",
                 "created": created,
                 "model": model,
@@ -155,7 +155,7 @@ class _Handler(BaseHTTPRequestHandler):
                 ],
             },
             {
-                "id": "chatcmpl-issue859-stream",
+                "id": "chatcmpl-bifrost-fixture-stream",
                 "object": "chat.completion.chunk",
                 "created": created,
                 "model": model,
@@ -168,7 +168,7 @@ class _Handler(BaseHTTPRequestHandler):
                 ],
             },
             {
-                "id": "chatcmpl-issue859-stream",
+                "id": "chatcmpl-bifrost-fixture-stream",
                 "object": "chat.completion.chunk",
                 "created": created,
                 "model": model,
@@ -207,7 +207,7 @@ def _prepare_github_actions_bifrost_data_root() -> None:
     workspace = os.getenv("GITHUB_WORKSPACE")
     if not workspace:
         return
-    data_root = Path(workspace) / ".issue859-bifrost-data"
+    data_root = Path(workspace) / ".bifrost-evaluation-data"
     data_root.mkdir(parents=True, exist_ok=True)
     # The reviewed image runs as UID 1000:GID 0 and requires APP_DIR to be writable.
     # This is a disposable CI-only directory containing synthetic configuration/state.
@@ -215,7 +215,7 @@ def _prepare_github_actions_bifrost_data_root() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the issue #859 mock OpenAI endpoint")
+    parser = argparse.ArgumentParser(description="Run the Bifrost mock OpenAI endpoint")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=18000)
     args = parser.parse_args(argv)

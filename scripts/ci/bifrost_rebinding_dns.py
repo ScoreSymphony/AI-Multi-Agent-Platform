@@ -1,4 +1,4 @@
-"""Controlled DNS rebinding fixture for issue #859 runtime evidence.
+"""Controlled DNS rebinding fixture for Bifrost runtime evidence.
 
 The fixture answers the first A query for one configured hostname with a
 synthetic public address and subsequent A queries with a blocked loopback
@@ -186,7 +186,7 @@ class _DNSHandler(socketserver.BaseRequestHandler):
 
 
 class _ControlHandler(BaseHTTPRequestHandler):
-    server_version = "Issue859RebindingDNS/1.2"
+    server_version = "BifrostRebindingDNS/1.2"
     state: ClassVar[_DNSState]
 
     def do_GET(self) -> None:  # noqa: N802
@@ -219,12 +219,12 @@ class _ControlHandler(BaseHTTPRequestHandler):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the issue #859 rebinding DNS fixture")
+    parser = argparse.ArgumentParser(description="Run the Bifrost rebinding DNS fixture")
     parser.add_argument("--dns-host", default="127.0.0.1")
     parser.add_argument("--dns-port", type=int, default=53)
     parser.add_argument("--control-host", default="127.0.0.1")
     parser.add_argument("--control-port", type=int, default=18002)
-    parser.add_argument("--hostname", default="issue859-rebind.test")
+    parser.add_argument("--hostname", default="bifrost-rebind.test")
     parser.add_argument("--first-ip", default="203.0.113.10")
     parser.add_argument("--rebound-ip", default="127.0.0.1")
     parser.add_argument(
