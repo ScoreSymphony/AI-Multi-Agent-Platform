@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -14,6 +15,7 @@ from .models import (
     ApplicationInstallRequest,
     ApplicationInstance,
     ApplicationLogEntry,
+    ApplicationManifest,
     ApplicationObservedState,
     utc_now,
 )
@@ -282,10 +284,10 @@ class ApplicationLifecycleService:
         self,
         application: Application,
         instance: ApplicationInstance,
-        operation: object,
+        operation: Callable[[ApplicationManifest, ApplicationInstance], ApplicationInstance],
     ) -> ApplicationInstance:
         try:
-            observed = operation(application.manifest, instance)  # type: ignore[operator]
+            observed = operation(application.manifest, instance)
         except ApplicationRuntimeError:
             self._persist_failed(instance)
             raise
