@@ -40,6 +40,13 @@ disposition = "keep"
 responsibility = "Application build/distribution state and release-gate integration, distinct from the component registry."
 
 [[package]]
+name = "applications"
+kind = "domain"
+owner = "applications"
+disposition = "keep"
+responsibility = "Canonical managed external-application definitions, instances, lifecycle, health, endpoints and reconciliation semantics."
+
+[[package]]
 name = "automation"
 kind = "domain"
 owner = "automation"
