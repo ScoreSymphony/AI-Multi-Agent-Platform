@@ -1,12 +1,12 @@
-"""Provider-neutral live Event projection for canonical conversations (issue #72)."""
+"""Provider-neutral live Event projection for canonical conversations."""
 
 from __future__ import annotations
 
 import asyncio
 import base64
 import json
+import sys
 from collections.abc import AsyncIterator, Mapping
-from contextlib import suppress
 from typing import Any, Protocol, cast
 from urllib.parse import parse_qsl
 from uuid import uuid4
@@ -34,6 +34,7 @@ from .stream_preparation import prepare_stream_request
 
 CONVERSATION_EVENT_STREAM_SUFFIX = ("events", "stream")
 _CURSOR_VERSION = 1
+_PUMP_TASK_NAME_PREFIX = "conversation-stream-pump:"
 
 
 class ConversationStreamingControlPlane(Protocol):
@@ -100,7 +101,8 @@ async def subscribe_conversation_events(
                     task_id,
                     positions.get(task_id),
                     queue,
-                )
+                ),
+                name=f"{_PUMP_TASK_NAME_PREFIX}{task_id}",
             )
             for task_id in conversation.task_ids
         ]
@@ -142,12 +144,7 @@ async def subscribe_conversation_events(
                     projection["attention"] = lifecycle.attention
                 yield projection
         finally:
-            for pump in pumps:
-                if not pump.done():
-                    pump.cancel()
-            for pump in pumps:
-                with suppress(asyncio.CancelledError):
-                    await pump
+            await _cancel_and_drain_pumps(pumps, primary=sys.exception())
 
     return iterator()
 
@@ -166,13 +163,80 @@ async def _pump_task_events(
             after_event_id=after_event_id,
         )
         async for event in stream:
-            await queue.put((task_id, event, None))
-    except BaseException as exc:
-        if isinstance(exc, asyncio.CancelledError):
-            raise
-        await queue.put((task_id, None, exc))
+            queue.put_nowait((task_id, event, None))
+    except asyncio.CancelledError as exc:
+        # Child cancellation is observable by the owning aggregator. Parent-driven teardown also
+        # reaches this path, but no consumer is waiting on the queue once teardown has begun.
+        queue.put_nowait((task_id, None, exc))
+        raise
+    # error-boundary: allow-broad-catch=boundary conversation pump owns ordinary child failures
+    except Exception as exc:
+        queue.put_nowait((task_id, None, exc))
     finally:
-        await queue.put((task_id, None, None))
+        # The queue is intentionally unbounded. Completion settlement is therefore synchronous and
+        # cannot be interrupted by queue backpressure or by another cancellation request.
+        queue.put_nowait((task_id, None, None))
+
+
+async def _cancel_and_drain_pumps(
+    pumps: list[asyncio.Task[None]],
+    *,
+    primary: BaseException | None,
+) -> None:
+    """Cancel remaining pumps and observe every child before iterator teardown completes.
+
+    Repeated cancellation of the consumer must not interrupt child settlement. If teardown itself
+    was entered without a primary exception, a new consumer cancellation is re-raised after all
+    pumps have settled. Expected child ``CancelledError`` values are the result of the cancellation
+    requested here; any other escaped child failure is retained as a safe note on an existing
+    primary exception or raised when teardown was otherwise clean.
+    """
+
+    for pump in pumps:
+        if not pump.done():
+            pump.cancel()
+
+    drain = asyncio.gather(*pumps, return_exceptions=True)
+    teardown_cancellation: asyncio.CancelledError | None = None
+    while not drain.done():
+        try:
+            await asyncio.shield(drain)
+        except asyncio.CancelledError as exc:
+            if teardown_cancellation is None:
+                teardown_cancellation = exc
+
+    results = drain.result()
+    unexpected = [
+        result
+        for result in results
+        if isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError)
+    ]
+
+    if primary is not None:
+        if teardown_cancellation is not None and teardown_cancellation is not primary:
+            primary.add_note("conversation stream teardown received an additional cancellation")
+        for failure in unexpected:
+            primary.add_note(
+                "conversation stream pump teardown observed an unexpected child failure: "
+                f"{type(failure).__name__}"
+            )
+        return
+
+    if teardown_cancellation is not None:
+        for failure in unexpected:
+            teardown_cancellation.add_note(
+                "conversation stream pump teardown observed an unexpected child failure: "
+                f"{type(failure).__name__}"
+            )
+        raise teardown_cancellation
+
+    if unexpected:
+        first = unexpected[0]
+        for failure in unexpected[1:]:
+            first.add_note(
+                f"additional conversation stream pump teardown failure: {type(failure).__name__}"
+            )
+        raise first
 
 
 async def _authorize_conversation_stream(

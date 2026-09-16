@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from collections.abc import Awaitable, Callable
 from datetime import datetime
+from functools import partial
 from importlib import import_module
 from types import MethodType
 from typing import Any, cast
@@ -21,6 +23,7 @@ _StartAttempt = Callable[[Step, StepCoordinationRecord, datetime], Awaitable[boo
 _ObserveRun = Callable[..., Awaitable[object]]
 _CancelActiveRun = Callable[[StepCoordinationRecord, str], Awaitable[None]]
 _CancelPlan = Callable[..., Awaitable[object]]
+_CleanupOperation = Callable[[], Awaitable[None]]
 
 
 def _budget_models() -> Any:
@@ -33,6 +36,90 @@ def _budget_store() -> Any:
     """Load reservation-store types without a static deployment -> execution package edge."""
 
     return import_module("ai_multi_agent_platform.execution.budgets.store")
+
+
+async def _settle_cleanup_operation(operation: _CleanupOperation) -> BaseException | None:
+    """Finish one async settlement despite caller cancellation and report secondary failure.
+
+    The cleanup runs in its own Task so repeated cancellation of the caller cannot interrupt a
+    reservation release half-way through. ``KeyboardInterrupt`` and ``SystemExit`` are deliberately
+    not contained here; process control remains authoritative.
+    """
+
+    try:
+        awaitable = operation()
+    except asyncio.CancelledError as exc:
+        return exc
+    # error-boundary: allow-broad-catch=cleanup settlement reports ordinary cleanup failure to owner
+    except Exception as exc:
+        return exc
+
+    cleanup = asyncio.ensure_future(awaitable)
+    caller_cancellation: asyncio.CancelledError | None = None
+    while not cleanup.done():
+        try:
+            await asyncio.shield(cleanup)
+        except asyncio.CancelledError as exc:
+            # shield prevents caller cancellation from cancelling ``cleanup``. A cancelled child is
+            # therefore distinguishable via cleanup.cancelled().
+            if not cleanup.cancelled() and caller_cancellation is None:
+                caller_cancellation = exc
+            if cleanup.done():
+                break
+        # error-boundary: allow-broad-catch=cleanup collect ordinary cleanup task failures
+        except Exception:
+            break
+
+    cleanup_failure: BaseException | None = None
+    try:
+        cleanup.result()
+    except asyncio.CancelledError as exc:
+        cleanup_failure = exc
+    # error-boundary: allow-broad-catch=cleanup settlement preserves primary control flow
+    except Exception as exc:
+        cleanup_failure = exc
+
+    if caller_cancellation is not None:
+        if cleanup_failure is not None:
+            caller_cancellation.add_note(
+                f"task-budget cleanup also failed with {type(cleanup_failure).__name__}"
+            )
+        return caller_cancellation
+    return cleanup_failure
+
+
+async def _settle_cleanup_batch(
+    operations: tuple[_CleanupOperation, ...],
+    *,
+    primary: BaseException | None = None,
+) -> None:
+    """Attempt every settlement exactly once and preserve an existing primary throwable."""
+
+    failures: list[BaseException] = []
+    for operation in operations:
+        failure = await _settle_cleanup_operation(operation)
+        if failure is not None:
+            failures.append(failure)
+
+    if not failures:
+        return
+    if primary is not None:
+        for failure in failures:
+            primary.add_note(
+                f"secondary task-budget settlement failed with {type(failure).__name__}"
+            )
+        return
+
+    cancellation = next(
+        (failure for failure in failures if isinstance(failure, asyncio.CancelledError)),
+        None,
+    )
+    first = cancellation or failures[0]
+    for failure in failures:
+        if failure is first:
+            continue
+        first.add_note(f"additional task-budget settlement failure: {type(failure).__name__}")
+    raise first
 
 
 class TaskBudgetRepairRuntime:
@@ -95,8 +182,12 @@ class TaskBudgetRepairRuntime:
                 step_id=step_id,
                 actor_ref=actor_ref,
             )
-        except BaseException:
-            await self._budgets.release(decision)
+        # error-boundary: allow-broad-catch=cleanup repair reservation settlement
+        except BaseException as exc:
+            await _settle_cleanup_batch(
+                (partial(self._budgets.release, decision),),
+                primary=exc,
+            )
             raise
 
         post_action = await self._budgets.reconcile(decision)
@@ -251,27 +342,45 @@ class TaskBudgetCoordinationBindings:
 
             parallel_decision = await self._claim_parallel(record)
             started = await original_start(step, record, now)
-            if not started:
-                await self._release_start_claims(retry_decision, parallel_decision)
-                return False
+        # error-boundary: allow-broad-catch=cleanup start claims must settle before propagation
+        except BaseException as exc:
+            await self._release_start_claims(
+                retry_decision,
+                parallel_decision,
+                primary=exc,
+            )
+            raise
 
-            if retry_decision is not None:
+        if not started:
+            await self._release_start_claims(retry_decision, parallel_decision)
+            return False
+
+        if retry_decision is not None:
+            try:
                 retry_result = await self._budgets.reconcile(retry_decision)
                 await self._budgets.require_permitted(retry_result)
-            return True
-        except BaseException:
-            await self._release_start_claims(retry_decision, parallel_decision)
-            raise
+            finally:
+                primary = sys.exception()
+                if primary is not None:
+                    await _settle_cleanup_batch(
+                        (partial(self._budgets.release, retry_decision),),
+                        primary=primary,
+                    )
+        return True
 
     async def _release_start_claims(
         self,
         retry_decision: Any | None,
         parallel_decision: Any | None,
+        *,
+        primary: BaseException | None = None,
     ) -> None:
+        operations: list[_CleanupOperation] = []
         if retry_decision is not None:
-            await self._budgets.release(retry_decision)
+            operations.append(partial(self._budgets.release, retry_decision))
         if parallel_decision is not None:
-            await self._budgets.release(parallel_decision)
+            operations.append(partial(self._budgets.release, parallel_decision))
+        await _settle_cleanup_batch(tuple(operations), primary=primary)
 
     async def _observe_with_budget(
         self,
@@ -294,7 +403,10 @@ class TaskBudgetCoordinationBindings:
             )
         finally:
             if step_id is not None:
-                await self._release_parallel(task_id, step_id)
+                await _settle_cleanup_batch(
+                    (partial(self._release_parallel, task_id, step_id),),
+                    primary=sys.exception(),
+                )
 
     async def _cancel_active_with_budget(
         self,
@@ -305,7 +417,10 @@ class TaskBudgetCoordinationBindings:
         try:
             await original_cancel_active(record, key)
         finally:
-            await self._release_parallel(record.task_id, record.step_id)
+            await _settle_cleanup_batch(
+                (partial(self._release_parallel, record.task_id, record.step_id),),
+                primary=sys.exception(),
+            )
 
     async def _cancel_plan_with_budget(
         self,
@@ -323,8 +438,13 @@ class TaskBudgetCoordinationBindings:
                 now=now,
             )
         finally:
-            for record in records:
-                await self._release_parallel(state.plan.task_id, record.step_id)
+            await _settle_cleanup_batch(
+                tuple(
+                    partial(self._release_parallel, state.plan.task_id, record.step_id)
+                    for record in records
+                ),
+                primary=sys.exception(),
+            )
 
     async def _claim_parallel(
         self,
