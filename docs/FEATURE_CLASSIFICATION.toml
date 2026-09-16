@@ -174,8 +174,8 @@ name = "Observability and accounting"
 owners = ["observability", "accounting"]
 role = "core"
 stability = "beta"
-public_surfaces = ["health/telemetry views", "usage/resource accounting views"]
-docs = ["docs/PLATFORM_CONFORMANCE.md"]
+public_surfaces = ["health/telemetry views", "usage/resource accounting views", "Task multi-agent trace explorer and trace-node detail"]
+docs = ["docs/PLATFORM_CONFORMANCE.md", "docs/operations/TRACE_EXPLORER.md"]
 compatibility = "Supported operator/public views may evolve in non-patch releases; canonical IDs and attribution semantics remain authoritative."
 user_signaling = "documentation"
 

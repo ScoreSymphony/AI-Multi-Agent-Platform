@@ -1,8 +1,7 @@
 """Canonical top-level command-line composition.
 
-Registry and governed Learning commands are API-first and use only the canonical
-Control Plane surfaces registered by the deployment. Every other area delegates
-to the stable repository/authenticated CLI composition.
+Registry, governed Learning and Task trace commands are API-first and use only the
+canonical Control Plane. Every other area delegates to the stable repository CLI.
 """
 
 from __future__ import annotations
@@ -26,6 +25,7 @@ from .profiles import CLIProfile, ProfileError, ProfileStore, default_config_pat
 from .registry import add_registry_parser, execute_registry
 from .render import Renderer
 from .repositories import run_cli as repository_run_cli
+from .trace import add_trace_parser, execute_trace
 
 
 def main() -> int:
@@ -57,7 +57,7 @@ def run_cli(
             )
         )
         return 2
-    if requested_area not in {"registry", "learning"}:
+    if requested_area not in {"registry", "learning", "trace"}:
         return repository_run_cli(
             arguments,
             transport=transport,
@@ -102,6 +102,8 @@ def run_cli(
             response = execute_registry(args, client, _require_confirmation)
         elif args.area == "learning":
             response = execute_learning(args, client, _require_confirmation)
+        elif args.area == "trace":
+            response = execute_trace(args, client)
         else:
             raise ProfileError(f"unsupported top-level CLI area: {args.area}")
         renderer.success(response)
@@ -134,6 +136,7 @@ def _build_parser() -> argparse.ArgumentParser:
     areas = parser.add_subparsers(dest="area", required=True)
     add_registry_parser(areas)
     add_learning_parser(areas)
+    add_trace_parser(areas)
     return parser
 
 
