@@ -64,7 +64,8 @@ def _complete_search_schemas(
     specification: dict[str, Any],
     schemas: dict[str, Any],
 ) -> None:
-    path = specification.get("paths", {}).get(f"/api/{API_VERSION}/search")
+    paths = specification.get("paths")
+    path = paths.get(f"/api/{API_VERSION}/search") if isinstance(paths, dict) else None
     operation = path.get("get") if isinstance(path, dict) else None
     parameters = operation.get("parameters") if isinstance(operation, dict) else None
     properties: dict[str, Any] = {}
@@ -99,37 +100,69 @@ def _complete_search_schemas(
 
 
 def _telemetry_schemas() -> dict[str, Any]:
+    external_ref = {
+        "type": "object",
+        "required": ["system", "kind", "value"],
+        "properties": {
+            "system": {"type": "string"},
+            "kind": {"type": "string"},
+            "value": {"type": "string"},
+        },
+        "additionalProperties": False,
+    }
+    provenance = {
+        "type": "object",
+        "required": ["source", "actor_ref", "details"],
+        "properties": {
+            "source": {"type": "string"},
+            "actor_ref": _NULLABLE_STRING,
+            "details": _JSON_OBJECT,
+        },
+        "additionalProperties": False,
+    }
     return {
         "CanonicalEvent": {
             "type": "object",
             "required": [
                 "id",
                 "type",
-                "schema_version",
                 "event_type",
-                "occurred_at",
                 "subject_type",
                 "subject_id",
                 "correlation_id",
+                "owner_ref",
+                "project_id",
+                "causation_id",
+                "trace_id",
+                "occurred_at",
                 "payload",
+                "schema_version",
+                "provenance",
+                "external_refs",
             ],
             "properties": {
                 "id": {"type": "string"},
                 "type": {"type": "string", "const": "event"},
-                "schema_version": {"type": "string"},
                 "event_type": {"type": "string"},
-                "occurred_at": {"type": "string", "format": "date-time"},
                 "subject_type": {"type": "string"},
                 "subject_id": {"type": "string"},
-                "project_id": _NULLABLE_STRING,
                 "correlation_id": {"type": "string"},
+                "owner_ref": {
+                    "oneOf": [
+                        {"$ref": "#/components/schemas/Owner"},
+                        {"type": "null"},
+                    ]
+                },
+                "project_id": _NULLABLE_STRING,
                 "causation_id": _NULLABLE_STRING,
                 "trace_id": _NULLABLE_STRING,
+                "occurred_at": {"type": "string", "format": "date-time"},
                 "payload": _JSON_OBJECT,
+                "schema_version": {"type": "string"},
+                "provenance": {"oneOf": [provenance, {"type": "null"}]},
+                "external_refs": {"type": "array", "items": external_ref},
             },
-            # Canonical events may expose additive owner/provenance fields from the
-            # versioned domain schema without changing timeline discrimination.
-            "additionalProperties": True,
+            "additionalProperties": False,
         },
         "TelemetryFailure": {
             "type": "object",
@@ -184,8 +217,8 @@ def _telemetry_schemas() -> dict[str, Any]:
     }
 
 
-def _accounting_schemas() -> dict[str, Any]:
-    quality_counts = {
+def _quality_counts_schema() -> dict[str, Any]:
+    return {
         "type": "object",
         "required": _MEASUREMENT_QUALITY,
         "properties": {
@@ -193,180 +226,122 @@ def _accounting_schemas() -> dict[str, Any]:
         },
         "additionalProperties": False,
     }
-    usage_record = {
-        "type": "object",
-        "required": [
-            "id",
-            "type",
-            "metric_type",
-            "quantity",
-            "unit",
-            "quality",
-            "aggregation_mode",
-            "source",
-            "provider",
-            "timestamp",
-            "started_at",
-            "ended_at",
-            "scope",
-            "correlation_id",
-            "causation_id",
-            "cost_amount",
-            "currency",
-            "precision",
-            "confidence",
-            "provenance",
-        ],
-        "properties": {
-            "id": {"type": "string"},
-            "type": {"type": "string", "const": "usage-record"},
-            "metric_type": {"type": "string"},
-            "quantity": {"type": ["number", "null"]},
-            "unit": {"type": "string"},
-            "quality": {"type": "string", "enum": _MEASUREMENT_QUALITY},
-            "aggregation_mode": {"type": "string", "enum": _AGGREGATION_MODE},
-            "source": {"type": "string"},
-            "provider": _NULLABLE_STRING,
-            "timestamp": {"type": "string", "format": "date-time"},
-            "started_at": _TIMESTAMP_OR_NULL,
-            "ended_at": _TIMESTAMP_OR_NULL,
-            "scope": _STRING_MAP,
-            "correlation_id": _NULLABLE_STRING,
-            "causation_id": _NULLABLE_STRING,
-            "cost_amount": {"type": ["number", "null"]},
-            "currency": _NULLABLE_STRING,
-            "precision": {"type": ["number", "null"]},
-            "confidence": {"type": ["number", "null"]},
-            "provenance": _JSON_OBJECT,
-        },
-        "additionalProperties": False,
-    }
-    trend_point = {
-        "type": "object",
-        "required": [
-            "start",
-            "end",
-            "value",
-            "record_count",
-            "unavailable_count",
-            "quality_counts",
-        ],
-        "properties": {
-            "start": {"type": "string", "format": "date-time"},
-            "end": {"type": "string", "format": "date-time"},
-            "value": {"type": ["number", "null"]},
-            "record_count": {"type": "integer", "minimum": 0},
-            "unavailable_count": {"type": "integer", "minimum": 0},
-            "quality_counts": {"$ref": "#/components/schemas/UsageQualityCounts"},
-        },
-        "additionalProperties": False,
-    }
-    usage_aggregate = {
-        "type": "object",
-        "required": [
-            "id",
-            "type",
-            "metric_type",
-            "unit",
-            "total",
-            "record_count",
-            "unavailable_count",
-            "quality_counts",
-            "aggregation_mode",
-            "scope",
-            "trend_window_start",
-            "trend_window_end",
-            "trend_bucket_seconds",
-            "trend",
-        ],
-        "properties": {
-            "id": {"type": "string"},
-            "type": {"type": "string", "const": "usage-aggregate"},
-            "metric_type": {"type": "string"},
-            "unit": {"type": "string"},
-            "total": {"type": ["number", "null"]},
-            "record_count": {"type": "integer", "minimum": 0},
-            "unavailable_count": {"type": "integer", "minimum": 0},
-            "quality_counts": {"$ref": "#/components/schemas/UsageQualityCounts"},
-            "aggregation_mode": {"type": "string", "enum": _AGGREGATION_MODE},
-            "scope": _STRING_MAP,
-            "trend_window_start": _TIMESTAMP_OR_NULL,
-            "trend_window_end": _TIMESTAMP_OR_NULL,
-            "trend_bucket_seconds": {"type": ["integer", "null"]},
-            "trend": {
-                "type": "array",
-                "items": {"$ref": "#/components/schemas/UsageTrendPoint"},
-            },
-        },
-        "additionalProperties": False,
-    }
-    usage_budget = {
-        "type": "object",
-        "required": [
-            "id",
-            "type",
-            "metric_type",
-            "unit",
-            "scope_type",
-            "scope_id",
-            "limit",
-            "kind",
-            "action",
-            "warning_fraction",
-            "window_seconds",
-            "window_mode",
-            "window_start",
-            "window_end",
-            "include_estimated",
-            "owner_type",
-            "owner_id",
-            "version",
-            "consumed",
-            "remaining",
-            "fraction",
-            "threshold_level",
-        ],
-        "properties": {
-            "id": {"type": "string"},
-            "type": {"type": "string", "const": "usage-budget"},
-            "metric_type": {"type": "string"},
-            "unit": {"type": "string"},
-            "scope_type": {"type": "string"},
-            "scope_id": {"type": "string"},
-            "limit": {"type": "number", "exclusiveMinimum": 0},
-            "kind": {"type": "string", "enum": ["soft", "hard"]},
-            "action": {
-                "type": "string",
-                "enum": ["record_only", "warn", "deny", "require_approval", "notify"],
-            },
-            "warning_fraction": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
-            "window_seconds": {"type": ["integer", "null"]},
-            "window_mode": {"type": "string", "enum": ["lifetime", "rolling"]},
-            "window_start": _TIMESTAMP_OR_NULL,
-            "window_end": _TIMESTAMP_OR_NULL,
-            "include_estimated": {"type": "boolean"},
-            "owner_type": _NULLABLE_STRING,
-            "owner_id": _NULLABLE_STRING,
-            "version": {"type": "integer", "minimum": 1},
-            "consumed": {"type": ["number", "null"]},
-            "remaining": {"type": ["number", "null"]},
-            "fraction": {"type": ["number", "null"]},
-            "threshold_level": {
-                "type": ["string", "null"],
-                "enum": ["warning", "exceeded", None],
-            },
-        },
-        "additionalProperties": False,
-    }
+
+
+def _accounting_schemas() -> dict[str, Any]:
     return {
-        "UsageQualityCounts": quality_counts,
-        "UsageRecord": usage_record,
-        "UsageTrendPoint": trend_point,
-        "UsageAggregate": usage_aggregate,
-        "UsageBudget": usage_budget,
+        "UsageQualityCounts": _quality_counts_schema(),
+        "UsageRecord": _usage_record_schema(),
+        "UsageTrendPoint": _usage_trend_point_schema(),
+        "UsageAggregate": _usage_aggregate_schema(),
+        "UsageBudget": _usage_budget_schema(),
         "UsageRecordPage": _page_schema("UsageRecord"),
         "UsageAggregatePage": _page_schema("UsageAggregate"),
         "UsageBudgetPage": _page_schema("UsageBudget"),
+    }
+
+
+def _usage_record_schema() -> dict[str, Any]:
+    properties = {
+        "id": {"type": "string"},
+        "type": {"type": "string", "const": "usage-record"},
+        "metric_type": {"type": "string"},
+        "quantity": {"type": ["number", "null"]},
+        "unit": {"type": "string"},
+        "quality": {"type": "string", "enum": _MEASUREMENT_QUALITY},
+        "aggregation_mode": {"type": "string", "enum": _AGGREGATION_MODE},
+        "source": {"type": "string"},
+        "provider": _NULLABLE_STRING,
+        "timestamp": {"type": "string", "format": "date-time"},
+        "started_at": _TIMESTAMP_OR_NULL,
+        "ended_at": _TIMESTAMP_OR_NULL,
+        "scope": _STRING_MAP,
+        "correlation_id": _NULLABLE_STRING,
+        "causation_id": _NULLABLE_STRING,
+        "cost_amount": {"type": ["number", "null"]},
+        "currency": _NULLABLE_STRING,
+        "precision": {"type": ["number", "null"]},
+        "confidence": {"type": ["number", "null"]},
+        "provenance": _JSON_OBJECT,
+    }
+    return _closed_required_object(properties)
+
+
+def _usage_trend_point_schema() -> dict[str, Any]:
+    properties = {
+        "start": {"type": "string", "format": "date-time"},
+        "end": {"type": "string", "format": "date-time"},
+        "value": {"type": ["number", "null"]},
+        "record_count": {"type": "integer", "minimum": 0},
+        "unavailable_count": {"type": "integer", "minimum": 0},
+        "quality_counts": {"$ref": "#/components/schemas/UsageQualityCounts"},
+    }
+    return _closed_required_object(properties)
+
+
+def _usage_aggregate_schema() -> dict[str, Any]:
+    properties = {
+        "id": {"type": "string"},
+        "type": {"type": "string", "const": "usage-aggregate"},
+        "metric_type": {"type": "string"},
+        "unit": {"type": "string"},
+        "total": {"type": ["number", "null"]},
+        "record_count": {"type": "integer", "minimum": 0},
+        "unavailable_count": {"type": "integer", "minimum": 0},
+        "quality_counts": {"$ref": "#/components/schemas/UsageQualityCounts"},
+        "aggregation_mode": {"type": "string", "enum": _AGGREGATION_MODE},
+        "scope": _STRING_MAP,
+        "trend_window_start": _TIMESTAMP_OR_NULL,
+        "trend_window_end": _TIMESTAMP_OR_NULL,
+        "trend_bucket_seconds": {"type": ["integer", "null"]},
+        "trend": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/UsageTrendPoint"},
+        },
+    }
+    return _closed_required_object(properties)
+
+
+def _usage_budget_schema() -> dict[str, Any]:
+    properties = {
+        "id": {"type": "string"},
+        "type": {"type": "string", "const": "usage-budget"},
+        "metric_type": {"type": "string"},
+        "unit": {"type": "string"},
+        "scope_type": {"type": "string"},
+        "scope_id": {"type": "string"},
+        "limit": {"type": "number", "exclusiveMinimum": 0},
+        "kind": {"type": "string", "enum": ["soft", "hard"]},
+        "action": {
+            "type": "string",
+            "enum": ["record_only", "warn", "deny", "require_approval", "notify"],
+        },
+        "warning_fraction": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "window_seconds": {"type": ["integer", "null"]},
+        "window_mode": {"type": "string", "enum": ["lifetime", "rolling"]},
+        "window_start": _TIMESTAMP_OR_NULL,
+        "window_end": _TIMESTAMP_OR_NULL,
+        "include_estimated": {"type": "boolean"},
+        "owner_type": _NULLABLE_STRING,
+        "owner_id": _NULLABLE_STRING,
+        "version": {"type": "integer", "minimum": 1},
+        "consumed": {"type": "number"},
+        "remaining": {"type": "number"},
+        "fraction": {"type": "number", "minimum": 0},
+        "threshold_level": {
+            "type": ["string", "null"],
+            "enum": ["warning", "exceeded", None],
+        },
+    }
+    return _closed_required_object(properties)
+
+
+def _closed_required_object(properties: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "required": list(properties),
+        "properties": properties,
+        "additionalProperties": False,
     }
 
 
