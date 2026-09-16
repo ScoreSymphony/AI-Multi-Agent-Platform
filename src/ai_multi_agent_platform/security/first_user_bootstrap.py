@@ -87,6 +87,10 @@ class FirstUserBootstrapService:
         self._bootstrap_lock = asyncio.Lock()
 
     async def status(self) -> FirstUserBootstrapStatus:
+        async with self._bootstrap_lock:
+            return await self._status_unlocked()
+
+    async def _status_unlocked(self) -> FirstUserBootstrapStatus:
         accounts = tuple(self.authentication.store.users.values())
         if not accounts:
             state = FirstUserBootstrapState.UNINITIALIZED
