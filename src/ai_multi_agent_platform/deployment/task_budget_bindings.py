@@ -29,6 +29,12 @@ def _budget_models() -> Any:
     return import_module("ai_multi_agent_platform.execution.budgets.models")
 
 
+def _budget_store() -> Any:
+    """Load reservation-store types without a static deployment -> execution package edge."""
+
+    return import_module("ai_multi_agent_platform.execution.budgets.store")
+
+
 class TaskBudgetRepairRuntime:
     """Enforce one shared Task repair budget before a new repair Run can start.
 
@@ -366,7 +372,7 @@ class TaskBudgetCoordinationBindings:
                 "attempt": record.current_attempt + 1,
             },
         )
-        claim = budget.ReservationClaim(
+        claim = _budget_store().ReservationClaim(
             reservation=reservation,
             limit=limit.limit,
             external_consumed=dimension.consumed,
