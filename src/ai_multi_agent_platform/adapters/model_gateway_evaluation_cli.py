@@ -82,14 +82,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     providers: dict[str, OpenAICompatibleModelProvider] = {
         "direct": _provider(
-            provider_id="issue-859-direct",
+            provider_id="model-gateway-evaluation-direct",
             base_url=args.direct_base_url,
             canonical_model_id=args.canonical_model_id,
             native_model=args.direct_model,
             api_key_env=args.direct_api_key_env,
         ),
         "bifrost": _provider(
-            provider_id="issue-859-bifrost",
+            provider_id="model-gateway-evaluation-bifrost",
             base_url=args.bifrost_base_url,
             canonical_model_id=args.canonical_model_id,
             native_model=args.bifrost_model,
@@ -115,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.litellm_base_url is not None and args.litellm_model is not None:
         assert args.litellm_version is not None
         providers["litellm"] = _provider(
-            provider_id="issue-859-litellm",
+            provider_id="model-gateway-evaluation-litellm",
             base_url=args.litellm_base_url,
             canonical_model_id=args.canonical_model_id,
             native_model=args.litellm_model,

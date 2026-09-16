@@ -43,7 +43,7 @@ docker run -d \
   --name "$mock" \
   --network "$network" \
   --ip 203.0.113.20 \
-  -v "$GITHUB_WORKSPACE/scripts/ci/issue859_mock_openai.py:/fixture.py:ro" \
+  -v "$GITHUB_WORKSPACE/scripts/ci/bifrost_mock_openai.py:/fixture.py:ro" \
   python:3.12-slim \
   python /fixture.py --host 0.0.0.0 --port 18000
 
@@ -52,26 +52,26 @@ docker run -d \
   --network "$network" \
   --ip 203.0.113.10 \
   -p 127.0.0.1:18001:18001 \
-  -v "$GITHUB_WORKSPACE/scripts/ci/issue859_ssrf_sentinel.py:/fixture.py:ro" \
+  -v "$GITHUB_WORKSPACE/scripts/ci/bifrost_ssrf_sentinel.py:/fixture.py:ro" \
   python:3.12-slim \
   python /fixture.py \
     --host 0.0.0.0 \
     --port 18001 \
-    --rebinding-location http://issue859-rebind.test:18003/ssrf-sentinel.txt
+    --rebinding-location http://bifrost-rebind.test:18003/ssrf-sentinel.txt
 
 docker run -d \
   --name "$dns" \
   --network "$network" \
   --ip 203.0.113.53 \
   -p 127.0.0.1:18002:18002 \
-  -v "$GITHUB_WORKSPACE/scripts/ci/issue859_rebinding_dns.py:/fixture.py:ro" \
+  -v "$GITHUB_WORKSPACE/scripts/ci/bifrost_rebinding_dns.py:/fixture.py:ro" \
   python:3.12-slim \
   python /fixture.py \
     --dns-host 0.0.0.0 \
     --dns-port 53 \
     --control-host 0.0.0.0 \
     --control-port 18002 \
-    --hostname issue859-rebind.test \
+    --hostname bifrost-rebind.test \
     --first-ip 203.0.113.10 \
     --rebound-ip 127.0.0.1
 
@@ -199,7 +199,7 @@ PY
 set +e
 BIFROST_EVAL_BIFROST_BASE_URL=http://127.0.0.1:18080/v1 \
 BIFROST_EVAL_BIFROST_NATIVE_OPENAI_MODEL=openai/fixture-model \
-BIFROST_EVAL_SSRF_REBINDING_URL=http://issue859-rebind.test:18001/redirect-to-rebound-host \
+BIFROST_EVAL_SSRF_REBINDING_URL=http://bifrost-rebind.test:18001/redirect-to-rebound-host \
 BIFROST_EVAL_REBINDING_DNS_CONTROL_URL=http://127.0.0.1:18002 \
 BIFROST_EVAL_SSRF_SENTINEL_CONTROL_URL=http://127.0.0.1:18001/control \
 pytest -q tests/integration/platform/test_bifrost_dns_rebinding.py -m integration
@@ -225,9 +225,9 @@ def get(url: str) -> dict[str, object]:
 evidence = {
     "bifrost_version": "v2.1.1",
     "network": "isolated Docker bridge 203.0.113.0/24",
-    "hostname": "issue859-rebind.test",
-    "entry_url": "http://issue859-rebind.test:18001/redirect-to-rebound-host",
-    "redirect_url": "http://issue859-rebind.test:18003/ssrf-sentinel.txt",
+    "hostname": "bifrost-rebind.test",
+    "entry_url": "http://bifrost-rebind.test:18001/redirect-to-rebound-host",
+    "redirect_url": "http://bifrost-rebind.test:18003/ssrf-sentinel.txt",
     "first_dns_answer": "203.0.113.10",
     "rebound_dns_answer": "127.0.0.1",
     "gate_exit_status": int(os.environ["BIFROST_DNS_REBINDING_GATE_STATUS"]),

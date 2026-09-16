@@ -1,4 +1,4 @@
-"""Reproducible direct-vs-gateway model benchmark evidence for issue #859.
+"""Reproducible direct-vs-gateway model benchmark evidence.
 
 The harness is intentionally gateway-neutral. Bifrost and LiteLLM are evaluated by
 pointing ordinary platform ModelProvider implementations at their HTTP endpoints;
@@ -126,8 +126,8 @@ async def run_model_gateway_comparison(
 ) -> ModelGatewayBenchmarkReport:
     """Run an identical canonical request workload across direct/gateway paths.
 
-    ``providers`` must contain a target named ``direct``. Other names are free-form
-    (for issue #859 the expected names are ``bifrost`` and optionally ``litellm``).
+    ``providers`` must contain a target named ``direct``. Other names are free-form;
+    expected gateway target names include ``bifrost`` and optionally ``litellm``.
     Only canonical response identity and aggregate measurements are recorded; raw
     prompts, responses, credentials, headers and exception messages are excluded.
     """
@@ -276,6 +276,6 @@ def _request(
     return ModelRequest(
         request_id=request_id,
         messages=(spec.prompt,),
-        context=OperationContext(correlation_id=f"issue-859:{target_name}:{request_id}"),
+        context=OperationContext(correlation_id=f"model-gateway-eval:{target_name}:{request_id}"),
         requirements={"model_config_id": spec.canonical_model_id},
     )
