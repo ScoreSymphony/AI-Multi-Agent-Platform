@@ -7,6 +7,7 @@ import pytest
 from ai_multi_agent_platform.accounting.service import AccountingService
 from ai_multi_agent_platform.accounting.store import InMemoryUsageStore
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.execution.budgets import (
     BudgetConsumptionSource,
     BudgetDimension,
@@ -27,7 +28,7 @@ from ai_multi_agent_platform.security import (
     ResourceType,
 )
 
-_TASK_ID = "task_budget_governance"
+_TASK_ID = new_id("task")
 
 
 def _policy() -> TaskBudgetPolicy:
