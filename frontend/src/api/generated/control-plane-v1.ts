@@ -351,19 +351,19 @@ export type CanonicalEvent = {
 
 export type TelemetryFailure = {
   code: string;
-  component: string;
+  component: "domain_kernel" | "orchestration" | "agent" | "execution" | "model_provider_router" | "capability_tool" | "persistence_storage" | "authorization_approval" | "verification" | "scheduler_worker_node" | "automation" | "control_plane_ha" | "connector_browser" | "plugin_adapter" | "infrastructure_unknown";
   retryable: boolean;
 };
 
 export type TelemetryTimelineEntry = {
   attributes: Record<string, JsonValue>;
-  component: string;
-  context: Record<string, JsonValue>;
+  component: "domain_kernel" | "orchestration" | "agent" | "execution" | "model_provider_router" | "capability_tool" | "persistence_storage" | "authorization_approval" | "verification" | "scheduler_worker_node" | "automation" | "control_plane_ha" | "connector_browser" | "plugin_adapter" | "infrastructure_unknown";
+  context: Record<string, string>;
   duration_seconds: number | null;
   event_name: string;
   failure: TelemetryFailure | null;
   id: string;
-  outcome: string;
+  outcome: "unknown" | "succeeded" | "failed" | "cancelled" | "timed_out";
   timestamp: string;
   type: "telemetry";
 };
