@@ -57,7 +57,7 @@ def build_single_node_deployment(
 ) -> SingleNodeDeployment:
     """Build the public durable profile through the typed single-node composition."""
 
-    deployment = _build_single_node_deployment(
+    return _build_single_node_deployment(
         config,
         onboarding_model_adapters=onboarding_model_adapters,
         secret_provider=secret_provider,
@@ -67,33 +67,6 @@ def build_single_node_deployment(
         enable_distributed_execution=enable_distributed_execution,
         repository_discovery_resolver=repository_discovery_resolver,
         application_release_gate_policy=application_release_gate_policy,
-    )
-    _bind_official_first_run(deployment)
-    return deployment
-
-
-def _bind_official_first_run(deployment: SingleNodeDeployment) -> None:
-    # Keep onboarding importable without a deployment -> onboarding -> deployment cycle.
-    from ai_multi_agent_platform.onboarding.multi_agent_first_run import (
-        ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
-        MultiAgentFirstRunService,
-    )
-
-    service = MultiAgentFirstRunService(
-        onboarding=deployment.onboarding,
-        kernel=deployment.kernel,
-        planning=deployment.planning,
-        scopes=deployment.scopes,
-        agents=deployment.agents,
-        authorization=deployment.authorization,
-        coordination=deployment.coordination_repository,
-        files=deployment.files,
-        verification=deployment.verification,
-        verification_runtime=deployment.verification_runtime,
-    )
-    deployment.control_plane.register_command(
-        ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
-        service.run,
     )
 
 
