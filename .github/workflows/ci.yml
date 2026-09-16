@@ -33,6 +33,8 @@ jobs:
         run: mypy
       - name: Fast unit tests
         run: pytest tests/unit
+      - name: Verify fast-layer regression detection
+        run: python scripts/ci/verify_fast_unit_regression_detection.py
       - name: Full pytest suite
         run: pytest
       - name: Deterministic evaluation gate
