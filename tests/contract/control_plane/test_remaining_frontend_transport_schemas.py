@@ -16,9 +16,7 @@ def _schemas(specification: dict[str, Any]) -> dict[str, Any]:
 def _assert_typed_page(schemas: dict[str, Any], page_name: str, item_name: str) -> None:
     page = schemas[page_name]
     assert page["required"] == ["items", "next_cursor", "total", "limit"]
-    assert page["properties"]["items"]["items"] == {
-        "$ref": f"#/components/schemas/{item_name}"
-    }
+    assert page["properties"]["items"]["items"] == {"$ref": f"#/components/schemas/{item_name}"}
     assert page["properties"]["next_cursor"]["type"] == ["string", "null"]
 
 
