@@ -1,0 +1,437 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  SetupClient,
+  type SetupProductCard,
+  type SetupRegistrySelection,
+  type SetupSessionStatus,
+  type SetupStepId,
+} from "../../api/setup";
+import type { APImanifest } from "../../api/types";
+import { Card, ErrorState, LoadingState, StatusBadge } from "../../components/States";
+
+const STEP_LABELS: Record<SetupStepId, string> = {
+  identity: "Administrator",
+  environment: "Environment",
+  components: "Applications & components",
+  configuration: "Configuration & credentials",
+  validation: "Validation",
+  ready: "Ready",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  orchestrator: "Orchestration",
+  model_provider: "Models",
+  executor: "Execution",
+  memory_knowledge: "Memory & knowledge",
+  tools_mcp: "Tools & integrations",
+  storage: "Storage",
+  compute: "Compute",
+};
+
+interface SetupLifecyclePanelProps {
+  setup: SetupClient;
+  manifest?: APImanifest | null;
+  onStateChange?: (status: SetupSessionStatus) => void;
+}
+
+export function SetupLifecyclePanel({
+  setup,
+  manifest,
+  onStateChange,
+}: SetupLifecyclePanelProps) {
+  const manifestKnown = manifest !== undefined && manifest !== null;
+  const available = manifestKnown ? manifest.resources.includes("setup-sessions") : true;
+  const updateAvailable = manifestKnown
+    ? (manifest.commands?.includes("onboarding.update-setup-session") ?? false)
+    : true;
+  const provisionAvailable = manifestKnown
+    ? (manifest.commands?.includes("onboarding.provision-setup") ?? false)
+    : true;
+  const validateAvailable = manifestKnown
+    ? (manifest.commands?.includes("onboarding.validate-setup") ?? false)
+    : true;
+  const [status, setStatus] = useState<SetupSessionStatus | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!available) return;
+    setLoading(true);
+    try {
+      const next = await setup.status();
+      setStatus(next);
+      setError(null);
+      onStateChange?.(next);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setLoading(false);
+    }
+  }, [available, onStateChange, setup]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const selectedRegistryRefs = useMemo(
+    () => new Set(status?.registry_items.map((item) => registryRef(item)) ?? []),
+    [status],
+  );
+
+  if (!available) {
+    return (
+      <Card title="Guided initial setup">
+        <p>
+          This Control Plane does not advertise the persistent setup lifecycle. The canonical
+          onboarding and component-profile APIs remain available independently.
+        </p>
+      </Card>
+    );
+  }
+  if (loading && status === null) return <LoadingState label="Loading persistent setup state…" />;
+  if (error && status === null) return <ErrorState error={error} onRetry={() => void load()} />;
+  if (status === null) return <LoadingState label="Loading persistent setup state…" />;
+
+  async function mutate(label: string, operation: () => Promise<SetupSessionStatus>, success: string) {
+    setBusy(label);
+    setError(null);
+    setNotice(null);
+    try {
+      const next = await operation();
+      setStatus(next);
+      onStateChange?.(next);
+      setNotice(success);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function selectRegistryItem(card: SetupProductCard, selected: boolean) {
+    if (!updateAvailable || card.kind !== "registry_item" || card.version === null) return;
+    const ref = `${card.technical_id}@${card.version}`;
+    const nextSelections = selected
+      ? uniqueSelections([
+          ...status.registry_items,
+          { item_id: card.technical_id, version: card.version },
+        ])
+      : status.registry_items.filter((item) => registryRef(item) !== ref);
+    await mutate(
+      `registry:${ref}`,
+      () => setup.update({ current_step: "components", registry_items: nextSelections }),
+      "Component selection saved on the server. The dependency plan was recalculated.",
+    );
+  }
+
+  async function setStep(step: Exclude<SetupStepId, "identity" | "ready">) {
+    if (!updateAvailable) return;
+    await mutate(
+      `step:${step}`,
+      () => setup.update({ current_step: step }),
+      `Setup progress saved at ${STEP_LABELS[step]}.`,
+    );
+  }
+
+  async function provision() {
+    if (!provisionAvailable) return;
+    setBusy("provision");
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await setup.provision();
+      setStatus(result.setup);
+      onStateChange?.(result.setup);
+      if (result.outcome?.state === "failed") {
+        setNotice("Provisioning stopped after a failed owner-domain operation. The failure is persisted and can be retried safely.");
+      } else {
+        setNotice(result.replayed
+          ? "The prior idempotent provisioning result was replayed."
+          : "Selected installable components were provisioned through their canonical owner domains.");
+      }
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function validate() {
+    if (!validateAvailable) return;
+    await mutate(
+      "validate",
+      () => setup.validate(),
+      "Readiness was recalculated from the live backend state.",
+    );
+  }
+
+  const registryCards = status.catalog.filter((card) => card.kind === "registry_item");
+  const groupedCards = groupCards(status.catalog);
+  const pendingMutations = status.plan.actions.filter(
+    (action) => action.state === "pending" && (action.kind === "install" || action.kind === "activate"),
+  );
+
+  return (
+    <div className="stack">
+      <Card title="Guided initial setup">
+        <p>
+          Progress, selections and provisioning outcomes are server-owned and resumable. Browser
+          reloads never restart completed work, and installation is performed only by explicit
+          authenticated Control Plane mutations.
+        </p>
+        {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+        {notice ? <div className="state" role="status"><strong>{notice}</strong></div> : null}
+        <SetupProgress status={status} />
+        <div className="actions">
+          <button className="secondary" disabled={busy !== null || loading} onClick={() => void load()}>
+            {loading ? "Refreshing…" : "Refresh setup state"}
+          </button>
+          {status.current_step !== "ready" ? (
+            <button
+              className="secondary"
+              disabled={busy !== null || !updateAvailable}
+              onClick={() => void setStep(nextEditableStep(status.current_step))}
+            >
+              Continue setup
+            </button>
+          ) : null}
+        </div>
+      </Card>
+
+      <Card title="Applications & components">
+        <p>
+          Choose product capabilities rather than technical package IDs. Already available platform
+          components are reused. Optional Registry items are selected here and remain unchanged until
+          you explicitly provision the reviewed plan.
+        </p>
+        {Object.entries(groupedCards).map(([category, cards]) => (
+          <section className="stack" key={category}>
+            <h3>{CATEGORY_LABELS[category] ?? category}</h3>
+            <div className="grid-two">
+              {cards.map((card) => (
+                <ProductCard
+                  busy={busy !== null}
+                  card={card}
+                  key={card.id}
+                  selected={
+                    card.kind === "registry_item"
+                    && card.version !== null
+                    && selectedRegistryRefs.has(`${card.technical_id}@${card.version}`)
+                  }
+                  selectionAvailable={updateAvailable}
+                  onSelected={(selected) => void selectRegistryItem(card, selected)}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+        {registryCards.length === 0 ? (
+          <p>
+            No optional Registry catalog is configured. The setup therefore reuses the shipped
+            components and does not invent network or paid-provider installation choices.
+          </p>
+        ) : null}
+      </Card>
+
+      <Card title="Dependency & compatibility plan">
+        <p>
+          This preview is computed before mutation. Blocked and manual actions are never silently
+          installed, while already available components are explicit no-op reuse actions.
+        </p>
+        <PlanTable status={status} />
+        <div className="actions">
+          <button
+            disabled={
+              busy !== null
+              || !provisionAvailable
+              || pendingMutations.length === 0
+              || status.plan.blocking
+            }
+            onClick={() => void provision()}
+          >
+            {busy === "provision" ? "Provisioning…" : "Provision selected components"}
+          </button>
+          <button
+            className="secondary"
+            disabled={busy !== null || !validateAvailable}
+            onClick={() => void validate()}
+          >
+            {busy === "validate" ? "Validating…" : "Validate readiness"}
+          </button>
+        </div>
+        {status.plan.blocking ? (
+          <p role="alert">
+            Resolve the blocked or manual-required actions before setup can become ready.
+          </p>
+        ) : null}
+        {!status.plan.mutation_required ? (
+          <p>No pending automatic install or activation operation exists in the current plan.</p>
+        ) : null}
+      </Card>
+
+      <Card title="Readiness">
+        <dl className="definition-list">
+          <div>
+            <dt>Setup</dt>
+            <dd><StatusBadge value={status.readiness.ready ? "ready" : "incomplete"} /></dd>
+          </div>
+          <div>
+            <dt>Canonical onboarding state</dt>
+            <dd><code>{status.readiness.canonical_onboarding_state ?? "unknown"}</code></dd>
+          </div>
+          <div>
+            <dt>Active component profile</dt>
+            <dd><code>{status.active_profile_id ?? "not selected"}</code></dd>
+          </div>
+          <div>
+            <dt>Dashboard</dt>
+            <dd>{status.readiness.dashboard_allowed ? "Available" : "Blocked until validation succeeds"}</dd>
+          </div>
+        </dl>
+        {status.readiness.blocking_actions.length > 0 ? (
+          <p>Blocking actions: {status.readiness.blocking_actions.join(", ")}</p>
+        ) : null}
+        {status.readiness.dashboard_allowed ? (
+          <div className="actions"><a href="/">Open dashboard</a></div>
+        ) : null}
+      </Card>
+    </div>
+  );
+}
+
+function SetupProgress({ status }: { status: SetupSessionStatus }) {
+  return (
+    <ol className="stack" aria-label="Initial setup progress">
+      {status.steps.map((step) => (
+        <li key={step.id}>
+          <strong>{STEP_LABELS[step.id]}</strong>{" "}
+          <StatusBadge value={step.state} />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function ProductCard({
+  card,
+  selected,
+  busy,
+  selectionAvailable,
+  onSelected,
+}: {
+  card: SetupProductCard;
+  selected: boolean;
+  busy: boolean;
+  selectionAvailable: boolean;
+  onSelected: (selected: boolean) => void;
+}) {
+  const selectable = card.kind === "registry_item"
+    && card.version !== null
+    && card.install_status === "installable";
+  return (
+    <article className="state">
+      <div className="detail-header">
+        <div>
+          <strong>{card.display_name}</strong>
+          <p>{card.utility}</p>
+        </div>
+        <StatusBadge value={card.install_status} />
+      </div>
+      <dl className="definition-list">
+        <div><dt>Compatibility</dt><dd><StatusBadge value={card.compatibility} /></dd></div>
+        <div><dt>Recommendation</dt><dd><StatusBadge value={card.recommendation} /></dd></div>
+        <div><dt>Delivery</dt><dd>{card.delivery}</dd></div>
+        <div><dt>Secrets</dt><dd>{card.requires_secrets ? "Required during configuration" : "Not requested here"}</dd></div>
+      </dl>
+      {card.dependencies.length > 0 ? <p>Dependencies: {card.dependencies.join(", ")}</p> : null}
+      {card.blockers.length > 0 ? (
+        <ul>{card.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
+      ) : null}
+      {selectable ? (
+        <label>
+          <input
+            checked={selected}
+            disabled={busy || !selectionAvailable}
+            onChange={(event) => onSelected(event.target.checked)}
+            type="checkbox"
+          />{" "}
+          Include in setup plan
+        </label>
+      ) : null}
+      <details>
+        <summary>Advanced details</summary>
+        <dl className="definition-list">
+          <div><dt>Technical ID</dt><dd><code>{card.technical_id}</code></dd></div>
+          <div><dt>Version</dt><dd>{card.version ?? "—"}</dd></div>
+          <div><dt>License</dt><dd>{card.license ?? "platform / not separately declared"}</dd></div>
+          <div><dt>Upstream</dt><dd>{card.upstream ?? "—"}</dd></div>
+        </dl>
+      </details>
+    </article>
+  );
+}
+
+function PlanTable({ status }: { status: SetupSessionStatus }) {
+  if (status.plan.actions.length === 0) return <p>No setup actions are currently selected.</p>;
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Component</th><th>Action</th><th>Status</th><th>Owner</th><th>Dependencies</th><th>Blockers</th>
+          </tr>
+        </thead>
+        <tbody>
+          {status.plan.actions.map((action) => (
+            <tr key={action.action_id}>
+              <td><strong>{action.display_name}</strong></td>
+              <td>{action.kind}</td>
+              <td><StatusBadge value={action.state} /></td>
+              <td>{action.owner}</td>
+              <td>{action.dependencies.join(", ") || "—"}</td>
+              <td>{action.blockers.join("; ") || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function groupCards(cards: SetupProductCard[]): Record<string, SetupProductCard[]> {
+  const grouped: Record<string, SetupProductCard[]> = {};
+  for (const card of cards) (grouped[card.category] ??= []).push(card);
+  for (const values of Object.values(grouped)) {
+    values.sort((left, right) => {
+      const recommended = recommendationRank(left.recommendation) - recommendationRank(right.recommendation);
+      return recommended !== 0 ? recommended : left.display_name.localeCompare(right.display_name);
+    });
+  }
+  return grouped;
+}
+
+function recommendationRank(value: string): number {
+  if (value === "recommended") return 0;
+  if (value === "supported") return 1;
+  if (value === "experimental") return 2;
+  return 3;
+}
+
+function uniqueSelections(selections: SetupRegistrySelection[]): SetupRegistrySelection[] {
+  return Array.from(
+    new Map(selections.map((item) => [registryRef(item), item])).values(),
+  ).sort((left, right) => registryRef(left).localeCompare(registryRef(right)));
+}
+
+function registryRef(selection: SetupRegistrySelection): string {
+  return `${selection.item_id}@${selection.version}`;
+}
+
+function nextEditableStep(step: SetupStepId): Exclude<SetupStepId, "identity" | "ready"> {
+  if (step === "identity" || step === "environment") return "components";
+  if (step === "components") return "configuration";
+  if (step === "configuration") return "validation";
+  return "validation";
+}
