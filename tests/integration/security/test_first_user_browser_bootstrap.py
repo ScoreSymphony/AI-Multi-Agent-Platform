@@ -35,12 +35,12 @@ def _run(awaitable):
     return asyncio.run(awaitable)
 
 
-def test_fresh_install_bootstrap_creates_admin_policy_and_authenticated_browser_session(tmp_path) -> None:
+def test_fresh_install_bootstrap_creates_admin_policy_and_authenticated_browser_session(
+    tmp_path,
+) -> None:
     http, authentication, authorization = _http(tmp_path)
 
-    status = _run(
-        http.handle(HTTPRequest(method="GET", path="/api/v1/auth/bootstrap-status"))
-    )
+    status = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/auth/bootstrap-status")))
     assert status.status == 200
     assert status.body == {
         "state": "uninitialized",
@@ -105,9 +105,7 @@ def test_partial_first_user_bootstrap_can_resume_only_with_existing_credentials(
     http, authentication, authorization = _http(tmp_path)
     account = authentication.bootstrap_first_admin("alice", PASSWORD)
 
-    partial = _run(
-        http.handle(HTTPRequest(method="GET", path="/api/v1/auth/bootstrap-status"))
-    )
+    partial = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/auth/bootstrap-status")))
     assert partial.body["state"] == "incomplete"
     assert partial.body["bootstrap_available"] is True
 
