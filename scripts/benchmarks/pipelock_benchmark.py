@@ -31,6 +31,7 @@ MCP_STDIO_FIXTURE = FIXTURE_DIR / "mcp_stdio_server.py"
 WEBSOCKET_FIXTURE = FIXTURE_DIR / "websocket_echo_server.py"
 CORPUS_PATH = FIXTURE_DIR / "pipelock_adversarial_cases.json"
 HTTP_SENTINEL = b"pipelock-benchmark-ok"
+EVIDENCE_SUITE = "pipelock-core-evaluation"
 
 
 def _args() -> argparse.Namespace:
@@ -493,8 +494,8 @@ def _main() -> int:
     mcp_direct_stats = _latency_stats(direct_mcp_values)
     mcp_mediated_stats = _latency_stats(mediated_mcp_values)
     result = {
-        "schema_version": 1,
-        "issue": 730,
+        "schema_version": 2,
+        "evidence_suite": EVIDENCE_SUITE,
         "pipelock_revision": "f7d1816f1a5ad63d501b0c48f36066f836f59022",
         "environment": _environment(args.environment_label),
         "measurement_scope": {

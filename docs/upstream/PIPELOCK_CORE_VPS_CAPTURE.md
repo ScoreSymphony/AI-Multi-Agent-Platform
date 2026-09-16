@@ -18,6 +18,9 @@ The script:
 - records the platform commit, Pipelock revision, binary/config/result SHA-256 values and host metadata;
 - packages the retained evidence and a checksum for the final bundle.
 
+The current benchmark and manifest contracts use schema version 2 and identify the domain-owned
+`pipelock-core-evaluation` evidence suite rather than a GitHub issue number.
+
 No paid service is required. The temporary environment and upstream checkout are removed when the run
 finishes; only the requested evidence directory remains.
 
@@ -53,4 +56,5 @@ The final recommendation must cite the retained VPS artifact rather than copying
 numbers into the VPS evidence slot. The outcome remains exactly one of `adopt`,
 `optional_provider`, `reference_only`, or `reject`.
 
-Historical context: generated evidence manifests retain the original issue provenance where required for auditability.
+Historical context: older retained evidence manifests may contain the original issue provenance for
+auditability. Current manifests use the `pipelock-core-evaluation` evidence-suite identity.

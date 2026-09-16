@@ -1,8 +1,8 @@
 # Pipelock Core protected-profile bypass matrix
 
-Issue #730 requires bypass-resistance claims to be limited to execution profiles whose network boundary
+The Pipelock evaluation requires bypass-resistance claims to be limited to execution profiles whose network boundary
 is actually controlled. This document records the distinction between **mediated traffic** and a
-**protected execution profile**.
+**protected execution profile**. Historical provenance: issue #730 introduced this evaluation requirement.
 
 ## Rule
 
@@ -12,10 +12,10 @@ an independent deployment-owned execution/network boundary prevents alternate di
 
 ## Profile matrix
 
-| Profile / surface | Live result | #730 classification |
+| Profile / surface | Live result | Pipelock evaluation classification |
 | --- | --- | --- |
 | MCP stdio child beneath `pipelock mcp proxy`, no containment | Child-owned direct socket reaches controlled target | **unsupported as protected** |
-| MCP stdio child + #730 INET seccomp evaluation boundary | MCP stdio remains usable; fresh IPv4/IPv6 sockets fail with `EPERM` | **evaluation-only protected profile** |
+| MCP stdio child + INET seccomp evaluation boundary | MCP stdio remains usable; fresh IPv4/IPv6 sockets fail with `EPERM` | **evaluation-only protected profile** |
 | In-process ordinary HTTP client | Direct request reaches controlled target while Pipelock is running and no matching target marker is emitted by Pipelock | **unsupported as protected** |
 | In-process MCP-HTTP-shaped request | Direct POST reaches controlled target while Pipelock is running | **unsupported as protected** |
 | In-process WebSocket client | Direct WebSocket reaches controlled target while Pipelock is running | **unsupported as protected** |
@@ -52,7 +52,7 @@ It is not promoted as the platform-wide production sandbox. Production-grade pro
 a deployment-owned mechanism capable of controlling the complete process/network boundary, including
 inherited file descriptors, namespace/routing policy and every executable that can initiate egress.
 
-Until such a boundary exists for a surface, #730 must report that surface as **unsupported for a
+Until such a boundary exists for a surface, the Pipelock evaluation must report that surface as **unsupported for a
 protected-profile enforcement claim**, not as silently protected by Pipelock.
 
 This result supports Pipelock as an optional mediated enforcement/evidence component, but it rules out
