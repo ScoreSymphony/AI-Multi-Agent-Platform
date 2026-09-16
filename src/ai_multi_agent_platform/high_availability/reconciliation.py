@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
-from ai_multi_agent_platform.distributed.runtime import DispatchState, DistributedRuntime
+from ai_multi_agent_platform.distributed.runtime import DistributedRuntime
 
 from .contracts import CoordinationProvider, FencingToken, ReconciliationResult
+from .reconciliation_policy import derive_reconciliation_result
 
 
 class DistributedRuntimeFailoverReconciler:
@@ -55,29 +56,17 @@ class DistributedRuntimeFailoverReconciler:
         # promotion barrier is allowed to complete.
         await self._coordinator.assert_fence(token)
 
+        after_states = {record.job.worker_job_id: record.state for record in reconciled}
         after_reservations = {
             reservation.reservation_id
             for reservation in self._runtime.registry.active_reservations()
         }
-        expired_reservations = before_reservations - after_reservations
-
-        state_changes = tuple(
-            record
-            for record in reconciled
-            if before_states.get(record.job.worker_job_id) != record.state
-        )
-        newly_lost = tuple(record for record in state_changes if record.state is DispatchState.LOST)
-
-        return ReconciliationResult(
-            recovered_items=len(state_changes),
-            rejected_stale_items=len(newly_lost) + len(expired_reservations),
-            details=(
-                f"epoch={token.epoch}",
-                f"previous_epoch={previous_epoch}",
-                f"reason={reason}",
-                f"dispatch_records={len(reconciled)}",
-                f"state_changes={len(state_changes)}",
-                f"lost_ownership={len(newly_lost)}",
-                f"expired_reservations={len(expired_reservations)}",
-            ),
+        return derive_reconciliation_result(
+            before_states=before_states,
+            after_states=after_states,
+            before_reservation_ids=before_reservations,
+            after_reservation_ids=after_reservations,
+            token_epoch=token.epoch,
+            previous_epoch=previous_epoch,
+            reason=reason,
         )
