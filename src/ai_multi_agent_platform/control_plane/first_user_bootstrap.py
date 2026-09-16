@@ -6,7 +6,9 @@ from typing import Any
 from uuid import uuid4
 
 from ai_multi_agent_platform.contracts.errors import ContractError
-from ai_multi_agent_platform.security.async_authorization_policy import LocalAuthorizationPolicyStore
+from ai_multi_agent_platform.security.async_authorization_policy import (
+    LocalAuthorizationPolicyStore,
+)
 from ai_multi_agent_platform.security.authentication import safe_actor
 from ai_multi_agent_platform.security.first_user_bootstrap import (
     FirstUserBootstrapService,
