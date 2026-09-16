@@ -11,14 +11,15 @@ const modelPort = 8001;
 const frontendPort = 4174;
 const frontendUrl = `http://${host}:${frontendPort}`;
 const backendUrl = `http://${host}:${backendPort}`;
+const username = "browser-admin";
 const password = "correct horse battery staple browser first run";
 const dataDir = await mkdtemp(join(tmpdir(), "ai-map-browser-first-run-"));
 
 let backend;
 let vite;
 let browser;
-let backendStderr = "";
-let viteStderr = "";
+let backendLog = "";
+let viteLog = "";
 
 const modelServer = createServer((request, response) => {
   if (request.method === "GET" && request.url === "/v1/models") {
@@ -44,23 +45,37 @@ function closeServer(server) {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
-async function waitForUrl(url, label, stderr) {
+async function waitForUrl(url, label, logs, predicate = (response) => response.ok) {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     try {
       const response = await fetch(url);
-      if (response.ok) return;
+      if (await predicate(response)) return;
     } catch {
       // Process is still starting.
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error(`${label} did not start. ${stderr()}`);
+  throw new Error(`${label} did not start. ${logs()}`);
 }
 
 async function waitForButton(page, name) {
   const button = page.getByRole("button", { name, exact: true });
   await button.waitFor();
   return button;
+}
+
+async function logoutThroughBrowserClient(page) {
+  await page.evaluate(async () => {
+    const { BrowserSessionClient } = await import("/src/api/browserSession.ts");
+    await new BrowserSessionClient().logout();
+  });
+}
+
+async function signIn(page) {
+  await page.getByRole("heading", { name: "Sign in", exact: true }).waitFor();
+  await page.getByLabel("Username", { exact: true }).fill(username);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await (await waitForButton(page, "Sign in")).click();
 }
 
 try {
@@ -82,13 +97,17 @@ try {
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
+  backend.stdout.on("data", (chunk) => {
+    backendLog += chunk.toString();
+  });
   backend.stderr.on("data", (chunk) => {
-    backendStderr += chunk.toString();
+    backendLog += chunk.toString();
   });
   await waitForUrl(
     `${backendUrl}/api/v1/auth/bootstrap-status`,
     "Single-node backend",
-    () => backendStderr,
+    () => backendLog,
+    async (response) => response.ok && (await response.json()).state === "uninitialized",
   );
 
   vite = spawn(
@@ -96,17 +115,21 @@ try {
     ["node_modules/vite/bin/vite.js", "--host", host, "--port", String(frontendPort)],
     { stdio: ["ignore", "pipe", "pipe"] },
   );
-  vite.stderr.on("data", (chunk) => {
-    viteStderr += chunk.toString();
+  vite.stdout.on("data", (chunk) => {
+    viteLog += chunk.toString();
   });
-  await waitForUrl(frontendUrl, "Vite", () => viteStderr);
+  vite.stderr.on("data", (chunk) => {
+    viteLog += chunk.toString();
+  });
+  await waitForUrl(frontendUrl, "Vite", () => viteLog);
 
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   await page.goto(frontendUrl);
 
+  // Fresh installation: first administrator is created entirely in the browser.
   await page.getByRole("heading", { name: "Create your administrator account", exact: true }).waitFor();
-  await page.getByLabel("Username", { exact: true }).fill("browser-admin");
+  await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByLabel("Confirm password", { exact: true }).fill(password);
   await (await waitForButton(page, "Create administrator")).click();
@@ -128,6 +151,13 @@ try {
   await (await waitForButton(page, "Use Recommended / Auto")).click();
   await page.getByRole("status").filter({ hasText: "profile selected and persisted" }).waitFor();
 
+  // Existing installation with incomplete setup: normal sign-in resumes the setup wizard.
+  await logoutThroughBrowserClient(page);
+  await page.reload();
+  await signIn(page);
+  await page.getByRole("heading", { name: "Guided onboarding", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Create project", exact: true }).waitFor();
+
   await page.getByLabel("Project name", { exact: true }).fill("Browser first-run project");
   await (await waitForButton(page, "Create project")).click();
   await page.getByRole("heading", { name: "Create workspace", exact: true }).waitFor();
@@ -146,6 +176,10 @@ try {
   await page.waitForURL(`${frontendUrl}/`);
   await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
 
+  // Completed setup survives reload and no longer routes back to onboarding.
+  await page.reload();
+  await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
+
   const bootstrapStatus = await page.evaluate(async () => {
     const response = await fetch("/api/v1/auth/bootstrap-status");
     return response.json();
@@ -153,6 +187,20 @@ try {
   if (bootstrapStatus.state !== "initialized" || bootstrapStatus.bootstrap_available !== false) {
     throw new Error(`Bootstrap endpoint did not fail closed after first run: ${JSON.stringify(bootstrapStatus)}`);
   }
+
+  // Existing completed installation: ordinary sign-in returns directly to the dashboard.
+  await page.goto(`${frontendUrl}/settings`);
+  await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
+  await (await waitForButton(page, "Sign out")).click();
+  await page.goto(frontendUrl);
+  await signIn(page);
+  await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
+} catch (error) {
+  throw new Error(
+    `${error instanceof Error ? error.stack ?? error.message : String(error)}\n\n`
+    + `--- platform-server ---\n${backendLog}\n`
+    + `--- vite ---\n${viteLog}`,
+  );
 } finally {
   if (browser) await browser.close();
   if (vite) vite.kill("SIGTERM");
