@@ -12,7 +12,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit --pretty false",
-    "test": "node scripts/check-transport-boundary.mjs && vitest run",
+    "generate:contracts": "python ../scripts/generate_frontend_contracts.py",
+    "check:contracts": "python ../scripts/generate_frontend_contracts.py --check",
+    "test": "npm run check:contracts && node scripts/check-transport-boundary.mjs && vitest run",
     "check:transport": "node scripts/check-transport-boundary.mjs",
     "preview": "vite preview"
   },

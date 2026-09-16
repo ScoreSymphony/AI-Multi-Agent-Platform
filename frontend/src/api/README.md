@@ -18,6 +18,30 @@ Domain clients under this directory own endpoint selection, typed request/respon
 - Streaming clients use `requestRaw()` when a successful response body must remain unconsumed. HTTP status/error handling, auth/CSRF, request diagnostics, timeout/cancellation and retry policy still stay inside `ApiTransport`.
 - Provider-, Hermes-, Forge-, MCP-, Worker-, database- and storage-private transports are not valid browser fallbacks.
 
+## Generated transport DTOs
+
+Stable v1 wire DTOs are generated from the canonical Control Plane OpenAPI document, not maintained independently in the frontend. The committed output is `generated/control-plane-v1.ts`; do not edit it by hand.
+
+From the repository root, regenerate with:
+
+```text
+python scripts/generate_frontend_contracts.py
+```
+
+Or from `frontend/`:
+
+```text
+npm run generate:contracts
+```
+
+`python scripts/generate_frontend_contracts.py --check` and `npm run check:contracts` fail when canonical schemas and the committed TypeScript output drift. `npm test` runs this check before the existing transport-boundary guard and Vitest.
+
+`types.ts` preserves the established frontend-facing export names while sourcing core Project, Workspace, Task, Run, model, health, manifest, error and create-request wire shapes from the generated module. Search, telemetry and accounting types remain manual until their canonical OpenAPI transport schemas are complete enough to migrate without inventing a second contract.
+
+Generated wire DTOs are not page/view/form state. UI-specific models must remain separate and should map explicitly from generated DTOs at the presentation boundary. Likewise, request and response DTOs are separate where the API applies defaults: optional request fields must not be made required merely because the corresponding canonical response materializes them.
+
+When a supported wire contract changes, update the canonical Control Plane schema first, regenerate the TypeScript file, then update explicit UI/domain mappings as needed. Do not patch the generated file to make the frontend compile.
+
 ## Domain client pattern
 
 Domain clients receive the shared browser-session transport and may retain `ApiTransportOptions` for isolated tests or non-shell composition:
@@ -42,4 +66,4 @@ export class ExampleClient {
 
 The shell shares one `BrowserSessionClient.transport` instance across domain clients so session/CSRF, timeout, diagnostics and retry behavior stay coherent.
 
-`npm test` runs `scripts/check-transport-boundary.mjs` before Vitest. The guard has no domain-client exception inventory: any new generic JSON/error/fetch transport owner outside `transport.ts` or the approved browser-session boundary fails the check.
+`npm test` runs the generated-contract drift check and `scripts/check-transport-boundary.mjs` before Vitest. The transport guard has no domain-client exception inventory: any new generic JSON/error/fetch transport owner outside `transport.ts` or the approved browser-session boundary fails the check.
