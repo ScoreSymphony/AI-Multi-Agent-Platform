@@ -50,8 +50,12 @@ def test_pr_governance_only_emits_dependency_review() -> None:
     assert _job_ids("governance-maintenance.yml") == {"validate", "discover"}
 
 
-def test_duplicate_post_merge_validation_stays_off_main_push() -> None:
-    assert "\n  push:" not in _trigger_block("codeql.yml")
+def test_codeql_rechecks_main_without_reenabling_duplicate_validation() -> None:
+    codeql_triggers = _trigger_block("codeql.yml")
+    assert "\n  push:" in codeql_triggers
+    assert "main" in codeql_triggers
+    assert "workflow_dispatch:" in codeql_triggers
+
     assert "\n  push:" not in _trigger_block("conformance.yml")
 
     repository_quality_triggers = _trigger_block("repository-quality.yml")
