@@ -17,18 +17,36 @@ from ai_multi_agent_platform.contracts.errors import ErrorCode
 
 def test_retryable_operational_failures_are_classified_explicitly() -> None:
     for code in (
+        ErrorCode.MODEL_UNAVAILABLE.value,
         ErrorCode.UNAVAILABLE.value,
         ErrorCode.TIMEOUT.value,
         ErrorCode.RATE_LIMITED.value,
         ErrorCode.RESOURCE_EXHAUSTED.value,
         ErrorCode.TRANSIENT_FAILURE.value,
-        ErrorCode.BACKEND_ERROR.value,
-        "automation_task_creation_failed",
     ):
         assert classify_delivery_failure(code) is RetryDisposition.RETRYABLE
 
 
-def test_stable_configuration_and_authorization_failures_are_terminal() -> None:
+def test_generic_backend_failure_is_terminal_without_explicit_retryable_hint() -> None:
+    assert classify_delivery_failure(ErrorCode.BACKEND_ERROR.value) is RetryDisposition.TERMINAL
+    assert (
+        classify_delivery_failure(ErrorCode.BACKEND_ERROR.value, retryable_hint=True)
+        is RetryDisposition.RETRYABLE
+    )
+
+
+def test_catch_all_automation_failure_is_never_implicitly_retried() -> None:
+    assert classify_delivery_failure("automation_task_creation_failed") is RetryDisposition.TERMINAL
+    assert (
+        classify_delivery_failure(
+            "automation_task_creation_failed",
+            retryable_hint=True,
+        )
+        is RetryDisposition.TERMINAL
+    )
+
+
+def test_stable_contract_failures_and_cancellation_ignore_retryable_hint() -> None:
     for code in (
         ErrorCode.INVALID_REQUEST.value,
         ErrorCode.INVALID_CONFIGURATION.value,
@@ -38,11 +56,13 @@ def test_stable_configuration_and_authorization_failures_are_terminal() -> None:
         ErrorCode.FORBIDDEN.value,
         ErrorCode.PERMANENT_FAILURE.value,
         ErrorCode.CONTRACT_VIOLATION.value,
+        ErrorCode.CANCELLED.value,
     ):
         assert classify_delivery_failure(code) is RetryDisposition.TERMINAL
+        assert classify_delivery_failure(code, retryable_hint=True) is RetryDisposition.TERMINAL
 
 
-def test_unknown_failure_code_fails_closed_but_retryable_hint_overrides() -> None:
+def test_unknown_failure_code_fails_closed_but_explicit_hint_can_mark_it_transient() -> None:
     assert classify_delivery_failure("future_unknown_code") is RetryDisposition.TERMINAL
     assert (
         classify_delivery_failure("future_unknown_code", retryable_hint=True)

@@ -176,7 +176,7 @@ class ReplacingRepairExecutor:
             subject_type="result",
             subject_id=new_id("result"),
             revision="2",
-            digest="sha256:issue-758-repaired-result",
+            digest="sha256:reviewer-repaired-result",
         )
         self._evidence.context = replace(
             self._evidence.context,
@@ -219,11 +219,11 @@ def _setup(tmp_path, *, max_repairs: int = 0):
     agent_service = AgentService(InMemoryAgentRepository())
     producer = agent_service.create_agent(
         _profile("Developer", "developer"),
-        owner_ref=OwnerRef(type="service", id="issue-758-boundaries"),
+        owner_ref=OwnerRef(type="service", id="reviewer-restart-boundaries"),
     )
     reviewer = agent_service.create_agent(
         _profile("Reviewer", "reviewer"),
-        owner_ref=OwnerRef(type="service", id="issue-758-boundaries"),
+        owner_ref=OwnerRef(type="service", id="reviewer-restart-boundaries"),
     )
     agents = AgentRuntime(agent_service)
 
@@ -241,7 +241,7 @@ def _setup(tmp_path, *, max_repairs: int = 0):
         subject_type="result",
         subject_id=new_id("result"),
         revision="1",
-        digest="sha256:issue-758-initial-result",
+        digest="sha256:reviewer-initial-result",
     )
     evidence = MutableEvidence(
         VerificationEvidenceContext(
@@ -268,7 +268,7 @@ def _setup(tmp_path, *, max_repairs: int = 0):
         run_id=run_id,
         result_id=subject.subject_id,
         producer=evidence.context.producer,
-        correlation_id="issue-758-boundary-review",
+        correlation_id="reviewer-boundary-review",
     )
     resolver = ConfiguredReviewerResolver(
         {
@@ -308,7 +308,7 @@ def test_staged_decision_for_changed_subject_blocks_without_second_model_call(tm
                 subject_type=request.subject.subject_type,
                 subject_id=request.subject.subject_id,
                 revision="2",
-                digest="sha256:issue-758-superseded-result",
+                digest="sha256:reviewer-superseded-result",
             ),
         )
         recovery = AutomaticReviewerStartupReconciler(
@@ -322,7 +322,9 @@ def test_staged_decision_for_changed_subject_blocks_without_second_model_call(tm
 
         assert first[0].disposition is ReviewerRecoveryDisposition.BLOCKED
         assert second[0].disposition is ReviewerRecoveryDisposition.BLOCKED
-        assert "subject differs from current canonical evidence" in (first[0].reason or "")
+        assert first[0].reason == "automatic reviewer recovery blocked: contract_violation"
+        assert second[0].reason == "automatic reviewer recovery blocked: contract_violation"
+        assert "subject differs from current canonical evidence" not in (first[0].reason or "")
         assert executor.calls == 1
         assert len(agents.service.repository.list_agent_runs()) == 1
         assert completion.assess_task_completion(request.task_id).state is CompletionState.WAITING

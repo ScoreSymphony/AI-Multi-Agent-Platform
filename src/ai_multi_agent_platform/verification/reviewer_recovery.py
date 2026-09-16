@@ -44,6 +44,14 @@ _RECOVERY_VERIFICATION_TERMINAL = "cancelled_due_to_terminal_verification"
 _RECOVERY_COMPLETED_STALE = "cancelled_after_verification_completed"
 
 
+def _recovery_failure_reason(prefix: str, error: Exception) -> str:
+    """Return content-safe durable evidence for an intentionally contained failure."""
+
+    if isinstance(error, ContractError):
+        return f"{prefix}: {error.code.value}"
+    return f"{prefix}: {type(error).__name__}"
+
+
 class ReviewerTaskState(Protocol):
     """Minimum canonical Task projection needed by reviewer recovery."""
 
@@ -295,7 +303,8 @@ class AutomaticReviewerStartupReconciler:
                 request.verification_id,
                 options=options,
             )
-        except Exception as exc:  # noqa: BLE001 - startup must persist an explicit blocker
+        # error-boundary: allow-broad-catch=boundary startup must persist an explicit blocker
+        except Exception as exc:  # noqa: BLE001
             return ReviewerRecoveryRecord(
                 verification_id=request.verification_id,
                 task_id=request.task_id,
@@ -303,7 +312,10 @@ class AutomaticReviewerStartupReconciler:
                 reviewer_agent_run_id=(
                     abandoned_run_id or stale_completed_run_id or _latest_run_id(runs_before)
                 ),
-                reason=f"{type(exc).__name__}: {exc}",
+                reason=_recovery_failure_reason(
+                    "automatic reviewer recovery blocked",
+                    exc,
+                ),
             )
 
         runs_after = self._review_runs_for(request.verification_id)
@@ -355,7 +367,8 @@ class AutomaticReviewerStartupReconciler:
             return False
         try:
             task = await self._tasks.get_task(request.task_id)
-        except Exception as exc:  # noqa: BLE001 - missing/corrupt Task must fail closed
+        # error-boundary: allow-broad-catch=boundary recovery must fail closed per Verification
+        except Exception as exc:  # noqa: BLE001
             return ReviewerRecoveryRecord(
                 verification_id=request.verification_id,
                 task_id=request.task_id,
@@ -363,7 +376,10 @@ class AutomaticReviewerStartupReconciler:
                 reviewer_agent_run_id=_latest_run_id(
                     self._review_runs_for(request.verification_id)
                 ),
-                reason=f"cannot resolve canonical Task during reviewer recovery: {exc}",
+                reason=_recovery_failure_reason(
+                    "cannot resolve canonical Task during reviewer recovery",
+                    exc,
+                ),
             )
         return task.status is TaskStatus.CANCELLED
 

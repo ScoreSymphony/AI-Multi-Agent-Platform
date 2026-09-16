@@ -15,6 +15,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 
+from ._settlement import settle_awaitable
 from .materialization import materialize_template_revision
 from .models import (
     TemplateDependency,
@@ -345,14 +346,21 @@ class TemplateApplicationService:
             )
             self.repository.record_instantiation(instantiation)
             return instantiation
-        except Exception as apply_error:
-            await self._compensate_failed_apply(applied_resources, apply_error)
+        # error-boundary: allow-broad-catch=cleanup Template apply must settle partial resources
+        except BaseException as apply_error:
+            _, compensation_failure = await settle_awaitable(
+                self._compensate_failed_apply(applied_resources, apply_error)
+            )
+            if compensation_failure is not None:
+                apply_error.add_note(
+                    f"Template compensation was incomplete: {type(compensation_failure).__name__}"
+                )
             raise
 
     async def _compensate_failed_apply(
         self,
         applied_resources: list[_AppliedResources],
-        apply_error: Exception,
+        apply_error: BaseException,
     ) -> None:
         failures: list[JsonValue] = []
         uncompensated: list[JsonValue] = []
@@ -378,12 +386,12 @@ class TemplateApplicationService:
                     applied.provenance,
                     applied.context,
                 )
+            # error-boundary: allow-broad-catch=cleanup continue compensating independent resources
             except Exception as compensation_error:
                 failures.append(
                     {
                         "template_type": handler.template_type.value,
                         "error_type": type(compensation_error).__name__,
-                        "error": str(compensation_error),
                     }
                 )
 
@@ -393,7 +401,6 @@ class TemplateApplicationService:
                 "Template apply failed and created resources could not be fully compensated",
                 details={
                     "apply_error_type": type(apply_error).__name__,
-                    "apply_error": str(apply_error),
                     "compensation_failures": failures,
                     "uncompensated_resources": uncompensated,
                 },

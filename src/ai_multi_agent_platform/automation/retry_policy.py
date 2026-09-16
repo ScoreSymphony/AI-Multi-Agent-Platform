@@ -1,8 +1,10 @@
-"""Deterministic Automation delivery retry semantics for issue #241.
+"""Deterministic Automation delivery retry semantics.
 
 This module deliberately contains policy only. Durable retry persistence and runtime wakeups
 consume these helpers so the canonical Automation model does not depend on one scheduler or
 workflow engine implementation.
+
+Historical context: introduced for #241.
 """
 
 from __future__ import annotations
@@ -23,8 +25,8 @@ class RetryDisposition(StrEnum):
 
 
 # Operational failures that are safe to retry through the same canonical Task-admission path.
-# A caller-provided retryable hint still wins because adapters may know that an otherwise generic
-# platform category is transient for one concrete failure.
+# BACKEND_ERROR is intentionally absent: an unknown implementation/backend failure is terminal
+# unless its owning boundary explicitly sets ContractError.retryable.
 _RETRYABLE_ERROR_CODES = frozenset(
     {
         ErrorCode.MODEL_UNAVAILABLE.value,
@@ -33,17 +35,13 @@ _RETRYABLE_ERROR_CODES = frozenset(
         ErrorCode.RATE_LIMITED.value,
         ErrorCode.RESOURCE_EXHAUSTED.value,
         ErrorCode.TRANSIENT_FAILURE.value,
-        ErrorCode.BACKEND_ERROR.value,
-        # Base AutomationService uses this provider-neutral code for unexpected TaskCreator
-        # exceptions. Unknown operational failures are conservatively retried until max_attempts.
-        "automation_task_creation_failed",
     }
 )
 
 
-# These categories describe invalid requests/configuration, authorization decisions or stable
-# contract/capability failures. Retrying an unchanged delivery would not make them valid.
-_TERMINAL_ERROR_CODES = frozenset(
+# These canonical categories are semantically stable for an unchanged delivery. A stale or buggy
+# boundary must not turn them into automatic retries merely by setting retryable=True.
+_HARD_TERMINAL_ERROR_CODES = frozenset(
     {
         ErrorCode.INVALID_REQUEST.value,
         ErrorCode.INVALID_CONFIGURATION.value,
@@ -62,6 +60,12 @@ _TERMINAL_ERROR_CODES = frozenset(
 )
 
 
+# The AutomationService catch-all TaskCreator category represents an unexpected implementation
+# failure rather than a typed operational condition. It remains terminal even if older durable
+# evidence or callers still carry retryable_hint=True.
+_UNEXPECTED_IMPLEMENTATION_ERROR_CODES = frozenset({"automation_task_creation_failed"})
+
+
 def classify_delivery_failure(
     error_code: str | None,
     *,
@@ -69,18 +73,20 @@ def classify_delivery_failure(
 ) -> RetryDisposition:
     """Classify one failed TriggerDelivery for automatic retry.
 
-    ``retryable_hint`` exists so a persisted ContractError.retryable bit can override a broad
-    error category once delivery persistence is wired in. Without that explicit hint, unknown
-    stable codes fail closed as terminal; the one legacy generic TaskCreator exception is listed
-    explicitly above as retryable.
+    Stable canonical contract/configuration/authorization failures and cancellation always remain
+    terminal. For generic backend or forward-compatible custom categories, an explicit retryable
+    hint may still carry boundary-local knowledge that the concrete failure is transient. Unknown
+    categories without that hint fail closed as terminal.
     """
 
+    if error_code in _UNEXPECTED_IMPLEMENTATION_ERROR_CODES:
+        return RetryDisposition.TERMINAL
+    if error_code in _HARD_TERMINAL_ERROR_CODES:
+        return RetryDisposition.TERMINAL
     if retryable_hint:
         return RetryDisposition.RETRYABLE
     if error_code in _RETRYABLE_ERROR_CODES:
         return RetryDisposition.RETRYABLE
-    if error_code in _TERMINAL_ERROR_CODES:
-        return RetryDisposition.TERMINAL
     return RetryDisposition.TERMINAL
 
 
