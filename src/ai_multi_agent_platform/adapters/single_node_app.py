@@ -38,13 +38,15 @@ from ai_multi_agent_platform.distribution import (
 )
 from ai_multi_agent_platform.distribution.control_plane import RegistryCommandHandlers
 from ai_multi_agent_platform.onboarding import (
-    BrowserFirstSetupService,
     JsonSetupProfileStore,
     JsonSetupSessionStore,
     OnboardingComponentSetupService,
     SingleNodeComponentDiscoverySource,
     register_component_setup_control_plane,
     register_setup_lifecycle_control_plane,
+)
+from ai_multi_agent_platform.onboarding.setup_registry_planning import (
+    DependencyAwareBrowserFirstSetupService,
 )
 from ai_multi_agent_platform.plugins import (
     CapabilityRegistryBinder,
@@ -134,7 +136,7 @@ def build_default_single_node_deployment(
         )
     )
     distribution, registry_commands = _configure_registry(config, deployment)
-    setup_lifecycle = BrowserFirstSetupService(
+    setup_lifecycle = DependencyAwareBrowserFirstSetupService(
         component_setup,
         deployment.onboarding,
         JsonSetupSessionStore(deployment.config.database_dir / "setup-sessions.json"),
