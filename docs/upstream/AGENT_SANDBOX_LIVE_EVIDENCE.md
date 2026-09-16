@@ -16,7 +16,7 @@ the static/source #798 scope once this handoff contract and its tests are comple
 The repository provides:
 
 ```text
-scripts/benchmarks/issue798_agent_sandbox_live.py
+scripts/benchmarks/agent_sandbox_live_evidence.py
 ```
 
 The harness requires only Python and `kubectl`. It targets an **already provisioned evaluation
@@ -26,18 +26,20 @@ Kubernetes a platform dependency.
 Basic example:
 
 ```bash
-python scripts/benchmarks/issue798_agent_sandbox_live.py \
+python scripts/benchmarks/agent_sandbox_live_evidence.py \
   --namespace agent-sandbox-eval \
   --sandbox-pod <sandbox-pod-name> \
   --controller-service-account agent-sandbox \
-  --canary ISSUE798-SYNTHETIC-CANARY \
+  --canary AGENT-SANDBOX-SYNTHETIC-CANARY \
   --allowed-host <explicitly-allowed-test-host> \
   --peer-pod-ip <second-sandbox-pod-ip> \
   --output artifacts/issue798-agent-sandbox-live.json
 ```
 
 Never use a real production credential as `--canary`. The canary is intentionally synthetic and is
-used only to detect accidental persistence in provider/Kubernetes metadata.
+used only to detect accidental persistence in provider/Kubernetes metadata. The retained
+`issue798-*` output filenames identify the historical evidence campaign and remain stable evidence
+provenance; maintained script and configuration entry points use behavior-oriented names.
 
 ### Optional cross-token ownership probe
 
@@ -48,7 +50,7 @@ API tokens/users. Put the tokens in environment variables rather than command-li
 export AGENT_SANDBOX_TOKEN_A='<evaluation-token-a>'
 export AGENT_SANDBOX_TOKEN_B='<evaluation-token-b>'
 
-python scripts/benchmarks/issue798_agent_sandbox_live.py \
+python scripts/benchmarks/agent_sandbox_live_evidence.py \
   --namespace agent-sandbox-eval \
   --sandbox-pod <sandbox-pod-name> \
   --provider-base-url http://127.0.0.1:10000/e2b/v1 \
@@ -99,8 +101,8 @@ The harness output is **raw evidence**, not an automatic adoption decision.
 The repository also provides:
 
 ```text
-scripts/benchmarks/issue798_agent_sandbox_evidence_gate.py
-scripts/benchmarks/issue798_agent_sandbox_campaign.example.json
+scripts/benchmarks/agent_sandbox_evidence_gate.py
+scripts/benchmarks/agent_sandbox_campaign.example.json
 ```
 
 Under #829, copy the example campaign manifest to the retained evidence directory. Fill its
@@ -112,7 +114,7 @@ one evidence reference; a missing scenario is normalized back to `not_run`.
 After the raw capture and lifecycle campaign, run:
 
 ```bash
-python scripts/benchmarks/issue798_agent_sandbox_evidence_gate.py \
+python scripts/benchmarks/agent_sandbox_evidence_gate.py \
   --evidence artifacts/issue798-agent-sandbox-live.json \
   --campaign artifacts/issue798-agent-sandbox-campaign.json \
   --output artifacts/issue798-agent-sandbox-gate.json
