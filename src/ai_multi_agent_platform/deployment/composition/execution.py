@@ -261,6 +261,7 @@ def build_kernel(
         kernel=kernel,
         scopes=storage.scopes,
         agents=runtime.agents,
+        workspace_provider=storage.workspaces,
     )
     return KernelBundle(
         kernel=kernel,

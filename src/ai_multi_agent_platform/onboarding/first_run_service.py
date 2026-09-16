@@ -12,6 +12,7 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.models import JsonModelRegistryStore, ModelRegistry
+from ai_multi_agent_platform.workspaces import WorkspaceProvider
 
 from .agent_lifecycle import preflight_first_run_agent
 from .first_run_model_setup import FIRST_RUN_RESOURCE_ID as FIRST_RUN_RESOURCE_ID
@@ -47,6 +48,7 @@ from .persistence import (
     OnboardingCommandRecord,
 )
 from .providers import OnboardingModelAdapter
+from .setup_contracts import model_setup_contract
 
 
 class OnboardingService:
@@ -68,6 +70,7 @@ class OnboardingService:
         agent_runtime: AgentRuntime,
         model_adapters: Iterable[OnboardingModelAdapter] = (),
         command_store: JsonOnboardingCommandStore | None = None,
+        workspace_provider: WorkspaceProvider | None = None,
     ) -> None:
         if agent_runtime.service is not agents:
             raise ValueError("onboarding AgentRuntime must use the supplied AgentService")
@@ -78,6 +81,7 @@ class OnboardingService:
         self.provider_store = provider_store
         self.command_store = command_store
         self.scopes = scopes
+        self.workspace_provider = workspace_provider
         self.agents = agents
         self.agent_runtime = agent_runtime
         self.model_adapters: dict[str, OnboardingModelAdapter] = {}
@@ -148,17 +152,21 @@ class OnboardingService:
         return result
 
     def status(self, context: RequestContext) -> dict[str, JsonValue]:
-        """Return first-run progress using the same executable paths as first-Task resolution."""
+        """Return first-run progress for legacy synchronous ScopeStore compositions."""
 
-        projection = self.first_run_path_projection(context)
-        project_count = sum(
-            1 for project in self.scopes.list_projects() if project.id in projection.project_ids
-        )
-        workspace_count = sum(
-            1
-            for workspace in self.scopes.list_workspaces()
-            if (workspace.project_id, workspace.id) in projection.workspace_bindings
-        )
+        return self._status_from_projection(context, self.first_run_path_projection(context))
+
+    async def status_async(self, context: RequestContext) -> dict[str, JsonValue]:
+        """Return first-run progress from the canonical WorkspaceProvider when configured."""
+
+        projection = await self.first_run_path_projection_async(context)
+        return self._status_from_projection(context, projection)
+
+    def _status_from_projection(
+        self,
+        context: RequestContext,
+        projection: FirstRunPathProjection,
+    ) -> dict[str, JsonValue]:
         inventory = collect_model_inventory(self.models)
         state, selection_kind = classify_first_run_state(projection, inventory)
         guidance = first_run_guidance(
@@ -167,37 +175,90 @@ class OnboardingService:
             projection=projection,
             inventory=inventory,
         )
-        return build_status_document(
+        adapter_ids = sorted(self.model_adapters)
+        status = build_status_document(
             authenticated_actor_present=context.actor.owner_id is not None,
-            project_count=project_count,
-            workspace_count=workspace_count,
+            project_count=len(projection.project_ids),
+            workspace_count=len(projection.workspace_bindings),
             projection=projection,
             inventory=inventory,
             state=state,
             selection_kind=selection_kind,
             candidates=candidate_ids(projection),
             starter_catalog_installed=self._starter_catalog_installed(),
-            installed_model_adapter_ids=sorted(self.model_adapters),
+            installed_model_adapter_ids=adapter_ids,
             guidance=guidance,
         )
+        status["model_setup"] = model_setup_contract(adapter_ids)
+        return status
 
     def first_run_path_projection(self, context: RequestContext) -> FirstRunPathProjection:
-        """Project structural and executable first-run paths without mutating canonical state."""
+        """Project structural and executable paths for legacy identity-only Workspace state."""
 
         owner_type = context.actor.owner_type
         owner_id = context.actor.owner_id
         if owner_type is None or owner_id is None:
             return FirstRunPathProjection((), (), (), (), ())
 
-        project_ids = tuple(
+        project_ids = self._owned_project_ids(owner_type, owner_id)
+        workspace_bindings = self._legacy_workspace_bindings(
+            owner_type,
+            owner_id,
+            set(project_ids),
+        )
+        return self._projection_from_bindings(
+            owner_type,
+            owner_id,
+            project_ids,
+            workspace_bindings,
+        )
+
+    async def first_run_path_projection_async(
+        self,
+        context: RequestContext,
+    ) -> FirstRunPathProjection:
+        """Project paths from WorkspaceProvider, falling back only for legacy-only state."""
+
+        owner_type = context.actor.owner_type
+        owner_id = context.actor.owner_id
+        if owner_type is None or owner_id is None:
+            return FirstRunPathProjection((), (), (), (), ())
+        provider = self.workspace_provider
+        if provider is None:
+            return self.first_run_path_projection(context)
+
+        project_ids = self._owned_project_ids(owner_type, owner_id)
+        owned_projects = set(project_ids)
+        workspaces = await provider.list_workspaces()
+        workspace_bindings = tuple(
             sorted(
-                project.id
-                for project in self.scopes.list_projects()
-                if project.owner_ref.type == owner_type and project.owner_ref.id == owner_id
+                (workspace.project_id, workspace.id)
+                for workspace in workspaces
+                if workspace.owner_ref.type == owner_type
+                and workspace.owner_ref.id == owner_id
+                and workspace.project_id in owned_projects
             )
         )
-        owned_projects = set(project_ids)
-        workspace_bindings = tuple(
+        if not workspace_bindings:
+            workspace_bindings = self._legacy_workspace_bindings(
+                owner_type,
+                owner_id,
+                owned_projects,
+            )
+        return self._projection_from_bindings(
+            owner_type,
+            owner_id,
+            project_ids,
+            workspace_bindings,
+        )
+
+    def _legacy_workspace_bindings(
+        self,
+        owner_type: str,
+        owner_id: str,
+        owned_projects: set[str],
+    ) -> tuple[tuple[str, str], ...]:
+        return tuple(
             sorted(
                 (workspace.project_id, workspace.id)
                 for workspace in self.scopes.list_workspaces()
@@ -206,6 +267,23 @@ class OnboardingService:
                 and workspace.project_id in owned_projects
             )
         )
+
+    def _owned_project_ids(self, owner_type: str, owner_id: str) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                project.id
+                for project in self.scopes.list_projects()
+                if project.owner_ref.type == owner_type and project.owner_ref.id == owner_id
+            )
+        )
+
+    def _projection_from_bindings(
+        self,
+        owner_type: str,
+        owner_id: str,
+        project_ids: tuple[str, ...],
+        workspace_bindings: tuple[tuple[str, str], ...],
+    ) -> FirstRunPathProjection:
         structural_paths = tuple(
             FirstRunPath(project_id, workspace_id, agent_id)
             for project_id, workspace_id, agent_id in self._scoped_general_assistants(
@@ -251,13 +329,9 @@ class OnboardingService:
         workspace_id: str | None = None,
         agent_id: str | None = None,
     ) -> FirstRunPath:
-        """Resolve exactly one executable path, respecting any explicit canonical IDs."""
+        """Resolve exactly one executable path for legacy synchronous Workspace state."""
 
-        if context.actor.owner_type is None or context.actor.owner_id is None:
-            raise ContractError(
-                ErrorCode.UNAUTHORIZED,
-                "first-run Task requires an authenticated canonical owner",
-            )
+        self._require_owner(context)
         projection = self.first_run_path_projection(context)
         return resolve_projected_first_run_path(
             projection,
@@ -266,6 +340,34 @@ class OnboardingService:
             agent_id=agent_id,
             preflight=self._preflight_path,
         )
+
+    async def resolve_first_run_path_async(
+        self,
+        context: RequestContext,
+        *,
+        project_id: str | None = None,
+        workspace_id: str | None = None,
+        agent_id: str | None = None,
+    ) -> FirstRunPath:
+        """Resolve exactly one executable path from canonical WorkspaceProvider state."""
+
+        self._require_owner(context)
+        projection = await self.first_run_path_projection_async(context)
+        return resolve_projected_first_run_path(
+            projection,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            agent_id=agent_id,
+            preflight=self._preflight_path,
+        )
+
+    @staticmethod
+    def _require_owner(context: RequestContext) -> None:
+        if context.actor.owner_type is None or context.actor.owner_id is None:
+            raise ContractError(
+                ErrorCode.UNAUTHORIZED,
+                "first-run Task requires an authenticated canonical owner",
+            )
 
     def preflight_general_assistant(
         self,

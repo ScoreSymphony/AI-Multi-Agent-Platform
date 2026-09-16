@@ -12,6 +12,25 @@ export type OnboardingState =
 
 export type OnboardingSelectionKind = "project" | "workspace" | "agent" | null;
 
+export interface ModelSetupFieldContract {
+  path: string;
+  label: string;
+  input_kind: "text" | "url" | "integer" | "boolean" | "select";
+  required: boolean;
+  options: string[];
+  placeholder: string | null;
+  secret_reference: boolean;
+}
+
+export interface ModelSetupContract {
+  version: string;
+  command: "onboarding.configure-model";
+  fields: ModelSetupFieldContract[];
+  secret_values_accepted: false;
+  automatic_remote_provider_selection: false;
+  automatic_paid_provider_selection: false;
+}
+
 export interface OnboardingStatus {
   id: "first-run";
   type: "onboarding_status";
@@ -34,6 +53,7 @@ export interface OnboardingStatus {
   candidate_agent_ids: string[];
   starter_catalog_installed: boolean;
   installed_model_adapter_ids: string[];
+  model_setup?: ModelSetupContract;
   automatic_remote_provider_selection: false;
   automatic_paid_provider_selection: false;
   guidance: JsonValue[];

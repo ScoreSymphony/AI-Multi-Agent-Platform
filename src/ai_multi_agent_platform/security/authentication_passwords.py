@@ -7,6 +7,9 @@ import hashlib
 import hmac
 import secrets
 
+PASSWORD_MIN_LENGTH = 12
+PASSWORD_MAX_BYTES = 1024
+
 
 class ScryptPasswordHasher:
     """Dependency-free memory-hard password verifier using Python/OpenSSL scrypt."""
@@ -66,9 +69,9 @@ class ScryptPasswordHasher:
 
 
 def validate_password(password: str) -> None:
-    if len(password) < 12:
-        raise ValueError("local passwords must contain at least 12 characters")
-    if len(password.encode("utf-8")) > 1024:
+    if len(password) < PASSWORD_MIN_LENGTH:
+        raise ValueError(f"local passwords must contain at least {PASSWORD_MIN_LENGTH} characters")
+    if len(password.encode("utf-8")) > PASSWORD_MAX_BYTES:
         raise ValueError("local password is too large")
 
 
@@ -85,4 +88,4 @@ def decode_base64(value: str) -> bytes:
     return base64.urlsafe_b64decode((value + padding).encode("ascii"))
 
 
-__all__ = ["ScryptPasswordHasher"]
+__all__ = ["PASSWORD_MAX_BYTES", "PASSWORD_MIN_LENGTH", "ScryptPasswordHasher"]

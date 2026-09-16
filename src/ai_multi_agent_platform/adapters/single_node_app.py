@@ -36,11 +36,17 @@ from ai_multi_agent_platform.distribution import (
     reconcile_registry_plugins,
     register_distribution_control_plane,
 )
+from ai_multi_agent_platform.distribution.control_plane import RegistryCommandHandlers
 from ai_multi_agent_platform.onboarding import (
     JsonSetupProfileStore,
+    JsonSetupSessionStore,
     OnboardingComponentSetupService,
     SingleNodeComponentDiscoverySource,
     register_component_setup_control_plane,
+    register_setup_lifecycle_control_plane,
+)
+from ai_multi_agent_platform.onboarding.setup_registry_planning import (
+    DependencyAwareBrowserFirstSetupService,
 )
 from ai_multi_agent_platform.plugins import (
     CapabilityRegistryBinder,
@@ -57,6 +63,7 @@ from ai_multi_agent_platform.repository_intelligence.wiring import (
 )
 
 from .onboarding_openai_compatible import OpenAICompatibleOnboardingAdapter
+from .setup_registry import DistributionSetupRegistryPort
 
 
 def _repository_actor_ref(context: OperationContext) -> str:
@@ -129,15 +136,30 @@ def build_default_single_node_deployment(
             )
         )
     )
-    _configure_registry(config, deployment)
+    distribution, registry_commands = _configure_registry(config, deployment)
+    setup_registry = (
+        None
+        if distribution is None
+        else DistributionSetupRegistryPort(distribution, registry_commands)
+    )
+    setup_lifecycle = DependencyAwareBrowserFirstSetupService(
+        component_setup,
+        deployment.onboarding,
+        JsonSetupSessionStore(deployment.config.database_dir / "setup-sessions.json"),
+        registry=setup_registry,
+    )
+    register_setup_lifecycle_control_plane(deployment.control_plane, setup_lifecycle)
     return deployment
 
 
-def _configure_registry(config: SingleNodeConfig, deployment: SingleNodeDeployment) -> None:
+def _configure_registry(
+    config: SingleNodeConfig,
+    deployment: SingleNodeDeployment,
+) -> tuple[DistributionService | None, RegistryCommandHandlers | None]:
     """Attach #81 only when an operator explicitly configures a local Registry catalog."""
 
     if config.registry_catalog is None:
-        return
+        return None, None
 
     provider = FilesystemRegistryProvider(config.registry_catalog)
     installations = JsonRegistryInstallationStore(
@@ -171,7 +193,9 @@ def _configure_registry(config: SingleNodeConfig, deployment: SingleNodeDeployme
     plugin_installer = PluginRegistryArtifactInstaller(plugin_registry)
     portability = deployment.control_plane.portability_workflow
     if portability is None:
-        raise RuntimeError("single-node Registry composition requires the canonical #79 workflow")
+        raise RuntimeError(
+            "single-node Registry composition requires the canonical portability workflow"
+        )
     router = CanonicalDistributionRouter(
         plugin_installer=plugin_installer,
         portability=portability,
@@ -209,6 +233,7 @@ def _configure_registry(config: SingleNodeConfig, deployment: SingleNodeDeployme
         distribution,
         validation_context_resolver=validation,
     )
+    return distribution, RegistryCommandHandlers(distribution, validation)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
