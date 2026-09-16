@@ -31,7 +31,7 @@ An extension can be Stable, Beta or Experimental.
 
 A capability that is not required for the ordinary reference single-node baseline and usually represents an advanced deployment, ecosystem, learning/improvement or specialized operational/product subsystem.
 
-Examples include distributed/HA profiles, Registry/Marketplace functionality, named enhanced repository-intelligence providers and advanced learning/research/governance subsystems.
+Examples include distributed/HA profiles, Registry/Marketplace functionality, managed external Application Adapters, named enhanced repository-intelligence providers and advanced learning/research/governance subsystems.
 
 Optional / Advanced is a role classification only. It does not mean unsupported, immature or Experimental.
 
@@ -157,6 +157,7 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `research-evidence` | Research Item/Source/Claim/Evidence resources and research workflow | `research` | Optional / Advanced | Beta |
 | `decision-compensation` | advanced decision and compensation/rollback workflows | `decisions`, `compensation` | Optional / Advanced | Beta |
 | `application-distribution` | application build/distribution state and release integration | `application_distribution` | Optional / Advanced | Beta |
+| `application-adapters` | declarative managed Application manifests, instances and runtime adapter lifecycle | `applications` | Optional / Advanced | Beta |
 | `backup-restore` | `platform-backup`, manifest v1 and restore compatibility boundary | `repository` | Optional / Advanced | Beta |
 | `high-availability` | Control Plane leadership/fencing/failover profile | `distributed` | Optional / Advanced | Experimental |
 | `learning` | governed learning/improvement resources and workflows | `learning` | Optional / Advanced | Experimental |
@@ -167,7 +168,7 @@ The registry carries the compatibility note, canonical documentation links and u
 
 Repository Intelligence is deliberately split across role boundaries per ADR 0011: the provider-neutral layer and deterministic local baseline are Core, while named enhanced providers remain optional integrations. Classifying a provider as Experimental does not downgrade the canonical baseline.
 
-The same independence applies to other advanced capabilities: Research, Decision/Compensation, Application Distribution and Backup/Restore are Optional / Advanced because the reference runtime does not require those advanced workflows for ordinary execution, but their current public contracts are supported as Beta rather than being labelled Experimental merely because they are advanced. Governed Learning, HA and named enhanced repository-intelligence providers retain explicit Experimental status where current compatibility commitments are intentionally weaker.
+The same independence applies to other advanced capabilities: Research, Decision/Compensation, Application Distribution, Application Adapters and Backup/Restore are Optional / Advanced because the reference runtime does not require those advanced workflows for ordinary execution, but their current public contracts are supported as Beta rather than being labelled Experimental merely because they are advanced. Governed Learning, HA and named enhanced repository-intelligence providers retain explicit Experimental status where current compatibility commitments are intentionally weaker.
 
 The MCP Tasks profile is a separate Experimental compatibility boundary layered under the Core Capabilities/Tools authority. Its provider-private task identifiers and statuses remain adapter state and never replace canonical Task, Run or CapabilityInvocation identity/lifecycle authority.
 
