@@ -417,8 +417,7 @@ def _validate_manifest_volumes(
         for mount in service.mounts:
             if mount.volume_name not in volume_name_set:
                 raise ValueError(
-                    f"service {service.service_id!r} mounts unknown volume "
-                    f"{mount.volume_name!r}"
+                    f"service {service.service_id!r} mounts unknown volume {mount.volume_name!r}"
                 )
 
 
