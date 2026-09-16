@@ -62,17 +62,13 @@ def _node(
     *,
     name: str,
     resources: ResourceSnapshot | None = None,
-    labels: tuple[str, ...] = (),
     models: tuple[str, ...] = (),
-    locality: tuple[str, ...] = (),
 ) -> NodeRecord:
     return NodeRecord(
         node_id=new_id("node"),
         display_name=name,
         resources=resources or _resources(),
-        labels=labels,
         model_refs=models,
-        locality_refs=locality,
         supported_runtimes=("python",),
     )
 
@@ -83,7 +79,6 @@ def _worker(
     executors: tuple[str, ...] = ("reference",),
     capabilities: tuple[str, ...] = (),
     models: tuple[str, ...] = (),
-    locality: tuple[str, ...] = (),
     concurrency: int = 1,
 ) -> WorkerRecord:
     return WorkerRecord(
@@ -93,7 +88,6 @@ def _worker(
         capability_refs=capabilities,
         supported_runtimes=("python",),
         model_refs=models,
-        locality_refs=locality,
         concurrency_limit=concurrency,
     )
 
@@ -144,7 +138,7 @@ def test_single_node_uses_same_scheduler_path_as_multi_node() -> None:
     assert placement.reservation.status is ReservationStatus.RESERVED
 
 
-def test_two_node_selection_filters_resources_capabilities_and_model() -> None:
+def test_registry_facts_feed_scheduler_candidate_selection() -> None:
     registry = DistributedRegistry()
     cpu_node = _node(name="cpu", resources=_resources(cpu=4.0, ram=8_000))
     gpu_node = _node(
@@ -182,43 +176,6 @@ def test_two_node_selection_filters_resources_capabilities_and_model() -> None:
         item for item in decision.evaluations if item.worker_id == cpu_worker.worker_id
     )
     assert not cpu_evaluation.accepted
-    assert {reason.code.value for reason in cpu_evaluation.reasons} >= {
-        "capability_unsupported",
-        "cpu_insufficient",
-        "ram_insufficient",
-        "gpu_required",
-        "vram_insufficient",
-        "model_unavailable",
-    }
-
-
-def test_deterministic_tie_break_uses_canonical_worker_id() -> None:
-    registry = DistributedRegistry()
-    node_a = _node(name="a")
-    node_b = _node(name="b")
-    worker_a = _worker(node_a)
-    worker_b = _worker(node_b)
-    _register(registry, node_a, worker_a)
-    _register(registry, node_b, worker_b)
-
-    decision = DeterministicScheduler(registry).evaluate(_job())
-
-    assert decision.selected_worker_id == min(worker_a.worker_id, worker_b.worker_id)
-
-
-def test_locality_is_preference_not_canonical_identity() -> None:
-    registry = DistributedRegistry()
-    remote = _node(name="remote")
-    local = _node(name="local", locality=("workspace:alpha",))
-    remote_worker = _worker(remote)
-    local_worker = _worker(local, locality=("snapshot:alpha",))
-    _register(registry, remote, remote_worker)
-    _register(registry, local, local_worker)
-
-    requirements = JobRequirements(locality_refs=("workspace:alpha", "snapshot:alpha"))
-    decision = DeterministicScheduler(registry).evaluate(_job(requirements=requirements))
-
-    assert decision.selected_worker_id == local_worker.worker_id
 
 
 def test_draining_and_unhealthy_workers_are_rejected() -> None:

@@ -60,6 +60,26 @@ Reserved for release, compatibility inventory and release-manifest verification.
 
 Shared repository-wide test fixtures. Prefer local fixtures next to a suite when they are not reused across categories.
 
+## Test-pyramid ownership
+
+Directory placement describes the primary boundary under test; it does not mean higher layers replace lower ones. Preserve real persistence, HTTP, Worker/process, adapter and end-to-end coverage, while keeping deterministic domain branches independently testable when they do not require those boundaries.
+
+When an integration-heavy path contains a deterministic policy decision, prefer this split:
+
+```text
+explicit canonical inputs
+    -> pure domain/service decision
+    -> focused unit coverage
+
+real database / HTTP / Worker / adapter boundary
+    -> same production decision seam
+    -> representative integration coverage
+```
+
+Before adding a new deterministic branch that is reachable only through a large integration fixture, ask whether the branch itself depends on infrastructure semantics. If it does not, expose the decision through the owning domain/service seam with explicit inputs and outputs and cover its branch matrix in `unit/` (or `contract/` when it is an interface contract). Do not create mocks that restate internals, duplicate production lifecycles, or remove the real boundary test merely to improve runtime.
+
+The representative #1109 audit and examples are documented in [`docs/quality/TEST_PYRAMID_AUDIT.md`](../docs/quality/TEST_PYRAMID_AUDIT.md).
+
 ## Pytest markers and selection
 
 The following stable markers are registered in `pyproject.toml`:

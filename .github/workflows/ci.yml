@@ -31,7 +31,9 @@ jobs:
         run: ruff check .
       - name: Mypy
         run: mypy
-      - name: Pytest
+      - name: Fast unit tests
+        run: pytest tests/unit
+      - name: Full pytest suite
         run: pytest
       - name: Deterministic evaluation gate
         run: python scripts/ci/deterministic_evaluation_regression_gate.py --platform-commit "$GITHUB_SHA"
