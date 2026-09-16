@@ -649,7 +649,7 @@ class EvaluationRunner:
         except Exception as exc:
             execution_error = exc
         # error-boundary: allow-broad-catch=cleanup preserve signals through teardown settlement
-        except BaseException as exc:
+        except (Exception, asyncio.CancelledError) as exc:
             primary_error = exc
             raise
         finally:
