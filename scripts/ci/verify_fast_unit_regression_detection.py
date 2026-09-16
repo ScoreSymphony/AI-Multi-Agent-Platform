@@ -26,6 +26,7 @@ TARGET_TEST = (
 ORIGINAL_INVARIANT = "score += 1000"
 MUTATED_INVARIANT = "score += 999"
 EXPECTED_FAILURE_FRAGMENT = "test_preference_score_has_explicit_additive_precedence"
+EXPECTED_ASSERTION_FRAGMENT = "AssertionError: assert 1784 == 1785"
 
 
 def main() -> int:
@@ -65,7 +66,11 @@ def main() -> int:
     if result.returncode == 0:
         print(output)
         raise RuntimeError("fast unit layer did not detect the controlled placement regression")
-    if EXPECTED_FAILURE_FRAGMENT not in output or "1 failed" not in output:
+    if (
+        result.returncode != 1
+        or EXPECTED_FAILURE_FRAGMENT not in output
+        or EXPECTED_ASSERTION_FRAGMENT not in output
+    ):
         print(output)
         raise RuntimeError(
             "regression probe failed for an unexpected reason instead of the targeted "
