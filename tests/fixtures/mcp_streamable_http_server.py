@@ -4,7 +4,7 @@ import argparse
 
 from mcp.server import MCPServer
 
-mcp = MCPServer("issue-730-streamable-http-test")
+mcp = MCPServer("pipelock-streamable-http-test")
 
 
 @mcp.tool()

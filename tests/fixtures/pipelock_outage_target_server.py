@@ -4,7 +4,7 @@ import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-SENTINEL = "issue-730-outage-target-ok"
+SENTINEL = "pipelock-outage-target-ok"
 
 
 class TargetHandler(BaseHTTPRequestHandler):

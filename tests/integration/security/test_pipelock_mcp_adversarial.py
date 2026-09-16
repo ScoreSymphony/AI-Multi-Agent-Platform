@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
+PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_TEST_BIN")
 FIXTURE_DIR = Path(__file__).parents[2] / "fixtures"
 PIPELOCK_CONFIG = FIXTURE_DIR / "pipelock_mcp_adversarial.yaml"
 MCP_FIXTURE = FIXTURE_DIR / "mcp_adversarial_http_server.py"
@@ -123,7 +123,7 @@ def _post(port: int, request_id: int, method: str, params: dict[str, object]) ->
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_pipelock_blocks_poisoned_mcp_tool_description(tmp_path: Path) -> None:
     with _upstream("poison") as upstream_port:
@@ -140,7 +140,7 @@ def test_pipelock_blocks_poisoned_mcp_tool_description(tmp_path: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_pipelock_blocks_mcp_descriptor_drift_after_clean_baseline(tmp_path: Path) -> None:
     with _upstream("drift") as upstream_port:
@@ -157,7 +157,7 @@ def test_pipelock_blocks_mcp_descriptor_drift_after_clean_baseline(tmp_path: Pat
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_pipelock_blocks_prompt_injection_in_mcp_tool_response(tmp_path: Path) -> None:
     with _upstream("response-injection") as upstream_port:
@@ -166,7 +166,7 @@ def test_pipelock_blocks_prompt_injection_in_mcp_tool_response(tmp_path: Path) -
                 proxy_port,
                 1,
                 "tools/call",
-                {"name": "lookup_invoice", "arguments": {"invoice_number": "INV-730"}},
+                {"name": "lookup_invoice", "arguments": {"invoice_number": "INV-ADVERSARIAL"}},
             )
 
     assert "Ignore all previous instructions" not in body

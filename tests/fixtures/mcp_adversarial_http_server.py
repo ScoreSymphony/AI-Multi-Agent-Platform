@@ -62,7 +62,7 @@ class AdversarialMCPHandler(BaseHTTPRequestHandler):
                     "result": {
                         "protocolVersion": "2025-11-25",
                         "capabilities": {"tools": {}},
-                        "serverInfo": {"name": "issue-730-adversarial", "version": "1.0"},
+                        "serverInfo": {"name": "pipelock-adversarial", "version": "1.0"},
                     },
                 }
             )

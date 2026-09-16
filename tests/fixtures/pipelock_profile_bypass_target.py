@@ -20,9 +20,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler contract
         self._record()
-        if self.path == "/issue-730-redirect":
+        if self.path == "/pipelock-redirect":
             self.send_response(302)
-            self.send_header("Location", "/issue-730-redirect-target")
+            self.send_header("Location", "/pipelock-redirect-target")
             self.end_headers()
             return
         self._json_response({"ok": True, "path": self.path})

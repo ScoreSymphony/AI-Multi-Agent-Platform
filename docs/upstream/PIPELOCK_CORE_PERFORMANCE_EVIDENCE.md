@@ -1,7 +1,6 @@
 # Pipelock Core performance and operability evidence
 
-Issue #730 requires measured latency/resource/false-positive evidence before a final adoption decision.
-This document defines the reproducible measurement boundary used for that evidence.
+The Pipelock candidate evaluation requires measured latency, resource and classification evidence before an adoption decision. Historical context: issue #730 introduced this evidence requirement and retains the original decision provenance.
 
 ## Exact candidate
 
@@ -11,8 +10,8 @@ binary whose Go build metadata contains the Enterprise build tag.
 
 ## Harness
 
-`scripts/benchmarks/issue730_pipelock_benchmark.py` runs a deterministic local comparison with the
-same platform fixtures used by the #730 transport/security evaluation. It records JSON evidence for:
+`scripts/benchmarks/pipelock_benchmark.py` runs a deterministic local comparison with the
+same platform fixtures used by the Pipelock transport/security evaluation. It records JSON evidence for:
 
 - direct HTTP versus Pipelock `/fetch` latency;
 - direct WebSocket echo versus Pipelock `/ws` round-trip latency;
@@ -29,7 +28,7 @@ client/process context for each call, so the measurement includes process startu
 handshake rather than pretending to be a persistent-session microbenchmark.
 
 No arbitrary performance threshold is used as a CI gate. The workflow gates only on successful,
-well-formed measurements and retains the observed numbers for the final #730 decision.
+well-formed measurements and retains the observed numbers for the adoption decision.
 
 ## Hosted-runner reference versus VPS evidence
 
@@ -73,7 +72,7 @@ The same harness is intentionally runnable unchanged on a Linux x86-64 VPS after
 reviewed Core pin and installing the platform dev/MCP dependencies plus `websockets==15.0.1`:
 
 ```bash
-python scripts/benchmarks/issue730_pipelock_benchmark.py \
+python scripts/benchmarks/pipelock_benchmark.py \
   --pipelock-bin /path/to/pipelock \
   --config tests/fixtures/pipelock_websocket_audit.yaml \
   --output /tmp/pipelock-performance-vps.json \
@@ -85,7 +84,7 @@ python scripts/benchmarks/issue730_pipelock_benchmark.py \
 
 A VPS result is acceptable evidence only when the retained artifact also identifies the exact
 Pipelock binary/config hashes and the environment metadata in the JSON output. Until such a run is
-retained, #730 must report representative VPS measurement as **pending**, rather than substituting the
+retained, representative VPS measurement must be reported as **pending**, rather than substituting the
 hosted-runner reference.
 
 ## Classification scope
@@ -96,11 +95,13 @@ case IDs and observed/expected classifications, but does not copy synthetic secr
 result JSON.
 
 This is a maintained evaluation subset, not a claim of general statistical accuracy for arbitrary
-real-world data. The broader #730 adversarial corpus remains the security-regression source of truth.
+real-world data. The broader Pipelock adversarial corpus remains the security-regression source of truth.
 
 ## Interpretation boundary
 
 Performance evidence does not strengthen Pipelock's security boundary by itself. In particular, the
-#730 containment work separately demonstrates whether traffic can bypass mediation. The final
+containment work separately demonstrates whether traffic can bypass mediation. The final
 recommendation must consider both the measured operational cost and the independently demonstrated
 containment limitations.
+
+Historical context: issue #730 owns the original candidate evaluation and the retained issue-number field in generated evidence manifests.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute one #730 evaluation command with new IPv4/IPv6 sockets denied.
+"""Execute one evaluation command with new IPv4/IPv6 sockets denied.
 
 This helper is intentionally narrow evaluation infrastructure, not a production sandbox.
 It installs an unprivileged Linux x86-64 seccomp filter after ``PR_SET_NO_NEW_PRIVS`` and
@@ -67,7 +67,7 @@ def _jump(code: int, value: int, *, on_true: int, on_false: int) -> _SockFilter:
 
 def _install_inet_socket_filter() -> None:
     if platform.system() != "Linux" or platform.machine().lower() not in {"x86_64", "amd64"}:
-        raise RuntimeError("issue #730 inet seccomp wrapper supports Linux x86-64 only")
+        raise RuntimeError("INET socket seccomp wrapper supports Linux x86-64 only")
 
     deny = _SECCOMP_RET_ERRNO | errno.EPERM
     instructions = [

@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
+PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_TEST_BIN")
 _RUNNER_TEMP = os.getenv("RUNNER_TEMP")
-PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_730_CONFIG") or (
+PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_TEST_CONFIG") or (
     str(Path(_RUNNER_TEMP) / "pipelock-audit.yaml") if _RUNNER_TEMP else None
 )
 FIXTURE_DIR = Path(__file__).parents[2] / "fixtures"
@@ -265,7 +265,7 @@ async def _expect_connection_blocked(websocket: object) -> None:
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_websocket_blocks_plain_secret_before_upstream(tmp_path: Path) -> None:
     websockets = pytest.importorskip("websockets")
@@ -294,7 +294,7 @@ def test_websocket_blocks_plain_secret_before_upstream(tmp_path: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_websocket_blocks_base64_encoded_secret_before_upstream(tmp_path: Path) -> None:
     websockets = pytest.importorskip("websockets")
@@ -324,7 +324,7 @@ def test_websocket_blocks_base64_encoded_secret_before_upstream(tmp_path: Path) 
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_websocket_blocks_secret_split_across_messages(tmp_path: Path) -> None:
     websockets = pytest.importorskip("websockets")
@@ -359,7 +359,7 @@ def test_websocket_blocks_secret_split_across_messages(tmp_path: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_websocket_blocks_server_prompt_injection_before_client(tmp_path: Path) -> None:
     websockets = pytest.importorskip("websockets")
@@ -390,7 +390,7 @@ def test_websocket_blocks_server_prompt_injection_before_client(tmp_path: Path) 
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None or PIPELOCK_TEST_CONFIG is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime and generated audit config",
+    reason="requires the pinned Pipelock compatibility runtime and generated audit config",
 )
 def test_connect_require_receipts_uses_fresh_writer_and_verifies_chain(
     tmp_path: Path,

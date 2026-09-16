@@ -16,14 +16,14 @@ from typing import Any, TextIO
 
 import pytest
 
-PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
-ALLOW_HOSTS_MUTATION = os.getenv("PIPELOCK_730_ALLOW_HOSTS_MUTATION") == "1"
-TEST_NET_IP = os.getenv("PIPELOCK_730_TEST_NET_IP", "192.0.2.123")
-REBINDS_HOSTNAME = "rebind.issue730.invalid"
+PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_TEST_BIN")
+ALLOW_HOSTS_MUTATION = os.getenv("PIPELOCK_ALLOW_HOSTS_MUTATION") == "1"
+TEST_NET_IP = os.getenv("PIPELOCK_TEST_NET_IP", "192.0.2.123")
+REBINDS_HOSTNAME = "pipelock-rebind.invalid"
 FIXTURE_DIR = Path(__file__).parents[2] / "fixtures"
 PIPELOCK_CONFIG = FIXTURE_DIR / "pipelock_network_boundary_audit.yaml"
 TARGET_FIXTURE = FIXTURE_DIR / "pipelock_network_boundary_target.py"
-TARGET_SENTINEL = "issue-730-network-target-ok"
+TARGET_SENTINEL = "pipelock-network-target-ok"
 SYNTHETIC_AWS_ACCESS_ID = "AKIA" + "IOSFODNN7EXAMPLE"
 
 
@@ -161,7 +161,7 @@ def _resolved_addresses(hostname: str) -> set[str]:
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 @pytest.mark.parametrize(
     "target",
@@ -187,7 +187,7 @@ def test_private_ipv4_and_hostname_resolution_are_blocked(
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_ipv6_loopback_equivalent_is_blocked(tmp_path: Path) -> None:
     with _pipelock(tmp_path, name="ipv6-loopback") as (proxy_port, log_path):
@@ -201,7 +201,7 @@ def test_ipv6_loopback_equivalent_is_blocked(tmp_path: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_multistage_secret_split_across_independent_fetches_reaches_upstream(
     tmp_path: Path,

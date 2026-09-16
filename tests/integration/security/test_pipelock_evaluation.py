@@ -32,31 +32,31 @@ from ai_multi_agent_platform.contracts import (
     digest_egress_payload,
 )
 
-PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
-PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_730_CONFIG")
+PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_TEST_BIN")
+PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_TEST_CONFIG")
 MCP_FIXTURE_SERVER = Path(__file__).parents[2] / "fixtures" / "mcp_stdio_server.py"
 
 
 def _request() -> EgressRequest:
     return EgressRequest(
-        request_id="egress-730",
+        request_id="egress-pipelock",
         target=EgressTarget(
             kind=EgressTargetKind.CAPABILITY,
             target_id="capability:external-http",
             posture=EgressTargetPosture.EXTERNAL,
         ),
         context=OperationContext(
-            correlation_id="corr-730",
+            correlation_id="corr-pipelock",
             owner_type="agent",
-            owner_id="agent-owner-730",
+            owner_id="agent-owner-pipelock",
         ),
         classification=DataClassification.PUBLIC,
         resource_type="tool_request",
         payload_digest=digest_egress_payload({"safe": "fixture"}),
-        task_id="task-730",
-        run_id="run-730",
-        capability_id="capability-730",
-        policy_descriptors={"agent_id": "agent-730"},
+        task_id="task-pipelock",
+        run_id="run-pipelock",
+        capability_id="capability-pipelock",
+        policy_descriptors={"agent_id": "agent-pipelock"},
     )
 
 
@@ -73,14 +73,14 @@ def _decision(
         EgressOutcome.UNKNOWN_BLOCKED: EgressReasonCode.UNKNOWN_TARGET_POSTURE,
     }[outcome]
     return EgressDecision(
-        request_id="egress-730",
+        request_id="egress-pipelock",
         outcome=outcome,
         target_kind=EgressTargetKind.CAPABILITY,
         target_id="capability:external-http",
         effective_classification=DataClassification.PUBLIC,
         reason_code=reason,
         policy_version=policy_version,
-        approval_ref="approval-730" if outcome is EgressOutcome.REQUIRE_APPROVAL else None,
+        approval_ref="approval-pipelock" if outcome is EgressOutcome.REQUIRE_APPROVAL else None,
     )
 
 
@@ -123,7 +123,7 @@ def test_canonical_non_allow_never_degrades_to_upstream_allow(
     assert projection.directive is PipelockDirective.BLOCK
     assert not projection.requires_pipelock
     if outcome is EgressOutcome.REQUIRE_APPROVAL:
-        assert projection.approval_ref == "approval-730"
+        assert projection.approval_ref == "approval-pipelock"
 
 
 def test_projection_rejects_decision_for_a_different_target() -> None:
@@ -194,7 +194,7 @@ def test_receipt_normalization_preserves_canonical_refs_without_raw_destination(
     evidence = normalize_pipelock_receipt(
         projection,
         {
-            "action_id": "0199-action-730",
+            "action_id": "0199-action-pipelock",
             "verdict": "allow",
             "transport": "forward",
             "method": "POST",
@@ -206,12 +206,12 @@ def test_receipt_normalization_preserves_canonical_refs_without_raw_destination(
         },
     )
 
-    assert evidence.request_id == "egress-730"
-    assert evidence.correlation_id == "corr-730"
-    assert evidence.task_id == "task-730"
-    assert evidence.run_id == "run-730"
-    assert evidence.agent_id == "agent-730"
-    assert evidence.capability_id == "capability-730"
+    assert evidence.request_id == "egress-pipelock"
+    assert evidence.correlation_id == "corr-pipelock"
+    assert evidence.task_id == "task-pipelock"
+    assert evidence.run_id == "run-pipelock"
+    assert evidence.agent_id == "agent-pipelock"
+    assert evidence.capability_id == "capability-pipelock"
     assert evidence.platform_policy_version == "egress-policy/v1"
     assert evidence.pipelock_policy_hash == "pipelock-config-hash"
     assert evidence.destination_digest is not None
@@ -257,7 +257,7 @@ def test_malformed_receipt_fails_closed_in_evidence_normalization() -> None:
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None or PIPELOCK_TEST_CONFIG is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_pipelock_mcp_stdio_wraps_canonical_invocation_path() -> None:
     from ai_multi_agent_platform.adapters.mcp import MCPServerConfig
@@ -293,17 +293,17 @@ def test_pipelock_mcp_stdio_wraps_canonical_invocation_path() -> None:
         registry = CapabilityRegistry()
         await registry.register_provider(build_mcp_provider(config))
         invocation = CapabilityInvocation(
-            invocation_id="mcp-pipelock-730",
+            invocation_id="mcp-pipelock-evaluation",
             capability_id="tool.lookup",
             arguments={"query": "pipelock-transport"},
             context=OperationContext(
-                correlation_id="mcp-pipelock-correlation-730",
+                correlation_id="mcp-pipelock-correlation",
                 owner_type="user",
-                owner_id="user-730",
+                owner_id="user-pipelock",
                 project_id=project_id,
             ),
             trace=InvocationTrace(
-                correlation_id="mcp-pipelock-correlation-730",
+                correlation_id="mcp-pipelock-correlation",
                 task_id=new_id("task"),
                 run_id=new_id("run"),
                 agent_id=new_id("agent"),

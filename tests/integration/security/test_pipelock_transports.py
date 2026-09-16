@@ -26,8 +26,8 @@ from ai_multi_agent_platform.capabilities import (
 from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.domain import new_id
 
-PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_730_BIN")
-PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_730_CONFIG")
+PIPELOCK_TEST_BIN = os.getenv("PIPELOCK_TEST_BIN")
+PIPELOCK_TEST_CONFIG = os.getenv("PIPELOCK_TEST_CONFIG")
 FIXTURE_DIR = Path(__file__).parents[2] / "fixtures"
 HTTP_FIXTURE = FIXTURE_DIR / "mcp_streamable_http_server.py"
 MCP_WEBSOCKET_FIXTURE = FIXTURE_DIR / "mcp_websocket_server.py"
@@ -158,17 +158,17 @@ def _fetch_through_pipelock(proxy_port: int, target: str) -> tuple[int, str]:
 def _invocation(query: str) -> CapabilityInvocation:
     project_id = new_id("project")
     return CapabilityInvocation(
-        invocation_id=f"mcp-pipelock-730-{query}",
+        invocation_id=f"mcp-pipelock-{query}",
         capability_id="tool.lookup",
         arguments={"query": query},
         context=OperationContext(
-            correlation_id=f"mcp-pipelock-correlation-730-{query}",
+            correlation_id=f"mcp-pipelock-correlation-{query}",
             owner_type="user",
-            owner_id="user-730",
+            owner_id="user-pipelock",
             project_id=project_id,
         ),
         trace=InvocationTrace(
-            correlation_id=f"mcp-pipelock-correlation-730-{query}",
+            correlation_id=f"mcp-pipelock-correlation-{query}",
             task_id=new_id("task"),
             run_id=new_id("run"),
             agent_id=new_id("agent"),
@@ -214,7 +214,7 @@ async def _exercise_upstream(
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None or PIPELOCK_TEST_CONFIG is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_pipelock_mcp_streamable_http_upstream_uses_canonical_invocation_path() -> None:
     with _running_fixture(HTTP_FIXTURE) as port:
@@ -231,7 +231,7 @@ def test_pipelock_mcp_streamable_http_upstream_uses_canonical_invocation_path() 
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None or PIPELOCK_TEST_CONFIG is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_pipelock_mcp_websocket_upstream_uses_canonical_invocation_path() -> None:
     with _running_fixture(MCP_WEBSOCKET_FIXTURE) as port:
@@ -248,7 +248,7 @@ def test_pipelock_mcp_websocket_upstream_uses_canonical_invocation_path() -> Non
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_pipelock_generic_websocket_proxy_relays_clean_text_frames(tmp_path: Path) -> None:
     websockets = pytest.importorskip("websockets")
@@ -282,7 +282,7 @@ def test_pipelock_generic_websocket_proxy_relays_clean_text_frames(tmp_path: Pat
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_pipelock_fetch_redirect_to_private_target_is_blocked_before_target_access(
     tmp_path: Path,
@@ -347,7 +347,7 @@ def test_pipelock_fetch_redirect_to_private_target_is_blocked_before_target_acce
 @pytest.mark.integration
 @pytest.mark.skipif(
     PIPELOCK_TEST_BIN is None,
-    reason="requires the pinned Pipelock #730 compatibility runtime",
+    reason="requires the pinned Pipelock compatibility runtime",
 )
 def test_pipelock_fetch_blocks_link_local_metadata_target(tmp_path: Path) -> None:
     proxy_port = _free_loopback_port()
