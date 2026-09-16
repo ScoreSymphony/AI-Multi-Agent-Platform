@@ -81,6 +81,8 @@ jobs:
           python scripts/ci/validate_permanent_naming.py
           --base "${{ github.event.pull_request.base.sha }}"
           --head "${{ github.event.pull_request.head.sha }}"
+      - name: Audit repository-wide permanent naming
+        run: python scripts/ci/validate_permanent_naming.py --full-tree
       - name: Audit migrated test inventory
         shell: bash
         run: |
