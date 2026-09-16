@@ -51,6 +51,21 @@ describe("Agent single-node configuration", () => {
     expect(html).toContain("Create Agent");
   });
 
+  it("renders the edit loading boundary until canonical server state arrives", () => {
+    const { core, configuration, collections } = clients();
+    const html = renderToStaticMarkup(
+      <AgentConfigurationPage
+        core={core}
+        configuration={configuration}
+        collections={collections}
+        mode="edit"
+        agentId="agent_123"
+      />,
+    );
+
+    expect(html).toContain("Loading Agent configuration…");
+  });
+
   it("validates identity, instructions and user-memory coupling before mutation", () => {
     const empty = emptyAgentProfile();
     expect(validateAgent(empty)).toBe("Agent name is required.");
