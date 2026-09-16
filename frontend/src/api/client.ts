@@ -39,6 +39,7 @@ import {
   type CreateTerminalSessionInput,
   type TerminalDimensions,
 } from "./terminal";
+import type { TraceNode, TracePage } from "./trace";
 import { ApiTransport } from "./transport";
 import type { ApiRequestOptions, ApiTransportOptions } from "./transport";
 
@@ -183,6 +184,18 @@ export class ControlPlaneClient {
   timeline(taskId: string, query: ListQuery = {}): Promise<Page<TimelineItem>> {
     return this.request<Page<TimelineItem>>(
       `/tasks/${encodeURIComponent(taskId)}/timeline${toQuery(query)}`,
+    );
+  }
+
+  trace(taskId: string, query: ListQuery = {}): Promise<TracePage> {
+    return this.request<TracePage>(
+      `/tasks/${encodeURIComponent(taskId)}/trace${toQuery(query)}`,
+    );
+  }
+
+  getTraceNode(taskId: string, nodeId: string): Promise<TraceNode> {
+    return this.request<TraceNode>(
+      `/tasks/${encodeURIComponent(taskId)}/trace/${encodeURIComponent(nodeId)}`,
     );
   }
 
