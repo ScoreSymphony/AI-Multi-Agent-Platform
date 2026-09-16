@@ -12,6 +12,7 @@ import "./evaluations.css";
 import "./approvals.css";
 import "./governance.css";
 import "./notifications.css";
+import "./organizations.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
