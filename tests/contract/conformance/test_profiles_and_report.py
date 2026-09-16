@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from ai_multi_agent_platform.conformance import (
@@ -25,6 +26,7 @@ def test_conformance_profiles_are_explicit_and_scenario_ids_are_unique() -> None
         assert scenarios
         assert len({scenario.scenario_id for scenario in scenarios}) == len(scenarios)
         assert all(scenario.owner.strip() for scenario in scenarios)
+        assert all(re.search(r"#\d+", scenario.owner) is None for scenario in scenarios)
         assert all(scenario.criterion for scenario in scenarios)
 
 
@@ -51,7 +53,7 @@ def test_fast_profile_owns_the_reference_security_verification_and_client_slice(
 def test_optional_disabled_scenario_does_not_break_reference_compatibility(tmp_path: Path) -> None:
     scenario = ConformanceScenario(
         scenario_id="S",
-        owner="#81 Registry",
+        owner="Registry",
         criterion="Registry remains optional",
         command=None,
         required=False,
@@ -74,7 +76,7 @@ def test_optional_disabled_scenario_does_not_break_reference_compatibility(tmp_p
 def test_required_unimplemented_scenario_blocks_compatibility_claim(tmp_path: Path) -> None:
     scenario = ConformanceScenario(
         scenario_id="future-required",
-        owner="#46 future required scenario",
+        owner="future required scenario",
         criterion="required acceptance path exists",
         command=None,
         required=True,
@@ -183,7 +185,7 @@ def test_optional_profiles_are_explicit_in_integration_registry() -> None:
 def test_report_schema_records_version_and_evidence_fields(tmp_path: Path) -> None:
     scenario = ConformanceScenario(
         scenario_id="S",
-        owner="#81 Registry",
+        owner="Registry",
         criterion="optional reference fixture",
         command=None,
         required=False,

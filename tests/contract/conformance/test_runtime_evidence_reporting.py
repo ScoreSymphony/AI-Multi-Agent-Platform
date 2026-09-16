@@ -27,7 +27,7 @@ def _emitting_command(payload: object) -> tuple[str, ...]:
 def test_runtime_evidence_is_promoted_into_scenario_report(tmp_path: Path) -> None:
     scenario = ConformanceScenario(
         scenario_id="runtime-evidence",
-        owner="#46 runtime evidence",
+        owner="runtime evidence",
         criterion="canonical IDs and evidence are retained",
         command=_emitting_command(
             {
@@ -59,7 +59,7 @@ def test_runtime_evidence_is_promoted_into_scenario_report(tmp_path: Path) -> No
 def test_required_runtime_evidence_is_fail_closed_when_missing(tmp_path: Path) -> None:
     scenario = ConformanceScenario(
         scenario_id="missing-evidence",
-        owner="#46 runtime evidence",
+        owner="runtime evidence",
         criterion="evidence-bearing claim cannot silently pass",
         command=(sys.executable, "-c", "print('scenario passed without evidence')"),
         requires_runtime_evidence=True,
@@ -83,7 +83,7 @@ def test_required_runtime_evidence_is_fail_closed_when_missing(tmp_path: Path) -
 def test_malformed_runtime_evidence_is_fail_closed(tmp_path: Path) -> None:
     scenario = ConformanceScenario(
         scenario_id="invalid-evidence",
-        owner="#46 runtime evidence",
+        owner="runtime evidence",
         criterion="malformed evidence cannot support compatibility",
         command=(sys.executable, "-c", f"print({EVIDENCE_PREFIX!r} + '{{not-json}}')"),
     )

@@ -8,7 +8,7 @@ def test_reference_multi_agent_conformance_reuses_maintained_golden_path() -> No
 
     assert scenario.required is True
     assert scenario.command is not None
-    assert scenario.owner == "#889/#46 reference multi-agent baseline"
+    assert scenario.owner == "reference multi-agent baseline"
     command = " ".join(scenario.command)
     assert "tests/integration/deployment/test_reference_multi_agent_provenance.py" in command
     assert (
