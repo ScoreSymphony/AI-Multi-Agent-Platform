@@ -40,6 +40,7 @@ from ai_multi_agent_platform.workspaces import (
 from .registry import RegistryError
 from .workspace_transport_codec import (
     _array,
+    _boolean,
     _decode_cleanup,
     _decode_receipt,
     _encode_receipt,
@@ -106,9 +107,15 @@ class TransportRemoteWorkspaceMaterializer(RemoteWorkspaceMaterializer):
         workspace = await self.workspaces.get_workspace(request.workspace_id)
         snapshot = await self.workspaces.get_snapshot(request.snapshot_id)
         if snapshot.workspace_id != workspace.id:
-            raise RegistryError("remote Workspace snapshot belongs to another Workspace")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "remote Workspace snapshot belongs to another Workspace",
+            )
         if snapshot.content_checksum != request.expected_checksum:
-            raise RegistryError("remote Workspace request checksum differs from canonical snapshot")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "remote Workspace request checksum differs from canonical snapshot",
+            )
         context = self._context(workspace)
         manifest: list[_ManifestEntry] = []
         portable_files: dict[str, bytes] = {}
@@ -367,19 +374,40 @@ class TransportRemoteWorkspaceMaterializer(RemoteWorkspaceMaterializer):
                 async with asyncio.timeout(self.response_timeout_seconds):
                     delivery = await anext(subscription)
             except TimeoutError as exc:
-                raise RegistryError("remote Workspace transport response timed out") from exc
+                raise ContractError(
+                    ErrorCode.TIMEOUT,
+                    "remote Workspace transport response timed out",
+                    retryable=True,
+                ) from exc
             await self.transport.ack(delivery)
             reply = delivery.envelope
-            if reply.causation_id != command.message_id:
-                raise RegistryError("remote Workspace reply causation mismatch")
-            if reply.correlation_id != command.correlation_id:
-                raise RegistryError("remote Workspace reply correlation mismatch")
-            data = _mapping(reply.payload, "remote Workspace reply")
-            if _required_string(data, "worker_id") != self.worker_id:
-                raise RegistryError("remote Workspace reply came from another Worker")
-            if reply.message_type == "workspace.error":
-                raise RegistryError(_required_string(data, "message"))
-            return data
+            try:
+                if reply.causation_id != command.message_id:
+                    raise RegistryError("remote Workspace reply causation mismatch")
+                if reply.correlation_id != command.correlation_id:
+                    raise RegistryError("remote Workspace reply correlation mismatch")
+                data = _mapping(reply.payload, "remote Workspace reply")
+                if _required_string(data, "worker_id") != self.worker_id:
+                    raise RegistryError("remote Workspace reply came from another Worker")
+                if reply.message_type == "workspace.error":
+                    error_code_raw = _required_string(data, "error_code")
+                    try:
+                        error_code = ErrorCode(error_code_raw)
+                    except ValueError as exc:
+                        raise RegistryError(
+                            "remote Workspace error reply contains an unknown error code"
+                        ) from exc
+                    raise ContractError(
+                        error_code,
+                        _required_string(data, "message"),
+                        retryable=_boolean(data.get("retryable"), "retryable"),
+                    )
+                return data
+            except RegistryError as exc:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "remote Workspace transport returned an invalid reply",
+                ) from exc
         finally:
             await subscription.aclose()
 

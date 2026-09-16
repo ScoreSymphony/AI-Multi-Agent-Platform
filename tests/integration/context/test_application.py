@@ -99,6 +99,47 @@ class _TeamHandler:
         )
 
 
+@dataclass
+class _CompensatingAgentHandler(_AgentHandler):
+    compensation_started: asyncio.Event
+    compensation_release: asyncio.Event
+    compensated: list[str]
+
+    async def compensate(
+        self,
+        resources: tuple[TemplateResourceRef, ...],
+        provenance: TemplateInstantiationProvenance,
+        context: TemplateInstantiationContext,
+    ) -> None:
+        del provenance, context
+        self.compensation_started.set()
+        await self.compensation_release.wait()
+        self.compensated.extend(resource.resource_id for resource in resources)
+
+
+@dataclass
+class _BlockingTeamHandler:
+    dependency_template_id: str
+    started: asyncio.Event
+    template_type = TemplateType.AGENT_TEAM
+
+    def preview(self, revision: TemplateRevision) -> tuple[TemplateResourceChange, ...]:
+        del revision
+        return (TemplateResourceChange(resource_type="agent_team", action="create"),)
+
+    async def instantiate(
+        self,
+        revision: TemplateRevision,
+        provenance: TemplateInstantiationProvenance,
+        context: TemplateInstantiationContext,
+    ) -> tuple[TemplateResourceRef, ...]:
+        del revision, provenance
+        context.single_resource_for(self.dependency_template_id, resource_type="agent")
+        self.started.set()
+        await asyncio.Event().wait()
+        raise AssertionError("blocking Template handler unexpectedly resumed")
+
+
 def test_dependency_created_resource_ids_are_available_to_later_handlers() -> None:
     async def scenario() -> None:
         repository = InMemoryTemplateRepository()
@@ -197,6 +238,70 @@ def test_reapply_creates_new_instance_without_mutating_previous_instance() -> No
         assert repository.get_instantiation(first.instance_id) == first
         assert repository.get_instantiation(second.instance_id) == second
         assert repository.list_instantiations(published.template_id) == (first, second)
+
+    asyncio.run(scenario())
+
+
+def test_apply_settles_created_resources_before_propagating_repeated_cancellation() -> None:
+    async def scenario() -> None:
+        repository = InMemoryTemplateRepository()
+        templates = TemplateService(repository)
+        agent = templates.publish(
+            templates.create_draft(
+                owner_ref=_owner(),
+                content=_content("Worker", TemplateType.AGENT),
+            ).template_id,
+            expected_revision=1,
+        )
+        team = templates.publish(
+            templates.create_draft(
+                owner_ref=_owner(),
+                content=_content(
+                    "Team",
+                    TemplateType.AGENT_TEAM,
+                    dependencies=(TemplateDependency(agent.template_id, agent.revision),),
+                ),
+            ).template_id,
+            expected_revision=1,
+        )
+
+        compensation_started = asyncio.Event()
+        compensation_release = asyncio.Event()
+        team_started = asyncio.Event()
+        agent_handler = _CompensatingAgentHandler(
+            created=[],
+            compensation_started=compensation_started,
+            compensation_release=compensation_release,
+            compensated=[],
+        )
+        registry = ContextualTemplateHandlerRegistry()
+        registry.register(agent_handler)
+        registry.register(
+            _BlockingTeamHandler(
+                dependency_template_id=agent.template_id,
+                started=team_started,
+            )
+        )
+        application = TemplateApplicationService(repository, registry)
+
+        applying = asyncio.create_task(
+            application.apply(
+                team.template_id,
+                applied_by=_owner(),
+                environment=TemplateEnvironment(),
+            )
+        )
+        await team_started.wait()
+        applying.cancel()
+        await compensation_started.wait()
+        applying.cancel()
+        compensation_release.set()
+
+        with pytest.raises(asyncio.CancelledError):
+            await applying
+
+        assert agent_handler.compensated == agent_handler.created
+        assert repository.list_instantiations(team.template_id) == ()
 
     asyncio.run(scenario())
 

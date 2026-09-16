@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable
 from dataclasses import dataclass, replace
 from statistics import pvariance
+
+from ai_multi_agent_platform.security import redact_exception
 
 from .aggregation import (
     AggregatedEvaluationResult,
@@ -97,6 +100,22 @@ class NoopEvaluationIsolation:
         succeeded: bool,
     ) -> None:
         del case, attempt, execution_context, succeeded
+
+
+async def _settle_awaitable[T](operation: Awaitable[T]) -> tuple[T | None, BaseException | None]:
+    """Let owned settlement finish despite repeated caller cancellation."""
+
+    worker = asyncio.ensure_future(operation)
+    while not worker.done():
+        try:
+            await asyncio.shield(worker)
+        except asyncio.CancelledError:
+            continue
+    try:
+        return worker.result(), None
+    # error-boundary: allow-broad-catch=cleanup report settlement failure to the primary owner
+    except BaseException as exc:
+        return None, exc
 
 
 class EvaluationRunner:
@@ -377,7 +396,8 @@ class EvaluationRunner:
                 completed_at=utc_now(),
             )
             await self._async_repository.save_run(completed)
-        except Exception:
+        # error-boundary: allow-broad-catch=cleanup persisted RUNNING run must become terminal
+        except BaseException as run_error:
             if run_persisted:
                 failed = replace(
                     run,
@@ -385,7 +405,14 @@ class EvaluationRunner:
                     repetitions=executed_repetitions or run.repetitions,
                     completed_at=utc_now(),
                 )
-                await self._async_repository.save_run(failed)
+                _, settlement_error = await _settle_awaitable(
+                    self._async_repository.save_run(failed)
+                )
+                if settlement_error is not None:
+                    run_error.add_note(
+                        "Evaluation Run failure settlement was incomplete: "
+                        f"{type(settlement_error).__name__}"
+                    )
             raise
 
         return EvaluationRunSummary(
@@ -593,6 +620,7 @@ class EvaluationRunner:
         execution_context: EvaluationExecutionContext | None = None
         setup_complete = False
         execution_error: Exception | None = None
+        primary_error: BaseException | None = None
         error_category = "case_execution_failure"
 
         try:
@@ -619,19 +647,20 @@ class EvaluationRunner:
             error_category = "case_execution_timeout"
         except Exception as exc:
             execution_error = exc
+        # error-boundary: allow-broad-catch=cleanup preserve signals through teardown settlement
+        except BaseException as exc:
+            primary_error = exc
+            raise
         finally:
             if setup_complete and execution_context is not None:
-                try:
-                    await self._isolation.teardown_case(
-                        case=case,
-                        attempt=attempt,
-                        execution_context=execution_context,
-                        succeeded=execution_error is None,
-                    )
-                except Exception as exc:
-                    if execution_error is None:
-                        execution_error = exc
-                        error_category = "case_teardown_failure"
+                execution_error, error_category = await self._settle_attempt_teardown(
+                    case=case,
+                    attempt=attempt,
+                    execution_context=execution_context,
+                    execution_error=execution_error,
+                    primary_error=primary_error,
+                    error_category=error_category,
+                )
 
         if execution_error is not None:
             await self._save_execution_errors(
@@ -676,6 +705,40 @@ class EvaluationRunner:
                 )
             )
 
+    async def _settle_attempt_teardown(
+        self,
+        *,
+        case: EvaluationCase,
+        attempt: EvaluationAttempt,
+        execution_context: EvaluationExecutionContext,
+        execution_error: Exception | None,
+        primary_error: BaseException | None,
+        error_category: str,
+    ) -> tuple[Exception | None, str]:
+        _, teardown_error = await _settle_awaitable(
+            self._isolation.teardown_case(
+                case=case,
+                attempt=attempt,
+                execution_context=execution_context,
+                succeeded=execution_error is None and primary_error is None,
+            )
+        )
+        if teardown_error is None:
+            return execution_error, error_category
+        if primary_error is not None:
+            primary_error.add_note(
+                f"Evaluation case teardown failed: {type(teardown_error).__name__}"
+            )
+            return execution_error, error_category
+        if not isinstance(teardown_error, Exception):
+            raise teardown_error
+        if execution_error is None:
+            return teardown_error, "case_teardown_failure"
+        execution_error.add_note(
+            f"Evaluation case teardown also failed: {type(teardown_error).__name__}"
+        )
+        return execution_error, error_category
+
     async def _save_execution_errors(
         self,
         run: EvaluationRun,
@@ -702,6 +765,6 @@ class EvaluationRunner:
                     repetition_index=attempt.repetition_index,
                     seed=attempt.seed,
                     error_category=error_category,
-                    error_message=str(error),
+                    error_message=redact_exception(error),
                 )
             )

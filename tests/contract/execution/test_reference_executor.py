@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 from executor_contract_suite import ExecutorContractSuite
 
 from ai_multi_agent_platform.execution import (
@@ -94,5 +96,63 @@ def test_inflight_cancellation_is_acknowledged_by_reference_executor(tmp_path: P
         assert result.run_id == request.run_id
         assert result.step_id == request.step_id
         assert result.correlation_id == request.correlation_id
+
+    asyncio.run(scenario())
+
+
+def test_task_cancellation_propagates_from_reference_executor(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "workspaces"
+    workspace = workspace_root / "run-1"
+    workspace.mkdir(parents=True)
+    executor = ReferenceExecutor(workspace_root)
+    request = ExecutionRequest(
+        task_id="task-1",
+        run_id="run-1",
+        step_id="step-1",
+        correlation_id="corr-1",
+        action="sleep",
+        workspace="run-1",
+        arguments={"seconds": 1.0},
+    )
+
+    async def scenario() -> None:
+        execution = asyncio.create_task(executor.execute(request))
+        await asyncio.sleep(0.01)
+        execution.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await execution
+
+    asyncio.run(scenario())
+
+
+def test_unexpected_executor_failure_is_contained_without_raw_diagnostics(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "workspaces"
+    workspace = workspace_root / "run-1"
+    workspace.mkdir(parents=True)
+    executor = ReferenceExecutor(workspace_root)
+    request = ExecutionRequest(
+        task_id="task-1",
+        run_id="run-1",
+        step_id="step-1",
+        correlation_id="corr-1",
+        action="echo",
+        workspace="run-1",
+        arguments={"text": "hello"},
+    )
+    private_detail = "implementation secret 42"
+
+    async def scenario() -> None:
+        with patch.object(
+            ReferenceExecutor,
+            "_run_action",
+            side_effect=RuntimeError(private_detail),
+        ):
+            result = await executor.execute(request)
+
+        assert result.status is ExecutionStatus.FAILED
+        assert result.error is not None
+        assert result.error.category.value == "internal"
+        assert result.error.message == "internal execution failure"
+        assert private_detail not in result.stderr
 
     asyncio.run(scenario())

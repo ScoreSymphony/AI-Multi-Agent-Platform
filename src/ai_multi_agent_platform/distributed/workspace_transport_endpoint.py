@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from collections.abc import Mapping
 
+from ai_multi_agent_platform.contracts import ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.messaging import (
     MessageKind,
@@ -17,6 +18,7 @@ from ai_multi_agent_platform.workspaces import (
     RemoteMaterializationReceipt,
 )
 
+from ._error_boundary import delivery_failure_retryable, workspace_error_semantics
 from .registry import RegistryError
 from .workspace_materialization_store import WorkerWorkspaceMaterializationStore
 from .workspace_transport_codec import (
@@ -66,11 +68,12 @@ class WorkerWorkspaceTransportEndpoint:
             async for delivery in subscription:
                 try:
                     await self._handle(delivery.envelope)
-                except Exception:
+                # error-boundary: allow-broad-catch=boundary delivery owner must ACK/NACK once
+                except Exception as exc:
                     await self.transport.nack(
                         delivery,
-                        retry=True,
-                        reason="workspace_transport_reply_publish_failed",
+                        retry=delivery_failure_retryable(exc),
+                        reason="workspace_transport_boundary_failed",
                     )
                 else:
                     await self.transport.ack(delivery)
@@ -83,13 +86,27 @@ class WorkerWorkspaceTransportEndpoint:
         if not reply_topic.startswith(f"{WORKSPACE_REPLY_TOPIC_PREFIX}."):
             raise RegistryError("remote Workspace reply topic is outside canonical prefix")
         if _required_string(data, "worker_id") != self.store.worker_id:
-            await self._error(command, reply_topic, "Worker Workspace target mismatch")
+            await self._error(
+                command,
+                reply_topic,
+                "Worker Workspace target mismatch",
+                error_code=ErrorCode.INVALID_REQUEST,
+                retryable=False,
+            )
             return
         operation = _required_string(data, "operation")
         try:
             payload = await self._dispatch(operation, data)
+        # error-boundary: allow-broad-catch=translation Worker operation -> canonical error payload
         except Exception as exc:
-            await self._error(command, reply_topic, _safe_workspace_error(exc))
+            error_code, retryable = workspace_error_semantics(exc)
+            await self._error(
+                command,
+                reply_topic,
+                _safe_workspace_error(exc),
+                error_code=error_code,
+                retryable=retryable,
+            )
             return
         await self._reply(command, reply_topic, f"workspace.{operation}.accepted", payload)
 
@@ -199,6 +216,9 @@ class WorkerWorkspaceTransportEndpoint:
         command: TransportEnvelope,
         reply_topic: str,
         message: str,
+        *,
+        error_code: ErrorCode,
+        retryable: bool,
     ) -> None:
         await self._reply(
             command,
@@ -206,8 +226,9 @@ class WorkerWorkspaceTransportEndpoint:
             "workspace.error",
             {
                 "worker_id": self.store.worker_id,
+                "error_code": error_code.value,
                 "message": message,
-                "retryable": False,
+                "retryable": retryable,
             },
         )
 

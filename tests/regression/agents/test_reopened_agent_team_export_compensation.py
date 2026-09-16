@@ -23,7 +23,7 @@ from ai_multi_agent_platform.templates import (
 )
 from ai_multi_agent_platform.templates.models import TemplateDefinition, TemplateRevision
 
-OWNER = OwnerRef(type="user", id="issue-78-export-owner")
+OWNER = OwnerRef(type="user", id="agent-team-export-owner")
 
 
 def _profile(name: str) -> AgentProfile:
@@ -132,7 +132,7 @@ def test_child_publish_failure_removes_published_and_draft_children() -> None:
     assert repository.list_templates() == ()
 
 
-def test_cleanup_failure_surfaces_original_export_and_compensation_evidence() -> None:
+def test_cleanup_failure_preserves_primary_export_error_with_safe_cleanup_evidence() -> None:
     class CleanupFailingRepository(_FailingTemplateRepository):
         def delete_template(self, template_id: str) -> None:
             raise ContractError(
@@ -146,13 +146,16 @@ def test_cleanup_failure_surfaces_original_export_and_compensation_evidence() ->
     repository = CleanupFailingRepository(fail_append_number=2)
     exporter = AgentTeamTemplateExporter(agents, TemplateService(repository))
 
-    with pytest.raises(ContractError) as exc_info:
+    with pytest.raises(RuntimeError, match="publish failure after persistence") as exc_info:
         exporter.create_from_team(
             team_id,
             owner_ref=OWNER,
             author="user:exporter",
         )
 
-    assert exc_info.value.code is ErrorCode.BACKEND_ERROR
-    assert exc_info.value.details["export_error_type"] == "RuntimeError"
-    assert exc_info.value.details["cleanup_failures"]
+    assert "simulated cleanup refusal" not in str(exc_info.value)
+    assert "Agent Team Template cleanup was incomplete: ContractError" in getattr(
+        exc_info.value,
+        "__notes__",
+        (),
+    )

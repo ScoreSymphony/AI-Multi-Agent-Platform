@@ -31,7 +31,6 @@ _RETRYABLE_EVENT_ERROR_CODES = frozenset(
         ErrorCode.RATE_LIMITED,
         ErrorCode.RESOURCE_EXHAUSTED,
         ErrorCode.TRANSIENT_FAILURE,
-        ErrorCode.BACKEND_ERROR,
     }
 )
 
@@ -393,6 +392,7 @@ class AutomationRuntime:
             try:
                 for preprocessor in self._event_preprocessors:
                     await preprocessor(event)
+            # error-boundary: allow-broad-catch=boundary failed projector must leave cursor pending
             except Exception as exc:
                 # Canonical projectors fail retryably: do not advance the #18 event cursor.
                 failed_event_ids.append(event.id)
@@ -412,6 +412,7 @@ class AutomationRuntime:
                             _terminal_event_failure_audit(event, exc)
                         )
                         await self._state.mark_processed_event(event.id)
+                    # error-boundary: allow-broad-catch=boundary terminal audit keeps cursor pending
                     except Exception as persistence_exc:
                         failed_event_ids.append(event.id)
                         if first_error is None:
@@ -421,9 +422,11 @@ class AutomationRuntime:
                 if first_error is None:
                     first_error = exc
                 continue
+            # error-boundary: allow-broad-catch=boundary unknown event keeps cursor pending
             except Exception as exc:
-                # Unknown exceptions are conservatively retryable. The runtime must not discard a
-                # canonical Event without a stable platform error category proving terminality.
+                # Without a canonical terminal category, dropping the Event would lose work. Keep
+                # the cursor pending and surface the failure through the tick/last_error instead of
+                # converting the implementation exception into a retryable ContractError.
                 failed_event_ids.append(event.id)
                 if first_error is None:
                     first_error = exc
@@ -435,6 +438,7 @@ class AutomationRuntime:
         try:
             retry_deliveries = await self._retry_due_deliveries(current)
             retry_delivery_ids.extend(delivery.id for delivery in retry_deliveries)
+        # error-boundary: allow-broad-catch=boundary retry failure must not starve schedule
         except Exception as exc:
             if first_error is None:
                 first_error = exc
@@ -474,6 +478,7 @@ class AutomationRuntime:
             try:
                 tick = await self.run_once()
                 run_failed = self._last_error is not None
+            # error-boundary: allow-broad-catch=boundary runtime supervisor records tick failure
             except Exception as exc:
                 self._last_error = exc
                 run_failed = True
@@ -492,6 +497,7 @@ class AutomationRuntime:
                         # spinning with repeated zero-delay event-loop yields.
                         if remaining <= 0 and tick is not None and tick.retry_delivery_ids:
                             delay = self._poll_interval_seconds
+                # error-boundary: allow-broad-catch=boundary wakeup failure falls back to poll floor
                 except Exception as exc:
                     self._last_error = exc
                     run_failed = True

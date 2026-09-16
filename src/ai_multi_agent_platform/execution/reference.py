@@ -35,6 +35,10 @@ class _ControlledFailure(Exception):
         self.code = code
 
 
+class _ExecutionCancelled(Exception):
+    """Internal sentinel for canonical CancellationToken cancellation only."""
+
+
 class ReferenceExecutor(Executor):
     """Executes only a small allow-listed set of deterministic platform actions."""
 
@@ -96,7 +100,7 @@ class ReferenceExecutor(Executor):
                 "execution timed out",
                 status=ExecutionStatus.TIMED_OUT,
             )
-        except asyncio.CancelledError:
+        except _ExecutionCancelled:
             return self._cancelled(request, started_at, started)
         except _ControlledFailure as exc:
             return self._failure(
@@ -115,13 +119,14 @@ class ReferenceExecutor(Executor):
                 ExecutionErrorCategory.INVALID_REQUEST,
                 str(exc),
             )
-        except Exception as exc:
+        # error-boundary: allow-broad-catch=boundary ExecutionResult owns the outer executor fault
+        except Exception:
             return self._failure(
                 request,
                 started_at,
                 started,
                 ExecutionErrorCategory.INTERNAL,
-                str(exc),
+                "internal execution failure",
             )
 
         if request.cancellation is not None and request.cancellation.cancelled:
@@ -218,19 +223,26 @@ class ReferenceExecutor(Executor):
         seconds: float,
         request: ExecutionRequest,
     ) -> None:
-        sleep_task = asyncio.create_task(asyncio.sleep(seconds))
         if request.cancellation is None:
-            await sleep_task
+            await asyncio.sleep(seconds)
             return
+
+        sleep_task = asyncio.create_task(asyncio.sleep(seconds))
         cancel_task = asyncio.create_task(request.cancellation.wait())
-        done, pending = await asyncio.wait(
-            {sleep_task, cancel_task},
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        for task in pending:
-            task.cancel()
-        if cancel_task in done:
-            raise asyncio.CancelledError
+        try:
+            done, _ = await asyncio.wait(
+                {sleep_task, cancel_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if cancel_task in done:
+                raise _ExecutionCancelled
+        finally:
+            # Child waiters are implementation resources, not cancellation authorities. Cancel
+            # each unfinished waiter exactly once while allowing task-level CancelledError to
+            # propagate out of execute unchanged.
+            for task in (sleep_task, cancel_task):
+                if not task.done():
+                    task.cancel()
 
     def _failure(
         self,
