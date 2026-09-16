@@ -42,7 +42,40 @@ jobs:
           .release-evidence/runtime-venv/bin/python -m pip install --upgrade pip
           .release-evidence/runtime-venv/bin/python -m pip install .
           .release-evidence/runtime-venv/bin/python -m pip freeze --all > .release-evidence/python-resolved.txt
+          python scripts/release/python_declared_dependencies.py pyproject.toml .release-evidence/python-declared.txt
           python -m pip install .
+      - name: Validate declared dependency evidence binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - "${{ inputs.generation_input }}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          input_path = Path(sys.argv[1])
+          document = json.loads(input_path.read_text(encoding="utf-8"))
+          dependency_sets = document.get("dependency_sets", [])
+          matches = [
+              item
+              for item in dependency_sets
+              if isinstance(item, dict)
+              and item.get("name") == "python-declared"
+              and item.get("ecosystem") == "python"
+              and item.get("kind") == "declared_set"
+          ]
+          if len(matches) != 1:
+              raise SystemExit(
+                  "release generation input must bind exactly one python-declared declared_set"
+              )
+          configured = (input_path.parent / matches[0].get("path", "")).resolve()
+          expected = Path(".release-evidence/python-declared.txt").resolve()
+          if configured != expected:
+              raise SystemExit(
+                  "python-declared dependency set must reference "
+                  ".release-evidence/python-declared.txt"
+              )
+          PY
       - name: Generate and validate manifest
         shell: bash
         run: |
@@ -60,4 +93,5 @@ jobs:
             release-manifest.generated.json
             release-manifest.validation.json
             .release-evidence/platform.whl
+            .release-evidence/python-declared.txt
             .release-evidence/python-resolved.txt

@@ -1,4 +1,4 @@
-"""Release, provenance and compatibility models for issue #42."""
+"""Release, provenance and compatibility models."""
 
 from __future__ import annotations
 
@@ -37,6 +37,7 @@ class GateStatus(StrEnum):
 class DependencySetKind(StrEnum):
     LOCKFILE = "lockfile"
     RESOLVED_SET = "resolved_set"
+    DECLARED_SET = "declared_set"
 
 
 class ReleaseEvidenceKind(StrEnum):
