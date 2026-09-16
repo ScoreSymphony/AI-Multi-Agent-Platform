@@ -7,7 +7,7 @@ on:
       - "conformance/mcp/**"
       - "scripts/ci/mcp_conformance_client.py"
       - "scripts/ci/mcp_protocol_conformance.py"
-      - "scripts/ci/issue46_optional_environment_profile.py"
+      - "scripts/ci/optional_environment_conformance_profile.py"
       - "src/ai_multi_agent_platform/adapters/mcp.py"
       - "src/ai_multi_agent_platform/adapters/mcp_sdk.py"
       - "src/ai_multi_agent_platform/adapters/mcp_stateless.py"
@@ -133,7 +133,7 @@ jobs:
       - name: Combine official protocol and platform integration evidence
         if: always()
         run: |
-          python scripts/ci/issue46_optional_environment_profile.py \
+          python scripts/ci/optional_environment_conformance_profile.py \
             mcp \
             --protocol-evidence mcp-protocol-2025-11-25.json \
             --json-report conformance-mcp-platform.json \

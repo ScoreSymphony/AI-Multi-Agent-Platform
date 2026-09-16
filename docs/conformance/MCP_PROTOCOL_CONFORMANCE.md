@@ -1,6 +1,6 @@
 # MCP protocol conformance
 
-Issue #731 adds official Model Context Protocol wire-level conformance evidence without changing the canonical capability architecture owned by #12.
+The MCP conformance path adds official Model Context Protocol wire-level evidence without changing the canonical capability architecture. Historical context: issue #731 introduced the official protocol-evidence path, while issue #12 established the MCP capability adapter.
 
 ## Evidence dimensions
 
@@ -8,8 +8,10 @@ MCP compatibility is deliberately split into two independent questions:
 
 | Dimension | Meaning | Evidence owner |
 | --- | --- | --- |
-| `protocol_conformant` | The named MCP revision/direction/transport profile passed the exact pinned official `modelcontextprotocol/conformance` scenarios. | #731 |
-| `platform_conformant` | That exact MCP profile works through the platform's canonical CapabilityRegistry/CapabilityInvoker and #46 environment path. | #12 / #46 |
+| `protocol_conformant` | The named MCP revision/direction/transport profile passed the exact pinned official `modelcontextprotocol/conformance` scenarios. | MCP protocol conformance |
+| `platform_conformant` | That exact MCP profile works through the platform's canonical CapabilityRegistry/CapabilityInvoker and maintained optional-environment conformance path. | MCP capability adapter / optional environment conformance |
+
+Historical context: issue #46 introduced the optional-environment conformance path that supplies the platform-integration evidence.
 
 Neither dimension implies the other. A production MCP compatibility claim requires both to be true for the **same** protocol revision, direction and transport profile.
 
@@ -24,7 +26,7 @@ It is a per-profile matrix. Each row records at least:
 - protocol revision;
 - mode/direction;
 - transport profile;
-- exact #46 deployment profile when platform evidence exists;
+- exact optional-environment deployment profile when platform evidence exists;
 - protocol-evidence status and `protocol_conformant`;
 - platform-evidence status and `platform_conformant`;
 - claim status (`claimed`, `not_claimed`, `unsupported`);
@@ -50,7 +52,7 @@ Exact pins live in `conformance/mcp/pins.json`.
 - runtime implementation under test: `MCPPythonSDKClient` using the pinned official Python SDK;
 - status: claimed and gating.
 
-The #46 `ENV-MCP` platform path now exercises this same `2025-11-25 / client / streamable-http` identity against a local Streamable-HTTP fixture before the official protocol and platform evidence can become one `compatible` matrix row.
+The `ENV-MCP` optional-environment platform path now exercises this same `2025-11-25 / client / streamable-http` identity against a local Streamable-HTTP fixture before the official protocol and platform evidence can become one `compatible` matrix row.
 
 This is intentionally a narrow tool-client claim. It does not claim every MCP extension, authorization profile or server behavior merely because the Python SDK supports additional features.
 
@@ -90,7 +92,7 @@ It is **not** combined with the stable official Streamable-HTTP protocol evidenc
 
 The platform does not currently expose a product MCP server surface. The compatibility matrix therefore records the server profile as `unsupported` rather than reporting a failed client implementation or silently omitting the direction.
 
-If a platform MCP server surface is introduced later, its official server-suite profile and matching #46 platform path must be added before any server compatibility claim is published.
+If a platform MCP server surface is introduced later, its official server-suite profile and matching optional-environment platform path must be added before any server compatibility claim is published.
 
 ## Machine-readable and retained evidence
 
@@ -138,10 +140,10 @@ python scripts/ci/mcp_protocol_conformance.py \
 
 After dependencies/checkouts are present, either conformance run itself needs no hosted MCP provider or paid API service.
 
-To combine the stable official protocol evidence with the profile-matched #46 MCP platform path:
+To combine the stable official protocol evidence with the profile-matched MCP platform path:
 
 ```bash
-python scripts/ci/issue46_optional_environment_profile.py \
+python scripts/ci/optional_environment_conformance_profile.py \
   mcp \
   --protocol-evidence mcp-protocol-2025-11-25.json \
   --json-report conformance-mcp-platform.json \
@@ -152,7 +154,7 @@ python scripts/ci/issue46_optional_environment_profile.py \
 
 The runner verifies both the suite package version and exact Git commit before executing any scenario. A mismatch fails before protocol tests start.
 
-Updating the suite requires an explicit upstream-review PR under #42 discipline:
+Updating the suite requires the maintained upstream-review discipline (historical context: issue #42):
 
 1. review suite release/commit and license changes;
 2. inspect protocol/scenario/runner changes;
