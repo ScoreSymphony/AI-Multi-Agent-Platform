@@ -7,78 +7,9 @@ permissions:
   contents: read
 
 jobs:
-  subset-benchmark:
-    name: ${{ matrix.case.name }}
+  benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
-    strategy:
-      fail-fast: false
-      matrix:
-        case:
-          - name: unit-serial
-            path: tests/unit
-            args: ""
-            repeats: 2
-          - name: unit-n4-loadscope
-            path: tests/unit
-            args: "-n 4 --dist=loadscope"
-            repeats: 3
-          - name: unit-n4-loadfile
-            path: tests/unit
-            args: "-n 4 --dist=loadfile"
-            repeats: 3
-          - name: contract-serial
-            path: tests/contract
-            args: ""
-            repeats: 2
-          - name: contract-n4-loadscope
-            path: tests/contract
-            args: "-n 4 --dist=loadscope"
-            repeats: 3
-          - name: contract-n4-loadfile
-            path: tests/contract
-            args: "-n 4 --dist=loadfile"
-            repeats: 3
-          - name: architecture-serial
-            path: tests/architecture
-            args: ""
-            repeats: 1
-          - name: architecture-n2-loadfile
-            path: tests/architecture
-            args: "-n 2 --dist=loadfile"
-            repeats: 2
-          - name: integration-serial
-            path: tests/integration
-            args: ""
-            repeats: 1
-          - name: integration-n2-loadfile
-            path: tests/integration
-            args: "-n 2 --dist=loadfile"
-            repeats: 2
-          - name: regression-serial
-            path: tests/regression
-            args: ""
-            repeats: 1
-          - name: regression-n2-loadfile
-            path: tests/regression
-            args: "-n 2 --dist=loadfile"
-            repeats: 2
-          - name: e2e-serial
-            path: tests/e2e
-            args: ""
-            repeats: 1
-          - name: e2e-n2-loadfile
-            path: tests/e2e
-            args: "-n 2 --dist=loadfile"
-            repeats: 2
-          - name: release-serial
-            path: tests/release
-            args: ""
-            repeats: 1
-          - name: release-n2-loadfile
-            path: tests/release
-            args: "-n 2 --dist=loadfile"
-            repeats: 2
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -102,22 +33,28 @@ jobs:
           PY
       - name: Run measured trials
         shell: bash
-        env:
-          CASE_NAME: ${{ matrix.case.name }}
-          TEST_PATH: ${{ matrix.case.path }}
-          XDIST_ARGS: ${{ matrix.case.args }}
-          REPEATS: ${{ matrix.case.repeats }}
         run: |
           set -euo pipefail
-          for trial in $(seq 1 "$REPEATS"); do
-            echo "::group::${CASE_NAME} trial ${trial}/${REPEATS}"
-            start_ns=$(date +%s%N)
-            set +e
-            pytest $XDIST_ARGS "$TEST_PATH"
-            status=$?
-            set -e
-            end_ns=$(date +%s%N)
-            python - "$CASE_NAME" "$trial" "$status" "$start_ns" "$end_ns" <<'PY'
+
+          run_case() {
+            local case_name="$1"
+            local test_path="$2"
+            local args="$3"
+            local repeats="$4"
+            local extra_args=()
+            if [ -n "$args" ]; then
+              read -r -a extra_args <<< "$args"
+            fi
+
+            for trial in $(seq 1 "$repeats"); do
+              echo "::group::${case_name} trial ${trial}/${repeats}"
+              start_ns=$(date +%s%N)
+              set +e
+              pytest "${extra_args[@]}" "$test_path"
+              status=$?
+              set -e
+              end_ns=$(date +%s%N)
+              python - "$case_name" "$trial" "$status" "$start_ns" "$end_ns" <<'PY'
           import json
           import sys
 
@@ -130,8 +67,36 @@ jobs:
               "duration_seconds": round(duration, 3),
           }, sort_keys=True))
           PY
-            echo "::endgroup::"
-            if [ "$status" -ne 0 ]; then
-              exit "$status"
-            fi
-          done
+              echo "::endgroup::"
+              if [ "$status" -ne 0 ]; then
+                return "$status"
+              fi
+            done
+          }
+
+          run_case unit-serial tests/unit "" 2
+          run_case unit-n4-loadfile tests/unit "-n 4 --dist=loadfile" 3
+          run_case unit-n4-loadscope tests/unit "-n 4 --dist=loadscope" 2
+
+          run_case contract-serial tests/contract "" 2
+          run_case contract-n4-loadfile tests/contract "-n 4 --dist=loadfile" 3
+          run_case contract-n4-loadscope tests/contract "-n 4 --dist=loadscope" 2
+
+          run_case architecture-serial tests/architecture "" 1
+          run_case architecture-n2-loadfile tests/architecture "-n 2 --dist=loadfile" 2
+
+          run_case integration-serial tests/integration "" 1
+          run_case integration-n2-loadfile tests/integration "-n 2 --dist=loadfile" 2
+
+          run_case regression-serial tests/regression "" 1
+          run_case regression-n2-loadfile tests/regression "-n 2 --dist=loadfile" 2
+
+          run_case e2e-serial tests/e2e "" 1
+          run_case e2e-n2-loadfile tests/e2e "-n 2 --dist=loadfile" 2
+
+          run_case release-serial tests/release "" 1
+          run_case release-n2-loadfile tests/release "-n 2 --dist=loadfile" 2
+
+          # Performance tests are intentionally measured serially only: running
+          # benchmarks under worker contention would invalidate timing semantics.
+          run_case performance-serial tests/performance "" 1
