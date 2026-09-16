@@ -473,6 +473,7 @@ async def _exercise_repetition(
             and len(projected_steps) == step_count
             and projected.get("activation_plan_id") == activated.activation_plan_id
         )
+    # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
     except Exception as exc:  # benchmark evidence must preserve correctness failures
         result.error = f"{type(exc).__name__}: {exc}"
     return result

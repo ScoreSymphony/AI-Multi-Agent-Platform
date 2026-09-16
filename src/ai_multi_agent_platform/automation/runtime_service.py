@@ -431,6 +431,7 @@ async def _canonical_event_visibility(
             return False, "workspace_scope_unproven"
         try:
             event_workspace_id = await workspace_resolver.resolve_workspace_id(event)
+        # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
         except Exception:
             # Visibility resolution is security-sensitive: any resolver/backend failure must
             # reject rather than accidentally broadening access.

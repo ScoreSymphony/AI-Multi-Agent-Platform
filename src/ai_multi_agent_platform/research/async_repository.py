@@ -205,6 +205,7 @@ class AsyncResearchRepositoryAdapter:
                 snapshot = _snapshot_state(self._repository)
                 try:
                     return operation()
+                # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
                 except Exception:
                     _restore_state(self._repository, snapshot)
                     raise

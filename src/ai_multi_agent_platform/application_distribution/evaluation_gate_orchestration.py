@@ -113,6 +113,7 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
                 suite_ref=suite_ref,
                 snapshot=input_snapshot,
             )
+        # error-boundary: allow-broad-catch=boundary release-gate evaluation evidence projection
         except Exception:
             return
         if _exact_evaluation_runs(self.evaluations, requirement, expected_snapshot):
@@ -123,6 +124,7 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
                 suite_ref=suite_ref,
                 snapshot=input_snapshot,
             )
+        # error-boundary: allow-broad-catch=boundary release-gate evaluation evidence projection
         except Exception:
             # EvaluationRunner durably marks a started run FAILED before re-raising. Errors that
             # happen before a run exists (for example a missing suite/provider) remain missing
@@ -168,6 +170,7 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
                     suite_ref=f"{suite_id}@{suite_version}",
                     snapshot=input_snapshot,
                 )
+            # error-boundary: allow-broad-catch=boundary release-gate evaluation evidence projection
             except Exception:
                 return _gate(
                     requirement,

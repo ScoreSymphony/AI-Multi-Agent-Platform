@@ -73,6 +73,7 @@ class AuthorityGatedAutomationLoop:
         while not self._stop_event.is_set():
             try:
                 await self.run_once()
+            # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
             except Exception as exc:
                 self._last_error = exc
 
@@ -153,6 +154,7 @@ class AuthorityGatedDistributedRuntime(DistributedRuntime):
     ) -> DispatchRecord:
         try:
             await self._authority_check()
+        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
         except Exception:
             self.registry.release_reservation(placement.reservation.reservation_id)
             self._persist()

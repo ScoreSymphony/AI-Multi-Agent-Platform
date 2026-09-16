@@ -234,6 +234,7 @@ class ControlPlane(_BaseControlPlane):
                 before[task_id] = await self._task_management.view(task)
         try:
             result = await super()._bulk_update_management_command(context, resource_ref, payload)
+        # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
         except Exception:
             await self._project_bulk_task_management_changes(before)
             raise
@@ -271,6 +272,7 @@ class ControlPlane(_BaseControlPlane):
             try:
                 task = await self._kernel.get_task(task_id)
                 after = await self._task_management.view(task)
+            # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
             except Exception:
                 continue
             if after != before_view:
@@ -285,6 +287,7 @@ class ControlPlane(_BaseControlPlane):
         try:
             for candidate in task_management_change_candidates(before, after, task):
                 await self._notification_service.create(candidate)
+        # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
         except Exception:
             # The canonical task update is already committed. Notification projection must never
             # become source-of-truth authority or turn a successful #88 update into a failure.

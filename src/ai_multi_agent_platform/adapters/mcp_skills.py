@@ -550,6 +550,7 @@ class McpSkillsAdapter:
                 manifest_digest=manifest_digest,
                 fetched_at=fetched_at,
             )
+        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
         except Exception:
             if temp_path.exists():
                 try:

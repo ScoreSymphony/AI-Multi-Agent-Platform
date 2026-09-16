@@ -221,6 +221,7 @@ class MigrationRunner:
             if existing is None and step.precondition is not None:
                 try:
                     step.precondition(context)
+                # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
                 except Exception as exc:
                     raise MigrationError(
                         f"migration {step.revision!r} precondition failed: {exc}"
@@ -246,6 +247,7 @@ class MigrationRunner:
                     step.apply(context)
                     if step.validate is not None:
                         step.validate(context)
+            # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
             except Exception as exc:
                 self.history.put(
                     MigrationRecord(

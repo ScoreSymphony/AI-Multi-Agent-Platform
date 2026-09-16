@@ -110,6 +110,7 @@ class ControlPlane(_BaseControlPlane):
                 break
             try:
                 notification = await self.notification_service.create_once(candidate, now=now)
+            # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
             except Exception:
                 continue
             if notification is not None:
@@ -144,6 +145,7 @@ class ControlPlane(_BaseControlPlane):
                 )
                 if candidate is not None:
                     await self.notification_service.create_once(candidate)
+        # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
         except Exception:
             return
 
@@ -169,6 +171,7 @@ class ControlPlane(_BaseControlPlane):
                     threshold_generation=generation,
                 )
             )
+        # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
         except Exception:
             return
 
@@ -229,6 +232,7 @@ class ControlPlane(_BaseControlPlane):
                 notification = await self.notification_service.create_once(candidate, now=now)
                 if notification is not None:
                     created.append(notification)
+            # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
             except Exception:
                 retry_required = True
         return tuple(created), not retry_required
@@ -277,6 +281,7 @@ class ControlPlane(_BaseControlPlane):
                     project_id=current.project_id,
                 )
             )
+        # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
         except Exception:
             return
 
@@ -335,6 +340,7 @@ class ControlPlane(_BaseControlPlane):
                     ),
                 )
             )
+        # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
         except Exception:
             return
 

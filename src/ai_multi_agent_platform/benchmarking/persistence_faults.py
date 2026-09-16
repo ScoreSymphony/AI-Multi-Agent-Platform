@@ -472,6 +472,7 @@ async def _with_retry(
                 recovery_latency=None,
                 error=f"{exc.code.value}: {exc.message}",
             )
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:  # pragma: no cover - defensive evidence path
             attempt_latencies.append(time.perf_counter() - attempt_started)
             return _OperationResult(
@@ -531,6 +532,7 @@ async def _verify_reopened_state(
         task_id = _task_id(index)
         try:
             state = await kernel.get_task(task_id)
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception:
             task_state_failures += 1
             history_failures += 1

@@ -233,6 +233,7 @@ class SingleNodeFaultUnderLoadHarness(SingleNodeWorkloadHarness):
         try:
             actor = deployment.authentication.authenticate_bearer(credential.secret)
             authentication_preserved = actor.identity.actor_id == admin.user_id
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:
             samples.errors.append(f"post-restart authentication: {type(exc).__name__}: {exc}")
 
@@ -413,6 +414,7 @@ class SingleNodeFaultUnderLoadHarness(SingleNodeWorkloadHarness):
                         samples.reads += 1
                     samples.operation.append(time.perf_counter() - operation_started)
                     samples.completed += 1
+                # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
                 except Exception as exc:
                     samples.failed += 1
                     samples.errors.append(f"operation {index}: {type(exc).__name__}: {exc}")

@@ -281,6 +281,7 @@ def _migration_precondition_checks(
             continue
         try:
             step.precondition(context)
+        # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
         except Exception as exc:
             checks.append(
                 PreflightCheck(

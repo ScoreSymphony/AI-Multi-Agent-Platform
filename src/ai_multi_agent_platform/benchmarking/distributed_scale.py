@@ -351,6 +351,7 @@ class DistributedWorkerWorkspaceScaleHarness:
                                 errors.append(f"terminal worker job has no result: {worker_job_id}")
         except TimeoutError:
             errors.append("distributed benchmark exceeded timeout")
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:
             errors.append(f"distributed benchmark failed: {type(exc).__name__}: {exc}")
         finally:

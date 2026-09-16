@@ -240,6 +240,7 @@ class GovernanceService:
             persisted = self.repository.revise_proposal(
                 superseded, expected_revision=expected_revision
             )
+        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
         except Exception:
             self._audit(
                 "proposal.supersession-incomplete",

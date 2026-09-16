@@ -548,6 +548,7 @@ class DistributedWorkerWorkspaceFaultHarness:
                     workspace_failure_observed = True
                     workspace_failure_code = exc.code.value
                     workspace_failure_retryable = exc.retryable
+                # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
                 except Exception as exc:
                     workspace_failure_samples.append(time.perf_counter() - failure_started)
                     errors.append(
@@ -559,6 +560,7 @@ class DistributedWorkerWorkspaceFaultHarness:
 
                 try:
                     failed_record = runtime.get_record(failure_job.worker_job_id)
+                # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
                 except Exception:
                     failed_record = None
                 if failed_record is not None:
@@ -615,6 +617,7 @@ class DistributedWorkerWorkspaceFaultHarness:
                     errors.append("Workspace recovery job did not terminate successfully")
         except TimeoutError:
             errors.append("distributed fault benchmark exceeded timeout")
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:
             errors.append(f"distributed fault benchmark failed: {type(exc).__name__}: {exc}")
         finally:

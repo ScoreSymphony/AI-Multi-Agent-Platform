@@ -325,6 +325,7 @@ class UpgradeService:
             # The deployment wrapper must call the deterministic #20 PluginStateMigrator. That
             # migrator is version-aware and therefore safe to invoke again during explicit resume.
             hook(manifests)
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception as exc:
             raise UpgradeError(f"plugin-owned state migration failed: {exc}") from exc
 

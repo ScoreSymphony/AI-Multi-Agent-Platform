@@ -180,6 +180,7 @@ class TcpMessageBroker:
             await write_frame(writer, {"ok": True, "result": response})
         except ContractError as exc:
             await try_write_error(writer, exc)
+        # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
         except Exception:
             await try_write_error(
                 writer,
@@ -775,6 +776,7 @@ class _TcpSubscription(MessageSubscription):
                     "TCP broker closed before confirming subscription"
                 )
             self._transport._result_or_raise(response)
+        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
         except Exception:
             writer.close()
             with suppress(ConnectionError, OSError, ssl.SSLError):

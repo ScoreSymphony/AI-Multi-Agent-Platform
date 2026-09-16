@@ -164,6 +164,7 @@ class SkillSpectorSecurityEvidenceProvider:
             if raw_bytes is not None:
                 try:
                     artifact = self.raw_report_store.put(raw_bytes)
+                # error-boundary: allow-broad-catch=cleanup optional raw evidence retention is secondary
                 except Exception:
                     reasons.append("raw_report_retention_failed")
                 else:

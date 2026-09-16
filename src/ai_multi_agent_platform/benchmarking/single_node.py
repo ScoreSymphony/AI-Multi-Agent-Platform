@@ -113,6 +113,7 @@ class SingleNodeBenchmarkHarness:
                         ),
                         timeout=spec.timeout_seconds,
                     )
+                # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
                 except Exception as exc:  # benchmark evidence records failures by design
                     samples.errors.append(f"operation {index}: {type(exc).__name__}: {exc}")
 

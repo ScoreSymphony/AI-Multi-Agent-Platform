@@ -410,6 +410,7 @@ class ObservedLearningService(LearningService):
                     promoted,
                     operation=operation,
                 )
+            # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
             except Exception as exc:
                 record = PostPromotionEvaluationRecord(
                     learning_candidate_id=promoted.learning_candidate_id,

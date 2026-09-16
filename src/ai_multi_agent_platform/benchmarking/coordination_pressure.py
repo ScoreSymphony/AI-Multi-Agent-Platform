@@ -321,6 +321,7 @@ class CoordinationPressureHarness:
                     observation_samples=observation_samples,
                     reconciled_running=reconciled_running,
                 )
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:  # evidence must retain deterministic failure details
             errors.append(f"{type(exc).__name__}: {exc}")
 

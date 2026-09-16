@@ -464,6 +464,7 @@ async def _exercise_cycle(
             and reactivated.activation_plan_id is not None
             and reactivated.activation_plan_id != initial_plan_id
         )
+    # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
     except Exception as exc:  # benchmark evidence records failure instead of hiding it
         result.error = f"{type(exc).__name__}: {exc}"
     return result

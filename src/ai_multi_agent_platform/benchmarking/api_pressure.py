@@ -273,6 +273,7 @@ class SingleNodeAPIPressureHarness:
                         timeout=spec.timeout_seconds,
                     )
                     _record_evidence(samples, evidence)
+                # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
                 except Exception as exc:  # benchmark evidence retains deterministic failures
                     samples.errors.append(f"operation {index}: {type(exc).__name__}: {exc}")
 

@@ -39,6 +39,7 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
         self._persist_policy(policy)
         try:
             super().register(policy)
+        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
         except Exception:
             self._delete_policy(policy.principal_ref)
             raise

@@ -656,6 +656,7 @@ class AutomaticReviewerWorkflow:
                 ) from exc
             self._fail_reviewer_run(reviewer_run.agent_run_id, str(exc))
             raise
+        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
         except Exception as exc:
             self._fail_reviewer_run(reviewer_run.agent_run_id, str(exc))
             raise
@@ -678,6 +679,7 @@ class AutomaticReviewerWorkflow:
             # If execution already produced and staged a decision, keep the run recoverable.
             # complete_review may already have terminalized it before canonical submission.
             raise
+        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
         except Exception as exc:
             current = self._agents.service.repository.get_agent_run(reviewer_run.agent_run_id)
             if current.status is AgentRunStatus.RUNNING:

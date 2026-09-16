@@ -67,10 +67,12 @@ class TemplateImportMutationHandler:
                 else:
                     self._repository.append_revision(definition, revision)
             return snapshot.definition.template_id
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception:
             if created:
                 try:
                     self._repository.delete_template(snapshot.definition.template_id)
+                # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
                 except Exception as rollback_error:
                     raise ContractError(
                         ErrorCode.BACKEND_ERROR,

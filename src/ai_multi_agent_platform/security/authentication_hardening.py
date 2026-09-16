@@ -522,6 +522,7 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
                 metadata={"provider_id": adapter.provider_id},
             )
             raise
+        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
         except Exception:
             self._audit_authentication_result(
                 "auth.external_authentication",

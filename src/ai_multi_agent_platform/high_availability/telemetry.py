@@ -360,6 +360,7 @@ class HighAvailabilityTelemetry:
     def _best_effort(action: Callable[[], None]) -> None:
         try:
             action()
+        # error-boundary: allow-broad-catch=cleanup telemetry must not affect HA correctness
         except Exception:
             return
 

@@ -271,6 +271,7 @@ class PlanStepBenchmarkHarness:
                     observation_samples.append(time.perf_counter() - observe_started)
                     completion_order.append(item.step_id)
                     active_width_peak = max(active_width_peak, _active_width(projection))
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:  # benchmark evidence must retain deterministic failure details
             errors.append(f"{type(exc).__name__}: {exc}")
 

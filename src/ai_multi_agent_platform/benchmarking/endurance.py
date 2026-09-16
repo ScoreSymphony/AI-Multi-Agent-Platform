@@ -513,6 +513,7 @@ class SingleNodeEnduranceHarness:
             samples.operation.append(elapsed)
             samples.window_operation.append(elapsed)
             samples.completed += 1
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:  # endurance evidence records failures by design
             samples.failed += 1
             samples.errors.append(f"operation {index}: {type(exc).__name__}: {exc}")

@@ -140,6 +140,7 @@ class ConnectionImportMutationHandler:
             )
             stored = await self._service.repository.save_connection(normalized)
             return stored.id
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception:
             if created is not None:
                 try:

@@ -707,6 +707,7 @@ class TerminalSessionService:
             )
         try:
             sink(frame)
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception as exc:
             raise ContractError(
                 ErrorCode.UNAVAILABLE,

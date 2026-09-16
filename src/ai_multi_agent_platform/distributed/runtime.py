@@ -297,6 +297,7 @@ class DistributedRuntime:
             )
         except FailoverError:
             raise
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception as exc:
             raise FailoverError(
                 FailoverRejectionCode.FENCE_REJECTED,
@@ -474,6 +475,7 @@ class DistributedRuntime:
                     snapshot = await dispatcher.cancel(worker_job_id)
                 else:
                     snapshot = await dispatcher.get(worker_job_id)
+            # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
             except Exception:
                 updated = replace(
                     record,
@@ -538,6 +540,7 @@ class DistributedRuntime:
                 worker_id,
                 node_id=placement.reservation.node_id,
             )
+        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
         except Exception:
             self.registry.release_reservation(placement.reservation.reservation_id)
             if self.telemetry is not None:
@@ -557,6 +560,7 @@ class DistributedRuntime:
         started = perf_counter()
         try:
             handle = await dispatcher.dispatch(job)
+        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
         except Exception:
             duration = max(0.0, perf_counter() - started)
             lost = replace(

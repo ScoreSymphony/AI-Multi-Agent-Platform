@@ -206,6 +206,7 @@ class NotificationDeliveryCoordinator:
                 recipient=notification.recipient,
                 idempotency_key=idempotency_key,
             )
+        # error-boundary: allow-broad-catch=boundary notification runtime/provider containment
         except Exception as exc:
             result = DeliveryResult(
                 channel=channel_id,

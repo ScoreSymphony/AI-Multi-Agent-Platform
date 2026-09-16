@@ -248,6 +248,7 @@ def register_connector_control_plane(
         ):
             try:
                 await health_event_sink(existing, checked)
+            # error-boundary: allow-broad-catch=cleanup secondary connector attention projection
             except Exception:
                 # #44 already owns and persisted the authoritative Connection health transition.
                 # Downstream attention must never falsify a successful health check.

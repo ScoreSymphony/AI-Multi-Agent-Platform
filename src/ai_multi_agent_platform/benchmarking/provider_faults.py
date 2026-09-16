@@ -676,6 +676,7 @@ class ProviderFaultBenchmarkHarness:
                             f"{exc.code.value} retryable={exc.retryable}"
                         )
                     return
+                # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
                 except Exception as exc:
                     latency = time.perf_counter() - started
                     evidence.latencies.append(latency)

@@ -74,6 +74,7 @@ class ModelRoutingProfileImportMutationHandler:
                     self._repository.update_profile(definition, revision)
                 applied_revision = revision.revision
             return snapshot.definition.profile_id
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception:
             if applied_revision:
                 try:
@@ -81,6 +82,7 @@ class ModelRoutingProfileImportMutationHandler:
                         snapshot.definition.profile_id,
                         expected_current_revision=applied_revision,
                     )
+                # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
                 except Exception as rollback_error:
                     raise ContractError(
                         ErrorCode.BACKEND_ERROR,

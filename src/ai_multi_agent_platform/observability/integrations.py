@@ -62,6 +62,7 @@ class AccountingBridgeExporter(ObservabilityExporter):
         self.delegate.emit_metric(record)
         try:
             self.measurement_sink.ingest_metric(record)
+        # error-boundary: allow-broad-catch=boundary observability owner boundary
         except Exception as exc:
             self.last_measurement_error = type(exc).__name__
             if self.strict:

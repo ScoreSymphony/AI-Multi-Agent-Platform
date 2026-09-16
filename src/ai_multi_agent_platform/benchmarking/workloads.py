@@ -263,6 +263,7 @@ class SingleNodeWorkloadHarness:
                         samples.read_operations += 1
                     samples.operation.append(time.perf_counter() - operation_started)
                     samples.completed += 1
+                # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
                 except Exception as exc:  # benchmark evidence records failures by design
                     samples.errors.append(f"operation {index}: {type(exc).__name__}: {exc}")
 

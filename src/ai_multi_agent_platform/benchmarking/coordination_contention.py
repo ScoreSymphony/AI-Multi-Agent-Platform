@@ -303,6 +303,7 @@ class CoordinationContentionHarness:
                     blocked_samples=blocked_samples,
                     completion_samples=completion_samples,
                 )
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:  # benchmark evidence retains deterministic failures
             errors.append(f"{type(exc).__name__}: {exc}")
 

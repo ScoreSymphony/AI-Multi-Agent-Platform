@@ -145,6 +145,7 @@ class PostgresKernelRepository(EventRepository):
                 raise
             except ContractError:
                 raise
+            # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
             except Exception as exc:
                 raise _map_postgres_error(exc, message) from None
 
@@ -154,6 +155,7 @@ class PostgresKernelRepository(EventRepository):
             result = operation(connection)
             connection.commit()
             return result
+        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
         except Exception:
             connection.rollback()
             raise
@@ -290,6 +292,7 @@ class PostgresKernelRepository(EventRepository):
                 LIMIT 0
                 """
             )
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
