@@ -47,7 +47,12 @@ class ApplicationRuntimeDescriptor:
 
 @runtime_checkable
 class ApplicationRuntime(Protocol):
-    """Provider-neutral lifecycle boundary for managed external applications."""
+    """Provider-neutral lifecycle boundary for managed external applications.
+
+    Canonical state is supplied to lifecycle operations instead of requiring the backend
+    to be the durable source of truth. A backend may keep private runtime handles, but
+    restart recovery can always be driven from the persisted manifest and instance.
+    """
 
     @property
     def descriptor(self) -> ApplicationRuntimeDescriptor: ...
@@ -55,37 +60,70 @@ class ApplicationRuntime(Protocol):
     def prepare(self, request: ApplicationInstallRequest) -> ApplicationInstance:
         """Validate/materialize an instance without implicitly starting it."""
 
-    def start(self, instance_id: str) -> ApplicationInstance:
-        """Set desired state to running and attempt to reach it."""
+    def start(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> ApplicationInstance:
+        """Attempt to converge the persisted running intent to a running instance."""
 
-    def stop(self, instance_id: str) -> ApplicationInstance:
-        """Set desired state to stopped and attempt to reach it."""
+    def stop(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> ApplicationInstance:
+        """Attempt to converge the persisted stopped intent to a stopped instance."""
 
-    def restart(self, instance_id: str) -> ApplicationInstance:
+    def restart(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> ApplicationInstance:
         """Restart one prepared instance without changing its canonical identity."""
 
-    def remove(self, instance_id: str) -> ApplicationInstance:
-        """Set desired state to removed and release runtime-owned resources."""
+    def remove(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> ApplicationInstance:
+        """Release runtime-owned resources for a persisted removed intent."""
 
-    def status(self, instance_id: str) -> ApplicationInstance:
-        """Return canonical desired/observed state without provider-private identifiers."""
+    def status(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> ApplicationInstance:
+        """Return canonical observed state without provider-private identifiers."""
 
-    def health(self, instance_id: str) -> ApplicationHealthStatus:
+    def health(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> ApplicationHealthStatus:
         """Return aggregate application health."""
 
-    def endpoints(self, instance_id: str) -> tuple[ApplicationEndpointResolution, ...]:
+    def endpoints(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> tuple[ApplicationEndpointResolution, ...]:
         """Return runtime-resolved logical endpoints."""
 
     def logs(
         self,
-        instance_id: str,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
         *,
         service_id: str | None = None,
         limit: int = 200,
     ) -> tuple[ApplicationLogEntry, ...]:
         """Return bounded canonical logs for an instance or service."""
 
-    def reconcile(self, instance_id: str) -> ApplicationInstance:
+    def reconcile(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> ApplicationInstance:
         """Converge observed state toward the persisted desired state."""
 
     def recover(
