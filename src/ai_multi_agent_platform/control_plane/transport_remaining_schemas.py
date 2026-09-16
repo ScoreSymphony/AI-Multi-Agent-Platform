@@ -126,8 +126,8 @@ def _complete_search_schemas(
             search_result["additionalProperties"] = False
 
 
-def _telemetry_schemas(page_schema: dict[str, Any]) -> dict[str, Any]:
-    external_ref = {
+def _external_ref_schema() -> dict[str, Any]:
+    return {
         "type": "object",
         "required": ["system", "kind", "value"],
         "properties": {
@@ -137,7 +137,10 @@ def _telemetry_schemas(page_schema: dict[str, Any]) -> dict[str, Any]:
         },
         "additionalProperties": False,
     }
-    provenance = {
+
+
+def _provenance_schema() -> dict[str, Any]:
+    return {
         "type": "object",
         "required": ["source", "actor_ref", "details"],
         "properties": {
@@ -147,93 +150,73 @@ def _telemetry_schemas(page_schema: dict[str, Any]) -> dict[str, Any]:
         },
         "additionalProperties": False,
     }
+
+
+def _canonical_event_schema() -> dict[str, Any]:
+    properties = {
+        "id": {"type": "string"},
+        "type": {"type": "string", "const": "event"},
+        "event_type": {"type": "string"},
+        "subject_type": {"type": "string"},
+        "subject_id": {"type": "string"},
+        "correlation_id": {"type": "string"},
+        "owner_ref": {
+            "oneOf": [
+                {"$ref": "#/components/schemas/Owner"},
+                {"type": "null"},
+            ]
+        },
+        "project_id": _NULLABLE_STRING,
+        "causation_id": _NULLABLE_STRING,
+        "trace_id": _NULLABLE_STRING,
+        "occurred_at": {"type": "string", "format": "date-time"},
+        "payload": _JSON_OBJECT,
+        "schema_version": {"type": "string"},
+        "provenance": {"oneOf": [_provenance_schema(), {"type": "null"}]},
+        "external_refs": {"type": "array", "items": _external_ref_schema()},
+    }
+    return _closed_required_object(properties)
+
+
+def _telemetry_failure_schema() -> dict[str, Any]:
     return {
-        "CanonicalEvent": {
-            "type": "object",
-            "required": [
-                "id",
-                "type",
-                "event_type",
-                "subject_type",
-                "subject_id",
-                "correlation_id",
-                "owner_ref",
-                "project_id",
-                "causation_id",
-                "trace_id",
-                "occurred_at",
-                "payload",
-                "schema_version",
-                "provenance",
-                "external_refs",
-            ],
-            "properties": {
-                "id": {"type": "string"},
-                "type": {"type": "string", "const": "event"},
-                "event_type": {"type": "string"},
-                "subject_type": {"type": "string"},
-                "subject_id": {"type": "string"},
-                "correlation_id": {"type": "string"},
-                "owner_ref": {
-                    "oneOf": [
-                        {"$ref": "#/components/schemas/Owner"},
-                        {"type": "null"},
-                    ]
-                },
-                "project_id": _NULLABLE_STRING,
-                "causation_id": _NULLABLE_STRING,
-                "trace_id": _NULLABLE_STRING,
-                "occurred_at": {"type": "string", "format": "date-time"},
-                "payload": _JSON_OBJECT,
-                "schema_version": {"type": "string"},
-                "provenance": {"oneOf": [provenance, {"type": "null"}]},
-                "external_refs": {"type": "array", "items": external_ref},
-            },
-            "additionalProperties": False,
+        "type": "object",
+        "required": ["component", "code", "retryable"],
+        "properties": {
+            "component": {"type": "string", "enum": _FAILURE_COMPONENT},
+            "code": {"type": "string"},
+            "retryable": {"type": "boolean"},
         },
-        "TelemetryFailure": {
-            "type": "object",
-            "required": ["component", "code", "retryable"],
-            "properties": {
-                "component": {"type": "string", "enum": _FAILURE_COMPONENT},
-                "code": {"type": "string"},
-                "retryable": {"type": "boolean"},
-            },
-            "additionalProperties": False,
+        "additionalProperties": False,
+    }
+
+
+def _telemetry_timeline_entry_schema() -> dict[str, Any]:
+    properties = {
+        "id": {"type": "string"},
+        "type": {"type": "string", "const": "telemetry"},
+        "event_name": {"type": "string"},
+        "component": {"type": "string", "enum": _FAILURE_COMPONENT},
+        "timestamp": {"type": "string", "format": "date-time"},
+        "outcome": {"type": "string", "enum": _TELEMETRY_OUTCOME},
+        "duration_seconds": {"type": ["number", "null"]},
+        "failure": {
+            "oneOf": [
+                {"$ref": "#/components/schemas/TelemetryFailure"},
+                {"type": "null"},
+            ]
         },
-        "TelemetryTimelineEntry": {
-            "type": "object",
-            "required": [
-                "id",
-                "type",
-                "event_name",
-                "component",
-                "timestamp",
-                "outcome",
-                "duration_seconds",
-                "failure",
-                "context",
-                "attributes",
-            ],
-            "properties": {
-                "id": {"type": "string"},
-                "type": {"type": "string", "const": "telemetry"},
-                "event_name": {"type": "string"},
-                "component": {"type": "string", "enum": _FAILURE_COMPONENT},
-                "timestamp": {"type": "string", "format": "date-time"},
-                "outcome": {"type": "string", "enum": _TELEMETRY_OUTCOME},
-                "duration_seconds": {"type": ["number", "null"]},
-                "failure": {
-                    "oneOf": [
-                        {"$ref": "#/components/schemas/TelemetryFailure"},
-                        {"type": "null"},
-                    ]
-                },
-                "context": _STRING_MAP,
-                "attributes": _JSON_OBJECT,
-            },
-            "additionalProperties": False,
-        },
+        "context": _STRING_MAP,
+        "attributes": _JSON_OBJECT,
+    }
+    return _closed_required_object(properties)
+
+
+def _telemetry_schemas(page_schema: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "CanonicalEvent": _canonical_event_schema(),
+        "TelemetryFailure": _telemetry_failure_schema(),
+        "TelemetryTimelineEntry": _telemetry_timeline_entry_schema(),
         "TimelineItem": {
             "oneOf": [
                 {"$ref": "#/components/schemas/CanonicalEvent"},
@@ -248,9 +231,7 @@ def _quality_counts_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "required": _MEASUREMENT_QUALITY,
-        "properties": {
-            name: {"type": "integer", "minimum": 0} for name in _MEASUREMENT_QUALITY
-        },
+        "properties": {name: {"type": "integer", "minimum": 0} for name in _MEASUREMENT_QUALITY},
         "additionalProperties": False,
     }
 
