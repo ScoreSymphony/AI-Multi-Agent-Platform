@@ -40,6 +40,34 @@ interface OrganizationData {
   audit: Page<CanonicalOrganizationAuditEvent> | null;
 }
 
+export function OrganizationsFeedback({
+  error,
+  mutationError,
+  onRetry,
+}: {
+  error: unknown;
+  mutationError: unknown;
+  onRetry: () => void;
+}) {
+  return (
+    <>
+      {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
+      {mutationError ? <ErrorState error={mutationError} /> : null}
+    </>
+  );
+}
+
+export function PersonalOrganizationScope() {
+  return (
+    <Card title="Personal scope">
+      <EmptyState
+        title="No organization selected"
+        detail="Personal work remains first-class. Select or create an organization only when collaboration is needed."
+      />
+    </Card>
+  );
+}
+
 export function OrganizationsPage({ client }: { client: OrganizationClient }) {
   const [organizations, setOrganizations] = useState<Page<CanonicalOrganization> | null>(null);
   const [context, setContext] = useState<CollaborationContext>(() => loadCollaborationContext());
@@ -215,8 +243,7 @@ export function OrganizationsPage({ client }: { client: OrganizationClient }) {
         </p>
       </header>
 
-      {error ? <ErrorState error={error} onRetry={() => void refresh()} /> : null}
-      {mutationError ? <ErrorState error={mutationError} /> : null}
+      <OrganizationsFeedback error={error} mutationError={mutationError} onRetry={() => void refresh()} />
 
       <Card title="Current collaboration context">
         {!organizations ? (
@@ -272,9 +299,7 @@ export function OrganizationsPage({ client }: { client: OrganizationClient }) {
       </Card>
 
       {!context.organizationId ? (
-        <Card title="Personal scope">
-          <EmptyState title="No organization selected" detail="Personal work remains first-class. Select or create an organization only when collaboration is needed." />
-        </Card>
+        <PersonalOrganizationScope />
       ) : !selectedOrganization || !data ? (
         <LoadingState />
       ) : (

@@ -12,6 +12,24 @@ import {
   requireText,
 } from "./goalInput";
 
+export function GoalInventoryState({
+  page,
+  error,
+  onRetry,
+}: {
+  page: Page<CanonicalGoal> | null;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  return (
+    <>
+      {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
+      {!page && !error ? <LoadingState /> : null}
+      {page ? <GoalTable goals={page.items} /> : null}
+    </>
+  );
+}
+
 export function GoalsPage({ client }: { client: GoalClient }) {
   const [page, setPage] = useState<Page<CanonicalGoal> | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -93,9 +111,7 @@ export function GoalsPage({ client }: { client: GoalClient }) {
         <div className="actions">
           <button onClick={() => void load()}>Refresh</button>
         </div>
-        {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
-        {!page && !error ? <LoadingState /> : null}
-        {page ? <GoalTable goals={page.items} /> : null}
+        <GoalInventoryState page={page} error={error} onRetry={() => void load()} />
         {page ? (
           <PaginationControls
             page={page}

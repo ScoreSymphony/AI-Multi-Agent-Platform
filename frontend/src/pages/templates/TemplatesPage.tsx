@@ -15,6 +15,23 @@ import {
 
 const TEMPLATE_QUERY_KEY = "templates:updated";
 
+export function TemplateLibraryState({
+  templates,
+  error,
+  onRetry,
+}: {
+  templates: Page<CanonicalTemplate> | null;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  return (
+    <>
+      {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
+      {!templates ? <LoadingState label="Loading Templates…" /> : <TemplateTable templates={templates.items} />}
+    </>
+  );
+}
+
 export function TemplatesPage({ client }: { client: TemplateClient }) {
   const { navigate } = useRouter();
   const [templates, setTemplates] = useState<Page<CanonicalTemplate> | null>(null);
@@ -74,20 +91,17 @@ export function TemplatesPage({ client }: { client: TemplateClient }) {
       {actionError ? <ErrorState error={actionError} /> : null}
 
       <Card title="Template library">
-        {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
-        {!templates ? <LoadingState label="Loading Templates…" /> : (
-          <>
-            <TemplateTable templates={templates.items} />
-            <PaginationControls
-              page={templates}
-              pageNumber={pagination.pageNumber}
-              hasPrevious={pagination.hasPrevious}
-              onPrevious={pagination.previous}
-              onRefresh={() => void load()}
-              onNext={() => pagination.next(templates.next_cursor)}
-            />
-          </>
-        )}
+        <TemplateLibraryState templates={templates} error={error} onRetry={() => void load()} />
+        {templates ? (
+          <PaginationControls
+            page={templates}
+            pageNumber={pagination.pageNumber}
+            hasPrevious={pagination.hasPrevious}
+            onPrevious={pagination.previous}
+            onRefresh={() => void load()}
+            onNext={() => pagination.next(templates.next_cursor)}
+          />
+        ) : null}
       </Card>
 
       <Card title="Create from an existing canonical resource">

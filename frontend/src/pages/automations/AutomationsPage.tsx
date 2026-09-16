@@ -84,9 +84,7 @@ export function AutomationsPage({
         <div className="actions">
           <button onClick={() => void load()}>Refresh</button>
         </div>
-        {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
-        {!page && !error ? <LoadingState /> : null}
-        {page ? <AutomationTable automations={page.items} /> : null}
+        <AutomationInventoryState page={page} error={error} onRetry={() => void load()} />
         {page ? (
           <PaginationControls
             page={page}
@@ -115,6 +113,24 @@ export function AutomationsPage({
         />
       </Card>
     </div>
+  );
+}
+
+export function AutomationInventoryState({
+  page,
+  error,
+  onRetry,
+}: {
+  page: Page<CanonicalAutomation> | null;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  return (
+    <>
+      {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
+      {!page && !error ? <LoadingState /> : null}
+      {page ? <AutomationTable automations={page.items} /> : null}
+    </>
   );
 }
 
