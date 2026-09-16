@@ -100,7 +100,7 @@ The capture tooling was implemented and regression-tested by #862, but execution
 On the documented reference host/VPS run:
 
 ```bash
-scripts/benchmarks/run_issue862_storage_vps_capture.sh
+scripts/benchmarks/run_storage_vps_capture.sh
 ```
 
 The script compares local filesystem, RustFS, Garage and SeaweedFS with the same larger workload, records host and image identity, idle/active resource samples, disk usage and workload timings, then creates a SHA-256 manifest and evidence archive. It refuses `GITHUB_ACTIONS=true` so hosted-runner numbers cannot be mislabeled as reference-host evidence.
@@ -108,7 +108,7 @@ The script compares local filesystem, RustFS, Garage and SeaweedFS with the same
 It also invokes:
 
 ```bash
-scripts/benchmarks/summarize_issue862_storage_vps_capture.py artifacts/issue862-storage-vps
+scripts/benchmarks/summarize_storage_vps_capture.py artifacts/issue862-storage-vps
 ```
 
 The summarizer emits `storage-vps-summary.json` and `storage-vps-summary.md` while retaining explicit comparability guardrails. In particular, local-process RSS is not presented as equivalent to resident object-store daemon memory, and residual data-root bytes are not presented as storage amplification.
@@ -116,7 +116,7 @@ The summarizer emits `storage-vps-summary.json` and `storage-vps-summary.md` whi
 Verify the retained campaign with:
 
 ```bash
-python3 scripts/benchmarks/verify_issue862_storage_vps_capture.py \
+python3 scripts/benchmarks/verify_storage_vps_capture.py \
   artifacts/issue862-storage-vps
 ```
 
