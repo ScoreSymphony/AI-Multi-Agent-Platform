@@ -18,7 +18,7 @@ jobs:
           python -m pip install -e ".[litellm]" pytest
       - name: Run LiteLLM environment conformance
         run: |
-          python scripts/ci/issue46_optional_environment_profile.py \
+          python scripts/ci/optional_environment_conformance_profile.py \
             litellm \
             --json-report conformance-litellm.json
       - name: Upload LiteLLM conformance evidence

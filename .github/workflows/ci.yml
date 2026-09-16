@@ -43,7 +43,7 @@ jobs:
         run: python scripts/ci/verify_distribution_runtime_assets.py dist
       - name: Run MCP environment conformance
         run: |
-          python scripts/ci/issue46_optional_environment_profile.py \
+          python scripts/ci/optional_environment_conformance_profile.py \
             mcp \
             --json-report conformance-mcp.json
       - name: Upload MCP conformance evidence
