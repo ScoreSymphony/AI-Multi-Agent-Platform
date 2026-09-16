@@ -21,18 +21,18 @@ def test_live_direct_vs_bifrost_comparison_when_environment_is_configured() -> N
     bifrost_base_url = os.getenv("BIFROST_EVAL_BIFROST_BASE_URL")
     bifrost_model = os.getenv("BIFROST_EVAL_BIFROST_MODEL")
     if not all((direct_base_url, direct_model, bifrost_base_url, bifrost_model)):
-        pytest.skip("live #859 direct/Bifrost endpoints are not configured")
+        pytest.skip("live direct/Bifrost evaluation endpoints are not configured")
 
-    canonical_model_id = "issue-859-live-model"
+    canonical_model_id = "bifrost-live-evaluation-model"
     direct = _openai_provider(
-        provider_id="issue-859-live-direct",
+        provider_id="bifrost-live-direct",
         base_url=direct_base_url,
         native_model=direct_model,
         canonical_model_id=canonical_model_id,
         api_key_env=os.getenv("BIFROST_EVAL_DIRECT_API_KEY_ENV"),
     )
     bifrost = _openai_provider(
-        provider_id="issue-859-live-bifrost",
+        provider_id="bifrost-live-gateway",
         base_url=bifrost_base_url,
         native_model=bifrost_model,
         canonical_model_id=canonical_model_id,

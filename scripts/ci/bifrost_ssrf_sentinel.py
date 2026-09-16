@@ -1,4 +1,4 @@
-"""Controlled HTTP sentinel for issue #859 Bifrost SSRF runtime evidence.
+"""Controlled HTTP sentinel for Bifrost SSRF runtime evidence.
 
 The sentinel is intentionally local and synthetic. It records whether a configured
 URL-fetching path actually reaches a blocked target, allowing deployment-level SSRF
@@ -41,10 +41,10 @@ class _SentinelState:
 
 
 class _Handler(BaseHTTPRequestHandler):
-    server_version = "Issue859SSRFSentinel/1.2"
+    server_version = "BifrostSSRFSentinel/1.2"
     protocol_version = "HTTP/1.1"
     state: ClassVar[_SentinelState] = _SentinelState()
-    rebinding_location: ClassVar[str] = "http://issue859-rebind.test:18003/ssrf-sentinel.txt"
+    rebinding_location: ClassVar[str] = "http://bifrost-rebind.test:18003/ssrf-sentinel.txt"
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/healthz":
@@ -61,7 +61,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/ssrf-sentinel.txt":
             self.state.record_hit(self.path)
-            self._text(HTTPStatus.OK, "issue-859-controlled-ssrf-sentinel\n")
+            self._text(HTTPStatus.OK, "bifrost-controlled-ssrf-sentinel\n")
             return
         if self.path == "/redirect-to-loopback":
             self.state.record_hit(self.path)
@@ -109,12 +109,12 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the issue #859 controlled SSRF sentinel")
+    parser = argparse.ArgumentParser(description="Run the controlled Bifrost SSRF sentinel")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=18001)
     parser.add_argument(
         "--rebinding-location",
-        default="http://issue859-rebind.test:18003/ssrf-sentinel.txt",
+        default="http://bifrost-rebind.test:18003/ssrf-sentinel.txt",
     )
     args = parser.parse_args(argv)
 

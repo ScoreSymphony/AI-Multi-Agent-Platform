@@ -26,15 +26,15 @@ from ai_multi_agent_platform.contracts import (
 @pytest.mark.integration
 def test_live_bifrost_openai_compatible_streaming_when_configured() -> None:
     provider = _live_provider_or_skip()
-    canonical_model_id = "issue-859-live-bifrost-model"
+    canonical_model_id = "bifrost-live-model"
 
     events = asyncio.run(
         _collect(
             provider.stream(
                 ModelRequest(
-                    request_id="issue-859-stream",
+                    request_id="bifrost-stream",
                     messages=("Reply with the single word: ready",),
-                    context=OperationContext(correlation_id="issue-859:stream"),
+                    context=OperationContext(correlation_id="bifrost:stream"),
                     requirements={"model_config_id": canonical_model_id},
                 )
             )
@@ -53,14 +53,14 @@ def test_live_bifrost_structured_output_when_declared_supported() -> None:
     if os.getenv("BIFROST_EVAL_STRUCTURED_OUTPUT") != "1":
         pytest.skip("set BIFROST_EVAL_STRUCTURED_OUTPUT=1 for a model with JSON-mode support")
     provider = _live_provider_or_skip()
-    canonical_model_id = "issue-859-live-bifrost-model"
+    canonical_model_id = "bifrost-live-model"
 
     response = asyncio.run(
         provider.generate(
             ModelRequest(
-                request_id="issue-859-structured",
+                request_id="bifrost-structured",
                 messages=('Return exactly this JSON object: {"status":"ready"}',),
-                context=OperationContext(correlation_id="issue-859:structured"),
+                context=OperationContext(correlation_id="bifrost:structured"),
                 requirements={
                     "model_config_id": canonical_model_id,
                     "structured_output": True,
@@ -79,16 +79,16 @@ def test_live_bifrost_tool_calling_when_declared_supported() -> None:
     if os.getenv("BIFROST_EVAL_TOOL_CALLING") != "1":
         pytest.skip("set BIFROST_EVAL_TOOL_CALLING=1 for a model with tool-calling support")
     provider = _live_provider_or_skip()
-    canonical_model_id = "issue-859-live-bifrost-model"
+    canonical_model_id = "bifrost-live-model"
 
     response = asyncio.run(
         provider.generate(
             ModelRequest(
-                request_id="issue-859-tool",
+                request_id="bifrost-tool",
                 messages=(
                     "Call the report_status tool with status ready. Do not answer directly.",
                 ),
-                context=OperationContext(correlation_id="issue-859:tool"),
+                context=OperationContext(correlation_id="bifrost:tool"),
                 requirements={
                     "model_config_id": canonical_model_id,
                     "canonical_tools": [
@@ -122,19 +122,19 @@ def test_live_bifrost_tool_calling_when_declared_supported() -> None:
 def test_live_bifrost_unavailable_upstream_maps_to_canonical_error_when_configured() -> None:
     control_url = os.getenv("BIFROST_EVAL_UPSTREAM_CONTROL_URL")
     if not control_url:
-        pytest.skip("live #859 upstream fault control is not configured")
+        pytest.skip("live Bifrost upstream fault control is not configured")
 
     provider = _live_provider_or_skip()
-    canonical_model_id = "issue-859-live-bifrost-model"
+    canonical_model_id = "bifrost-live-model"
     _set_upstream_availability(control_url, available=False)
     try:
         with pytest.raises(ContractError) as captured:
             asyncio.run(
                 provider.generate(
                     ModelRequest(
-                        request_id="issue-859-upstream-unavailable",
+                        request_id="bifrost-upstream-unavailable",
                         messages=("Reply with the single word: ready",),
-                        context=OperationContext(correlation_id="issue-859:upstream-unavailable"),
+                        context=OperationContext(correlation_id="bifrost:upstream-unavailable"),
                         requirements={"model_config_id": canonical_model_id},
                     )
                 )
@@ -164,12 +164,12 @@ def _live_provider_or_skip() -> OpenAICompatibleModelProvider:
     base_url = os.getenv("BIFROST_EVAL_BIFROST_BASE_URL")
     native_model = os.getenv("BIFROST_EVAL_BIFROST_MODEL")
     if not base_url or not native_model:
-        pytest.skip("live #859 Bifrost endpoint is not configured")
+        pytest.skip("live Bifrost endpoint is not configured")
     return OpenAICompatibleModelProvider(
         OpenAICompatibleProviderConfig(
-            provider_id="issue-859-live-bifrost",
+            provider_id="bifrost-live-gateway",
             base_url=base_url,
-            models={"issue-859-live-bifrost-model": native_model},
+            models={"bifrost-live-model": native_model},
             api_key_env=os.getenv("BIFROST_EVAL_BIFROST_API_KEY_ENV"),
         )
     )
