@@ -25,11 +25,15 @@ def _changed_python_files() -> list[Path]:
 
 def _semanticize_issue_references(text: str) -> str:
     # Permanent source names/docstrings should describe behavior, not historical work items.
-    # Keep the prose and runtime semantics intact while removing only provenance tokens.
-    text = re.sub(r"\bIssue\s+#\d+\s*", "", text)
-    text = re.sub(r"\bissue\s+#\d+\b", "the owning subsystem", text, flags=re.IGNORECASE)
+    # Remove only provenance tokens; never normalize whitespace or alter Python structure.
+    text = re.sub(r"\bIssue[ \t]+#\d+[ \t]*", "", text)
+    text = re.sub(
+        r"\bissue[ \t]+#\d+\b",
+        "the owning subsystem",
+        text,
+        flags=re.IGNORECASE,
+    )
     text = re.sub(r"(?<![A-Za-z0-9_])#\d+\b", "", text)
-    text = re.sub(r"[ \t]{2,}", " ", text)
     return text
 
 
