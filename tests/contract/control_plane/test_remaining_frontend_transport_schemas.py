@@ -44,9 +44,22 @@ def test_observability_timeline_contract_covers_events_and_telemetry() -> None:
         {"$ref": "#/components/schemas/CanonicalEvent"},
         {"$ref": "#/components/schemas/TelemetryTimelineEntry"},
     ]
+    event = schemas["CanonicalEvent"]
+    assert set(event["required"]) == set(event["properties"])
+    assert event["properties"]["owner_ref"]["oneOf"] == [
+        {"$ref": "#/components/schemas/Owner"},
+        {"type": "null"},
+    ]
+    assert event["properties"]["external_refs"]["items"]["required"] == [
+        "system",
+        "kind",
+        "value",
+    ]
+
     telemetry = schemas["TelemetryTimelineEntry"]
     assert telemetry["properties"]["duration_seconds"]["type"] == ["number", "null"]
     assert telemetry["properties"]["failure"]["oneOf"][-1] == {"type": "null"}
+    assert schemas["TelemetryFailure"]["required"] == ["component", "code", "retryable"]
 
     timeline_response = specification["paths"]["/api/v1/tasks/{task_id}/timeline"]["get"][
         "responses"
@@ -82,6 +95,9 @@ def test_accounting_transport_contract_preserves_nullability_enums_and_typed_pag
 
     budget = schemas["UsageBudget"]
     assert budget["properties"]["kind"]["enum"] == ["soft", "hard"]
+    assert budget["properties"]["consumed"]["type"] == "number"
+    assert budget["properties"]["remaining"]["type"] == "number"
+    assert budget["properties"]["fraction"]["type"] == "number"
     assert budget["properties"]["threshold_level"]["enum"] == [
         "warning",
         "exceeded",
