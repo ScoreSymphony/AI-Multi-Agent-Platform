@@ -21,14 +21,20 @@ from ai_multi_agent_platform.distributed.placement_policy import (
 from ai_multi_agent_platform.domain import new_id
 
 
-def _resources(*, cpu: float = 8.0, ram: int = 16_000, vram: int = 16_000) -> ResourceSnapshot:
+def _resources(
+    *, cpu: float = 8.0, ram: int = 16_000, vram: int = 16_000
+) -> ResourceSnapshot:
     accelerators = (
-        AcceleratorResource(
-            accelerator_id="gpu-0",
-            memory_total_bytes=vram,
-            memory_available_bytes=vram,
-        ),
-    ) if vram else ()
+        (
+            AcceleratorResource(
+                accelerator_id="gpu-0",
+                memory_total_bytes=vram,
+                memory_available_bytes=vram,
+            ),
+        )
+        if vram
+        else ()
+    )
     return ResourceSnapshot(
         cpu_cores_total=cpu,
         cpu_cores_available=cpu,
@@ -123,7 +129,10 @@ def test_health_and_draining_rejections_are_deterministic() -> None:
     worker = _worker(node)
 
     node_evaluation = _evaluate(node=replace(node, status=NodeStatus.OFFLINE), worker=worker)
-    worker_evaluation = _evaluate(node=node, worker=replace(worker, status=WorkerStatus.UNHEALTHY))
+    worker_evaluation = _evaluate(
+        node=node,
+        worker=replace(worker, status=WorkerStatus.UNHEALTHY),
+    )
     draining_evaluation = _evaluate(node=replace(node, draining=True), worker=worker)
 
     assert _codes(node_evaluation) == {RejectionCode.NODE_OFFLINE}
@@ -236,8 +245,18 @@ def test_selection_ignores_rejections_then_uses_score_and_stable_worker_id() -> 
     worker_b = new_id("worker")
     node_id = new_id("node")
     evaluations = (
-        CandidateEvaluation(worker_id=worker_a, node_id=node_id, accepted=True, score=10),
-        CandidateEvaluation(worker_id=worker_b, node_id=node_id, accepted=True, score=20),
+        CandidateEvaluation(
+            worker_id=worker_a,
+            node_id=node_id,
+            accepted=True,
+            score=10,
+        ),
+        CandidateEvaluation(
+            worker_id=worker_b,
+            node_id=node_id,
+            accepted=True,
+            score=20,
+        ),
         CandidateEvaluation(
             worker_id=new_id("worker"),
             node_id=node_id,
