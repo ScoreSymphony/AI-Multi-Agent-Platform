@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from types import MethodType
+from typing import cast
 
 from ai_multi_agent_platform.coordination import DurablePlanStepCoordinator
 from ai_multi_agent_platform.coordination.models import StepCoordinationRecord
@@ -98,6 +99,12 @@ class TaskBudgetRepairRuntime:
         post_action = await self._budgets.reconcile(decision)
         await self._budgets.require_permitted(post_action)
         return execution
+
+
+def as_verification_repair_runtime(runtime: TaskBudgetRepairRuntime) -> VerificationRepairRuntime:
+    """Narrow compatibility cast for reviewer code that only calls ``start_repair``."""
+
+    return cast(VerificationRepairRuntime, runtime)
 
 
 class TaskBudgetCoordinationBindings:
@@ -409,4 +416,8 @@ class TaskBudgetCoordinationBindings:
         return None
 
 
-__all__ = ["TaskBudgetCoordinationBindings", "TaskBudgetRepairRuntime"]
+__all__ = [
+    "TaskBudgetCoordinationBindings",
+    "TaskBudgetRepairRuntime",
+    "as_verification_repair_runtime",
+]
