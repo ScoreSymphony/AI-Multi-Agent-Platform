@@ -1,183 +1,152 @@
 # AI Multi-Agent Platform
 
-A general-purpose, self-hostable, local-first, model-agnostic and hardware-agnostic platform for defining, orchestrating, executing, observing and evaluating AI-assisted work across one or many machines.
+A general-purpose, self-hostable AI Multi-Agent Platform for turning goals into durable, observable work carried out by one or more specialized agents.
 
-The platform is built around canonical Tasks, Plans, Steps, Runs, Agents, Tools, Models, Workers, Nodes, Workspaces, Files, Artifacts, Results, Verification, Approvals and Events. Concrete systems such as Hermes, Forge, LiteLLM, MCP-compatible tool servers, model runtimes, storage engines or workflow engines integrate behind replaceable platform-owned contracts rather than defining the platform itself.
+The reference baseline is local-first and self-hosted. Models, orchestrators, executors and capabilities remain replaceable behind platform-owned contracts, so the platform is not defined by Hermes, Forge, LiteLLM, MCP or any single model vendor. A single-agent wrapper can submit one model-driven action; this platform additionally owns the Task/Plan/Step/Run lifecycle, multi-agent coordination, Artifacts, Results, Verification and traceable history around that work.
 
-## Core principles
+## 30-second architecture
 
-- General purpose; not tied to ScoreSymphony or another application domain.
-- Supports both single-agent and multi-agent workloads.
-- Task-centric rather than chat-centric, while still supporting interactive chat as one product surface.
-- Model/provider and hardware/deployment agnostic.
-- Local and self-hosted operation are first-class; baseline operation must not require recurring paid AI/API services.
-- Single-node operation is a first-class baseline; distributed multi-node operation extends the same conceptual model.
-- Orchestration, execution, models, tools, memory, files, knowledge, persistence, messaging, authorization, scheduling, observability and automation remain replaceable behind platform-owned boundaries.
-- API-first, plugin-friendly and designed so Web UI, CLI and external applications consume the same canonical platform state.
-
-## Architecture at a glance
-
-The platform owns the canonical workflow and lifecycle model:
+The primary product path is intentionally small:
 
 ```text
-Goal
-  ↓
-Task
-  ↓
-Plan
-  ↓
-Steps / Subtasks
-  ↓
-Runs / Worker Jobs
-  ↓
-Artifacts
-  ↓
-Result
+User / Web / CLI
+       |
+       v
+  Control Plane
+       |
+       v
+   Goal / Task
+       |
+       v
+Planner -> Plan / Steps
+       |
+       v
+Agent Team -> Models / Capabilities
+       |
+       v
+Execution / Workers
+       |
+       v
+Artifact / Result -> Verification
+       |
+       v
+ Trace / durable history
 ```
 
-The platform-owned kernel is authoritative for externally visible Task/Run lifecycle state. Orchestrators, executors, model providers, tool providers, storage systems and other integrations consume platform contracts and must not become implicit owners of canonical lifecycle or domain state.
+The platform owns the canonical state in that path. Orchestrators, executors, model providers, capability/tool providers, storage implementations and distributed transports are replaceable implementations around it; they do not become a second lifecycle authority.
 
-```text
-Clients / External Applications
-            │
-            ▼
-      Control Plane API
-            │
-            ▼
-      Platform Kernel
-            │
-   ┌────────┼────────┐
-   ▼        ▼        ▼
-Orchestration  Execution  Providers
-   │           │       models / tools /
-   │           │       memory / files /
-   │           │       knowledge / events
-   └───────────┴───────────────┐
-                               ▼
-                       Nodes / Workers
+## Quick Start
+
+### Prerequisites
+
+- Python 3.12 or newer
+- Git
+- local write access for the platform data directory
+
+No GPU, paid AI/API service, Hermes, Forge, LiteLLM, MCP server or remote Worker is required to install, start and smoke-test the reference single-node platform.
+
+From a clean checkout on Linux/macOS:
+
+```bash
+git clone https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git
+cd AI-Multi-Agent-Platform
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+pip install '.[server]'
+cp config/single-node.env.example .env.single-node
+set -a
+. ./.env.single-node
+set +a
+platform-server bootstrap-admin --username admin
+platform-server smoke
+platform-server serve
 ```
 
-The authoritative product direction lives in [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md). Non-negotiable architecture boundaries and invariants live in [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md). The canonical domain model is defined in [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md), replaceable provider boundaries in [`docs/CONTRACTS.md`](docs/CONTRACTS.md), Task/Run lifecycle ownership and recovery in [`docs/KERNEL.md`](docs/KERNEL.md), and top-level Python package ownership in [`docs/PACKAGE_BOUNDARIES.md`](docs/PACKAGE_BOUNDARIES.md).
+`bootstrap-admin` asks for the administrator password without putting it in shell history. `platform-server smoke` runs a canonical Task/Run with the in-process reference orchestrator/executor and requires no model endpoint or external service.
 
-Material architecture decisions are recorded under [`docs/adr/`](docs/adr/README.md). Implementations must not silently contradict the normative product or architecture documents.
+On Windows PowerShell, use `.\.venv\Scripts\Activate.ps1` and set the `AI_MAP_*` values from `config/single-node.env.example` in the current process instead of sourcing the POSIX env file. The maintained deployment guide contains the complete Windows and operator instructions.
 
-## What is implemented today
+With the server running, check the public Control Plane from a second terminal:
 
-The repository has moved beyond foundational scaffolding into active product integration, acceptance, hardening and operating-envelope work. The merged platform already contains substantial end-to-end functionality across the following areas.
+```bash
+curl http://127.0.0.1:8000/api/v1/health
+curl http://127.0.0.1:8000/api/v1/readiness
+platform --endpoint http://127.0.0.1:8000 doctor
+```
 
-### Core workflow and control plane
+The reference listener is `127.0.0.1:8000`. For configuration, restart behavior, secure exposure and the supported single-server topology, continue with [`docs/operations/DEPLOYMENT.md`](docs/operations/DEPLOYMENT.md).
 
-- canonical Tasks, Plans, Steps, Runs, Events, Results and Artifacts;
-- versioned Control Plane APIs used by supported clients;
-- durable Plan/Step coordination with dependencies, fan-out/fan-in, waits, retries, cancellation, reconciliation and recovery semantics;
-- Projects, Workspaces, Files and portable result/artifact handling;
-- Web and CLI client paths over the canonical Control Plane.
+## Run your first multi-agent task
 
-### Agents, models and capabilities
+The maintained first product workflow is a real multi-agent run, not a UI-only demo. It uses the same canonical Control Plane state as the rest of the platform.
 
-- Agents and Agent Teams;
-- autonomous planning and bounded replanning foundations;
-- exact planned Step-to-Agent execution bindings;
-- model-provider and model-routing contracts, including durable routing-profile revisions;
-- tools/capabilities and MCP-compatible integration boundaries;
-- Chat, Browser and Terminal product capabilities;
-- reference and distributed execution paths behind platform-owned execution contracts.
+First authenticate and inspect onboarding readiness:
 
-### Memory, knowledge and repository intelligence
+```bash
+platform auth login --username admin
+platform onboarding status
+```
 
-- Memory and Knowledge domains;
-- Search and discovery over supported platform resources;
-- provider-neutral repository intelligence with repository maps, deterministic search, exact source slices and revision provenance;
-- Repository/Git integration through authorization-aware platform services;
-- reusable workflow definitions, Templates and portable import/export.
+The server and baseline smoke above need no model. The multi-agent workflow does need one explicitly configured, healthy text model at location `local` or `self_hosted`, plus one owned Project and Workspace. Onboarding never selects a remote or paid provider implicitly. Use the `/onboarding` Web flow when the optional frontend is deployed, or follow [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md) for the exact CLI/API setup against your actual local model endpoint.
 
-### Governance, review and user-attention flows
-
-- authentication and session handling;
-- authorization, policy enforcement and human approvals;
-- Verification/Review workflows;
-- Notifications and user-attention surfaces;
-- Organizations, Teams and Memberships;
-- optional Proposal/Specification governance foundations with immutable revisions and exact Approval binding;
-- usage/resource accounting and related policy integrations.
-
-### Distributed execution and operations
-
-- Node/Worker and resource abstractions;
-- authenticated remote Worker reporting and distributed Workspace materialization;
-- network-capable distributed transport while preserving the same canonical lifecycle model;
-- host-pressure telemetry and pressure-aware admission foundations;
-- observability and diagnostic paths;
-- backup, upgrade, release-manifest and compatibility/provenance foundations;
-- deterministic performance, fault, restart, endurance and distributed-execution test tooling.
-
-### Extension and ecosystem foundations
-
-- Registry/Marketplace foundations with local/offline discovery, compatibility, integrity and trust validation;
-- Connector persistence with restart-stable identities and sync checkpoints;
-- architecture-significant upstream provenance and update workflows;
-- platform-wide conformance profiles and machine-readable acceptance evidence.
-
-This is deliberately a stable capability summary rather than an issue-by-issue progress ledger. For the curated current integration state, use [`docs/STATUS.md`](docs/STATUS.md). For individual work items, GitHub issues, dependencies, pull-request checks and the exact merged repository state remain authoritative.
-
-## Current maturity
-
-The usable single-node prototype acceptance gate has passed, and the repository now concentrates on convergence, conformance, hardening, measured operating envelopes and release readiness rather than basic platform construction.
-
-Architectural role and public compatibility maturity are tracked separately. The authoritative taxonomy and current major-surface audit live in [`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md); in particular, `Core` does not automatically mean `Stable`, and optional/advanced capabilities are not automatically `Experimental`.
-
-No formal GitHub release has been published yet. Release claims are therefore intentionally conservative: merged functionality is real, but operational-version acceptance still depends on the repository's release and conformance gates. See [`CHANGELOG.md`](CHANGELOG.md), [`docs/STATUS.md`](docs/STATUS.md), [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md) and [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md) for the corresponding evidence and process.
-
-## Product first run
-
-After the supported single-node platform is running, the maintained first product proof is a real multi-agent goal. Configure one healthy local/self-hosted text model, create or select a Project and Workspace, then open `/onboarding` and choose **Official first run: multi-agent goal**.
-
-The reference Planner exposes parallel-ready research and execution-approach branches, fans them into the producing Agent, applies canonical Agent Verification to the exact produced Result, and keeps the Plan, Steps, Agent assignments, Runs, Artifact, Result and Verification visible through the same Control Plane used by Web and CLI.
-
-The equivalent CLI action is:
+Once onboarding reports a usable scope, run the official scenario:
 
 ```bash
 platform onboarding run-multi-agent \
   --objective "Research two viable approaches, produce a concise result from both inputs, and review the exact result."
 ```
 
-Hermes, Forge, LiteLLM, MCP, the standard Agent catalog and paid providers are not baseline requirements. Follow [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md) for the clean-checkout startup path, model/setup requirements, Web/CLI/API workflow, recovery guidance and acceptance evidence.
+If more than one owned Project or Workspace exists, pass the `--project-id` and `--workspace-id` values returned by onboarding. The visible workflow is:
 
-## Quickstart for development
-
-Requirements:
-
-- Python 3.12+
-- Git
-
-Clone the repository and create an isolated environment:
-
-```bash
-git clone https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git
-cd AI-Multi-Agent-Platform
-python -m venv .venv
+```text
+Goal
+  |
+  v
+Task -> Plan
+        |-- Gather evidence ---------------- researcher ----\
+        |                                                  |
+        |-- Prepare execution approach ------- developer ---+--> Produce result -- developer
+        |                                                                    |
+        +--------------------------------------------------------------------v
+                                                               Verification -- reviewer
+                                                                    |
+                                                                    v
+                                                         Artifact + Result + trace
 ```
 
-Activate it on Linux/macOS:
+The two preparation branches are parallel-ready, the producing Step waits for both, and Verification is bound to the exact produced Result. The Web onboarding projection and the CLI/API response expose the Plan, Step dependencies, assigned Agent revisions, Runs, Artifact, Result, Verification records and trace identifiers so the same run can be inspected rather than inferred from chat output.
 
-```bash
-source .venv/bin/activate
+Hermes, Forge, LiteLLM, MCP, the standard Agent catalog and paid providers are not baseline requirements for this workflow. The maintained walkthrough, model setup contract, recovery guidance and acceptance fixture are in [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md).
+
+## How it works
+
+Canonical platform state is owned by the platform itself:
+
+```text
+Goal -> Task -> Plan -> Steps -> Runs -> Artifacts -> Result -> Verification
 ```
 
-or in Windows PowerShell:
+A Planner may decompose a Task into dependent or parallel-ready Steps. Exact Agent revisions are bound to planned work, while model and capability selection stays behind platform-owned provider contracts. Execution may remain local or extend to Workers on other machines without changing the canonical Task/Run model. Results and Artifacts stay attached to durable platform state, and Verification/Approvals remain explicit rather than being inferred from provider output.
 
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
+For normative details, use [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md), [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md), [`docs/CONTRACTS.md`](docs/CONTRACTS.md), [`docs/KERNEL.md`](docs/KERNEL.md) and the ADR index under [`docs/adr/`](docs/adr/README.md). Contributor-oriented code navigation lives in [`docs/CONTRIBUTOR_ARCHITECTURE.md`](docs/CONTRIBUTOR_ARCHITECTURE.md).
 
-Install the project with development dependencies:
+## Current maturity
+
+The usable single-node prototype gate and maintained multi-agent first-run path exist on `main`. The repository is still under active development and has not published a formal GitHub release, so release claims remain conservative while conformance, hardening and operational-version acceptance continue.
+
+Architectural role and public compatibility maturity are separate concepts; the current taxonomy is documented in [`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md). Curated point-in-time integration status lives in [`docs/STATUS.md`](docs/STATUS.md), while GitHub issues, dependencies, pull-request checks and merged repository state remain authoritative for individual work items. The README intentionally does not duplicate an issue/PR ledger or dated progress history.
+
+## Develop and contribute
+
+For a development checkout, install the development extras instead of the server-only baseline:
 
 ```bash
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-Run the CI-equivalent validation path:
+Run the CI-equivalent local validation path:
 
 ```bash
 ruff format --check .
@@ -187,14 +156,14 @@ pytest
 python -m build
 ```
 
-The complete development setup and validation contract lives in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+Development setup lives in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). Contribution and architecture-change rules live in [`CONTRIBUTING.md`](CONTRIBUTING.md), coding-agent rules in [`AGENTS.md`](AGENTS.md), and the dependency-driven planning view in [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md).
 
 ## Repository layout
 
 ```text
 AI-Multi-Agent-Platform/
 ├── src/ai_multi_agent_platform/   # platform runtime, domain and adapters
-├── frontend/                      # web/control-plane client
+├── frontend/                      # optional Web client
 ├── tests/                         # automated validation and conformance tests
 ├── docs/                          # product, architecture, operations and acceptance docs
 ├── upstream/                      # upstream provenance material
@@ -205,43 +174,29 @@ AI-Multi-Agent-Platform/
 
 Runtime integrations implement platform-owned contracts under `src/ai_multi_agent_platform/` rather than creating parallel ownership of canonical domain state.
 
-## Start here
-
-For the maintained first product workflow, start with [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md). For a fresh checkout, environment setup and the CI-equivalent local validation path, follow [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). Contribution and architecture-change rules live in [`CONTRIBUTING.md`](CONTRIBUTING.md), the contributor-facing implementation map and “where do I change X?” guide lives in [`docs/CONTRIBUTOR_ARCHITECTURE.md`](docs/CONTRIBUTOR_ARCHITECTURE.md), and coding-agent execution/dependency rules live in [`AGENTS.md`](AGENTS.md).
-
-The canonical single-node prototype profiles are documented in [`docs/PROTOTYPE_ACCEPTANCE.md`](docs/PROTOTYPE_ACCEPTANCE.md). Wider platform acceptance and optional-profile reporting live in [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md).
-
 ## Documentation map
 
 | Need | Canonical location |
 | --- | --- |
+| First successful multi-agent run | [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md) |
+| Installation and single-node deployment | [`docs/operations/DEPLOYMENT.md`](docs/operations/DEPLOYMENT.md) |
+| Security policy and threat model | [`SECURITY.md`](SECURITY.md), [`docs/SECURITY_THREAT_MODEL.md`](docs/SECURITY_THREAT_MODEL.md) |
 | Product identity and goals | [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md) |
-| Official multi-agent first run | [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md) |
 | Architecture invariants | [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md) |
 | Contributor architecture and code navigation | [`docs/CONTRIBUTOR_ARCHITECTURE.md`](docs/CONTRIBUTOR_ARCHITECTURE.md) |
 | Domain model | [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md) |
 | Replaceable contracts | [`docs/CONTRACTS.md`](docs/CONTRACTS.md) |
-| Feature role and API stability taxonomy | [`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md) |
 | Kernel lifecycle and recovery | [`docs/KERNEL.md`](docs/KERNEL.md) |
-| Top-level package ownership | [`docs/PACKAGE_BOUNDARIES.md`](docs/PACKAGE_BOUNDARIES.md) |
-| Current project status | [`docs/STATUS.md`](docs/STATUS.md) |
-| User-visible accumulated changes | [`CHANGELOG.md`](CHANGELOG.md) |
-| Dependency-driven implementation planning | [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) |
-| Release and operations process | [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md) |
-| Development setup and validation | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) |
-| Contribution rules | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
-| Coding-agent rules | [`AGENTS.md`](AGENTS.md) |
-| Architecture decisions | [`docs/adr/`](docs/adr/README.md) |
+| Feature role and API stability taxonomy | [`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md) |
 | Platform acceptance/conformance | [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md) |
-
-## Project status
-
-This repository is under active development. The curated point-in-time implementation and integration status lives in [`docs/STATUS.md`](docs/STATUS.md); the dependency-driven planning view lives in [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md).
-
-GitHub issue state, explicit issue dependencies, pull-request reviews/checks and merged repository state remain authoritative for individual work items. Published releases, once available, are authoritative for release history. The README intentionally does not duplicate issue-by-issue progress or dated implementation ledgers.
+| Current integration status | [`docs/STATUS.md`](docs/STATUS.md) |
+| Release and operations process | [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md) |
+| Development setup | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) |
+| Contribution rules | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Architecture decisions | [`docs/adr/`](docs/adr/README.md) |
 
 ## Licensing and upstream components
 
-Project-owned source is distributed under the MIT License in [`LICENSE`](LICENSE). Rules for third-party source, dependencies, services, adapters, vendored/forked source, selective ports and reference-only influence live in [`LICENSE_POLICY.md`](LICENSE_POLICY.md).
+Project-owned source is distributed under the MIT License in [`LICENSE`](LICENSE). Third-party source, dependencies, services, adapters, vendored/forked source and reference-only influence follow [`LICENSE_POLICY.md`](LICENSE_POLICY.md).
 
-Before approving an architecture-significant upstream, complete [`docs/UPSTREAM_ADOPTION_CHECKLIST.md`](docs/UPSTREAM_ADOPTION_CHECKLIST.md). Approved/integrated upstream provenance is recorded in [`docs/UPSTREAMS.md`](docs/UPSTREAMS.md) using the machine-readable starting format in [`upstream/PROVENANCE_TEMPLATE.yaml`](upstream/PROVENANCE_TEMPLATE.yaml). Updates and periodic reviews follow [`docs/UPSTREAM_UPDATE_WORKFLOW.md`](docs/UPSTREAM_UPDATE_WORKFLOW.md).
+Architecture-significant upstream adoption and updates are governed by [`docs/UPSTREAM_ADOPTION_CHECKLIST.md`](docs/UPSTREAM_ADOPTION_CHECKLIST.md), [`docs/UPSTREAMS.md`](docs/UPSTREAMS.md) and [`docs/UPSTREAM_UPDATE_WORKFLOW.md`](docs/UPSTREAM_UPDATE_WORKFLOW.md).
