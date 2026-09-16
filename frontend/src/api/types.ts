@@ -2,6 +2,7 @@ import type {
   AgentAssignment as GeneratedAgentAssignment,
   APIError as GeneratedAPIError,
   APIManifest as GeneratedAPIManifest,
+  CanonicalEvent as GeneratedCanonicalEvent,
   CanonicalWorkspace as GeneratedCanonicalWorkspace,
   CreateProjectRequest as GeneratedCreateProjectRequest,
   CreateTaskRequest as GeneratedCreateTaskRequest,
@@ -17,9 +18,22 @@ import type {
   Project as GeneratedProject,
   Run as GeneratedRun,
   RunError as GeneratedRunError,
+  SearchPage as GeneratedSearchPage,
+  SearchQueryParameters as GeneratedSearchQueryParameters,
+  SearchResult as GeneratedSearchResult,
   Task as GeneratedTask,
   TaskDependency as GeneratedTaskDependency,
   TaskResponsibility as GeneratedTaskResponsibility,
+  TelemetryTimelineEntry as GeneratedTelemetryTimelineEntry,
+  TimelineItem as GeneratedTimelineItem,
+  TimelinePage as GeneratedTimelinePage,
+  UsageAggregate as GeneratedUsageAggregate,
+  UsageAggregatePage as GeneratedUsageAggregatePage,
+  UsageBudget as GeneratedUsageBudget,
+  UsageBudgetPage as GeneratedUsageBudgetPage,
+  UsageRecord as GeneratedUsageRecord,
+  UsageRecordPage as GeneratedUsageRecordPage,
+  UsageTrendPoint as GeneratedUsageTrendPoint,
   Workspace as GeneratedWorkspace,
   WorkspaceSourceRef as GeneratedWorkspaceSourceRef,
 } from "./generated/control-plane-v1";
@@ -30,8 +44,8 @@ export type JsonValue = GeneratedJsonValue;
 export type OwnerType = GeneratedOwner["type"];
 export type TaskStatus = GeneratedTask["status"];
 export type RunStatus = GeneratedRun["status"];
-export type MeasurementQuality = "measured" | "reported" | "estimated" | "unavailable";
-export type AggregationMode = "additive" | "latest";
+export type MeasurementQuality = GeneratedUsageRecord["quality"];
+export type AggregationMode = GeneratedUsageRecord["aggregation_mode"];
 export type TaskPriority = GeneratedTask["priority"];
 export type TaskResponsibilityKind = GeneratedTaskResponsibility["kind"];
 export type AgentAssignmentKind = GeneratedAgentAssignment["kind"];
@@ -39,59 +53,63 @@ export type TaskDependencyKind = GeneratedTaskDependency["kind"];
 export type WorkspaceType = GeneratedCanonicalWorkspace["workspace_type"];
 export type WorkspaceAccessMode = GeneratedCanonicalWorkspace["access_mode"];
 export type WorkspaceRetention = GeneratedCanonicalWorkspace["retention"];
-export type SearchMode = "exact" | "keyword" | "metadata" | "semantic" | "hybrid";
-export type SearchSort = "relevance" | "id" | "updated_at";
+export type SearchMode = NonNullable<GeneratedSearchQueryParameters["mode"]>;
+export type SearchSort = NonNullable<GeneratedSearchQueryParameters["sort"]>;
 
-export interface Page<T> {
+type GenericPage<T> = {
   items: T[];
   next_cursor: string | null;
   total: number;
   limit: number;
-}
+};
 
+type IsSameType<Left, Right> = [Left] extends [Right]
+  ? [Right] extends [Left]
+    ? true
+    : false
+  : false;
+
+/**
+ * Compatibility page helper. The migrated #1159 wire surfaces resolve to their
+ * generated concrete response pages; unrelated collection/view models retain the
+ * established generic helper until their own canonical transport migration.
+ */
+export type Page<T> = IsSameType<T, GeneratedTimelineItem> extends true
+  ? GeneratedTimelinePage
+  : IsSameType<T, GeneratedUsageRecord> extends true
+    ? GeneratedUsageRecordPage
+    : IsSameType<T, GeneratedUsageAggregate> extends true
+      ? GeneratedUsageAggregatePage
+      : IsSameType<T, GeneratedUsageBudget> extends true
+        ? GeneratedUsageBudgetPage
+        : GenericPage<T>;
+
+/**
+ * Frontend query-builder model. Array fields are intentionally mapped to the
+ * canonical comma-separated OpenAPI query parameters by `toSearchQuery()`.
+ * It is not a second wire DTO; scalar enum semantics come from generated OpenAPI.
+ */
 export interface SearchRequest {
-  q?: string;
-  id?: string;
+  q?: GeneratedSearchQueryParameters["q"];
+  id?: GeneratedSearchQueryParameters["id"];
   types?: string[];
-  project_id?: string;
-  workspace_id?: string;
+  project_id?: GeneratedSearchQueryParameters["project_id"];
+  workspace_id?: GeneratedSearchQueryParameters["workspace_id"];
   statuses?: string[];
   tags?: string[];
   sources?: string[];
   providers?: string[];
-  updated_after?: string;
-  updated_before?: string;
+  updated_after?: GeneratedSearchQueryParameters["updated_after"];
+  updated_before?: GeneratedSearchQueryParameters["updated_before"];
   mode?: SearchMode;
-  limit?: number;
-  cursor?: string;
+  limit?: GeneratedSearchQueryParameters["limit"];
+  cursor?: GeneratedSearchQueryParameters["cursor"];
   sort?: SearchSort;
-  direction?: "asc" | "desc";
+  direction?: GeneratedSearchQueryParameters["direction"];
 }
 
-export interface SearchResult {
-  resource_type: string;
-  resource_id: string;
-  title: string;
-  summary: string;
-  project_id: string | null;
-  workspace_id: string | null;
-  owner_type: string | null;
-  owner_id: string | null;
-  status: string | null;
-  tags: string[];
-  relevance: number;
-  matched_fields: string[];
-  source: string;
-  provider: string;
-  version: string | null;
-  updated_at: string | null;
-  canonical_ref: string | null;
-  provenance: Record<string, JsonValue>;
-  access: "authorized";
-  redacted: boolean;
-}
-
-export type SearchPage = Page<SearchResult>;
+export type SearchResult = GeneratedSearchResult;
+export type SearchPage = GeneratedSearchPage;
 
 export type CanonicalProject = GeneratedProject;
 export type WorkspaceSourceRef = GeneratedWorkspaceSourceRef;
@@ -143,35 +161,10 @@ export type CanonicalRun = Omit<GeneratedRun, "error"> & {
   error?: GeneratedRun["error"];
 };
 
-export interface CanonicalEvent {
-  id: string;
-  type: "event";
-  schema_version: string;
-  event_type: string;
-  occurred_at: string;
-  subject_type: string;
-  subject_id: string;
-  project_id?: string | null;
-  correlation_id: string;
-  causation_id?: string | null;
-  trace_id?: string | null;
-  payload: Record<string, JsonValue>;
-}
-
-export interface TelemetryTimelineEntry {
-  id: string;
-  type: "telemetry";
-  event_name: string;
-  component: string;
-  timestamp: string;
-  outcome: string;
-  duration_seconds: number | null;
-  failure: JsonValue;
-  context: Record<string, JsonValue>;
-  attributes: Record<string, JsonValue>;
-}
-
-export type TimelineItem = CanonicalEvent | TelemetryTimelineEntry;
+export type CanonicalEvent = GeneratedCanonicalEvent;
+export type TelemetryTimelineEntry = GeneratedTelemetryTimelineEntry;
+export type TimelineItem = GeneratedTimelineItem;
+export type TimelinePage = GeneratedTimelinePage;
 
 export type APIErrorBody = GeneratedAPIError;
 export type APImanifest = GeneratedAPIManifest;
@@ -180,76 +173,13 @@ export type ModelCapabilities = GeneratedModelCapabilities;
 export type CanonicalModel = GeneratedModel;
 export type CanonicalModelProvider = GeneratedModelProvider;
 
-export interface CanonicalUsageRecord {
-  id: string;
-  metric_type: string;
-  quantity: number | null;
-  unit: string;
-  quality: MeasurementQuality;
-  aggregation_mode: AggregationMode;
-  source: string;
-  provider: string | null;
-  timestamp: string;
-  started_at: string | null;
-  ended_at: string | null;
-  scope: Record<string, string>;
-  correlation_id: string | null;
-  causation_id: string | null;
-  cost_amount: number | null;
-  currency: string | null;
-  precision: number | null;
-  confidence: number | null;
-  provenance: Record<string, JsonValue>;
-}
-
-export interface CanonicalUsageTrendPoint {
-  start: string;
-  end: string;
-  value: number | null;
-  record_count: number;
-  unavailable_count: number;
-  quality_counts: Record<MeasurementQuality, number>;
-}
-
-export interface CanonicalUsageAggregate {
-  id: string;
-  metric_type: string;
-  unit: string;
-  total: number | null;
-  record_count: number;
-  unavailable_count: number;
-  quality_counts: Record<MeasurementQuality, number>;
-  aggregation_mode: AggregationMode;
-  scope: Record<string, string>;
-  trend_window_start: string | null;
-  trend_window_end: string | null;
-  trend_bucket_seconds: number | null;
-  trend: CanonicalUsageTrendPoint[];
-}
-
-export interface CanonicalUsageBudget {
-  id: string;
-  metric_type: string;
-  unit: string;
-  scope_type: string;
-  scope_id: string;
-  limit: number;
-  kind: "soft" | "hard";
-  action: "record_only" | "warn" | "deny" | "require_approval" | "notify";
-  warning_fraction: number;
-  window_seconds: number | null;
-  window_mode: "lifetime" | "rolling";
-  window_start: string | null;
-  window_end: string | null;
-  include_estimated: boolean;
-  owner_type: string | null;
-  owner_id: string | null;
-  version: number;
-  consumed: number | null;
-  remaining: number | null;
-  fraction: number | null;
-  threshold_level: "warning" | "exceeded" | null;
-}
+export type CanonicalUsageRecord = GeneratedUsageRecord;
+export type CanonicalUsageRecordPage = GeneratedUsageRecordPage;
+export type CanonicalUsageTrendPoint = GeneratedUsageTrendPoint;
+export type CanonicalUsageAggregate = GeneratedUsageAggregate;
+export type CanonicalUsageAggregatePage = GeneratedUsageAggregatePage;
+export type CanonicalUsageBudget = GeneratedUsageBudget;
+export type CanonicalUsageBudgetPage = GeneratedUsageBudgetPage;
 
 export type CreateProjectInput = Omit<GeneratedCreateProjectRequest, "project_id">;
 export type CreateWorkspaceInput = GeneratedCreateWorkspaceRequest;

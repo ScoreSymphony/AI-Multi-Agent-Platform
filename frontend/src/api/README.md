@@ -36,11 +36,13 @@ npm run generate:contracts
 
 `python scripts/generate_frontend_contracts.py --check` and `npm run check:contracts` fail when canonical schemas and the committed TypeScript output drift. `npm test` runs this check before the existing transport-boundary guard and Vitest.
 
-`types.ts` preserves the established frontend-facing export names while sourcing core Project, Workspace, Task, Run, model, health, manifest, error and create-request wire shapes from the generated module. Search, telemetry and accounting types remain manual until their canonical OpenAPI transport schemas are complete enough to migrate without inventing a second contract.
+`types.ts` preserves established frontend-facing export names while sourcing the supported Project, Workspace, Task, Run, model, health, manifest, error, Search response, observability timeline and accounting/usage wire shapes from the generated module. Concrete Search, timeline and accounting page envelopes are generated as well.
 
-Generated wire DTOs are not page/view/form state. UI-specific models must remain separate and should map explicitly from generated DTOs at the presentation boundary. Likewise, request and response DTOs are separate where the API applies defaults: optional request fields must not be made required merely because the corresponding canonical response materializes them.
+Search query parameters are also represented canonically in generated OpenAPI as `SearchQueryParameters`. The frontend `SearchRequest` type intentionally remains a small query-builder/view model because plural array fields such as `types`, `statuses`, `tags`, `sources` and `providers` are mapped by `toSearchQuery()` to comma-separated wire query parameters. It must derive scalar enum/value semantics from the generated query contract rather than redeclaring those wire semantics independently.
 
-When a supported wire contract changes, update the canonical Control Plane schema first, regenerate the TypeScript file, then update explicit UI/domain mappings as needed. Do not patch the generated file to make the frontend compile.
+Generated wire DTOs are not page/view/form state. UI-specific models must remain separate and should map explicitly from generated DTOs at the presentation boundary. The `Page<T>` compatibility helper routes the migrated timeline and accounting element types to their generated concrete page DTOs; its generic fallback remains only for unrelated collection/view surfaces that are outside this migration. `ListQuery`, query-builder state and presentation summaries remain frontend-owned helpers rather than shadow definitions of the migrated resource wire DTOs. Likewise, request and response DTOs are separate where the API applies defaults: optional request fields must not be made required merely because the corresponding canonical response materializes them.
+
+When a supported wire contract changes, update the canonical Control Plane schema first, regenerate the TypeScript file, then update explicit UI/domain mappings as needed. Do not patch the generated file to make the frontend compile. Search, telemetry/observability and accounting/usage changes follow this same rule; they no longer have a manual-wire exception.
 
 ## Domain client pattern
 
