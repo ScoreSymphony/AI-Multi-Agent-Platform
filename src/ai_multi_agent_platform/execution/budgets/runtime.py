@@ -59,11 +59,13 @@ class TaskBudgetModelRuntime:
         decision = await self._admit_contract(request)
         if decision is None:
             return await self._inner.generate(request)
+        completed = False
         try:
             response = await self._inner.generate(request)
-        except BaseException:
-            await self._budgets.release(decision)
-            raise
+            completed = True
+        finally:
+            if not completed:
+                await self._budgets.release(decision)
         await self._reconcile(decision)
         return response
 
@@ -79,9 +81,6 @@ class TaskBudgetModelRuntime:
                 async for event in self._inner.stream(request):
                     yield event
                 completed = True
-            except BaseException:
-                await self._budgets.release(decision)
-                raise
             finally:
                 if not completed:
                     await self._budgets.release(decision)
@@ -99,11 +98,13 @@ class TaskBudgetModelRuntime:
         )
         if decision is None:
             return await self._inner.generate_canonical(request)
+        completed = False
         try:
             response = await self._inner.generate_canonical(request)
-        except BaseException:
-            await self._budgets.release(decision)
-            raise
+            completed = True
+        finally:
+            if not completed:
+                await self._budgets.release(decision)
         await self._reconcile(decision)
         return response
 
@@ -125,9 +126,6 @@ class TaskBudgetModelRuntime:
                 async for event in self._inner.stream_canonical(request):
                     yield event
                 completed = True
-            except BaseException:
-                await self._budgets.release(decision)
-                raise
             finally:
                 if not completed:
                     await self._budgets.release(decision)
@@ -204,11 +202,13 @@ class TaskBudgetCapabilityInvoker:
             provenance={"enforcement_point": "capability_invoker"},
         )
         _require_budget_permitted(decision)
+        completed = False
         try:
             result = await self._inner.invoke(request)
-        except BaseException:
-            await self._budgets.release(decision)
-            raise
+            completed = True
+        finally:
+            if not completed:
+                await self._budgets.release(decision)
         post_action = await self._budgets.reconcile(decision)
         _require_budget_permitted(post_action)
         return result
