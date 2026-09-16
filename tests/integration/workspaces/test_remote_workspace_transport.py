@@ -4,6 +4,7 @@ import asyncio
 import multiprocessing
 from contextlib import suppress
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 
@@ -37,6 +38,13 @@ from ai_multi_agent_platform.workspaces import (
 from ai_multi_agent_platform.workspaces.reference import LocalWorkspaceProvider
 
 TEST_TRANSPORT_KEY = "issue-433-test-transport-key"
+PROCESS_START_TIMEOUT_SECONDS = 15.0
+
+
+class _ProcessReadySignal(Protocol):
+    def set(self) -> None: ...
+
+    def wait(self, timeout: float | None = None) -> bool: ...
 
 
 class _RecordingTransport(InProcessMessageTransport):
@@ -419,7 +427,13 @@ def test_tcp_commit_reply_failure_redelivers_without_duplicate_materialization(
     asyncio.run(scenario())
 
 
-def _workspace_endpoint_process(host: str, port: int, worker_id: str, root: str) -> None:
+def _workspace_endpoint_process(
+    host: str,
+    port: int,
+    worker_id: str,
+    root: str,
+    ready: _ProcessReadySignal,
+) -> None:
     async def serve() -> None:
         transport = TcpMessageTransport(
             host,
@@ -429,6 +443,9 @@ def _workspace_endpoint_process(host: str, port: int, worker_id: str, root: str)
         )
         store = WorkerWorkspaceMaterializationStore(worker_id, root)
         try:
+            if not await transport.check_ready():
+                raise RuntimeError("spawned Workspace Worker could not reach message broker")
+            ready.set()
             await WorkerWorkspaceTransportEndpoint(store, transport).serve()
         finally:
             await transport.close(graceful=False)
@@ -453,20 +470,35 @@ def test_remote_workspace_materializes_across_independent_worker_process(tmp_pat
             authentication_key=TEST_TRANSPORT_KEY,
             provider_id="issue-433-process-control",
         )
-        process = multiprocessing.get_context("spawn").Process(
+        process_context = multiprocessing.get_context("spawn")
+        ready = process_context.Event()
+        process = process_context.Process(
             target=_workspace_endpoint_process,
-            args=(broker.host, broker.port, worker_id, str(worker_root)),
+            args=(broker.host, broker.port, worker_id, str(worker_root), ready),
         )
         process.start()
-        materializer = TransportRemoteWorkspaceMaterializer(
-            worker_id,
-            control_transport,
-            workspaces,
-            files,
-            lambda _workspace: context,
-            response_timeout_seconds=5.0,
-        )
         try:
+            reached_readiness = await asyncio.to_thread(
+                ready.wait,
+                PROCESS_START_TIMEOUT_SECONDS,
+            )
+            if not reached_readiness:
+                process.join(timeout=0)
+                pytest.fail(
+                    "spawned Workspace Worker did not reach transport readiness "
+                    f"(exitcode={process.exitcode})"
+                )
+            assert process.is_alive(), (
+                f"spawned Workspace Worker exited after readiness (exitcode={process.exitcode})"
+            )
+            materializer = TransportRemoteWorkspaceMaterializer(
+                worker_id,
+                control_transport,
+                workspaces,
+                files,
+                lambda _workspace: context,
+                response_timeout_seconds=5.0,
+            )
             receipt = await materializer.materialize(request)
             assert receipt.worker_ref == worker_id
             execution_workspace = inspection_store.execution_workspace(workspace.id, snapshot.id)
