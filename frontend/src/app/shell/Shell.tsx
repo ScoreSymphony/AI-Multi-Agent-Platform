@@ -79,6 +79,12 @@ export function Shell() {
   }, [bootstrapStatus, loadAuthenticatedState, navigate, path]);
 
   useEffect(() => {
+    if (!authenticated) {
+      setManifest(null);
+      setManifestState("loading");
+      return;
+    }
+    setManifestState("loading");
     void clients.client.manifest().then((loadedManifest) => {
       setManifest(loadedManifest);
       setManifestState("ready");
@@ -86,7 +92,7 @@ export function Shell() {
       setManifest(null);
       setManifestState("unavailable");
     });
-  }, [clients.client]);
+  }, [authenticated, clients.client]);
 
   useEffect(() => setMenuOpen(false), [path]);
 
