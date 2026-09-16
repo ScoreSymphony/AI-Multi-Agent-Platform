@@ -25,9 +25,7 @@ PROVENANCE_PREFIXES = ("historical context:", "provenance:")
 PERMANENT_ROOTS = frozenset({"src", "tests", "scripts"})
 EVIDENCE_ROOT = PurePosixPath("tests/evidence")
 WORKFLOW_PREFIX = PurePosixPath(".github/workflows")
-STRING_LITERAL_FIXTURE_PATH = PurePosixPath(
-    "tests/unit/governance/test_permanent_naming_policy.py"
-)
+STRING_LITERAL_FIXTURE_PATH = PurePosixPath("tests/unit/governance/test_permanent_naming_policy.py")
 LEGACY_COMPATIBILITY_STRINGS = frozenset(
     {
         "ai-multi-agent-platform/issue-388-two-host-transport/v1",
@@ -137,9 +135,7 @@ def _provenance_line(line: str) -> bool:
 
 
 def _legacy_compatibility_string(value: str) -> bool:
-    return value in LEGACY_COMPATIBILITY_STRINGS or value.startswith(
-        LEGACY_COMPATIBILITY_PREFIXES
-    )
+    return value in LEGACY_COMPATIBILITY_STRINGS or value.startswith(LEGACY_COMPATIBILITY_PREFIXES)
 
 
 def _semantic_string_violations(
