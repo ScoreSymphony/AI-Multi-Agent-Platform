@@ -1,7 +1,8 @@
-"""Rollback-safe package import execution for issue #79."""
+"""Rollback-safe package import execution."""
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -150,6 +151,12 @@ class ImportExecutor:
             for item in prepared:
                 token = await item.handler.apply(item.resource, item.value, context)
                 applied.append(_AppliedResource(prepared=item, token=token))
+        except asyncio.CancelledError as exc:
+            await self._rollback_preserving_primary(applied, context, exc)
+            raise
+        except (KeyboardInterrupt, SystemExit) as exc:
+            await self._rollback_preserving_primary(applied, context, exc)
+            raise
         except Exception as exc:
             await self._rollback_after_failure(applied, context, exc)
             raise AssertionError("rollback helper must always raise") from exc
@@ -168,23 +175,32 @@ class ImportExecutor:
             ),
         )
 
+    async def _rollback_preserving_primary(
+        self,
+        applied: list[_AppliedResource],
+        context: ImportContext,
+        primary: BaseException,
+    ) -> None:
+        """Finish rollback without translating cancellation or process-control signals."""
+
+        rollback_failures = await self._rollback_applied(applied, context)
+        if rollback_failures:
+            primary.add_note(
+                "portable import rollback was incomplete while preserving "
+                f"{type(primary).__name__}: {len(rollback_failures)} rollback operation(s) failed"
+            )
+
     async def _rollback_after_failure(
         self,
         applied: list[_AppliedResource],
         context: ImportContext,
         error: Exception,
     ) -> None:
+        rollback_errors = await self._rollback_applied(applied, context)
         rollback_failures: list[JsonValue] = []
-        for item in reversed(applied):
-            try:
-                await item.prepared.handler.rollback(
-                    item.prepared.resource,
-                    item.prepared.value,
-                    item.token,
-                    context,
-                )
-            except Exception as rollback_error:
-                rollback_failures.append(redact_exception(rollback_error))
+        for rollback_error in rollback_errors:
+            redacted = redact_exception(rollback_error)
+            rollback_failures.append(redacted or type(rollback_error).__name__)
 
         original = redact_exception(error)
         if rollback_failures:
@@ -209,6 +225,51 @@ class ImportExecutor:
                 "applied_resource_count": len(applied),
             },
         ) from error
+
+    async def _rollback_applied(
+        self,
+        applied: list[_AppliedResource],
+        context: ImportContext,
+    ) -> list[BaseException]:
+        failures: list[BaseException] = []
+        for item in reversed(applied):
+            failure = await _settle_rollback(item, context)
+            if failure is not None:
+                failures.append(failure)
+        return failures
+
+
+async def _settle_rollback(
+    item: _AppliedResource,
+    context: ImportContext,
+) -> BaseException | None:
+    """Let one rollback settle even if the owning task is cancelled again."""
+
+    rollback = asyncio.create_task(
+        item.prepared.handler.rollback(
+            item.prepared.resource,
+            item.prepared.value,
+            item.token,
+            context,
+        )
+    )
+    while not rollback.done():
+        try:
+            await asyncio.shield(rollback)
+        except asyncio.CancelledError:
+            if rollback.cancelled():
+                break
+            continue
+        except Exception:
+            break
+
+    try:
+        rollback.result()
+    except asyncio.CancelledError as exc:
+        return exc
+    except Exception as exc:
+        return exc
+    return None
 
 
 def _validate_preview(package: PortablePackage, preview: ImportPreview) -> None:
