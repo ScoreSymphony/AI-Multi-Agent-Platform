@@ -170,14 +170,21 @@ class AgentTeamTemplateExporter:
                 content=content,
                 template_id=parent_template_id,
             )
-        except Exception as export_error:
-            self._compensate_partial_export(created_template_ids, export_error)
+        # error-boundary: allow-broad-catch=cleanup export must remove partial Template graph
+        except BaseException as export_error:
+            try:
+                self._compensate_partial_export(created_template_ids, export_error)
+            # error-boundary: allow-broad-catch=cleanup cleanup must not replace primary failure
+            except Exception as cleanup_error:
+                export_error.add_note(
+                    f"Agent Team Template cleanup was incomplete: {type(cleanup_error).__name__}"
+                )
             raise
 
     def _compensate_partial_export(
         self,
         created_template_ids: list[str],
-        export_error: Exception,
+        export_error: BaseException,
     ) -> None:
         failures: list[dict[str, JsonValue]] = []
         for template_id in reversed(created_template_ids):
@@ -193,6 +200,7 @@ class AgentTeamTemplateExporter:
                         "error": str(cleanup_error),
                     }
                 )
+            # error-boundary: allow-broad-catch=cleanup continue deleting independent Templates
             except Exception as cleanup_error:
                 failures.append(
                     {
@@ -211,7 +219,6 @@ class AgentTeamTemplateExporter:
                 ),
                 details={
                     "export_error_type": type(export_error).__name__,
-                    "export_error": str(export_error),
                     "cleanup_failures": cleanup_failures,
                 },
             ) from export_error

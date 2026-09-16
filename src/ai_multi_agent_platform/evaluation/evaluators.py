@@ -123,7 +123,7 @@ def _error_result(
         artifact_refs=observation.artifact_refs,
         telemetry_refs=observation.telemetry_refs,
         error_category="evaluator_failure",
-        error_message=str(error),
+        error_message=f"evaluator execution failed ({type(error).__name__})",
     )
 
 
@@ -253,6 +253,7 @@ class SafeEvaluator:
                 case=case,
                 observation=observation,
             )
+        # error-boundary: allow-broad-catch=boundary evaluator result contract contains local faults
         except Exception as exc:
             return _error_result(
                 descriptor=self.descriptor,
@@ -281,6 +282,7 @@ async def evaluate_safely(
         if isawaitable(candidate):
             return await cast(Awaitable[EvaluationResult], candidate)
         return candidate
+    # error-boundary: allow-broad-catch=boundary evaluator result contract contains local faults
     except Exception as exc:
         return _error_result(
             descriptor=evaluator.descriptor,

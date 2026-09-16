@@ -199,7 +199,8 @@ class LocalWorkspaceProvider(WorkspaceProvider):
             self._reject_symlinks(local_root)
             if materialization.access_mode is WorkspaceAccessMode.READ_ONLY:
                 self._make_read_only(local_root)
-        except Exception:
+        # error-boundary: allow-broad-catch=cleanup remove partial local materialization on exit
+        except BaseException:
             self._make_writable(local_root)
             shutil.rmtree(local_root, ignore_errors=True)
             raise

@@ -24,6 +24,7 @@ from ai_multi_agent_platform.workspaces import (
     WorkspaceType,
 )
 
+from ._settlement import settle_awaitable
 from .application import ContextualTemplateHandlerRegistry, TemplateInstantiationContext
 from .models import (
     TemplateConfiguration,
@@ -111,34 +112,38 @@ class WorkspaceStructureTemplateHandler:
                 resources.append(
                     TemplateResourceRef(resource_type="workspace", resource_id=workspace.id)
                 )
-        except Exception as creation_error:
-            failures: list[JsonValue] = []
-            for resource in reversed(resources):
-                try:
-                    await self.provider.compensate_workspace(resource.resource_id)
-                except Exception as compensation_error:
-                    failures.append(
-                        {
-                            "workspace_id": resource.resource_id,
-                            "error_type": type(compensation_error).__name__,
-                            "error": str(compensation_error),
-                        }
-                    )
+        # error-boundary: allow-broad-catch=cleanup handler must settle partial Workspace creation
+        except BaseException as creation_error:
+            failures, settlement_error = await settle_awaitable(self._compensate_created(resources))
             if failures:
-                raise ContractError(
-                    ErrorCode.BACKEND_ERROR,
-                    (
-                        "Workspace Template creation failed and partial creation "
-                        "could not be fully compensated"
-                    ),
-                    details={
-                        "creation_error_type": type(creation_error).__name__,
-                        "creation_error": str(creation_error),
-                        "compensation_failures": failures,
-                    },
-                ) from creation_error
+                creation_error.add_note(
+                    "Workspace Template compensation was incomplete for "
+                    f"{len(failures)} Workspace(s)"
+                )
+            if settlement_error is not None:
+                creation_error.add_note(
+                    f"Workspace Template compensation failed: {type(settlement_error).__name__}"
+                )
             raise
         return tuple(resources)
+
+    async def _compensate_created(
+        self,
+        resources: list[TemplateResourceRef],
+    ) -> list[JsonValue]:
+        failures: list[JsonValue] = []
+        for resource in reversed(resources):
+            try:
+                await self.provider.compensate_workspace(resource.resource_id)
+            # error-boundary: allow-broad-catch=cleanup continue compensating independent Workspaces
+            except Exception as compensation_error:
+                failures.append(
+                    {
+                        "workspace_id": resource.resource_id,
+                        "error_type": type(compensation_error).__name__,
+                    }
+                )
+        return failures
 
 
 @dataclass(slots=True)

@@ -37,6 +37,7 @@ from ai_multi_agent_platform.distributed import (
     JobResultStatus,
     NodeRecord,
     RegistrationRequest,
+    RemoteWorkerTransportError,
     WorkerJobRequest,
     WorkerJobResult,
     WorkerRecord,
@@ -156,7 +157,11 @@ class _LostResultReplyDispatcher:
             artifact_refs=(self._artifact_id,),
         )
         if self.result_calls == 1:
-            raise RuntimeError("simulated lost result reply")
+            raise RemoteWorkerTransportError(
+                "response_timeout",
+                "simulated lost result reply",
+                retryable=True,
+            )
         return result
 
 
@@ -242,7 +247,7 @@ async def _setup(tmp_path: Path) -> _Harness:
         runtime,
     )
     operation = OperationContext(
-        correlation_id="issue-749-lost-reply",
+        correlation_id="lost-reply-recovery",
         owner_type="user",
         owner_id="tester",
         project_id=project_id,

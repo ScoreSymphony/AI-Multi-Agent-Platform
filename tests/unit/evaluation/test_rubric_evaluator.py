@@ -100,7 +100,8 @@ def test_rubric_evaluator_failure_is_contained_as_canonical_error_result() -> No
 
     assert result.outcome is EvaluationOutcome.ERROR
     assert result.error_category == "evaluator_failure"
-    assert "rubric_scores" in (result.error_message or "")
+    assert result.error_message == "evaluator execution failed (ValueError)"
+    assert "rubric_scores" not in result.error_message
     assert result.evaluator.kind is EvaluatorKind.RUBRIC
 
 
