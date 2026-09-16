@@ -22,7 +22,7 @@ def test_live_bifrost_blocks_configured_ssrf_targets_before_connection() -> None
             sentinel_control_url,
         )
     ):
-        pytest.skip("live #859 deployment-level SSRF environment is not configured")
+        pytest.skip("live Bifrost deployment-level SSRF environment is not configured")
 
     assert bifrost_base_url is not None
     assert native_openai_model is not None
@@ -67,7 +67,7 @@ def test_live_bifrost_revalidates_redirect_target_before_connection() -> None:
             sentinel_control_url,
         )
     ):
-        pytest.skip("live #859 redirect SSRF environment is not configured")
+        pytest.skip("live Bifrost redirect SSRF environment is not configured")
 
     assert bifrost_base_url is not None
     assert native_openai_model is not None

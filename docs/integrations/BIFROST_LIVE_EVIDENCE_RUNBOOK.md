@@ -107,7 +107,7 @@ python -m ai_multi_agent_platform.adapters.model_gateway_evaluation_cli \
   --concurrency 8 \
   --warmup-operations 10 \
   --platform-commit "$(git rev-parse HEAD)" \
-  --output artifacts/issue-859-direct-vs-bifrost.json
+  --output artifacts/direct-vs-bifrost.json
 ```
 
 The Bifrost version/revision defaults in this evaluator are the reviewed `transports/v2.1.1` / core `v1.8.6` / `c193745...` pin. Override them only when the actual live target differs and that revision has been reviewed.
@@ -145,7 +145,7 @@ python -m ai_multi_agent_platform.adapters.model_gateway_evaluation_cli \
   --concurrency 8 \
   --warmup-operations 10 \
   --platform-commit "$(git rev-parse HEAD)" \
-  --output artifacts/issue-859-direct-vs-gateways.json
+  --output artifacts/direct-vs-bifrost-vs-litellm.json
 ```
 
 Use identical prompts, operation count, concurrency and warmup settings. If one path uses a materially different downstream deployment, the result is not a gateway-overhead comparison and must be labelled accordingly.

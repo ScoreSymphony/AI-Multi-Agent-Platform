@@ -24,7 +24,7 @@ def test_live_bifrost_revalidates_dns_on_redirect_dial_and_blocks_rebound_loopba
             sentinel_control_url,
         )
     ):
-        pytest.skip("live #859 DNS rebinding environment is not configured")
+        pytest.skip("live Bifrost DNS rebinding environment is not configured")
 
     assert bifrost_base_url is not None
     assert native_openai_model is not None
