@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .definition import Application
 from .models import (
@@ -88,22 +89,26 @@ class ApplicationLifecycleService:
         service_runtimes = {service.runtime for service in request.manifest.services}
         unsupported = service_runtimes - descriptor.supported_service_runtimes
         if unsupported:
+            unsupported_values: list[JsonValue] = [
+                item.value for item in sorted(unsupported, key=lambda item: item.value)
+            ]
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
                 "application runtime does not support all declared service runtimes",
                 details={
                     "runtime_id": runtime_id,
-                    "unsupported_service_runtimes": sorted(item.value for item in unsupported),
+                    "unsupported_service_runtimes": unsupported_values,
                 },
             )
         missing_capabilities = set(request.manifest.runtime_requirements) - descriptor.capabilities
         if missing_capabilities:
+            missing_values: list[JsonValue] = [item for item in sorted(missing_capabilities)]
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
                 "application runtime does not satisfy declared runtime requirements",
                 details={
                     "runtime_id": runtime_id,
-                    "missing_capabilities": sorted(missing_capabilities),
+                    "missing_capabilities": missing_values,
                 },
             )
 
