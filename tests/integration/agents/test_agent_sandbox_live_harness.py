@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
 
-SCRIPT = Path("scripts/benchmarks/issue798_agent_sandbox_live.py")
+SCRIPT = Path("scripts/benchmarks/agent_sandbox_live_evidence.py")
 
 
 def _write_fake_kubectl(
@@ -227,7 +227,7 @@ def test_live_harness_captures_protected_profile_evidence(tmp_path: Path) -> Non
 def test_live_harness_surfaces_unsafe_profile_and_secret_annotation(
     tmp_path: Path,
 ) -> None:
-    canary = "ISSUE798-SYNTHETIC-CANARY"
+    canary = "AGENT-SANDBOX-SYNTHETIC-CANARY"
     kubectl = _write_fake_kubectl(tmp_path, unsafe=True, canary=canary)
     report = _run(tmp_path, kubectl, canary=canary)
 
