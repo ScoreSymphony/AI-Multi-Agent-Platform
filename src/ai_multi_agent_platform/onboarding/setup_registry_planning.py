@@ -13,13 +13,18 @@ from dataclasses import replace
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import RequestContext
+from ai_multi_agent_platform.distribution import DistributionService
+from ai_multi_agent_platform.distribution.control_plane import RegistryCommandHandlers
 from ai_multi_agent_platform.distribution.items import RegistryItem
 from ai_multi_agent_platform.distribution.models import RegistryDependency, version_key
 
+from .component_setup import OnboardingComponentSetupService
 from .components import DiscoveredComponent, SetupProfile
+from .service import OnboardingService
 from .setup_lifecycle import (
     SETUP_SESSION_RESOURCE_ID,
     BrowserFirstSetupService,
+    JsonSetupSessionStore,
     ProvisioningActionKind,
     ProvisioningActionState,
     RegistrySelection,
@@ -31,8 +36,22 @@ from .setup_lifecycle import (
 class DependencyAwareBrowserFirstSetupService(BrowserFirstSetupService):
     """Resolve required Registry dependencies into the persisted setup plan before mutation."""
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        component_setup: OnboardingComponentSetupService,
+        onboarding: OnboardingService,
+        store: JsonSetupSessionStore,
+        *,
+        distribution: DistributionService | None = None,
+        registry_commands: RegistryCommandHandlers | None = None,
+    ) -> None:
+        super().__init__(
+            component_setup,
+            onboarding,
+            store,
+            distribution=distribution,
+            registry_commands=registry_commands,
+        )
         # The base service already serializes mutation of durable setup state. This outer lock also
         # keeps the final-outcome replay check atomic with the delegated provisioning operation.
         self._provision_replay_lock = asyncio.Lock()
