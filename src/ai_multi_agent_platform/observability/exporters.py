@@ -194,6 +194,7 @@ class Telemetry:
         context: TelemetryContext,
         unit: str = "count",
         attributes: dict[str, JsonValue] | None = None,
+        timestamp: datetime | None = None,
     ) -> None:
         safe = self.capture_policy.redact(attributes or {})
         self.exporter.emit_metric(
@@ -203,6 +204,7 @@ class Telemetry:
                 context=context,
                 unit=unit,
                 attributes=safe,
+                timestamp=timestamp or utc_now(),
             )
         )
 

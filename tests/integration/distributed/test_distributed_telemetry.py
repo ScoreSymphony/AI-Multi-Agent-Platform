@@ -136,19 +136,21 @@ def test_scheduler_reservation_and_dispatch_emit_correlated_safe_telemetry() -> 
 def test_heartbeat_and_reconciliation_emit_liveness_and_loss_evidence() -> None:
     runtime, exporter, node, selected, rejected, _ = _stack()
     job = _job()
+    heartbeat_observed_at = BASE + timedelta(seconds=2)
+    reconciliation_observed_at = BASE + timedelta(seconds=15)
 
     async def scenario() -> None:
         runtime.heartbeat(
             Heartbeat(
                 node_id=node.node_id,
                 sequence=1,
-                observed_at=BASE + timedelta(seconds=2),
+                observed_at=heartbeat_observed_at,
                 workers=(selected, rejected),
             )
         )
         await runtime.dispatch(job, now=BASE + timedelta(seconds=3))
         runtime.detach_worker(selected.worker_id)
-        records = await runtime.reconcile(now=BASE + timedelta(seconds=15))
+        records = await runtime.reconcile(now=reconciliation_observed_at)
         assert records[0].state.value == "lost"
         assert records[0].last_error == "worker_unreachable"
 
@@ -166,6 +168,26 @@ def test_heartbeat_and_reconciliation_emit_liveness_and_loss_evidence() -> None:
         "platform.worker.reconciliations",
     } <= metric_names
 
+    heartbeat_metrics = [
+        metric
+        for metric in exporter.metrics
+        if metric.name in {"platform.node.heartbeats", "platform.worker.heartbeats"}
+    ]
+    assert heartbeat_metrics
+    assert all(metric.timestamp == heartbeat_observed_at for metric in heartbeat_metrics)
+
+    node_resource_metrics = [
+        metric
+        for metric in exporter.metrics
+        if metric.name in {"platform.node.cpu_cores_available", "platform.node.ram_available_bytes"}
+        and metric.context.node_id == node.node_id
+    ]
+    assert node_resource_metrics
+    assert {metric.timestamp for metric in node_resource_metrics} == {
+        heartbeat_observed_at,
+        reconciliation_observed_at,
+    }
+
     node_age = [
         metric
         for metric in exporter.metrics
@@ -174,6 +196,13 @@ def test_heartbeat_and_reconciliation_emit_liveness_and_loss_evidence() -> None:
     ]
     assert node_age
     assert node_age[-1].value == 13.0
+    assert node_age[-1].timestamp == reconciliation_observed_at
+
+    reconciliation_metrics = [
+        metric for metric in exporter.metrics if metric.name == "platform.worker.reconciliations"
+    ]
+    assert reconciliation_metrics
+    assert reconciliation_metrics[-1].timestamp == reconciliation_observed_at
 
     reconciled = [entry for entry in exporter.timeline if entry.event_name == "worker.reconciled"]
     assert reconciled

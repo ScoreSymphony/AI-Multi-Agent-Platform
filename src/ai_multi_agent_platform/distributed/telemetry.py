@@ -171,8 +171,9 @@ class DistributedTelemetry:
             1.0,
             context=node_context,
             attributes={"status": node.status.value},
+            timestamp=observed_at,
         )
-        self._node_resources(node, context=node_context)
+        self._node_resources(node, context=node_context, observed_at=observed_at)
         for worker in workers:
             worker_context = TelemetryContext(node_id=node.node_id, worker_id=worker.worker_id)
             self.telemetry.metric(
@@ -183,16 +184,19 @@ class DistributedTelemetry:
                     "status": worker.status.value,
                     "draining": worker.draining,
                 },
+                timestamp=observed_at,
             )
             self.telemetry.metric(
                 "platform.worker.active_jobs",
                 float(worker.active_jobs),
                 context=worker_context,
+                timestamp=observed_at,
             )
             self.telemetry.metric(
                 "platform.worker.concurrency_limit",
                 float(worker.concurrency_limit),
                 context=worker_context,
+                timestamp=observed_at,
             )
         self.telemetry.timeline(
             event_name="node.heartbeat",
@@ -223,8 +227,9 @@ class DistributedTelemetry:
                     "draining": node.draining,
                     "maintenance": node.maintenance,
                 },
+                timestamp=observed_at,
             )
-            self._node_resources(node, context=context)
+            self._node_resources(node, context=context, observed_at=observed_at)
         for worker in workers:
             age = max(0.0, (observed_at - worker.last_heartbeat_at).total_seconds())
             context = TelemetryContext(node_id=worker.node_id, worker_id=worker.worker_id)
@@ -234,16 +239,19 @@ class DistributedTelemetry:
                 context=context,
                 unit="seconds",
                 attributes={"status": worker.status.value, "draining": worker.draining},
+                timestamp=observed_at,
             )
             self.telemetry.metric(
                 "platform.worker.active_jobs",
                 float(worker.active_jobs),
                 context=context,
+                timestamp=observed_at,
             )
             self.telemetry.metric(
                 "platform.worker.concurrency_limit",
                 float(worker.concurrency_limit),
                 context=context,
+                timestamp=observed_at,
             )
 
     def reconciliation(
@@ -268,6 +276,7 @@ class DistributedTelemetry:
             1.0,
             context=context,
             attributes=attributes,
+            timestamp=observed_at,
         )
         self.telemetry.timeline(
             event_name="worker.reconciled",
@@ -287,7 +296,13 @@ class DistributedTelemetry:
             attributes=attributes,
         )
 
-    def _node_resources(self, node: NodeRecord, *, context: TelemetryContext) -> None:
+    def _node_resources(
+        self,
+        node: NodeRecord,
+        *,
+        context: TelemetryContext,
+        observed_at: datetime,
+    ) -> None:
         resources = node.resources
         reporting = resource_reporting_state(node.adapter_metadata)
         accelerator_total = sum(item.memory_total_bytes for item in resources.accelerators)
@@ -344,7 +359,13 @@ class DistributedTelemetry:
         )
         for name, field, value, unit in measurements:
             if reporting.is_reported(field, value):
-                self.telemetry.metric(name, float(value), context=context, unit=unit)
+                self.telemetry.metric(
+                    name,
+                    float(value),
+                    context=context,
+                    unit=unit,
+                    timestamp=observed_at,
+                )
                 continue
             if reporting.is_unavailable(field):
                 self.telemetry.metric(
@@ -356,6 +377,7 @@ class DistributedTelemetry:
                         "resource_key": field,
                         "resource_unit": unit,
                     },
+                    timestamp=observed_at,
                 )
 
         # Keep the pre-existing scheduler-oriented max-single-accelerator gauge explicit.
@@ -371,6 +393,7 @@ class DistributedTelemetry:
                 context=context,
                 unit="bytes",
                 attributes={"aggregation": "max_single_accelerator"},
+                timestamp=observed_at,
             )
 
 
