@@ -26,24 +26,33 @@ and `owner` fields are the source of truth for that distinction.
 
 ## Boundaries that are easy to confuse
 
-### `deployment`, `distributed`, `distribution` and `high_availability`
+### `deployment`, `distributed`, `distribution`, `applications` and `high_availability`
 
-These names are similar but the responsibilities are not interchangeable:
+These names are similar or adjacent in runtime/delivery workflows, but the responsibilities are not
+interchangeable:
 
 - `distributed` is the canonical owner for distributed execution topology: Node, Worker, WorkerJob,
   scheduling, worker transport, distributed runtime and distributed execution state.
 - `deployment` is an operator/composition boundary: self-hosted profiles, process entrypoints,
   configuration wiring, startup/recovery composition and deployment-specific bindings. It may wire a
-  distributed runtime, but it must not redefine Node/Worker/Scheduler semantics.
+  distributed runtime or Application Runtime, but it must not redefine Node/Worker/Scheduler or
+  Application lifecycle semantics.
 - `distribution` is the component registry/catalog domain: discovery, validation, registry items,
-  installation and distribution of platform components. It is unrelated to distributed compute.
+  installation and distribution of platform components. It is unrelated to distributed compute and
+  does not own the desired/observed runtime state of installed Applications.
+- `applications` owns provider-neutral managed external-application definitions, Application
+  Instances, desired/observed lifecycle state, health, logical endpoints and reconciliation. Concrete
+  Docker/Podman/process/Kubernetes/remote-worker implementations remain replaceable backends behind
+  the Application Runtime contract.
 - `high_availability` currently owns Control Plane leadership, coordination leases, fencing and
   failover reconciliation. Those are distributed-runtime concerns, so its target owner is
   `distributed`. New HA behavior should be added under the distributed owner; the existing root
   package is migrated incrementally rather than removed in this issue.
 
 `application_distribution` is also distinct: it owns application build/distribution state and
-release-gate integration, not the general component registry and not distributed execution.
+release-gate integration. It does not own the managed Application runtime lifecycle, general component
+registry or distributed execution. `applications` may consume release/catalog results, placement and
+security facilities, but those integrations do not transfer their canonical ownership.
 
 ### `task_management` and `task_reassignment`
 
@@ -105,6 +114,12 @@ A new top-level package is justified only when all of the following are true:
    responsibility rationale;
 6. any material change to canonical ownership or public compatibility is documented in the relevant
    architecture documentation and, when required, an ADR.
+
+Issue #1173 satisfies that exception for `applications`: independently deployable external
+applications have durable definition/instance state and lifecycle/reconciliation semantics that remain
+meaningful when the concrete runtime backend is replaced. Assigning that authority to
+`application_distribution`, `distribution`, `deployment` or `distributed` would mix distinct state
+lifecycles. ADR 0015 records the resulting ownership decision.
 
 "It keeps this feature in its own folder" is not sufficient justification for a root package.
 Provider-specific, issue-numbered and one-feature-only packages should live below the canonical owner
