@@ -1,6 +1,6 @@
 # Real two-host MessageTransport acceptance
 
-Issue: #388
+Historical provenance: #388
 
 This runbook closes the evidence gap left after the network-capable #35 transport implementation
 landed. It exercises the existing `TcpMessageBroker` / `TcpMessageTransport` adapter and the
@@ -13,6 +13,13 @@ authenticated encrypted transport, result retrieval, Artifact/Evidence reference
 Worker process restart/reconnect with stable canonical Worker identity. The broader private-tunnel,
 registration/heartbeat, scheduler placement, interruption/reconciliation and exposure checks remain
 owned by #562.
+
+The versioned `issue-388` schema/evidence identifiers and the sanitized artifact filenames
+`issue388-first.json`, `issue388-second.json` and `issue388-restart.json` are intentionally retained
+compatibility/provenance identifiers for existing evidence and downstream conformance validation.
+They are not maintained product/runtime naming and must not be used as precedent for new
+issue-number naming. See `docs/quality/TWO_HOST_TRANSPORT_EVIDENCE_COMPATIBILITY.md` for the exact
+compatibility boundary.
 
 ## What counts as acceptance
 
