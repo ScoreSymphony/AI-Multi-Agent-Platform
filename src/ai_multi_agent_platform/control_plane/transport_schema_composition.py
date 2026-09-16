@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from .models import API_VERSION
+from .transport_remaining_schemas import augment_remaining_transport_schemas
 
 
 def preserve_existing_transport_schemas(
@@ -35,7 +36,7 @@ def preserve_existing_transport_schemas(
         if isinstance(baseline, dict) and isinstance(generated, dict):
             _merge_object_schema(generated, baseline)
 
-    return specification
+    return augment_remaining_transport_schemas(specification)
 
 
 def _merge_object_schema(target: dict[str, Any], baseline: dict[str, Any]) -> None:
