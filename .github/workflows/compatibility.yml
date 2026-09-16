@@ -49,9 +49,9 @@ jobs:
       - name: Start hermetic OpenAI-compatible upstream fixture
         shell: bash
         run: |
-          python scripts/ci/issue859_mock_openai.py --port 18000 \
-            > "$GITHUB_WORKSPACE/.issue859-mock-openai.log" 2>&1 &
-          echo $! > "$GITHUB_WORKSPACE/.issue859-mock-openai.pid"
+          python scripts/ci/bifrost_mock_openai.py --port 18000 \
+            > "$GITHUB_WORKSPACE/.bifrost-mock-openai.log" 2>&1 &
+          echo $! > "$GITHUB_WORKSPACE/.bifrost-mock-openai.pid"
           python - <<'PY'
           import json
           import time
@@ -66,14 +66,14 @@ jobs:
               except Exception:
                   time.sleep(0.25)
           else:
-              raise SystemExit("issue #859 mock OpenAI endpoint did not become healthy")
+              raise SystemExit("Bifrost mock OpenAI endpoint did not become healthy")
           PY
       - name: Create file-only Bifrost configuration
         shell: bash
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/.issue859-bifrost-data"
+          mkdir -p "$GITHUB_WORKSPACE/.bifrost-evaluation-data"
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
-          cat > "$GITHUB_WORKSPACE/.issue859-bifrost-data/config.json" <<'JSON'
+          cat > "$GITHUB_WORKSPACE/.bifrost-evaluation-data/config.json" <<'JSON'
           {
             "encryption_key": "env.BIFROST_ENCRYPTION_KEY",
             "client": {
@@ -81,11 +81,11 @@ jobs:
               "enable_logging": false
             },
             "providers": {
-              "issue859-local": {
+              "bifrost-local": {
                 "keys": [
                   {
-                    "name": "issue859-fixture-key",
-                    "value": "env.ISSUE859_PROVIDER_KEY",
+                    "name": "bifrost-fixture-key",
+                    "value": "env.BIFROST_FIXTURE_PROVIDER_KEY",
                     "models": ["fixture-model"],
                     "weight": 1.0
                   }
@@ -121,14 +121,14 @@ jobs:
           docker image inspect \
             --format '{{index .RepoDigests 0}}' \
             maximhq/bifrost:v2.1.1 \
-            > "$GITHUB_WORKSPACE/artifacts/issue-859-bifrost-image-digest.txt"
+            > "$GITHUB_WORKSPACE/artifacts/bifrost-image-digest.txt"
           docker run --rm -d \
-            --name issue859-bifrost \
+            --name bifrost-evaluation-gateway \
             --network host \
-            -v "$GITHUB_WORKSPACE/.issue859-bifrost-data:/app/data" \
+            -v "$GITHUB_WORKSPACE/.bifrost-evaluation-data:/app/data" \
             -e APP_HOST=0.0.0.0 \
             -e BIFROST_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef \
-            -e ISSUE859_PROVIDER_KEY=ci-fixture-provider-key \
+            -e BIFROST_FIXTURE_PROVIDER_KEY=ci-fixture-provider-key \
             maximhq/bifrost:v2.1.1
           python - <<'PY'
           import json
@@ -137,7 +137,7 @@ jobs:
           import urllib.request
 
           payload = json.dumps({
-              "model": "issue859-local/fixture-model",
+              "model": "bifrost-local/fixture-model",
               "messages": [{"role": "user", "content": "ready"}],
           }).encode("utf-8")
           for _ in range(120):
@@ -162,7 +162,7 @@ jobs:
           BIFROST_EVAL_DIRECT_BASE_URL: http://127.0.0.1:18000/v1
           BIFROST_EVAL_DIRECT_MODEL: fixture-model
           BIFROST_EVAL_BIFROST_BASE_URL: http://127.0.0.1:8080/v1
-          BIFROST_EVAL_BIFROST_MODEL: issue859-local/fixture-model
+          BIFROST_EVAL_BIFROST_MODEL: bifrost-local/fixture-model
           BIFROST_EVAL_OPERATION_COUNT: "6"
           BIFROST_EVAL_CONCURRENCY: "2"
           BIFROST_EVAL_WARMUP: "1"
@@ -178,27 +178,27 @@ jobs:
       - name: Emit non-representative CI gateway smoke evidence
         run: |
           python -m ai_multi_agent_platform.adapters.model_gateway_evaluation_cli \
-            --canonical-model-id issue-859-ci-model \
-            --downstream-deployment-label issue-859-ci-mock-openai \
+            --canonical-model-id bifrost-ci-model \
+            --downstream-deployment-label bifrost-ci-mock-openai \
             --direct-base-url http://127.0.0.1:18000/v1 \
             --direct-model fixture-model \
-            --direct-runtime-version issue859-mock-openai-v1 \
+            --direct-runtime-version bifrost-mock-openai-v1 \
             --bifrost-base-url http://127.0.0.1:8080/v1 \
-            --bifrost-model issue859-local/fixture-model \
+            --bifrost-model bifrost-local/fixture-model \
             --operation-count 10 \
             --concurrency 2 \
             --warmup-operations 1 \
             --platform-commit "$GITHUB_SHA" \
-            --output artifacts/issue-859-ci-direct-vs-bifrost.json
+            --output artifacts/bifrost-ci-direct-vs-bifrost.json
       - name: Verify gateway diagnostics do not expose synthetic secrets
         shell: bash
         run: |
-          docker logs issue859-bifrost > "$RUNNER_TEMP/issue859-bifrost.log" 2>&1
-          if grep -Fq "ci-fixture-provider-key" "$RUNNER_TEMP/issue859-bifrost.log"; then
+          docker logs bifrost-evaluation-gateway > "$RUNNER_TEMP/bifrost-evaluation-gateway.log" 2>&1
+          if grep -Fq "ci-fixture-provider-key" "$RUNNER_TEMP/bifrost-evaluation-gateway.log"; then
             echo "Bifrost runtime logs exposed the synthetic provider credential" >&2
             exit 1
           fi
-          if grep -Fq "synthetic-secret=must-not-leak" "$RUNNER_TEMP/issue859-bifrost.log"; then
+          if grep -Fq "synthetic-secret=must-not-leak" "$RUNNER_TEMP/bifrost-evaluation-gateway.log"; then
             echo "Bifrost runtime logs exposed the synthetic upstream secret marker" >&2
             exit 1
           fi
@@ -206,19 +206,19 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: issue-859-bifrost-ci-smoke
-          path: artifacts/issue-859-*
+          name: bifrost-ci-smoke
+          path: artifacts/bifrost-*
           if-no-files-found: warn
       - name: Show Bifrost startup diagnostics on failure
         if: failure()
-        run: docker logs issue859-bifrost || true
+        run: docker logs bifrost-evaluation-gateway || true
       - name: Stop Bifrost and mock upstream
         if: always()
         shell: bash
         run: |
-          docker stop issue859-bifrost 2>/dev/null || true
-          if [ -f "$GITHUB_WORKSPACE/.issue859-mock-openai.pid" ]; then
-            kill "$(cat "$GITHUB_WORKSPACE/.issue859-mock-openai.pid")" 2>/dev/null || true
+          docker stop bifrost-evaluation-gateway 2>/dev/null || true
+          if [ -f "$GITHUB_WORKSPACE/.bifrost-mock-openai.pid" ]; then
+            kill "$(cat "$GITHUB_WORKSPACE/.bifrost-mock-openai.pid")" 2>/dev/null || true
           fi
       - name: Run Bifrost DNS rebinding runtime gate
         run: bash scripts/ci/bifrost_dns_rebinding_gate.sh
