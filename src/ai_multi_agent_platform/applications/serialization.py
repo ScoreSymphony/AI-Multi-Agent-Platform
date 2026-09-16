@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -310,10 +311,9 @@ def _integer(value: Any, field_name: str) -> int:
     return value
 
 
-def _datetime(value: Any, field_name: str):
+def _datetime(value: Any, field_name: str) -> datetime:
     text = _string(value, field_name)
     try:
-        parsed = __import__("datetime").datetime.datetime.fromisoformat(text)
+        return datetime.fromisoformat(text)
     except ValueError as exc:
         raise ValueError(f"{field_name} must be an ISO-8601 datetime") from exc
-    return parsed
