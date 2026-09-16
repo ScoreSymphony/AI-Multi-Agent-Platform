@@ -1,4 +1,4 @@
-"""Canonical evaluation and regression value types for issue #19."""
+"""Canonical evaluation and regression value types."""
 
 from __future__ import annotations
 

@@ -20,7 +20,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 _SUITE = _REPOSITORY_ROOT / "config" / "evaluation-suite.planning-deterministic.json"
 
 
-def test_checked_in_planning_suite_runs_through_issue_19_evaluation_runtime() -> None:
+def test_checked_in_planning_suite_runs_through_canonical_evaluation_runtime() -> None:
     async def scenario() -> None:
         suite = load_evaluation_suite(_SUITE)
         assert suite.suite_id == "suite.planning-deterministic"

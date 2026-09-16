@@ -1,6 +1,6 @@
 """Completion hardening helpers for canonical evaluation execution.
 
-This module keeps issue #19 completion rules additive: non-output behavior becomes
+These helpers keep completion hardening additive: non-output behavior becomes
 assertable without duplicating it into executor-private data, resource limits receive
 explicit deterministic semantics, and configuration snapshots can be enriched and
 validated without weakening their canonical identity.

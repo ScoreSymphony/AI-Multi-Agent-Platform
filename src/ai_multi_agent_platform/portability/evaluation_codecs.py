@@ -1,4 +1,4 @@
-"""Portable codec for exact versioned EvaluationSuite assets from issue #19."""
+"""Portable codec for exact versioned EvaluationSuite assets."""
 
 from __future__ import annotations
 
