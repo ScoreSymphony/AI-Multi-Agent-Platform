@@ -106,7 +106,7 @@ jobs:
           npm --version
           python --version
       - name: Install frontend dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Install browser E2E backend
         run: python -m pip install -e "..[server]"
       - name: Typecheck frontend
@@ -116,9 +116,14 @@ jobs:
       - name: Build frontend
         run: npm run build
       - name: Install Chromium regression runner
-        run: npm install --no-save --package-lock=false playwright@1.55.0
+        shell: bash
+        run: |
+          runner_dir="$RUNNER_TEMP/playwright"
+          npm install --prefix "$runner_dir" --no-audit --no-fund --no-save --package-lock=false playwright@1.55.0
+          ln -s "$runner_dir/node_modules/playwright" node_modules/playwright
+          ln -s "$runner_dir/node_modules/playwright-core" node_modules/playwright-core
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: '"$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps chromium'
       - name: Run real browser session regression
         run: node tests/browserSession.browser.mjs
       - name: Run clean browser-first deployment regression
