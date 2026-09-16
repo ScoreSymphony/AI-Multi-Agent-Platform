@@ -1,4 +1,4 @@
-"""Provider-neutral #502 repository-intelligence evaluation through the #19 framework.
+"""Provider-neutral repository-intelligence evaluation through the #19 framework.
 
 The executor deliberately evaluates the canonical capability boundary rather than a concrete
 indexer. The same versioned EvaluationCase can therefore run against the deterministic baseline
@@ -43,7 +43,7 @@ _IMMUTABLE_REVISION_LENGTHS = frozenset({40, 64})
 
 
 class RepositoryIntelligenceEvaluationCaseExecutor:
-    """Execute one #502 capability case against a replaceable provider.
+    """Execute one repository-intelligence capability case against a replaceable provider.
 
     ``EvaluationCase.input_template`` must contain ``operation`` and ``arguments``. Source-derived
     operations are additionally checked for canonical repository/revision/provider provenance and
