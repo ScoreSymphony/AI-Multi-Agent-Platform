@@ -132,6 +132,54 @@ def test_issue_reference_must_be_secondary_provenance_in_docstring() -> None:
     assert source_violations("src/package/reference.py", good) == ()
 
 
+def test_compact_issue_numbered_semantic_strings_are_rejected() -> None:
+    source = """
+provider_id = "issue388-control"
+topic = "issue-388.retry"
+source_component = "issue_388_tests"
+"""
+
+    violations = source_violations("tests/integration/test_transport.py", source)
+
+    assert len(violations) == 3
+    assert all("embeds a GitHub issue number" in violation for violation in violations)
+
+
+def test_internal_issue_reference_in_semantic_message_is_rejected() -> None:
+    source = 'message = "optional #388 transport evidence failed"\n'
+
+    violations = source_violations("scripts/acceptance/transport.py", source)
+
+    assert len(violations) == 1
+    assert "embeds a GitHub issue number" in violations[0]
+
+
+def test_documented_legacy_evidence_contract_strings_are_allowed() -> None:
+    source = """
+transport_schema = "ai-multi-agent-platform/issue-388-two-host-transport/v1"
+restart_schema = "ai-multi-agent-platform/issue-388-two-host-restart/v1"
+evidence_ref = "evidence:issue388-two-host"
+network_schema = "ai-multi-agent-platform/issue-562-network-probe/v1"
+phase_schema = "ai-multi-agent-platform/issue-562-platform-phase/v1"
+report_schema = "ai-multi-agent-platform/issue-562-two-vps-private-tunnel/v1"
+evidence_lineage = "issue562:real-two-vps-private-tunnel-report"
+"""
+
+    assert source_violations("scripts/acceptance/evidence_contract.py", source) == ()
+
+
+def test_legacy_compatibility_allowlist_does_not_cover_arbitrary_issue_strings() -> None:
+    source = """
+provider_id = "issue388-new-provider"
+evidence_ref = "evidence:issue388-unrelated"
+schema = "ai-multi-agent-platform/issue-562-unrelated/v1"
+"""
+
+    violations = source_violations("scripts/acceptance/new_contract.py", source)
+
+    assert len(violations) == 3
+
+
 def test_runtime_strings_with_domain_issue_numbers_are_not_mistaken_for_provenance() -> None:
     source = 'message = "Repository issue #42 is open"\n'
 
