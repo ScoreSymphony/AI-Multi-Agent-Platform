@@ -208,7 +208,7 @@ def test_worker_compacts_local_staging_and_state_paths(tmp_path: Path) -> None:
         assert isinstance(prepared, str)
         incoming = tuple((worker_root / ".remote-workspace-incoming").iterdir())
         assert len(incoming) == 1
-        assert len(incoming[0].name) == 32
+        assert len(incoming[0].name) == 20
         assert incoming[0].name != prepared
 
         await store.put_chunk(

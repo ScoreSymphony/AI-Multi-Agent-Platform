@@ -70,9 +70,17 @@ def _workspace_path_token(workspace_id: str, snapshot_id: str) -> str:
 def _materialization_path_token(materialization_ref: str) -> str:
     _validate_opaque(materialization_ref, "materialization_ref")
     digest = hashlib.sha256(materialization_ref.encode("utf-8")).hexdigest()
-    # Materialization refs remain canonical transport identities; only Worker-local staging
-    # and state filenames are compacted to retain Windows path budget.
+    # Materialization refs remain canonical transport identities; only Worker-local state
+    # filenames are compacted to retain Windows path budget.
     return digest[:32]
+
+
+def _staging_path_token(materialization_ref: str) -> str:
+    _validate_opaque(materialization_ref, "materialization_ref")
+    digest = hashlib.sha256(materialization_ref.encode("utf-8")).hexdigest()
+    # Incoming transfers are transient and never become restart identity. 80 bits keeps collision
+    # risk negligible while reserving additional path budget on classic MAX_PATH Windows hosts.
+    return digest[:20]
 
 
 class WorkerWorkspaceMaterializationStore:
@@ -119,7 +127,7 @@ class WorkerWorkspaceMaterializationStore:
                 cache_hit=True,
             )
 
-        incoming_root = self._incoming_root / _materialization_path_token(materialization_ref)
+        incoming_root = self._incoming_root / _staging_path_token(materialization_ref)
         async with self._lock:
             existing = self._transfers.get(materialization_ref)
             if existing is not None:
@@ -165,9 +173,9 @@ class WorkerWorkspaceMaterializationStore:
             raise RegistryError("workspace transfer chunk exceeds configured size")
         if chunk_index < total_chunks - 1 and len(data) != transfer.chunk_bytes:
             raise RegistryError("non-terminal workspace transfer chunk has invalid size")
-        chunk_root = transfer.incoming_root / "chunks" / _entry_token(entry)
+        chunk_root = transfer.incoming_root / "c" / _entry_token(entry)
         chunk_root.mkdir(parents=True, exist_ok=True)
-        destination = chunk_root / f"{chunk_index:08d}.chunk"
+        destination = chunk_root / f"{chunk_index:08d}.c"
         if destination.exists():
             existing = await asyncio.to_thread(destination.read_bytes)
             if existing != data:
@@ -180,7 +188,7 @@ class WorkerWorkspaceMaterializationStore:
             transfer = self._transfer(materialization_ref)
         except RegistryError:
             return await asyncio.to_thread(self._completed_receipt, materialization_ref)
-        files_root = transfer.incoming_root / "files"
+        files_root = transfer.incoming_root / "f"
         await asyncio.to_thread(self._reset_directory, files_root)
         for entry in transfer.manifest:
             destination = self._safe_target(files_root, entry.relative_path)
@@ -190,9 +198,9 @@ class WorkerWorkspaceMaterializationStore:
                 (entry.size_bytes + transfer.chunk_bytes - 1) // transfer.chunk_bytes,
             )
             data = bytearray()
-            chunk_root = transfer.incoming_root / "chunks" / _entry_token(entry)
+            chunk_root = transfer.incoming_root / "c" / _entry_token(entry)
             for index in range(total_chunks):
-                chunk = chunk_root / f"{index:08d}.chunk"
+                chunk = chunk_root / f"{index:08d}.c"
                 if not chunk.exists():
                     raise RegistryError(
                         f"workspace transfer is missing a chunk for {entry.relative_path}"
