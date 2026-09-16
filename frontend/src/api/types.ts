@@ -62,7 +62,7 @@ export interface Page<T> {
 /**
  * Frontend query-builder model. Array fields are intentionally mapped to the
  * canonical comma-separated OpenAPI query parameters by `toSearchQuery()`.
- * Wire response DTOs and scalar query semantics come from generated OpenAPI types.
+ * It is not a second wire DTO; scalar enum semantics come from generated OpenAPI.
  */
 export interface SearchRequest {
   q?: GeneratedSearchQueryParameters["q"];
@@ -76,15 +76,6 @@ export interface SearchRequest {
   providers?: string[];
   updated_after?: GeneratedSearchQueryParameters["updated_after"];
   updated_before?: GeneratedSearchQueryParameters["updated_before"];
-  priorities?: string[];
-  due_after?: GeneratedSearchQueryParameters["due_after"];
-  due_before?: GeneratedSearchQueryParameters["due_before"];
-  assignment_state?: GeneratedSearchQueryParameters["assignment_state"];
-  responsible_id?: GeneratedSearchQueryParameters["responsible_id"];
-  agent_assignment_id?: GeneratedSearchQueryParameters["agent_assignment_id"];
-  blocked?: GeneratedSearchQueryParameters["blocked"];
-  overdue?: GeneratedSearchQueryParameters["overdue"];
-  dependency_id?: GeneratedSearchQueryParameters["dependency_id"];
   mode?: SearchMode;
   limit?: GeneratedSearchQueryParameters["limit"];
   cursor?: GeneratedSearchQueryParameters["cursor"];
