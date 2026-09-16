@@ -47,15 +47,23 @@ class InMemoryApplicationRepository(ApplicationRepository):
     def save_application(self, application: Application) -> Application:
         key = (application.application_id, application.version)
         current = self._applications.get(key)
-        if current is not None and current != application:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "application definition is immutable for an existing application/version",
-                details={
-                    "application_id": application.application_id,
-                    "version": application.version,
-                },
+        if current is not None:
+            same_definition = (
+                current.manifest == application.manifest
+                and current.runtime_id == application.runtime_id
+                and current.source_ref == application.source_ref
+                and dict(current.provenance) == dict(application.provenance)
             )
+            if not same_definition:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "application definition is immutable for an existing application/version",
+                    details={
+                        "application_id": application.application_id,
+                        "version": application.version,
+                    },
+                )
+            return current
         self._applications[key] = application
         return application
 
@@ -79,16 +87,26 @@ class InMemoryApplicationRepository(ApplicationRepository):
 
     def save_instance(self, instance: ApplicationInstance) -> ApplicationInstance:
         current = self._instances.get(instance.instance_id)
-        if current is not None and instance.revision < current.revision:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "application instance revision must not move backwards",
-                details={
-                    "instance_id": instance.instance_id,
-                    "current_revision": current.revision,
-                    "proposed_revision": instance.revision,
-                },
-            )
+        if current is not None:
+            if instance.revision < current.revision:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "application instance revision must not move backwards",
+                    details={
+                        "instance_id": instance.instance_id,
+                        "current_revision": current.revision,
+                        "proposed_revision": instance.revision,
+                    },
+                )
+            if instance.revision == current.revision and instance != current:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "application instance updates require a new revision",
+                    details={
+                        "instance_id": instance.instance_id,
+                        "revision": instance.revision,
+                    },
+                )
         self._instances[instance.instance_id] = instance
         return instance
 
