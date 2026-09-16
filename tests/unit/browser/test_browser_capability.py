@@ -111,7 +111,11 @@ class _Handler(BaseHTTPRequestHandler):
 class _FixtureServer:
     def __init__(self) -> None:
         self.server = _FixtureHTTPServer(("127.0.0.1", 0), _Handler)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread = threading.Thread(
+            target=self.server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
 
     def __enter__(self) -> _FixtureServer:
         self.thread.start()

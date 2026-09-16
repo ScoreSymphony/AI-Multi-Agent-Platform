@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -43,12 +45,12 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-async def _campaign(tmp_path: Path, name: str, *, host_label: str = "reference-a") -> Path:
-    output_dir = tmp_path / name
+async def _run_campaign(root: Path, name: str) -> Path:
+    output_dir = root / name
     runner = ReferenceHostCampaignRunner(
         output_dir=output_dir,
-        work_dir=tmp_path / f"{name}-work",
-        host_label=host_label,
+        work_dir=root / f"{name}-work",
+        host_label="reference-a",
         platform_commit=COMMIT,
         work_dir_mode="explicit",
     )
@@ -56,10 +58,43 @@ async def _campaign(tmp_path: Path, name: str, *, host_label: str = "reference-a
     return output_dir
 
 
-@pytest.mark.asyncio
-async def test_reproducibility_analyzer_observes_same_host_variability(tmp_path: Path) -> None:
-    first = await _campaign(tmp_path, "run-1")
-    second = await _campaign(tmp_path, "run-2")
+@pytest.fixture(scope="module")
+def campaign_templates(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
+    """Generate the expensive independent campaign evidence once for this module."""
+
+    root = tmp_path_factory.mktemp("reference-host-reproducibility")
+
+    async def generate() -> tuple[Path, Path]:
+        first = await _run_campaign(root, "template-1")
+        second = await _run_campaign(root, "template-2")
+        return first, second
+
+    return asyncio.run(generate())
+
+
+def _campaign_copy(
+    tmp_path: Path,
+    name: str,
+    template: Path,
+    *,
+    host_label: str | None = None,
+) -> Path:
+    output_dir = tmp_path / name
+    shutil.copytree(template, output_dir)
+    if host_label is not None:
+        campaign_path = output_dir / "campaign.json"
+        campaign = _json_object(campaign_path)
+        campaign["host_label"] = host_label
+        _write_json(campaign_path, campaign)
+    return output_dir
+
+
+def test_reproducibility_analyzer_observes_same_host_variability(
+    tmp_path: Path,
+    campaign_templates: tuple[Path, Path],
+) -> None:
+    first = _campaign_copy(tmp_path, "run-1", campaign_templates[0])
+    second = _campaign_copy(tmp_path, "run-2", campaign_templates[1])
 
     report = ReferenceHostReproducibilityAnalyzer().analyze(
         campaign_dirs=(first, second),
@@ -82,9 +117,11 @@ async def test_reproducibility_analyzer_observes_same_host_variability(tmp_path:
     assert report.endurance_variability.p95_latency_ms.sample_count == 2
 
 
-@pytest.mark.asyncio
-async def test_single_campaign_does_not_claim_variability(tmp_path: Path) -> None:
-    campaign = await _campaign(tmp_path, "run-1")
+def test_single_campaign_does_not_claim_variability(
+    tmp_path: Path,
+    campaign_templates: tuple[Path, Path],
+) -> None:
+    campaign = _campaign_copy(tmp_path, "run-1", campaign_templates[0])
 
     report = ReferenceHostReproducibilityAnalyzer().analyze(campaign_dirs=(campaign,))
 
@@ -98,10 +135,12 @@ async def test_single_campaign_does_not_claim_variability(tmp_path: Path) -> Non
     )
 
 
-@pytest.mark.asyncio
-async def test_reproducibility_cli_writes_schema_valid_report(tmp_path: Path) -> None:
-    first = await _campaign(tmp_path, "run-1")
-    second = await _campaign(tmp_path, "run-2")
+def test_reproducibility_cli_writes_schema_valid_report(
+    tmp_path: Path,
+    campaign_templates: tuple[Path, Path],
+) -> None:
+    first = _campaign_copy(tmp_path, "run-1", campaign_templates[0])
+    second = _campaign_copy(tmp_path, "run-2", campaign_templates[1])
     output = tmp_path / "reproducibility.json"
 
     assert (
@@ -120,18 +159,22 @@ async def test_reproducibility_cli_writes_schema_valid_report(tmp_path: Path) ->
     Draft202012Validator(_json_object(REPORT_SCHEMA)).validate(_json_object(output))
 
 
-@pytest.mark.asyncio
-async def test_reproducibility_rejects_different_host_labels(tmp_path: Path) -> None:
-    first = await _campaign(tmp_path, "run-1", host_label="reference-a")
-    second = await _campaign(tmp_path, "run-2", host_label="reference-b")
+def test_reproducibility_rejects_different_host_labels(
+    tmp_path: Path,
+    campaign_templates: tuple[Path, Path],
+) -> None:
+    first = _campaign_copy(tmp_path, "run-1", campaign_templates[0], host_label="reference-a")
+    second = _campaign_copy(tmp_path, "run-2", campaign_templates[1], host_label="reference-b")
 
     with pytest.raises(ValueError, match="incomparable host_label"):
         ReferenceHostReproducibilityAnalyzer().analyze(campaign_dirs=(first, second))
 
 
-@pytest.mark.asyncio
-async def test_reproducibility_rejects_tampered_envelope_evidence(tmp_path: Path) -> None:
-    campaign = await _campaign(tmp_path, "run-1")
+def test_reproducibility_rejects_tampered_envelope_evidence(
+    tmp_path: Path,
+    campaign_templates: tuple[Path, Path],
+) -> None:
+    campaign = _campaign_copy(tmp_path, "run-1", campaign_templates[0])
     envelope_path = campaign / "operating-envelope.json"
     envelope = _json_object(envelope_path)
     envelope["generated_at"] = "2026-09-10T00:00:00+00:00"
@@ -141,9 +184,11 @@ async def test_reproducibility_rejects_tampered_envelope_evidence(tmp_path: Path
         ReferenceHostReproducibilityAnalyzer().analyze(campaign_dirs=(campaign,))
 
 
-@pytest.mark.asyncio
-async def test_reproducibility_rejects_duplicate_campaign_directory(tmp_path: Path) -> None:
-    campaign = await _campaign(tmp_path, "run-1")
+def test_reproducibility_rejects_duplicate_campaign_directory(
+    tmp_path: Path,
+    campaign_templates: tuple[Path, Path],
+) -> None:
+    campaign = _campaign_copy(tmp_path, "run-1", campaign_templates[0])
 
     with pytest.raises(ValueError, match="campaign directories must be unique"):
         ReferenceHostReproducibilityAnalyzer().analyze(campaign_dirs=(campaign, campaign))
