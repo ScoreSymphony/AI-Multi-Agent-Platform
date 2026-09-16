@@ -38,7 +38,7 @@ These checks are also required for every pull request to `main`:
 - `Analyze (python)`
 - `Analyze (javascript-typescript)`
 
-The CodeQL checks stay in the dedicated `codeql.yml` workflow so GitHub Advanced Security keeps the established workflow/job configuration identity. CodeQL runs on pull requests to `main` and on its scheduled scan; the redundant post-merge `push` copy is intentionally omitted because the exact merge candidate has already passed the required CodeQL checks.
+The CodeQL checks stay in the dedicated `codeql.yml` workflow so GitHub Advanced Security keeps the established workflow/job configuration identity. CodeQL runs on pull requests to `main`, on pushes to `main`, on its scheduled scan, and by manual dispatch. The default-branch push is an intentional security exception to routine post-merge deduplication: it makes GitHub code scanning re-analyze the actual default-branch revision immediately after merge so resolved or newly introduced default-branch alerts do not wait for the next scheduled scan.
 
 ### Optional compatibility checks
 
@@ -70,15 +70,17 @@ Examples include:
 
 ## Routine check-count budget
 
-The default branch should not accumulate every specialized validation lane on every merge. For an ordinary `main` push, the target is **at most 10 check runs** with the current workflow inventory.
+The default branch should not accumulate every specialized validation lane on every merge. For an ordinary `main` push, the target is **at most 10 routine, non-security check runs** with the current workflow inventory.
 
-With the current layout, an ordinary `main` push has a baseline of **9 check runs**:
+With the current layout, an ordinary `main` push has a routine baseline of **9 check runs**:
 
 - `ci.yml`: 3 core checks (`test`, `single-node-install-smoke`, `frontend`);
 - `benchmark-smoke.yml`: 3 benchmark checks;
 - `performance-extended-smoke.yml`: 3 extended performance checks.
 
-The former duplicate post-merge surface is intentionally absent: CodeQL contributes 0 routine push checks, full conformance/acceptance contributes 0, repository-quality contributes 0, and optional compatibility contributes 0. Those responsibilities remain covered on pull requests, scheduled runs, manual runs, or specialized path-scoped workflows.
+CodeQL is tracked separately from that routine budget because it is default-branch security validation rather than duplicate product/conformance validation. Its two language jobs add **2 security checks**, so an ordinary `main` push currently produces **11 total checks: 9 routine + 2 CodeQL security checks**.
+
+The other former duplicate post-merge surfaces remain intentionally absent: full conformance/acceptance contributes 0 routine push checks, repository-quality contributes 0, and optional compatibility contributes 0. Those responsibilities remain covered on pull requests, scheduled runs, manual runs, or specialized path-scoped workflows.
 
 For ordinary pull requests that do not touch a specialized path-filtered integration surface, the intended baseline is **10 check runs**:
 
@@ -90,7 +92,7 @@ For ordinary pull requests that do not touch a specialized path-filtered integra
 
 Issue validation, upstream discovery and Actions-history cleanup live in workflows that do not subscribe to `pull_request`, so they do not create skipped check entries on ordinary PRs. Manual maintenance jobs must not appear as skipped checks on ordinary pull requests.
 
-The check-count budget is an execution-surface policy, not a license to delete coverage. Expensive or specialized coverage should move to path-scoped pull requests, scheduled runs, manual validation, or release-specific workflows rather than disappearing.
+The routine check-count budget is an execution-surface policy, not a license to delete coverage. Expensive or specialized product validation should move to path-scoped pull requests, scheduled runs, manual validation, or release-specific workflows rather than disappearing. Security validation that must refresh the default-branch security state may be tracked separately when that exception is explicit and covered by governance tests.
 
 ## Forge retirement
 
