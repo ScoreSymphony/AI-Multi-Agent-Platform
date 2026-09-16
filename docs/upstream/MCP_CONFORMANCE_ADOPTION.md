@@ -17,7 +17,7 @@
 
 - [x] The required capability is stated precisely: wire-level evidence for MCP revisions claimed by the platform.
 - [x] The upstream provides official client/server conformance scenarios tied to MCP specification requirements.
-- [x] Platform-specific evidence aggregation remains local because upstream does not know #46 or the platform's compatibility model.
+- [x] Platform-specific evidence aggregation remains local because upstream does not know the platform-wide conformance aggregator or the platform's compatibility model.
 
 ### Architecture fit
 

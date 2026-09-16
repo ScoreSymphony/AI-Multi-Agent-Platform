@@ -181,4 +181,4 @@ The following remain deliberately outside this first slice:
 - authentication/session/revocation continuity against shared persistence;
 - Worker re-registration and Automation single-fire over real process failover;
 - multi-host/private-network acceptance evidence;
-- optional #46 conformance result for the complete profile.
+- optional platform-conformance result for the complete profile.

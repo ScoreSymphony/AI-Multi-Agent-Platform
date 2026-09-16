@@ -3,7 +3,7 @@
 ## Version policy
 
 - `0.1.0` is the first usable single-node prototype and requires the M2 acceptance gate in #252.
-- `1.0.0` is the operational baseline and requires the full conformance gate in #46.
+- `1.0.0` is the operational baseline and requires the full platform-conformance gate, historically tracked under issue #46.
 - Patch versions contain backward-compatible fixes and must not intentionally break documented public surfaces except for unavoidable security/correctness remediation.
 - While the repository remains `0.x`, a minor version may contain a documented incompatible change to an explicitly Beta or Experimental surface under [`FEATURE_CLASSIFICATION.md`](FEATURE_CLASSIFICATION.md), but any stricter surface-specific API/schema/format major-version or migration mechanism still applies; Stable surfaces remain protected by their own major-version/deprecation rules.
 - At and after `1.0.0`, minor versions remain backward-compatible for the Stable public compatibility set. Beta/Experimental surfaces remain outside that Stable compatibility set and may evolve only under their explicitly documented maturity rules and any stricter surface-specific versioning mechanism.
@@ -27,7 +27,7 @@ The release/update system itself is no longer only policy documentation. The mer
 
 The remaining #42 operationalization is implemented through deterministic `platform-release generate`, restart-persistent reviewed advisory discovery, explicit schema-v2 browser types and an optional provider-neutral scheduled Git discovery workflow. Discovery remains advisory: it cannot mutate production pins, approve or merge changes, deploy a release or replace #41 as the authority for persisted upgrade/version state.
 
-The `1.0.0` operational target remains gated by #46 full platform conformance. Current open implementation work may add capabilities before that point, but compatibility must not be claimed beyond the profiles that have explicit evidence.
+The `1.0.0` operational target remains gated by full platform conformance; issue #46 is retained as the historical tracking record for that gate. Current open implementation work may add capabilities before that point, but compatibility must not be claimed beyond the profiles that have explicit evidence.
 
 ## Release candidate checklist
 

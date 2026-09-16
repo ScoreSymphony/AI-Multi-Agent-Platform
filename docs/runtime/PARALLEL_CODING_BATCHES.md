@@ -119,9 +119,9 @@ The #872 implementation now includes:
 - dependency-cycle rejection and dependency-topological integration ordering;
 - hard-dependency versus serialization-only failure semantics;
 - #19 deterministic evaluation coverage for safe parallelism and regressions;
-- #46 release conformance scenario `Z`, including three coding workstreams plus a canonical fourth Integration Step and a conflicting-workstream repair path;
+- platform-conformance release scenario `Z`, including three coding workstreams plus a canonical fourth Integration Step and a conflicting-workstream repair path;
 - focused #872 restart, authorization, verification, observability, orchestration and safety regression tests.
 
-The #46 E2E path proves that two independent coding Steps can run concurrently while a dependent Step waits for canonical predecessor acceptance. Once all accepted predecessor Steps complete, #384 activates a fourth Integration Step. The Integration AgentRun is bound to isolated integration provenance, #82 repository evidence supplies the combined revision, and that revision must then pass fresh combined validation and exact #15 authorization before merge readiness. A separate conflict scenario proves that overlapping outputs remain blocked until a bounded canonical repair produces a newly verified revision and the repaired integration passes fresh combined validation.
+The platform-conformance E2E path proves that two independent coding Steps can run concurrently while a dependent Step waits for canonical predecessor acceptance. Once all accepted predecessor Steps complete, #384 activates a fourth Integration Step. The Integration AgentRun is bound to isolated integration provenance, #82 repository evidence supplies the combined revision, and that revision must then pass fresh combined validation and exact #15 authorization before merge readiness. A separate conflict scenario proves that overlapping outputs remain blocked until a bounded canonical repair produces a newly verified revision and the repaired integration passes fresh combined validation.
 
 All productive side effects continue to invoke the existing #37/#82/#33/#86/#15 authorities; #872 introduces no replacement lifecycle or repository authority.
