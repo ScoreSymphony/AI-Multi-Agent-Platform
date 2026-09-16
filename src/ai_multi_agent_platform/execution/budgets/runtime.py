@@ -3,14 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
-from typing import cast
+from typing import Any
 
-from ai_multi_agent_platform.capabilities import (
-    CapabilityInvocation,
-    CapabilityInvocationResult,
-    EgressCapabilityInvoker,
-)
-from ai_multi_agent_platform.capabilities.invocation import CapabilityInvoker
 from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
@@ -19,11 +13,6 @@ from ai_multi_agent_platform.contracts import (
     ModelResponse,
 )
 from ai_multi_agent_platform.contracts.model_stream import ModelStreamEvent
-from ai_multi_agent_platform.models import (
-    CanonicalModelRequest,
-    CanonicalModelResponse,
-    ModelRuntime,
-)
 
 from .models import BudgetActionKind, BudgetAdmissionDecision, BudgetDimension
 from .service import TaskBudgetAdmission
@@ -32,13 +21,18 @@ from .service import TaskBudgetAdmission
 class TaskBudgetModelRuntime:
     """Decorate the canonical ModelRuntime so autonomous callers cannot skip #902 admission."""
 
-    def __init__(self, inner: ModelRuntime, budgets: TaskBudgetAdmission) -> None:
+    def __init__(self, inner: Any, budgets: TaskBudgetAdmission) -> None:
         self._inner = inner
         self._budgets = budgets
         # Preserve the operational attributes consumed by existing composition code.
         self.registry = inner.registry
         self.router = inner.router
         self.egress_gate = inner.egress_gate
+
+    def __getattr__(self, name: str) -> Any:
+        """Keep the decorator transparent for operational attributes owned by the inner runtime."""
+
+        return getattr(self._inner, name)
 
     async def select(self, request: ModelRequest):  # type: ignore[no-untyped-def]
         return await self._inner.select(request)
@@ -77,7 +71,7 @@ class TaskBudgetModelRuntime:
 
         return iterate()
 
-    async def generate_canonical(self, request: CanonicalModelRequest) -> CanonicalModelResponse:
+    async def generate_canonical(self, request: Any) -> Any:
         decision = await self._admit(
             task_id=request.task_id,
             run_id=request.run_id,
@@ -95,7 +89,7 @@ class TaskBudgetModelRuntime:
         await self._reconcile(decision)
         return response
 
-    def stream_canonical(self, request: CanonicalModelRequest) -> AsyncIterator[ModelStreamEvent]:
+    def stream_canonical(self, request: Any) -> AsyncIterator[ModelStreamEvent]:
         async def iterate() -> AsyncIterator[ModelStreamEvent]:
             decision = await self._admit(
                 task_id=request.task_id,
@@ -164,13 +158,18 @@ class TaskBudgetModelRuntime:
 class TaskBudgetCapabilityInvoker:
     """Decorate the canonical CapabilityInvoker at the provider-execution boundary."""
 
-    def __init__(self, inner: CapabilityInvoker, budgets: TaskBudgetAdmission) -> None:
+    def __init__(self, inner: Any, budgets: TaskBudgetAdmission) -> None:
         self._inner = inner
         self._budgets = budgets
         # Preserve the operational egress surface consumed by public deployment composition/tests.
         self.egress_gate = getattr(inner, "egress_gate", None)
 
-    async def invoke(self, request: CapabilityInvocation) -> CapabilityInvocationResult:
+    def __getattr__(self, name: str) -> Any:
+        """Delegate non-budget operational seams to the canonical wrapped invoker."""
+
+        return getattr(self._inner, name)
+
+    async def invoke(self, request: Any) -> Any:
         task_id = request.trace.task_id
         if task_id is None:
             return await self._inner.invoke(request)
@@ -197,16 +196,16 @@ class TaskBudgetCapabilityInvoker:
         return result
 
 
-def as_model_runtime(runtime: TaskBudgetModelRuntime) -> ModelRuntime:
-    """Narrow compatibility cast for composition sites typed to the concrete runtime class."""
+def as_model_runtime(runtime: TaskBudgetModelRuntime) -> Any:
+    """Compatibility seam for composition sites typed to the concrete model runtime."""
 
-    return cast(ModelRuntime, runtime)
+    return runtime
 
 
-def as_capability_invoker(invoker: TaskBudgetCapabilityInvoker) -> EgressCapabilityInvoker:
-    """Narrow compatibility cast for the public egress-enforced Agent invoker annotation."""
+def as_capability_invoker(invoker: TaskBudgetCapabilityInvoker) -> Any:
+    """Compatibility seam for the public egress-enforced Agent invoker annotation."""
 
-    return cast(EgressCapabilityInvoker, invoker)
+    return invoker
 
 
 def _requirement_ref(requirements: Mapping[str, JsonValue], name: str) -> str | None:
