@@ -13,7 +13,10 @@ from ai_multi_agent_platform.adapters.onboarding_openai_compatible import (
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
 from ai_multi_agent_platform.control_plane import ActorContext, RequestContext
-from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
+from ai_multi_agent_platform.deployment import SingleNodeConfig
+from ai_multi_agent_platform.deployment.product_composition import (
+    build_product_single_node_deployment,
+)
 from ai_multi_agent_platform.onboarding import FIRST_RUN_RESOURCE_ID
 from ai_multi_agent_platform.onboarding.multi_agent_first_run import (
     ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
@@ -96,7 +99,7 @@ def _model_payload() -> dict[str, JsonValue]:
 
 
 def _build(data_dir: Path, transport: MultiAgentFirstRunTransport):
-    return build_single_node_deployment(
+    return build_product_single_node_deployment(
         SingleNodeConfig(data_dir=data_dir, secure_cookie=False),
         onboarding_model_adapters=(OpenAICompatibleOnboardingAdapter(transport=transport),),
     )
