@@ -354,7 +354,7 @@ def _suite() -> EvaluationSuite:
     )
 
 
-def test_context_bundle_scenarios_run_through_issue_19_evaluation_framework() -> None:
+def test_context_bundle_scenarios_run_through_canonical_evaluation_framework() -> None:
     runner = EvaluationRunner(
         repository=InMemoryEvaluationRepository(),
         executor=_ContextEvaluationExecutor(),

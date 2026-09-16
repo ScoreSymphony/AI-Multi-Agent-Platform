@@ -1,7 +1,7 @@
 """Product-facing Evaluation assets, targets, snapshot enrichment and fixtures.
 
-Issue #19 keeps the canonical evaluator/runtime contracts generic. This module turns
-those contracts into deployable configuration without depending on portability or a
+The canonical evaluator/runtime contracts remain generic. This module turns those
+contracts into deployable configuration without depending on portability or a
 registry/marketplace: suites and policies are explicit files under one deployment
 asset directory, agent targets bind to the normal Agent execution metadata contract,
 and fixture directories become canonical Workspace file evidence before each attempt.

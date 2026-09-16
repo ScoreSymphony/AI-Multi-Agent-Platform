@@ -207,7 +207,7 @@ def _run_quality(
     return asyncio.run(scenario())
 
 
-def test_validated_parallel_batch_passes_deterministic_issue_19_quality_suite() -> None:
+def test_validated_parallel_batch_passes_deterministic_quality_suite() -> None:
     coordinator, _store, batch_id, integration_id = _validated_independent_batch()
 
     summary = _run_quality(coordinator, batch_id, integration_id)
@@ -230,7 +230,7 @@ def test_validated_parallel_batch_passes_deterministic_issue_19_quality_suite() 
     assert metrics["unresolved_conflict_rate"].value == 0.0
 
 
-def test_stale_target_is_reported_as_issue_19_regression_evidence() -> None:
+def test_stale_target_is_reported_as_regression_evidence() -> None:
     coordinator, store, batch_id, integration_id = _validated_independent_batch()
     batch = coordinator.get(batch_id)
     candidate = batch.integration_candidate(integration_id)
@@ -260,7 +260,7 @@ def test_stale_target_is_reported_as_issue_19_regression_evidence() -> None:
     assert candidate.validation is not None
 
 
-def test_verified_repair_passes_issue_19_repair_quality_fixture() -> None:
+def test_verified_repair_passes_repair_quality_fixture() -> None:
     owner = OwnerRef(type="user", id="issue-872-evaluation-repair")
     task_id = new_id("task")
     plan_id = new_id("plan")
