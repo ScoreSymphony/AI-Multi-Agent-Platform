@@ -171,7 +171,7 @@ The runtime matrix recorded `blocked_before_connection: true`, zero hits on the 
 - Teredo;
 - public-source redirect to loopback.
 
-The remaining deployment-level edge case is DNS rebinding. The first dedicated rebinding job failed before the probe because the controlled DNS fixture answered only the test name and suppressed unrelated Bifrost DNS queries. That was a harness defect, not a positive or negative Bifrost security result. The fixture now forwards all non-target DNS packets to Docker's embedded resolver while retaining deterministic first-public/then-loopback answers for `issue859-rebind.test`.
+The remaining deployment-level edge case is DNS rebinding. The first dedicated rebinding job failed before the probe because the controlled DNS fixture answered only the test name and suppressed unrelated Bifrost DNS queries. That was a harness defect, not a positive or negative Bifrost security result. The fixture now forwards all non-target DNS packets to Docker's embedded resolver while retaining deterministic first-public/then-loopback answers for `bifrost-rebind.test`.
 
 Encoded/alternative host syntax is only applicable where the enabled Bifrost URL parser accepts the representation; unsupported syntaxes are not treated as successful security probes.
 
