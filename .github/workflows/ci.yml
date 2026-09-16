@@ -32,7 +32,7 @@ jobs:
       - name: Mypy
         run: mypy
       - name: Fast unit tests
-        run: pytest tests/unit
+        run: pytest -m unit tests/unit
       - name: Verify fast-layer regression detection
         run: python scripts/ci/verify_fast_unit_regression_detection.py
       - name: Non-unit pytest suite
