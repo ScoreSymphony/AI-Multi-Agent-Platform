@@ -46,10 +46,10 @@ async def _snapshot(
 
 def _invocation(tool_ref: str, arguments: dict[str, JsonValue]) -> ToolInvocation:
     return ToolInvocation(
-        invocation_id=f"issue-502-{tool_ref}",
+        invocation_id=f"repository-intelligence-{tool_ref}",
         tool_ref=tool_ref,
         arguments=arguments,
-        context=OperationContext(correlation_id="issue-502"),
+        context=OperationContext(correlation_id="repository-intelligence-foundation"),
     )
 
 
