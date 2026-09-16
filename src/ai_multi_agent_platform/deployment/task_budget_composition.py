@@ -19,7 +19,11 @@ from ai_multi_agent_platform.execution.budgets import (
 
 from .config import SingleNodeConfig
 from .durable_connectors import SingleNodeDeployment as DurableSingleNodeDeployment
-from .task_budget_bindings import TaskBudgetCoordinationBindings, TaskBudgetRepairRuntime
+from .task_budget_bindings import (
+    TaskBudgetCoordinationBindings,
+    TaskBudgetRepairRuntime,
+    as_verification_repair_runtime,
+)
 
 
 @dataclass(slots=True)
@@ -80,9 +84,11 @@ def extend_single_node_with_task_budgets(
 
     repair_runtime = getattr(base.automatic_reviewer, "_repair_runtime", None)
     if repair_runtime is not None:
-        base.automatic_reviewer._repair_runtime = TaskBudgetRepairRuntime(  # noqa: SLF001
-            repair_runtime,
-            task_budgets,
+        base.automatic_reviewer._repair_runtime = as_verification_repair_runtime(  # noqa: SLF001
+            TaskBudgetRepairRuntime(
+                repair_runtime,
+                task_budgets,
+            )
         )
 
     base_values: dict[str, Any] = {
