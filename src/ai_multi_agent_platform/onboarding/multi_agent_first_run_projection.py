@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ai_multi_agent_platform.agents import AgentRevisionRef
+from ai_multi_agent_platform.agents.execution_profile import decode_agent_step_execution_binding
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .multi_agent_first_run_support import FIRST_RUN_WORKFLOW
@@ -26,6 +27,7 @@ async def project_first_run_result(
     goal_artifact_id: str,
 ) -> dict[str, JsonValue]:
     state = coordination.get_plan(plan_id)
+    task = await kernel.get_task(task_id)
     steps: list[dict[str, JsonValue]] = []
     result_ids: list[str] = []
     artifact_ids: list[str] = [goal_artifact_id]
@@ -34,7 +36,7 @@ async def project_first_run_result(
 
     for step in state.steps:
         record = coordination.get_step_record(step.id)
-        projected = await _project_step(kernel, task_id, step, record)
+        projected = await _project_step(kernel, task_id, task.task.metadata, step, record)
         steps.append(projected)
         result_ids.extend(_string_list(projected.get("result_ids")))
         artifact_ids.extend(_string_list(projected.get("artifact_ids")))
@@ -53,7 +55,6 @@ async def project_first_run_result(
         (item for item in verification_items if item.get("is_final_result_review") is True),
         None,
     )
-    task = await kernel.get_task(task_id)
     return {
         "id": task_id,
         "type": "multi_agent_first_run_result",
@@ -92,6 +93,7 @@ async def project_first_run_result(
 async def _project_step(
     kernel: Any,
     task_id: str,
+    task_metadata: Any,
     step: Any,
     record: Any,
 ) -> dict[str, JsonValue]:
@@ -104,7 +106,7 @@ async def _project_step(
         run_result_ids = list(run.result_ids)
         run_artifact_ids = list(run.artifact_ids)
         run_status = run.status.value
-    assignment = step.assignment
+    assignment = decode_agent_step_execution_binding(task_metadata, step.id)
     return {
         "step_id": step.id,
         "title": step.title,
