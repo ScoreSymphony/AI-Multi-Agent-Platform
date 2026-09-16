@@ -11,6 +11,12 @@ from ai_multi_agent_platform.execution.budgets import (
     TaskBudgetLimit,
     TaskBudgetPolicy,
 )
+from ai_multi_agent_platform.execution.budgets.control_plane import (
+    TASK_BUDGET_COLLECTION,
+    TASK_BUDGET_CONFIGURE_COMMAND,
+    TASK_BUDGET_MODULE,
+    TASK_BUDGET_REVISE_COMMAND,
+)
 from ai_multi_agent_platform.execution.budgets.models import utc_now
 
 
@@ -23,6 +29,14 @@ def test_public_single_node_profile_persists_task_budget_authority_across_restar
         first = build_single_node_deployment(config)
 
         assert first.accounting_service is not None
+        assert TASK_BUDGET_MODULE in first.control_plane.registered_modules
+        assert first.control_plane.resource_owner(TASK_BUDGET_COLLECTION) == TASK_BUDGET_MODULE
+        assert first.control_plane.command_owner(TASK_BUDGET_CONFIGURE_COMMAND) == TASK_BUDGET_MODULE
+        assert first.control_plane.command_owner(TASK_BUDGET_REVISE_COMMAND) == TASK_BUDGET_MODULE
+        assert TASK_BUDGET_COLLECTION in first.control_plane.extension_collections
+        assert TASK_BUDGET_CONFIGURE_COMMAND in first.control_plane.extension_commands
+        assert TASK_BUDGET_REVISE_COMMAND in first.control_plane.extension_commands
+
         await first.task_budgets.put_policy(
             TaskBudgetPolicy(
                 task_id=task_id,
