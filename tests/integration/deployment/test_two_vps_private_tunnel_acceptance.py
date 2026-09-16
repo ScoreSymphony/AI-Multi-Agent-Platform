@@ -239,6 +239,14 @@ def _load_acceptance_module():
     return module
 
 
+def test_acceptance_schema_lineage_remains_backward_compatible() -> None:
+    module = _load_acceptance_module()
+
+    assert module.PROBE_SCHEMA == "ai-multi-agent-platform/issue-562-network-probe/v1"
+    assert module.PHASE_SCHEMA == "ai-multi-agent-platform/issue-562-platform-phase/v1"
+    assert module.REPORT_SCHEMA == "ai-multi-agent-platform/issue-562-two-vps-private-tunnel/v1"
+
+
 def test_finalizer_accepts_complete_sanitized_real_host_evidence(tmp_path: Path) -> None:
     paths = _materialize_evidence(tmp_path)
     report_path = tmp_path / "two-vps.json"

@@ -1,4 +1,6 @@
-# Issue #562 reference only. Do not commit real keys or provider addresses.
+# Reference WireGuard configuration for the real two-VPS private-tunnel profile.
+# Historical context: issue #562 introduced this repository-side validation profile.
+# Do not commit real keys or provider addresses.
 # Host A: Control Plane / scheduler / broker side.
 [Interface]
 Address = 10.203.0.1/30
