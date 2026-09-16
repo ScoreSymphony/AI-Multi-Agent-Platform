@@ -4,7 +4,7 @@ This document records the **Observability / Telemetry / Control Plane / API / AS
 Lifecycle / Notifications / HA** slice of issue #983. The slice was originally audited
 from `main` commit `b54708094062730424a8621bbd85e0906189bb19` on 2026-09-16 and was
 cleanly reconstructed and revalidated on `main` commit
-`adfab2d43b94931e5066a7c16d0752d3b6d5fe9b` after the parallel #983 slices landed.
+`1414aa0ce5fa7da927befb38921288f6d87dce30` after the parallel #983 slices landed.
 No merge of `main` into the feature branch was used.
 
 The repository-wide inventory, generic BaseException/cancellation/settlement audit,
