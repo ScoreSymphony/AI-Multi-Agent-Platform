@@ -1,0 +1,81 @@
+/* Route-scoped dashboard polish for the canonical platform overview. */
+
+main[data-route="/"] > .stack {
+  gap: 1.45rem;
+}
+
+main[data-route="/"] .page-header {
+  position: relative;
+  overflow: hidden;
+  padding: 1.35rem 1.4rem 1.45rem;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 88% 8%, rgba(56, 189, 248, .09), transparent 34%),
+    linear-gradient(180deg, rgba(23, 31, 45, .66), rgba(17, 23, 34, .82));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .11);
+}
+
+main[data-route="/"] .page-header h1 {
+  max-width: none;
+  margin-top: .16rem;
+  font-size: clamp(2rem, 3.4vw, 3rem);
+}
+
+main[data-route="/"] .page-header p:not(.eyebrow) {
+  max-width: 62ch;
+}
+
+main[data-route="/"] > .stack > .metrics {
+  grid-template-columns: 1.15fr repeat(3, minmax(0, 1fr));
+}
+
+main[data-route="/"] > .stack > .metrics > .metric:first-child {
+  border-color: #36536d;
+  background:
+    linear-gradient(180deg, rgba(23, 48, 66, .6), rgba(17, 23, 34, .94));
+}
+
+main[data-route="/"] > .stack > .metrics > .metric:first-child strong {
+  color: var(--accent);
+}
+
+main[data-route="/"] > .stack > .grid-two {
+  align-items: stretch;
+  gap: 1.15rem;
+}
+
+main[data-route="/"] > .stack > .grid-two > .card {
+  min-width: 0;
+  min-height: 250px;
+}
+
+main[data-route="/"] > .stack > .grid-two > .card h2 {
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+
+main[data-route="/"] > .stack > .grid-two > .card .table-wrap {
+  margin-top: -.1rem;
+}
+
+@media (max-width: 1180px) {
+  main[data-route="/"] > .stack > .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  main[data-route="/"] .page-header {
+    padding: 1.05rem;
+    border-radius: 11px;
+  }
+
+  main[data-route="/"] > .stack > .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  main[data-route="/"] > .stack > .grid-two > .card {
+    min-height: 0;
+  }
+}
