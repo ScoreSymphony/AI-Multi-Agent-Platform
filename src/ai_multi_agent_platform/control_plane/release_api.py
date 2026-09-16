@@ -4,17 +4,30 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, cast
+from uuid import uuid4
 
+from ai_multi_agent_platform.contracts.errors import ContractError
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .extensions import ControlPlaneModule, ControlPlaneRoute
-from .http import HTTPRequest, HTTPResponse
-from .models import API_VERSION
+from .http import (
+    ASGIReceive,
+    ASGISend,
+    HTTPRequest,
+    HTTPResponse,
+    _decode_asgi_headers,
+    _header,
+    _send_response,
+    _send_sse_error,
+)
+from .models import API_VERSION, APIException
 from .module_registry import install_control_plane_modules
+from .northbound_errors import api_exception_for_boundary, log_unexpected_boundary_error
 from .task_project_reassignment import (
     AuthenticatedControlPlaneHTTP as _CurrentAuthenticatedControlPlaneHTTP,
 )
-from .task_project_reassignment import ControlPlane, ControlPlaneASGI
+from .task_project_reassignment import ControlPlane
+from .task_project_reassignment import ControlPlaneASGI as _CurrentControlPlaneASGI
 from .task_project_reassignment import ControlPlaneHTTP as _CurrentControlPlaneHTTP
 from .task_project_reassignment import build_openapi as _build_current_openapi
 from .transport_contract_schemas import augment_transport_schemas
@@ -26,6 +39,10 @@ if TYPE_CHECKING:
 
 RELEASE_STATUS_PATH = f"/api/{API_VERSION}/release/status"
 RELEASE_STATUS_MODULE = "release-status"
+
+
+class _HTTPDisconnect(Exception):
+    """Private control-flow signal for a client that has left before a response exists."""
 
 
 def _runtime_release_operator() -> ReleaseOperatorService:
@@ -121,7 +138,12 @@ def _augment_generated_transport_contract(specification: dict[str, Any]) -> dict
 
 
 class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
-    """Expose release metadata through an explicitly owned special route."""
+    """Expose release metadata through an explicitly owned special route.
+
+    This is also the current public HTTP façade, so it owns the final ordinary
+    ``Exception`` containment point. Process-control signals derive from
+    ``BaseException`` and therefore continue to propagate.
+    """
 
     def __init__(
         self,
@@ -140,27 +162,55 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
         return self._release_operator
 
     async def handle(self, request: HTTPRequest) -> HTTPResponse:
-        response = await super().handle(request)
-        if response.status != 200 or not isinstance(response.body, dict):
+        request_id = _header(request.headers, "x-request-id") or f"request_{uuid4()}"
+        correlation_id = _header(request.headers, "x-correlation-id") or request_id
+        boundary_headers = dict(request.headers)
+        boundary_headers["x-request-id"] = request_id
+        boundary_headers["x-correlation-id"] = correlation_id
+        boundary_request = HTTPRequest(
+            method=request.method,
+            path=request.path,
+            headers=boundary_headers,
+            query=request.query,
+            body=request.body,
+            trusted_actor=request.trusted_actor,
+        )
+        try:
+            response = await super().handle(boundary_request)
+            if response.status != 200 or not isinstance(response.body, dict):
+                return response
+            if request.method != "GET":
+                return response
+            normalized_path = request.path.rstrip("/")
+            if normalized_path == f"/api/{API_VERSION}":
+                return HTTPResponse(
+                    status=response.status,
+                    body=_augment_root_manifest(response.body),
+                    headers=dict(response.headers),
+                )
+            if normalized_path == f"/api/{API_VERSION}/openapi.json":
+                specification = _filter_extension_discovery(self._control_plane, response.body)
+                _augment_generated_transport_contract(cast(dict[str, Any], specification))
+                return HTTPResponse(
+                    status=response.status,
+                    body=specification,
+                    headers=dict(response.headers),
+                )
             return response
-        if request.method != "GET":
-            return response
-        normalized_path = request.path.rstrip("/")
-        if normalized_path == f"/api/{API_VERSION}":
-            return HTTPResponse(
-                status=response.status,
-                body=_augment_root_manifest(response.body),
-                headers=dict(response.headers),
+        # error-boundary: allow-broad-catch=boundary public Control Plane HTTP containment
+        except Exception as exc:
+            if not isinstance(exc, (ContractError, APIException)):
+                log_unexpected_boundary_error(
+                    exc,
+                    boundary="control-plane-http",
+                    request_id=request_id,
+                    correlation_id=correlation_id,
+                )
+            return self._error_response(
+                api_exception_for_boundary(exc),
+                request_id,
+                correlation_id,
             )
-        if normalized_path == f"/api/{API_VERSION}/openapi.json":
-            specification = _filter_extension_discovery(self._control_plane, response.body)
-            _augment_generated_transport_contract(cast(dict[str, Any], specification))
-            return HTTPResponse(
-                status=response.status,
-                body=specification,
-                headers=dict(response.headers),
-            )
-        return response
 
 
 class AuthenticatedControlPlaneHTTP(_CurrentAuthenticatedControlPlaneHTTP):
@@ -183,6 +233,82 @@ class AuthenticatedControlPlaneHTTP(_CurrentAuthenticatedControlPlaneHTTP):
     @property
     def release_operator(self) -> ReleaseOperatorService:
         return self._release_status_http.release_operator
+
+
+class ControlPlaneASGI:
+    """Outermost public ASGI containment around the current composed application.
+
+    Ordinary HTTP errors are returned through the same canonical envelope as direct
+    ``ControlPlaneHTTP`` calls. SSE failures that occur after response start are
+    terminated with the canonical ``platform.error`` event. A failed ASGI ``send``
+    is never retried as an API error, and client disconnect is not converted to 5xx.
+    """
+
+    def __init__(self, http: Any) -> None:
+        self._http = http
+        self._inner = _CurrentControlPlaneASGI(http)
+
+    async def __call__(
+        self,
+        scope: dict[str, Any],
+        receive: ASGIReceive,
+        send: ASGISend,
+    ) -> None:
+        if scope.get("type") != "http":
+            await self._inner(scope, receive, send)
+            return
+
+        headers = _decode_asgi_headers(scope.get("headers", []))
+        request_id = headers.get("x-request-id") or f"request_{uuid4()}"
+        correlation_id = headers.get("x-correlation-id") or request_id
+        started = False
+        event_stream = False
+        send_failed = False
+
+        async def disconnect_aware_receive() -> dict[str, Any]:
+            message = await receive()
+            if message.get("type") == "http.disconnect":
+                raise _HTTPDisconnect
+            return message
+
+        async def tracked_send(message: dict[str, Any]) -> None:
+            nonlocal started, event_stream, send_failed
+            try:
+                await send(message)
+            except Exception:
+                send_failed = True
+                raise
+            if message.get("type") != "http.response.start":
+                return
+            started = True
+            response_headers = _decode_asgi_headers(message.get("headers", []))
+            event_stream = response_headers.get("content-type", "").startswith("text/event-stream")
+
+        try:
+            await self._inner(scope, disconnect_aware_receive, tracked_send)
+        except _HTTPDisconnect:
+            return
+        # error-boundary: allow-broad-catch=boundary public ASGI containment
+        except Exception as exc:
+            if send_failed:
+                raise
+            if not isinstance(exc, (ContractError, APIException)):
+                log_unexpected_boundary_error(
+                    exc,
+                    boundary="control-plane-asgi",
+                    request_id=request_id,
+                    correlation_id=correlation_id,
+                )
+            error = api_exception_for_boundary(exc)
+            if started:
+                if event_stream:
+                    await _send_sse_error(error, request_id, correlation_id, send)
+                    return
+                raise
+            await _send_response(
+                ControlPlaneHTTP._error_response(error, request_id, correlation_id),
+                send,
+            )
 
 
 def _augment_openapi(specification: dict[str, Any]) -> None:

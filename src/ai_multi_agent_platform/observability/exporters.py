@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Lock
@@ -146,16 +147,29 @@ class SpanHandle:
 
 
 class Telemetry:
-    """Small instrumentation facade shared by kernel, executors and later domains."""
+    """Small instrumentation facade shared by kernel, executors and later domains.
+
+    Export is fail-open by default because observability is derived state and must
+    not become lifecycle authority. Explicitly strict exporters retain their
+    historical fail-fast behavior, and callers may override that choice with
+    ``strict_exporter_errors`` for diagnostics/tests.
+    """
 
     def __init__(
         self,
         exporter: ObservabilityExporter | None = None,
         *,
         capture_policy: CapturePolicy | None = None,
+        strict_exporter_errors: bool | None = None,
     ) -> None:
         self.exporter = exporter or NoOpExporter()
         self.capture_policy = capture_policy or CapturePolicy()
+        self.strict_exporter_errors = (
+            bool(getattr(self.exporter, "strict", False))
+            if strict_exporter_errors is None
+            else strict_exporter_errors
+        )
+        self.last_export_error: str | None = None
         self._anchors: dict[tuple[str, str], SpanHandle] = {}
         self._lock = Lock()
 
@@ -173,18 +187,17 @@ class Telemetry:
         capture_kind: CaptureKind = CaptureKind.GENERIC,
     ) -> None:
         safe = self.capture_policy.redact(attributes or {}, kind=capture_kind)
-        self.exporter.emit_log(
-            StructuredLog(
-                severity=severity,
-                component=component,
-                event_name=event_name,
-                context=context,
-                outcome=outcome,
-                failure=failure,
-                duration_seconds=duration_seconds,
-                attributes=safe,
-            )
+        record = StructuredLog(
+            severity=severity,
+            component=component,
+            event_name=event_name,
+            context=context,
+            outcome=outcome,
+            failure=failure,
+            duration_seconds=duration_seconds,
+            attributes=safe,
         )
+        self._emit(lambda: self.exporter.emit_log(record))
 
     def metric(
         self,
@@ -197,16 +210,15 @@ class Telemetry:
         timestamp: datetime | None = None,
     ) -> None:
         safe = self.capture_policy.redact(attributes or {})
-        self.exporter.emit_metric(
-            MetricRecord(
-                name=name,
-                value=value,
-                context=context,
-                unit=unit,
-                attributes=safe,
-                timestamp=timestamp or utc_now(),
-            )
+        record = MetricRecord(
+            name=name,
+            value=value,
+            context=context,
+            unit=unit,
+            attributes=safe,
+            timestamp=timestamp or utc_now(),
         )
+        self._emit(lambda: self.exporter.emit_metric(record))
 
     def timeline(
         self,
@@ -221,18 +233,17 @@ class Telemetry:
         attributes: dict[str, JsonValue] | None = None,
     ) -> None:
         safe = self.capture_policy.redact(attributes or {})
-        self.exporter.emit_timeline(
-            TimelineEntry(
-                event_name=event_name,
-                component=component,
-                context=context,
-                timestamp=timestamp or utc_now(),
-                outcome=outcome,
-                duration_seconds=duration_seconds,
-                failure=failure,
-                attributes=safe,
-            )
+        record = TimelineEntry(
+            event_name=event_name,
+            component=component,
+            context=context,
+            timestamp=timestamp or utc_now(),
+            outcome=outcome,
+            duration_seconds=duration_seconds,
+            failure=failure,
+            attributes=safe,
         )
+        self._emit(lambda: self.exporter.emit_timeline(record))
 
     def start_span(
         self,
@@ -289,7 +300,7 @@ class Telemetry:
             failure=failure,
             attributes=safe,
         )
-        self.exporter.emit_span(record)
+        self._emit(lambda: self.exporter.emit_span(record))
         return record
 
     def set_anchor(self, scope: str, identifier: str, handle: SpanHandle) -> None:
@@ -305,6 +316,15 @@ class Telemetry:
     def pop_anchor(self, scope: str, identifier: str) -> SpanHandle | None:
         with self._lock:
             return self._anchors.pop((scope, identifier), None)
+
+    def _emit(self, action: Callable[[], None]) -> None:
+        try:
+            action()
+        # error-boundary: allow-broad-catch=cleanup telemetry exporter is derived/best-effort state
+        except Exception as exc:
+            self.last_export_error = type(exc).__name__
+            if self.strict_exporter_errors:
+                raise
 
     @staticmethod
     def new_trace_id() -> str:

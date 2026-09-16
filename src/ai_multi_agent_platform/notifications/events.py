@@ -48,9 +48,19 @@ class NotificationProjectingEventProvider(EventProvider):
         await self._inner.publish(event)
         try:
             await self._notifications.project_event(event)
+        # error-boundary: allow-broad-catch=cleanup secondary notification projection
         except Exception as exc:
-            if self._projection_failure_sink is not None:
-                await self._projection_failure_sink(event, exc)
+            await self._report_projection_failure(event, exc)
+
+    async def _report_projection_failure(self, event: PlatformEvent, error: Exception) -> None:
+        sink = self._projection_failure_sink
+        if sink is None:
+            return
+        try:
+            await sink(event, error)
+        # error-boundary: allow-broad-catch=cleanup secondary failure reporting
+        except Exception:
+            return
 
     async def read(
         self,

@@ -28,6 +28,7 @@ from .http import (
     _send_sse_error,
 )
 from .models import API_VERSION, APIException, RequestContext, api_exception_from_contract
+from .northbound_errors import safe_lifespan_failure_message
 from .notifications_authorized_composition import (
     ControlPlane as _BaseControlPlane,
 )
@@ -159,31 +160,61 @@ class ControlPlaneASGI:
                     await control_plane.start_automation_runtime()
                     automation_started = True
                     await control_plane.start_notification_runtime()
-                except Exception as exc:
+                # error-boundary: allow-broad-catch=cleanup partial startup settlement
+                except BaseException as exc:
+                    cleanup_error: Exception | None = None
                     if automation_started:
                         try:
                             await control_plane.stop_automation_runtime()
-                        except Exception:
-                            pass
-                    await send({"type": "lifespan.startup.failed", "message": str(exc)})
+                        # error-boundary: allow-broad-catch=cleanup startup rollback failure
+                        except Exception as rollback_exc:
+                            cleanup_error = rollback_exc
+                    if not isinstance(exc, Exception):
+                        raise
+                    await send(
+                        {
+                            "type": "lifespan.startup.failed",
+                            "message": safe_lifespan_failure_message(
+                                "notification runtime startup",
+                                exc,
+                                cleanup_error=cleanup_error,
+                            ),
+                        }
+                    )
                     return
                 await send({"type": "lifespan.startup.complete"})
                 continue
             if message_type == "lifespan.shutdown":
-                failures: list[Exception] = []
+                failures: list[tuple[str, BaseException]] = []
                 try:
                     await control_plane.stop_notification_runtime()
-                except Exception as exc:
-                    failures.append(exc)
+                # error-boundary: allow-broad-catch=cleanup settle notification shutdown
+                except BaseException as exc:
+                    failures.append(("notification runtime shutdown", exc))
                 try:
                     await control_plane.stop_automation_runtime()
-                except Exception as exc:
-                    failures.append(exc)
-                if failures:
+                # error-boundary: allow-broad-catch=cleanup settle automation shutdown
+                except BaseException as exc:
+                    failures.append(("automation runtime shutdown", exc))
+                process_failure = next(
+                    (error for _, error in failures if not isinstance(error, Exception)),
+                    None,
+                )
+                if process_failure is not None:
+                    raise process_failure
+                ordinary_failures = [
+                    (operation, error)
+                    for operation, error in failures
+                    if isinstance(error, Exception)
+                ]
+                if ordinary_failures:
                     await send(
                         {
                             "type": "lifespan.shutdown.failed",
-                            "message": "; ".join(str(exc) for exc in failures),
+                            "message": "; ".join(
+                                safe_lifespan_failure_message(operation, error)
+                                for operation, error in ordinary_failures
+                            ),
                         }
                     )
                     return
