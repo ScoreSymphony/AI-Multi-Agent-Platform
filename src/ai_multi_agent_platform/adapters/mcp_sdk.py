@@ -99,6 +99,7 @@ class MCPPythonSDKClient(MCPClient):
             async with self._client() as client:
                 self._validate_protocol_revision(client)
             return True
+        # error-boundary: allow-broad-catch=boundary MCP SDK connect/negotiation health result
         except Exception:
             return False
 
