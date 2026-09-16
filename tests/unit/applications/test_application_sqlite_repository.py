@@ -47,6 +47,8 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.security import SecretReference
 
+pytestmark = pytest.mark.asyncio
+
 
 class RestartRuntime:
     def __init__(self, *, fail_start: bool = False) -> None:
@@ -62,7 +64,7 @@ class RestartRuntime:
     def descriptor(self) -> ApplicationRuntimeDescriptor:
         return self._descriptor
 
-    def prepare(self, request: ApplicationInstallRequest) -> ApplicationInstance:
+    async def prepare(self, request: ApplicationInstallRequest) -> ApplicationInstance:
         return ApplicationInstance(
             application_id=request.manifest.application_id,
             application_version=request.manifest.version,
@@ -83,66 +85,73 @@ class RestartRuntime:
             ),
         )
 
-    def start(
+    async def start(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         if self.fail_start:
             raise ApplicationRuntimeError("simulated start failure")
         return self._running(instance)
 
-    def stop(
+    async def stop(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         return replace(
             instance,
             observed_state=ApplicationObservedState.STOPPED,
             health=ApplicationHealthStatus.UNKNOWN,
         )
 
-    def restart(
+    async def restart(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         return self._running(instance)
 
-    def remove(
+    async def remove(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         return replace(
             instance,
             observed_state=ApplicationObservedState.REMOVED,
             health=ApplicationHealthStatus.UNKNOWN,
         )
 
-    def status(
+    async def status(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         return instance
 
-    def health(
+    async def health(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationHealthStatus:
+        del manifest
         return instance.health
 
-    def endpoints(
+    async def endpoints(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> tuple[ApplicationEndpointResolution, ...]:
+        del manifest
         return instance.endpoints
 
-    def logs(
+    async def logs(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
@@ -150,20 +159,22 @@ class RestartRuntime:
         service_id: str | None = None,
         limit: int = 200,
     ) -> tuple[ApplicationLogEntry, ...]:
+        del manifest, instance, service_id, limit
         return ()
 
-    def reconcile(
+    async def reconcile(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
-        return self.recover(manifest, instance)
+        return await self.recover(manifest, instance)
 
-    def recover(
+    async def recover(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
+        del manifest
         self.recover_intent = instance.desired_state
         if instance.desired_state is ApplicationDesiredState.RUNNING:
             return self._running(instance)
@@ -280,7 +291,7 @@ def _request(manifest: ApplicationManifest) -> ApplicationInstallRequest:
     )
 
 
-def test_sqlite_repository_round_trips_canonical_application_state(tmp_path: Path) -> None:
+async def test_sqlite_repository_round_trips_canonical_application_state(tmp_path: Path) -> None:
     manifest = _manifest()
     request = _request(manifest)
     runtime = RestartRuntime()
@@ -290,7 +301,7 @@ def test_sqlite_repository_round_trips_canonical_application_state(tmp_path: Pat
         source_ref="registry://applications/durable-app",
         provenance={"registry": "local"},
     )
-    instance = runtime.prepare(request)
+    instance = await runtime.prepare(request)
     database_path = tmp_path / "applications.sqlite3"
 
     repository = SqliteApplicationRepository(database_path)
@@ -307,7 +318,7 @@ def test_sqlite_repository_round_trips_canonical_application_state(tmp_path: Pat
     assert reopened.list_instances(application_id=manifest.application_id) == (instance,)
 
 
-def test_restart_recovery_uses_persisted_running_intent_after_reopen(tmp_path: Path) -> None:
+async def test_restart_recovery_uses_persisted_running_intent_after_reopen(tmp_path: Path) -> None:
     manifest = _manifest()
     database_path = tmp_path / "applications.sqlite3"
     first_runtime = RestartRuntime(fail_start=True)
@@ -316,13 +327,13 @@ def test_restart_recovery_uses_persisted_running_intent_after_reopen(tmp_path: P
         first_repository,
         ApplicationRuntimeRegistry((first_runtime,)),
     )
-    installed = first_lifecycle.install(
+    installed = await first_lifecycle.install(
         _request(manifest),
         runtime_id=first_runtime.descriptor.runtime_id,
     )
 
     with pytest.raises(ApplicationRuntimeError, match="simulated start failure"):
-        first_lifecycle.start(installed.instance_id)
+        await first_lifecycle.start(installed.instance_id)
 
     failed = first_repository.get_instance(installed.instance_id)
     assert failed.desired_state is ApplicationDesiredState.RUNNING
@@ -334,7 +345,7 @@ def test_restart_recovery_uses_persisted_running_intent_after_reopen(tmp_path: P
         reopened,
         ApplicationRuntimeRegistry((second_runtime,)),
     )
-    report = second_lifecycle.recover_all()
+    report = await second_lifecycle.recover_all()
 
     assert report.failures == ()
     assert second_runtime.recover_intent is ApplicationDesiredState.RUNNING
@@ -345,7 +356,7 @@ def test_restart_recovery_uses_persisted_running_intent_after_reopen(tmp_path: P
     assert recovered.revision > failed.revision
 
 
-def test_sqlite_repository_enforces_immutable_application_version(tmp_path: Path) -> None:
+async def test_sqlite_repository_enforces_immutable_application_version(tmp_path: Path) -> None:
     manifest = _manifest()
     repository = SqliteApplicationRepository(tmp_path / "applications.sqlite3")
     original = Application(manifest=manifest, runtime_id="reference.process")
@@ -362,9 +373,9 @@ def test_sqlite_repository_enforces_immutable_application_version(tmp_path: Path
     assert exc_info.value.code is ErrorCode.CONFLICT
 
 
-def test_sqlite_repository_rejects_orphan_instance(tmp_path: Path) -> None:
+async def test_sqlite_repository_rejects_orphan_instance(tmp_path: Path) -> None:
     manifest = _manifest()
-    instance = RestartRuntime().prepare(_request(manifest))
+    instance = await RestartRuntime().prepare(_request(manifest))
     repository = SqliteApplicationRepository(tmp_path / "applications.sqlite3")
 
     with pytest.raises(ContractError) as exc_info:
