@@ -43,6 +43,10 @@ _SAFE_PROVIDER_METADATA_KEYS = frozenset(
 )
 
 
+class _ExecutionCancellationRequested(Exception):
+    """Internal signal for canonical request-token cancellation, not task cancellation."""
+
+
 class SwerexExecutionStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
@@ -124,10 +128,27 @@ _ERROR_MAP: dict[str, ExecutionErrorCategory] = {
     "unavailable": ExecutionErrorCategory.INTERNAL,
     "runtime_unavailable": ExecutionErrorCategory.INTERNAL,
 }
+_PROVIDER_INFRASTRUCTURE_ERROR_CODES = frozenset({"internal", "unavailable", "runtime_unavailable"})
+_PROVIDER_FAILURE_MESSAGE = "SWE-ReX provider execution failed"
 
 
 def _safe_provider_metadata(metadata: dict[str, JsonValue]) -> dict[str, JsonValue]:
     return {key: value for key, value in metadata.items() if key in _SAFE_PROVIDER_METADATA_KEYS}
+
+
+def _safe_provider_error_code(error_code: str | None) -> str | None:
+    if error_code is None or error_code not in _ERROR_MAP:
+        return None
+    return error_code
+
+
+def _requires_provider_failure_redaction(backend: SwerexClientResult) -> bool:
+    if backend.status is SwerexExecutionStatus.SUCCEEDED:
+        return False
+    safe_error_code = _safe_provider_error_code(backend.error_code)
+    if backend.error_code is not None and safe_error_code is None:
+        return True
+    return safe_error_code in _PROVIDER_INFRASTRUCTURE_ERROR_CODES
 
 
 class SwerexExecutor(Executor):
@@ -180,6 +201,7 @@ class SwerexExecutor(Executor):
     async def health(self) -> ExecutorDescriptor:
         try:
             health = await self._client.health()
+        # error-boundary: allow-broad-catch=boundary external provider health boundary
         except Exception as exc:
             return ExecutorDescriptor(
                 executor_id=self._executor_id,
@@ -234,7 +256,7 @@ class SwerexExecutor(Executor):
                 ExecutionErrorCategory.INVALID_REQUEST,
                 (
                     "direct environment projection to SWE-ReX is disabled until a "
-                    "#34-safe scoped environment/secret delivery path is proven"
+                    "safe scoped environment/secret delivery path is proven"
                 ),
             )
 
@@ -262,18 +284,23 @@ class SwerexExecutor(Executor):
                 ExecutionErrorCategory.TIMEOUT,
                 "execution timed out",
                 status=ExecutionStatus.TIMED_OUT,
+                retryable=True,
             )
-        except asyncio.CancelledError:
+        except _ExecutionCancellationRequested:
             await self._cancel_backend(backend_request.request_ref)
             return self._cancelled(request, started_at, started)
-        except Exception as exc:
+        except asyncio.CancelledError:
+            await self._cancel_backend(backend_request.request_ref)
+            raise
+        # error-boundary: allow-broad-catch=translation external execution provider boundary
+        except Exception:
             return self._failure(
                 request,
                 started_at,
                 started,
                 ExecutionErrorCategory.INTERNAL,
-                f"SWE-ReX client error: {type(exc).__name__}",
-                retryable=True,
+                _PROVIDER_FAILURE_MESSAGE,
+                retryable=False,
             )
 
         return self._translate_result(request, backend_result, started_at, started, workspace)
@@ -302,7 +329,7 @@ class SwerexExecutor(Executor):
             if not done:
                 raise TimeoutError
             if cancel_task in done and request.cancellation.cancelled:
-                raise asyncio.CancelledError
+                raise _ExecutionCancellationRequested
             return result_task.result()
         finally:
             for task in (result_task, cancel_task):
@@ -321,6 +348,7 @@ class SwerexExecutor(Executor):
     async def _cancel_backend(self, request_ref: str) -> None:
         try:
             await self._client.cancel(request_ref)
+        # error-boundary: allow-broad-catch=cleanup best-effort provider cancellation
         except Exception:
             return
 
@@ -338,51 +366,58 @@ class SwerexExecutor(Executor):
             SwerexExecutionStatus.TIMED_OUT: ExecutionStatus.TIMED_OUT,
             SwerexExecutionStatus.CANCELLED: ExecutionStatus.CANCELLED,
         }[backend.status]
+        redact_provider_failure = _requires_provider_failure_redaction(backend)
 
         artifacts: list[ExecutionArtifact] = []
-        for artifact in backend.artifacts:
-            if not artifact.relative_path.strip():
-                return self._failure(
-                    request,
-                    started_at,
-                    started,
-                    ExecutionErrorCategory.INTERNAL,
-                    "SWE-ReX returned an empty artifact path",
+        if not redact_provider_failure:
+            for artifact in backend.artifacts:
+                if not artifact.relative_path.strip():
+                    return self._failure(
+                        request,
+                        started_at,
+                        started,
+                        ExecutionErrorCategory.INTERNAL,
+                        "SWE-ReX returned an empty artifact path",
+                    )
+                artifact_path = (workspace / artifact.relative_path).resolve()
+                if artifact_path != workspace and workspace not in artifact_path.parents:
+                    return self._failure(
+                        request,
+                        started_at,
+                        started,
+                        ExecutionErrorCategory.INTERNAL,
+                        "SWE-ReX returned artifact evidence outside the execution workspace",
+                    )
+                if not artifact_path.exists() or not artifact_path.is_file():
+                    return self._failure(
+                        request,
+                        started_at,
+                        started,
+                        ExecutionErrorCategory.INTERNAL,
+                        "SWE-ReX returned artifact evidence before canonical collection",
+                    )
+                artifacts.append(
+                    ExecutionArtifact(
+                        relative_path=artifact.relative_path,
+                        media_type=artifact.media_type,
+                        size_bytes=artifact_path.stat().st_size,
+                    )
                 )
-            artifact_path = (workspace / artifact.relative_path).resolve()
-            if artifact_path != workspace and workspace not in artifact_path.parents:
-                return self._failure(
-                    request,
-                    started_at,
-                    started,
-                    ExecutionErrorCategory.INTERNAL,
-                    "SWE-ReX returned artifact evidence outside the execution workspace",
-                )
-            if not artifact_path.exists() or not artifact_path.is_file():
-                return self._failure(
-                    request,
-                    started_at,
-                    started,
-                    ExecutionErrorCategory.INTERNAL,
-                    "SWE-ReX returned artifact evidence before canonical collection",
-                )
-            artifacts.append(
-                ExecutionArtifact(
-                    relative_path=artifact.relative_path,
-                    media_type=artifact.media_type,
-                    size_bytes=artifact_path.stat().st_size,
-                )
-            )
 
+        safe_error_code = _safe_provider_error_code(backend.error_code)
         error: ExecutionError | None = None
         if status is not ExecutionStatus.SUCCEEDED:
             category = self._error_category(backend)
             message = (
-                backend.error_message or backend.stderr or f"SWE-ReX execution {backend.status}"
+                _PROVIDER_FAILURE_MESSAGE
+                if redact_provider_failure
+                else backend.error_message
+                or backend.stderr
+                or f"SWE-ReX execution {backend.status}"
             )
             details: dict[str, JsonValue] = {}
-            if backend.error_code is not None:
-                details["swe_rex_error_code"] = backend.error_code
+            if safe_error_code is not None:
+                details["swe_rex_error_code"] = safe_error_code
             error = ExecutionError(
                 category=category,
                 message=message,
@@ -401,8 +436,8 @@ class SwerexExecutor(Executor):
             provider_metadata["runtime_id"] = backend.runtime_id
         if backend.session_id is not None:
             provider_metadata["session_id"] = backend.session_id
-        if backend.error_code is not None:
-            provider_metadata["error_code"] = backend.error_code
+        if safe_error_code is not None:
+            provider_metadata["error_code"] = safe_error_code
 
         return ExecutionResult(
             task_id=request.task_id,
@@ -411,18 +446,28 @@ class SwerexExecutor(Executor):
             step_id=request.step_id,
             status=status,
             result_code=backend.result_code,
-            output=backend.output,
-            stdout=backend.stdout,
-            stderr=backend.stderr,
+            output={} if redact_provider_failure else backend.output,
+            stdout="" if redact_provider_failure else backend.stdout,
+            stderr=_PROVIDER_FAILURE_MESSAGE if redact_provider_failure else backend.stderr,
             artifacts=tuple(artifacts),
-            started_at=backend.started_at or started_at,
-            finished_at=backend.finished_at or datetime.now(UTC).isoformat(),
-            duration_seconds=(
-                backend.duration_seconds
-                if backend.duration_seconds is not None
-                else monotonic() - started
+            started_at=(
+                started_at if redact_provider_failure else (backend.started_at or started_at)
             ),
-            resources=backend.resources,
+            finished_at=(
+                datetime.now(UTC).isoformat()
+                if redact_provider_failure
+                else (backend.finished_at or datetime.now(UTC).isoformat())
+            ),
+            duration_seconds=(
+                monotonic() - started
+                if redact_provider_failure
+                else (
+                    backend.duration_seconds
+                    if backend.duration_seconds is not None
+                    else monotonic() - started
+                )
+            ),
+            resources={} if redact_provider_failure else backend.resources,
             error=error,
             adapter_metadata={"swe_rex": provider_metadata},
         )

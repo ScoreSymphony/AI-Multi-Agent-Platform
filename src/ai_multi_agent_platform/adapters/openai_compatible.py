@@ -585,12 +585,6 @@ class OpenAICompatibleModelProvider(ModelProvider):
                     payload=payload,
                     timeout_seconds=effective_timeout,
                 )
-        except asyncio.CancelledError as exc:
-            raise ContractError(
-                ErrorCode.CANCELLED,
-                "model request was cancelled",
-                provider_id=self.config.provider_id,
-            ) from exc
         except TimeoutError as exc:
             raise ContractError(
                 ErrorCode.TIMEOUT,
@@ -604,12 +598,18 @@ class OpenAICompatibleModelProvider(ModelProvider):
                 "model provider endpoint is unavailable",
                 retryable=True,
                 provider_id=self.config.provider_id,
-                adapter_metadata=(
-                    AdapterMetadata(
-                        namespace="openai-compatible",
-                        values={"exception_type": type(exc).__name__},
-                    ),
-                ),
+                details={"exception_type": type(exc).__name__},
+            ) from exc
+        except ContractError:
+            raise
+        # error-boundary: allow-broad-catch=translation external model transport boundary
+        except Exception as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "model provider transport failed",
+                retryable=False,
+                provider_id=self.config.provider_id,
+                details={"exception_type": type(exc).__name__},
             ) from exc
 
     def _headers(self) -> dict[str, str]:

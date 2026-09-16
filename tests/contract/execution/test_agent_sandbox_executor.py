@@ -391,7 +391,7 @@ def test_environment_projection_fails_closed_without_provider_dispatch(
                 correlation_id="corr-1",
                 action="echo",
                 workspace="run-1",
-                environment={"SYNTHETIC_SECRET": "issue-798-canary"},
+                environment={"SYNTHETIC_SECRET": "environment-secret-canary"},
             )
         )
     )
@@ -399,7 +399,8 @@ def test_environment_projection_fails_closed_without_provider_dispatch(
     assert result.status is ExecutionStatus.FAILED
     assert result.error is not None
     assert result.error.category is ExecutionErrorCategory.INVALID_REQUEST
-    assert "#34-safe" in result.error.message
+    assert "safe scoped environment/secret delivery path" in result.error.message
+    assert "environment-secret-canary" not in result.error.message
     assert client.requests == []
 
 

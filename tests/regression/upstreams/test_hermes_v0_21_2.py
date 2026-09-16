@@ -84,9 +84,9 @@ def _request(marker: str) -> PlanRequest:
         task_id=new_id("task"),
         objective=f"Validate Hermes v0.21.2 baseline compatibility: {marker}",
         context=OperationContext(
-            correlation_id=f"issue-959-baseline-{marker}",
+            correlation_id=f"hermes-v0-21-2-baseline-{marker}",
             control=OperationControl(
-                idempotency_key=f"issue-959-baseline-{marker}",
+                idempotency_key=f"hermes-v0-21-2-baseline-{marker}",
                 timeout_seconds=1.0,
             ),
         ),
@@ -220,7 +220,8 @@ def test_candidate_failed_status_maps_to_canonical_backend_error() -> None:
             await orchestrator.plan(_request("failed"))
 
         assert error.value.code is ErrorCode.BACKEND_ERROR
-        assert "candidate planner failed" in error.value.message
+        assert error.value.message == "Hermes planning run failed with status failed"
+        assert "candidate planner failed" not in error.value.message
         assert (
             error.value.adapter_metadata[0].values["upstream_revision"] == HERMES_V0_21_2_REVISION
         )
@@ -259,7 +260,7 @@ def test_candidate_restart_while_waiting_reconciles_and_cancels_same_external_ru
     async def scenario() -> None:
         external_run_id = "run_waiting_restart"
         context = OperationContext(
-            correlation_id="issue-959-restart-waiting",
+            correlation_id="hermes-v0-21-2-restart-waiting",
             control=OperationControl(timeout_seconds=1.0),
         )
 
