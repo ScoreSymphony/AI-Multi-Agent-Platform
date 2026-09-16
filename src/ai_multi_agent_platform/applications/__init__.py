@@ -1,6 +1,7 @@
 """Canonical managed Application definitions, lifecycle and runtime contracts."""
 
 from .definition import Application
+from .local_process_runtime import LocalProcessApplicationRuntime
 from .manifest import (
     APPLICATION_MANIFEST_SCHEMA,
     application_manifest_from_document,
@@ -98,6 +99,7 @@ __all__ = [
     "ApplicationVolumeKind",
     "ApplicationVolumeMount",
     "InMemoryApplicationRepository",
+    "LocalProcessApplicationRuntime",
     "SqliteApplicationRepository",
     "application_manifest_from_document",
     "validate_application_manifest_document",
