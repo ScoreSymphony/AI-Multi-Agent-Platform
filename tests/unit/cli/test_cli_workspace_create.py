@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Mapping
-from io import StringIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
+from cli_test_helpers import invoke_cli_json as _invoke
+
 from ai_multi_agent_platform.cli.client import RawResponse
-from ai_multi_agent_platform.cli.main import run_cli
 from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.domain import new_id
@@ -73,24 +73,6 @@ def _transport(tmp_path: Path) -> RecordingTransport:
         workspace_provider=workspaces,
     )
     return RecordingTransport(ControlPlaneHTTP(control_plane))
-
-
-def _invoke(
-    config: Path,
-    transport: RecordingTransport,
-    *arguments: str,
-) -> tuple[int, dict[str, Any], str]:
-    stdout = StringIO()
-    stderr = StringIO()
-    code = run_cli(
-        ["--config", str(config), "--json", *arguments],
-        transport=transport,
-        stdout=stdout,
-        stderr=stderr,
-    )
-    payload = json.loads(stdout.getvalue()) if stdout.getvalue() else {}
-    assert isinstance(payload, dict)
-    return code, payload, stderr.getvalue()
 
 
 def _create_project(config: Path, transport: RecordingTransport) -> str:

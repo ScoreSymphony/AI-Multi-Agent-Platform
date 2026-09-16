@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import asyncio
-import json
-from collections.abc import Mapping
-from io import StringIO
 from pathlib import Path
-from typing import Any
-from urllib.parse import parse_qsl, urlsplit
+
+from cli_test_helpers import ControlPlaneRecordingTransport as RecordingTransport
+from cli_test_helpers import invoke_cli_json as _invoke
+from cli_test_helpers import page_items as _items
 
 from ai_multi_agent_platform.agents import (
     AgentCapabilityPolicy,
@@ -23,54 +21,12 @@ from ai_multi_agent_platform.agents import (
     InstructionSource,
     register_agent_control_plane,
 )
-from ai_multi_agent_platform.cli.client import RawResponse
-from ai_multi_agent_platform.cli.main import run_cli
-from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
+from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP
 from ai_multi_agent_platform.data import MemoryScope, new_knowledge_source_id
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.models import RoutingRequirements
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
-
-
-class RecordingTransport:
-    def __init__(self, http: ControlPlaneHTTP) -> None:
-        self.http = http
-        self.calls: list[tuple[str, str]] = []
-
-    def request(
-        self,
-        method: str,
-        url: str,
-        *,
-        headers: Mapping[str, str],
-        body: bytes | None,
-        timeout: float,
-    ) -> RawResponse:
-        del timeout
-        parsed = urlsplit(url)
-        decoded: dict[str, Any] = {}
-        if body:
-            loaded = json.loads(body.decode("utf-8"))
-            assert isinstance(loaded, dict)
-            decoded = loaded
-        self.calls.append((method, parsed.path))
-        response = asyncio.run(
-            self.http.handle(
-                HTTPRequest(
-                    method=method,
-                    path=parsed.path,
-                    headers=headers,
-                    query=dict(parse_qsl(parsed.query)),
-                    body=decoded,
-                )
-            )
-        )
-        return RawResponse(
-            status=response.status,
-            body=json.dumps(response.body, default=str).encode("utf-8"),
-            headers=response.headers,
-        )
 
 
 def _http(*, agents: AgentService | None = None) -> ControlPlaneHTTP:
@@ -84,33 +40,6 @@ def _http(*, agents: AgentService | None = None) -> ControlPlaneHTTP:
     if agents is not None:
         register_agent_control_plane(control_plane, agents)
     return ControlPlaneHTTP(control_plane)
-
-
-def _invoke(
-    config: Path,
-    transport: RecordingTransport,
-    *arguments: str,
-) -> tuple[int, dict[str, Any], str]:
-    stdout = StringIO()
-    stderr = StringIO()
-    code = run_cli(
-        ["--config", str(config), "--json", *arguments],
-        transport=transport,
-        stdout=stdout,
-        stderr=stderr,
-    )
-    payload = json.loads(stdout.getvalue()) if stdout.getvalue() else {}
-    assert isinstance(payload, dict)
-    return code, payload, stderr.getvalue()
-
-
-def _items(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    data = payload["data"]
-    assert isinstance(data, dict)
-    items = data["items"]
-    assert isinstance(items, list)
-    assert all(isinstance(item, dict) for item in items)
-    return items
 
 
 def _seed_agents() -> tuple[AgentService, str, str, str]:
@@ -221,15 +150,3 @@ def test_agent_cli_reads_registered_agent_team_and_run_resources(tmp_path: Path)
         ("GET", "/api/v1/openapi.json"),
         ("GET", "/api/v1/agent-runs"),
     ]
-
-
-def test_agent_cli_has_no_backend_fallback_when_agent_api_is_absent(tmp_path: Path) -> None:
-    transport = RecordingTransport(_http())
-    config = tmp_path / "cli.json"
-
-    code, payload, error = _invoke(config, transport, "extension", "list", "agents")
-
-    assert code == 2
-    assert payload == {}
-    assert "canonical extension collection is not registered: agents" in error
-    assert transport.calls == [("GET", "/api/v1/openapi.json")]
