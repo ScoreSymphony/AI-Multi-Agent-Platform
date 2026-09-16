@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { BrowserSessionClient, type AuthenticatedActor } from "../../api/browserSession";
 import { ControlPlaneClient } from "../../api/client";
 import {
@@ -26,12 +26,12 @@ import { OnboardingSteps } from "./steps";
 interface OnboardingPageProps {
   client: ControlPlaneClient;
   onboarding: OnboardingClient;
-  setup: SetupClient;
   session: BrowserSessionClient;
   manifest: APImanifest | null;
 }
 
-export function OnboardingPage({ client, onboarding, setup, session, manifest }: OnboardingPageProps) {
+export function OnboardingPage({ client, onboarding, session, manifest }: OnboardingPageProps) {
+  const setup = useMemo(() => new SetupClient({ transport: session.transport }), [session]);
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
   const [actor, setActor] = useState<AuthenticatedActor | null>(null);
   const [models, setModels] = useState<CanonicalModel[]>([]);
