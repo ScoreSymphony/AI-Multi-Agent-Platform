@@ -68,11 +68,34 @@ or async promotion orchestration.
 
 ## CI signal
 
-The primary Python CI job now runs `pytest tests/unit` after format/lint/type checking and before the
+The primary Python CI job runs `pytest tests/unit` after format/lint/type checking and before the
 full `pytest` invocation. The full suite remains unchanged and therefore still includes contract,
 integration, E2E, performance, regression, release and architecture coverage. A deterministic
 policy regression can fail the job before heavier test layers start, while no required tier becomes
 optional.
+
+### Controlled regression evidence
+
+CI also runs `scripts/ci/verify_fast_unit_regression_detection.py` immediately after the fast unit
+suite and before the full suite. The probe:
+
+1. copies the production `src/` tree into a temporary directory;
+2. changes only the temporary distributed-placement preferred-worker score from `1000` to `999`;
+3. runs the existing focused unit invariant
+   `test_preference_score_has_explicit_additive_precedence` against that mutated production copy;
+4. succeeds only when that unit test fails for the expected assertion;
+5. prints the measured detection time from the current runner instead of encoding a fragile
+   hardware-independent runtime budget.
+
+The repository working tree is never mutated by the probe, and no PostgreSQL service, HTTP server,
+Worker, subprocess-backed provider or other integration fixture is started to detect the regression.
+This supplies executable evidence that a real deterministic production-policy regression is caught
+by the fast layer before infrastructure-heavy suites are needed.
+
+The two extracted seams currently add 11 focused unit cases in total: seven placement-policy cases
+and four reconciliation-policy cases. The representative integration files for both migrated paths
+remain present and continue to prove scheduler/runtime wiring and failover/recovery behavior rather
+than duplicating every deterministic branch below them.
 
 ## Review guardrail
 
