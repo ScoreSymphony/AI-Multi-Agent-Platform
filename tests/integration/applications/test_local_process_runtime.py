@@ -145,8 +145,7 @@ async def test_local_process_runtime_waits_for_dependency_health_before_starting
         "print('dependency-ready', flush=True); time.sleep(30)"
     )
     probe_script = (
-        "import pathlib,sys; "
-        f"sys.exit(0 if pathlib.Path({marker_literal}).exists() else 1)"
+        f"import pathlib,sys; sys.exit(0 if pathlib.Path({marker_literal}).exists() else 1)"
     )
     dependent_script = (
         "import pathlib,sys,time; "
@@ -186,7 +185,9 @@ async def test_local_process_runtime_waits_for_dependency_health_before_starting
         await _wait_for_log(lifecycle, instance_id, "dependent-ready")
     finally:
         await lifecycle.stop(instance_id)
-        assert repository.get_instance(instance_id).observed_state is ApplicationObservedState.STOPPED
+        assert (
+            repository.get_instance(instance_id).observed_state is ApplicationObservedState.STOPPED
+        )
 
 
 async def test_local_process_runtime_restart_preserves_canonical_instance_identity() -> None:
