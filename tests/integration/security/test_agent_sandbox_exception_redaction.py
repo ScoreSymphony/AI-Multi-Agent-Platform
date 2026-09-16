@@ -17,7 +17,7 @@ from ai_multi_agent_platform.execution import (
     ExecutionStatus,
 )
 
-_SECRET = "ISSUE798-PROVIDER-SECRET-CANARY"
+_SECRET = "AGENT-SANDBOX-PROVIDER-SECRET-CANARY"
 
 
 class SecretBearingFailureClient:
