@@ -1,4 +1,7 @@
-"""Platform-owned durable Plan/Step runtime coordinator for issue #384."""
+"""Platform-owned durable Plan/Step runtime coordinator.
+
+Historical context: issue #384 established the original coordination boundary.
+"""
 
 from __future__ import annotations
 
@@ -379,8 +382,10 @@ class DurablePlanStepCoordinator:
 
         current_time = self._now(now)
         changed: set[str] = set()
+        retry_plans: set[str] = set()
         for plan in await self.runtime_repository.list_active_plans():
-            for record in await self.runtime_repository.list_step_records(plan.plan.id):
+            plan_id = plan.plan.id
+            for record in await self.runtime_repository.list_step_records(plan_id):
                 wait = record.wait
                 if (
                     record.phase is CoordinationPhase.WAITING
@@ -395,14 +400,16 @@ class DurablePlanStepCoordinator:
                         f"deadline:{wait.wait_key}",
                         current_time,
                     )
-                    changed.add(plan.plan.id)
+                    changed.add(plan_id)
                 elif (
                     record.phase is CoordinationPhase.RETRY_SCHEDULED
                     and record.retry_due_at is not None
                     and record.retry_due_at <= current_time
                 ):
-                    await self.advance(plan.plan.id, now=current_time)
-                    changed.add(plan.plan.id)
+                    retry_plans.add(plan_id)
+        for plan_id in sorted(retry_plans):
+            await self.advance(plan_id, now=current_time)
+            changed.add(plan_id)
         projections: list[PlanCoordinationProjection] = []
         for plan_id in sorted(changed):
             projections.append(await self.async_projection(plan_id))
