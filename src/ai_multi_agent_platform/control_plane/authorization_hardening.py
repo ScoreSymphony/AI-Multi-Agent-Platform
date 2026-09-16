@@ -1,8 +1,7 @@
 """Authorization hardening for the fully composed Control Plane.
 
-Later Control Plane domains must preserve issue-#15 exact-action approval binding rather
-than accidentally falling back to action/resource-only authorization when they override
-foundation commands.
+Later Control Plane domains must preserve exact-action approval binding rather than accidentally
+falling back to action/resource-only authorization when they override foundation commands.
 """
 
 from __future__ import annotations

@@ -14,8 +14,8 @@ _SCRIPT = (
     Path(__file__).resolve().parents[3] / "scripts" / "acceptance" / "two_vps_private_tunnel.py"
 )
 _COMMIT = "0123456789abcdef0123456789abcdef01234567"
-_NODE_ID = "node_00000000-0000-4000-8000-000000000562"
-_WORKER_ID = "worker_00000000-0000-4000-8000-000000000562"
+_NODE_ID = "node_00000000-0000-4000-8000-000000000001"
+_WORKER_ID = "worker_00000000-0000-4000-8000-000000000001"
 
 
 def _write(path: Path, payload: dict[str, object]) -> None:
@@ -56,14 +56,14 @@ def _dispatch() -> dict[str, object]:
     return _phase(
         "dispatch",
         worker_id=_WORKER_ID,
-        task_id="task_00000000-0000-4000-8000-000000000562",
-        run_id="run_00000000-0000-4000-8000-000000000562",
-        worker_job_id="worker_job_00000000-0000-4000-8000-000000000562",
+        task_id="task_00000000-0000-4000-8000-000000000001",
+        run_id="run_00000000-0000-4000-8000-000000000001",
+        worker_job_id="worker_job_00000000-0000-4000-8000-000000000001",
         result_status="succeeded",
-        correlation_id="corr-562",
-        returned_correlation_id="corr-562",
-        trace_id="trace-562",
-        returned_trace_id="trace-562",
+        correlation_id="corr-two-vps",
+        returned_correlation_id="corr-two-vps",
+        trace_id="trace-two-vps",
+        returned_trace_id="trace-two-vps",
         correlation_preserved=True,
         trace_preserved=True,
         duplicate_run_count=0,
@@ -91,8 +91,8 @@ def _recovery() -> dict[str, object]:
         heartbeat_recovered=True,
         stale_authority_rejected=True,
         duplicate_run_count=0,
-        post_recovery_run_id="run_00000000-0000-4000-8000-000000000563",
-        post_recovery_worker_job_id="worker_job_00000000-0000-4000-8000-000000000563",
+        post_recovery_run_id="run_00000000-0000-4000-8000-000000000002",
+        post_recovery_worker_job_id="worker_job_00000000-0000-4000-8000-000000000002",
         post_recovery_status="succeeded",
     )
 
@@ -106,7 +106,7 @@ def _restart() -> dict[str, object]:
         worker_process_restarted=True,
         re_registered=True,
         heartbeat_recovered=True,
-        post_restart_run_id="run_00000000-0000-4000-8000-000000000564",
+        post_restart_run_id="run_00000000-0000-4000-8000-000000000003",
         post_restart_status="succeeded",
     )
 
@@ -231,7 +231,7 @@ def _run_finalizer(paths: dict[str, Path], report_path: Path) -> subprocess.Comp
 
 
 def _load_acceptance_module():
-    spec = importlib.util.spec_from_file_location("issue562_acceptance", _SCRIPT)
+    spec = importlib.util.spec_from_file_location("two_vps_acceptance", _SCRIPT)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -241,7 +241,7 @@ def _load_acceptance_module():
 
 def test_finalizer_accepts_complete_sanitized_real_host_evidence(tmp_path: Path) -> None:
     paths = _materialize_evidence(tmp_path)
-    report_path = tmp_path / "issue562.json"
+    report_path = tmp_path / "two-vps.json"
 
     completed = _run_finalizer(paths, report_path)
 
@@ -300,7 +300,7 @@ def test_finalizer_rejects_publicly_reachable_internal_service(tmp_path: Path) -
     payload["outcome"] = "connected"
     payload["status"] = "fail"
     _write(public_broker, payload)
-    report_path = tmp_path / "issue562.json"
+    report_path = tmp_path / "two-vps.json"
 
     completed = _run_finalizer(paths, report_path)
 
@@ -315,7 +315,7 @@ def test_finalizer_rejects_mismatched_public_probe_port(tmp_path: Path) -> None:
     payload = _probe("message-broker", "public")
     payload["port"] = 8766
     _write(public_broker, payload)
-    report_path = tmp_path / "issue562.json"
+    report_path = tmp_path / "two-vps.json"
 
     completed = _run_finalizer(paths, report_path)
 
@@ -329,7 +329,7 @@ def test_finalizer_rejects_worker_identity_drift(tmp_path: Path) -> None:
     recovery = _recovery()
     recovery["worker_id"] = "worker_00000000-0000-4000-8000-000000009999"
     _write(paths["recovery"], recovery)
-    report_path = tmp_path / "issue562.json"
+    report_path = tmp_path / "two-vps.json"
 
     completed = _run_finalizer(paths, report_path)
 
@@ -343,7 +343,7 @@ def test_finalizer_rejects_missing_advertised_capabilities(tmp_path: Path) -> No
     registration = _registration()
     registration["capability_refs"] = []
     _write(paths["registration"], registration)
-    report_path = tmp_path / "issue562.json"
+    report_path = tmp_path / "two-vps.json"
 
     completed = _run_finalizer(paths, report_path)
 
@@ -357,7 +357,7 @@ def test_finalizer_rejects_reused_run_id_after_recovery(tmp_path: Path) -> None:
     recovery = _recovery()
     recovery["post_recovery_run_id"] = _dispatch()["run_id"]
     _write(paths["recovery"], recovery)
-    report_path = tmp_path / "issue562.json"
+    report_path = tmp_path / "two-vps.json"
 
     completed = _run_finalizer(paths, report_path)
 
@@ -371,7 +371,7 @@ def test_finalizer_rejects_sensitive_manual_evidence_key(tmp_path: Path) -> None
     registration = _registration()
     registration["token_value"] = "must-not-be-retained"
     _write(paths["registration"], registration)
-    report_path = tmp_path / "issue562.json"
+    report_path = tmp_path / "two-vps.json"
 
     completed = _run_finalizer(paths, report_path)
 

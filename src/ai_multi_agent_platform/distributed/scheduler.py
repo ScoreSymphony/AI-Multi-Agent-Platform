@@ -48,9 +48,9 @@ class ScheduledPlacement:
 class DeterministicScheduler:
     """Reference scheduler with explainable filtering and stable tie-breaking.
 
-    Optional issue-#500 pressure admission augments the existing #14 scheduler.  The scheduler
-    remains the sole placement/reservation authority: pressure code can only admit or reject a
-    candidate before reservation and never creates a second dispatch/lifecycle path.
+    Optional host-pressure admission augments the existing capability/resource scheduler. The
+    scheduler remains the sole placement/reservation authority: pressure code can only admit or
+    reject a candidate before reservation and never creates a second dispatch/lifecycle path.
     """
 
     def __init__(
@@ -309,8 +309,8 @@ class DeterministicScheduler:
                 self._reason(RejectionCode.CONCURRENCY_EXHAUSTED, "worker concurrency exhausted")
             )
 
-        # Pressure admission is deliberately last: ordinary #14 capability/resource eligibility
-        # is authoritative, and no pressure decision may reserve or dispatch work itself. One
+        # Pressure admission is deliberately last: ordinary capability/resource eligibility is
+        # authoritative, and no pressure decision may reserve or dispatch work itself. One
         # snapshot is shared by all otherwise-eligible Workers on the same Node in this evaluation
         # so stateful/delta-based providers are sampled consistently.
         if not reasons and self.pressure_policy is not None:
@@ -406,10 +406,10 @@ class DeterministicScheduler:
 
     @staticmethod
     def _pressure_rejection(admission: AdmissionDecision) -> RejectionReason:
-        # Existing #14 reason codes remain stable in this first contract slice.  The structured
+        # Existing scheduler reason codes remain stable in this contract slice. The structured
         # AdmissionDecision carries the precise pressure action/reasons; the scheduler maps the
         # result conservatively onto the existing unhealthy/draining vocabulary for callers that
-        # only understand #14 CandidateEvaluation today.
+        # only understand CandidateEvaluation today.
         code = (
             RejectionCode.NODE_DRAINING
             if admission.action is AdmissionAction.BLOCK_FOR_MAINTENANCE

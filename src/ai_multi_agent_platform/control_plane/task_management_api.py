@@ -1,9 +1,8 @@
 """Public Control Plane composition for canonical Task management.
 
-Built-in Task-management commands are intentionally kept separate from the
-future-extension command registry introduced by issue #32. They share the
-same HTTP command transport, authorization boundary and idempotency rules,
-but do not make the extension registry claim built-in platform behavior.
+Built-in Task-management commands are intentionally kept separate from the future-extension
+command registry. They share the same HTTP command transport, authorization boundary and
+idempotency rules, but do not make the extension registry claim built-in platform behavior.
 """
 
 from __future__ import annotations
@@ -75,10 +74,9 @@ class ControlPlane(_TaskManagementControlPlane):
             command_handlers=command_handlers,
             task_management=task_management,
         )
-        # The parent implementation originally used the generic extension
-        # registry as a transport hook. Remove only the platform-owned commands
-        # so `registered_commands` keeps its issue-#32 meaning: external/future
-        # extension registrations supplied by composition.
+        # The parent implementation originally used the generic extension registry as a
+        # transport hook. Remove only the platform-owned commands so `registered_commands`
+        # keeps its extension-only meaning for registrations supplied by composition.
         self._command_handlers.pop(TASK_MANAGEMENT_UPDATE_COMMAND, None)
         self._command_handlers.pop(TASK_MANAGEMENT_BULK_UPDATE_COMMAND, None)
 
@@ -147,7 +145,7 @@ def build_openapi(
     extension_collections: tuple[str, ...] = (),
     extension_commands: tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    """Build OpenAPI with native #88 commands separate from extension discovery."""
+    """Build OpenAPI with native Task-management commands separate from extension discovery."""
 
     specification = _augment_openapi(
         _build_observability_openapi(
