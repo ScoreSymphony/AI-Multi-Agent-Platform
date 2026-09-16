@@ -60,7 +60,7 @@ function ModelStep(props: OnboardingStepsProps) {
   return (
     <>
       <Card title="Model setup">
-        {!props.configureAvailable ? <UnavailableAction text="The onboarding.configure-model command is not advertised by this deployment." /> : status.installed_model_adapter_ids.length === 0 ? <UnavailableAction text="No onboarding ModelProvider adapter is installed in this deployment." /> : <ModelSetupForm adapterIds={status.installed_model_adapter_ids} busy={busy === "configure-model"} onSubmit={props.onConfigureModel} />}
+        {!props.configureAvailable ? <UnavailableAction text="The onboarding.configure-model command is not advertised by this deployment." /> : status.installed_model_adapter_ids.length === 0 ? <UnavailableAction text="No onboarding ModelProvider adapter is installed in this deployment." /> : <ModelSetupForm adapterIds={status.installed_model_adapter_ids} contract={status.model_setup} busy={busy === "configure-model"} onSubmit={props.onConfigureModel} />}
       </Card>
       {status.local_model_count + status.self_hosted_model_count > 0 ? (
         <Card title="Revalidate an existing provider">
