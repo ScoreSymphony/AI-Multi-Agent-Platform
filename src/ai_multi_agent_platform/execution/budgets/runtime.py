@@ -163,7 +163,6 @@ class TaskBudgetCapabilityInvoker:
         self._budgets = budgets
         # Preserve the operational egress surface consumed by public deployment composition/tests.
         self.egress_gate = getattr(inner, "egress_gate", None)
-        self._classification_resolver = getattr(inner, "_classification_resolver", None)
 
     def __getattr__(self, name: str) -> Any:
         """Delegate non-budget operational seams to the canonical wrapped invoker."""
