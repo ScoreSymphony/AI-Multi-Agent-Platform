@@ -28,7 +28,7 @@ def test_public_cli_registers_and_dispatches_learning_domain() -> None:
     cli = Path("src/ai_multi_agent_platform/cli/app.py").read_text(encoding="utf-8")
 
     assert "from .learning import add_learning_parser, execute_learning" in cli
-    assert 'requested_area not in {"registry", "learning"}' in cli
+    assert 'requested_area not in {"registry", "learning", "trace"}' in cli
     assert "add_learning_parser(areas)" in cli
     assert 'elif args.area == "learning":' in cli
     assert "execute_learning(args, client, _require_confirmation)" in cli
