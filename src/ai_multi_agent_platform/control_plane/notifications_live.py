@@ -161,8 +161,8 @@ class ControlPlaneASGI:
             if message_type == "lifespan.startup":
                 automation_started = False
 
-                async def rollback_started_automation() -> Exception | None:
-                    if not automation_started:
+                async def rollback_started_automation(started: bool) -> Exception | None:
+                    if not started:
                         return None
                     try:
                         await control_plane.stop_automation_runtime()
@@ -176,7 +176,7 @@ class ControlPlaneASGI:
                     automation_started = True
                     await control_plane.start_notification_runtime()
                 except (CancelledError, KeyboardInterrupt, SystemExit):
-                    cleanup_error = await rollback_started_automation()
+                    cleanup_error = await rollback_started_automation(automation_started)
                     if cleanup_error is not None:
                         log_unexpected_boundary_error(
                             cleanup_error,
@@ -185,7 +185,7 @@ class ControlPlaneASGI:
                     raise
                 # error-boundary: allow-broad-catch=cleanup startup failure settlement
                 except Exception as exc:
-                    cleanup_error = await rollback_started_automation()
+                    cleanup_error = await rollback_started_automation(automation_started)
                     await send(
                         {
                             "type": "lifespan.startup.failed",
