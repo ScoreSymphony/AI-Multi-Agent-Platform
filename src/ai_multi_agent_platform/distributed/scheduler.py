@@ -9,9 +9,7 @@ from typing import TYPE_CHECKING
 
 from .models import (
     CandidateEvaluation,
-    JobRequirements,
     NodeRecord,
-    NodeStatus,
     RejectionCode,
     RejectionReason,
     Reservation,
@@ -19,8 +17,8 @@ from .models import (
     SchedulingDecision,
     WorkerJobRequest,
     WorkerRecord,
-    WorkerStatus,
 )
+from .placement_policy import evaluate_candidate, select_worker
 from .pressure import (
     AdmissionAction,
     AdmissionDecision,
@@ -88,16 +86,9 @@ class DeterministicScheduler:
             )
             for worker in self.registry.list_workers()
         )
-        accepted = [evaluation for evaluation in evaluations if evaluation.accepted]
-        selected = None
-        if accepted:
-            selected = sorted(
-                accepted,
-                key=lambda evaluation: (-evaluation.score, evaluation.worker_id),
-            )[0].worker_id
         return SchedulingDecision(
             worker_job_id=job.worker_job_id,
-            selected_worker_id=selected,
+            selected_worker_id=select_worker(evaluations),
             evaluations=evaluations,
         )
 
@@ -213,138 +204,51 @@ class DeterministicScheduler:
         now: datetime | None,
         pressure_snapshots: dict[str, HostPressureSnapshot | None],
     ) -> CandidateEvaluation:
-        requirements = job.requirements
-        reasons: list[RejectionReason] = []
-
-        if node.status is NodeStatus.OFFLINE:
-            reasons.append(self._reason(RejectionCode.NODE_OFFLINE, "node is offline"))
-        elif node.status is NodeStatus.MAINTENANCE:
-            reasons.append(self._reason(RejectionCode.NODE_UNHEALTHY, "node is in maintenance"))
-        elif node.status is NodeStatus.DEGRADED:
-            reasons.append(self._reason(RejectionCode.NODE_UNHEALTHY, "node is degraded"))
-        if node.draining or node.maintenance:
-            reasons.append(self._reason(RejectionCode.NODE_DRAINING, "node rejects new work"))
-
-        if worker.status is WorkerStatus.OFFLINE:
-            reasons.append(self._reason(RejectionCode.WORKER_OFFLINE, "worker is offline"))
-        elif worker.status is WorkerStatus.UNHEALTHY:
-            reasons.append(self._reason(RejectionCode.WORKER_UNHEALTHY, "worker is unhealthy"))
-        elif worker.status is WorkerStatus.DEGRADED:
-            reasons.append(self._reason(RejectionCode.WORKER_UNHEALTHY, "worker is degraded"))
-        if worker.draining:
-            reasons.append(self._reason(RejectionCode.WORKER_DRAINING, "worker rejects new work"))
-
-        if (
-            requirements.executor_type is not None
-            and requirements.executor_type not in worker.supported_executors
-        ):
-            reasons.append(
-                self._reason(RejectionCode.EXECUTOR_UNSUPPORTED, "required executor unavailable")
-            )
-        missing_capabilities = set(requirements.capability_refs) - set(worker.capability_refs)
-        if missing_capabilities:
-            reasons.append(
-                self._reason(
-                    RejectionCode.CAPABILITY_UNSUPPORTED,
-                    "required capability unavailable",
-                )
-            )
-
-        runtimes = set(node.supported_runtimes) | set(worker.supported_runtimes)
-        if requirements.runtime is not None and requirements.runtime not in runtimes:
-            reasons.append(self._reason(RejectionCode.RUNTIME_UNSUPPORTED, "runtime unavailable"))
-        if requirements.os_name is not None and requirements.os_name != node.os_name:
-            reasons.append(self._reason(RejectionCode.OS_UNSUPPORTED, "OS constraint mismatch"))
-        if requirements.architecture is not None and requirements.architecture != node.architecture:
-            reasons.append(
-                self._reason(
-                    RejectionCode.ARCHITECTURE_UNSUPPORTED,
-                    "architecture constraint mismatch",
-                )
-            )
-
         available = self.registry.available_node_resources(node.node_id)
-        if requirements.cpu_cores_min > available.cpu_cores_available:
-            reasons.append(self._reason(RejectionCode.CPU_INSUFFICIENT, "insufficient CPU"))
-        if requirements.ram_min_bytes > available.ram_available_bytes:
-            reasons.append(self._reason(RejectionCode.RAM_INSUFFICIENT, "insufficient RAM"))
-        if requirements.storage_min_bytes > available.storage_available_bytes:
-            reasons.append(self._reason(RejectionCode.STORAGE_INSUFFICIENT, "insufficient storage"))
-
-        if requirements.gpu == "required" and not available.accelerators:
-            reasons.append(self._reason(RejectionCode.GPU_REQUIRED, "accelerator required"))
-        if requirements.gpu == "forbidden" and node.resources.accelerators:
-            reasons.append(self._reason(RejectionCode.GPU_REQUIRED, "CPU-only placement required"))
-        if (
-            requirements.vram_min_bytes > 0
-            and available.max_available_accelerator_memory_bytes < requirements.vram_min_bytes
-        ):
-            reasons.append(self._reason(RejectionCode.VRAM_INSUFFICIENT, "insufficient VRAM"))
-
-        models = set(node.model_refs) | set(worker.model_refs)
-        if requirements.model_ref is not None and requirements.model_ref not in models:
-            reasons.append(
-                self._reason(RejectionCode.MODEL_UNAVAILABLE, "required model unavailable")
-            )
-        if (
-            requirements.allowed_trust_levels
-            and node.trust_level not in requirements.allowed_trust_levels
-        ):
-            reasons.append(
-                self._reason(RejectionCode.TRUST_INSUFFICIENT, "node trust level not allowed")
-            )
-
-        labels = set(node.labels)
-        if set(requirements.required_labels) - labels:
-            reasons.append(self._reason(RejectionCode.LABEL_MISMATCH, "required label missing"))
-        if node.node_id in requirements.anti_affinity_node_ids:
-            reasons.append(
-                self._reason(RejectionCode.ANTI_AFFINITY, "node excluded by anti-affinity")
-            )
-        if requirements.network_required and not node.network_available:
-            reasons.append(self._reason(RejectionCode.NETWORK_UNAVAILABLE, "network unavailable"))
-
-        if requirements.concurrency_units > self.registry.available_concurrency(worker.worker_id):
-            reasons.append(
-                self._reason(RejectionCode.CONCURRENCY_EXHAUSTED, "worker concurrency exhausted")
-            )
+        evaluation = evaluate_candidate(
+            worker=worker,
+            node=node,
+            requirements=job.requirements,
+            available=available,
+            available_concurrency=self.registry.available_concurrency(worker.worker_id),
+        )
 
         # Pressure admission is deliberately last: ordinary capability/resource eligibility is
         # authoritative, and no pressure decision may reserve or dispatch work itself. One
         # snapshot is shared by all otherwise-eligible Workers on the same Node in this evaluation
         # so stateful/delta-based providers are sampled consistently.
-        if not reasons and self.pressure_policy is not None:
-            snapshot = self._pressure_snapshot(node.node_id, pressure_snapshots)
-            workload_class = self._workload_class(job)
-            admission = self._pressure_decision(
-                job=job,
-                node=node,
-                worker=worker,
-                available=available,
-                snapshot=snapshot,
-                now=now,
+        if not evaluation.accepted or self.pressure_policy is None:
+            return evaluation
+
+        snapshot = self._pressure_snapshot(node.node_id, pressure_snapshots)
+        workload_class = self._workload_class(job)
+        admission = self._pressure_decision(
+            job=job,
+            node=node,
+            worker=worker,
+            available=available,
+            snapshot=snapshot,
+            now=now,
+            workload_class=workload_class,
+        )
+        if self.pressure_telemetry is not None:
+            if snapshot is not None:
+                self.pressure_telemetry.snapshot(node.node_id, snapshot)
+            self.pressure_telemetry.admission(
+                job,
+                node_id=node.node_id,
+                worker_id=worker.worker_id,
+                decision=admission,
                 workload_class=workload_class,
             )
-            if self.pressure_telemetry is not None:
-                if snapshot is not None:
-                    self.pressure_telemetry.snapshot(node.node_id, snapshot)
-                self.pressure_telemetry.admission(
-                    job,
-                    node_id=node.node_id,
-                    worker_id=worker.worker_id,
-                    decision=admission,
-                    workload_class=workload_class,
-                )
-            if not admission.admits:
-                reasons.append(self._pressure_rejection(admission))
-
-        score = self._score(worker, node, requirements) if not reasons else 0
+        if admission.admits:
+            return evaluation
         return CandidateEvaluation(
             worker_id=worker.worker_id,
             node_id=node.node_id,
-            accepted=not reasons,
-            score=score,
-            reasons=tuple(reasons),
+            accepted=False,
+            score=0,
+            reasons=(self._pressure_rejection(admission),),
         )
 
     def _pressure_snapshot(
@@ -387,24 +291,6 @@ class DeterministicScheduler:
         return None if self.workload_class_resolver is None else self.workload_class_resolver(job)
 
     @staticmethod
-    def _score(worker: WorkerRecord, node: NodeRecord, requirements: JobRequirements) -> int:
-        """Score only explicit preferences; tie-breaks are handled by canonical worker ID."""
-
-        score = 0
-        if worker.worker_id in requirements.preferred_worker_ids:
-            score += 1000
-        if node.node_id in requirements.preferred_node_ids:
-            score += 500
-        score += 50 * len(set(requirements.preferred_labels) & set(node.labels))
-        locality = set(node.locality_refs) | set(worker.locality_refs)
-        score += 100 * len(set(requirements.locality_refs) & locality)
-        if requirements.model_ref is not None and requirements.model_ref in worker.model_refs:
-            score += 25
-        if requirements.runtime is not None and requirements.runtime in worker.supported_runtimes:
-            score += 10
-        return score
-
-    @staticmethod
     def _pressure_rejection(admission: AdmissionDecision) -> RejectionReason:
         # Existing scheduler reason codes remain stable in this contract slice. The structured
         # AdmissionDecision carries the precise pressure action/reasons; the scheduler maps the
@@ -420,7 +306,3 @@ class DeterministicScheduler:
             code=code,
             message=f"pressure admission {admission.action.value}: {reason_codes}",
         )
-
-    @staticmethod
-    def _reason(code: RejectionCode, message: str) -> RejectionReason:
-        return RejectionReason(code=code, message=message)
