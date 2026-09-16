@@ -13,6 +13,15 @@ def _schemas(specification: dict[str, Any]) -> dict[str, Any]:
     return schemas
 
 
+def _assert_typed_page(schemas: dict[str, Any], page_name: str, item_name: str) -> None:
+    page = schemas[page_name]
+    assert page["required"] == ["items", "next_cursor", "total", "limit"]
+    assert page["properties"]["items"]["items"] == {
+        "$ref": f"#/components/schemas/{item_name}"
+    }
+    assert page["properties"]["next_cursor"]["type"] == ["string", "null"]
+
+
 def test_search_transport_contract_is_generated_from_canonical_query_and_response_schema() -> None:
     specification = build_openapi()
     schemas = _schemas(specification)
@@ -44,6 +53,8 @@ def test_observability_timeline_contract_covers_events_and_telemetry() -> None:
         {"$ref": "#/components/schemas/CanonicalEvent"},
         {"$ref": "#/components/schemas/TelemetryTimelineEntry"},
     ]
+    _assert_typed_page(schemas, "TimelinePage", "TimelineItem")
+
     event = schemas["CanonicalEvent"]
     assert set(event["required"]) == set(event["properties"])
     assert event["properties"]["owner_ref"]["oneOf"] == [
@@ -112,6 +123,7 @@ def test_accounting_transport_contract_preserves_nullability_enums_and_typed_pag
         "unavailable",
     ]
     assert record["properties"]["aggregation_mode"]["enum"] == ["additive", "latest"]
+    _assert_typed_page(schemas, "UsageRecordPage", "UsageRecord")
 
     aggregate = schemas["UsageAggregate"]
     assert aggregate["properties"]["quality_counts"] == {
@@ -120,6 +132,7 @@ def test_accounting_transport_contract_preserves_nullability_enums_and_typed_pag
     assert aggregate["properties"]["trend"]["items"] == {
         "$ref": "#/components/schemas/UsageTrendPoint"
     }
+    _assert_typed_page(schemas, "UsageAggregatePage", "UsageAggregate")
 
     budget = schemas["UsageBudget"]
     assert budget["properties"]["kind"]["enum"] == ["soft", "hard"]
@@ -131,6 +144,7 @@ def test_accounting_transport_contract_preserves_nullability_enums_and_typed_pag
         "exceeded",
         None,
     ]
+    _assert_typed_page(schemas, "UsageBudgetPage", "UsageBudget")
 
     for collection, page_schema in (
         ("usage-records", "UsageRecordPage"),
