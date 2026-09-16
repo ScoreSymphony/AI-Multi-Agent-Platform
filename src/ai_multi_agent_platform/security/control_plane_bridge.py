@@ -175,6 +175,14 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
     if action.startswith("task-management."):
         return AuthorizationAction.MODIFY, ResourceType.TASK
 
+    if action.startswith("task-budget."):
+        budget_verb = action.removeprefix("task-budget.")
+        budget_actions = {
+            "configure": AuthorizationAction.CREATE,
+            "revise": AuthorizationAction.MODIFY,
+        }
+        return budget_actions.get(budget_verb, AuthorizationAction.MODIFY), ResourceType.TASK
+
     if action.startswith("learning."):
         learning_verb = action.removeprefix("learning.")
         learning_actions = {
@@ -306,6 +314,8 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         "project": ResourceType.PROJECT,
         "workspace": ResourceType.WORKSPACE,
         "task": ResourceType.TASK,
+        "task-budget": ResourceType.TASK,
+        "task-execution-budget": ResourceType.TASK,
         "run": ResourceType.RUN,
         "artifact": ResourceType.ARTIFACT,
         "artifacts": ResourceType.ARTIFACT,
