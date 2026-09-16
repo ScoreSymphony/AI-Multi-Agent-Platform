@@ -18,6 +18,24 @@ _JSON_OBJECT = {"type": "object", "additionalProperties": True}
 _STRING_MAP = {"type": "object", "additionalProperties": {"type": "string"}}
 _MEASUREMENT_QUALITY = ["measured", "reported", "estimated", "unavailable"]
 _AGGREGATION_MODE = ["additive", "latest"]
+_TELEMETRY_OUTCOME = ["unknown", "succeeded", "failed", "cancelled", "timed_out"]
+_FAILURE_COMPONENT = [
+    "domain_kernel",
+    "orchestration",
+    "agent",
+    "execution",
+    "model_provider_router",
+    "capability_tool",
+    "persistence_storage",
+    "authorization_approval",
+    "verification",
+    "scheduler_worker_node",
+    "automation",
+    "control_plane_ha",
+    "connector_browser",
+    "plugin_adapter",
+    "infrastructure_unknown",
+]
 
 
 def augment_remaining_transport_schemas(specification: dict[str, Any]) -> dict[str, Any]:
@@ -168,7 +186,7 @@ def _telemetry_schemas() -> dict[str, Any]:
             "type": "object",
             "required": ["component", "code", "retryable"],
             "properties": {
-                "component": {"type": "string"},
+                "component": {"type": "string", "enum": _FAILURE_COMPONENT},
                 "code": {"type": "string"},
                 "retryable": {"type": "boolean"},
             },
@@ -192,9 +210,9 @@ def _telemetry_schemas() -> dict[str, Any]:
                 "id": {"type": "string"},
                 "type": {"type": "string", "const": "telemetry"},
                 "event_name": {"type": "string"},
-                "component": {"type": "string"},
+                "component": {"type": "string", "enum": _FAILURE_COMPONENT},
                 "timestamp": {"type": "string", "format": "date-time"},
-                "outcome": {"type": "string"},
+                "outcome": {"type": "string", "enum": _TELEMETRY_OUTCOME},
                 "duration_seconds": {"type": ["number", "null"]},
                 "failure": {
                     "oneOf": [
@@ -202,7 +220,7 @@ def _telemetry_schemas() -> dict[str, Any]:
                         {"type": "null"},
                     ]
                 },
-                "context": _JSON_OBJECT,
+                "context": _STRING_MAP,
                 "attributes": _JSON_OBJECT,
             },
             "additionalProperties": False,
