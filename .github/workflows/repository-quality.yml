@@ -28,6 +28,27 @@ jobs:
             --json-out .maintainability/current.json \
             --markdown-out .maintainability/current.md
           cat .maintainability/current.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Audit current production error boundaries
+        shell: bash
+        run: |
+          mkdir -p .broad-exception-audit
+          python scripts/ci/broad_exception_audit.py \
+            --repository-root . \
+            --format json \
+            > .broad-exception-audit/current.json
+          python scripts/ci/broad_exception_audit.py \
+            --repository-root . \
+            --format markdown \
+            > .broad-exception-audit/current.md
+          python scripts/ci/broad_exception_audit.py \
+            --repository-root . \
+            --format text \
+            > .broad-exception-audit/current.txt
+          {
+            echo
+            echo "## Broad exception boundary audit"
+            cat .broad-exception-audit/current.md
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Materialize pull request base
         if: github.event_name == 'pull_request'
         run: |
@@ -40,12 +61,104 @@ jobs:
           --root .maintainability-base
           --config config/maintainability.toml
           --json-out .maintainability/base.json
+      - name: Inventory pull request base error boundaries
+        if: github.event_name == 'pull_request'
+        run: >-
+          python scripts/ci/broad_exception_audit.py
+          --repository-root .maintainability-base
+          --format json
+          > .broad-exception-audit/base.json
       - name: Reject newly introduced extreme outliers
         if: github.event_name == 'pull_request'
         run: >-
           python scripts/ci/maintainability_guard.py compare
           --baseline .maintainability/base.json
           --current .maintainability/current.json
+      - name: Reject newly introduced broad exception debt
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          python - <<'PY'
+          from collections import Counter
+          import json
+          from pathlib import Path
+
+          base = json.loads(
+              Path(".broad-exception-audit/base.json").read_text(encoding="utf-8")
+          )
+          current = json.loads(
+              Path(".broad-exception-audit/current.json").read_text(encoding="utf-8")
+          )
+
+          tracked_severities = {"prohibited", "review"}
+          signature_fields = (
+              "severity",
+              "file",
+              "scope",
+              "exception_form",
+              "current_action",
+              "recommended_classification",
+              "justification",
+          )
+
+          def signature(item: dict[str, object]) -> tuple[object, ...]:
+              return tuple(item.get(field) for field in signature_fields)
+
+          base_debt = Counter(
+              signature(item)
+              for item in base
+              if item.get("severity") in tracked_severities
+          )
+          current_debt = Counter(
+              signature(item)
+              for item in current
+              if item.get("severity") in tracked_severities
+          )
+          introduced = current_debt - base_debt
+
+          if not introduced:
+              print("No newly introduced prohibited or unclassified broad catches.")
+              raise SystemExit(0)
+
+          remaining = introduced.copy()
+          findings = []
+          for item in current:
+              if item.get("severity") not in tracked_severities:
+                  continue
+              item_signature = signature(item)
+              if remaining[item_signature] <= 0:
+                  continue
+              findings.append(item)
+              remaining[item_signature] -= 1
+
+          for item in findings:
+              severity = item["severity"]
+              if severity == "prohibited":
+                  message = (
+                      "New prohibited broad-catch shape; narrow the exception set or preserve "
+                      "cancellation/process-control and containment semantics explicitly."
+                  )
+              else:
+                  message = (
+                      "New unclassified broad catch; classify it with a reviewed "
+                      "boundary/cleanup/translation marker or narrow the expected exception set."
+                  )
+              print(
+                  "::error file={file},line={line}::{message} {form} in {scope}.".format(
+                      file=item["file"],
+                      line=item["line"],
+                      message=message,
+                      form=item["exception_form"],
+                      scope=item["scope"],
+                  )
+              )
+
+          counts = Counter(item["severity"] for item in findings)
+          raise SystemExit(
+              "new broad-exception debt introduced: "
+              f"prohibited={counts['prohibited']} review={counts['review']}"
+          )
+          PY
       - name: Upload maintainability evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -55,6 +168,10 @@ jobs:
             .maintainability/current.json
             .maintainability/current.md
             .maintainability/base.json
+            .broad-exception-audit/current.json
+            .broad-exception-audit/current.md
+            .broad-exception-audit/current.txt
+            .broad-exception-audit/base.json
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 14

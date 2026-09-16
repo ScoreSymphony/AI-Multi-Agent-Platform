@@ -1,6 +1,6 @@
 # Error-boundary audit and migration guide
 
-Status: mergeable audit/guardrail foundation for #983. This document is **non-normative**.
+Status: audit/guardrail foundation for #983 with a baseline-aware Repository Quality ratchet. This document is **non-normative**.
 
 The canonical cross-boundary error model remains
 `src/ai_multi_agent_platform/contracts/errors.py` (`ContractError`, `ErrorCode`, `retryable`, safe
@@ -187,13 +187,31 @@ The Research persistence seam has active/recent backend-neutrality work. Persist
 #983 must re-read current #892 state before edits. The durable scanner deliberately contains no
 issue-specific path exceptions or issue-numbered policy fields.
 
-### CI consolidation
+### CI consolidation and ratchet
 
-#1018 has landed, so a later #983 slice may add the broad-exception ratchet to the consolidated
-`repository-quality.yml`. This first mergeable slice does not make the historical repository fail
-wholesale: the current inventory still contains review/migration work. CI integration should compare
-against an exact baseline or enforce only reviewed prohibited additions so existing debt is not
-silently grandfathered as acceptable behavior.
+The broad-exception guardrail runs inside the consolidated `repository-quality.yml` maintainability
+job rather than adding another routine workflow.
+
+Every run inventories the current production tree and retains JSON, Markdown, and text evidence in
+the existing Repository Quality artifact. The Markdown inventory is also appended to the job
+summary. The scanner's standalone `--check` mode remains the strict whole-tree acceptance command:
+it fails whenever a clearly prohibited production pattern remains.
+
+For pull requests, CI materializes and scans the exact base commit before enforcing the ratchet.
+`prohibited` and `review` findings are compared as multisets using structural fields (`severity`,
+`file`, `scope`, exception form, current action, recommended classification, and justification)
+rather than line-number-derived finding IDs. Moving an unchanged handler therefore does not create
+noise, while introducing another prohibited pattern, another unclassified broad catch, or changing a
+handler into a new debt shape fails the ratchet.
+
+Existing `prohibited` and `review` debt on the base commit remains visible as evidence but is neither
+silently declared safe nor made an unrelated PR blocker. This baseline-aware behavior is necessary
+while the parallel #983 migration slices are still landing. Once those slices are integrated, the
+final combined-`main` acceptance audit must run the strict scanner with `--check`; #983 must not close
+while any prohibited finding remains.
+
+This keeps #983 focused on error-boundary semantics while reusing the repository-quality execution
+surface owned alongside #896.
 
 ## Characterization coverage in this slice
 
@@ -225,7 +243,9 @@ The behavior-oriented tests cover:
 4. Review tool/workspace/execution/worker boundaries for equivalent canonical translation and
    redaction.
 5. Review persistence after its active ownership seams are stable.
-6. Add a baseline-aware CI ratchet in the consolidated repository-quality workflow.
+6. Keep the baseline-aware Repository Quality ratchet green while the remaining migration slices
+   land, then run `broad_exception_audit.py --check` plus the full required CI suite on the combined
+   `main` state.
 
-#983 remains open after this foundation lands; it closes only when the repository-wide migration,
-observability and CI acceptance criteria are satisfied.
+#983 remains open until the repository-wide migration, observability, combined-slice acceptance, and
+full required CI criteria are satisfied.

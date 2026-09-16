@@ -6,11 +6,11 @@
 
 ## Context
 
-The supported single-node profile currently inventories 25 platform-owned SQLite databases: 21 required stores and 4 optional stores. That layout grew from domain/provider ownership rather than from one explicit platform-wide topology decision. Issue #891 therefore asks whether logical domain separation still needs physical database separation or whether the v1 baseline should consolidate relational state into one `platform.sqlite` database.
+The supported single-node profile currently inventories 26 platform-owned SQLite databases: 21 required stores and 5 optional stores. That layout grew from domain/provider ownership rather than from one explicit platform-wide topology decision. Issue #891 therefore asks whether logical domain separation still needs physical database separation or whether the v1 baseline should consolidate relational state into one `platform.sqlite` database.
 
 The current durable-state boundary is broader than SQLite. The same deployment also has JSON persistence, filesystem-backed File/Workspace content and replaceable or external providers. Whole-platform backup already quiesces the source and validates semantic relationships across those boundaries. Cross-domain operations also use canonical IDs, deterministic idempotency, compensation and reconciliation where one logical action spans independently owned state or external side effects.
 
-The repository has a canonical SQLite contention benchmark that exercises synchronized concurrent Task mutations through multiple `SqliteKernelRepository` instances sharing one database. It proves shared-file writer contention can and must be measured through the canonical path; it does not provide a retained platform-wide comparison of the current 25-file topology against a hypothetical consolidated schema. No performance claim about either topology is therefore treated as established evidence.
+The repository has a canonical SQLite contention benchmark that exercises synchronized concurrent Task mutations through multiple `SqliteKernelRepository` instances sharing one database. It proves shared-file writer contention can and must be measured through the canonical path; it does not provide a retained platform-wide comparison of the current 26-file topology against a hypothetical consolidated schema. No performance claim about either topology is therefore treated as established evidence.
 
 The full inventory, cross-store coupling audit and migration considerations are recorded in `docs/runtime/PERSISTENCE_TOPOLOGY.md`.
 
@@ -38,7 +38,7 @@ If a future operation has a real correctness invariant requiring atomic writes a
 
 One SQLite file would simplify the relational subset of backup, but the supported backup still needs consistency with filesystem content, JSON stores and provider dependency evidence. Therefore #40's quiesced capture, staged restore and semantic integrity gate remain necessary under either SQLite topology.
 
-The current backup store contract v2 explicitly inventories the existing database paths. Changing them requires a deliberate versioned backup/upgrade migration, not an unversioned path rewrite.
+The current backup store contract v2 explicitly inventories the existing database paths. Adding an optional store such as `db/applications.sqlite3` extends the inventory without changing which stores are required for an older/current deployment. Changing required paths or compatibility semantics still requires a deliberate versioned backup/upgrade migration.
 
 ### Concurrency and failure blast radius remain explicit trade-offs
 
@@ -55,7 +55,7 @@ Any provider-level cross-repository transaction capability must be surfaced thro
 ## Consequences
 
 - No data migration is required for #891, so existing canonical IDs/history and backup compatibility remain unchanged.
-- The 25-file SQLite inventory remains the supported single-node v1 relational topology and is now documented explicitly.
+- The 26-file SQLite inventory remains the supported single-node v1 relational topology and is now documented explicitly.
 - #40 backup/restore continues to operate over the durable-store contract and semantic cross-store validation.
 - #41 remains the required mechanism for any future physical topology migration.
 - Existing idempotency/compensation/reconciliation remains necessary where workflows span independent providers or external effects.
