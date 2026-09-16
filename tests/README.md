@@ -24,7 +24,7 @@ tests/
 
 `tests/architecture/` is an intentionally retained repository-policy suite. It verifies repository-wide architecture, package/documentation boundaries and static ownership constraints rather than one runtime test type. It is collected by the full pytest run and may be selected explicitly by directory, but it is not one of the seven runtime suite markers below. It must not be used as a fallback for tests whose responsibility is really unit, contract, integration, E2E, performance, regression or release.
 
-Within a canonical suite, use stable domain-oriented subdirectories whenever the responsibility has a clear owner (for example `unit/browser/`, `unit/capabilities/` and `unit/cli/`).
+Within a canonical suite, use stable domain-oriented subdirectories whenever the responsibility has a clear owner (for example `unit/browser/`, `contract/models/`, `integration/control_plane/` or `regression/security/`).
 
 ## Placement rules
 
