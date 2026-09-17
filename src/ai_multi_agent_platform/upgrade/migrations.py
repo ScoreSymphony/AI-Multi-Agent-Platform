@@ -223,7 +223,7 @@ class MigrationRunner:
                     step.precondition(context)
                 except Exception as exc:
                     raise MigrationError(
-                        f"migration {step.revision!r} precondition failed: {exc}"
+                        f"migration {step.revision!r} precondition failed: {type(exc).__name__}"
                     ) from exc
             started_at = _now()
             self.history.put(
@@ -256,10 +256,12 @@ class MigrationRunner:
                         status=MigrationStatus.FAILED,
                         started_at=started_at,
                         finished_at=_now(),
-                        error=f"{type(exc).__name__}: {exc}",
+                        error=type(exc).__name__,
                     )
                 )
-                raise MigrationError(f"migration {step.revision!r} failed: {exc}") from exc
+                raise MigrationError(
+                    f"migration {step.revision!r} failed: {type(exc).__name__}"
+                ) from exc
             self.history.put(
                 MigrationRecord(
                     revision=step.revision,
