@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   ApplicationsClient,
   type CanonicalApplication,
@@ -329,7 +329,7 @@ function OpenApplication({
   target,
   compact = false,
 }: {
-  target: CanonicalApplicationInstance["open"] & {};
+  target: NonNullable<CanonicalApplicationInstance["open"]>;
   compact?: boolean;
 }) {
   const external = target.open_mode === "external";
@@ -367,12 +367,7 @@ function ApplicationLogs({ stream }: { stream: CanonicalApplicationLogStream }) 
   );
 }
 
-function OpenApplicationTargetGuard() {
-  return null;
-}
-void OpenApplicationTargetGuard;
-
-function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+function Detail({ label, children }: { label: string; children: ReactNode }) {
   return <div><dt>{label}</dt><dd>{children}</dd></div>;
 }
 
