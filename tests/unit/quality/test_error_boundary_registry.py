@@ -62,11 +62,7 @@ def _entry(
 def test_registry_classifies_exact_handler_signature(tmp_path: Path) -> None:
     result = _run(
         tmp_path,
-        "def probe():\n"
-        "    try:\n"
-        "        work()\n"
-        "    except Exception:\n"
-        "        return None\n",
+        "def probe():\n    try:\n        work()\n    except Exception:\n        return None\n",
         [_entry()],
     )
 
@@ -99,11 +95,7 @@ def test_registry_recognizes_structural_destructor_cleanup(tmp_path: Path) -> No
 def test_registry_fails_when_current_finding_is_unclassified(tmp_path: Path) -> None:
     result = _run(
         tmp_path,
-        "def probe():\n"
-        "    try:\n"
-        "        work()\n"
-        "    except Exception:\n"
-        "        return None\n",
+        "def probe():\n    try:\n        work()\n    except Exception:\n        return None\n",
         [],
     )
 
@@ -114,11 +106,7 @@ def test_registry_fails_when_current_finding_is_unclassified(tmp_path: Path) -> 
 def test_registry_fails_when_review_entry_is_stale(tmp_path: Path) -> None:
     result = _run(
         tmp_path,
-        "def probe():\n"
-        "    try:\n"
-        "        work()\n"
-        "    except OSError:\n"
-        "        return None\n",
+        "def probe():\n    try:\n        work()\n    except OSError:\n        return None\n",
         [_entry()],
     )
 
@@ -129,11 +117,7 @@ def test_registry_fails_when_review_entry_is_stale(tmp_path: Path) -> None:
 def test_registry_cannot_authorize_process_control_risk(tmp_path: Path) -> None:
     result = _run(
         tmp_path,
-        "def probe():\n"
-        "    try:\n"
-        "        work()\n"
-        "    except BaseException:\n"
-        "        return None\n",
+        "def probe():\n    try:\n        work()\n    except BaseException:\n        return None\n",
         [_entry(exception_form="BaseException")],
     )
 
