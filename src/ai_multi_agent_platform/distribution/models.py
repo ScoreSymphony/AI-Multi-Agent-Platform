@@ -26,7 +26,15 @@ class RegistryItemType(StrEnum):
     DOCUMENTATION = "documentation"
 
 
-RegistryItemKind = RegistryItemType | str
+class CustomRegistryItemKind(str):
+    """Validated future Marketplace kind retaining enum-like ``.value`` compatibility."""
+
+    @property
+    def value(self) -> str:
+        return str(self)
+
+
+RegistryItemKind = RegistryItemType | CustomRegistryItemKind | str
 
 
 class TrustStatus(StrEnum):
@@ -120,18 +128,18 @@ class ArtifactIntegrity:
 def parse_registry_item_kind(value: RegistryItemKind) -> RegistryItemKind:
     """Return a known enum where possible while preserving valid future kind names."""
 
-    raw = value.value if isinstance(value, RegistryItemType) else value
+    raw = value.value if isinstance(value, (RegistryItemType, CustomRegistryItemKind)) else value
     if not isinstance(raw, str) or not _ID_RE.fullmatch(raw):
         raise ValueError("registry item kind has invalid canonical ID syntax")
     try:
         return RegistryItemType(raw)
     except ValueError:
-        return raw
+        return CustomRegistryItemKind(raw)
 
 
 def registry_item_kind_value(value: RegistryItemKind) -> str:
     resolved = parse_registry_item_kind(value)
-    return resolved.value if isinstance(resolved, RegistryItemType) else resolved
+    return resolved.value
 
 
 def version_key(value: str) -> tuple[int, int, int]:
