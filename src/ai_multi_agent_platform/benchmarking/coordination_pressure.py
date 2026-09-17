@@ -1,4 +1,4 @@
-"""Retry, wait and reconciliation pressure evidence for issue #440."""
+"""Retry, wait and reconciliation pressure evidence for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -321,8 +321,9 @@ class CoordinationPressureHarness:
                     observation_samples=observation_samples,
                     reconciled_running=reconciled_running,
                 )
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:  # evidence must retain deterministic failure details
-            errors.append(f"{type(exc).__name__}: {exc}")
+            errors.append(f"{type(exc).__name__}")
 
         duration = time.perf_counter() - wall_started
         process_cpu_seconds = time.process_time() - cpu_before

@@ -269,6 +269,7 @@ class MCPStatelessHTTPClient(MCPClient):
         try:
             await self._request("server/discover", {})
             return True
+        # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
         except Exception:
             return False
 

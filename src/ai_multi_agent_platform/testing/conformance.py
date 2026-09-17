@@ -383,6 +383,7 @@ async def assert_canonical_error(
             ) from error
         assert_namespaced_adapter_metadata(error.adapter_metadata)
         return error
+    # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
     except Exception as error:
         raise AssertionError(
             f"backend-private exception escaped provider boundary: {type(error).__name__}"

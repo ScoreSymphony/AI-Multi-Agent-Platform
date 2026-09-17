@@ -1,4 +1,4 @@
-"""Rollback-safe Connection import for issue #79."""
+"""Rollback-safe Connection import for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -140,6 +140,7 @@ class ConnectionImportMutationHandler:
             )
             stored = await self._service.repository.save_connection(normalized)
             return stored.id
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception:
             if created is not None:
                 try:

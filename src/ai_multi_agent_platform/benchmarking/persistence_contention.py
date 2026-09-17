@@ -1,4 +1,4 @@
-"""Real SQLite writer-contention benchmark evidence for issue #440."""
+"""Real SQLite writer-contention benchmark evidence for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -389,9 +389,10 @@ async def _run_writer_async(
                     unexpected_errors += 1
                 errors.append(f"writer {writer_index} {phase}: {exc.code.value}: {exc.message}")
                 task_succeeded = False
+            # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
             except Exception as exc:  # pragma: no cover - defensive evidence path
                 unexpected_errors += 1
-                errors.append(f"writer {writer_index} {phase}: {type(exc).__name__}: {exc}")
+                errors.append(f"writer {writer_index} {phase}: {type(exc).__name__}")
                 task_succeeded = False
             else:
                 successful_operations += 1
@@ -431,6 +432,7 @@ async def _verify_reopened_state(
         task_id = _task_id(index)
         try:
             state = await kernel.get_task(task_id)
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception:
             task_state_failures += 1
             history_failures += 1

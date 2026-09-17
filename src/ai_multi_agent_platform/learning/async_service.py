@@ -496,6 +496,7 @@ class RuntimeGovernedLearningService(GovernedObservedLearningService):
             return
         try:
             record = await evaluator.evaluate(promoted, operation=operation)
+        # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
         except Exception as exc:
             record = PostPromotionEvaluationRecord(
                 learning_candidate_id=promoted.learning_candidate_id,

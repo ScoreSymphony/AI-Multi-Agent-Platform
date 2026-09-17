@@ -73,6 +73,7 @@ class AuthorityGatedAutomationLoop:
         while not self._stop_event.is_set():
             try:
                 await self.run_once()
+            # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
             except Exception as exc:
                 self._last_error = exc
 
@@ -89,7 +90,7 @@ class AuthorityGatedDistributedRuntime(DistributedRuntime):
     dispatch. A second check immediately before the base dispatch boundary closes the scheduling
     race and releases the just-created reservation if authority was lost in between.
 
-    Worker-side validation of the Control Plane fencing epoch is intentionally a separate #89
+    Worker-side validation of the Control Plane fencing epoch is intentionally a separate
     integration step; this class does not claim that transport-level protection yet.
     """
 
@@ -153,6 +154,7 @@ class AuthorityGatedDistributedRuntime(DistributedRuntime):
     ) -> DispatchRecord:
         try:
             await self._authority_check()
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self.registry.release_reservation(placement.reservation.reservation_id)
             self._persist()

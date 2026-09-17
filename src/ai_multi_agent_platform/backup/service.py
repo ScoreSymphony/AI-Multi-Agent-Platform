@@ -188,6 +188,7 @@ def create_single_node_backup(
         target.parent.mkdir(parents=True, exist_ok=True)
         os.replace(partial, target)
         return target
+    # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
     except Exception:
         if partial.exists():
             shutil.rmtree(partial, ignore_errors=True)
@@ -361,6 +362,7 @@ def restore_single_node_backup(
         target.parent.mkdir(parents=True, exist_ok=True)
         os.replace(partial, target)
         return target
+    # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
     except Exception:
         if partial.exists():
             shutil.rmtree(partial, ignore_errors=True)
