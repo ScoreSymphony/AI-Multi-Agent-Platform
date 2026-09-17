@@ -62,6 +62,7 @@ from ai_multi_agent_platform.repository_intelligence.wiring import (
     AuthorizedRunWorkspaceSnapshotLoader,
 )
 
+from .application_runtime import compose_application_runtime
 from .onboarding_openai_compatible import OpenAICompatibleOnboardingAdapter
 from .setup_registry import DistributionSetupRegistryPort
 
@@ -101,6 +102,11 @@ def build_default_single_node_deployment(
         secret_provider=secrets,
         enable_distributed_execution=enable_distributed_execution,
         application_release_gate_policy=release_gate_policy,
+    )
+    compose_application_runtime(
+        config,
+        deployment,
+        secret_provider=secrets,
     )
     component_setup = OnboardingComponentSetupService(
         SingleNodeComponentDiscoverySource(

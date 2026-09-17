@@ -3,6 +3,8 @@
 This module is intentionally separate from disaster-restore recovery. The normal
 single-Control-Plane profile must reconcile durable canonical Runs and automatic
 reviewer work after an abnormal process exit even when no backup/restore operation occurred.
+Outer product adapters may contribute provider-neutral startup recovery extensions without
+moving their lifecycle ownership into the deployment package.
 """
 
 from __future__ import annotations
@@ -42,6 +44,22 @@ class StartupDistributedRuntime(Protocol):
     async def reconcile(self) -> tuple[object, ...]: ...
 
 
+@dataclass(frozen=True, slots=True)
+class StartupRecoveryExtensionReport:
+    """Provider-neutral diagnostics returned by one outer startup recovery extension."""
+
+    name: str
+    items_checked: int
+    failures: tuple[dict[str, Any], ...] = ()
+    ready_for_service: bool = True
+
+
+class StartupRecoveryExtension(Protocol):
+    """Outer product-owned recovery seam that preserves deployment ownership boundaries."""
+
+    async def reconcile_startup(self) -> StartupRecoveryExtensionReport: ...
+
+
 class StartupReviewerReconciler(Protocol):
     """Narrow #758 seam for durable automatic-reviewer reconciliation."""
 
@@ -59,12 +77,21 @@ class SingleNodeStartupRecoveryResult:
     ready_for_service: bool
     plans_reconciled: int = 0
     distributed_jobs_reconciled: int = 0
+    extension_recoveries: tuple[StartupRecoveryExtensionReport, ...] = ()
     reviewer_recoveries: tuple[ReviewerRecoveryRecord, ...] = ()
     blocked_verification_ids: tuple[str, ...] = ()
 
     @property
     def runs_checked(self) -> int:
         return sum(len(report.entries) for report in self.reports)
+
+    @property
+    def extension_items_checked(self) -> int:
+        return sum(report.items_checked for report in self.extension_recoveries)
+
+    @property
+    def extension_failures(self) -> int:
+        return sum(len(report.failures) for report in self.extension_recoveries)
 
 
 async def reconcile_single_node_startup(
@@ -73,6 +100,7 @@ async def reconcile_single_node_startup(
     kernel: PlatformKernel,
     coordinator: StartupCoordinator | None = None,
     distributed_runtime: StartupDistributedRuntime | None = None,
+    extensions: tuple[StartupRecoveryExtension, ...] = (),
     reviewer_reconciler: StartupReviewerReconciler | None = None,
 ) -> SingleNodeStartupRecoveryResult:
     """Reconcile durable runtime state before an ordinary single-node serve.
@@ -83,9 +111,10 @@ async def reconcile_single_node_startup(
     startup records an explicit orphaned blocker instead of asking the kernel to
     redispatch a possibly accepted STARTING execution or aborting before a report can
     be written. Once those blockers are resolved, the durable Plan/Step coordinator
-    resumes due waits/retries and the kernel scans every Task stream. Only after
-    canonical Run ownership is stable may #758 reconcile automatic reviewer AgentRuns.
-    The complete pass is safe to repeat.
+    resumes due waits/retries and the kernel scans every Task stream. Product-owned
+    recovery extensions then reconcile independently through a narrow provider-neutral
+    seam. Only after canonical Run ownership is stable may #758 reconcile automatic
+    reviewer AgentRuns. The complete pass is safe to repeat.
 
     A running canonical Run whose execution backend can no longer be found is never
     guessed into a terminal state: it remains marked as requiring reconciliation and
@@ -124,13 +153,16 @@ async def reconcile_single_node_startup(
         if entry.disposition is RecoveryDisposition.ORPHANED_RECONCILIATION_REQUIRED
     )
 
+    extension_recoveries = tuple([await extension.reconcile_startup() for extension in extensions])
+
     reviewer_recoveries: tuple[ReviewerRecoveryRecord, ...] = ()
     if not unresolved and reviewer_reconciler is not None:
         reviewer_recoveries = await reviewer_reconciler.reconcile_startup()
     blocked_verification_ids = tuple(
         record.verification_id for record in reviewer_recoveries if record.blocked
     )
-    ready_for_service = not unresolved and not blocked_verification_ids
+    extensions_ready = all(report.ready_for_service for report in extension_recoveries)
+    ready_for_service = not unresolved and not blocked_verification_ids and extensions_ready
 
     payload: dict[str, Any] = {
         "report_version": STARTUP_RECOVERY_REPORT_VERSION,
@@ -139,10 +171,22 @@ async def reconcile_single_node_startup(
         "runs_checked": sum(len(report.entries) for report in reports),
         "plans_reconciled": plans_reconciled,
         "distributed_jobs_reconciled": distributed_jobs_reconciled,
+        "extension_items_checked": sum(report.items_checked for report in extension_recoveries),
+        "extension_failures": sum(len(report.failures) for report in extension_recoveries),
         "reviewer_recoveries_checked": len(reviewer_recoveries),
         "unresolved_run_ids": list(unresolved),
         "blocked_verification_ids": list(blocked_verification_ids),
         "ready_for_service": ready_for_service,
+        "extensions": [
+            {
+                "name": report.name,
+                "items_checked": report.items_checked,
+                "failure_count": len(report.failures),
+                "ready_for_service": report.ready_for_service,
+                "failures": list(report.failures),
+            }
+            for report in extension_recoveries
+        ],
         "reviewer_recoveries": [
             {
                 "verification_id": record.verification_id,
@@ -179,6 +223,7 @@ async def reconcile_single_node_startup(
         ready_for_service=ready_for_service,
         plans_reconciled=plans_reconciled,
         distributed_jobs_reconciled=distributed_jobs_reconciled,
+        extension_recoveries=extension_recoveries,
         reviewer_recoveries=reviewer_recoveries,
         blocked_verification_ids=blocked_verification_ids,
     )
