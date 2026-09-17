@@ -62,9 +62,7 @@ def test_server_startup_recovery_reconciles_durable_applications(
     monkeypatch,
 ) -> None:
     root = tmp_path / "restart"
-    deployment = build_single_node_deployment(
-        SingleNodeConfig(data_dir=root, secure_cookie=False)
-    )
+    deployment = build_single_node_deployment(SingleNodeConfig(data_dir=root, secure_cookie=False))
     manifest = _manifest()
     installed = asyncio.run(
         deployment.applications.install(
@@ -87,9 +85,7 @@ def test_server_startup_recovery_reconciles_durable_applications(
     assert report["application_recovery_failures"] == 0
     assert report["application_failures"] == []
 
-    restarted = build_single_node_deployment(
-        SingleNodeConfig(data_dir=root, secure_cookie=False)
-    )
+    restarted = build_single_node_deployment(SingleNodeConfig(data_dir=root, secure_cookie=False))
     recovered = restarted.application_repository.get_instance(installed.instance_id)
     assert recovered.desired_state.value == "stopped"
     assert recovered.observed_state.value == "stopped"
