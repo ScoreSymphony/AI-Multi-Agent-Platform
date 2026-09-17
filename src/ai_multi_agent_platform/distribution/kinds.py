@@ -1,4 +1,4 @@
-"""Extensible Marketplace component-kind contracts for issue #1174."""
+"""Extensible Marketplace component-kind contracts."""
 
 from __future__ import annotations
 
