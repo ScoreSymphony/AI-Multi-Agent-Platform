@@ -1,4 +1,4 @@
-"""Coordinated, fail-closed upgrade application service for issue #41."""
+"""Coordinated, fail-closed upgrade application service."""
 
 from __future__ import annotations
 
@@ -326,7 +326,9 @@ class UpgradeService:
             # migrator is version-aware and therefore safe to invoke again during explicit resume.
             hook(manifests)
         except Exception as exc:
-            raise UpgradeError(f"plugin-owned state migration failed: {exc}") from exc
+            raise UpgradeError(
+                f"plugin-owned state migration failed: {type(exc).__name__}"
+            ) from exc
 
     def _resume_request(
         self,
