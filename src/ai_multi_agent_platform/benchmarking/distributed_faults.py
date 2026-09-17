@@ -619,7 +619,9 @@ class DistributedWorkerWorkspaceFaultHarness:
             errors.append("distributed fault benchmark exceeded timeout")
         # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:
-            errors.append(f"distributed fault benchmark failed: {type(exc).__name__}: {type(exc).__name__}")
+            errors.append(
+                f"distributed fault benchmark failed: {type(exc).__name__}: {type(exc).__name__}"
+            )
         finally:
             duration = max(0.0, time.perf_counter() - started)
             traced_current, traced_peak = tracemalloc.get_traced_memory()

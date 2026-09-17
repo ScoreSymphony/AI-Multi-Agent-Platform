@@ -261,7 +261,9 @@ class MigrationRunner:
                         error=f"{type(exc).__name__}: {type(exc).__name__}",
                     )
                 )
-                raise MigrationError(f"migration {step.revision!r} failed: {type(exc).__name__}") from exc
+                raise MigrationError(
+                    f"migration {step.revision!r} failed: {type(exc).__name__}"
+                ) from exc
             self.history.put(
                 MigrationRecord(
                     revision=step.revision,

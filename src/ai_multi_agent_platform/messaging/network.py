@@ -331,7 +331,7 @@ class TcpMessageBroker:
 
 
 class TcpMessageTransport(MessageTransport):
-    """ client adapter for a :class:`TcpMessageBroker`."""
+    """client adapter for a :class:`TcpMessageBroker`."""
 
     def __init__(
         self,

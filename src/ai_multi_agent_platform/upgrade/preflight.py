@@ -288,7 +288,10 @@ def _migration_precondition_checks(
                     code="migration.precondition.failed",
                     severity=CheckSeverity.ERROR,
                     message=f"migration {step.revision} precondition failed: {type(exc).__name__}",
-                    details={"revision": step.revision, "error": f"{type(exc).__name__}: {type(exc).__name__}"},
+                    details={
+                        "revision": step.revision,
+                        "error": f"{type(exc).__name__}: {type(exc).__name__}",
+                    },
                 )
             )
         else:

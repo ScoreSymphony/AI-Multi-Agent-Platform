@@ -217,7 +217,6 @@ def test_worker_failure_can_be_suppressed_when_outer_cancellation_is_authoritati
     assert finding["severity"] == "allowed"
 
 
-
 def test_check_rejects_unclassified_production_catch(tmp_path: Path) -> None:
     code, findings, _ = _scan(
         tmp_path,
@@ -231,6 +230,7 @@ def test_check_rejects_unclassified_production_catch(tmp_path: Path) -> None:
     assert code == 1
     assert findings[0]["recommended_classification"] == "needs review"
     assert findings[0]["severity"] == "review"
+
 
 def test_development_tools_are_classified_separately(tmp_path: Path) -> None:
     code, findings, _ = _scan(

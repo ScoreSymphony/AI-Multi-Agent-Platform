@@ -1,4 +1,4 @@
-""" Control Plane HA telemetry over the existing  observability facade."""
+"""Control Plane HA telemetry over the existing  observability facade."""
 
 from __future__ import annotations
 

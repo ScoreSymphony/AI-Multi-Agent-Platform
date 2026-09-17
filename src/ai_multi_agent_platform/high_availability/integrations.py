@@ -90,7 +90,7 @@ class AuthorityGatedDistributedRuntime(DistributedRuntime):
     dispatch. A second check immediately before the base dispatch boundary closes the scheduling
     race and releases the just-created reservation if authority was lost in between.
 
-    Worker-side validation of the Control Plane fencing epoch is intentionally a separate 
+    Worker-side validation of the Control Plane fencing epoch is intentionally a separate
     integration step; this class does not claim that transport-level protection yet.
     """
 

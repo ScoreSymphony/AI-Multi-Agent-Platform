@@ -674,8 +674,7 @@ def main(argv: list[str] | None = None) -> int:
     return int(
         args.check
         and any(
-            item.source_class == "production" and item.severity != "allowed"
-            for item in findings
+            item.source_class == "production" and item.severity != "allowed" for item in findings
         )
     )
 
