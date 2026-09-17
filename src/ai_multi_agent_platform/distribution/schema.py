@@ -12,13 +12,14 @@ from .models import (
     ArtifactIntegrity,
     DistributionRoute,
     RegistryDependency,
-    RegistryItemType,
+    RegistryManifestReference,
     RegistrySource,
     TrustStatus,
     VersionRange,
+    parse_registry_item_kind,
 )
 
-REGISTRY_ITEM_SCHEMA_VERSION = "2"
+REGISTRY_ITEM_SCHEMA_VERSION = "3"
 REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
@@ -138,11 +139,33 @@ REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
 }
 
 REGISTRY_ITEM_SCHEMA_V2: dict[str, Any] = deepcopy(REGISTRY_ITEM_SCHEMA_V1)
-REGISTRY_ITEM_SCHEMA_V2["properties"]["schema_version"] = {"const": REGISTRY_ITEM_SCHEMA_VERSION}
+REGISTRY_ITEM_SCHEMA_V2["properties"]["schema_version"] = {"const": "2"}
 REGISTRY_ITEM_SCHEMA_V2["properties"]["distribution_route"] = {"const": "manual"}
+
+REGISTRY_ITEM_SCHEMA_V3: dict[str, Any] = deepcopy(REGISTRY_ITEM_SCHEMA_V2)
+REGISTRY_ITEM_SCHEMA_V3["properties"]["schema_version"] = {"const": REGISTRY_ITEM_SCHEMA_VERSION}
+REGISTRY_ITEM_SCHEMA_V3["properties"]["item_type"] = {
+    "type": "string",
+    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+}
+REGISTRY_ITEM_SCHEMA_V3["properties"]["manifest"] = {
+    "type": "object",
+    "required": ["kind", "reference"],
+    "properties": {
+        "kind": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        },
+        "reference": {"type": "string", "minLength": 1},
+        "schema_version": {"type": "string", "minLength": 1},
+    },
+    "additionalProperties": False,
+}
+
 _REGISTRY_ITEM_SCHEMAS = {
     "1": REGISTRY_ITEM_SCHEMA_V1,
-    REGISTRY_ITEM_SCHEMA_VERSION: REGISTRY_ITEM_SCHEMA_V2,
+    "2": REGISTRY_ITEM_SCHEMA_V2,
+    REGISTRY_ITEM_SCHEMA_VERSION: REGISTRY_ITEM_SCHEMA_V3,
 }
 
 
@@ -163,6 +186,7 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
     source = document["source"]
     supported_platform = document["supported_platform"]
     integrity = document["integrity"]
+    manifest_document = document.get("manifest")
     dependencies = tuple(
         RegistryDependency(
             item_id=dependency["item_id"],
@@ -176,7 +200,7 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
     )
     return RegistryItem(
         item_id=document["item_id"],
-        item_type=RegistryItemType(document["item_type"]),
+        item_type=parse_registry_item_kind(document["item_type"]),
         name=document["name"],
         description=document["description"],
         version=document["version"],
@@ -213,6 +237,15 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
         distribution_route=(
             DistributionRoute(document["distribution_route"])
             if "distribution_route" in document
+            else None
+        ),
+        manifest=(
+            RegistryManifestReference(
+                kind=manifest_document["kind"],
+                reference=manifest_document["reference"],
+                schema_version=manifest_document.get("schema_version"),
+            )
+            if manifest_document is not None
             else None
         ),
     )
