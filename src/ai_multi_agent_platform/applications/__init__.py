@@ -13,6 +13,13 @@ from .control_plane import (
 )
 from .definition import Application
 from .local_process_runtime import LocalProcessApplicationRuntime
+from .log_control_plane import (
+    APPLICATION_LOG_COLLECTION,
+    APPLICATION_LOG_MODULE,
+    ApplicationLogResourceService,
+    application_log_control_plane_module,
+    register_application_log_control_plane,
+)
 from .manifest import (
     APPLICATION_MANIFEST_SCHEMA,
     application_manifest_from_document,
@@ -72,6 +79,8 @@ __all__ = [
     "APPLICATION_COLLECTIONS",
     "APPLICATION_COMMANDS",
     "APPLICATION_INSTANCE_COLLECTION",
+    "APPLICATION_LOG_COLLECTION",
+    "APPLICATION_LOG_MODULE",
     "APPLICATION_MANIFEST_SCHEMA",
     "APPLICATION_MANIFEST_SCHEMA_VERSION",
     "APPLICATION_MODULE",
@@ -92,6 +101,7 @@ __all__ = [
     "ApplicationInstanceResourceService",
     "ApplicationLifecycleService",
     "ApplicationLogEntry",
+    "ApplicationLogResourceService",
     "ApplicationManifest",
     "ApplicationMaturity",
     "ApplicationObservedState",
@@ -122,7 +132,9 @@ __all__ = [
     "LocalProcessApplicationRuntime",
     "SqliteApplicationRepository",
     "application_control_plane_module",
+    "application_log_control_plane_module",
     "application_manifest_from_document",
     "register_application_control_plane",
+    "register_application_log_control_plane",
     "validate_application_manifest_document",
 ]
