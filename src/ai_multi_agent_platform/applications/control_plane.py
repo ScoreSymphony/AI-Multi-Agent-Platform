@@ -23,7 +23,6 @@ from .manifest import application_manifest_from_document
 from .models import (
     ApplicationInstallRequest,
     ApplicationInstance,
-    ApplicationManifest,
     ApplicationVolumeBinding,
     ApplicationVolumeKind,
 )
