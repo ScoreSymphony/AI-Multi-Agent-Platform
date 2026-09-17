@@ -1,4 +1,4 @@
-"""Backend-neutral deterministic migration framework for issue #41."""
+"""Backend-neutral deterministic migration framework."""
 
 from __future__ import annotations
 
