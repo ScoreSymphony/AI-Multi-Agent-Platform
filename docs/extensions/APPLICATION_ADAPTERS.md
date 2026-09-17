@@ -57,15 +57,29 @@ The Application store is optional in the single-node backup inventory because Ap
 
 Persistence contains canonical metadata only. Secret bindings are serialized as `SecretReference` objects and resolved secret values are never written to the Application repository. Provider-private process/container/runtime handles also remain outside canonical persistence.
 
-`ApplicationLifecycleService` persists desired state before invoking an external runtime transition. A failed start can therefore leave `desired=running` with an observed failure. After a platform restart, reopening the repository and calling `recover_all()` supplies that persisted intent to the selected runtime adapter, which can reconcile the observed state without changing canonical instance identity.
+`ApplicationLifecycleService` persists desired state before invoking an external runtime transition. Runtime operations are asynchronous because concrete adapters may perform process, network, secret or workspace I/O. A failed start can therefore leave `desired=running` with an observed failure. After a platform restart, reopening the repository and awaiting `recover_all()` supplies that persisted intent to the selected runtime adapter without changing canonical instance identity.
 
 ## Runtime boundary
 
-`ApplicationRuntime` is the platform-owned lifecycle boundary. A concrete backend implements preparation, start, stop, restart, removal, status, health, endpoint resolution, logs and reconciliation/recovery.
+`ApplicationRuntime` is the platform-owned asynchronous lifecycle boundary. A concrete backend implements preparation, start, stop, restart, removal, status, health, endpoint resolution, logs and reconciliation/recovery.
 
 A backend may be implemented with Docker Compose, Podman Compose, local processes, Kubernetes or a remote Worker/Node execution mechanism. Backend choice must not alter canonical IDs or require callers to understand backend-private handles.
 
-Logical endpoints are declared by name. The runtime resolves them to concrete runtime endpoints, so applications do not depend on fixed host ports as canonical identity.
+Logical endpoints are declared by name. The runtime resolves them to concrete runtime endpoints, so applications do not depend on provider-private endpoint handles as canonical identity.
+
+### Local process reference backend
+
+`LocalProcessApplicationRuntime` is the first concrete runtime backend. It is dependency-free and manages real local subprocesses without invoking a shell. For a PROCESS service, the executed argv is the manifest's `process` tuple followed by its optional `command` tuple.
+
+The backend starts services in validated dependency order. A service with a health check must become healthy before dependent services are started. stdout and stderr are continuously drained into bounded canonical `ApplicationLogEntry` records, while process handles and PIDs remain private to the backend. Stop and restart operate in reverse dependency order where teardown ordering matters.
+
+Typed configuration values are projected only through configuration fields that explicitly declare an `environment_variable`. The backend does not expose arbitrary environment mutation through the manifest.
+
+The local process backend deliberately fails closed for capabilities that are not wired yet: canonical SecretReference resolution, persistent/workspace/ephemeral volume materialization, service mounts and explicit remote Node placement. Those bindings must reuse the platform's existing security, Workspace/storage and distributed placement authorities rather than introducing backend-local substitutes.
+
+Because PIDs alone are not a safe durable ownership token, a newly created local-process runtime does not adopt an unknown process after a platform/runtime restart. If durable state says `desired=running` but the backend has lost its private process ownership, recovery reports a runtime failure instead of spawning a duplicate process or attaching to an unverified PID. A later supervised-process implementation may provide stronger verifiable adoption semantics without changing canonical Application identity.
+
+For local PROCESS services there is no container network namespace, so declared endpoint target ports currently resolve directly to loopback ports. Container/remote backends may map the same logical endpoint references to different concrete ports or addresses.
 
 ## Storage and secrets
 
