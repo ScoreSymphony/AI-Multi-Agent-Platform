@@ -410,6 +410,7 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
                     self._states[workspace.id] = replace(latest, deleted=True)
                     await self._persist_states_async()
                 deleted.append(workspace.id)
+            # error-boundary: allow-broad-catch=boundary per-workspace retention batch containment
             except Exception:
                 failed.append(workspace.id)
 

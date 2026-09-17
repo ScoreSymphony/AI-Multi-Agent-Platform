@@ -648,7 +648,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Exit 1 only when clearly prohibited broad-catch shapes are present.",
+        help="Exit 1 when any production broad catch is prohibited or unclassified.",
     )
     return parser
 
@@ -671,7 +671,12 @@ def main(argv: list[str] | None = None) -> int:
     else:
         sys.stdout.write(_text(findings))
 
-    return int(args.check and any(item.severity == "prohibited" for item in findings))
+    return int(
+        args.check
+        and any(
+            item.source_class == "production" and item.severity != "allowed" for item in findings
+        )
+    )
 
 
 if __name__ == "__main__":

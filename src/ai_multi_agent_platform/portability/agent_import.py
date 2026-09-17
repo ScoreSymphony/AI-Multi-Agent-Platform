@@ -68,10 +68,12 @@ class AgentImportMutationHandler:
             for revision in snapshot.revisions[1:]:
                 self._repository.update_agent(_agent_definition_at(snapshot, revision), revision)
             return snapshot.definition.agent_id
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception:
             if created:
                 try:
                     self._repository.delete_agent(snapshot.definition.agent_id)
+                # error-boundary: allow-broad-catch=translation reviewed error translation
                 except Exception as rollback_error:
                     raise ContractError(
                         ErrorCode.BACKEND_ERROR,
@@ -129,10 +131,12 @@ class AgentTeamImportMutationHandler:
             for revision in snapshot.revisions[1:]:
                 self._repository.update_team(_team_definition_at(snapshot, revision), revision)
             return snapshot.definition.team_id
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception:
             if created:
                 try:
                     self._repository.delete_team(snapshot.definition.team_id)
+                # error-boundary: allow-broad-catch=translation reviewed error translation
                 except Exception as rollback_error:
                     raise ContractError(
                         ErrorCode.BACKEND_ERROR,
@@ -200,7 +204,7 @@ def _routing_profile_assignments(
                     "portable Agent routing-profile reference must pin an exact canonical revision",
                     details={"routing_profile_ref": raw_ref},
                 ) from exc
-            # Preserve pre-#309 compatibility routing keys unchanged.
+            # Preserve pre- compatibility routing keys unchanged.
             continue
         if (reference.profile_id, reference.revision) not in declared:
             raise ContractError(

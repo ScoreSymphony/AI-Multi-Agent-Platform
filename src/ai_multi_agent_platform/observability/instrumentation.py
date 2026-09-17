@@ -342,6 +342,7 @@ class ObservedExecutor(Executor):
         )
         try:
             result = await self._executor.execute(request)
+        # error-boundary: allow-broad-catch=boundary observed operation re-raises primary failure
         except Exception as exc:
             exception_failure = self._failure_from_exception(exc, FailureComponent.EXECUTION)
             finished = self._telemetry.finish_span(
@@ -472,6 +473,7 @@ class ObservedModelProvider(ModelProvider):
         self._telemetry.metric("platform.model.calls", 1.0, context=context)
         try:
             response = await self._provider.generate(request)
+        # error-boundary: allow-broad-catch=boundary observed operation re-raises primary failure
         except Exception as exc:
             failure = ObservedExecutor._failure_from_exception(
                 exc, FailureComponent.MODEL_PROVIDER_ROUTER
@@ -541,6 +543,7 @@ class ObservedToolProvider(ToolProvider):
         self._telemetry.metric("platform.tool.calls", 1.0, context=context)
         try:
             result = await self._provider.invoke(invocation)
+        # error-boundary: allow-broad-catch=boundary observed operation re-raises primary failure
         except Exception as exc:
             failure = ObservedExecutor._failure_from_exception(
                 exc, FailureComponent.CAPABILITY_TOOL

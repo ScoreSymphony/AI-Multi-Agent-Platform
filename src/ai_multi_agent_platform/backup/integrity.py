@@ -69,9 +69,10 @@ async def validate_restored_single_node(
             validator_checks = await validator(reports)
         except RestoreValidationError:
             raise
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception as exc:
             raise RestoreValidationError(
-                f"deployment restore-integrity validator failed: {type(exc).__name__}: {exc}"
+                f"deployment restore-integrity validator failed: {type(exc).__name__}"
             ) from exc
         checks.extend(validator_checks)
 

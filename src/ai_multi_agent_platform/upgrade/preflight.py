@@ -1,4 +1,4 @@
-"""Mutation-free upgrade preflight checks for issue #41."""
+"""Mutation-free upgrade preflight checks for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -281,13 +281,17 @@ def _migration_precondition_checks(
             continue
         try:
             step.precondition(context)
+        # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
         except Exception as exc:
             checks.append(
                 PreflightCheck(
                     code="migration.precondition.failed",
                     severity=CheckSeverity.ERROR,
-                    message=f"migration {step.revision} precondition failed: {exc}",
-                    details={"revision": step.revision, "error": f"{type(exc).__name__}: {exc}"},
+                    message=f"migration {step.revision} precondition failed: {type(exc).__name__}",
+                    details={
+                        "revision": step.revision,
+                        "error": f"{type(exc).__name__}",
+                    },
                 )
             )
         else:
@@ -375,7 +379,7 @@ def _plugin_state_migration_checks(request: PreflightRequest) -> tuple[Preflight
                 code="plugin.state_migration.hook_missing",
                 severity=CheckSeverity.ERROR,
                 message=(
-                    "plugin-owned state requires migration but no controlled #20 hook is available"
+                    "plugin-owned state requires migration but no controlled  hook is available"
                 ),
                 details={"plugin_ids": sorted(required)},
             ),
@@ -384,7 +388,7 @@ def _plugin_state_migration_checks(request: PreflightRequest) -> tuple[Preflight
         PreflightCheck(
             code="plugin.state_migration.ready",
             severity=CheckSeverity.INFO,
-            message="required plugin-owned state migrations have a controlled #20 hook",
+            message="required plugin-owned state migrations have a controlled  hook",
             details={"plugin_ids": sorted(required)},
         ),
     )

@@ -71,7 +71,7 @@ class SkillSpectorConfig:
 
     def __post_init__(self) -> None:
         if self.provider_version != PINNED_VERSION or self.provider_revision != PINNED_REVISION:
-            raise ValueError("unsupported SkillSpector pin; rerun #800 corpus before upgrade")
+            raise ValueError("unsupported SkillSpector pin; rerun corpus before upgrade")
         if self.dependency_set_digest != PINNED_DEPENDENCY_SET_SHA256:
             raise ValueError("SkillSpector dependency lock does not match approved production pin")
         if self.scan_mode != SCAN_MODE:
@@ -164,6 +164,7 @@ class SkillSpectorSecurityEvidenceProvider:
             if raw_bytes is not None:
                 try:
                     artifact = self.raw_report_store.put(raw_bytes)
+                # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
                 except Exception:
                     reasons.append("raw_report_retention_failed")
                 else:

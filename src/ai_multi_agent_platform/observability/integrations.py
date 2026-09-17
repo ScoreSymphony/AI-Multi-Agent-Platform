@@ -30,7 +30,7 @@ class TimelineReader(Protocol):
 
 
 class MeasurementSink(Protocol):
-    """#76-facing measurement input; intentionally contains no budget semantics."""
+    """-facing measurement input; intentionally contains no budget semantics."""
 
     def ingest_metric(self, record: MetricRecord) -> None: ...
 
@@ -40,7 +40,7 @@ class AccountingBridgeExporter(ObservabilityExporter):
 
     Logs, spans and timelines only go to the configured observability exporter. Metric
     records are additionally offered to the accounting sink. The bridge does not create
-    UsageRecords, budgets, costs or accounting state; those remain owned by issue #76.
+    UsageRecords, budgets, costs or accounting state; those remain owned by the owning subsystem.
     """
 
     def __init__(
@@ -62,6 +62,7 @@ class AccountingBridgeExporter(ObservabilityExporter):
         self.delegate.emit_metric(record)
         try:
             self.measurement_sink.ingest_metric(record)
+        # error-boundary: allow-broad-catch=boundary observability owner boundary
         except Exception as exc:
             self.last_measurement_error = type(exc).__name__
             if self.strict:
@@ -147,7 +148,7 @@ def inject_trace_carrier(
     envelope: TransportEnvelope,
     carrier: TraceCarrier,
 ) -> TransportEnvelope:
-    """Attach trace parentage and canonical observability context to a #35 envelope."""
+    """Attach trace parentage and canonical observability context to a  envelope."""
 
     baggage = dict(envelope.trace_context.baggage)
     baggage.update(carrier.to_mapping())

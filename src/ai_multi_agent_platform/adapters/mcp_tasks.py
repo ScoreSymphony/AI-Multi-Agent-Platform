@@ -307,6 +307,7 @@ class SqliteMCPTaskBindingStore:
     def __del__(self) -> None:  # pragma: no cover - best-effort fallback for abandoned stores
         try:
             self.close()
+        # error-boundary: allow-broad-catch=cleanup destructor best-effort resource release
         except Exception:
             pass
 

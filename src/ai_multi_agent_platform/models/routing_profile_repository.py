@@ -82,6 +82,7 @@ class JsonModelRoutingProfileRepository:
         self._revisions[(revision.profile_id, revision.revision)] = revision
         try:
             self._persist()
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self._definitions.pop(definition.profile_id, None)
             self._revisions.pop((revision.profile_id, revision.revision), None)
@@ -139,6 +140,7 @@ class JsonModelRoutingProfileRepository:
         self._revisions[(revision.profile_id, revision.revision)] = revision
         try:
             self._persist()
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self._definitions[definition.profile_id] = current
             self._revisions.pop((revision.profile_id, revision.revision), None)
@@ -184,6 +186,7 @@ class JsonModelRoutingProfileRepository:
         self._definitions[profile_id] = updated
         try:
             self._persist()
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self._definitions[profile_id] = current
             raise
@@ -213,6 +216,7 @@ class JsonModelRoutingProfileRepository:
             self._revisions.pop((profile_id, revision_number), None)
         try:
             self._persist()
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self._definitions[profile_id] = definition
             for stored_revision in revisions:

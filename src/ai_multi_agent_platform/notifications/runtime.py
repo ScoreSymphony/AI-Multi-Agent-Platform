@@ -1,4 +1,4 @@
-"""Autonomous restart-safe notification projection runtime for issue #75."""
+"""Autonomous restart-safe notification projection runtime for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ class NotificationRuntimeTick:
 
 
 class NotificationRuntime:
-    """Continuously project canonical Events and #88 reminder state into Notifications.
+    """Continuously project canonical Events and  reminder state into Notifications.
 
     The runtime never owns source lifecycle state. Canonical Events remain in ``EventRepository``;
     runtime state only checkpoints successful projection so restarts do not inflate duplicate
@@ -187,6 +187,7 @@ class NotificationRuntime:
                 try:
                     projected += len(await self._notifications.project_event(event))
                     await self._state.mark_processed(event.id, event_type=event.event_type)
+                # error-boundary: allow-broad-catch=boundary reviewed owner boundary
                 except Exception as exc:
                     failed += 1
                     if first_error is None:
@@ -198,6 +199,7 @@ class NotificationRuntime:
         if self._reminder_evaluator is not None:
             try:
                 reminder_count = len(await self._reminder_evaluator())
+            # error-boundary: allow-broad-catch=boundary notification runtime/provider containment
             except Exception as exc:
                 reminder_failed = True
                 if first_error is None:
@@ -216,6 +218,7 @@ class NotificationRuntime:
         while not self._stop.is_set():
             try:
                 await self.run_once()
+            # error-boundary: allow-broad-catch=boundary notification runtime/provider containment
             except Exception as exc:
                 self._last_error = exc
             try:

@@ -1,4 +1,4 @@
-"""Idle-footprint and bounded soak/endurance benchmarks for issue #440."""
+"""Idle-footprint and bounded soak/endurance benchmarks for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -513,9 +513,10 @@ class SingleNodeEnduranceHarness:
             samples.operation.append(elapsed)
             samples.window_operation.append(elapsed)
             samples.completed += 1
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:  # endurance evidence records failures by design
             samples.failed += 1
-            samples.errors.append(f"operation {index}: {type(exc).__name__}: {exc}")
+            samples.errors.append(f"operation {index}: {type(exc).__name__}")
 
     async def _seed_completed_tasks(
         self,

@@ -157,6 +157,7 @@ class ImportExecutor:
         except (KeyboardInterrupt, SystemExit) as exc:
             await self._rollback_preserving_primary(applied, context, exc)
             raise
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception as exc:
             await self._rollback_after_failure(applied, context, exc)
             raise AssertionError("rollback helper must always raise") from exc
@@ -260,6 +261,7 @@ async def _settle_rollback(
             if rollback.cancelled():
                 break
             continue
+        # error-boundary: allow-broad-catch=cleanup rollback settlement preserves primary failure
         except Exception:
             break
 
@@ -267,6 +269,7 @@ async def _settle_rollback(
         rollback.result()
     except asyncio.CancelledError as exc:
         return exc
+    # error-boundary: allow-broad-catch=cleanup rollback settlement preserves primary failure
     except Exception as exc:
         return exc
     return None

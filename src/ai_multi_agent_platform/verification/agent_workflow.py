@@ -1,4 +1,4 @@
-"""Automatic reviewer-Agent workflow coordination for issue #711.
+"""Automatic reviewer-Agent workflow coordination for the owning subsystem.
 
 This module productively wires canonical Verification to the normal Agent runtime.
 Provider/orchestrator-specific reviewer execution remains replaceable, and repair
@@ -656,8 +656,9 @@ class AutomaticReviewerWorkflow:
                 ) from exc
             self._fail_reviewer_run(reviewer_run.agent_run_id, str(exc))
             raise
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception as exc:
-            self._fail_reviewer_run(reviewer_run.agent_run_id, str(exc))
+            self._fail_reviewer_run(reviewer_run.agent_run_id, type(exc).__name__)
             raise
 
         staged = self._stage_execution_decision(reviewer_run, execution)
@@ -678,13 +679,14 @@ class AutomaticReviewerWorkflow:
             # If execution already produced and staged a decision, keep the run recoverable.
             # complete_review may already have terminalized it before canonical submission.
             raise
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception as exc:
             current = self._agents.service.repository.get_agent_run(reviewer_run.agent_run_id)
             if current.status is AgentRunStatus.RUNNING:
                 self._agents.finish_agent_run(
                     current.agent_run_id,
                     status=AgentRunStatus.FAILED,
-                    error=str(exc),
+                    error=type(exc).__name__,
                     telemetry=current.telemetry,
                 )
             raise

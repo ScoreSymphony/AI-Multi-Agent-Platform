@@ -1,9 +1,9 @@
 """Dependency-free cross-process MessageTransport adapter.
 
-The adapter remains an implementation of the platform-owned #35 transport
+The adapter remains an implementation of the platform-owned  transport
 contract.  It never owns canonical Task/Run/Event/Node/Worker identity.  The
 small broker retains transport-only delivery state and delegates ordering,
-retry, backpressure and dead-letter behavior to the deterministic #35 reference
+retry, backpressure and dead-letter behavior to the deterministic  reference
 transport.
 """
 
@@ -60,7 +60,7 @@ _DISCONNECT_POLL_SECONDS = 0.1
 
 
 class TcpMessageBroker:
-    """Self-hosted JSON-line broker exposing existing #35 semantics over TCP."""
+    """Self-hosted JSON-line broker exposing existing  semantics over TCP."""
 
     def __init__(
         self,
@@ -180,6 +180,7 @@ class TcpMessageBroker:
             await write_frame(writer, {"ok": True, "result": response})
         except ContractError as exc:
             await try_write_error(writer, exc)
+        # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
         except Exception:
             await try_write_error(
                 writer,
@@ -330,7 +331,7 @@ class TcpMessageBroker:
 
 
 class TcpMessageTransport(MessageTransport):
-    """#35 client adapter for a :class:`TcpMessageBroker`."""
+    """client adapter for a :class:`TcpMessageBroker`."""
 
     def __init__(
         self,
@@ -775,6 +776,7 @@ class _TcpSubscription(MessageSubscription):
                     "TCP broker closed before confirming subscription"
                 )
             self._transport._result_or_raise(response)
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             writer.close()
             with suppress(ConnectionError, OSError, ssl.SSLError):

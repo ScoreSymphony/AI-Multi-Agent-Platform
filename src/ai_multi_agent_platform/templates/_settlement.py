@@ -25,5 +25,6 @@ async def settle_awaitable[T](
             continue
     try:
         return worker.result(), None
-    except BaseException as exc:  # error-boundary: allow-broad-catch=cleanup
+    # error-boundary: allow-broad-catch=cleanup secondary settlement failure
+    except (Exception, asyncio.CancelledError) as exc:
         return None, exc

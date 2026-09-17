@@ -36,7 +36,7 @@ from .service import TemplateService, validate_template_configuration
 
 @dataclass(slots=True)
 class WorkflowTemplateExporter:
-    """Export one authorized #364 revision without retaining deployment-local Agent IDs."""
+    """Export one authorized  revision without retaining deployment-local Agent IDs."""
 
     workflows: AuthorizedWorkflowService
     agents: AgentService
@@ -206,7 +206,7 @@ class WorkflowTemplateExporter:
                     {
                         "template_id": template_id,
                         "error_type": type(cleanup_error).__name__,
-                        "error": str(cleanup_error),
+                        "error": type(cleanup_error).__name__,
                     }
                 )
         if failures:

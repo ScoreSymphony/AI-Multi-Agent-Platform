@@ -100,6 +100,7 @@ class PostgresCoordinationProvider:
             raise
         except (LeadershipConflict, StaleFencingToken, CoordinationUnavailable):
             raise
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception:
             raise CoordinationUnavailable(
                 "PostgreSQL coordination backend is unavailable"
@@ -111,6 +112,7 @@ class PostgresCoordinationProvider:
             result = operation(connection)
             connection.commit()
             return result
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             connection.rollback()
             raise

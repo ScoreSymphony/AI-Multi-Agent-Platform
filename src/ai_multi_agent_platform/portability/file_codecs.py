@@ -1,4 +1,4 @@
-"""Portable File/Artifact codecs and provider-neutral file materialization for issue #79."""
+"""Portable File/Artifact codecs and provider-neutral materialization."""
 
 from __future__ import annotations
 
@@ -237,10 +237,12 @@ async def materialize_file(
         for artifact_id in record.artifact_ids:
             imported = await provider.link_artifact(imported.file_id, artifact_id, context)
         return imported
+    # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
     except Exception:
         if created:
             try:
                 await provider.delete_file(record.file_id, context)
+            # error-boundary: allow-broad-catch=translation reviewed error translation
             except Exception as rollback_error:
                 raise ContractError(
                     ErrorCode.BACKEND_ERROR,

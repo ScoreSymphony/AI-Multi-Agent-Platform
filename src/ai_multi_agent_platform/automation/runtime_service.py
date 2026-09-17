@@ -360,7 +360,7 @@ class AutomationService(_HardenedAutomationService):
         )
 
     async def _emit(self, automation: Automation, delivery: TriggerDelivery, outcome: str) -> None:
-        """Emit canonical delivery audit including #241 retry state without secret material."""
+        """Emit canonical delivery audit including  retry state without secret material."""
 
         if self._event_sink is None:
             return
@@ -431,6 +431,7 @@ async def _canonical_event_visibility(
             return False, "workspace_scope_unproven"
         try:
             event_workspace_id = await workspace_resolver.resolve_workspace_id(event)
+        # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
         except Exception:
             # Visibility resolution is security-sensitive: any resolver/backend failure must
             # reject rather than accidentally broadening access.

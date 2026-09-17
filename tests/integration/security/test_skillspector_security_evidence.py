@@ -201,7 +201,7 @@ def _evidence(
 
 
 def test_production_pin_rejects_unreviewed_provider_drift() -> None:
-    with pytest.raises(ValueError, match="rerun #800 corpus"):
+    with pytest.raises(ValueError, match="rerun corpus before upgrade"):
         skillspector.SkillSpectorConfig(provider_revision="deadbeef")
     with pytest.raises(ValueError, match="dependency lock"):
         skillspector.SkillSpectorConfig(dependency_set_digest="0" * 64)

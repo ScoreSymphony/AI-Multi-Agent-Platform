@@ -1,4 +1,4 @@
-"""Deterministic large-Plan graph scale evidence for issue #440 after #439."""
+"""Deterministic large-Plan graph scale evidence for the owning subsystem after ."""
 
 from __future__ import annotations
 
@@ -473,8 +473,9 @@ async def _exercise_repetition(
             and len(projected_steps) == step_count
             and projected.get("activation_plan_id") == activated.activation_plan_id
         )
+    # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
     except Exception as exc:  # benchmark evidence must preserve correctness failures
-        result.error = f"{type(exc).__name__}: {exc}"
+        result.error = f"{type(exc).__name__}"
     return result
 
 

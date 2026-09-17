@@ -370,6 +370,7 @@ class AuthorizationGate:
         for sink in tuple(self._approval_event_sinks):
             try:
                 await sink(event, record)
+            # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
             except Exception:
                 # Approval state is authoritative and may already be committed. A downstream
                 # attention observer must never turn that successful state transition into a
