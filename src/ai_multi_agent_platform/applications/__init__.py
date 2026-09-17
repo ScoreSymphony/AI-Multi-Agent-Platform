@@ -1,5 +1,16 @@
 """Canonical managed Application definitions, lifecycle and runtime contracts."""
 
+from .control_plane import (
+    APPLICATION_COLLECTION,
+    APPLICATION_COLLECTIONS,
+    APPLICATION_COMMANDS,
+    APPLICATION_INSTANCE_COLLECTION,
+    APPLICATION_MODULE,
+    ApplicationInstanceResourceService,
+    ApplicationResourceService,
+    application_control_plane_module,
+    register_application_control_plane,
+)
 from .definition import Application
 from .local_process_runtime import LocalProcessApplicationRuntime
 from .manifest import (
@@ -57,8 +68,13 @@ from .sqlite_repository import SqliteApplicationRepository
 from .workspace_execution import LocalApplicationWorkspaceBinder
 
 __all__ = [
+    "APPLICATION_COLLECTION",
+    "APPLICATION_COLLECTIONS",
+    "APPLICATION_COMMANDS",
+    "APPLICATION_INSTANCE_COLLECTION",
     "APPLICATION_MANIFEST_SCHEMA",
     "APPLICATION_MANIFEST_SCHEMA_VERSION",
+    "APPLICATION_MODULE",
     "Application",
     "ApplicationConfigValueType",
     "ApplicationConfigurationField",
@@ -73,6 +89,7 @@ __all__ = [
     "ApplicationInstallRequest",
     "ApplicationInstance",
     "ApplicationInstanceNotFoundError",
+    "ApplicationInstanceResourceService",
     "ApplicationLifecycleService",
     "ApplicationLogEntry",
     "ApplicationManifest",
@@ -84,6 +101,7 @@ __all__ = [
     "ApplicationRepository",
     "ApplicationResourceAssociation",
     "ApplicationResourceRequirements",
+    "ApplicationResourceService",
     "ApplicationRuntime",
     "ApplicationRuntimeDescriptor",
     "ApplicationRuntimeError",
@@ -103,6 +121,8 @@ __all__ = [
     "LocalApplicationWorkspaceBinder",
     "LocalProcessApplicationRuntime",
     "SqliteApplicationRepository",
+    "application_control_plane_module",
     "application_manifest_from_document",
+    "register_application_control_plane",
     "validate_application_manifest_document",
 ]
