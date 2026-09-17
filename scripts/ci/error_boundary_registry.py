@@ -1,9 +1,9 @@
 """Machine-verified reviewed classifications for broad exception findings.
 
-The registry is deliberately handler-specific.  It is not a path allowlist: a reviewed entry must
+The registry is deliberately handler-specific. It is not a path allowlist: a reviewed entry must
 match the scanner's structural signature (file, scope, exception form and observed action), every
 entry must be consumed exactly once, and every otherwise-unresolved production finding must have a
-matching review.  Registry entries can never authorize swallowing cancellation or process-control
+matching review. Registry entries can never authorize swallowing cancellation or process-control
 signals.
 """
 
@@ -11,11 +11,10 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict, deque
+from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Iterable, TypeVar
-
-T = TypeVar("T")
+from typing import Any
 
 _CLASSIFICATION_MAP = {
     "BOUNDARY": "boundary catch",
@@ -59,7 +58,9 @@ def _load_entries(path: Path) -> list[dict[str, object]]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"cannot load error-boundary classification registry: {type(exc).__name__}") from exc
+        raise ValueError(
+            "cannot load error-boundary classification registry: " f"{type(exc).__name__}"
+        ) from exc
     if not isinstance(payload, dict) or payload.get("schema_version") != 1:
         raise ValueError("error-boundary classification registry must use schema_version=1")
     entries = payload.get("entries")
@@ -88,7 +89,7 @@ def _load_entries(path: Path) -> list[dict[str, object]]:
     return normalized
 
 
-def apply_review_registry(findings: Iterable[T], registry_path: Path | None) -> list[T]:
+def apply_review_registry[T](findings: Iterable[T], registry_path: Path | None) -> list[T]:
     """Apply an exact reviewed registry and fail closed on drift.
 
     When ``registry_path`` is ``None`` the scanner keeps its structural recommendations unchanged.
@@ -109,7 +110,10 @@ def apply_review_registry(findings: Iterable[T], registry_path: Path | None) -> 
     reviewed: list[T] = []
     unresolved: list[Any] = []
     for item in materialized:
-        if getattr(item, "source_class", None) != "production" or getattr(item, "severity", None) == "allowed":
+        if (
+            getattr(item, "source_class", None) != "production"
+            or getattr(item, "severity", None) == "allowed"
+        ):
             reviewed.append(item)
             continue
 
@@ -145,16 +149,20 @@ def apply_review_registry(findings: Iterable[T], registry_path: Path | None) -> 
         messages: list[str] = []
         if unresolved:
             sample = "; ".join(
-                f"{item.file}:{item.line} [{item.scope}] {item.exception_form}/{item.current_action}"
+                f"{item.file}:{item.line} [{item.scope}] "
+                f"{item.exception_form}/{item.current_action}"
                 for item in unresolved[:8]
             )
             messages.append(f"unclassified production findings={len(unresolved)} ({sample})")
         if stale:
             sample = "; ".join(
-                f"{entry['file']} [{entry['scope']}] {entry['exception_form']}/{entry['current_action']}"
+                f"{entry['file']} [{entry['scope']}] "
+                f"{entry['exception_form']}/{entry['current_action']}"
                 for entry in stale[:8]
             )
             messages.append(f"stale classification entries={len(stale)} ({sample})")
-        raise ValueError("error-boundary classification registry is out of sync: " + " | ".join(messages))
+        raise ValueError(
+            "error-boundary classification registry is out of sync: " + " | ".join(messages)
+        )
 
     return reviewed
