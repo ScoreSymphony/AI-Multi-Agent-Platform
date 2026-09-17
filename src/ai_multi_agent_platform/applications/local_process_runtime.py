@@ -1,8 +1,8 @@
 """Concrete local-process Application Runtime backend.
 
-This backend owns real local PROCESS services and keeps process handles and resolved
-secret material private. Workspace/volume materialization and remote Node placement are
-separate execution-boundary concerns and continue to fail closed until explicitly wired.
+This backend owns real local PROCESS services and keeps process handles, resolved secret
+material and Workspace host paths private to the execution boundary. Remote Node placement
+and non-Workspace volume kinds continue to fail closed until explicitly wired.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from ai_multi_agent_platform.configuration import SecretAccessContext, SecretProvider
 from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.security import redact_text
+from ai_multi_agent_platform.workspaces import MaterializationOutcome
 
 from .models import (
     ApplicationDesiredState,
@@ -37,6 +38,10 @@ from .runtime import (
     ApplicationRuntimeDescriptor,
     ApplicationRuntimeError,
     ApplicationRuntimeUnavailableError,
+)
+from .workspace_execution import (
+    LocalApplicationWorkspaceBinder,
+    LocalApplicationWorkspaceExecution,
 )
 
 _DEFAULT_LOG_CAPACITY = 2_000
@@ -65,6 +70,7 @@ class LocalProcessApplicationRuntime:
         secret_consumer_ref: str = "service:application-runtime",
         secret_purpose: str = "application_runtime",
         secret_lifetime_seconds: int = _DEFAULT_SECRET_LIFETIME_SECONDS,
+        workspace_binder: LocalApplicationWorkspaceBinder | None = None,
     ) -> None:
         if stop_timeout_seconds <= 0:
             raise ValueError("stop_timeout_seconds must be > 0")
@@ -79,6 +85,8 @@ class LocalProcessApplicationRuntime:
         capabilities = {"local", "process"}
         if secret_provider is not None:
             capabilities.add("secret_environment")
+        if workspace_binder is not None:
+            capabilities.add("workspace_cwd")
         self._descriptor = ApplicationRuntimeDescriptor(
             runtime_id=runtime_id,
             supported_service_runtimes=frozenset({ApplicationServiceRuntime.PROCESS}),
@@ -90,10 +98,12 @@ class LocalProcessApplicationRuntime:
         self._secret_consumer_ref = secret_consumer_ref
         self._secret_purpose = secret_purpose
         self._secret_lifetime_seconds = secret_lifetime_seconds
+        self._workspace_binder = workspace_binder
         self._processes: dict[str, dict[str, _ManagedProcess]] = {}
         self._logs: dict[str, deque[ApplicationLogEntry]] = {}
         self._environments: dict[str, dict[str, str]] = {}
         self._sensitive_values: dict[str, tuple[str, ...]] = {}
+        self._workspace_executions: dict[str, LocalApplicationWorkspaceExecution] = {}
         self._secret_lease_tasks: dict[str, asyncio.Task[None]] = {}
         self._expired_secret_leases: set[str] = set()
 
@@ -132,18 +142,27 @@ class LocalProcessApplicationRuntime:
         if existing and all(item.process.returncode is None for item in existing.values()):
             return await self.status(manifest, instance)
         if existing:
-            await self._stop_owned(manifest, instance.instance_id)
+            await self._stop_owned(
+                manifest,
+                instance.instance_id,
+                workspace_outcome=MaterializationOutcome.FAILED,
+                commit_workspace=False,
+            )
 
         self._expired_secret_leases.discard(instance.instance_id)
-        environment, sensitive_values, secret_expires_at = await self._execution_environment(
-            manifest,
-            instance,
-        )
-        self._environments[instance.instance_id] = environment
-        self._sensitive_values[instance.instance_id] = sensitive_values
-
-        owned = self._processes.setdefault(instance.instance_id, {})
         try:
+            workspace_execution = await self._materialize_workspace(manifest, instance)
+            if workspace_execution is not None:
+                self._workspace_executions[instance.instance_id] = workspace_execution
+            environment, sensitive_values, secret_expires_at = await self._execution_environment(
+                manifest,
+                instance,
+                workspace_execution,
+            )
+            self._environments[instance.instance_id] = environment
+            self._sensitive_values[instance.instance_id] = sensitive_values
+
+            owned = self._processes.setdefault(instance.instance_id, {})
             for service in _dependency_order(manifest.services):
                 managed = await self._spawn_service(manifest, instance, service)
                 owned[service.service_id] = managed
@@ -156,13 +175,25 @@ class LocalProcessApplicationRuntime:
                 if service.health_check is not None:
                     await self._wait_until_healthy(manifest, instance, service, managed)
         except asyncio.CancelledError:
-            await self._finish_cleanup(manifest, instance.instance_id)
+            await self._finish_cleanup(
+                manifest,
+                instance.instance_id,
+                MaterializationOutcome.CANCELLED,
+            )
             raise
         except ApplicationRuntimeError:
-            await self._finish_cleanup(manifest, instance.instance_id)
+            await self._finish_cleanup(
+                manifest,
+                instance.instance_id,
+                MaterializationOutcome.FAILED,
+            )
             raise
         except OSError as exc:
-            await self._finish_cleanup(manifest, instance.instance_id)
+            await self._finish_cleanup(
+                manifest,
+                instance.instance_id,
+                MaterializationOutcome.FAILED,
+            )
             raise ApplicationRuntimeUnavailableError(
                 f"local process runtime could not start an application service: {exc}"
             ) from exc
@@ -182,7 +213,12 @@ class LocalProcessApplicationRuntime:
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
-        await self._stop_owned(manifest, instance.instance_id)
+        await self._stop_owned(
+            manifest,
+            instance.instance_id,
+            workspace_outcome=MaterializationOutcome.SUCCEEDED,
+            commit_workspace=True,
+        )
         self._expired_secret_leases.discard(instance.instance_id)
         return replace(
             instance,
@@ -212,7 +248,12 @@ class LocalProcessApplicationRuntime:
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
-        await self._stop_owned(manifest, instance.instance_id)
+        await self._stop_owned(
+            manifest,
+            instance.instance_id,
+            workspace_outcome=MaterializationOutcome.SUCCEEDED,
+            commit_workspace=True,
+        )
         self._logs.pop(instance.instance_id, None)
         self._expired_secret_leases.discard(instance.instance_id)
         return replace(
@@ -390,19 +431,32 @@ class LocalProcessApplicationRuntime:
                     "local process runtime only supports secrets projected through declared "
                     f"environment variables: {unsupported_secrets!r}"
                 )
-        if request.volume_bindings or request.manifest.volumes:
-            raise ApplicationPreparationError(
-                "local process runtime volume/workspace materialization is not wired yet"
-            )
-        if any(service.mounts for service in request.manifest.services):
-            raise ApplicationPreparationError(
-                "local process runtime service mounts are not wired yet"
-            )
+        uses_volumes = bool(
+            request.volume_bindings
+            or request.manifest.volumes
+            or any(service.mounts for service in request.manifest.services)
+        )
+        if uses_volumes:
+            if self._workspace_binder is None:
+                raise ApplicationPreparationError(
+                    "local process runtime requires a Workspace binder for volume bindings"
+                )
+            self._workspace_binder.validate_request(request)
+
+    async def _materialize_workspace(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> LocalApplicationWorkspaceExecution | None:
+        if self._workspace_binder is None:
+            return None
+        return await self._workspace_binder.materialize(manifest, instance)
 
     async def _execution_environment(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
+        workspace_execution: LocalApplicationWorkspaceExecution | None,
     ) -> tuple[dict[str, str], tuple[str, ...], datetime | None]:
         environment = _environment(manifest, instance)
         if not instance.secret_bindings:
@@ -415,6 +469,12 @@ class LocalProcessApplicationRuntime:
         secret_fields = {field.name: field for field in manifest.secrets}
         sensitive_values: list[str] = []
         earliest_expiry: datetime | None = None
+        project_id = (
+            workspace_execution.context.project_id if workspace_execution is not None else None
+        )
+        workspace_id = (
+            workspace_execution.workspace_id if workspace_execution is not None else None
+        )
         try:
             for name, reference in instance.secret_bindings.items():
                 field = secret_fields[name]
@@ -428,6 +488,8 @@ class LocalProcessApplicationRuntime:
                     reference,
                     SecretAccessContext(
                         consumer_ref=self._secret_consumer_ref,
+                        project_id=project_id,
+                        workspace_id=workspace_id,
                         action=_SECRET_ACTION,
                         capability_ref=_SECRET_CAPABILITY,
                         purpose=self._secret_purpose,
@@ -458,11 +520,18 @@ class LocalProcessApplicationRuntime:
         environment = self._environments.get(instance.instance_id)
         if environment is None:
             raise ApplicationRuntimeError("application execution environment is unavailable")
+        workspace_execution = self._workspace_executions.get(instance.instance_id)
+        cwd = (
+            self._workspace_binder.service_cwd(workspace_execution, service)
+            if self._workspace_binder is not None
+            else None
+        )
         process = await asyncio.create_subprocess_exec(
             *argv,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=environment,
+            cwd=cwd,
         )
         stdout_task = asyncio.create_task(
             self._drain_stream(instance.instance_id, service.service_id, process.stdout, "info")
@@ -543,10 +612,17 @@ class LocalProcessApplicationRuntime:
             environment = self._environments.get(instance.instance_id)
             if environment is None:
                 return False
+            workspace_execution = self._workspace_executions.get(instance.instance_id)
+            cwd = (
+                self._workspace_binder.service_cwd(workspace_execution, service)
+                if self._workspace_binder is not None
+                else None
+            )
             return await _probe_command(
                 health_check.command,
                 environment=environment,
                 timeout_seconds=health_check.timeout_seconds,
+                cwd=cwd,
             )
         endpoint = next(
             item for item in service.endpoints if item.name == health_check.endpoint_name
@@ -593,18 +669,32 @@ class LocalProcessApplicationRuntime:
         instance_id: str,
         *,
         cancel_secret_lease: bool = True,
+        workspace_outcome: MaterializationOutcome = MaterializationOutcome.SUCCEEDED,
+        commit_workspace: bool = False,
     ) -> None:
         if cancel_secret_lease:
             await self._cancel_secret_lease(instance_id)
         owned = self._processes.get(instance_id)
+        had_live_process = bool(
+            owned and any(managed.process.returncode is None for managed in owned.values())
+        )
         if owned:
             for service in reversed(_dependency_order(manifest.services)):
                 managed = owned.pop(service.service_id, None)
                 if managed is not None:
                     await self._stop_process(managed)
             self._processes.pop(instance_id, None)
-        self._environments.pop(instance_id, None)
-        self._sensitive_values.pop(instance_id, None)
+        workspace_execution = self._workspace_executions.pop(instance_id, None)
+        try:
+            if self._workspace_binder is not None:
+                await self._workspace_binder.release(
+                    workspace_execution,
+                    outcome=workspace_outcome,
+                    commit=commit_workspace and had_live_process,
+                )
+        finally:
+            self._environments.pop(instance_id, None)
+            self._sensitive_values.pop(instance_id, None)
 
     async def _stop_process(self, managed: _ManagedProcess) -> None:
         process = managed.process
@@ -641,6 +731,8 @@ class LocalProcessApplicationRuntime:
                 manifest,
                 instance_id,
                 cancel_secret_lease=False,
+                workspace_outcome=MaterializationOutcome.FAILED,
+                commit_workspace=False,
             )
         except asyncio.CancelledError:
             raise
@@ -659,8 +751,20 @@ class LocalProcessApplicationRuntime:
         except asyncio.CancelledError:
             pass
 
-    async def _finish_cleanup(self, manifest: ApplicationManifest, instance_id: str) -> None:
-        task = asyncio.create_task(self._stop_owned(manifest, instance_id))
+    async def _finish_cleanup(
+        self,
+        manifest: ApplicationManifest,
+        instance_id: str,
+        outcome: MaterializationOutcome,
+    ) -> None:
+        task = asyncio.create_task(
+            self._stop_owned(
+                manifest,
+                instance_id,
+                workspace_outcome=outcome,
+                commit_workspace=False,
+            )
+        )
         while not task.done():
             try:
                 await asyncio.shield(task)
@@ -738,6 +842,7 @@ async def _probe_command(
     *,
     environment: dict[str, str],
     timeout_seconds: float,
+    cwd: os.PathLike[str] | None = None,
 ) -> bool:
     try:
         process = await asyncio.create_subprocess_exec(
@@ -745,6 +850,7 @@ async def _probe_command(
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
             env=environment,
+            cwd=cwd,
         )
     except OSError:
         return False
