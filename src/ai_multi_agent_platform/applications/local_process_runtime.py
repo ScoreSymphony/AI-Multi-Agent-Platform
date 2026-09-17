@@ -1,9 +1,8 @@
 """Concrete local-process Application Runtime backend.
 
-This backend is intentionally narrow: it owns real local PROCESS services and keeps all
-process handles private. Secret resolution, volume/workspace materialization and remote
-Node placement are separate execution-boundary concerns and fail closed here until those
-bindings are explicitly wired.
+This backend owns real local PROCESS services and keeps process handles and resolved
+secret material private. Workspace/volume materialization and remote Node placement are
+separate execution-boundary concerns and continue to fail closed until explicitly wired.
 """
 
 from __future__ import annotations
@@ -12,6 +11,11 @@ import asyncio
 import os
 from collections import deque
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+
+from ai_multi_agent_platform.configuration import SecretAccessContext, SecretProvider
+from ai_multi_agent_platform.contracts import ContractError
+from ai_multi_agent_platform.security import redact_text
 
 from .models import (
     ApplicationDesiredState,
@@ -36,6 +40,9 @@ from .runtime import (
 )
 
 _DEFAULT_LOG_CAPACITY = 2_000
+_DEFAULT_SECRET_LIFETIME_SECONDS = 300
+_SECRET_ACTION = "application.run.process"
+_SECRET_CAPABILITY = "application.process"
 
 
 @dataclass(slots=True)
@@ -54,20 +61,41 @@ class LocalProcessApplicationRuntime:
         runtime_id: str = "local.process",
         stop_timeout_seconds: float = 5.0,
         log_capacity: int = _DEFAULT_LOG_CAPACITY,
+        secret_provider: SecretProvider | None = None,
+        secret_consumer_ref: str = "service:application-runtime",
+        secret_purpose: str = "application_runtime",
+        secret_lifetime_seconds: int = _DEFAULT_SECRET_LIFETIME_SECONDS,
     ) -> None:
         if stop_timeout_seconds <= 0:
             raise ValueError("stop_timeout_seconds must be > 0")
         if log_capacity < 1:
             raise ValueError("log_capacity must be >= 1")
+        if not secret_consumer_ref.strip():
+            raise ValueError("secret_consumer_ref must not be blank")
+        if not secret_purpose.strip():
+            raise ValueError("secret_purpose must not be blank")
+        if secret_lifetime_seconds <= 0:
+            raise ValueError("secret_lifetime_seconds must be > 0")
+        capabilities = {"local", "process"}
+        if secret_provider is not None:
+            capabilities.add("secret_environment")
         self._descriptor = ApplicationRuntimeDescriptor(
             runtime_id=runtime_id,
             supported_service_runtimes=frozenset({ApplicationServiceRuntime.PROCESS}),
-            capabilities=frozenset({"local", "process"}),
+            capabilities=frozenset(capabilities),
         )
         self._stop_timeout_seconds = stop_timeout_seconds
         self._log_capacity = log_capacity
+        self._secret_provider = secret_provider
+        self._secret_consumer_ref = secret_consumer_ref
+        self._secret_purpose = secret_purpose
+        self._secret_lifetime_seconds = secret_lifetime_seconds
         self._processes: dict[str, dict[str, _ManagedProcess]] = {}
         self._logs: dict[str, deque[ApplicationLogEntry]] = {}
+        self._environments: dict[str, dict[str, str]] = {}
+        self._sensitive_values: dict[str, tuple[str, ...]] = {}
+        self._secret_lease_tasks: dict[str, asyncio.Task[None]] = {}
+        self._expired_secret_leases: set[str] = set()
 
     @property
     def descriptor(self) -> ApplicationRuntimeDescriptor:
@@ -106,6 +134,14 @@ class LocalProcessApplicationRuntime:
         if existing:
             await self._stop_owned(manifest, instance.instance_id)
 
+        self._expired_secret_leases.discard(instance.instance_id)
+        environment, sensitive_values, secret_expires_at = await self._execution_environment(
+            manifest,
+            instance,
+        )
+        self._environments[instance.instance_id] = environment
+        self._sensitive_values[instance.instance_id] = sensitive_values
+
         owned = self._processes.setdefault(instance.instance_id, {})
         try:
             for service in _dependency_order(manifest.services):
@@ -131,6 +167,14 @@ class LocalProcessApplicationRuntime:
                 f"local process runtime could not start an application service: {exc}"
             ) from exc
 
+        if secret_expires_at is not None:
+            self._secret_lease_tasks[instance.instance_id] = asyncio.create_task(
+                self._expire_secret_lease(
+                    manifest,
+                    instance.instance_id,
+                    secret_expires_at,
+                )
+            )
         return await self.status(manifest, instance)
 
     async def stop(
@@ -139,6 +183,7 @@ class LocalProcessApplicationRuntime:
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
         await self._stop_owned(manifest, instance.instance_id)
+        self._expired_secret_leases.discard(instance.instance_id)
         return replace(
             instance,
             observed_state=ApplicationObservedState.STOPPED,
@@ -169,6 +214,7 @@ class LocalProcessApplicationRuntime:
     ) -> ApplicationInstance:
         await self._stop_owned(manifest, instance.instance_id)
         self._logs.pop(instance.instance_id, None)
+        self._expired_secret_leases.discard(instance.instance_id)
         return replace(
             instance,
             observed_state=ApplicationObservedState.REMOVED,
@@ -329,9 +375,21 @@ class LocalProcessApplicationRuntime:
                 "local process runtime does not accept explicit Node placement"
             )
         if request.secret_bindings:
-            raise ApplicationPreparationError(
-                "local process runtime secret projection is not wired yet"
+            if self._secret_provider is None:
+                raise ApplicationPreparationError(
+                    "local process runtime requires a SecretProvider for secret bindings"
+                )
+            secret_fields = {field.name: field for field in request.manifest.secrets}
+            unsupported_secrets = sorted(
+                name
+                for name in request.secret_bindings
+                if secret_fields[name].environment_variable is None
             )
+            if unsupported_secrets:
+                raise ApplicationPreparationError(
+                    "local process runtime only supports secrets projected through declared "
+                    f"environment variables: {unsupported_secrets!r}"
+                )
         if request.volume_bindings or request.manifest.volumes:
             raise ApplicationPreparationError(
                 "local process runtime volume/workspace materialization is not wired yet"
@@ -341,14 +399,65 @@ class LocalProcessApplicationRuntime:
                 "local process runtime service mounts are not wired yet"
             )
 
+    async def _execution_environment(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> tuple[dict[str, str], tuple[str, ...], datetime | None]:
+        environment = _environment(manifest, instance)
+        if not instance.secret_bindings:
+            return environment, (), None
+        if self._secret_provider is None:
+            raise ApplicationRuntimeUnavailableError(
+                "local process runtime requires a SecretProvider for secret bindings"
+            )
+
+        secret_fields = {field.name: field for field in manifest.secrets}
+        sensitive_values: list[str] = []
+        earliest_expiry: datetime | None = None
+        try:
+            for name, reference in instance.secret_bindings.items():
+                field = secret_fields[name]
+                environment_variable = field.environment_variable
+                if environment_variable is None:
+                    raise ApplicationRuntimeError(
+                        "local process runtime cannot project a secret without a declared "
+                        "environment variable"
+                    )
+                material = await self._secret_provider.resolve(
+                    reference,
+                    SecretAccessContext(
+                        consumer_ref=self._secret_consumer_ref,
+                        action=_SECRET_ACTION,
+                        capability_ref=_SECRET_CAPABILITY,
+                        purpose=self._secret_purpose,
+                        requested_lifetime_seconds=self._secret_lifetime_seconds,
+                    ),
+                )
+                if material.expires_at <= datetime.now(UTC):
+                    raise ApplicationRuntimeError(
+                        "application secret lease expired before process execution"
+                    )
+                value = material.reveal()
+                environment[environment_variable] = value
+                sensitive_values.append(value)
+                if earliest_expiry is None or material.expires_at < earliest_expiry:
+                    earliest_expiry = material.expires_at
+        except ContractError as exc:
+            raise ApplicationRuntimeError("application secret resolution failed") from exc
+        return environment, tuple(sensitive_values), earliest_expiry
+
     async def _spawn_service(
         self,
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
         service: ApplicationService,
     ) -> _ManagedProcess:
+        del manifest
         argv = service.process + service.command
-        environment = _environment(manifest, instance)
+        environment = self._environments.get(instance.instance_id)
+        if environment is None:
+            raise ApplicationRuntimeError("application execution environment is unavailable")
         process = await asyncio.create_subprocess_exec(
             *argv,
             stdout=asyncio.subprocess.PIPE,
@@ -383,6 +492,7 @@ class LocalProcessApplicationRuntime:
             message = line.decode(errors="replace").rstrip("\r\n")
             if not message:
                 continue
+            message = redact_text(message, self._sensitive_values.get(instance_id, ()))
             entries = self._logs.setdefault(
                 instance_id,
                 deque(maxlen=self._log_capacity),
@@ -423,15 +533,19 @@ class LocalProcessApplicationRuntime:
         service: ApplicationService,
         managed: _ManagedProcess,
     ) -> bool:
+        del manifest
         if managed.process.returncode is not None:
             return False
         health_check = service.health_check
         if health_check is None:
             return True
         if health_check.kind is ApplicationHealthCheckKind.COMMAND:
+            environment = self._environments.get(instance.instance_id)
+            if environment is None:
+                return False
             return await _probe_command(
                 health_check.command,
-                environment=_environment(manifest, instance),
+                environment=environment,
                 timeout_seconds=health_check.timeout_seconds,
             )
         endpoint = next(
@@ -459,6 +573,13 @@ class LocalProcessApplicationRuntime:
                 observed_state=ApplicationObservedState.REMOVED,
                 health=ApplicationHealthStatus.UNKNOWN,
             )
+        if instance.instance_id in self._expired_secret_leases:
+            return ApplicationServiceState(
+                service_id=service.service_id,
+                observed_state=ApplicationObservedState.FAILED,
+                health=ApplicationHealthStatus.UNHEALTHY,
+                message="application secret lease expired",
+            )
         return ApplicationServiceState(
             service_id=service.service_id,
             observed_state=ApplicationObservedState.FAILED,
@@ -466,15 +587,24 @@ class LocalProcessApplicationRuntime:
             message="runtime process is not owned by this backend instance",
         )
 
-    async def _stop_owned(self, manifest: ApplicationManifest, instance_id: str) -> None:
+    async def _stop_owned(
+        self,
+        manifest: ApplicationManifest,
+        instance_id: str,
+        *,
+        cancel_secret_lease: bool = True,
+    ) -> None:
+        if cancel_secret_lease:
+            await self._cancel_secret_lease(instance_id)
         owned = self._processes.get(instance_id)
-        if not owned:
-            return
-        for service in reversed(_dependency_order(manifest.services)):
-            managed = owned.pop(service.service_id, None)
-            if managed is not None:
-                await self._stop_process(managed)
-        self._processes.pop(instance_id, None)
+        if owned:
+            for service in reversed(_dependency_order(manifest.services)):
+                managed = owned.pop(service.service_id, None)
+                if managed is not None:
+                    await self._stop_process(managed)
+            self._processes.pop(instance_id, None)
+        self._environments.pop(instance_id, None)
+        self._sensitive_values.pop(instance_id, None)
 
     async def _stop_process(self, managed: _ManagedProcess) -> None:
         process = managed.process
@@ -496,6 +626,38 @@ class LocalProcessApplicationRuntime:
             managed.stderr_task,
             return_exceptions=True,
         )
+
+    async def _expire_secret_lease(
+        self,
+        manifest: ApplicationManifest,
+        instance_id: str,
+        expires_at: datetime,
+    ) -> None:
+        delay = max(0.0, (expires_at - datetime.now(UTC)).total_seconds())
+        try:
+            await asyncio.sleep(delay)
+            self._expired_secret_leases.add(instance_id)
+            await self._stop_owned(
+                manifest,
+                instance_id,
+                cancel_secret_lease=False,
+            )
+        except asyncio.CancelledError:
+            raise
+        finally:
+            current = asyncio.current_task()
+            if self._secret_lease_tasks.get(instance_id) is current:
+                self._secret_lease_tasks.pop(instance_id, None)
+
+    async def _cancel_secret_lease(self, instance_id: str) -> None:
+        task = self._secret_lease_tasks.pop(instance_id, None)
+        if task is None or task is asyncio.current_task():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     async def _finish_cleanup(self, manifest: ApplicationManifest, instance_id: str) -> None:
         task = asyncio.create_task(self._stop_owned(manifest, instance_id))
