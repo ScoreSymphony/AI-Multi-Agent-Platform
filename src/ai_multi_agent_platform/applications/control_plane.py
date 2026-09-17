@@ -511,7 +511,7 @@ def _json_object(value: JsonValue, field_name: str) -> dict[str, JsonValue]:
             ErrorCode.INVALID_REQUEST,
             f"{field_name} must be an object",
         )
-    return cast(dict[str, JsonValue], value)
+    return value
 
 
 def _object_string(
