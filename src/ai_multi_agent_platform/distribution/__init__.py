@@ -1,4 +1,4 @@
-"""Optional registry and distribution contracts for issue #81/#1174."""
+"""Optional registry and Marketplace distribution contracts."""
 
 from .canonical_router import (
     CanonicalDistributionRouter,
