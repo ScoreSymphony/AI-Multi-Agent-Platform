@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
 from ai_multi_agent_platform.distribution import (
     DistributionRoute,
     DistributionService,
+    JsonRegistryInstallationStore,
     LocalRegistryProvider,
     MarketplaceKindDescriptor,
     MarketplaceKindHandlerRegistry,
@@ -80,7 +82,9 @@ def test_builtin_marketplace_kinds_include_new_first_class_families() -> None:
 
     assert {"tool", "skill", "plugin", "connector", "application", "template"} <= kinds
     assert registry.require("application").default_route is DistributionRoute.KIND_HANDLER
-    assert registry.require(RegistryItemType.TOOL).default_route is DistributionRoute.PORTABLE_IMPORT
+    assert (
+        registry.require(RegistryItemType.TOOL).default_route is DistributionRoute.PORTABLE_IMPORT
+    )
 
 
 def test_new_marketplace_kind_can_be_registered_without_enum_change() -> None:
@@ -162,6 +166,25 @@ def test_cross_kind_search_accepts_known_and_future_kind_filters() -> None:
     assert provider.search(RegistryQuery(item_types=frozenset({"application"}))) == (application,)
     assert provider.search(RegistryQuery(item_types=frozenset({"notebook_extension"}))) == (future,)
     assert provider.search(RegistryQuery(text="notebook_extension")) == (future,)
+
+
+def test_future_kind_installation_state_survives_restart(tmp_path: Path) -> None:
+    item = _item(
+        "notebook_extension",
+        manifest=RegistryManifestReference(
+            kind="notebook_extension", reference="manifests/notebook-extension.json"
+        ),
+    )
+    path = tmp_path / "registry-installations.json"
+    store = JsonRegistryInstallationStore(path)
+    store.record(item, provider_id="local", artifact_sha256="0" * 64)
+
+    reloaded = JsonRegistryInstallationStore(path)
+    installation = reloaded.get(item.item_id)
+
+    assert installation is not None
+    assert installation.current.item_type is not None
+    assert installation.current.item_type.value == "notebook_extension"
 
 
 class RecordingApplicationHandler:
