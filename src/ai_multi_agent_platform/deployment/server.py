@@ -394,7 +394,7 @@ async def _run_startup_recovery(
         kernel=deployment.kernel,
         coordinator=deployment.coordination,
         distributed_runtime=deployment.distributed_runtime,
-        application_reconciler=deployment.applications,
+        extensions=deployment.startup_recovery_extensions,
         reviewer_reconciler=deployment.reviewer_recovery,
     )
 
@@ -417,8 +417,8 @@ def _print_startup_recovery(recovery: SingleNodeStartupRecoveryResult) -> None:
         f"runs_checked={recovery.runs_checked} "
         f"plans={recovery.plans_reconciled} "
         f"distributed_jobs={recovery.distributed_jobs_reconciled} "
-        f"applications={recovery.application_instances_checked} "
-        f"application_failures={recovery.application_recovery_failures} "
+        f"extension_items={recovery.extension_items_checked} "
+        f"extension_failures={recovery.extension_failures} "
         f"reviewers={len(recovery.reviewer_recoveries)} "
         f"unresolved={len(recovery.unresolved_run_ids)} "
         f"blocked_verifications={len(recovery.blocked_verification_ids)} "
