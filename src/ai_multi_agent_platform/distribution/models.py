@@ -35,6 +35,7 @@ class CustomRegistryItemKind(str):
 
 
 RegistryItemKind = RegistryItemType | CustomRegistryItemKind | str
+ResolvedRegistryItemKind = RegistryItemType | CustomRegistryItemKind
 
 
 class TrustStatus(StrEnum):
@@ -90,7 +91,9 @@ class RegistrySource:
 
     def __post_init__(self) -> None:
         _require_text(self.repository, "source repository")
-        _require_text(self.package_reference, "package reference")
+        _require_text(self.package_reference, "source package_reference")
+        if self.revision is not None:
+            _require_text(self.revision, "source revision")
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +128,7 @@ class ArtifactIntegrity:
             raise ValueError("signature_key_id requires signature metadata")
 
 
-def parse_registry_item_kind(value: RegistryItemKind) -> RegistryItemKind:
+def parse_registry_item_kind(value: RegistryItemKind) -> ResolvedRegistryItemKind:
     """Return a known enum where possible while preserving valid future kind names."""
 
     raw = value.value if isinstance(value, (RegistryItemType, CustomRegistryItemKind)) else value
@@ -138,8 +141,7 @@ def parse_registry_item_kind(value: RegistryItemKind) -> RegistryItemKind:
 
 
 def registry_item_kind_value(value: RegistryItemKind) -> str:
-    resolved = parse_registry_item_kind(value)
-    return resolved.value
+    return parse_registry_item_kind(value).value
 
 
 def version_key(value: str) -> tuple[int, int, int]:
