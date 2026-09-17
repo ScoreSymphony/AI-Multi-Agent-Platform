@@ -151,8 +151,7 @@ async def test_control_plane_resource_handlers_expose_only_definition_metadata()
         )
     )
     repository.save_instance(_running_instance(editor))
-    resolver = ApplicationResourceAssociationResolver(repository)
-    service = ApplicationResourceHandlerService(repository, resolver)
+    service = ApplicationResourceHandlerService(repository)
 
     resources = await service.list_resources(_context(), PageQuery())
 
