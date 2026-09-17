@@ -91,9 +91,7 @@ class RegistrySource:
 
     def __post_init__(self) -> None:
         _require_text(self.repository, "source repository")
-        _require_text(self.package_reference, "source package_reference")
-        if self.revision is not None:
-            _require_text(self.revision, "source revision")
+        _require_text(self.package_reference, "package reference")
 
 
 @dataclass(frozen=True, slots=True)
