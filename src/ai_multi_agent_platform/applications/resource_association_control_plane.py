@@ -15,10 +15,6 @@ from ai_multi_agent_platform.control_plane.module_registry import install_contro
 
 from .definition import Application
 from .repository import ApplicationRepository
-from .resource_associations import (
-    ApplicationResourceAssociationResolver,
-    ApplicationResourceResolution,
-)
 
 APPLICATION_RESOURCE_HANDLER_COLLECTION = "application-resource-handlers"
 APPLICATION_RESOURCE_HANDLER_MODULE = "applications.resource-associations"
@@ -27,13 +23,8 @@ APPLICATION_RESOURCE_HANDLER_MODULE = "applications.resource-associations"
 class ApplicationResourceHandlerService(ResourceService):
     """Read installed Applications as generic media/resource-type handlers."""
 
-    def __init__(
-        self,
-        repository: ApplicationRepository,
-        resolver: ApplicationResourceAssociationResolver,
-    ) -> None:
+    def __init__(self, repository: ApplicationRepository) -> None:
         self._repository = repository
-        self._resolver = resolver
 
     async def list_resources(
         self,
@@ -41,7 +32,7 @@ class ApplicationResourceHandlerService(ResourceService):
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return _all_handler_resources(self._repository, self._resolver)
+        return _all_handler_resources(self._repository)
 
     async def get_resource(
         self,
@@ -49,7 +40,7 @@ class ApplicationResourceHandlerService(ResourceService):
         resource_id: str,
     ) -> dict[str, JsonValue]:
         del context
-        for resource in _all_handler_resources(self._repository, self._resolver):
+        for resource in _all_handler_resources(self._repository):
             if resource["id"] == resource_id:
                 return resource
         raise ContractError(
@@ -63,14 +54,10 @@ def application_resource_handler_module(
 ) -> ControlPlaneModule:
     """Build the Application-owned optional resource-association discovery module."""
 
-    resolver = ApplicationResourceAssociationResolver(repository)
     return ControlPlaneModule(
         name=APPLICATION_RESOURCE_HANDLER_MODULE,
         resource_services={
-            APPLICATION_RESOURCE_HANDLER_COLLECTION: ApplicationResourceHandlerService(
-                repository,
-                resolver,
-            )
+            APPLICATION_RESOURCE_HANDLER_COLLECTION: ApplicationResourceHandlerService(repository)
         },
         requires=frozenset({"applications"}),
     )
@@ -90,7 +77,6 @@ def register_application_resource_handlers(
 
 def _all_handler_resources(
     repository: ApplicationRepository,
-    resolver: ApplicationResourceAssociationResolver,
 ) -> tuple[dict[str, JsonValue], ...]:
     resources: list[dict[str, JsonValue]] = []
     emitted: set[tuple[str, str, str]] = set()
@@ -102,13 +88,9 @@ def _all_handler_resources(
                 if key in emitted:
                     continue
                 emitted.add(key)
-                resolution = _single_resolution(
-                    resolver.resolve(media_type=normalized),
-                    application,
-                )
                 resources.append(
                     _handler_resource(
-                        resolution,
+                        application,
                         association_kind="media_type",
                         association_value=normalized,
                     )
@@ -119,13 +101,9 @@ def _all_handler_resources(
                 if key in emitted:
                     continue
                 emitted.add(key)
-                resolution = _single_resolution(
-                    resolver.resolve(resource_type=normalized),
-                    application,
-                )
                 resources.append(
                     _handler_resource(
-                        resolution,
+                        application,
                         association_kind="resource_type",
                         association_value=normalized,
                     )
@@ -133,35 +111,22 @@ def _all_handler_resources(
     return tuple(sorted(resources, key=lambda item: str(item["id"])))
 
 
-def _single_resolution(
-    resolutions: tuple[ApplicationResourceResolution, ...],
-    application: Application,
-) -> ApplicationResourceResolution:
-    for resolution in resolutions:
-        if (
-            resolution.application.application_id == application.application_id
-            and resolution.application.version == application.version
-        ):
-            return resolution
-    raise RuntimeError("installed Application association could not resolve itself")
-
-
 def _handler_resource(
-    resolution: ApplicationResourceResolution,
+    application: Application,
     *,
     association_kind: str,
     association_value: str,
 ) -> dict[str, JsonValue]:
-    application = resolution.application
+    application_ref = _application_ref(application)
     identifier = _handler_id(
-        resolution.application_ref,
+        application_ref,
         association_kind,
         association_value,
     )
     return {
         "id": identifier,
         "type": "application-resource-handler",
-        "application_ref": resolution.application_ref,
+        "application_ref": application_ref,
         "application_id": application.application_id,
         "application_version": application.version,
         "name": application.name,
