@@ -5,17 +5,19 @@ import sys
 from pathlib import Path
 
 from ai_multi_agent_platform.adapters.application_runtime import ApplicationRuntimeComposition
-from ai_multi_agent_platform.adapters.single_node_app import (
-    build_default_single_node_deployment,
-    main as server_main,
-)
+from ai_multi_agent_platform.adapters.single_node_app import build_default_single_node_deployment
+from ai_multi_agent_platform.adapters.single_node_app import main as server_main
 from ai_multi_agent_platform.applications import (
     ApplicationInstallRequest,
     ApplicationManifest,
     ApplicationService,
     ApplicationServiceRuntime,
 )
-from ai_multi_agent_platform.deployment import SingleNodeConfig, load_startup_recovery_report
+from ai_multi_agent_platform.deployment import (
+    SingleNodeConfig,
+    SingleNodeDeployment,
+    load_startup_recovery_report,
+)
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.upgrade.versioning import (
     JsonVersionStateStore,
@@ -40,11 +42,12 @@ def _manifest() -> ApplicationManifest:
     )
 
 
-def _application_runtime(deployment: object) -> ApplicationRuntimeComposition:
-    extensions = getattr(deployment, "startup_recovery_extensions")
+def _application_runtime(
+    deployment: SingleNodeDeployment,
+) -> ApplicationRuntimeComposition:
     applications = [
         extension
-        for extension in extensions
+        for extension in deployment.startup_recovery_extensions
         if isinstance(extension, ApplicationRuntimeComposition)
     ]
     assert len(applications) == 1
