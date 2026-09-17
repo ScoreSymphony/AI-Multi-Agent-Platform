@@ -1,0 +1,1337 @@
+{
+  "schema_version": 1,
+  "audit_base_sha": "9f3b29d2bd845512d590592881292fe88318983b",
+  "description": "Handler-level classifications for production broad catches that the AST scanner cannot infer structurally. This is not a file allowlist.",
+  "entries": [
+    {
+      "file": "src/ai_multi_agent_platform/adapters/mcp_skills.py",
+      "line": 553,
+      "scope": "McpSkillsAdapter.fetch_and_stage",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "External adapter/health boundary intentionally normalizes ordinary implementation failures into the adapter's established result/health contract; task/process control remains authoritative."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/adapters/mcp_stateless.py",
+      "line": 272,
+      "scope": "MCPStatelessHTTPClient.ping",
+      "exception_form": "Exception",
+      "current_action": "return fallback",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "External adapter/health boundary intentionally normalizes ordinary implementation failures into the adapter's established result/health contract; task/process control remains authoritative."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/adapters/skillspector.py",
+      "line": 167,
+      "scope": "SkillSpectorSecurityEvidenceProvider.scan",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "External adapter/health boundary intentionally normalizes ordinary implementation failures into the adapter's established result/health contract; task/process control remains authoritative."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/application_distribution/evaluation_gate_orchestration.py",
+      "line": 116,
+      "scope": "ApplicationReleaseGateCoordinator._ensure_evaluation_run",
+      "exception_form": "Exception",
+      "current_action": "return None",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Release-gate evidence projection is fail-closed: evaluation/configuration failure leaves evidence missing or failed rather than fabricating a gate result or failing an unrelated Control Plane read."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/application_distribution/evaluation_gate_orchestration.py",
+      "line": 126,
+      "scope": "ApplicationReleaseGateCoordinator._ensure_evaluation_run",
+      "exception_form": "Exception",
+      "current_action": "return None",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Release-gate evidence projection is fail-closed: evaluation/configuration failure leaves evidence missing or failed rather than fabricating a gate result or failing an unrelated Control Plane read."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/application_distribution/evaluation_gate_orchestration.py",
+      "line": 171,
+      "scope": "ApplicationReleaseGateCoordinator._evaluation",
+      "exception_form": "Exception",
+      "current_action": "return fallback",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Release-gate evidence projection is fail-closed: evaluation/configuration failure leaves evidence missing or failed rather than fabricating a gate result or failing an unrelated Control Plane read."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/application_distribution/repository.py",
+      "line": 150,
+      "scope": "JsonApplicationReleaseRepository.save",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/automation/runtime_service.py",
+      "line": 434,
+      "scope": "_canonical_event_visibility",
+      "exception_form": "Exception",
+      "current_action": "return fallback",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Automation derived-visibility boundary fails closed to the established fallback without converting cancellation/process-control into ordinary work."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/backup/integrity.py",
+      "line": 72,
+      "scope": "validate_restored_single_node",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/backup/service.py",
+      "line": 191,
+      "scope": "create_single_node_backup",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/backup/service.py",
+      "line": 364,
+      "scope": "restore_single_node_backup",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/api_pressure.py",
+      "line": 276,
+      "scope": "SingleNodeAPIPressureHarness.run.run_one",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/coordination_contention.py",
+      "line": 306,
+      "scope": "CoordinationContentionHarness.run",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/coordination_pressure.py",
+      "line": 324,
+      "scope": "CoordinationPressureHarness.run",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/distributed_faults.py",
+      "line": 551,
+      "scope": "DistributedWorkerWorkspaceFaultHarness.run",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/distributed_faults.py",
+      "line": 562,
+      "scope": "DistributedWorkerWorkspaceFaultHarness.run",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/distributed_faults.py",
+      "line": 618,
+      "scope": "DistributedWorkerWorkspaceFaultHarness.run",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/distributed_scale.py",
+      "line": 354,
+      "scope": "DistributedWorkerWorkspaceScaleHarness.run",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/endurance.py",
+      "line": 516,
+      "scope": "SingleNodeEnduranceHarness._execute_soak_operation",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/faults.py",
+      "line": 236,
+      "scope": "SingleNodeFaultUnderLoadHarness.run_fault",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/faults.py",
+      "line": 416,
+      "scope": "SingleNodeFaultUnderLoadHarness._run_phase.run_one",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/model_gateway_evaluation.py",
+      "line": 229,
+      "scope": "_run_target.invoke",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/model_gateway_evaluation.py",
+      "line": 266,
+      "scope": "_invoke_without_evidence",
+      "exception_form": "Exception",
+      "current_action": "return None",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/persistence_contention.py",
+      "line": 392,
+      "scope": "_run_writer_async",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/persistence_contention.py",
+      "line": 434,
+      "scope": "_verify_reopened_state",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/persistence_faults.py",
+      "line": 475,
+      "scope": "_with_retry",
+      "exception_form": "Exception",
+      "current_action": "return fallback",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/persistence_faults.py",
+      "line": 534,
+      "scope": "_verify_reopened_state",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/plan_step.py",
+      "line": 274,
+      "scope": "PlanStepBenchmarkHarness.run",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/planning_graph_scale.py",
+      "line": 476,
+      "scope": "_exercise_repetition",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/planning_pressure.py",
+      "line": 467,
+      "scope": "_exercise_cycle",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/provider_faults.py",
+      "line": 679,
+      "scope": "ProviderFaultBenchmarkHarness._run_phase.run_one",
+      "exception_form": "Exception",
+      "current_action": "return fallback",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/single_node.py",
+      "line": 116,
+      "scope": "SingleNodeBenchmarkHarness.run.run_one",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/transport_faults.py",
+      "line": 415,
+      "scope": "TransportFaultBenchmarkHarness._publish_one",
+      "exception_form": "Exception",
+      "current_action": "return fallback",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/transport_faults.py",
+      "line": 451,
+      "scope": "TransportFaultBenchmarkHarness._expect_publish_error",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/benchmarking/workloads.py",
+      "line": 266,
+      "scope": "SingleNodeWorkloadHarness.run.run_one",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Benchmark/fault harness result boundary; one ordinary sample failure is recorded as benchmark evidence without aborting independent samples. Cancellation and process-control are not caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/connectors/control_plane.py",
+      "line": 251,
+      "scope": "register_connector_control_plane.check_health",
+      "exception_form": "Exception",
+      "current_action": "pass",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Connector health transition is already authoritative/persisted; the downstream attention event is secondary and must not turn a successful health check into failure."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/control_plane/notifications_composition.py",
+      "line": 237,
+      "scope": "ControlPlane._bulk_update_management_command",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/control_plane/notifications_composition.py",
+      "line": 274,
+      "scope": "ControlPlane._project_bulk_task_management_changes",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/control_plane/notifications_composition.py",
+      "line": 288,
+      "scope": "ControlPlane._project_task_management_change",
+      "exception_form": "Exception",
+      "current_action": "return None",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/control_plane/notifications_source_composition.py",
+      "line": 113,
+      "scope": "ControlPlane.evaluate_task_attention_reminders",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/control_plane/notifications_source_composition.py",
+      "line": 147,
+      "scope": "ControlPlane._project_approval_event",
+      "exception_form": "Exception",
+      "current_action": "return None",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/control_plane/notifications_source_composition.py",
+      "line": 172,
+      "scope": "ControlPlane._enqueue_budget_threshold",
+      "exception_form": "Exception",
+      "current_action": "return None",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/control_plane/notifications_source_composition.py",
+      "line": 232,
+      "scope": "ControlPlane._recover_persisted_budget_thresholds",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/control_plane/notifications_source_composition.py",
+      "line": 280,
+      "scope": "ControlPlane.connector_health_event_sink",
+      "exception_form": "Exception",
+      "current_action": "return None",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/control_plane/notifications_source_composition.py",
+      "line": 338,
+      "scope": "ControlPlane._project_automation_event",
+      "exception_form": "Exception",
+      "current_action": "return None",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/distributed/postgres_control_plane_coordination.py",
+      "line": 103,
+      "scope": "PostgresCoordinationProvider._run",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/distributed/postgres_control_plane_coordination.py",
+      "line": 114,
+      "scope": "PostgresCoordinationProvider._run_sync",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Explicit owning boundary for an ordinary failure; the broad catch is retained only for this scoped ownership contract and does not catch BaseException process-control signals."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/distributed/runtime.py",
+      "line": 300,
+      "scope": "DistributedRuntime.fence_for_failover",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/distributed/runtime.py",
+      "line": 477,
+      "scope": "DistributedRuntime.reconcile",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "RETRY BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Owning delivery/reconciliation boundary; it must settle the current unit of work and preserve explicit typed retryability while keeping task cancellation/process control outside Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/distributed/runtime.py",
+      "line": 541,
+      "scope": "DistributedRuntime._dispatch_placement",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "RETRY BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Owning delivery/reconciliation boundary; it must settle the current unit of work and preserve explicit typed retryability while keeping task cancellation/process control outside Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/distributed/runtime.py",
+      "line": 560,
+      "scope": "DistributedRuntime._dispatch_placement",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "RETRY BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Owning delivery/reconciliation boundary; it must settle the current unit of work and preserve explicit typed retryability while keeping task cancellation/process control outside Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/evaluation/runner.py",
+      "line": 648,
+      "scope": "EvaluationRunner._run_attempt",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Evaluation attempt result boundary converts an ordinary case failure into canonical evaluation evidence; cancellation/process-control has separate explicit settlement."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/governance/service.py",
+      "line": 243,
+      "scope": "GovernanceService.supersede_proposal",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/high_availability/integrations.py",
+      "line": 76,
+      "scope": "AuthorityGatedAutomationLoop._run_loop",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "HA lifecycle/authority boundary contains an ordinary subordinate failure while preserving fencing or background-loop ownership; cancellation/process-control remains outside Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/high_availability/integrations.py",
+      "line": 156,
+      "scope": "AuthorityGatedDistributedRuntime._dispatch_placement",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "HA lifecycle/authority boundary contains an ordinary subordinate failure while preserving fencing or background-loop ownership; cancellation/process-control remains outside Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/high_availability/service.py",
+      "line": 195,
+      "scope": "ControlPlaneFailoverService.try_promote",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/high_availability/telemetry.py",
+      "line": 363,
+      "scope": "HighAvailabilityTelemetry._best_effort",
+      "exception_form": "Exception",
+      "current_action": "return None",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "HA lifecycle/authority boundary contains an ordinary subordinate failure while preserving fencing or background-loop ownership; cancellation/process-control remains outside Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/kernel/postgres_repository.py",
+      "line": 148,
+      "scope": "PostgresKernelRepository._run",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/kernel/postgres_repository.py",
+      "line": 157,
+      "scope": "PostgresKernelRepository._run_sync",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Kernel persistence ownership boundary translates or rolls back ordinary backend failures while preserving the canonical kernel contract and process-control semantics."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/kernel/postgres_repository.py",
+      "line": 293,
+      "scope": "PostgresKernelRepository._validate_kernel_tables",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/kernel/sqlite_repository.py",
+      "line": 243,
+      "scope": "SqliteKernelRepository._commit_sync",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Kernel persistence ownership boundary translates or rolls back ordinary backend failures while preserving the canonical kernel contract and process-control semantics."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/learning/async_service.py",
+      "line": 499,
+      "scope": "RuntimeGovernedLearningService._run_post_promotion_evaluation",
+      "exception_form": "Exception",
+      "current_action": "return fallback",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Learning/evaluation integration boundary contains an ordinary subordinate operation failure without invalidating already-owned canonical state; process-control propagates."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/learning/runtime.py",
+      "line": 413,
+      "scope": "ObservedLearningService.promote",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Learning/evaluation integration boundary contains an ordinary subordinate operation failure without invalidating already-owned canonical state; process-control propagates."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/messaging/helpers.py",
+      "line": 121,
+      "scope": "IdempotentConsumer.handle",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "RETRY BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Owning delivery/reconciliation boundary; it must settle the current unit of work and preserve explicit typed retryability while keeping task cancellation/process control outside Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/messaging/network.py",
+      "line": 183,
+      "scope": "TcpMessageBroker._handle_connection",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "RETRY BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Owning delivery/reconciliation boundary; it must settle the current unit of work and preserve explicit typed retryability while keeping task cancellation/process control outside Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/messaging/network.py",
+      "line": 778,
+      "scope": "_TcpSubscription._ensure_connected",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "RETRY BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Owning delivery/reconciliation boundary; it must settle the current unit of work and preserve explicit typed retryability while keeping task cancellation/process control outside Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/models/routing_profile_repository.py",
+      "line": 85,
+      "scope": "JsonModelRoutingProfileRepository.create_profile",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/models/routing_profile_repository.py",
+      "line": 142,
+      "scope": "JsonModelRoutingProfileRepository.update_profile",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/models/routing_profile_repository.py",
+      "line": 187,
+      "scope": "JsonModelRoutingProfileRepository.set_enabled",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/models/routing_profile_repository.py",
+      "line": 216,
+      "scope": "JsonModelRoutingProfileRepository.compensate_profile_creation",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/notifications/delivery.py",
+      "line": 209,
+      "scope": "NotificationDeliveryCoordinator.deliver",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/notifications/runtime.py",
+      "line": 190,
+      "scope": "NotificationRuntime.run_once",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/notifications/runtime.py",
+      "line": 201,
+      "scope": "NotificationRuntime.run_once",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/notifications/runtime.py",
+      "line": 219,
+      "scope": "NotificationRuntime._run",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/notifications/service.py",
+      "line": 406,
+      "scope": "NotificationService._deliver_external",
+      "exception_form": "Exception",
+      "current_action": "return fallback",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Derived notification/attention projection after canonical state ownership; ordinary projection failure is secondary and must not falsify or roll back the authoritative operation. Cancellation is not caught."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/observability/hierarchy.py",
+      "line": 228,
+      "scope": "TraceHierarchy._observe",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Observability boundary records/classifies an ordinary failure and preserves primary control flow; telemetry is derived state and must not replace the owned operation."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/observability/instrumentation.py",
+      "line": 345,
+      "scope": "ObservedExecutor.execute",
+      "exception_form": "Exception",
+      "current_action": "reraise, log",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Observability boundary records/classifies an ordinary failure and preserves primary control flow; telemetry is derived state and must not replace the owned operation."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/observability/instrumentation.py",
+      "line": 475,
+      "scope": "ObservedModelProvider.generate",
+      "exception_form": "Exception",
+      "current_action": "reraise, log",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Observability boundary records/classifies an ordinary failure and preserves primary control flow; telemetry is derived state and must not replace the owned operation."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/observability/instrumentation.py",
+      "line": 544,
+      "scope": "ObservedToolProvider.invoke",
+      "exception_form": "Exception",
+      "current_action": "reraise, log",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Observability boundary records/classifies an ordinary failure and preserves primary control flow; telemetry is derived state and must not replace the owned operation."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/observability/integrations.py",
+      "line": 65,
+      "scope": "AccountingBridgeExporter.emit_metric",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Observability boundary records/classifies an ordinary failure and preserves primary control flow; telemetry is derived state and must not replace the owned operation."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/observability/model_provider.py",
+      "line": 105,
+      "scope": "ObservedModelProvider.stream.iterate",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Observability boundary records/classifies an ordinary failure and preserves primary control flow; telemetry is derived state and must not replace the owned operation."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/planning/evidence.py",
+      "line": 415,
+      "scope": "ReplanningEvidenceBridge._request",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Planning evidence provider boundary observes an ordinary implementation failure while preserving the established request/error contract and re-raising to its owner."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/planning/repository.py",
+      "line": 164,
+      "scope": "JsonPlanningRepository.create",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/planning/repository.py",
+      "line": 175,
+      "scope": "JsonPlanningRepository.save",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/agent_import.py",
+      "line": 71,
+      "scope": "AgentImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "reraise, raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/agent_import.py",
+      "line": 75,
+      "scope": "AgentImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/agent_import.py",
+      "line": 132,
+      "scope": "AgentTeamImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "reraise, raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/agent_import.py",
+      "line": 136,
+      "scope": "AgentTeamImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/connector_import.py",
+      "line": 143,
+      "scope": "ConnectionImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "reraise, raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/egress_profile_import.py",
+      "line": 74,
+      "scope": "EgressProfileImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "reraise, raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/egress_profile_import.py",
+      "line": 81,
+      "scope": "EgressProfileImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/executor.py",
+      "line": 160,
+      "scope": "ImportExecutor.execute",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/executor.py",
+      "line": 263,
+      "scope": "_settle_rollback",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Portability rollback settlement boundary continues/collects compensation failures so all owned resources receive a rollback attempt; process-control handling is owned by the surrounding import boundary."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/executor.py",
+      "line": 270,
+      "scope": "_settle_rollback",
+      "exception_form": "Exception",
+      "current_action": "return fallback",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Portability rollback settlement boundary continues/collects compensation failures so all owned resources receive a rollback attempt; process-control handling is owned by the surrounding import boundary."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/file_codecs.py",
+      "line": 240,
+      "scope": "materialize_file",
+      "exception_form": "Exception",
+      "current_action": "reraise, raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/file_codecs.py",
+      "line": 244,
+      "scope": "materialize_file",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/knowledge_import.py",
+      "line": 100,
+      "scope": "KnowledgeSourceImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/knowledge_import.py",
+      "line": 103,
+      "scope": "KnowledgeSourceImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/model_routing_profile_import.py",
+      "line": 77,
+      "scope": "ModelRoutingProfileImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "reraise, raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/model_routing_profile_import.py",
+      "line": 84,
+      "scope": "ModelRoutingProfileImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/skill_import.py",
+      "line": 67,
+      "scope": "SkillImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "reraise, raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/skill_import.py",
+      "line": 71,
+      "scope": "SkillImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/template_import.py",
+      "line": 70,
+      "scope": "TemplateImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "reraise, raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/portability/template_import.py",
+      "line": 74,
+      "scope": "TemplateImportMutationHandler.apply",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/repositories/management.py",
+      "line": 338,
+      "scope": "RepositoryManagementService._persist_and_register",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/repositories/management.py",
+      "line": 368,
+      "scope": "RepositoryManagementService._delete_and_unregister",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/research/async_repository.py",
+      "line": 208,
+      "scope": "AsyncResearchRepositoryAdapter._run.execute",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/authentication_hardening.py",
+      "line": 525,
+      "scope": "LocalAuthenticationService.authenticate_external",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Security service ownership boundary performs required audit/rollback/translation handling for an ordinary failure and then preserves the established authorization/authentication contract."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/egress_profiles.py",
+      "line": 159,
+      "scope": "JsonEgressProfileRepository.create_profile",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/egress_profiles.py",
+      "line": 195,
+      "scope": "JsonEgressProfileRepository.update_profile",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/egress_profiles.py",
+      "line": 242,
+      "scope": "JsonEgressProfileRepository.set_enabled",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/egress_profiles.py",
+      "line": 304,
+      "scope": "JsonEgressProfileRepository.compensate_profile_creation",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/enforcement.py",
+      "line": 373,
+      "scope": "AuthorizationGate._emit_approval",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Security service ownership boundary performs required audit/rollback/translation handling for an ordinary failure and then preserves the established authorization/authentication contract."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/policy_profile_persistence.py",
+      "line": 49,
+      "scope": "JsonAuthorizationPolicyProfileRepository.create_profile",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/policy_profile_persistence.py",
+      "line": 65,
+      "scope": "JsonAuthorizationPolicyProfileRepository.append_revision",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/policy_profile_persistence.py",
+      "line": 80,
+      "scope": "JsonAuthorizationPolicyProfileRepository.import_profile",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/policy_profile_persistence.py",
+      "line": 93,
+      "scope": "JsonAuthorizationPolicyProfileRepository.delete_profile",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/policy_profile_persistence.py",
+      "line": 106,
+      "scope": "JsonAuthorizationPolicyProfileRepository.set_enabled",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/policy_profile_persistence.py",
+      "line": 114,
+      "scope": "JsonAuthorizationPolicyProfileRepository.create_assignment",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/sqlite_approvals.py",
+      "line": 60,
+      "scope": "SqliteApprovalService.request",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/sqlite_approvals.py",
+      "line": 72,
+      "scope": "SqliteApprovalService.get",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/sqlite_approvals.py",
+      "line": 97,
+      "scope": "SqliteApprovalService._decide_authorized",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/sqlite_approvals.py",
+      "line": 110,
+      "scope": "SqliteApprovalService._cancel_authorized",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/security/sqlite_authorization.py",
+      "line": 42,
+      "scope": "SqliteLocalAuthorizationProvider.register",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "CLEANUP / BEST EFFORT",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Mutation/persistence ownership boundary performs rollback/transaction settlement before re-raising the ordinary primary error; no process-control signal is caught by Exception."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/terminal/service.py",
+      "line": 710,
+      "scope": "TerminalSessionService._retain_frame",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/testing/conformance.py",
+      "line": 386,
+      "scope": "assert_canonical_error",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/upgrade/migrations.py",
+      "line": 224,
+      "scope": "MigrationRunner.apply",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/upgrade/migrations.py",
+      "line": 249,
+      "scope": "MigrationRunner.apply",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/upgrade/preflight.py",
+      "line": 284,
+      "scope": "_migration_precondition_checks",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Explicit owning boundary for an ordinary failure; the broad catch is retained only for this scoped ownership contract and does not catch BaseException process-control signals."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/upgrade/service.py",
+      "line": 328,
+      "scope": "UpgradeService._migrate_plugin_state",
+      "exception_form": "Exception",
+      "current_action": "raise translated",
+      "classification": "DOMAIN / CONTRACT TRANSLATION",
+      "decision": "TRANSLATE",
+      "rationale": "Owning translation boundary for an ordinary implementation/infrastructure failure; the handler raises the established canonical/domain error contract and must preserve cause and reviewed retry semantics without exposing implementation objects."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/verification/agent_workflow.py",
+      "line": 659,
+      "scope": "AutomaticReviewerWorkflow._execute_reviewer",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Reviewer execution/completion boundary updates durable AgentRun state for an ordinary implementation failure and re-raises; cancellation has a separate explicit path."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/verification/agent_workflow.py",
+      "line": 681,
+      "scope": "AutomaticReviewerWorkflow._execute_reviewer",
+      "exception_form": "Exception",
+      "current_action": "reraise",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Reviewer execution/completion boundary updates durable AgentRun state for an ordinary implementation failure and re-raises; cancellation has a separate explicit path."
+    },
+    {
+      "file": "src/ai_multi_agent_platform/workspaces/retention.py",
+      "line": 413,
+      "scope": "RetentionManagedWorkspaceProvider.enforce_retention",
+      "exception_form": "Exception",
+      "current_action": "contain / mutate / cleanup",
+      "classification": "BOUNDARY",
+      "decision": "KEEP + JUSTIFY",
+      "rationale": "Per-workspace batch/result boundary isolates an ordinary workspace failure and reports it explicitly without aborting independent retention work."
+    }
+  ]
+}
