@@ -10,6 +10,7 @@ from ai_multi_agent_platform.accounting import AccountingService
 
 from .config import SingleNodeConfig
 from .durable_connectors import SingleNodeDeployment as DurableSingleNodeDeployment
+from .startup_recovery import StartupRecoveryExtension
 from .task_budget_bindings import (
     TaskBudgetCoordinationBindings,
     TaskBudgetRepairRuntime,
@@ -29,6 +30,7 @@ class TaskBudgetSingleNodeDeployment(DurableSingleNodeDeployment):
 
     task_budgets: Any
     task_budget_mutations: Any
+    startup_recovery_extensions: tuple[StartupRecoveryExtension, ...]
 
 
 def extend_single_node_with_task_budgets(
@@ -98,6 +100,7 @@ def extend_single_node_with_task_budgets(
         **base_values,
         task_budgets=task_budgets,
         task_budget_mutations=task_budget_mutations,
+        startup_recovery_extensions=(),
     )
 
 
