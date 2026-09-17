@@ -113,8 +113,8 @@ async def _settle_awaitable[T](operation: Awaitable[T]) -> tuple[T | None, BaseE
             continue
     try:
         return worker.result(), None
-    # error-boundary: allow-broad-catch=cleanup report settlement failure to the primary owner
-    except BaseException as exc:
+    # error-boundary: allow-broad-catch=cleanup report ordinary/child-cancel failure to owner
+    except (Exception, asyncio.CancelledError) as exc:
         return None, exc
 
 
