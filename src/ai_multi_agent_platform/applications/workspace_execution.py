@@ -152,17 +152,17 @@ class LocalApplicationWorkspaceBinder:
         )
         try:
             materialization = await self._provider.materialize(workspace.id, context)
-            path = self._local_path(materialization.id)
         except ContractError as exc:
             raise ApplicationRuntimeError("application Workspace materialization failed") from exc
+        try:
+            path = self._local_path(materialization.id)
+        except ContractError as exc:
+            await self._release_after_failure(materialization.id)
+            raise ApplicationRuntimeError(
+                "application Workspace local path resolution failed"
+            ) from exc
         if not path.is_dir():
-            try:
-                await self._provider.release_materialization(
-                    materialization.id,
-                    MaterializationOutcome.FAILED,
-                )
-            except ContractError:
-                pass
+            await self._release_after_failure(materialization.id)
             raise ApplicationRuntimeError(
                 "application Workspace materialization did not produce a local directory"
             )
@@ -221,5 +221,5 @@ class LocalApplicationWorkspaceBinder:
             )
         except ContractError as exc:
             raise ApplicationRuntimeError(
-                "application Workspace commit and cleanup both failed"
+                "application Workspace cleanup failed"
             ) from exc
