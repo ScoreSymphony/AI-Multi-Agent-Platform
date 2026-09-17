@@ -92,8 +92,7 @@ class ApplicationInstanceResourceService(ResourceService):
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
         return tuple(
-            _instance_resource(self._repository, item)
-            for item in self._repository.list_instances()
+            _instance_resource(self._repository, item) for item in self._repository.list_instances()
         )
 
     async def get_resource(
@@ -279,10 +278,7 @@ def _install_request(
         name: _secret_reference(value, field_name=f"secret_bindings.{name}")
         for name, value in _optional_object(payload, "secret_bindings").items()
     }
-    volumes = tuple(
-        _volume_binding(item)
-        for item in _optional_array(payload, "volume_bindings")
-    )
+    volumes = tuple(_volume_binding(item) for item in _optional_array(payload, "volume_bindings"))
     node_id = _optional_string(payload, "node_id")
     return (
         ApplicationInstallRequest(
@@ -378,8 +374,7 @@ def _instance_resource(
         "health": instance.health.value,
         "configuration": dict(instance.configuration),
         "secret_bindings": {
-            name: reference.to_dict()
-            for name, reference in instance.secret_bindings.items()
+            name: reference.to_dict() for name, reference in instance.secret_bindings.items()
         },
         "volume_bindings": [
             {
