@@ -305,7 +305,7 @@ class CoordinationContentionHarness:
                 )
         # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:  # benchmark evidence retains deterministic failures
-            errors.append(f"{type(exc).__name__}: {type(exc).__name__}")
+            errors.append(f"{type(exc).__name__}")
 
         duration = time.perf_counter() - wall_started
         process_cpu_seconds = time.process_time() - cpu_before

@@ -118,7 +118,7 @@ class IdempotentConsumer:
             await self._store.release(key)
             await self._transport.nack(delivery, retry=True, reason="CancelledError")
             raise
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception as exc:
             await self._store.release(key)
             await self._transport.nack(delivery, retry=True, reason=type(exc).__name__)

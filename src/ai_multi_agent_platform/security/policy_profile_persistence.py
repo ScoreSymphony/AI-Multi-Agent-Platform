@@ -46,7 +46,7 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
         super().create_profile(definition, revision)
         try:
             self._save()
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             InMemoryAuthorizationPolicyProfileRepository.delete_profile(
                 self,
@@ -63,7 +63,7 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
         super().append_revision(definition, revision)
         try:
             self._save()
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self._profiles[definition.policy_profile_id] = previous
             self._revisions.pop((revision.policy_profile_id, revision.revision), None)
@@ -79,7 +79,7 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
         super().import_profile(definition, revisions)
         try:
             self._save()
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             InMemoryAuthorizationPolicyProfileRepository.delete_profile(
                 self,
@@ -93,7 +93,7 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
         super().delete_profile(policy_profile_id)
         try:
             self._save()
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             InMemoryAuthorizationPolicyProfileRepository.import_profile(
                 self,
@@ -107,7 +107,7 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
         super().set_enabled(definition)
         try:
             self._save()
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self._profiles[definition.policy_profile_id] = previous
             raise
@@ -116,7 +116,7 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
         super().create_assignment(assignment)
         try:
             self._save()
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self._assignments.pop(assignment.assignment_id, None)
             raise

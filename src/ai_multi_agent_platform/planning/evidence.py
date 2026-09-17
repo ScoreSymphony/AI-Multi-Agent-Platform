@@ -412,7 +412,7 @@ class ReplanningEvidenceBridge:
                 error_code=exc.code.value,
             )
             raise
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception as exc:
             await self._emit(
                 "planning.replan.failed",

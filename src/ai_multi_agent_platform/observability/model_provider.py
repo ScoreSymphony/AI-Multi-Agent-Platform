@@ -102,7 +102,7 @@ class ObservedModelProvider(_GenerateObservedModelProvider):
                 )
                 self._finish_stream_failure(span, context, outcome, failure)
                 raise
-            # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+            # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
             except Exception as exc:
                 failure = self.hierarchy.failure_from_exception(
                     exc,

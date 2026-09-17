@@ -161,7 +161,7 @@ class JsonPlanningRepository(InMemoryPlanningRepository):
                 return stored
             try:
                 self._persist()
-            # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+            # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
             except Exception:
                 self._records = before
                 raise
@@ -173,7 +173,7 @@ class JsonPlanningRepository(InMemoryPlanningRepository):
             stored = super().save(record, expected_revision=expected_revision)
             try:
                 self._persist()
-            # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+            # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
             except Exception:
                 self._records = before
                 raise

@@ -466,7 +466,7 @@ async def _exercise_cycle(
         )
     # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
     except Exception as exc:  # benchmark evidence records failure instead of hiding it
-        result.error = f"{type(exc).__name__}: {type(exc).__name__}"
+        result.error = f"{type(exc).__name__}"
     return result
 
 

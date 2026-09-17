@@ -73,7 +73,7 @@ class AgentImportMutationHandler:
             if created:
                 try:
                     self._repository.delete_agent(snapshot.definition.agent_id)
-                # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
+                # error-boundary: allow-broad-catch=translation reviewed error translation
                 except Exception as rollback_error:
                     raise ContractError(
                         ErrorCode.BACKEND_ERROR,
@@ -136,7 +136,7 @@ class AgentTeamImportMutationHandler:
             if created:
                 try:
                     self._repository.delete_team(snapshot.definition.team_id)
-                # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
+                # error-boundary: allow-broad-catch=translation reviewed error translation
                 except Exception as rollback_error:
                     raise ContractError(
                         ErrorCode.BACKEND_ERROR,

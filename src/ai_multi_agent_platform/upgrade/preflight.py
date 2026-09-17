@@ -290,7 +290,7 @@ def _migration_precondition_checks(
                     message=f"migration {step.revision} precondition failed: {type(exc).__name__}",
                     details={
                         "revision": step.revision,
-                        "error": f"{type(exc).__name__}: {type(exc).__name__}",
+                        "error": f"{type(exc).__name__}",
                     },
                 )
             )

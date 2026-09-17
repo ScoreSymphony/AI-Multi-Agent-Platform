@@ -187,7 +187,7 @@ class NotificationRuntime:
                 try:
                     projected += len(await self._notifications.project_event(event))
                     await self._state.mark_processed(event.id, event_type=event.event_type)
-                # error-boundary: allow-broad-catch=boundary notification runtime/provider containment
+                # error-boundary: allow-broad-catch=boundary reviewed owner boundary
                 except Exception as exc:
                     failed += 1
                     if first_error is None:

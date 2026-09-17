@@ -335,7 +335,7 @@ class RepositoryManagementService:
             await self._catalog.save(record)
             try:
                 self._registry.register(binding)
-            # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+            # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
             except Exception:
                 await self._restore_catalog_record(binding.reference.id, previous)
                 raise
@@ -366,7 +366,7 @@ class RepositoryManagementService:
                 removed = None
             try:
                 await self._catalog.delete(repository_id)
-            # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+            # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
             except Exception:
                 if removed is not None:
                     self._registry.register(removed)

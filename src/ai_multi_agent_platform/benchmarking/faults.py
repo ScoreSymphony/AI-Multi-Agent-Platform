@@ -235,9 +235,7 @@ class SingleNodeFaultUnderLoadHarness(SingleNodeWorkloadHarness):
             authentication_preserved = actor.identity.actor_id == admin.user_id
         # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:
-            samples.errors.append(
-                f"post-restart authentication: {type(exc).__name__}: {type(exc).__name__}"
-            )
+            samples.errors.append(f"post-restart authentication: {type(exc).__name__}")
 
         unauthorized_response = await deployment.http.handle(
             HTTPRequest(method="GET", path="/api/v1/tasks", headers={})
@@ -416,12 +414,10 @@ class SingleNodeFaultUnderLoadHarness(SingleNodeWorkloadHarness):
                         samples.reads += 1
                     samples.operation.append(time.perf_counter() - operation_started)
                     samples.completed += 1
-                # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
+                # error-boundary: allow-broad-catch=boundary reviewed owner boundary
                 except Exception as exc:
                     samples.failed += 1
-                    samples.errors.append(
-                        f"operation {index}: {type(exc).__name__}: {type(exc).__name__}"
-                    )
+                    samples.errors.append(f"operation {index}: {type(exc).__name__}")
 
         await asyncio.gather(*(run_one(index) for index in indices))
 

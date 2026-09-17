@@ -776,7 +776,7 @@ class _TcpSubscription(MessageSubscription):
                     "TCP broker closed before confirming subscription"
                 )
             self._transport._result_or_raise(response)
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             writer.close()
             with suppress(ConnectionError, OSError, ssl.SSLError):

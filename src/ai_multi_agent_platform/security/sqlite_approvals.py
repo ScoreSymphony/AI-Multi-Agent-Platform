@@ -57,7 +57,7 @@ class SqliteApprovalService(ApprovalService):
             return record
         try:
             self._persist(record)
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self._records.pop(record.approval_id, None)
             raise
@@ -70,7 +70,7 @@ class SqliteApprovalService(ApprovalService):
             return record
         try:
             self._persist(record)
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             if previous is None:
                 self._records.pop(approval_id, None)
@@ -96,7 +96,7 @@ class SqliteApprovalService(ApprovalService):
         )
         try:
             self._persist(record)
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             if previous is None:
                 self._records.pop(approval_id, None)
@@ -110,7 +110,7 @@ class SqliteApprovalService(ApprovalService):
         record = super()._cancel_authorized(approval_id, actor_ref=actor_ref)
         try:
             self._persist(record)
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             if previous is None:
                 self._records.pop(approval_id, None)

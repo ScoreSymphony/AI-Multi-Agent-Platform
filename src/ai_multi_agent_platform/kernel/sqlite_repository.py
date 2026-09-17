@@ -240,7 +240,7 @@ class SqliteKernelRepository(EventRepository):
         except sqlite3.IntegrityError as exc:
             connection.rollback()
             raise ContractError(ErrorCode.CONFLICT, f"kernel persistence conflict: {exc}") from exc
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             connection.rollback()
             raise

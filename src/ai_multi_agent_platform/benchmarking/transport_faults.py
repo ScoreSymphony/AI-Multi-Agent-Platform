@@ -416,7 +416,7 @@ class TransportFaultBenchmarkHarness:
         except Exception as exc:
             evidence.unexpected_failures += 1
             evidence.errors.append(
-                f"unexpected publish failure for {envelope.message_id}: {type(exc).__name__}: {type(exc).__name__}"
+                f"unexpected publish failure for {envelope.message_id}: {type(exc).__name__}"
             )
             return False
         finally:
@@ -452,9 +452,7 @@ class TransportFaultBenchmarkHarness:
         # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:
             evidence.unexpected_failures += 1
-            evidence.errors.append(
-                f"expected {expected_code.value}, got {type(exc).__name__}: {type(exc).__name__}"
-            )
+            evidence.errors.append(f"expected {expected_code.value}, got {type(exc).__name__}")
         else:
             evidence.unexpected_failures += 1
             evidence.accepted_ids.append(envelope.message_id)

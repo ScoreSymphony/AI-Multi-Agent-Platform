@@ -69,7 +69,7 @@ class SkillImportMutationHandler:
             if created:
                 try:
                     self._repository.delete_skill(snapshot.definition.skill_id)
-                # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
+                # error-boundary: allow-broad-catch=translation reviewed error translation
                 except Exception as rollback_error:
                     raise ContractError(
                         ErrorCode.BACKEND_ERROR,

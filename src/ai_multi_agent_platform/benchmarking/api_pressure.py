@@ -273,11 +273,9 @@ class SingleNodeAPIPressureHarness:
                         timeout=spec.timeout_seconds,
                     )
                     _record_evidence(samples, evidence)
-                # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
+                # error-boundary: allow-broad-catch=boundary reviewed owner boundary
                 except Exception as exc:  # benchmark evidence retains deterministic failures
-                    samples.errors.append(
-                        f"operation {index}: {type(exc).__name__}: {type(exc).__name__}"
-                    )
+                    samples.errors.append(f"operation {index}: {type(exc).__name__}")
 
         await asyncio.gather(*(run_one(index) for index in range(spec.operation_count)))
         duration = time.perf_counter() - wall_started

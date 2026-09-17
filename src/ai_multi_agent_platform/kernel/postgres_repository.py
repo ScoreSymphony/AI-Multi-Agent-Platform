@@ -145,7 +145,7 @@ class PostgresKernelRepository(EventRepository):
                 raise
             except ContractError:
                 raise
-            # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
+            # error-boundary: allow-broad-catch=translation reviewed error translation
             except Exception as exc:
                 raise _map_postgres_error(exc, message) from None
 
@@ -155,7 +155,7 @@ class PostgresKernelRepository(EventRepository):
             result = operation(connection)
             connection.commit()
             return result
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             connection.rollback()
             raise

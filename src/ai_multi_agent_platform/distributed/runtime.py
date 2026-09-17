@@ -540,7 +540,7 @@ class DistributedRuntime:
                 worker_id,
                 node_id=placement.reservation.node_id,
             )
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self.registry.release_reservation(placement.reservation.reservation_id)
             if self.telemetry is not None:
@@ -560,7 +560,7 @@ class DistributedRuntime:
         started = perf_counter()
         try:
             handle = await dispatcher.dispatch(job)
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             duration = max(0.0, perf_counter() - started)
             lost = replace(

@@ -225,7 +225,7 @@ class TraceHierarchy:
                 safe_attributes,
             )
             raise
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception as exc:
             failure = self.failure_from_exception(exc, component)
             self._finish_failure(

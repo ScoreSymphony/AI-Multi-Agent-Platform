@@ -482,7 +482,7 @@ async def _with_retry(
                 logical_latency=time.perf_counter() - logical_started,
                 attempt_latencies=tuple(attempt_latencies),
                 recovery_latency=None,
-                error=f"{type(exc).__name__}: {type(exc).__name__}",
+                error=f"{type(exc).__name__}",
             )
 
         attempt_latencies.append(time.perf_counter() - attempt_started)

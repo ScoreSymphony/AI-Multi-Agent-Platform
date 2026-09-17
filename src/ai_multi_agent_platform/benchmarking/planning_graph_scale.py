@@ -475,7 +475,7 @@ async def _exercise_repetition(
         )
     # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
     except Exception as exc:  # benchmark evidence must preserve correctness failures
-        result.error = f"{type(exc).__name__}: {type(exc).__name__}"
+        result.error = f"{type(exc).__name__}"
     return result
 
 

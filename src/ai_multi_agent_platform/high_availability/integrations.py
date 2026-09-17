@@ -154,7 +154,7 @@ class AuthorityGatedDistributedRuntime(DistributedRuntime):
     ) -> DispatchRecord:
         try:
             await self._authority_check()
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self.registry.release_reservation(placement.reservation.reservation_id)
             self._persist()

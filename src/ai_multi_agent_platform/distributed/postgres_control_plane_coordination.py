@@ -112,7 +112,7 @@ class PostgresCoordinationProvider:
             result = operation(connection)
             connection.commit()
             return result
-        # error-boundary: allow-broad-catch=cleanup local rollback/settlement re-raises primary failure
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             connection.rollback()
             raise
