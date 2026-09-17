@@ -472,9 +472,7 @@ class LocalProcessApplicationRuntime:
         project_id = (
             workspace_execution.context.project_id if workspace_execution is not None else None
         )
-        workspace_id = (
-            workspace_execution.workspace_id if workspace_execution is not None else None
-        )
+        workspace_id = workspace_execution.workspace_id if workspace_execution is not None else None
         try:
             for name, reference in instance.secret_bindings.items():
                 field = secret_fields[name]
