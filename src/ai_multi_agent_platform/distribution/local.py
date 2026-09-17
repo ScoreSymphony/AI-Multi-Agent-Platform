@@ -1,4 +1,4 @@
-"""Reference local/offline registry provider for issue #81."""
+"""Reference local/offline registry provider."""
 
 from __future__ import annotations
 
