@@ -11,7 +11,9 @@ from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.data import DataAccessContext
 from ai_multi_agent_platform.workspaces import (
     MaterializationOutcome,
+    Workspace,
     WorkspaceAccessMode,
+    WorkspaceMaterialization,
     WorkspaceProvider,
 )
 
@@ -20,6 +22,7 @@ from .models import (
     ApplicationInstance,
     ApplicationManifest,
     ApplicationService,
+    ApplicationVolumeBinding,
     ApplicationVolumeKind,
 )
 from .runtime import ApplicationPreparationError, ApplicationRuntimeError
@@ -40,6 +43,14 @@ class LocalApplicationWorkspaceExecution:
     base_revision: int
     access_mode: WorkspaceAccessMode
     mounted_service_ids: frozenset[str]
+
+
+@dataclass(frozen=True, slots=True)
+class _WorkspaceBindingPlan:
+    volume_name: str
+    binding: ApplicationVolumeBinding
+    mounted_service_ids: frozenset[str]
+    requested_read_only: bool
 
 
 class LocalApplicationWorkspaceBinder:
@@ -102,79 +113,22 @@ class LocalApplicationWorkspaceBinder:
         manifest: ApplicationManifest,
         instance: ApplicationInstance,
     ) -> LocalApplicationWorkspaceExecution | None:
-        workspace_volumes = tuple(
-            volume for volume in manifest.volumes if volume.kind is ApplicationVolumeKind.WORKSPACE
-        )
-        if not workspace_volumes:
+        plan = self._binding_plan(manifest, instance)
+        if plan is None:
             return None
-        volume = workspace_volumes[0]
-        mounted_service_ids = frozenset(
-            service.service_id
-            for service in manifest.services
-            if any(mount.volume_name == volume.name for mount in service.mounts)
-        )
-        if not mounted_service_ids:
-            return None
-        binding = next(
-            (item for item in instance.volume_bindings if item.volume_name == volume.name),
-            None,
-        )
-        if binding is None:
-            raise ApplicationRuntimeError(
-                f"application Workspace volume is not bound: {volume.name}"
-            )
-
-        try:
-            workspace = await self._provider.get_workspace(binding.source_ref)
-        except ContractError as exc:
-            raise ApplicationRuntimeError("application Workspace lookup failed") from exc
-
-        requested_read_only = binding.read_only or any(
-            mount.read_only
-            for service in manifest.services
-            for mount in service.mounts
-            if mount.volume_name == volume.name
-        )
-        if requested_read_only and workspace.access_mode is WorkspaceAccessMode.READ_WRITE:
-            raise ApplicationRuntimeError(
-                "local process runtime cannot enforce a read-only projection of a "
-                "read-write Workspace"
-            )
-
-        context = DataAccessContext(
-            operation=OperationContext(
-                correlation_id=f"application:{instance.instance_id}",
-                owner_type="application_instance",
-                owner_id=instance.instance_id,
-                project_id=workspace.project_id,
-            ),
-            actor_ref=_WORKSPACE_ACTOR_REF,
-        )
-        try:
-            materialization = await self._provider.materialize(workspace.id, context)
-        except ContractError as exc:
-            raise ApplicationRuntimeError("application Workspace materialization failed") from exc
-        try:
-            path = self._local_path(materialization.id)
-        except ContractError as exc:
-            await self._release_after_failure(materialization.id)
-            raise ApplicationRuntimeError(
-                "application Workspace local path resolution failed"
-            ) from exc
-        if not path.is_dir():
-            await self._release_after_failure(materialization.id)
-            raise ApplicationRuntimeError(
-                "application Workspace materialization did not produce a local directory"
-            )
+        workspace = await self._workspace(plan.binding.source_ref)
+        self._validate_access(plan, workspace)
+        context = self._data_context(instance, workspace.project_id)
+        materialization, path = await self._materialize_local(workspace.id, context)
         return LocalApplicationWorkspaceExecution(
-            volume_name=volume.name,
+            volume_name=plan.volume_name,
             workspace_id=workspace.id,
             materialization_id=materialization.id,
             path=path,
             context=context,
             base_revision=materialization.base_revision,
             access_mode=materialization.access_mode,
-            mounted_service_ids=mounted_service_ids,
+            mounted_service_ids=plan.mounted_service_ids,
         )
 
     def service_cwd(
@@ -213,6 +167,98 @@ class LocalApplicationWorkspaceBinder:
         except ContractError as exc:
             raise ApplicationRuntimeError("application Workspace release failed") from exc
 
+    def _binding_plan(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> _WorkspaceBindingPlan | None:
+        volume = next(
+            (
+                item
+                for item in manifest.volumes
+                if item.kind is ApplicationVolumeKind.WORKSPACE
+            ),
+            None,
+        )
+        if volume is None:
+            return None
+        mounted_service_ids = frozenset(
+            service.service_id
+            for service in manifest.services
+            if any(mount.volume_name == volume.name for mount in service.mounts)
+        )
+        if not mounted_service_ids:
+            return None
+        binding = next(
+            (item for item in instance.volume_bindings if item.volume_name == volume.name),
+            None,
+        )
+        if binding is None:
+            raise ApplicationRuntimeError(
+                f"application Workspace volume is not bound: {volume.name}"
+            )
+        requested_read_only = binding.read_only or any(
+            mount.read_only
+            for service in manifest.services
+            for mount in service.mounts
+            if mount.volume_name == volume.name
+        )
+        return _WorkspaceBindingPlan(
+            volume_name=volume.name,
+            binding=binding,
+            mounted_service_ids=mounted_service_ids,
+            requested_read_only=requested_read_only,
+        )
+
+    async def _workspace(self, workspace_id: str) -> Workspace:
+        try:
+            return await self._provider.get_workspace(workspace_id)
+        except ContractError as exc:
+            raise ApplicationRuntimeError("application Workspace lookup failed") from exc
+
+    @staticmethod
+    def _validate_access(plan: _WorkspaceBindingPlan, workspace: Workspace) -> None:
+        if plan.requested_read_only and workspace.access_mode is WorkspaceAccessMode.READ_WRITE:
+            raise ApplicationRuntimeError(
+                "local process runtime cannot enforce a read-only projection of a "
+                "read-write Workspace"
+            )
+
+    @staticmethod
+    def _data_context(instance: ApplicationInstance, project_id: str) -> DataAccessContext:
+        return DataAccessContext(
+            operation=OperationContext(
+                correlation_id=f"application:{instance.instance_id}",
+                owner_type="application_instance",
+                owner_id=instance.instance_id,
+                project_id=project_id,
+            ),
+            actor_ref=_WORKSPACE_ACTOR_REF,
+        )
+
+    async def _materialize_local(
+        self,
+        workspace_id: str,
+        context: DataAccessContext,
+    ) -> tuple[WorkspaceMaterialization, Path]:
+        try:
+            materialization = await self._provider.materialize(workspace_id, context)
+        except ContractError as exc:
+            raise ApplicationRuntimeError("application Workspace materialization failed") from exc
+        try:
+            path = self._local_path(materialization.id)
+        except ContractError as exc:
+            await self._release_after_failure(materialization.id)
+            raise ApplicationRuntimeError(
+                "application Workspace local path resolution failed"
+            ) from exc
+        if not path.is_dir():
+            await self._release_after_failure(materialization.id)
+            raise ApplicationRuntimeError(
+                "application Workspace materialization did not produce a local directory"
+            )
+        return materialization, path
+
     async def _release_after_failure(self, materialization_id: str) -> None:
         try:
             await self._provider.release_materialization(
@@ -220,6 +266,4 @@ class LocalApplicationWorkspaceBinder:
                 MaterializationOutcome.FAILED,
             )
         except ContractError as exc:
-            raise ApplicationRuntimeError(
-                "application Workspace cleanup failed"
-            ) from exc
+            raise ApplicationRuntimeError("application Workspace cleanup failed") from exc
