@@ -9,7 +9,7 @@ from ai_multi_agent_platform.evaluation.runner import _settle_awaitable as settl
 from ai_multi_agent_platform.plugins._settlement import settle_awaitable as settle_plugin
 from ai_multi_agent_platform.templates._settlement import settle_awaitable as settle_template
 
-Settlement = Callable[[Awaitable[None]], Awaitable[tuple[None, BaseException | None]]]
+type Settlement = Callable[[Awaitable[None]], Awaitable[tuple[None, BaseException | None]]]
 
 
 async def _raise(signal: BaseException) -> None:
