@@ -153,21 +153,6 @@ def _handler_resource(
     association_value: str,
 ) -> dict[str, JsonValue]:
     application = resolution.application
-    open_instances: list[JsonValue] = []
-    for instance in resolution.openable_instances:
-        endpoint = instance.open_endpoint(application.manifest)
-        if endpoint is None or application.manifest.ui is None:
-            continue
-        open_instances.append(
-            {
-                "instance_id": instance.instance_id,
-                "health": instance.health.value,
-                "observed_state": instance.observed_state.value,
-                "endpoint_ref": endpoint.endpoint_ref,
-                "uri": endpoint.uri,
-                "open_mode": application.manifest.ui.open_mode.value,
-            }
-        )
     identifier = _handler_id(
         resolution.application_ref,
         association_kind,
@@ -185,8 +170,6 @@ def _handler_resource(
         "association_value": association_value,
         "media_type": association_value if association_kind == "media_type" else None,
         "resource_type": association_value if association_kind == "resource_type" else None,
-        "instance_ids": [instance.instance_id for instance in resolution.instances],
-        "open_instances": open_instances,
     }
 
 
