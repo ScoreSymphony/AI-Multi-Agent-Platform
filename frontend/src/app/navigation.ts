@@ -35,6 +35,7 @@ export const navigation: NavigationItem[] = [
   { label: "Learning", path: "/learning", group: "Intelligence", apiResource: "learning-candidates" },
   { label: "Marketplace", path: "/marketplace", group: "Intelligence", apiResource: "registry-items" },
   { label: "Compute", path: "/compute", group: "Platform", apiResource: "nodes" },
+  { label: "Applications", path: "/applications", group: "Platform", apiResource: "applications" },
   { label: "Terminal", path: "/terminal", group: "Platform", apiResource: "terminal-sessions" },
   { label: "Automations", path: "/automations", group: "Platform", apiResource: "automations" },
   { label: "Plugins", path: "/plugins", group: "Platform", apiResource: "plugins" },
