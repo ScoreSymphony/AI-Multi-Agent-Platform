@@ -1,8 +1,9 @@
 """Ordinary single-node startup reconciliation for issues #707 and #758.
 
 This module is intentionally separate from disaster-restore recovery. The normal
-single-Control-Plane profile must reconcile durable canonical Runs and automatic
-reviewer work after an abnormal process exit even when no backup/restore operation occurred.
+single-Control-Plane profile must reconcile durable canonical Runs, managed Applications
+and automatic reviewer work after an abnormal process exit even when no backup/restore
+operation occurred.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+from ai_multi_agent_platform.applications import ApplicationRecoveryReport
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.distributed import DispatchRecord, DispatchState
 from ai_multi_agent_platform.domain import RunStatus
@@ -42,6 +44,12 @@ class StartupDistributedRuntime(Protocol):
     async def reconcile(self) -> tuple[object, ...]: ...
 
 
+class StartupApplicationReconciler(Protocol):
+    """Narrow #1173 seam for durable managed-Application reconciliation."""
+
+    async def recover_all(self) -> ApplicationRecoveryReport: ...
+
+
 class StartupReviewerReconciler(Protocol):
     """Narrow #758 seam for durable automatic-reviewer reconciliation."""
 
@@ -59,12 +67,25 @@ class SingleNodeStartupRecoveryResult:
     ready_for_service: bool
     plans_reconciled: int = 0
     distributed_jobs_reconciled: int = 0
+    application_recovery: ApplicationRecoveryReport | None = None
     reviewer_recoveries: tuple[ReviewerRecoveryRecord, ...] = ()
     blocked_verification_ids: tuple[str, ...] = ()
 
     @property
     def runs_checked(self) -> int:
         return sum(len(report.entries) for report in self.reports)
+
+    @property
+    def application_instances_checked(self) -> int:
+        if self.application_recovery is None:
+            return 0
+        return len(self.application_recovery.instances)
+
+    @property
+    def application_recovery_failures(self) -> int:
+        if self.application_recovery is None:
+            return 0
+        return len(self.application_recovery.failures)
 
 
 async def reconcile_single_node_startup(
@@ -73,6 +94,7 @@ async def reconcile_single_node_startup(
     kernel: PlatformKernel,
     coordinator: StartupCoordinator | None = None,
     distributed_runtime: StartupDistributedRuntime | None = None,
+    application_reconciler: StartupApplicationReconciler | None = None,
     reviewer_reconciler: StartupReviewerReconciler | None = None,
 ) -> SingleNodeStartupRecoveryResult:
     """Reconcile durable runtime state before an ordinary single-node serve.
@@ -83,9 +105,11 @@ async def reconcile_single_node_startup(
     startup records an explicit orphaned blocker instead of asking the kernel to
     redispatch a possibly accepted STARTING execution or aborting before a report can
     be written. Once those blockers are resolved, the durable Plan/Step coordinator
-    resumes due waits/retries and the kernel scans every Task stream. Only after
-    canonical Run ownership is stable may #758 reconcile automatic reviewer AgentRuns.
-    The complete pass is safe to repeat.
+    resumes due waits/retries and the kernel scans every Task stream. Managed Applications
+    then reconcile their persisted desired state through their selected ApplicationRuntime.
+    Application-level recovery failures remain visible as failed instances but do not make
+    the whole Control Plane unavailable. Only after canonical Run ownership is stable may
+    #758 reconcile automatic reviewer AgentRuns. The complete pass is safe to repeat.
 
     A running canonical Run whose execution backend can no longer be found is never
     guessed into a terminal state: it remains marked as requiring reconciliation and
@@ -124,6 +148,12 @@ async def reconcile_single_node_startup(
         if entry.disposition is RecoveryDisposition.ORPHANED_RECONCILIATION_REQUIRED
     )
 
+    application_recovery = (
+        await application_reconciler.recover_all()
+        if application_reconciler is not None
+        else None
+    )
+
     reviewer_recoveries: tuple[ReviewerRecoveryRecord, ...] = ()
     if not unresolved and reviewer_reconciler is not None:
         reviewer_recoveries = await reviewer_reconciler.reconcile_startup()
@@ -132,6 +162,9 @@ async def reconcile_single_node_startup(
     )
     ready_for_service = not unresolved and not blocked_verification_ids
 
+    application_failures = (
+        () if application_recovery is None else application_recovery.failures
+    )
     payload: dict[str, Any] = {
         "report_version": STARTUP_RECOVERY_REPORT_VERSION,
         "recovery_kind": "ordinary_single_node_startup",
@@ -139,10 +172,21 @@ async def reconcile_single_node_startup(
         "runs_checked": sum(len(report.entries) for report in reports),
         "plans_reconciled": plans_reconciled,
         "distributed_jobs_reconciled": distributed_jobs_reconciled,
+        "application_instances_checked": (
+            0 if application_recovery is None else len(application_recovery.instances)
+        ),
+        "application_recovery_failures": len(application_failures),
         "reviewer_recoveries_checked": len(reviewer_recoveries),
         "unresolved_run_ids": list(unresolved),
         "blocked_verification_ids": list(blocked_verification_ids),
         "ready_for_service": ready_for_service,
+        "application_failures": [
+            {
+                "instance_id": failure.instance_id,
+                "runtime_id": failure.runtime_id,
+            }
+            for failure in application_failures
+        ],
         "reviewer_recoveries": [
             {
                 "verification_id": record.verification_id,
@@ -179,6 +223,7 @@ async def reconcile_single_node_startup(
         ready_for_service=ready_for_service,
         plans_reconciled=plans_reconciled,
         distributed_jobs_reconciled=distributed_jobs_reconciled,
+        application_recovery=application_recovery,
         reviewer_recoveries=reviewer_recoveries,
         blocked_verification_ids=blocked_verification_ids,
     )
