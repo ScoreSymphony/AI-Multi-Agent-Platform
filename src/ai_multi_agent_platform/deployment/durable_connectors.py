@@ -11,6 +11,11 @@ from ai_multi_agent_platform.application_distribution import (
     JsonApplicationReleaseRepository,
     ReleaseGatePolicy,
 )
+from ai_multi_agent_platform.applications import (
+    ApplicationLifecycleService,
+    ApplicationRuntimeRegistry,
+    SqliteApplicationRepository,
+)
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.connectors import (
     ConnectorRegistry,
@@ -35,6 +40,11 @@ from ai_multi_agent_platform.verification.reviewer_recovery import (
     AutomaticReviewerStartupReconciler,
 )
 
+from .composition.applications import (
+    ApplicationRuntimeBundle,
+    build_application_runtime,
+    register_application_runtime,
+)
 from .composition.durable import (
     ApplicationDistributionBundle,
     AutomaticReviewBundle,
@@ -66,6 +76,9 @@ from .single_node import SingleNodeSmokeResult, build_single_node_deployment_fro
 class SingleNodeDeployment(BaseSingleNodeDeployment):
     """Normal single-node deployment with durable public owner-domain state."""
 
+    application_repository: SqliteApplicationRepository
+    application_runtimes: ApplicationRuntimeRegistry
+    applications: ApplicationLifecycleService
     connector_repository: SqliteConnectorRepository
     connector_registry: ConnectorRegistry
     connectors: ConnectorService
@@ -122,9 +135,16 @@ def build_single_node_deployment(
         repository_discovery_resolver=connector_foundation.repository_discovery_resolver,
         model_runtime_factory=egress.model_runtime,
     )
+    application_runtime = build_application_runtime(
+        config,
+        workspace_provider=base.workspaces,
+        workspace_local_path=base.workspaces.local_path,
+        secret_provider=base.secrets,
+    )
+    register_application_runtime(base.control_plane, application_runtime)
     automatic_review = build_automatic_review(base)
     egress_connectors = build_connector_services(base, connector_foundation, egress)
-    application = build_application_distribution(
+    application_distribution = build_application_distribution(
         config,
         base,
         connector_foundation,
@@ -141,10 +161,11 @@ def build_single_node_deployment(
     register_durable_template_environment(base, connector_foundation.registry)
     return _extend_base_deployment(
         base,
+        application_runtime=application_runtime,
         connector_foundation=connector_foundation,
         automatic_review=automatic_review,
         egress_connectors=egress_connectors,
-        application=application,
+        application=application_distribution,
         planning=planning,
         extensions=extensions,
     )
@@ -153,6 +174,7 @@ def build_single_node_deployment(
 def _extend_base_deployment(
     base: BaseSingleNodeDeployment,
     *,
+    application_runtime: ApplicationRuntimeBundle,
     connector_foundation: ConnectorFoundationBundle,
     automatic_review: AutomaticReviewBundle,
     egress_connectors: EgressConnectorBundle,
@@ -214,6 +236,9 @@ def _extend_base_deployment(
         control_plane=base.control_plane,
         http=base.http,
         app=base.app,
+        application_repository=application_runtime.repository,
+        application_runtimes=application_runtime.runtimes,
+        applications=application_runtime.lifecycle,
         connector_repository=connector_foundation.repository,
         connector_registry=connector_foundation.registry,
         connectors=egress_connectors.connectors,
