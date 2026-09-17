@@ -54,6 +54,7 @@ from .service import (
     ApplicationRuntimeRegistry,
 )
 from .sqlite_repository import SqliteApplicationRepository
+from .workspace_execution import LocalApplicationWorkspaceBinder
 
 __all__ = [
     "APPLICATION_MANIFEST_SCHEMA",
@@ -99,6 +100,7 @@ __all__ = [
     "ApplicationVolumeKind",
     "ApplicationVolumeMount",
     "InMemoryApplicationRepository",
+    "LocalApplicationWorkspaceBinder",
     "LocalProcessApplicationRuntime",
     "SqliteApplicationRepository",
     "application_manifest_from_document",
