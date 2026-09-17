@@ -1,4 +1,4 @@
-"""Marketplace owner-domain handler registry for issue #1174."""
+"""Marketplace owner-domain handler registry."""
 
 from __future__ import annotations
 
