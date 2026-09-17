@@ -1,4 +1,4 @@
-"""Automatic reviewer-Agent workflow coordination for issue #711.
+"""Automatic reviewer-Agent workflow coordination.
 
 This module productively wires canonical Verification to the normal Agent runtime.
 Provider/orchestrator-specific reviewer execution remains replaceable, and repair
@@ -657,7 +657,7 @@ class AutomaticReviewerWorkflow:
             self._fail_reviewer_run(reviewer_run.agent_run_id, str(exc))
             raise
         except Exception as exc:
-            self._fail_reviewer_run(reviewer_run.agent_run_id, str(exc))
+            self._fail_reviewer_run(reviewer_run.agent_run_id, type(exc).__name__)
             raise
 
         staged = self._stage_execution_decision(reviewer_run, execution)
@@ -684,7 +684,7 @@ class AutomaticReviewerWorkflow:
                 self._agents.finish_agent_run(
                     current.agent_run_id,
                     status=AgentRunStatus.FAILED,
-                    error=str(exc),
+                    error=type(exc).__name__,
                     telemetry=current.telemetry,
                 )
             raise
