@@ -19,6 +19,7 @@ from ai_multi_agent_platform.applications import (
     SqliteApplicationRepository,
     register_application_control_plane,
     register_application_log_control_plane,
+    register_application_resource_handlers,
 )
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.deployment import SingleNodeDeployment
@@ -87,6 +88,10 @@ def compose_application_runtime(
     register_application_log_control_plane(
         deployment.control_plane,
         lifecycle,
+        repository,
+    )
+    register_application_resource_handlers(
+        deployment.control_plane,
         repository,
     )
     composition = ApplicationRuntimeComposition(
