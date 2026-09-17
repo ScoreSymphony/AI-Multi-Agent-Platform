@@ -149,9 +149,7 @@ async def reconcile_single_node_startup(
     )
 
     application_recovery = (
-        await application_reconciler.recover_all()
-        if application_reconciler is not None
-        else None
+        await application_reconciler.recover_all() if application_reconciler is not None else None
     )
 
     reviewer_recoveries: tuple[ReviewerRecoveryRecord, ...] = ()
@@ -162,9 +160,7 @@ async def reconcile_single_node_startup(
     )
     ready_for_service = not unresolved and not blocked_verification_ids
 
-    application_failures = (
-        () if application_recovery is None else application_recovery.failures
-    )
+    application_failures = () if application_recovery is None else application_recovery.failures
     payload: dict[str, Any] = {
         "report_version": STARTUP_RECOVERY_REPORT_VERSION,
         "recovery_kind": "ordinary_single_node_startup",
