@@ -19,6 +19,7 @@ from ai_multi_agent_platform.applications.models import (
     ApplicationInstallRequest,
     ApplicationManifest,
     ApplicationObservedState,
+    ApplicationSecretField,
     ApplicationService,
     ApplicationServiceRuntime,
 )
@@ -31,7 +32,9 @@ from ai_multi_agent_platform.applications.service import (
     ApplicationLifecycleService,
     ApplicationRuntimeRegistry,
 )
+from ai_multi_agent_platform.configuration import LocalSecretProvider
 from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.security import SecretReference
 
 pytestmark = pytest.mark.asyncio
 
@@ -55,17 +58,36 @@ def _manifest(*services: ApplicationService) -> ApplicationManifest:
     )
 
 
+def _secret_manifest(service: ApplicationService) -> ApplicationManifest:
+    return ApplicationManifest(
+        application_id=new_id("application"),
+        name="Secret process fixture",
+        version="1.0.0",
+        description="Secret projection lifecycle fixture",
+        services=(service,),
+        secrets=(
+            ApplicationSecretField(
+                name="token",
+                environment_variable="APP_SECRET",
+            ),
+        ),
+        runtime_requirements=("local", "process", "secret_environment"),
+    )
+
+
 async def _installed(
     manifest: ApplicationManifest,
     *,
     configuration: dict[str, str] | None = None,
+    secret_bindings: dict[str, SecretReference] | None = None,
+    runtime: LocalProcessApplicationRuntime | None = None,
 ) -> tuple[
     LocalProcessApplicationRuntime,
     ApplicationLifecycleService,
     InMemoryApplicationRepository,
     str,
 ]:
-    runtime = LocalProcessApplicationRuntime(stop_timeout_seconds=1.0)
+    runtime = runtime or LocalProcessApplicationRuntime(stop_timeout_seconds=1.0)
     repository = InMemoryApplicationRepository()
     lifecycle = ApplicationLifecycleService(
         repository,
@@ -75,6 +97,7 @@ async def _installed(
         ApplicationInstallRequest(
             manifest=manifest,
             configuration=configuration or {},
+            secret_bindings=secret_bindings or {},
         ),
         runtime_id=runtime.descriptor.runtime_id,
     )
@@ -103,6 +126,18 @@ async def _wait_for_log_count(
             return
         await asyncio.sleep(0.02)
     raise AssertionError(f"log entry count was not observed: {expected!r} >= {count}")
+
+
+async def _wait_for_failed_status(
+    lifecycle: ApplicationLifecycleService,
+    instance_id: str,
+) -> None:
+    for _ in range(100):
+        observed = await lifecycle.status(instance_id)
+        if observed.observed_state is ApplicationObservedState.FAILED:
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError("application did not transition to failed state")
 
 
 async def test_local_process_runtime_runs_real_process_and_projects_configuration() -> None:
@@ -218,6 +253,131 @@ async def test_local_process_runtime_restart_preserves_canonical_instance_identi
         assert restarted.instance_id == first.instance_id == instance_id
         assert restarted.desired_state is ApplicationDesiredState.RUNNING
         assert restarted.observed_state is ApplicationObservedState.RUNNING
+    finally:
+        await lifecycle.stop(instance_id)
+
+
+async def test_local_process_runtime_projects_secret_and_redacts_process_logs() -> None:
+    secret_value = "runtime-secret-do-not-log"
+    provider = LocalSecretProvider()
+    reference = SecretReference(
+        provider="local-secrets",
+        secret_id="runtime-token",
+        scope="application-runtime-test",
+    )
+    await provider.create(
+        reference,
+        secret_value,
+        purpose="application_runtime",
+        allowed_consumers=("service:application-runtime",),
+        allowed_purposes=("application_runtime",),
+    )
+    runtime = LocalProcessApplicationRuntime(
+        stop_timeout_seconds=1.0,
+        secret_provider=provider,
+        secret_lifetime_seconds=30,
+    )
+    service = ApplicationService(
+        service_id="app",
+        runtime=ApplicationServiceRuntime.PROCESS,
+        process=(sys.executable, "-u"),
+        command=(
+            "-c",
+            "import os,time; print('secret:' + os.environ['APP_SECRET'], flush=True); "
+            "time.sleep(30)",
+        ),
+    )
+    _, lifecycle, repository, instance_id = await _installed(
+        _secret_manifest(service),
+        secret_bindings={"token": reference},
+        runtime=runtime,
+    )
+
+    try:
+        running = await lifecycle.start(instance_id)
+        assert running.observed_state is ApplicationObservedState.RUNNING
+        for _ in range(50):
+            entries = await lifecycle.logs(instance_id)
+            if any(entry.message.startswith("secret:") for entry in entries):
+                break
+            await asyncio.sleep(0.02)
+        else:
+            raise AssertionError("secret projection log line was not observed")
+        entries = await lifecycle.logs(instance_id)
+        rendered = "\n".join(entry.message for entry in entries)
+        assert "secret:" in rendered
+        assert secret_value not in rendered
+        persisted = repository.get_instance(instance_id)
+        assert persisted.secret_bindings["token"] == reference
+        assert secret_value not in repr(persisted)
+    finally:
+        await lifecycle.stop(instance_id)
+
+
+async def test_local_process_runtime_rejects_secret_binding_without_provider() -> None:
+    reference = SecretReference(
+        provider="local-secrets",
+        secret_id="runtime-token",
+        scope="application-runtime-test",
+    )
+    service = ApplicationService(
+        service_id="app",
+        runtime=ApplicationServiceRuntime.PROCESS,
+        process=(sys.executable, "-c", "pass"),
+    )
+    runtime = LocalProcessApplicationRuntime()
+
+    with pytest.raises(ApplicationPreparationError, match="requires a SecretProvider"):
+        await runtime.prepare(
+            ApplicationInstallRequest(
+                manifest=_secret_manifest(service),
+                secret_bindings={"token": reference},
+            )
+        )
+
+
+async def test_local_process_runtime_stops_process_when_secret_lease_expires() -> None:
+    provider = LocalSecretProvider()
+    reference = SecretReference(
+        provider="local-secrets",
+        secret_id="expiring-token",
+        scope="application-runtime-test",
+    )
+    await provider.create(
+        reference,
+        "lease-bound-secret",
+        purpose="application_runtime",
+        allowed_consumers=("service:application-runtime",),
+        allowed_purposes=("application_runtime",),
+    )
+    runtime = LocalProcessApplicationRuntime(
+        stop_timeout_seconds=1.0,
+        secret_provider=provider,
+        secret_lifetime_seconds=1,
+    )
+    service = ApplicationService(
+        service_id="app",
+        runtime=ApplicationServiceRuntime.PROCESS,
+        process=(sys.executable, "-u"),
+        command=("-c", "import time; print('running', flush=True); time.sleep(30)"),
+    )
+    _, lifecycle, repository, instance_id = await _installed(
+        _secret_manifest(service),
+        secret_bindings={"token": reference},
+        runtime=runtime,
+    )
+
+    try:
+        running = await lifecycle.start(instance_id)
+        assert running.observed_state is ApplicationObservedState.RUNNING
+        await _wait_for_failed_status(lifecycle, instance_id)
+        failed = repository.get_instance(instance_id)
+        assert failed.desired_state is ApplicationDesiredState.RUNNING
+        assert failed.observed_state is ApplicationObservedState.FAILED
+        assert failed.health is ApplicationHealthStatus.UNHEALTHY
+        assert all(
+            state.message == "application secret lease expired" for state in failed.service_states
+        )
     finally:
         await lifecycle.stop(instance_id)
 
