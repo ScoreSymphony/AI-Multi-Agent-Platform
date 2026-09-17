@@ -17,7 +17,7 @@ from .authorization import (
 
 
 class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
-    """Persist deterministic #15 local principal policies across restarts."""
+    """Persist deterministic  local principal policies across restarts."""
 
     def __init__(self, path: str | Path, *, provider_id: str = "local-authorization") -> None:
         self.path = Path(path)
@@ -39,6 +39,7 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
         self._persist_policy(policy)
         try:
             super().register(policy)
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
         except Exception:
             self._delete_policy(policy.principal_ref)
             raise

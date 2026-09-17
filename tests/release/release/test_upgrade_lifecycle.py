@@ -192,8 +192,9 @@ def test_failed_migration_requires_explicit_restart_safe_resume(tmp_path: Path) 
     history = JsonMigrationHistoryStore.for_data_dir(data_dir)
     runner = MigrationRunner(history)
 
-    with pytest.raises(MigrationError, match="fixture failure"):
+    with pytest.raises(MigrationError, match="migration 'r001' failed: RuntimeError") as exc_info:
         runner.apply((step,), MigrationContext(data_dir=data_dir))
+    assert "fixture failure" not in str(exc_info.value)
     assert history.records()[0].status is MigrationStatus.FAILED
     with pytest.raises(MigrationError, match="explicit resume required"):
         runner.apply((step,), MigrationContext(data_dir=data_dir))
@@ -453,8 +454,9 @@ def test_failed_upgrade_stays_in_maintenance_until_explicit_resume(tmp_path: Pat
     )
     request = PreflightRequest(data_dir=data_dir, current=old, target=target)
 
-    with pytest.raises(MigrationError, match="interrupted"):
+    with pytest.raises(MigrationError, match="migration 'r001' failed: RuntimeError") as exc_info:
         service.apply(request, quiesced=True)
+    assert "interrupted" not in str(exc_info.value)
     assert maintenance.active()
     assert state.read() == old
 

@@ -1,4 +1,4 @@
-"""Canonical Control Plane composition for notifications and user attention (#75)."""
+"""Canonical Control Plane composition for notifications and user attention ()."""
 
 from __future__ import annotations
 
@@ -141,7 +141,7 @@ class _PreferenceResources(ResourceService):
 
 
 class ControlPlane(_BaseControlPlane):
-    """Current platform Control Plane plus the canonical #75 notification subsystem."""
+    """Current platform Control Plane plus the canonical  notification subsystem."""
 
     def __init__(
         self,
@@ -234,6 +234,7 @@ class ControlPlane(_BaseControlPlane):
                 before[task_id] = await self._task_management.view(task)
         try:
             result = await super()._bulk_update_management_command(context, resource_ref, payload)
+        # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
         except Exception:
             await self._project_bulk_task_management_changes(before)
             raise
@@ -246,7 +247,7 @@ class ControlPlane(_BaseControlPlane):
         now: datetime | None = None,
         approaching_window: timedelta = DEFAULT_DEADLINE_APPROACHING_WINDOW,
     ) -> tuple[Notification, ...]:
-        """Project current #88 deadline/dependency attention without owning planning state."""
+        """Project current  deadline/dependency attention without owning planning state."""
 
         active: list[Notification] = []
         for task_id in await self._task_ids():
@@ -271,6 +272,7 @@ class ControlPlane(_BaseControlPlane):
             try:
                 task = await self._kernel.get_task(task_id)
                 after = await self._task_management.view(task)
+            # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
             except Exception:
                 continue
             if after != before_view:
@@ -285,9 +287,10 @@ class ControlPlane(_BaseControlPlane):
         try:
             for candidate in task_management_change_candidates(before, after, task):
                 await self._notification_service.create(candidate)
+        # error-boundary: allow-broad-catch=cleanup derived notification projection is secondary
         except Exception:
             # The canonical task update is already committed. Notification projection must never
-            # become source-of-truth authority or turn a successful #88 update into a failure.
+            # become source-of-truth authority or turn a successful  update into a failure.
             return
 
     async def _mark_read(

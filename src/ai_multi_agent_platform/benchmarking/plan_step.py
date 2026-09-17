@@ -1,4 +1,4 @@
-"""Durable Plan/Step scale evidence for issue #440 after #384."""
+"""Durable Plan/Step scale evidence for the owning subsystem after ."""
 
 from __future__ import annotations
 
@@ -176,7 +176,7 @@ class _GraphOrchestrator(FakeOrchestrator):
 
 
 class PlanStepBenchmarkHarness:
-    """Exercise canonical kernel + durable #384 coordinator paths with SQLite persistence."""
+    """Exercise canonical kernel + durable  coordinator paths with SQLite persistence."""
 
     def __init__(self, data_dir: Path, *, platform_commit: str = "unknown") -> None:
         self._data_dir = data_dir
@@ -271,8 +271,9 @@ class PlanStepBenchmarkHarness:
                     observation_samples.append(time.perf_counter() - observe_started)
                     completion_order.append(item.step_id)
                     active_width_peak = max(active_width_peak, _active_width(projection))
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:  # benchmark evidence must retain deterministic failure details
-            errors.append(f"{type(exc).__name__}: {exc}")
+            errors.append(f"{type(exc).__name__}")
 
         duration = time.perf_counter() - wall_started
         process_cpu_seconds = time.process_time() - cpu_before

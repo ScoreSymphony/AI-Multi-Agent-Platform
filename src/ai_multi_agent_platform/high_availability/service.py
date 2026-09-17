@@ -192,6 +192,7 @@ class ControlPlaneFailoverService:
                 previous_epoch=previous_epoch,
                 reason=reason,
             )
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception as exc:
             await self._best_effort_release(lease.token)
             self._last_error_code = "promotion_reconciliation_failed"

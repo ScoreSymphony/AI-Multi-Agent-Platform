@@ -114,7 +114,7 @@ async def _settle_awaitable[T](operation: Awaitable[T]) -> tuple[T | None, BaseE
     try:
         return worker.result(), None
     # error-boundary: allow-broad-catch=cleanup report settlement failure to the primary owner
-    except BaseException as exc:
+    except (Exception, asyncio.CancelledError) as exc:
         return None, exc
 
 
@@ -645,10 +645,11 @@ class EvaluationRunner:
         except TimeoutError as exc:
             execution_error = exc
             error_category = "case_execution_timeout"
+        # error-boundary: allow-broad-catch=boundary reviewed owner containment boundary
         except Exception as exc:
             execution_error = exc
-        # error-boundary: allow-broad-catch=cleanup preserve signals through teardown settlement
-        except BaseException as exc:
+        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
+        except asyncio.CancelledError as exc:
             primary_error = exc
             raise
         finally:

@@ -93,7 +93,7 @@ def test_plugin_state_upgrade_requires_backup_and_controlled_hook(tmp_path: Path
 
     service = _service(data_dir, current_platform=current.platform_release)
 
-    with pytest.raises(UpgradeError, match="no controlled #20 hook"):
+    with pytest.raises(UpgradeError, match=r"no controlled\s+hook"):
         service.apply(request, quiesced=True)
 
     assert JsonVersionStateStore.for_data_dir(data_dir).read() == current
@@ -162,8 +162,11 @@ def test_plugin_state_failure_remains_fail_closed_and_resumes_same_set(tmp_path:
         current_platform=current.platform_release,
         hook=failing_hook,
     )
-    with pytest.raises(UpgradeError, match="plugin fixture failed"):
+    with pytest.raises(
+        UpgradeError, match="plugin-owned state migration failed: RuntimeError"
+    ) as exc_info:
         failing.apply(request, quiesced=True)
+    assert "plugin fixture failed" not in str(exc_info.value)
 
     maintenance = MaintenanceStateStore.for_data_dir(data_dir)
     marker = maintenance.read()

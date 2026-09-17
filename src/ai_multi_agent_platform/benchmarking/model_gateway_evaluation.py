@@ -226,6 +226,7 @@ async def _run_target(
                 error_counts[exc.code.value] += 1
             except TimeoutError:
                 error_counts["timeout"] += 1
+            # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
             except Exception:  # noqa: BLE001 - benchmark must count without leaking raw errors.
                 error_counts["unexpected_error"] += 1
             else:
@@ -263,6 +264,7 @@ async def _invoke_without_evidence(
     request = _request(spec=spec, request_id=request_id, target_name="warmup")
     try:
         await asyncio.wait_for(provider.generate(request), timeout=spec.timeout_seconds)
+    # error-boundary: allow-broad-catch=cleanup benchmark warmup is excluded from evidence
     except Exception:  # noqa: BLE001 - warmups are deliberately excluded from evidence.
         return
 

@@ -1,4 +1,4 @@
-"""Authenticated Control Plane API pressure evidence for issue #440."""
+"""Authenticated Control Plane API pressure evidence for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -273,8 +273,9 @@ class SingleNodeAPIPressureHarness:
                         timeout=spec.timeout_seconds,
                     )
                     _record_evidence(samples, evidence)
+                # error-boundary: allow-broad-catch=boundary reviewed owner boundary
                 except Exception as exc:  # benchmark evidence retains deterministic failures
-                    samples.errors.append(f"operation {index}: {type(exc).__name__}: {exc}")
+                    samples.errors.append(f"operation {index}: {type(exc).__name__}")
 
         await asyncio.gather(*(run_one(index) for index in range(spec.operation_count)))
         duration = time.perf_counter() - wall_started

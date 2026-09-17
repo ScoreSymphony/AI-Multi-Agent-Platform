@@ -1,4 +1,4 @@
-"""Backend-neutral deterministic migration framework for issue #41."""
+"""Backend-neutral deterministic migration framework for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -221,9 +221,10 @@ class MigrationRunner:
             if existing is None and step.precondition is not None:
                 try:
                     step.precondition(context)
+                # error-boundary: allow-broad-catch=translation reviewed error translation
                 except Exception as exc:
                     raise MigrationError(
-                        f"migration {step.revision!r} precondition failed: {exc}"
+                        f"migration {step.revision!r} precondition failed: {type(exc).__name__}"
                     ) from exc
             started_at = _now()
             self.history.put(
@@ -246,6 +247,7 @@ class MigrationRunner:
                     step.apply(context)
                     if step.validate is not None:
                         step.validate(context)
+            # error-boundary: allow-broad-catch=translation reviewed error translation
             except Exception as exc:
                 self.history.put(
                     MigrationRecord(
@@ -256,10 +258,12 @@ class MigrationRunner:
                         status=MigrationStatus.FAILED,
                         started_at=started_at,
                         finished_at=_now(),
-                        error=f"{type(exc).__name__}: {exc}",
+                        error=f"{type(exc).__name__}",
                     )
                 )
-                raise MigrationError(f"migration {step.revision!r} failed: {exc}") from exc
+                raise MigrationError(
+                    f"migration {step.revision!r} failed: {type(exc).__name__}"
+                ) from exc
             self.history.put(
                 MigrationRecord(
                     revision=step.revision,

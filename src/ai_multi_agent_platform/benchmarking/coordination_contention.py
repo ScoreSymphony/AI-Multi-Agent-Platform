@@ -1,4 +1,4 @@
-"""Concurrent multi-Plan and coordinator claim-contention evidence for issue #440."""
+"""Concurrent multi-Plan and coordinator claim-contention evidence for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -303,8 +303,9 @@ class CoordinationContentionHarness:
                     blocked_samples=blocked_samples,
                     completion_samples=completion_samples,
                 )
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:  # benchmark evidence retains deterministic failures
-            errors.append(f"{type(exc).__name__}: {exc}")
+            errors.append(f"{type(exc).__name__}")
 
         duration = time.perf_counter() - wall_started
         process_cpu_seconds = time.process_time() - cpu_before

@@ -45,7 +45,7 @@ CONNECTOR_COMMANDS = (
 
 
 def default_actor_resolver(context: RequestContext) -> ActorIdentity:
-    """Translate the already-authenticated Control Plane actor into canonical #15 identity."""
+    """Translate the already-authenticated Control Plane actor into canonical  identity."""
 
     if context.actor.actor_type is None:
         return infer_actor_identity(context.actor.principal_ref)
@@ -111,7 +111,7 @@ class ConnectionResourceService(ResourceService):
         Search rebuild instead enumerates canonical repository records and relies on the
         Control Plane's per-result authorization before counts or results become visible.
         Organization-scoped Connections are enumerated only when the composed Control
-        Plane advertises the #87 live membership visibility guard.
+        Plane advertises the  live membership visibility guard.
         """
 
         connections = await self._connectors.repository.list_connections()
@@ -140,9 +140,9 @@ def register_connector_control_plane(
     """Expose connector lifecycle without creating an action-invocation bypass.
 
     External actions intentionally are not registered as generic Control Plane commands.
-    They remain available only through the canonical #12 capability pipeline. A Control Plane
+    They remain available only through the canonical  capability pipeline. A Control Plane
     may expose ``connector_health_event_sink`` as a provider-neutral best-effort observer; this
-    keeps #44 authoritative while allowing #75 to project health attention without a hard import.
+    keeps  authoritative while allowing  to project health attention without a hard import.
     """
 
     if health_event_sink is None:
@@ -248,8 +248,9 @@ def register_connector_control_plane(
         ):
             try:
                 await health_event_sink(existing, checked)
+            # error-boundary: allow-broad-catch=cleanup secondary connector attention projection
             except Exception:
-                # #44 already owns and persisted the authoritative Connection health transition.
+                #  already owns and persisted the authoritative Connection health transition.
                 # Downstream attention must never falsify a successful health check.
                 pass
         return _connection_resource(checked)

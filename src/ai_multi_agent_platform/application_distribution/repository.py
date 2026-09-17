@@ -147,6 +147,7 @@ class JsonApplicationReleaseRepository(InMemoryApplicationReleaseRepository):
             saved = await super().save(release, expected_revision=expected_revision)
             try:
                 self._write()
+            # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
             except Exception:
                 if previous is None:
                     self._items.pop(release.release_id, None)

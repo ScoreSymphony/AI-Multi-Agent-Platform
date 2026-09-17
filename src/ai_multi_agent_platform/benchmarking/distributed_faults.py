@@ -1,4 +1,4 @@
-"""Distributed Worker loss/rejoin and remote Workspace failure evidence for issue #440."""
+"""Distributed Worker loss/rejoin and remote Workspace failure evidence for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -548,10 +548,11 @@ class DistributedWorkerWorkspaceFaultHarness:
                     workspace_failure_observed = True
                     workspace_failure_code = exc.code.value
                     workspace_failure_retryable = exc.retryable
+                # error-boundary: allow-broad-catch=boundary reviewed owner boundary
                 except Exception as exc:
                     workspace_failure_samples.append(time.perf_counter() - failure_started)
                     errors.append(
-                        f"Workspace fault raised non-canonical error: {type(exc).__name__}: {exc}"
+                        f"Workspace fault raised non-canonical error: {type(exc).__name__}"
                     )
                 else:
                     workspace_failure_samples.append(time.perf_counter() - failure_started)
@@ -559,6 +560,7 @@ class DistributedWorkerWorkspaceFaultHarness:
 
                 try:
                     failed_record = runtime.get_record(failure_job.worker_job_id)
+                # error-boundary: allow-broad-catch=boundary reviewed owner boundary
                 except Exception:
                     failed_record = None
                 if failed_record is not None:
@@ -615,8 +617,9 @@ class DistributedWorkerWorkspaceFaultHarness:
                     errors.append("Workspace recovery job did not terminate successfully")
         except TimeoutError:
             errors.append("distributed fault benchmark exceeded timeout")
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:
-            errors.append(f"distributed fault benchmark failed: {type(exc).__name__}: {exc}")
+            errors.append(f"distributed fault benchmark failed: {type(exc).__name__}")
         finally:
             duration = max(0.0, time.perf_counter() - started)
             traced_current, traced_peak = tracemalloc.get_traced_memory()

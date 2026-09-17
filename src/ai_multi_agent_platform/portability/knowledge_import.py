@@ -1,4 +1,4 @@
-"""Privacy-aware KnowledgeSource import and destination index rebuild for issue #79."""
+"""Privacy-aware KnowledgeSource import and destination index rebuild for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -97,9 +97,11 @@ class KnowledgeSourceImportMutationHandler:
                         details={"source_id": source.source_id},
                     )
             return source.source_id
+        # error-boundary: allow-broad-catch=translation reviewed canonical/domain error translation
         except Exception as exc:
             try:
                 await self._provider.remove_source(source.source_id, self._data_context)
+            # error-boundary: allow-broad-catch=translation reviewed error translation
             except Exception as rollback_exc:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,

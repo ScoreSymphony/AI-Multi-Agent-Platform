@@ -1,4 +1,4 @@
-"""Deterministic autonomous-planning pressure evidence for issue #440 after #439."""
+"""Deterministic autonomous-planning pressure evidence for the owning subsystem after ."""
 
 from __future__ import annotations
 
@@ -464,8 +464,9 @@ async def _exercise_cycle(
             and reactivated.activation_plan_id is not None
             and reactivated.activation_plan_id != initial_plan_id
         )
+    # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
     except Exception as exc:  # benchmark evidence records failure instead of hiding it
-        result.error = f"{type(exc).__name__}: {exc}"
+        result.error = f"{type(exc).__name__}"
     return result
 
 

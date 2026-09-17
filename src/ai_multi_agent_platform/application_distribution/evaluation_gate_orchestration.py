@@ -1,4 +1,4 @@
-"""Canonical #19 Evaluation orchestration for application release gates (#750).
+"""Canonical  Evaluation orchestration for application release gates ().
 
 Application distribution owns only the release requirement and projection. Missing configured
 Evaluation evidence is obtained through the canonical EvaluationService and then read back through
@@ -41,7 +41,7 @@ from .models import ApplicationArtifact, ApplicationRelease, GateEvidence, GateS
 
 
 class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinator):
-    """Drive and project only exact-configuration #19 Evaluation evidence.
+    """Drive and project only exact-configuration  Evaluation evidence.
 
     The coordinator deliberately does not own Evaluation lifecycle state. It asks the canonical
     EvaluationService to complete the exact ConfigurationSnapshot and execute an exact suite
@@ -113,6 +113,7 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
                 suite_ref=suite_ref,
                 snapshot=input_snapshot,
             )
+        # error-boundary: allow-broad-catch=boundary release-gate evaluation evidence projection
         except Exception:
             return
         if _exact_evaluation_runs(self.evaluations, requirement, expected_snapshot):
@@ -123,6 +124,7 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
                 suite_ref=suite_ref,
                 snapshot=input_snapshot,
             )
+        # error-boundary: allow-broad-catch=boundary release-gate evaluation evidence projection
         except Exception:
             # EvaluationRunner durably marks a started run FAILED before re-raising. Errors that
             # happen before a run exists (for example a missing suite/provider) remain missing
@@ -168,6 +170,7 @@ class ApplicationReleaseGateCoordinator(_HardenedApplicationReleaseGateCoordinat
                     suite_ref=f"{suite_id}@{suite_version}",
                     snapshot=input_snapshot,
                 )
+            # error-boundary: allow-broad-catch=boundary release-gate evaluation evidence projection
             except Exception:
                 return _gate(
                     requirement,

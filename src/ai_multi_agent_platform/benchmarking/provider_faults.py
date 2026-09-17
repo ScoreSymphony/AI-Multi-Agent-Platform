@@ -1,4 +1,4 @@
-"""Deterministic model/tool/provider degradation benchmarks for issue #440."""
+"""Deterministic model/tool/provider degradation benchmarks for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -676,13 +676,13 @@ class ProviderFaultBenchmarkHarness:
                             f"{exc.code.value} retryable={exc.retryable}"
                         )
                     return
+                # error-boundary: allow-broad-catch=boundary reviewed owner boundary
                 except Exception as exc:
                     latency = time.perf_counter() - started
                     evidence.latencies.append(latency)
                     evidence.unexpected_failures += 1
                     evidence.errors.append(
-                        f"{phase} operation {index} failed unexpectedly: "
-                        f"{type(exc).__name__}: {exc}"
+                        f"{phase} operation {index} failed unexpectedly: {type(exc).__name__}"
                     )
                     return
 

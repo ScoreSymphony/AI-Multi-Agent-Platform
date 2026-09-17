@@ -403,6 +403,7 @@ class NotificationService:
             return
         try:
             attempts = await self._delivery.deliver_configured(notification, preference)
+        # error-boundary: allow-broad-catch=cleanup external notification delivery is secondary
         except Exception as exc:
             await self._emit(
                 "notification.delivery_failure",

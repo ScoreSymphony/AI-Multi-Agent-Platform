@@ -251,7 +251,7 @@ class RepositoryManagementService:
     ) -> tuple[RepositoryReference, ...]:
         """Prune all canonical repository bindings before their Connection is removed.
 
-        Connection deletion is already authorized by #44. This lifecycle hook only removes
+        Connection deletion is already authorized by . This lifecycle hook only removes
         platform-owned routing/catalog state and never deletes provider-owned repository content.
         It is idempotent with respect to missing in-memory bindings and also cleans transient
         registry-only bindings so a Search rebuild cannot retain stale repository discovery.
@@ -335,6 +335,7 @@ class RepositoryManagementService:
             await self._catalog.save(record)
             try:
                 self._registry.register(binding)
+            # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
             except Exception:
                 await self._restore_catalog_record(binding.reference.id, previous)
                 raise
@@ -365,6 +366,7 @@ class RepositoryManagementService:
                 removed = None
             try:
                 await self._catalog.delete(repository_id)
+            # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary
             except Exception:
                 if removed is not None:
                     self._registry.register(removed)

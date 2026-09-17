@@ -1,4 +1,4 @@
-"""Deterministic single-node performance benchmark harness for issue #440."""
+"""Deterministic single-node performance benchmark harness for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -113,8 +113,9 @@ class SingleNodeBenchmarkHarness:
                         ),
                         timeout=spec.timeout_seconds,
                     )
+                # error-boundary: allow-broad-catch=boundary reviewed owner boundary
                 except Exception as exc:  # benchmark evidence records failures by design
-                    samples.errors.append(f"operation {index}: {type(exc).__name__}: {exc}")
+                    samples.errors.append(f"operation {index}: {type(exc).__name__}")
 
         await asyncio.gather(*(run_one(index) for index in range(spec.operation_count)))
         duration = time.perf_counter() - wall_started

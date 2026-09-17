@@ -1,4 +1,4 @@
-"""Distributed Worker and remote Workspace scale evidence for issue #440."""
+"""Distributed Worker and remote Workspace scale evidence for the owning subsystem."""
 
 from __future__ import annotations
 
@@ -351,8 +351,9 @@ class DistributedWorkerWorkspaceScaleHarness:
                                 errors.append(f"terminal worker job has no result: {worker_job_id}")
         except TimeoutError:
             errors.append("distributed benchmark exceeded timeout")
+        # error-boundary: allow-broad-catch=boundary benchmark operation evidence containment
         except Exception as exc:
-            errors.append(f"distributed benchmark failed: {type(exc).__name__}: {exc}")
+            errors.append(f"distributed benchmark failed: {type(exc).__name__}")
         finally:
             duration = max(0.0, time.perf_counter() - started)
             traced_current, traced_peak = tracemalloc.get_traced_memory()
