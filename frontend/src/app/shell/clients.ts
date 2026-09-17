@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { ApplicationsClient } from "../../api/applications";
 import { ApprovalClient } from "../../api/approvals";
 import { AutomationClient } from "../../api/automations";
 import { BrowserSessionClient } from "../../api/browserSession";
@@ -26,6 +27,7 @@ export function useShellClients(baseUrl: string) {
   const session = useMemo(() => new BrowserSessionClient({ baseUrl }), [baseUrl]);
   const transport = session.transport;
   const client = useMemo(() => new ControlPlaneClient({ transport }), [transport]);
+  const applicationsClient = useMemo(() => new ApplicationsClient({ transport }), [transport]);
   const onboardingClient = useMemo(() => new OnboardingClient({ transport }), [transport]);
   const setupClient = useMemo(() => new SetupClient({ transport }), [transport]);
   const collections = useMemo(() => new ControlPlaneCollectionClient({ transport }), [transport]);
@@ -50,6 +52,7 @@ export function useShellClients(baseUrl: string) {
   return {
     session,
     client,
+    applicationsClient,
     onboardingClient,
     setupClient,
     collections,

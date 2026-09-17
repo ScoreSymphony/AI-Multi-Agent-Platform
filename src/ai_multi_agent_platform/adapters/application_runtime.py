@@ -18,6 +18,7 @@ from ai_multi_agent_platform.applications import (
     LocalProcessApplicationRuntime,
     SqliteApplicationRepository,
     register_application_control_plane,
+    register_application_log_control_plane,
 )
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.deployment import SingleNodeDeployment
@@ -79,6 +80,11 @@ def compose_application_runtime(
     runtimes = ApplicationRuntimeRegistry((local_process,))
     lifecycle = ApplicationLifecycleService(repository, runtimes)
     register_application_control_plane(
+        deployment.control_plane,
+        lifecycle,
+        repository,
+    )
+    register_application_log_control_plane(
         deployment.control_plane,
         lifecycle,
         repository,
