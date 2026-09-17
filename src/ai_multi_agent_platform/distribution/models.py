@@ -1,4 +1,4 @@
-"""Canonical metadata for optional distribution registries (issue #81)."""
+"""Canonical metadata for optional distribution registries (issue #81/#1174)."""
 
 from __future__ import annotations
 
@@ -15,13 +15,18 @@ class RegistryItemType(StrEnum):
     AGENT = "agent"
     AGENT_TEAM = "agent_team"
     TOOL = "tool"
+    SKILL = "skill"
     PLUGIN = "plugin"
     WORKFLOW = "workflow"
     TEMPLATE = "template"
     MODEL_CONFIGURATION = "model_configuration"
     CONNECTOR = "connector"
+    APPLICATION = "application"
     EVALUATION = "evaluation"
     DOCUMENTATION = "documentation"
+
+
+RegistryItemKind = RegistryItemType | str
 
 
 class TrustStatus(StrEnum):
@@ -34,6 +39,7 @@ class TrustStatus(StrEnum):
 class DistributionRoute(StrEnum):
     PLUGIN = "plugin"
     PORTABLE_IMPORT = "portable_import"
+    KIND_HANDLER = "kind_handler"
     MANUAL = "manual"
 
 
@@ -80,6 +86,25 @@ class RegistrySource:
 
 
 @dataclass(frozen=True, slots=True)
+class RegistryManifestReference:
+    """Reference to kind-owned metadata without flattening it into RegistryItem."""
+
+    kind: RegistryItemKind
+    reference: str
+    schema_version: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "kind", parse_registry_item_kind(self.kind))
+        _require_text(self.reference, "manifest reference")
+        if self.schema_version is not None:
+            _require_text(self.schema_version, "manifest schema_version")
+
+    @property
+    def kind_value(self) -> str:
+        return registry_item_kind_value(self.kind)
+
+
+@dataclass(frozen=True, slots=True)
 class ArtifactIntegrity:
     sha256: str | None = None
     signature: str | None = None
@@ -90,6 +115,23 @@ class ArtifactIntegrity:
             raise ValueError("sha256 must be a lowercase 64-character hex digest")
         if self.signature_key_id is not None and self.signature is None:
             raise ValueError("signature_key_id requires signature metadata")
+
+
+def parse_registry_item_kind(value: RegistryItemKind) -> RegistryItemKind:
+    """Return a known enum where possible while preserving valid future kind names."""
+
+    raw = value.value if isinstance(value, RegistryItemType) else value
+    if not isinstance(raw, str) or not _ID_RE.fullmatch(raw):
+        raise ValueError("registry item kind has invalid canonical ID syntax")
+    try:
+        return RegistryItemType(raw)
+    except ValueError:
+        return raw
+
+
+def registry_item_kind_value(value: RegistryItemKind) -> str:
+    resolved = parse_registry_item_kind(value)
+    return resolved.value if isinstance(resolved, RegistryItemType) else resolved
 
 
 def version_key(value: str) -> tuple[int, int, int]:
