@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { ReferenceCollection } from "../../api/references";
 import type { APImanifest } from "../../api/types";
 import { AgentDetailPage, AgentsPage, AgentTeamDetailPage, AgentTeamsPage } from "../../pages/AgentsPage";
+import { ApplicationDetailPage, ApplicationsPage } from "../../pages/ApplicationsPage";
 import { ApprovalDetailPage, ApprovalsPage } from "../../pages/ApprovalsPage";
 import { AutomationDetailPage, AutomationsPage } from "../../pages/AutomationsPage";
 import { CapabilitiesPage, CapabilityDetailPage, CapabilityProviderDetailPage } from "../../pages/CapabilitiesPage";
@@ -47,6 +48,7 @@ const EVALUATION_RESOURCES = ["evaluation-suites", "evaluation-runs"] as const;
 const COMPUTE_RESOURCES = ["nodes", "workers", "worker-jobs"] as const;
 const INTEGRATION_RESOURCES = ["connector-definitions", "connections"] as const;
 const KNOWLEDGE_RESOURCES = ["knowledge", "knowledge-results"] as const;
+const APPLICATION_RESOURCES = ["applications", "application-instances", "application-logs"] as const;
 
 export function renderShellRoute({
   path,
@@ -61,6 +63,7 @@ export function renderShellRoute({
 }): ReactNode {
   const {
     client,
+    applicationsClient,
     onboardingClient,
     session,
     collections,
@@ -108,6 +111,7 @@ export function renderShellRoute({
   const computeNodeMatch = matchPath("/compute/nodes/:nodeId", path);
   const computeWorkerMatch = matchPath("/compute/workers/:workerId", path);
   const computeWorkerJobMatch = matchPath("/compute/jobs/:workerJobId", path);
+  const applicationMatch = matchPath("/applications/:instanceId", path);
   const pluginCandidateMatch = matchPath("/plugins/candidates/:pluginId", path);
   const pluginMatch = matchPath("/plugins/:pluginId", path);
   const automationMatch = matchPath("/automations/:automationId", path);
@@ -177,6 +181,8 @@ export function renderShellRoute({
   if (computeNodeMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}><ComputeNodeDetailPage client={computeClient} nodeId={computeNodeMatch.nodeId} /></ManifestResourcesPage>;
   if (computeWorkerMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}><ComputeWorkerDetailPage client={computeClient} workerId={computeWorkerMatch.workerId} /></ManifestResourcesPage>;
   if (computeWorkerJobMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}><ComputeWorkerJobDetailPage client={computeClient} workerJobId={computeWorkerJobMatch.workerJobId} /></ManifestResourcesPage>;
+  if (path === "/applications") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Applications" resources={APPLICATION_RESOURCES}><ApplicationsPage client={applicationsClient} /></ManifestResourcesPage>;
+  if (applicationMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Application instance" resources={APPLICATION_RESOURCES}><ApplicationDetailPage client={applicationsClient} instanceId={applicationMatch.instanceId} /></ManifestResourcesPage>;
   if (path === "/plugins") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Plugins" resource="plugins"><PluginsPage client={pluginsClient} candidateAvailable={pluginCandidatesAvailable} /></ManifestResourcePage>;
   if (pluginCandidateMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Plugin discovery" resource="plugin-candidates"><PluginCandidateDetailPage client={pluginsClient} pluginId={pluginCandidateMatch.pluginId} /></ManifestResourcePage>;
   if (pluginMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Plugins" resource="plugins"><PluginDetailPage client={pluginsClient} pluginId={pluginMatch.pluginId} candidateAvailable={pluginCandidatesAvailable} /></ManifestResourcePage>;
