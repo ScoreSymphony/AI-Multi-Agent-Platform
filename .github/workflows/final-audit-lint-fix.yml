@@ -28,6 +28,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re
+          import subprocess
 
           root = Path('.')
           changed = []
@@ -45,18 +46,16 @@ jobs:
               r'\{type\((?P=name)\)\.__name__\}'
           )
 
-          for relative in [
-              line.strip()
-              for line in __import__('subprocess').check_output(
-                  [
-                      'git', 'diff', '--name-only',
-                      '9f3b29d2bd845512d590592881292fe88318983b...HEAD',
-                      '--', '*.py'
-                  ],
-                  text=True,
-              ).splitlines()
-              if line.strip()
-          ]:
+          changed_files = subprocess.check_output(
+              [
+                  'git', 'diff', '--name-only',
+                  '9f3b29d2bd845512d590592881292fe88318983b...HEAD',
+                  '--', '*.py'
+              ],
+              text=True,
+          ).splitlines()
+
+          for relative in [line.strip() for line in changed_files if line.strip()]:
               path = root / relative
               if not path.is_file():
                   continue
@@ -85,11 +84,17 @@ jobs:
                       1,
                   )
               if relative == 'src/ai_multi_agent_platform/evaluation/runner.py':
-                  after = after.replace(
-                      'except (Exception, asyncio.CancelledError) as exc:',
-                      'except asyncio.CancelledError as exc:',
-                      1,
+                  old = (
+                      '        # error-boundary: allow-broad-catch=cleanup preserve signals through teardown settlement\n'
+                      '        except (Exception, asyncio.CancelledError) as exc:\n'
                   )
+                  new = (
+                      '        # error-boundary: allow-broad-catch=cleanup reviewed cleanup boundary\n'
+                      '        except asyncio.CancelledError as exc:\n'
+                  )
+                  if old not in after:
+                      raise RuntimeError('expected outer evaluation cancellation handler not found')
+                  after = after.replace(old, new, 1)
               if after != before:
                   compile(after, relative, 'exec')
                   path.write_text(after, encoding='utf-8')
