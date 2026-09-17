@@ -173,11 +173,7 @@ class LocalApplicationWorkspaceBinder:
         instance: ApplicationInstance,
     ) -> _WorkspaceBindingPlan | None:
         volume = next(
-            (
-                item
-                for item in manifest.volumes
-                if item.kind is ApplicationVolumeKind.WORKSPACE
-            ),
+            (item for item in manifest.volumes if item.kind is ApplicationVolumeKind.WORKSPACE),
             None,
         )
         if volume is None:
