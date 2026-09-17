@@ -60,6 +60,7 @@ from .egress_bindings import EgressDeploymentBindings
 from .handoff_composition import HandoffDeploymentComposition
 from .single_node import SingleNodeDeployment as BaseSingleNodeDeployment
 from .single_node import SingleNodeSmokeResult, build_single_node_deployment_from_foundation
+from .startup_recovery import StartupRecoveryExtension
 
 
 @dataclass(slots=True)
@@ -82,6 +83,7 @@ class SingleNodeDeployment(BaseSingleNodeDeployment):
     handoffs: HandoffDeploymentComposition
     automatic_reviewer: AsyncAutomaticReviewerWorkflow
     reviewer_recovery: AutomaticReviewerStartupReconciler
+    startup_recovery_extensions: tuple[StartupRecoveryExtension, ...]
 
 
 def build_single_node_deployment(
@@ -230,6 +232,7 @@ def _extend_base_deployment(
         handoffs=extensions.handoffs,
         automatic_reviewer=automatic_review.workflow,
         reviewer_recovery=automatic_review.recovery,
+        startup_recovery_extensions=(),
     )
 
 
