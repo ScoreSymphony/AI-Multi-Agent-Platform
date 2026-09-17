@@ -75,7 +75,11 @@ The backend starts services in validated dependency order. A service with a heal
 
 Typed configuration values are projected only through configuration fields that explicitly declare an `environment_variable`. The backend does not expose arbitrary environment mutation through the manifest.
 
-The local process backend deliberately fails closed for capabilities that are not wired yet: canonical SecretReference resolution, persistent/workspace/ephemeral volume materialization, service mounts and explicit remote Node placement. Those bindings must reuse the platform's existing security, Workspace/storage and distributed placement authorities rather than introducing backend-local substitutes.
+When a `SecretProvider` is configured, `SecretReference` bindings may be projected only through secret fields that explicitly declare an `environment_variable`. Resolution happens immediately at the process execution boundary through `SecretAccessContext`; plaintext secret material is retained only in backend-private process environment state and never written into canonical Application or Application Instance persistence. stdout/stderr are redacted using the actually resolved secret values before an `ApplicationLogEntry` is created.
+
+Secret leases are also execution authority, not merely metadata. The local process backend requests a bounded lease and tracks the earliest expiry across all resolved secrets. A long-running process is stopped when that lease expires and subsequent status reports the instance as failed/unhealthy until it is explicitly reconciled or restarted with freshly resolved material. This avoids leaving daemon-like Applications running indefinitely with expired credentials.
+
+The local process backend still fails closed for capabilities that are not wired yet: persistent/workspace/ephemeral volume materialization, service mounts and explicit remote Node placement. Those bindings must reuse the platform's existing Workspace/storage and distributed placement authorities rather than introducing backend-local substitutes.
 
 Because PIDs alone are not a safe durable ownership token, a newly created local-process runtime does not adopt an unknown process after a platform/runtime restart. If durable state says `desired=running` but the backend has lost its private process ownership, recovery reports a runtime failure instead of spawning a duplicate process or attaching to an unverified PID. A later supervised-process implementation may provide stronger verifiable adoption semantics without changing canonical Application identity.
 
@@ -87,7 +91,7 @@ Application manifests declare storage needs; installation binds those declaratio
 
 Host filesystem paths are not accepted as persistent-volume bindings by the canonical model. A backend that needs host-level materialization must resolve a platform-approved resource internally rather than allowing an Application manifest to request arbitrary host access.
 
-Secrets are always bound through the existing platform `SecretReference` model. Plaintext secret values do not belong in Application manifests or canonical instance state.
+Secrets are always bound through the existing platform `SecretReference` model. Plaintext secret values do not belong in Application manifests or canonical instance state. Runtime adapters resolve material only at the narrow execution boundary and must redact any canonical text surface that could otherwise echo a resolved value.
 
 ## Placement
 
