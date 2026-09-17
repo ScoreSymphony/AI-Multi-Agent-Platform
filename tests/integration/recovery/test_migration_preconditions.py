@@ -32,10 +32,11 @@ def test_failed_migration_precondition_blocks_preflight_and_runner_before_mutati
 ) -> None:
     data_dir = _data_dir(tmp_path)
     mutations: list[str] = []
+    secret = "migration-secret-token"
 
     def precondition(context: MigrationContext) -> None:
         assert context.data_dir == data_dir
-        raise ValueError("required source invariant is absent")
+        raise ValueError(f"required source invariant is absent; token={secret}")
 
     step = MigrationStep(
         sequence=1,
@@ -66,12 +67,18 @@ def test_failed_migration_precondition_blocks_preflight_and_runner_before_mutati
     report = preflight.run(PreflightRequest(data_dir=data_dir, current=current, target=target))
 
     assert not report.ok
-    assert any(check.code == "migration.precondition.failed" for check in report.checks)
+    failed_check = next(
+        check for check in report.checks if check.code == "migration.precondition.failed"
+    )
+    assert secret not in failed_check.message
+    assert secret not in str(failed_check.details)
+    assert failed_check.details["error"] == "ValueError"
     assert mutations == []
     assert history.records() == ()
 
-    with pytest.raises(MigrationError, match="precondition failed"):
+    with pytest.raises(MigrationError, match="precondition failed") as caught:
         MigrationRunner(history).apply((step,), MigrationContext(data_dir=data_dir))
+    assert secret not in str(caught.value)
     assert mutations == []
     assert history.records() == ()
 
