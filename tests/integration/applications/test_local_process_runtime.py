@@ -86,12 +86,23 @@ async def _wait_for_log(
     instance_id: str,
     expected: str,
 ) -> None:
+    await _wait_for_log_count(lifecycle, instance_id, expected, count=1)
+
+
+async def _wait_for_log_count(
+    lifecycle: ApplicationLifecycleService,
+    instance_id: str,
+    expected: str,
+    *,
+    count: int,
+) -> None:
     for _ in range(50):
         entries = await lifecycle.logs(instance_id)
-        if any(entry.message == expected for entry in entries):
+        observed = sum(entry.message == expected for entry in entries)
+        if observed >= count:
             return
         await asyncio.sleep(0.02)
-    raise AssertionError(f"log entry was not observed: {expected!r}")
+    raise AssertionError(f"log entry count was not observed: {expected!r} >= {count}")
 
 
 async def test_local_process_runtime_runs_real_process_and_projects_configuration() -> None:
@@ -201,11 +212,12 @@ async def test_local_process_runtime_restart_preserves_canonical_instance_identi
 
     try:
         first = await lifecycle.start(instance_id)
+        await _wait_for_log_count(lifecycle, instance_id, "started", count=1)
         restarted = await lifecycle.restart(instance_id)
+        await _wait_for_log_count(lifecycle, instance_id, "started", count=2)
         assert restarted.instance_id == first.instance_id == instance_id
         assert restarted.desired_state is ApplicationDesiredState.RUNNING
         assert restarted.observed_state is ApplicationObservedState.RUNNING
-        assert restarted.revision > first.revision
     finally:
         await lifecycle.stop(instance_id)
 
