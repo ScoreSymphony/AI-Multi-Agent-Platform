@@ -4,18 +4,18 @@ import asyncio
 import sys
 from pathlib import Path
 
+from ai_multi_agent_platform.adapters.application_runtime import ApplicationRuntimeComposition
+from ai_multi_agent_platform.adapters.single_node_app import (
+    build_default_single_node_deployment,
+    main as server_main,
+)
 from ai_multi_agent_platform.applications import (
     ApplicationInstallRequest,
     ApplicationManifest,
     ApplicationService,
     ApplicationServiceRuntime,
 )
-from ai_multi_agent_platform.deployment import (
-    SingleNodeConfig,
-    build_single_node_deployment,
-    load_startup_recovery_report,
-)
-from ai_multi_agent_platform.deployment.server import main as server_main
+from ai_multi_agent_platform.deployment import SingleNodeConfig, load_startup_recovery_report
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.upgrade.versioning import (
     JsonVersionStateStore,
@@ -40,13 +40,25 @@ def _manifest() -> ApplicationManifest:
     )
 
 
-def test_normal_single_node_composes_application_runtime_and_control_plane(tmp_path: Path) -> None:
-    deployment = build_single_node_deployment(
+def _application_runtime(deployment: object) -> ApplicationRuntimeComposition:
+    extensions = getattr(deployment, "startup_recovery_extensions")
+    applications = [
+        extension
+        for extension in extensions
+        if isinstance(extension, ApplicationRuntimeComposition)
+    ]
+    assert len(applications) == 1
+    return applications[0]
+
+
+def test_shipped_single_node_composes_application_runtime_and_control_plane(tmp_path: Path) -> None:
+    deployment = build_default_single_node_deployment(
         SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
     )
+    applications = _application_runtime(deployment)
 
-    assert deployment.application_runtimes.list_runtime_ids() == ("local.process",)
-    descriptor = deployment.application_runtimes.get("local.process").descriptor
+    assert applications.runtimes.list_runtime_ids() == ("local.process",)
+    descriptor = applications.runtimes.get("local.process").descriptor
     assert "local" in descriptor.capabilities
     assert "process" in descriptor.capabilities
     assert "workspace_cwd" in descriptor.capabilities
@@ -62,11 +74,13 @@ def test_server_startup_recovery_reconciles_durable_applications(
     monkeypatch,
 ) -> None:
     root = tmp_path / "restart"
-    deployment = build_single_node_deployment(SingleNodeConfig(data_dir=root, secure_cookie=False))
-    manifest = _manifest()
+    deployment = build_default_single_node_deployment(
+        SingleNodeConfig(data_dir=root, secure_cookie=False)
+    )
+    applications = _application_runtime(deployment)
     installed = asyncio.run(
-        deployment.applications.install(
-            ApplicationInstallRequest(manifest=manifest),
+        applications.lifecycle.install(
+            ApplicationInstallRequest(manifest=_manifest()),
             runtime_id="local.process",
         )
     )
@@ -81,11 +95,21 @@ def test_server_startup_recovery_reconciles_durable_applications(
     report = load_startup_recovery_report(root)
     assert report is not None
     assert report["ready_for_service"] is True
-    assert report["application_instances_checked"] == 1
-    assert report["application_recovery_failures"] == 0
-    assert report["application_failures"] == []
+    assert report["extension_items_checked"] == 1
+    assert report["extension_failures"] == 0
+    assert report["extensions"] == [
+        {
+            "name": "applications",
+            "items_checked": 1,
+            "failure_count": 0,
+            "ready_for_service": True,
+            "failures": [],
+        }
+    ]
 
-    restarted = build_single_node_deployment(SingleNodeConfig(data_dir=root, secure_cookie=False))
-    recovered = restarted.application_repository.get_instance(installed.instance_id)
+    restarted = build_default_single_node_deployment(
+        SingleNodeConfig(data_dir=root, secure_cookie=False)
+    )
+    recovered = _application_runtime(restarted).repository.get_instance(installed.instance_id)
     assert recovered.desired_state.value == "stopped"
     assert recovered.observed_state.value == "stopped"
