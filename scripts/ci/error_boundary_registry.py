@@ -58,9 +58,8 @@ def _load_entries(path: Path) -> list[dict[str, object]]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ValueError(
-            "cannot load error-boundary classification registry: " f"{type(exc).__name__}"
-        ) from exc
+        message = f"cannot load error-boundary classification registry: {type(exc).__name__}"
+        raise ValueError(message) from exc
     if not isinstance(payload, dict) or payload.get("schema_version") != 1:
         raise ValueError("error-boundary classification registry must use schema_version=1")
     entries = payload.get("entries")
@@ -89,6 +88,30 @@ def _load_entries(path: Path) -> list[dict[str, object]]:
     return normalized
 
 
+def _review_structural_cleanup[T](item: T) -> T | None:
+    """Recognize broad cleanup that is self-evident from the handler structure."""
+
+    if (
+        getattr(item, "source_class", None) == "production"
+        and str(getattr(item, "scope", "")).endswith(".__del__")
+        and getattr(item, "exception_form", None) == "Exception"
+        and getattr(item, "current_action", None) == "pass"
+        and not getattr(item, "cancellation_risk", False)
+        and not getattr(item, "shutdown_risk", False)
+    ):
+        return replace(
+            item,
+            recommended_classification="cleanup / best effort",
+            recommended_action=(
+                "KEEP + JUSTIFY: destructor cleanup must not raise during garbage collection; "
+                "Exception does not consume cancellation/process-control signals"
+            ),
+            justification="structural:destructor-cleanup",
+            severity="allowed",
+        )
+    return None
+
+
 def apply_review_registry[T](findings: Iterable[T], registry_path: Path | None) -> list[T]:
     """Apply an exact reviewed registry and fail closed on drift.
 
@@ -115,6 +138,11 @@ def apply_review_registry[T](findings: Iterable[T], registry_path: Path | None) 
             or getattr(item, "severity", None) == "allowed"
         ):
             reviewed.append(item)
+            continue
+
+        structural_cleanup = _review_structural_cleanup(item)
+        if structural_cleanup is not None:
+            reviewed.append(structural_cleanup)
             continue
 
         bucket = by_signature.get(_signature(item))
