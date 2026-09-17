@@ -77,6 +77,25 @@ def test_registry_classifies_exact_handler_signature(tmp_path: Path) -> None:
     assert findings[0]["justification"] == "registry:BOUNDARY"
 
 
+def test_registry_recognizes_structural_destructor_cleanup(tmp_path: Path) -> None:
+    result = _run(
+        tmp_path,
+        "class Store:\n"
+        "    def __del__(self):\n"
+        "        try:\n"
+        "            self.close()\n"
+        "        except Exception:\n"
+        "            pass\n",
+        [],
+    )
+
+    assert result.returncode == 0, result.stderr
+    findings = json.loads(result.stdout)
+    assert findings[0]["severity"] == "allowed"
+    assert findings[0]["recommended_classification"] == "cleanup / best effort"
+    assert findings[0]["justification"] == "structural:destructor-cleanup"
+
+
 def test_registry_fails_when_current_finding_is_unclassified(tmp_path: Path) -> None:
     result = _run(
         tmp_path,
