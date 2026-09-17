@@ -1,0 +1,69 @@
+name: Final audit formatting fix
+
+on:
+  push:
+    branches:
+      - codex/983-final-error-boundary-audit
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/983-final-error-boundary-audit
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install project tooling
+        run: python -m pip install -e ".[dev]"
+      - name: Apply semantic message and test update
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path("src/ai_multi_agent_platform/adapters/skillspector.py")
+          text = source.read_text(encoding="utf-8")
+          old = 'raise ValueError("unsupported SkillSpector pin; rerun  corpus before upgrade")'
+          new = 'raise ValueError("unsupported SkillSpector pin; rerun corpus before upgrade")'
+          if old not in text:
+              raise SystemExit("expected SkillSpector source text not found")
+          source.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          test = Path("tests/integration/security/test_skillspector_security_evidence.py")
+          text = test.read_text(encoding="utf-8")
+          old = 'with pytest.raises(ValueError, match="rerun #800 corpus"):'
+          new = 'with pytest.raises(ValueError, match="rerun corpus before upgrade"):'
+          if old not in text:
+              raise SystemExit("expected SkillSpector test text not found")
+          test.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+      - name: Format changed Python files
+        shell: bash
+        run: |
+          mapfile -t files < <(git diff --name-only 9f3b29d2bd845512d590592881292fe88318983b...HEAD -- '*.py')
+          ruff format "${files[@]}"
+          ruff format --check "${files[@]}"
+      - name: Verify focused acceptance checks
+        shell: bash
+        run: |
+          python scripts/ci/broad_exception_audit.py --repository-root . --check
+          pytest -q tests/unit/quality/test_broad_exception_audit.py tests/integration/security/test_skillspector_security_evidence.py
+      - name: Commit fixes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No fixes produced."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src scripts tests
+          git commit -m "fix: normalize final audit diagnostics and formatting"
+          git push origin HEAD:codex/983-final-error-boundary-audit
