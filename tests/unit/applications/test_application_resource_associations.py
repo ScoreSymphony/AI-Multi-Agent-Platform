@@ -141,7 +141,7 @@ def test_resolver_rejects_missing_or_invalid_selectors() -> None:
 
 
 @pytest.mark.asyncio
-async def test_control_plane_resource_handlers_are_filterable_and_expose_open_targets() -> None:
+async def test_control_plane_resource_handlers_expose_only_definition_metadata() -> None:
     repository = InMemoryApplicationRepository()
     editor = repository.save_application(
         _application(
@@ -150,7 +150,7 @@ async def test_control_plane_resource_handlers_are_filterable_and_expose_open_ta
             resource_types=("file",),
         )
     )
-    instance = repository.save_instance(_running_instance(editor))
+    repository.save_instance(_running_instance(editor))
     resolver = ApplicationResourceAssociationResolver(repository)
     service = ApplicationResourceHandlerService(repository, resolver)
 
@@ -158,17 +158,10 @@ async def test_control_plane_resource_handlers_are_filterable_and_expose_open_ta
 
     text_handler = next(item for item in resources if item["media_type"] == "text/plain")
     assert text_handler["application_ref"] == f"{editor.application_id}@1.0.0"
-    assert text_handler["instance_ids"] == [instance.instance_id]
-    assert text_handler["open_instances"] == [
-        {
-            "instance_id": instance.instance_id,
-            "health": "healthy",
-            "observed_state": "running",
-            "endpoint_ref": "web.ui",
-            "uri": "http://127.0.0.1:8765/",
-            "open_mode": "external",
-        }
-    ]
+    assert text_handler["association_kind"] == "media_type"
+    assert text_handler["association_value"] == "text/plain"
+    assert "instance_ids" not in text_handler
+    assert "open_instances" not in text_handler
     assert await service.get_resource(_context(), str(text_handler["id"])) == text_handler
 
     module = application_resource_handler_module(repository)
