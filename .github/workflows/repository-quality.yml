@@ -49,6 +49,8 @@ jobs:
             echo "## Broad exception boundary audit"
             cat .broad-exception-audit/current.md
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Enforce reviewed production error boundaries
+        run: python scripts/ci/broad_exception_audit.py --repository-root . --check
       - name: Materialize pull request base
         if: github.event_name == 'pull_request'
         run: |
