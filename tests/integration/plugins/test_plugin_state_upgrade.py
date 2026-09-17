@@ -153,17 +153,19 @@ def test_plugin_state_failure_remains_fail_closed_and_resumes_same_set(tmp_path:
         plugins=(manifest,),
         plugin_state_migration_required=frozenset({manifest.plugin_id}),
     )
+    secret = "plugin-migration-secret"
 
     def failing_hook(manifests: tuple[PluginManifest, ...]) -> None:
-        raise RuntimeError("plugin fixture failed")
+        raise RuntimeError(f"plugin fixture failed; token={secret}")
 
     failing = _service(
         data_dir,
         current_platform=current.platform_release,
         hook=failing_hook,
     )
-    with pytest.raises(UpgradeError, match="plugin fixture failed"):
+    with pytest.raises(UpgradeError, match="RuntimeError") as caught:
         failing.apply(request, quiesced=True)
+    assert secret not in str(caught.value)
 
     maintenance = MaintenanceStateStore.for_data_dir(data_dir)
     marker = maintenance.read()
