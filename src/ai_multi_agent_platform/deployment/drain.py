@@ -8,7 +8,7 @@ normal subsystem and is reconciled after restart by the existing startup-recover
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from enum import StrEnum
@@ -523,7 +523,7 @@ async def _cancel_and_settle(task: asyncio.Task[Any]) -> None:
         await task
 
 
-def _request_header(headers: dict[str, str], name: str) -> str | None:
+def _request_header(headers: Mapping[str, str], name: str) -> str | None:
     target = name.lower()
     for key, value in headers.items():
         if key.lower() == target:
