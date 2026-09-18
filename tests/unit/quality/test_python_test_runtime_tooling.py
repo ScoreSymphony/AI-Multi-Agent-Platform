@@ -52,6 +52,10 @@ def test_runtime_report_aggregates_test_and_module_durations(tmp_path: Path) -> 
         "module": "tests.integration.alpha",
         "seconds": 2.5,
     }
+    assert report["slowest_directories"][0] == {
+        "directory": "tests/integration",
+        "seconds": 3.5,
+    }
     assert budget_violations(report) == []
 
 
@@ -134,7 +138,7 @@ def test_runtime_aggregate_uses_slowest_lane_and_enforces_budget() -> None:
     assert summary["pytest_total_compute_seconds"] == 273.0
     assert aggregate_violations(
         summary,
-        {"pytest_critical_path_seconds": 210},
+        {"pytest_critical_path_seconds": 330},
     ) == []
     assert aggregate_violations(
         summary,
@@ -166,5 +170,5 @@ def test_runtime_aggregate_rejects_failed_or_over_budget_lane() -> None:
 
     assert aggregate_violations(
         summary,
-        {"pytest_critical_path_seconds": 210},
+        {"pytest_critical_path_seconds": 330},
     ) == ["failed or over-budget lanes: integration"]
