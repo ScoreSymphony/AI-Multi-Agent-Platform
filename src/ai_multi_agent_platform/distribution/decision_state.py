@@ -251,6 +251,7 @@ def _candidate_is_compatible(
         candidate,
         catalog=catalog,
         installed_items=context.installed_items,
+        context=context,
     )
     return not any(resolution.blocking for resolution in dependencies)
 
