@@ -41,8 +41,7 @@ MAINTAINED_EVIDENCE = (
 )
 
 
-def test_application_distribution_doc_does_not_restore_superseded_remote_dispatch_limitations(
-) -> None:
+def test_application_distribution_docs_reject_stale_remote_dispatch_claims() -> None:
     documentation = DISTRIBUTION_DOC.read_text(encoding="utf-8")
 
     for stale in SUPERSEDED_REMOTE_LIMITATIONS:
