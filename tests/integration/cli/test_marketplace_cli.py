@@ -151,6 +151,34 @@ def test_marketplace_search_uses_unified_collection_and_first_class_filters(
     assert query["filter[platform_version]"] == ["1.0.0"]
 
 
+def test_marketplace_updates_reuses_canonical_update_filter(tmp_path: Path) -> None:
+    transport = MarketplaceTransport()
+
+    code = run_cli(
+        [
+            "--config",
+            str(_config(tmp_path)),
+            "marketplace",
+            "updates",
+            "--kind",
+            "application",
+            "--source",
+            "source-a",
+        ],
+        transport=transport,
+        stdout=StringIO(),
+    )
+
+    assert code == 0
+    method, path, query, _headers, body = transport.calls[0]
+    assert method == "GET"
+    assert path == "/api/v1/registry-items"
+    assert body is None
+    assert query["filter[update_available]"] == ["true"]
+    assert query["filter[kind]"] == ["application"]
+    assert query["filter[source]"] == ["source-a"]
+
+
 def test_marketplace_show_and_status_share_unified_detail_surface(tmp_path: Path) -> None:
     config = _config(tmp_path)
     transport = MarketplaceTransport()
