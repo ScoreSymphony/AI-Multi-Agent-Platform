@@ -145,13 +145,16 @@ def test_runtime_aggregate_uses_slowest_lane_and_enforces_budget() -> None:
     assert summary["pytest_total_compute_seconds"] == 273.0
     assert summary["validation_critical_lane"] == "integration"
     assert summary["validation_critical_path_seconds"] == 148.0
-    assert aggregate_violations(
-        summary,
-        {
-            "pytest_critical_path_seconds": 330,
-            "validation_critical_path_seconds": 350,
-        },
-    ) == []
+    assert (
+        aggregate_violations(
+            summary,
+            {
+                "pytest_critical_path_seconds": 330,
+                "validation_critical_path_seconds": 350,
+            },
+        )
+        == []
+    )
     assert aggregate_violations(
         summary,
         {
