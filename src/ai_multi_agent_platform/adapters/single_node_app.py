@@ -69,6 +69,7 @@ from .application_runtime import ApplicationRuntimeComposition, compose_applicat
 from .marketplace_owner_handlers import (
     ApplicationMarketplaceKindHandler,
     PluginExtensionMarketplaceKindHandler,
+    PluginMarketplaceKindHandler,
     SkillMarketplaceKindHandler,
 )
 from .onboarding_openai_compatible import OpenAICompatibleOnboardingAdapter
@@ -195,6 +196,7 @@ def _marketplace_kind_handlers(
 ) -> MarketplaceKindHandlerRegistry:
     return MarketplaceKindHandlerRegistry(
         (
+            PluginMarketplaceKindHandler(plugin_installer, plugin_registry),
             PluginExtensionMarketplaceKindHandler(
                 kind=RegistryItemType.TOOL,
                 extension_type=ExtensionType.CAPABILITY_PROVIDER,
