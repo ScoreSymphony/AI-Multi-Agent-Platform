@@ -8,7 +8,8 @@ CONFORMANCE_DOC = ROOT / "docs" / "product" / "APPLICATION_DISTRIBUTION_CONFORMA
 
 SUPERSEDED_REMOTE_LIMITATIONS = (
     "does not yet dispatch the command to a remote Worker",
-    "Distributed inventory therefore must not be used to claim that a target is buildable until remote build execution",
+    "Distributed inventory therefore must not be used to claim that a target is buildable "
+    "until remote build execution",
     "Remote Worker build dispatch can replace this path later",
 )
 
@@ -40,7 +41,7 @@ MAINTAINED_EVIDENCE = (
 )
 
 
-def test_application_distribution_doc_does_not_restore_superseded_remote_dispatch_limitations() -> None:
+def test_application_distribution_doc_does_not_restore_superseded_remote_dispatch_limitations(\n) -> None:
     documentation = DISTRIBUTION_DOC.read_text(encoding="utf-8")
 
     for stale in SUPERSEDED_REMOTE_LIMITATIONS:
