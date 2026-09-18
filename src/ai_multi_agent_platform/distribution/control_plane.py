@@ -269,8 +269,23 @@ class RegistryResourceService:
                 "marketplace owner detail provider failed",
                 details={"marketplace_reason": "owner_failure", "kind": item.kind},
             ) from exc
+        descriptor = self.distribution.kind_descriptor(item)
+        supported_operations = (
+            [
+                operation
+                for operation, supported in (
+                    ("install", descriptor.supports_install),
+                    ("update", descriptor.supports_update),
+                    ("uninstall", descriptor.supports_uninstall),
+                )
+                if supported
+            ]
+            if descriptor is not None
+            else []
+        )
         return {
             "handler_available": self.distribution.has_kind_handler(item),
+            "supported_operations": _json_strings(supported_operations),
             "requirements": json_value(requirements) if requirements is not None else None,
             "details": json_value(details) if details is not None else None,
             "status": json_value(status) if status is not None else None,
@@ -456,13 +471,25 @@ class RegistryCommandHandlers:
                 "marketplace item is not installed; use marketplace.install",
                 details={"marketplace_reason": "not_installed"},
             )
-        if version_key(preview.item.version) <= version_key(installation.current.version):
+        installed_key = version_key(installation.current.version)
+        candidate_key = version_key(preview.item.version)
+        same_version_source_change = (
+            candidate_key == installed_key
+            and preview.item.source_registry != installation.current.source_registry
+        )
+        if candidate_key < installed_key or (
+            candidate_key == installed_key and not same_version_source_change
+        ):
             raise ContractError(
                 ErrorCode.CONFLICT,
-                "marketplace update version must be newer than the installed version",
+                (
+                    "marketplace update must use a newer version or an explicitly selected "
+                    "different Marketplace source"
+                ),
                 details={
                     "marketplace_reason": "not_newer",
                     "installed_version": installation.current.version,
+                    "installed_source_registry": installation.current.source_registry,
                 },
             )
         _require_marketplace_activation(
