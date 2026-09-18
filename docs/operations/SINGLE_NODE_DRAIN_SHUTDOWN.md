@@ -38,6 +38,12 @@ export AI_MAP_SHUTDOWN_TIMEOUT_SECONDS="30"
 
 The supported range is 1–3600 seconds.
 
+A first SIGTERM/SIGINT requests the normal bounded drain. A second termination signal while the
+server is already exiting escalates to Uvicorn force-exit semantics: connection/task settlement and
+application lifespan cleanup may be skipped. The drain is then recorded as forced with
+`force_reason="operator_force_signal"`; canonical Task/Run/Step/Approval/Verification state is
+still not rewritten. The next startup must reconcile the same durable data root through #707.
+
 ## Health and readiness during drain
 
 While draining:
