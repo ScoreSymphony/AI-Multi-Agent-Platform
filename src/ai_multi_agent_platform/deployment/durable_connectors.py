@@ -61,6 +61,7 @@ from .handoff_composition import HandoffDeploymentComposition
 from .single_node import SingleNodeDeployment as BaseSingleNodeDeployment
 from .single_node import SingleNodeSmokeResult, build_single_node_deployment_from_foundation
 from .startup_recovery import StartupRecoveryExtension
+from .transient_recovery import SingleNodeTransientStateRecoveryExtension
 
 
 @dataclass(slots=True)
@@ -232,7 +233,12 @@ def _extend_base_deployment(
         handoffs=extensions.handoffs,
         automatic_reviewer=automatic_review.workflow,
         reviewer_recovery=automatic_review.recovery,
-        startup_recovery_extensions=(),
+        startup_recovery_extensions=(
+            SingleNodeTransientStateRecoveryExtension(
+                automation=base.control_plane.automation_service,
+                authentication_sessions=base.authentication.store.sessions,
+            ),
+        ),
     )
 
 
