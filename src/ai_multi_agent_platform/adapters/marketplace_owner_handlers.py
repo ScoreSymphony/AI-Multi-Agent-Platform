@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 
-from jsonschema.exceptions import ValidationError
+from jsonschema.exceptions import ValidationError  # type: ignore[import-untyped]
 
 from ai_multi_agent_platform.applications import (
     Application,
