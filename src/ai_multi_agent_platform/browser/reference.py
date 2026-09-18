@@ -93,7 +93,7 @@ class DownloadValidationHook(Protocol):
 
 @runtime_checkable
 class ArtifactLinkingFileProvider(Protocol):
-    """Refined #13 file seam needed to link a downloaded file to an artifact identity."""
+    """Refined canonical file seam needed to link a downloaded file to an artifact identity."""
 
     async def link_artifact(
         self,

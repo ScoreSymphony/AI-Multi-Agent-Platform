@@ -1,4 +1,4 @@
-"""Governed feedback, learning-candidate and owner-domain promotion workflow (#595/#694)."""
+"""Governed feedback, learning-candidate and owner-domain promotion workflow."""
 
 from .control_plane import (
     LEARNING_CANDIDATE_COLLECTION,

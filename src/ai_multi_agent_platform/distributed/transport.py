@@ -1,4 +1,4 @@
-"""#35-backed transport adapter for canonical distributed Worker jobs."""
+"""MessageTransport adapter for canonical distributed Worker jobs."""
 
 from __future__ import annotations
 

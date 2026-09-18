@@ -1,6 +1,6 @@
 """Canonical read/state models for conflict-aware parallel coding batches.
 
-Issue #872 is an orchestration layer over existing planning, workspace, repository,
+Coding batches are an orchestration layer over existing planning, workspace, repository,
 Agent runtime, verification and authorization authorities. The models here deliberately
 store only composition/provenance state; they do not create a second scheduler, source-
 control history, Workspace identity or Verification result model.
@@ -101,7 +101,7 @@ class CheckState(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class CodingWorkItem:
-    """Planner-owned work identity plus overlap hints consumed by #872."""
+    """Planner-owned work identity plus overlap hints consumed by coding-batch orchestration."""
 
     work_item_id: str
     task_id: str
@@ -330,7 +330,7 @@ class IntegrationConflict:
 
 @dataclass(frozen=True, slots=True)
 class IntegrationExecutionProvenance:
-    """Canonical #384/#33/#37 execution binding for a clean integration attempt."""
+    """Canonical Step/AgentRun/Workspace execution binding for a clean integration attempt."""
 
     task_id: str
     plan_id: str
@@ -362,7 +362,7 @@ class IntegrationExecutionProvenance:
 
 @dataclass(frozen=True, slots=True)
 class IntegrationRepairAttempt:
-    """#872 binding to one externally created canonical #439/#384 repair Step."""
+    """Coding-batch binding to one externally created canonical planning repair Step."""
 
     repair_id: str
     attempt: int

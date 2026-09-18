@@ -1,8 +1,8 @@
-"""Reference multi-agent composition over existing platform runtime authorities (#889).
+"""Reference multi-agent composition over existing platform runtime authorities.
 
 The code here deliberately owns no Task/Run, Plan/Step, Handoff, Context or verification state.
-It supplies a deterministic reference planner behind #439 and materializes durable #651 Handoffs
-from already-canonical predecessor AgentRun outputs immediately before the existing #590 Context
+It supplies a deterministic planner through canonical Planning and materializes durable
+Handoffs from predecessor AgentRun outputs immediately before the canonical Context
 resolver assembles the consuming Run's immutable ContextBundle.
 """
 
@@ -64,11 +64,11 @@ def _agent_actor(agent: AgentRevisionRef) -> ActorIdentity:
 
 
 class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
-    """Deterministic #439 planner for the built-in multi-agent golden path.
+    """Deterministic planner for the built-in multi-agent golden path.
 
     The planner expresses role requirements only. Proposal construction then delegates actual
-    eligibility and exact immutable Agent revision selection to the canonical #903 matcher already
-    owned by #439. The ordinary deterministic single-Agent reference path remains available when
+    eligibility and exact immutable Agent revision selection to the canonical Agent matcher already
+    owned by Planning. The ordinary deterministic single-Agent reference path remains available when
     the multi-Agent path was not requested. An explicitly requested multi-Agent path fails closed
     when a required role is unavailable instead of silently selecting a fallback Agent.
     """
@@ -94,18 +94,18 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
         research_assignment = AgentAssignment(
             role_requirement="researcher",
             rationale=(
-                "reference golden path: resolve Research Agent through canonical #903 matcher"
+                "reference golden path: resolve Research Agent through canonical Agent matcher"
             ),
         )
         execution_assignment = AgentAssignment(
             role_requirement="developer",
             rationale=(
-                "reference golden path: resolve Execution Agent through canonical #903 matcher"
+                "reference golden path: resolve Execution Agent through canonical Agent matcher"
             ),
         )
         review_assignment = AgentAssignment(
             role_requirement="reviewer",
-            rationale="reference golden path: resolve Review Agent through canonical #903 matcher",
+            rationale="reference golden path: resolve Review Agent through canonical Agent matcher",
         )
         draft = PlanDraft(
             summary="Reference multi-agent research, execution and review plan",
@@ -164,11 +164,11 @@ class ReferenceMultiAgentPlanner(DeterministicReferencePlanner):
 
 
 class ReferenceIncomingHandoffContextAdapter:
-    """Materialize dependency Handoffs, bind them to the Run, and project them into #590.
+    """Materialize dependency Handoffs, bind them to the Run, and project them into Context.
 
-    #384 remains the dependency/Run authority and #651 remains the Handoff authority. The adapter
-    only turns already-durable predecessor AgentRun outputs into idempotent Handoffs at the safe
-    consumer Context boundary. Coordination reads use #384's awaitable runtime repository seam, so
+    Step coordination remains the dependency/Run authority, and Handoff remains authoritative.
+    The adapter turns durable predecessor AgentRun outputs into idempotent Handoffs at the safe
+    consumer Context boundary. Coordination reads use the awaitable runtime repository seam, so
     SQLite persistence is not performed inline on the Context/Agent event loop. This makes a
     producer -> process restart -> consumer path equivalent to the uninterrupted path without
     reserving a second kernel output-observer slot.
@@ -176,8 +176,8 @@ class ReferenceIncomingHandoffContextAdapter:
     A context transfer also needs the predecessor output to be a canonical Result/Artifact
     reference. Reference Agent execution records the immutable output identity on the AgentRun and
     kernel Run snapshot first; this adapter publishes that exact identity through the existing
-    kernel attachment command before asking #651/#86 to resolve it. The attachment is idempotent and
-    remains platform history rather than Handoff-private state.
+    kernel attachment command before asking Handoff and Verification services to resolve it.
+    The attachment is idempotent and remains platform history rather than Handoff-private state.
     """
 
     adapter_id = "reference-multi-agent-incoming-handoff/v1"

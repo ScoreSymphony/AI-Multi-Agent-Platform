@@ -1,4 +1,4 @@
-"""Deterministic, authorization-aware context resolver for issue #590."""
+"""Deterministic, authorization-aware context resolver."""
 
 from __future__ import annotations
 
@@ -745,7 +745,7 @@ class ContextAssemblyService:
 
 
 def context_window_requirement(bundle: ContextBundle, *, output_reserve_tokens: int = 0) -> int:
-    """Provider-neutral minimum input+reserved-output context requirement for #10 routing."""
+    """Provider-neutral minimum input+reserved-output context requirement for model routing."""
 
     if output_reserve_tokens < 0:
         raise ValueError("output_reserve_tokens must be >= 0")

@@ -1,8 +1,10 @@
-"""Issue #251 lifecycle-capable local data providers.
+"""Lifecycle-capable local data providers.
 
-These classes extend the issue-#13 SQLite reference implementations without changing
-canonical identities or introducing a second persistence architecture. Existing SQLite
-files are migrated in place when #251 metadata is first used.
+These classes extend the SQLite reference implementations without changing canonical
+identities or introducing a second persistence architecture. Existing SQLite files are
+migrated in place when lifecycle metadata is first used.
+
+Historical context: issue #251 extended reference providers originally tracked by issue #13.
 """
 
 from __future__ import annotations
@@ -292,7 +294,7 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
 
 
 class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
-    """#13 local Knowledge provider with canonical #251 source management."""
+    """Local Knowledge provider with canonical source management."""
 
     def __init__(self, db_path: str | Path, *, max_concurrency: int = 4) -> None:
         super().__init__(db_path, max_concurrency=max_concurrency)

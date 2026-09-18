@@ -41,7 +41,7 @@ _SCOPE_FIELDS = frozenset({"actions", "resource_types", "resource_ids"})
 
 
 class ControlPlaneAuthorizationBridge(AuthorizationProvider):
-    """Translate northbound operations into canonical #15 authorization decisions."""
+    """Translate northbound operations into canonical authorization decisions."""
 
     def __init__(self, gate: AuthorizationGate) -> None:
         self._gate = gate
@@ -137,7 +137,7 @@ def credential_scope_denial(
     """Return a deny reason when an authenticated credential ceiling rejects an action.
 
     The scope is a deny-only constraint. Passing this check never grants the operation;
-    the normal #15 provider still evaluates the canonical authorization request.
+    the normal authorization provider still evaluates the canonical authorization request.
     """
 
     if not isinstance(request, CanonicalAuthorizationRequest):

@@ -1,7 +1,8 @@
-"""Canonical northbound Approval decision compatibility composition for issue #214.
+"""Canonical northbound Approval decision compatibility composition.
 
-Approval lifecycle storage remains owned by #15. The historical ControlPlane symbol is
-kept as a thin composition façade while #982 moves its northbound resource/commands to
+Approval lifecycle storage remains owned by authorization. The historical ControlPlane symbol
+is kept as a thin composition façade while the explicit module owns northbound resources and
+commands at
 an explicitly owned module.
 """
 
@@ -32,7 +33,7 @@ from .organization_audit_api import ControlPlane as _CurrentControlPlane
 
 
 class ControlPlane(_CurrentControlPlane):
-    """Compatibility façade installing the explicit #15 Approval decision module."""
+    """Compatibility façade installing the explicit Approval decision module."""
 
     def __init__(
         self,
@@ -56,7 +57,7 @@ def build_openapi(
     include_conversations: bool = False,
     include_approval_decisions: bool = False,
 ) -> dict[str, Any]:
-    """Build the current schema and optionally advertise the #214 decision commands."""
+    """Build the current schema and optionally advertise the Approval decision commands."""
 
     commands = extension_commands
     if include_approval_decisions:

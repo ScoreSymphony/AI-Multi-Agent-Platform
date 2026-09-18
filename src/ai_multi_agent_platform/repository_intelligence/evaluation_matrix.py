@@ -1,7 +1,8 @@
 """Repository-intelligence comparative evaluation matrix without fabricated measurements.
 
-The existing #19 executor records schema/provenance/query metrics. This module defines the broader
-representative-workflow evidence required before an enhanced provider can be adopted. Every field is
+The existing Evaluation executor records schema/provenance/query metrics. This module defines
+broader representative-workflow evidence required before an enhanced provider can be adopted.
+Every field is
 optional until actually measured; absence remains explicit rather than being converted into zero.
 """
 

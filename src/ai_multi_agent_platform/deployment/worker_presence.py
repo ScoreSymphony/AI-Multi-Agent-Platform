@@ -1,4 +1,4 @@
-"""Deployment-only Worker reachability probes over the existing #35 transport.
+"""Deployment-only Worker reachability probes over the existing message transport.
 
 A Node reporter remains the sole owner of canonical Node heartbeat state. These probes provide
 transport reachability evidence for independently running sibling Worker processes so a live

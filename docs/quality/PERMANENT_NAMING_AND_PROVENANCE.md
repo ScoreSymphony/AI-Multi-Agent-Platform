@@ -55,7 +55,7 @@ The repository contains historical production comments and scripts created befor
 5. Only explicitly issue-scoped evidence directories under `tests/evidence/issue_<number>/` are exempt from issue-number naming checks; the `tests/evidence/` root is not a blanket allowlist.
 6. Focused cleanup batches should update callers, CI configuration and documentation together when a permanent script/module is renamed.
 
-`scripts/ci/validate_permanent_naming.py` enforces these rules on the changed tree of pull requests. The diff-scoped policy lets existing historical debt be removed in focused batches while preventing new debt from entering the repository.
+`scripts/ci/validate_permanent_naming.py` enforces these rules both on pull-request diffs and across the full maintained repository tree in Repository Quality. Diff-scoped validation gives immediate feedback on touched files; the full-tree audit proves that pre-existing permanent naming debt cannot remain or regress outside explicit provenance and compatibility boundaries. The full-tree pass classifies behavior-first prose with a trailing issue reference as an allowed cross-reference, while still rejecting issue-led prose and issue numbers used as domain nouns (for example `#14 scheduler`). Newly changed Python files remain subject to the stricter rule that useful issue history should be expressed as explicit secondary `Historical context:` or `Provenance:` text.
 
 ## Current classification
 

@@ -1,7 +1,7 @@
 """Safe persistence for first-run onboarding configuration.
 
 Only non-secret adapter metadata is stored here. Credential material is intentionally
-excluded; authenticated provider setups persist only canonical #34 ``SecretReference``
+excluded; authenticated provider setups persist only canonical ``SecretReference``
 metadata and resolve the referenced value at the adapter boundary. Idempotency replay
 records persist only payload digests plus already-redacted command responses.
 """

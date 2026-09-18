@@ -1,4 +1,4 @@
-"""Compose #902 Task execution budgets onto the durable single-node profile."""
+"""Compose Task execution budgets onto the durable single-node profile."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def _budget_runtime() -> Any:
 
 @dataclass(slots=True)
 class TaskBudgetSingleNodeDeployment(DurableSingleNodeDeployment):
-    """Durable public profile extended with canonical #902 budget authorities."""
+    """Durable public profile extended with canonical Task-budget authorities."""
 
     task_budgets: Any
     task_budget_mutations: Any
@@ -57,7 +57,7 @@ def extend_single_node_with_task_budgets(
     # Replanning consumes the same Task-level allowance as all other autonomous work.
     base.planning._budget_admission = task_budgets  # noqa: SLF001 - composition seam
 
-    # Coordination remains lifecycle authority for Step attempts. #902 only owns admission,
+    # Coordination remains lifecycle authority for Step attempts. Task budgets only own admission,
     # cumulative retry counters and live parallel claims around those lifecycle transitions.
     TaskBudgetCoordinationBindings(base.coordination, task_budgets).install()
 

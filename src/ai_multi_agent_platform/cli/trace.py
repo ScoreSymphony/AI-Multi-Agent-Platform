@@ -1,4 +1,4 @@
-"""CLI projection for the canonical #901 Task trace explorer."""
+"""CLI projection for the canonical Task trace explorer."""
 
 from __future__ import annotations
 

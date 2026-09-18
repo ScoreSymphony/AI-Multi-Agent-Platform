@@ -1,4 +1,4 @@
-"""Mirror canonical resource owners into issue #87 ownership/share metadata."""
+"""Mirror canonical resource owners into organization ownership/share metadata."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ MIRRORED_OWNERSHIP_RESOURCE_TYPES = (
 
 
 class CanonicalOwnershipMirror:
-    """Keep #87 ownership metadata aligned with a resource-owned canonical OwnerRef."""
+    """Keep organization ownership metadata aligned with a resource-owned canonical OwnerRef."""
 
     def __init__(self, organizations: OrganizationService) -> None:
         self._organizations = organizations
@@ -123,7 +123,7 @@ def reject_direct_mirror_owner_mutation(
     command: str,
     payload: Mapping[str, object],
 ) -> None:
-    """Prevent generic #87 commands from creating a second owner truth for mirrored resources."""
+    """Prevent generic organization commands from creating duplicate owner truth."""
 
     if command not in {"resource-ownership.set", "resource-ownership.transfer"}:
         return

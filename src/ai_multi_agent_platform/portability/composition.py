@@ -111,8 +111,8 @@ def build_agent_portability_workflow(
     or services are supplied. Research bundle export is an explicit owner-domain opt-in: supplying
     the canonical Research service alone does not expose Research through a generic northbound
     portability workflow that lacks caller owner scope. Import remains an explicit owner-domain
-    operation so destination-local #86 Verification authority can be revalidated.
-    Authorization-policy portability is enabled only when the canonical #310 repository, lifecycle
+    operation so destination-local Verification authority can be revalidated.
+    Authorization-policy portability is enabled only when the canonical policy repository, lifecycle
     service, explicit import context and destination owner are supplied together.
 
     Project rollback deliberately fails closed unless the caller supplies a cross-domain

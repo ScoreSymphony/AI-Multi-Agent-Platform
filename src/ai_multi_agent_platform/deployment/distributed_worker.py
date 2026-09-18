@@ -1,7 +1,7 @@
 """Deployable Worker-process composition for advanced distributed profiles.
 
-This module composes existing #14 Worker contracts, #35 MessageTransport, #36 Worker
-credentials and #37 remote Workspace materialization. It deliberately owns no canonical
+This module composes existing distributed Worker contracts, MessageTransport, Worker
+credentials and remote Workspace materialization. It deliberately owns no canonical
 Task/Run/Node/Worker/Workspace identity of its own.
 """
 
@@ -133,7 +133,7 @@ class DistributedWorkerProcess:
         """Serve until ``stop`` is requested or the hosting task is cancelled.
 
         Execution, Workspace and presence endpoints start before reporter registration. This makes
-        registration truthful: a Worker is not projected healthy before its #35 endpoint can
+        registration truthful: a Worker is not projected healthy before its transport endpoint can
         answer. A reporting Worker deregisters best-effort on graceful stop; abrupt sibling loss
         is detected by the reporter's transport presence probes on the next Node heartbeat.
         """
@@ -209,7 +209,7 @@ class DistributedWorkerProcess:
             except WorkerProtocolHTTPClientError as exc:
                 if exc.retryable:
                     # A Worker-protocol outage is not evidence that Control-Plane state vanished.
-                    # Keep retrying; #35 presence evidence independently bounds sibling liveness.
+                    # Keep retrying; transport presence independently bounds sibling liveness.
                     pass
                 elif exc.status == 400:
                     # A restarted Control Plane may have lost volatile Node/Worker registration.
@@ -257,7 +257,7 @@ def build_worker_process_from_deployment_node(
     heartbeat_interval_seconds: float = _DEFAULT_HEARTBEAT_SECONDS,
     pressure_provider: PressureSnapshotProvider | None = None,
 ) -> DistributedWorkerProcess:
-    """Compose one process from a validated #240 deployment node.
+    """Compose one process from a validated advanced-deployment node.
 
     Exactly the declared reporter performs registration/heartbeat. Additional Worker processes
     for the same Node run execution/Workspace/presence endpoints with ``reporting=False`` while
@@ -297,7 +297,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="platform-worker",
         description="Run one Worker process from an advanced distributed deployment profile.",
     )
-    parser.add_argument("--profile", required=True, help="Validated #240 deployment profile JSON")
+    parser.add_argument(
+        "--profile", required=True, help="Validated advanced-deployment profile JSON"
+    )
     parser.add_argument("--host-ref", required=True, help="Deployment host_ref to run")
     parser.add_argument("--worker-id", required=True, help="Canonical worker_* identity to serve")
     parser.add_argument("--control-plane-url", required=True)
@@ -306,12 +308,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--worker-token-env",
         default="PLATFORM_WORKER_TOKEN",
-        help="Environment variable containing the #36 Worker bearer credential",
+        help="Environment variable containing the Worker bearer credential",
     )
     parser.add_argument(
         "--transport-auth-env",
         default="PLATFORM_TRANSPORT_AUTH_KEY",
-        help="Environment variable containing the #35 TCP HMAC key (optional with mTLS/loopback)",
+        help="Environment variable containing the TCP HMAC key (optional with mTLS/loopback)",
     )
     parser.add_argument("--ca-file", default=None)
     parser.add_argument("--client-cert", default=None)

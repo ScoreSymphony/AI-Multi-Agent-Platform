@@ -9,9 +9,12 @@ if str(ROOT) not in sys.path:
 
 from scripts.ci.validate_permanent_naming import (  # noqa: E402
     ChangedPath,
+    changed_line_numbers,
     changed_targets,
     path_violations,
+    repository_targets,
     source_violations,
+    validate_changed_tree,
     workflow_violations,
 )
 
@@ -35,6 +38,85 @@ def test_changed_targets_include_added_modified_copied_and_renamed_destinations(
         ChangedPath("R100", "scripts/ci/new.py"),
         ChangedPath("C100", "tests/integration/test_copy.py"),
     )
+
+
+def test_changed_line_numbers_tracks_new_side_zero_context_ranges() -> None:
+    diff = """diff --git a/src/package/runtime.py b/src/package/runtime.py
+--- a/src/package/runtime.py
++++ b/src/package/runtime.py
+@@ -2 +2,2 @@
+-old
++new
++extra
+@@ -8,0 +10 @@
++tail
+"""
+
+    assert changed_line_numbers(diff) == {
+        "src/package/runtime.py": frozenset({2, 3, 10}),
+    }
+
+
+def test_diff_scoped_validation_ignores_unchanged_legacy_provenance(tmp_path: Path) -> None:
+    path = tmp_path / "src" / "package" / "runtime.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        '"""Historical runtime for issue #33."""\n\ndef behavior() -> None:\n    pass\n',
+        encoding="utf-8",
+    )
+    changes = (ChangedPath("M", "src/package/runtime.py"),)
+
+    assert (
+        validate_changed_tree(
+            tmp_path,
+            changes,
+            strict_provenance=True,
+            changed_lines={"src/package/runtime.py": frozenset({3, 4})},
+        )
+        == ()
+    )
+
+
+def test_diff_scoped_validation_rejects_new_issue_semantics_on_changed_line(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "src" / "package" / "runtime.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        '"""Runtime behavior."""\n\nmessage = "denied by #15"\n',
+        encoding="utf-8",
+    )
+    changes = (ChangedPath("M", "src/package/runtime.py"),)
+
+    violations = validate_changed_tree(
+        tmp_path,
+        changes,
+        strict_provenance=True,
+        changed_lines={"src/package/runtime.py": frozenset({3})},
+    )
+
+    assert len(violations) == 1
+    assert "embeds a GitHub issue number" in violations[0]
+
+
+def test_repository_targets_inventory_all_guarded_paths(tmp_path: Path) -> None:
+    guarded = (
+        "src/package/runtime.py",
+        "tests/unit/test_runtime.py",
+        "scripts/ci/release_gate.py",
+        ".github/workflows/release.yml",
+    )
+    for relative in guarded:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("content", encoding="utf-8")
+    docs = tmp_path / "docs" / "history.md"
+    docs.parent.mkdir(parents=True, exist_ok=True)
+    docs.write_text("history", encoding="utf-8")
+
+    targets = repository_targets(tmp_path)
+
+    assert {target.path for target in targets} == set(guarded)
 
 
 def test_issue_numbered_permanent_path_is_rejected() -> None:
@@ -132,6 +214,93 @@ def test_issue_reference_must_be_secondary_provenance_in_docstring() -> None:
     assert source_violations("src/package/reference.py", good) == ()
 
 
+def test_bare_hash_issue_reference_must_be_secondary_provenance() -> None:
+    bad = '"""Canonical contract for #33 runtime behavior."""\n'
+    good = '"""Canonical runtime behavior contract.\n\nHistorical context: issue #33.\n"""\n'
+
+    assert len(source_violations("src/package/runtime.py", bad)) == 1
+    assert source_violations("src/package/runtime.py", good) == ()
+
+
+def test_full_tree_allows_behavior_first_trailing_cross_reference() -> None:
+    source = '"""Canonical Agent runtime models for issue #33."""\n'
+
+    assert (
+        source_violations(
+            "src/package/agents.py",
+            source,
+            strict_provenance=False,
+        )
+        == ()
+    )
+
+
+def test_full_tree_allows_explicit_test_migration_provenance() -> None:
+    source = '"""Migrated under #722; original coverage tracked issue #15."""\n'
+
+    assert (
+        source_violations(
+            "tests/integration/security/test_authorization.py",
+            source,
+            strict_provenance=False,
+        )
+        == ()
+    )
+
+
+def test_full_tree_still_rejects_test_docstring_domain_alias() -> None:
+    source = '"""Canonical #15 authorization boundary."""\n'
+
+    violations = source_violations(
+        "tests/integration/security/test_authorization.py",
+        source,
+        strict_provenance=False,
+    )
+
+    assert len(violations) == 1
+
+
+def test_full_tree_rejects_issue_number_used_as_domain_name() -> None:
+    source = '"""The canonical #14 scheduler owns placement."""\n'
+
+    violations = source_violations(
+        "src/package/scheduler.py",
+        source,
+        strict_provenance=False,
+    )
+
+    assert len(violations) == 1
+
+
+def test_full_tree_rejects_issue_led_historical_comment() -> None:
+    source = "# Issue #439 final hardening\ndef behavior() -> None:\n    pass\n"
+
+    violations = source_violations(
+        "src/package/runtime.py",
+        source,
+        strict_provenance=False,
+    )
+
+    assert len(violations) == 1
+
+
+def test_full_tree_allows_secondary_issue_led_docstring_provenance() -> None:
+    source = (
+        '"""Canonical runtime behavior.\n\n'
+        "Issue #33 introduced the original compatibility path.\n"
+        '"""\n'
+    )
+
+    assert (
+        source_violations(
+            "src/package/runtime.py",
+            source,
+            strict_provenance=False,
+        )
+        == ()
+    )
+
+
 def test_compact_issue_numbered_semantic_strings_are_rejected() -> None:
     source = """
 provider_id = "issue388-control"
@@ -143,6 +312,55 @@ source_component = "issue_388_tests"
 
     assert len(violations) == 3
     assert all("embeds a GitHub issue number" in violation for violation in violations)
+
+
+def test_full_tree_allows_opaque_issue_numbered_test_fixture_ids() -> None:
+    source = """
+provider_id = "issue650-local-provider"
+suite_id = "suite.issue-590"
+case_id = "issue-594.case"
+"""
+
+    assert (
+        source_violations(
+            "tests/integration/test_fixture_ids.py",
+            source,
+            strict_provenance=False,
+        )
+        == ()
+    )
+
+
+def test_full_tree_classifies_existing_test_literals_as_fixture_provenance() -> None:
+    source = 'message = "denied by #15"\n'
+
+    assert (
+        source_violations(
+            "tests/integration/test_auth.py",
+            source,
+            strict_provenance=False,
+        )
+        == ()
+    )
+
+
+def test_opaque_fixture_ids_may_retain_nonsemantic_issue_tokens() -> None:
+    source = """
+correlation_id = "issue-72-audit"
+request_id = "request-issue-72-audit"
+idempotency_key = "issue-72-command"
+"""
+
+    assert source_violations("tests/integration/test_fixture_ids.py", source) == ()
+
+
+def test_semantic_keyword_issue_token_is_rejected() -> None:
+    source = 'Config(provider_id="issue-12-provider")\n'
+
+    violations = source_violations("src/package/config.py", source)
+
+    assert len(violations) == 1
+    assert "embeds a GitHub issue number" in violations[0]
 
 
 def test_internal_issue_reference_in_semantic_message_is_rejected() -> None:
@@ -217,3 +435,20 @@ jobs:
 """
 
     assert workflow_violations(".github/workflows/issues.yml", source) == ()
+
+
+def test_workflow_action_input_name_may_retain_evidence_provenance() -> None:
+    source = """
+name: Evidence upload
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload retained evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue123-evidence
+          path: evidence.json
+"""
+
+    assert workflow_violations(".github/workflows/evidence.yml", source) == ()

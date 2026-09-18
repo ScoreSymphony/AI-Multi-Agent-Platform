@@ -1,4 +1,4 @@
-"""Exact-action #15 authorization composition for coding-batch integration."""
+"""Exact-action authorization composition for coding-batch integration."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from .secured import CodingBatchCoordinator
 
 @dataclass(frozen=True, slots=True)
 class CodingBatchAuthorizationContext:
-    """Caller identity and correlation context used by canonical #15 authorization."""
+    """Caller identity and correlation context used by canonical authorization."""
 
     actor: ActorIdentity
     operation: OperationContext
@@ -29,11 +29,11 @@ class CodingBatchAuthorizationContext:
 
 
 class AuthorizedCodingBatchIntegration:
-    """Gate merge readiness through #15 without making #872 a merge authority.
+    """Gate merge readiness through authorization without owning merge authority.
 
     The composed action binds authorization/Approval to the exact integration candidate and
     combined revision. Repository push/PR/merge side effects remain independently enforced by
-    the canonical #82 RepositoryService.
+    the canonical RepositoryService.
     """
 
     def __init__(

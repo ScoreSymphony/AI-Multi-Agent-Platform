@@ -1,4 +1,4 @@
-"""#37 Workspace/Snapshot accounting without duplicating canonical physical storage."""
+"""Workspace/Snapshot accounting without duplicating canonical physical storage."""
 
 from __future__ import annotations
 

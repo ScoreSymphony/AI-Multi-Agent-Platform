@@ -1,8 +1,8 @@
 """Deterministic composition state machine for issue #872 coding batches.
 
 The coordinator intentionally performs no Git, Workspace, Agent, Verification or authorization
-side effects itself.  Those remain with #82, #37, #33/#384, #86 and #15 respectively.  Callers
-record the exact results returned by those authorities here, making restart/reconciliation and
+side effects itself. Those remain with Repository, Workspace, Agent/coordination, Verification,
+and Authorization authorities respectively. Callers record their exact results here, making
 Control Plane projection possible without inventing duplicate canonical resources.
 """
 
@@ -569,7 +569,7 @@ class CodingBatchCoordinator:
         batch_id: str,
         integration_id: str,
     ) -> IntegrationCandidate:
-        """Apply merge readiness only after the canonical #15 adapter has authorized it."""
+        """Apply merge readiness only after the canonical authorization adapter permits it."""
 
         batch = self.get(batch_id)
         candidate = batch.integration_candidate(integration_id)

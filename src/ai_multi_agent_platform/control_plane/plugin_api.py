@@ -1,4 +1,4 @@
-"""Canonical northbound plugin lifecycle compatibility facade for issue #20.
+"""Canonical northbound plugin lifecycle compatibility facade.
 
 Plugin lifecycle behavior is owned by ``PluginControlPlaneBinding`` and exposed by an
 explicit ``ControlPlaneModule``.  This class remains only as a stable construction
@@ -61,7 +61,7 @@ class ControlPlane(_CurrentControlPlane):
         plugin_catalog: PluginCatalog | None = None,
         plugin_permission_resolver: PluginPermissionResolver | None = None,
     ) -> None:
-        """Attach the optional #20 lifecycle exactly once through module registration."""
+        """Attach the optional plugin lifecycle exactly once through module registration."""
 
         module = self._plugin_binding.attach(
             plugin_registry,

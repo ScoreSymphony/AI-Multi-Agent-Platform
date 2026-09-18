@@ -27,7 +27,10 @@ from ai_multi_agent_platform.testing import FakeAuthorizationProvider
 
 
 class _MembershipPolicyAuthorization(FakeAuthorizationProvider):
-    """Test #15 provider that interprets repository-backed membership policy context."""
+    """Interpret repository-backed membership policy context in authorization tests.
+
+    Historical context: issue #15.
+    """
 
     async def authorize(self, request: AuthorizationRequest) -> AuthorizationDecision:
         self.calls.append(request)
@@ -71,7 +74,7 @@ def test_team_update_is_canonical_and_preserves_identity() -> None:
     asyncio.run(scenario())
 
 
-def test_live_membership_guard_revokes_stale_team_scope_before_issue_15_policy() -> None:
+def test_live_membership_guard_revokes_stale_team_scope_before_authorization_policy() -> None:
     async def scenario() -> None:
         now = datetime(2026, 9, 3, 12, tzinfo=UTC)
         repository = InMemoryOrganizationRepository()
@@ -119,7 +122,7 @@ def test_live_membership_guard_revokes_stale_team_scope_before_issue_15_policy()
             resource_type=ResourceType.TEAM,
             resource_id=team.id,
             operation=OperationContext(
-                correlation_id="issue-87-live-membership",
+                correlation_id="organization-live-membership",
                 owner_type="organization",
                 owner_id=organization.id,
             ),
@@ -175,7 +178,7 @@ def test_membership_policy_assignment_changes_canonical_authorization_input() ->
             resource_type=ResourceType.TEAM,
             resource_id=team.id,
             operation=OperationContext(
-                correlation_id="issue-87-policy-projection",
+                correlation_id="organization-policy-projection",
                 owner_type="organization",
                 owner_id=organization.id,
             ),

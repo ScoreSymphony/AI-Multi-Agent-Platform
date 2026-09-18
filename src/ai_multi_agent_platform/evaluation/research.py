@@ -1,4 +1,4 @@
-"""Deterministic #19 evaluation adapter for canonical Research Evidence (#589)."""
+"""Deterministic Evaluation adapter for canonical Research Evidence."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ RESEARCH_QUALITY_SUITE_VERSION = "1"
 
 
 class ResearchEvaluationCaseExecutor:
-    """Project canonical Research quality into the existing deterministic #19 framework.
+    """Project canonical Research quality into the existing deterministic Evaluation framework.
 
     The executor reads only Research-owned structured records. It does not invoke an LLM,
     mutate Claim status, perform source acquisition, or create Verification results. This makes
@@ -151,7 +151,7 @@ def canonical_research_quality_suite(research_item_id: str) -> EvaluationSuite:
             "Deterministic citation, freshness, contradiction, source-binding and Verification "
             "quality gates for canonical Research Evidence."
         ),
-        tags=("research", "issue-589", "deterministic", "no-paid-service"),
+        tags=("research", "research-evidence", "deterministic", "no-paid-service"),
         cases=(
             EvaluationCase(
                 case_id="case.research-decision-readiness",

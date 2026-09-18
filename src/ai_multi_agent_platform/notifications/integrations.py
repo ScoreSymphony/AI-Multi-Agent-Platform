@@ -27,8 +27,8 @@ def approval_required_candidate(
 ) -> NotificationCandidate:
     """Project an already-canonical pending approval into user attention.
 
-    The caller resolves the approver recipient according to #15/#87 policy. The notification
-    does not infer an approver from the requester and does not copy proposed payload data.
+    The caller resolves the approver recipient according to authorization and membership policy.
+    The notification neither infers an approver from the requester nor copies proposed payload data.
     """
 
     return NotificationCandidate(

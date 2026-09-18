@@ -118,7 +118,7 @@ def project_egress_decision(
     *,
     mode: PipelockAdapterMode,
 ) -> PipelockProjection:
-    """Project canonical #591 output without granting or redefining permissions.
+    """Project canonical egress-policy output without granting or redefining permissions.
 
     Canonical non-allow outcomes are blocked before an upstream enforcement adapter is consulted.
     Only an explicit canonical ``ALLOW`` may become audit traffic or a mediated allow. Unknown

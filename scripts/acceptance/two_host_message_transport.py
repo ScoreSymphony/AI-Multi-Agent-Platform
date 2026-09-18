@@ -1,7 +1,7 @@
 """Operator-run acceptance harness for the real two-host message transport path.
 
-The harness consumes the existing #35 TCP MessageTransport adapter and canonical
-#14 Worker command/reply path. It does not introduce another transport or Worker
+The harness consumes the existing TCP MessageTransport adapter and canonical
+Worker command/reply path. It does not introduce another transport or Worker
 identity model.
 """
 

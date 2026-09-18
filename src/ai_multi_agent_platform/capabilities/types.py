@@ -82,7 +82,7 @@ class CompensationDescriptor:
     """Backend-neutral declaration of one explicitly supported compensating capability.
 
     The descriptor is metadata only. Capability resolution, Authorization, Approval and execution
-    remain owned by the ordinary #12/#15 invocation pipeline.
+    remain owned by the ordinary capability/authorization invocation pipeline.
     """
 
     capability_id: str
@@ -120,7 +120,7 @@ class CredentialRequirement(StrEnum):
 
 
 class PolicyDecision(StrEnum):
-    """Minimal authorization hook result until issue #15 supplies the final policy engine."""
+    """Minimal authorization hook result for the canonical authorization policy engine."""
 
     ALLOW = "allow"
     DENY = "deny"

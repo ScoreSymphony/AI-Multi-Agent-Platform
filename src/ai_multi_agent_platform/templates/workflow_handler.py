@@ -120,7 +120,7 @@ class _Configuration:
 
 @dataclass(slots=True)
 class WorkflowTemplateHandler:
-    """Instantiate ``workflow_plan`` Templates through the canonical #364 domain."""
+    """Instantiate ``workflow_plan`` Templates through the canonical workflow-template domain."""
 
     service: AuthorizedWorkflowService
     agents: AgentService | None = None

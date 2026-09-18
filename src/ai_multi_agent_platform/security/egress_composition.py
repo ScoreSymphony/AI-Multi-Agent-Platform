@@ -48,7 +48,7 @@ def build_durable_egress_runtime(
     embeddings may opt out explicitly with ``require_external_profile=False``; direct
     ``CanonicalEgressPolicy`` use retains its legacy profileless behavior.
 
-    ``approval_policy`` is deliberately inert unless the existing #15 ``approval_gate`` is also
+    ``approval_policy`` is deliberately inert unless the existing ``approval_gate`` is also
     supplied. The default exception policy approves no reason code, so ordinary deployments gain
     no new disclosure authority merely by constructing this runtime.
     """

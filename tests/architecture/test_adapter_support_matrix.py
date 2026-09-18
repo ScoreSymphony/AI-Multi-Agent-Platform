@@ -259,7 +259,7 @@ def _implementations() -> list[dict[str, object]]:
     return raw
 
 
-def test_adapter_support_matrix_covers_issue_904_boundaries() -> None:
+def test_adapter_support_matrix_covers_adapter_boundaries() -> None:
     matrix = _matrix()
 
     assert matrix["schema_version"] == 1

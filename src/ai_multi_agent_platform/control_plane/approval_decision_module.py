@@ -22,7 +22,7 @@ APPROVAL_DECISION_MODULE = "approval-decisions"
 
 
 class ApprovalDecisionBinding:
-    """Northbound adapter around the canonical #15 Approval authority."""
+    """Northbound adapter around the canonical Approval authority."""
 
     def __init__(self, gate: AuthorizationGate) -> None:
         self.gate = gate
@@ -39,7 +39,7 @@ class ApprovalDecisionBinding:
     ) -> None:
         """Declare that Approval authorization is owned by ``AuthorizationGate``.
 
-        The pre-#982 contract intentionally did not call the generic Control Plane
+        The legacy compatibility contract intentionally did not call the generic Control Plane
         ``_authorize(command, resource_ref)`` path for Approval decisions. The gate's
         ``decide_approval`` operation validates the approver and exact stored action.
         Keeping this explicit authorizer prevents module migration from adding a second,

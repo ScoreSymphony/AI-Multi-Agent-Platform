@@ -45,7 +45,7 @@ class BaselineRepositoryIntelligenceProvider(CapabilityToolProvider):
     """Read exact repository snapshots without owning repository/workspace lifecycle.
 
     ``snapshot_loader`` is deliberately injected. Production composition must supply a loader
-    that crosses the canonical #82/#37 authorization/materialization boundary; this provider
+    that crosses the canonical repository/workspace authorization and materialization boundary;
     never reaches into LocalGitRepositoryProvider paths or provider-private worktrees.
     """
 

@@ -1,4 +1,4 @@
-"""Control Plane projections and administrative commands for issue #14."""
+"""Control Plane projections and administrative commands for distributed runtime state."""
 
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ class WorkerResourceService:
 class WorkerJobResourceService:
     """Read-only dispatch ownership/reconciliation projection without secret references."""
 
-    # Worker jobs are scheduler/lifecycle state, not part of #288 global discovery.
+    # Worker jobs are scheduler/lifecycle state, not part of global discovery.
     # Keeping them out also prevents Search from becoming a second dispatch authority.
     search_indexable = False
 
@@ -129,7 +129,7 @@ class WorkerJobResourceService:
 
 
 class DistributedAdminCommandHandlers:
-    """Administrative mutations routed through the generic #15-authorized command seam."""
+    """Administrative mutations routed through the generic authorization-gated command seam."""
 
     def __init__(self, runtime: DistributedRuntime) -> None:
         self.runtime = runtime
@@ -219,7 +219,7 @@ def register_distributed_control_plane(
     control_plane: ControlPlane,
     runtime: DistributedRuntime,
 ) -> None:
-    """Register #14 reads/admin commands without creating a second transport or auth stack."""
+    """Register distributed reads/admin commands without a second transport/auth stack."""
 
     control_plane.register_resource_service(NODE_COLLECTION, NodeResourceService(runtime))
     control_plane.register_resource_service(WORKER_COLLECTION, WorkerResourceService(runtime))

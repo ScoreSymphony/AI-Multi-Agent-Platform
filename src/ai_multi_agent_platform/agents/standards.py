@@ -1,4 +1,4 @@
-"""Provider-neutral standard Agent and Agent Team starters for issue #77."""
+"""Provider-neutral standard Agent and Agent Team starters."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ STANDARD_TEAM_IDS: Mapping[str, str] = MappingProxyType(
 
 
 class CapabilityInventory(Protocol):
-    """Minimal #12 inventory seam used for starter readiness checks."""
+    """Minimal Capability inventory seam used for starter readiness checks."""
 
     def inventory_capabilities(
         self,

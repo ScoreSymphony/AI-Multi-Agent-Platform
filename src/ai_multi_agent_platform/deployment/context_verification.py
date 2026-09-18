@@ -81,7 +81,7 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
             ):
                 # The exact subject FileRecord revision/digest was already proven above.
                 continue
-            # #86 validates additional evidence artifacts when a result is submitted, but its
+            # Canonical Verification validates additional evidence artifacts on submission, but its
             # durable VerificationResult currently keeps only their Artifact IDs, not the exact
             # FileRecord revision/digest that was reviewed. A later Artifact-to-File relink must
             # therefore never justify rendering findings at a weaker current classification.

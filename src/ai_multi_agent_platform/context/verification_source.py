@@ -1,6 +1,6 @@
-"""Canonical Verification findings as #590 Context evidence.
+"""Canonical Verification findings as Context evidence.
 
-Verification remains owned by #86. This adapter projects completed, task-scoped
+Verification remains owned by the Verification domain. This adapter projects completed, task-scoped
 Verification results into Context candidates without creating a second Verification
 store or allowing reviewer prose to acquire instruction authority.
 """
@@ -55,7 +55,7 @@ class VerificationContextClassificationResolver(Protocol):
 
 
 class VerificationContextSourceAdapter:
-    """Project completed canonical #86 findings into Context as untrusted evidence."""
+    """Project completed canonical Verification findings into Context as untrusted evidence."""
 
     adapter_id = "platform.verification-context/v1"
 

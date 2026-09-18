@@ -1,4 +1,4 @@
-"""#33 executed Agent/Team attribution for canonical #76 usage records."""
+"""Executed Agent/Team attribution for canonical usage records."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from .models import UsageRecord
 
 
 class AgentRunReader(Protocol):
-    """Minimal #33 read boundary needed to preserve executed revision provenance."""
+    """Minimal AgentRun read boundary needed to preserve executed revision provenance."""
 
     def list_agent_runs(self, run_id: str | None = None) -> tuple[AgentRunRecord, ...]: ...
 

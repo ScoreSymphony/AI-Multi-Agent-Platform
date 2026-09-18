@@ -317,7 +317,7 @@ def test_acceptance_profiles_are_explicit_and_owner_attributed() -> None:
         checks = profile_checks(profile)
         assert checks
         assert len({check.check_id for check in checks}) == len(checks)
-        assert all(check.owner.startswith("#") for check in checks)
+        assert all(check.owner and not check.owner.startswith("#") for check in checks)
         assert all(check.criterion for check in checks)
         assert all(check.command for check in checks)
 

@@ -1,4 +1,4 @@
-"""Deterministic host-pressure admission benchmark fixture for issues #500 and #440."""
+"""Deterministic host-pressure admission benchmark fixture."""
 
 from __future__ import annotations
 

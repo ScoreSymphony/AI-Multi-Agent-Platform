@@ -1,4 +1,4 @@
-"""#34 least-privilege secret delivery at the Worker execution boundary."""
+"""Least-privilege secret delivery at the Worker execution boundary."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from .registry import RegistryError
 
 
 class WorkerSecretReferenceResolver(Protocol):
-    """Resolve one portable WorkerJob secret ref to the canonical #34 reference object."""
+    """Resolve one portable WorkerJob secret ref to the canonical SecretReference object."""
 
     def resolve_reference(self, secret_ref: str) -> SecretReference: ...
 
@@ -80,12 +80,12 @@ class SecretAwareWorkerDispatcher(Protocol):
 
 
 class SecretDeliveringWorkerDispatcher:
-    """Resolve #34 secret references immediately before exact-Worker execution.
+    """Resolve canonical secret references immediately before exact-Worker execution.
 
     Plaintext material is never copied into ``WorkerJobRequest``, runtime persistence,
     telemetry or wrapper state. The ephemeral bundle exists only for the duration of the
     downstream ``dispatch_with_secrets`` call. Security-enabled deployments should pass
-    the existing ``AuthorizedSecretProvider`` so #15 is enforced by the established
+    the existing ``AuthorizedSecretProvider`` so authorization is enforced by the established
     secret-provider boundary rather than by a second distributed authorization stack.
     """
 

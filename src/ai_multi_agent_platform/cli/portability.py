@@ -1,4 +1,4 @@
-"""CLI surface for canonical issue #79 portability workflows."""
+"""CLI surface for canonical portability workflows."""
 
 from __future__ import annotations
 

@@ -68,7 +68,7 @@ class WorkspaceDataContextResolver(Protocol):
 
 
 class TransportRemoteWorkspaceMaterializer(RemoteWorkspaceMaterializer):
-    """Control-side concrete #37 materializer implemented through #35 transport."""
+    """Control-side remote workspace materializer implemented through message transport."""
 
     def __init__(
         self,

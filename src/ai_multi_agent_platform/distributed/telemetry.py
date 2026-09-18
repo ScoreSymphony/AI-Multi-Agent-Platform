@@ -1,4 +1,4 @@
-"""#14 scheduler, lease and liveness telemetry over the existing #16 facade."""
+"""Distributed scheduler, lease and liveness telemetry over the observability facade."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from .resource_reporting import resource_reporting_state
 
 
 class DistributedTelemetry:
-    """Emit #14-owned scheduler/Worker/Node facts through #16 telemetry contracts.
+    """Emit scheduler/Worker/Node facts through canonical telemetry contracts.
 
     This class owns no exporter, storage or trace backend. It intentionally records only
     operational metadata and canonical references; job inputs and secret references are

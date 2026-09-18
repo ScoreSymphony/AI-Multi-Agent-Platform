@@ -1,4 +1,4 @@
-"""Optional #89 Control Plane composition with active/passive authority gates."""
+"""Optional high-availability Control Plane composition with active/passive authority gates."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ _READ_ONLY_ACTION_SUFFIXES = (
 
 
 class ControlPlane(_BaseControlPlane):
-    """Current Control Plane plus optional #89 leadership/readiness enforcement."""
+    """Current Control Plane plus optional leadership/readiness enforcement."""
 
     def __init__(
         self,

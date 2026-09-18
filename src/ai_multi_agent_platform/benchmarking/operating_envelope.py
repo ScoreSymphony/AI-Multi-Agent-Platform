@@ -1,4 +1,4 @@
-"""Comparable operating-envelope analysis for issue #440 benchmark evidence."""
+"""Comparable operating-envelope analysis for benchmark evidence."""
 
 from __future__ import annotations
 

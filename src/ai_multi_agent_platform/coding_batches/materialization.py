@@ -1,4 +1,4 @@
-"""#37/#82 composition for isolated coding-workstream materialization."""
+"""Workspace/repository composition for isolated coding-workstream materialization."""
 
 from __future__ import annotations
 
@@ -28,10 +28,11 @@ def deterministic_workspace_id(batch_id: str, workstream_id: str) -> str:
 
 
 class CanonicalWorkstreamMaterializer:
-    """Allocate isolated #37 Workspace state and provider-local #82 branch metadata.
+    """Allocate isolated Workspace state and provider-local repository branch metadata.
 
-    Agent/AgentRun allocation remains a #33/#384 responsibility.  This adapter receives the exact
-    revision/run identity from that authority and binds it to the Workspace/repository evidence.
+    Agent/AgentRun allocation remains an AgentRun/Step-orchestration responsibility. This
+    adapter receives the exact revision/run identity and binds it to the Workspace/repository
+    evidence.
     """
 
     def __init__(
@@ -169,7 +170,7 @@ class CanonicalWorkstreamMaterializer:
         *,
         repository_context: RepositoryCallContext,
     ) -> str:
-        """Resolve the current target through #82 before creating an integration candidate."""
+        """Resolve the current target before creating an integration candidate."""
 
         batch = self._coordinator.get(batch_id)
         commits = await self._repositories.commits(

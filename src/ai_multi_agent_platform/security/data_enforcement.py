@@ -1,4 +1,4 @@
-"""Authorization wrappers for the refined issue-#13 data-provider contracts."""
+"""Authorization wrappers for refined data-provider contracts."""
 
 from __future__ import annotations
 

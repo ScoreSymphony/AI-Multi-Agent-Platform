@@ -1,4 +1,7 @@
-"""Migrated under #722; original coverage tracked issue #15."""
+"""Authorization hardening integration coverage.
+
+Historical context: issue #15; test migration #722.
+"""
 
 # ruff: noqa: F401
 
@@ -54,7 +57,7 @@ def _data_context(*, project_id: str | None = None) -> DataAccessContext:
     )
 
 
-def test_refined_issue_13_data_paths_cannot_bypass_authorization(tmp_path) -> None:
+def test_refined_data_paths_cannot_bypass_authorization(tmp_path) -> None:
     project_id = new_id("project")
     task_id = new_id("task")
     context = _data_context(project_id=project_id)

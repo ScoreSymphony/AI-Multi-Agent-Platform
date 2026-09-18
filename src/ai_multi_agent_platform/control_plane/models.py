@@ -92,7 +92,7 @@ def api_error_category(code: str | ErrorCode) -> str:
 
 @dataclass(frozen=True, slots=True)
 class ActorContext:
-    """Transport-neutral actor context consumed by authentication and #15 authorization."""
+    """Transport-neutral actor context consumed by authentication and canonical authorization."""
 
     principal_ref: str = "local:anonymous"
     owner_type: OwnerType | None = None
@@ -145,7 +145,7 @@ class PageQuery:
 
 @dataclass(frozen=True, slots=True)
 class WorkspaceIdentity:
-    """Minimal canonical identity only; #37 owns workspace lifecycle/materialization."""
+    """Minimal canonical identity only; the Workspace domain owns lifecycle/materialization."""
 
     project_id: str
     owner_type: OwnerType

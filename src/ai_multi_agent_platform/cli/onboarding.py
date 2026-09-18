@@ -47,7 +47,7 @@ def add_onboarding_parser(
     )
     configure.add_argument(
         "--credential-ref-json",
-        help="canonical #34 SecretReference JSON object; secret values are never accepted",
+        help="canonical SecretReference JSON object; secret values are never accepted",
     )
     configure.add_argument("--idempotency-key")
 

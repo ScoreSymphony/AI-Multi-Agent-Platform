@@ -109,7 +109,7 @@ class RemoteCleanupAcknowledgement:
 
 
 class RemoteWorkspaceMaterializer(ABC):
-    """Transport-independent seam implemented later by #14 worker communication."""
+    """Transport-independent seam implemented by distributed worker communication."""
 
     @abstractmethod
     async def materialize(

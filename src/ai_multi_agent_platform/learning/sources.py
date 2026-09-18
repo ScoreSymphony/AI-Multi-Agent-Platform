@@ -1,4 +1,4 @@
-"""Explicit source adapters for governed Learning Candidate creation (#595/#694)."""
+"""Explicit source adapters for governed Learning Candidate creation."""
 
 from __future__ import annotations
 

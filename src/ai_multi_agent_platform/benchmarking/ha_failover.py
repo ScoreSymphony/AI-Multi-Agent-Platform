@@ -1,4 +1,4 @@
-"""Deterministic Control Plane HA failover performance evidence for issue #440."""
+"""Deterministic Control Plane HA failover performance evidence."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ class _MutableClock:
 
 @dataclass(frozen=True, slots=True)
 class HAFailoverBenchmarkSpec:
-    """One bounded active/passive failover workload over the completed #89 reference path."""
+    """One bounded active/passive failover workload over the reference path."""
 
     active_task_count: int = 25
     repetitions: int = 3
@@ -93,7 +93,7 @@ class HAFailoverBenchmarkSpec:
             "total_active_tasks": self.total_active_tasks,
             "expected_invariants": [
                 "promotion acquires a strictly newer fencing epoch",
-                "the #89 distributed promotion reconciler expires every seeded stale reservation",
+                "the distributed promotion reconciler expires every seeded stale reservation",
                 "the old leader is rejected by the canonical fencing contract",
                 "replaying identical Task/ready/start commands preserves Task and Run identities",
                 "replay does not cause a second lifecycle dispatch",
@@ -111,9 +111,9 @@ class HAFailoverBenchmarkSpec:
                 "recovered Task throughput and process resource evidence",
             ],
             "scope_limitations": [
-                "uses the process-local deterministic #89 InMemoryCoordinationProvider",
+                "uses the process-local deterministic InMemoryCoordinationProvider",
                 "does not claim independent-process or cross-host HA compatibility",
-                "real production-shaped multi-instance HA remains owned by issue #566",
+                "real multi-instance HA remains outside this deterministic benchmark",
             ],
         }
 
@@ -199,7 +199,7 @@ class _IterationResult:
 
 
 class HAFailoverBenchmarkHarness:
-    """Measure deterministic #89 promotion/fencing/replay behavior over durable canonical state."""
+    """Measure deterministic promotion/fencing/replay behavior over durable canonical state."""
 
     def __init__(self, data_dir: Path, *, platform_commit: str = "unknown") -> None:
         self._data_dir = data_dir

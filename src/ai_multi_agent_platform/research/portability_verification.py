@@ -1,4 +1,4 @@
-"""#86 adapter for trusted Research portability binding restoration."""
+"""Verification adapter for trusted Research portability binding restoration."""
 
 from __future__ import annotations
 

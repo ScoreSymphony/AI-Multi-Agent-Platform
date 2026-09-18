@@ -1,4 +1,4 @@
-"""Hosted/self-hosted repository composition over canonical #44 connector state."""
+"""Hosted/self-hosted repository composition over canonical Connector state."""
 
 from __future__ import annotations
 

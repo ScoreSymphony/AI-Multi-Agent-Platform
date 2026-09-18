@@ -1,4 +1,4 @@
-"""Reviewer-Agent bridge between canonical Verification and the normal Agent runtime (#86, #759)."""
+"""Reviewer-Agent bridge between canonical Verification and the normal Agent runtime."""
 
 from __future__ import annotations
 

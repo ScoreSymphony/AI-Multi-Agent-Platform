@@ -334,7 +334,7 @@ class SqliteAutomationRuntimeState(AutomationRuntimeState):
 
 
 class AutomationRuntime:
-    """Autonomous reference runner for schedules, retries and canonical #6 events.
+    """Autonomous reference runner for schedules, retries and canonical lifecycle events.
 
     The runtime deliberately polls replaceable persistence seams rather than requiring a broker or
     workflow engine. Delivery retry deadlines live on canonical TriggerDelivery state, so the
@@ -374,7 +374,7 @@ class AutomationRuntime:
         return self._last_error
 
     def register_event_preprocessor(self, preprocessor: AutomationEventPreprocessor) -> None:
-        """Run a canonical-event projector before #18 delivery/cursor advancement."""
+        """Run a canonical-event projector before Automation delivery/cursor advancement."""
         if preprocessor not in self._event_preprocessors:
             self._event_preprocessors.append(preprocessor)
 
@@ -394,7 +394,7 @@ class AutomationRuntime:
                     await preprocessor(event)
             # error-boundary: allow-broad-catch=boundary failed projector must leave cursor pending
             except Exception as exc:
-                # Canonical projectors fail retryably: do not advance the #18 event cursor.
+                # Canonical projectors fail retryably: do not advance the Automation event cursor.
                 failed_event_ids.append(event.id)
                 if first_error is None:
                     first_error = exc

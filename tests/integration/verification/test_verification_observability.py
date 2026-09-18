@@ -177,7 +177,7 @@ def test_sqlite_restart_preserves_audit_without_replaying_duplicate_events(tmp_p
     assert restored.audit_history() == after
 
 
-def test_verification_timeline_reader_maps_audit_to_issue_16_semantics() -> None:
+def test_verification_timeline_reader_maps_audit_to_observability_semantics() -> None:
     service = VerificationService()
     policy = service.register_policy(_human_policy())
     task_id = new_id("task")
@@ -234,9 +234,9 @@ def test_control_plane_timeline_merges_verification_projection_without_changing_
         )
         control = ControlPlane(kernel=kernel, events=repository)
         task = await kernel.create_task(
-            idempotency_key="issue-86-observability-task",
+            idempotency_key="verification-observability-task",
             title="Verification timeline",
-            objective="Expose canonical review activity through #16",
+            objective="Expose canonical review activity through observability",
             owner_type="user",
             owner_id="verification-observer",
         )

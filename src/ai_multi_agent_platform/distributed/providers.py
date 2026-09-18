@@ -1,4 +1,4 @@
-"""#5 provider adapters backed by the platform-owned distributed runtime."""
+"""Provider adapters backed by the platform-owned distributed runtime."""
 
 from __future__ import annotations
 

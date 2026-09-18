@@ -173,7 +173,7 @@ def build_openapi() -> dict[str, Any]:
             "version": "1.0.0",
             "description": (
                 "Small platform-owned northbound API for the canonical resources that exist "
-                "at the #32 foundation stage. Later domains extend this API rather than being "
+                "at the Task/Run foundation stage. Later domains extend this API rather than being "
                 "predeclared here."
             ),
         },

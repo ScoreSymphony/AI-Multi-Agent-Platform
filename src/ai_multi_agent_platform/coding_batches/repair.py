@@ -1,8 +1,9 @@
-"""Bounded Integration/Repair Step composition for issue #872.
+"""Bounded Integration/Repair Step composition for coding batches.
 
-Repair Steps are created and progressed by the canonical planning/#384 authorities. This module
-only binds those existing canonical identities to a blocked integration candidate and records the
-exact repaired repository revision plus #86-style Verification evidence returned by the canonical
+Repair Steps are created and progressed by canonical planning and Step orchestration.
+This module only binds those canonical identities to a blocked integration candidate and
+records the
+exact repaired repository revision plus canonical Verification evidence returned by the canonical
 review boundary.
 """
 
@@ -57,10 +58,11 @@ def _repair_id(
 
 
 class CodingBatchRepairCoordinator:
-    """Compose canonical repair Steps with #872 integration state.
+    """Compose canonical repair Steps with coding-batch integration state.
 
     The coordinator deliberately accepts canonical :class:`Plan`/:class:`Step` objects rather
-    than creating repair work itself. The caller must obtain those objects through #439/#384.
+    than creating repair work itself. The caller must obtain those objects through canonical
+    planning and Step orchestration.
     """
 
     def __init__(

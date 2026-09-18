@@ -36,7 +36,7 @@ from .validation import (
 
 
 class DistributionRouter(Protocol):
-    """Hands validated legacy distribution routes to existing owner domains (#20/#78/#79)."""
+    """Hands validated legacy distribution routes to their existing owner-domain services."""
 
     async def install_plugin(self, item: RegistryItem, artifact: bytes) -> object: ...
 

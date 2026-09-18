@@ -1,4 +1,4 @@
-"""#16 timeline projection for canonical Verification audit history (#86)."""
+"""Observability timeline projection for canonical Verification audit history."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from .service import VerificationService
 
 
 class VerificationTimelineReader:
-    """Derived #16 TimelineReader backed only by canonical Verification audit facts.
+    """Derived TimelineReader backed only by canonical Verification audit facts.
 
     This projection is intentionally read-only. Completion policy never reads telemetry;
     it continues to use VerificationService and CompletionAuthority state directly. The

@@ -1,4 +1,4 @@
-"""#651 late-bound Handoff consumer evaluation through the canonical #903 matcher."""
+"""Late-bound Handoff consumer evaluation through the canonical Agent matcher."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ class CanonicalConsumerRequirementEvaluator:
         *,
         resolver: AgentResolver | None = None,
     ) -> None:
-        # Preserve the public #651 composition seam while delegating matching to #903.
+        # Preserve the Handoff composition seam while delegating to the Agent matcher.
         self.agents = agents
         self._resolver = resolver or AgentResolver(agents)
 
@@ -39,8 +39,8 @@ class CanonicalConsumerRequirementEvaluator:
         if parsed is None:
             return False
 
-        # #651 already knows the exact consumer. Carry its canonical scope into #903 so the
-        # resolver validates the pinned revision against its real scope instead of treating the
+        # The Handoff knows the exact consumer. Carry its canonical scope into the Agent matcher
+        # so the resolver validates the pinned revision against its real scope rather than treating
         # absence of Task scope in the legacy requirement tuple as a cross-scope mismatch.
         if isinstance(consumer, AgentRevisionRef):
             agent_revision = self.agents.get_agent_revision(consumer.agent_id, consumer.revision)

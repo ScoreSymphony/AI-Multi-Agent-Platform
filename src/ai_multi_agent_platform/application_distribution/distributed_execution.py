@@ -1,4 +1,4 @@
-"""Distributed application-build lifecycle over canonical #14/#433 Worker primitives.
+"""Distributed application-build lifecycle over canonical Worker/materialization primitives.
 
 This module owns only application-specific translation and result admission. Scheduling,
 Worker ownership, remote Workspace transfer, transport, reconciliation and Artifact publication
@@ -102,8 +102,8 @@ class DistributedApplicationBuildLifecycleBackend(LifecycleBackend):
                 "distributed application build binding differs from release provenance",
             )
         if release.build_specification.secret_environment:
-            # #748 owns the final reference->ephemeral Worker environment delivery seam. Never
-            # downgrade to plaintext or silently execute without declared secret-backed inputs.
+            # The final reference-to-ephemeral Worker environment delivery seam stays external.
+            # Never downgrade to plaintext or execute without declared secret-backed inputs.
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
                 (
@@ -422,7 +422,7 @@ class ApplicationBuildWorkerLifecycleBackend(LifecycleBackend):
     """Worker-local application command route for an already-materialized Workspace.
 
     The Control Plane sends only provider-neutral build metadata and safe non-secret environment
-    values. Host filesystem paths are derived locally from #433 materialization state.
+    values. Host filesystem paths are derived locally from application materialization state.
     """
 
     def __init__(

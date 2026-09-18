@@ -1,4 +1,4 @@
-"""Deterministic #19 evaluation executor for the platform-owned #439 planning contract.
+"""Deterministic evaluation executor for the platform-owned planning contract.
 
 This module is intentionally a reference/contract evaluator, not a model-quality benchmark.  It
 runs planner scenarios entirely through local platform components and projects structured evidence

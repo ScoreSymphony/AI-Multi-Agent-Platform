@@ -27,7 +27,7 @@ from .models import (
 
 @dataclass(slots=True)
 class ModelRoutingPolicyTemplateHandler:
-    """Instantiate ``model_routing_policy`` Templates through the canonical #309 service."""
+    """Instantiate ``model_routing_policy`` Templates through model routing."""
 
     service: ModelRoutingProfileService
     template_type = TemplateType.MODEL_ROUTING_POLICY
@@ -113,7 +113,7 @@ def _policy(revision: TemplateRevision) -> ModelRoutingProfilePolicy:
         raise ContractError(
             ErrorCode.UNSUPPORTED_CAPABILITY,
             "Model Routing Policy Template cannot preserve independent organization scope "
-            "in canonical #309 routing profiles",
+            "in canonical routing profiles",
             details={"organization_id": revision.organization_id},
         )
     payload = revision.content.configuration.payload

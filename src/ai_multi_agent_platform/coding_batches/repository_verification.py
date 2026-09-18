@@ -1,4 +1,4 @@
-"""Canonical #82 + #86 verification for combined and repaired coding-batch outputs."""
+"""Canonical repository and Verification checks for combined and repaired coding-batch outputs."""
 
 from __future__ import annotations
 
@@ -34,19 +34,19 @@ from .service import CodingBatchCoordinator, CodingBatchStore
 
 
 class RepositoryRunEvidenceReader(Protocol):
-    """Minimal #82 provenance read boundary used to prove exact repository output."""
+    """Minimal repository-provenance read boundary used to prove exact repository output."""
 
     def get(self, run_id: str, repository_id: str) -> RepositoryRunProvenance | None: ...
 
 
 class CanonicalRepositoryOutputVerifier:
-    """Translate a canonical #82 Run output into exact passing #86 evidence.
+    """Translate a canonical repository Run output into exact passing Verification evidence.
 
-    A Git SHA is not itself a #86 subject. The bridge therefore requires the complete canonical
-    #82 diff-artifact set for the Run, verifies one Artifact as the primary subject and requires
-    the completed #86 result to cover every remaining diff Artifact. The returned lightweight
-    ``VerificationEvidence`` is safe to project into #872 because its revision is taken only from
-    the proven #82 output revision.
+    A Git SHA is not itself a Verification subject. The bridge requires the complete
+    repository diff-artifact set for the Run, verifies one Artifact as the primary subject,
+    and requires the completed result to cover every remaining diff Artifact. The returned
+    ``VerificationEvidence`` is safe to project because its revision comes only from the
+    proven repository output revision.
     """
 
     def __init__(
@@ -113,7 +113,7 @@ class CanonicalRepositoryOutputVerifier:
         expected_output_revision: str | None,
     ) -> RepositoryRunProvenance:
         if record is None:
-            raise ValueError("canonical #82 repository Run provenance is missing")
+            raise ValueError("canonical repository Run provenance is missing")
         if record.task_id != task_id:
             raise ValueError("repository output provenance belongs to another Task")
         if record.input_revision != expected_input_revision:
@@ -152,7 +152,9 @@ class CanonicalRepositoryOutputVerifier:
             expected_output_revision=expected_output_revision,
         )
         if subject_artifact_id not in repository.diff_artifact_ids:
-            raise ValueError("Verification subject is outside the canonical #82 diff-artifact set")
+            raise ValueError(
+                "Verification subject is outside the canonical repository diff-artifact set"
+            )
         subject = await self._runtime.evidence.resolve_subject(
             task_id=task_id,
             subject_type="artifact",
@@ -224,10 +226,12 @@ class CanonicalRepositoryOutputVerifier:
         if result.verification_id != request.verification_id or result.subject != request.subject:
             raise ValueError("canonical Verification result does not match its exact request")
         if result.outcome is not VerificationOutcome.PASS:
-            raise ValueError("repository output requires a passing canonical #86 Verification")
+            raise ValueError("repository output requires a passing canonical Verification")
         covered_artifacts = {request.subject.subject_id, *result.evidence_artifact_ids}
         if covered_artifacts != set(repository.diff_artifact_ids):
-            raise ValueError("canonical Verification must cover the complete #82 diff-artifact set")
+            raise ValueError(
+                "canonical Verification must cover the complete repository diff-artifact set"
+            )
         assert repository.output_revision is not None
         return VerificationEvidence(
             verification_id=request.verification_id,
@@ -249,17 +253,19 @@ class CanonicalRepositoryOutputVerifier:
         if request.subject.subject_type != "artifact":
             raise ValueError("repository output Verification must use a canonical Artifact subject")
         if request.subject.subject_id not in repository.diff_artifact_ids:
-            raise ValueError("canonical Verification subject is outside #82 diff artifacts")
+            raise ValueError("canonical Verification subject is outside repository diff artifacts")
         if (
             repository.agent_id is not None
             and request.producer is not None
             and request.producer.agent_id != repository.agent_id
         ):
-            raise ValueError("canonical Verification producer differs from #82 Agent provenance")
+            raise ValueError(
+                "canonical Verification producer differs from repository Agent provenance"
+            )
 
 
 class CanonicalCombinedValidationCoordinator:
-    """Record combined validation only after the exact integrated SHA passes canonical #86."""
+    """Record combined validation only after the integrated SHA passes Verification."""
 
     def __init__(
         self,
@@ -347,7 +353,7 @@ class CanonicalCombinedValidationCoordinator:
 
 
 class CanonicalRepairVerificationCoordinator:
-    """Accept repair output only after its #82 revision receives fresh canonical #86 evidence."""
+    """Accept repair output only after fresh Verification evidence for its revision."""
 
     def __init__(
         self,

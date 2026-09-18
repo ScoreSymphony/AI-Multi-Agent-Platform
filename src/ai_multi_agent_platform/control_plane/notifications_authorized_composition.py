@@ -1,4 +1,4 @@
-"""Request-context authorization hardening for canonical Notifications (#75)."""
+"""Request-context authorization hardening for canonical Notifications."""
 
 from __future__ import annotations
 
@@ -142,7 +142,7 @@ class ControlPlane(_BaseControlPlane):
         context: RequestContext,
         notification: Notification,
     ) -> bool:
-        """Return current #15 visibility for the notification's canonical source resource."""
+        """Return authorization visibility for the notification source resource."""
 
         source = notification.resource_ref or notification.source
         return await self._allowed(

@@ -35,7 +35,7 @@ def run(coro: object) -> object:
     return asyncio.run(coro)  # type: ignore[arg-type]
 
 
-def test_issue79_research_codec_preserves_history_and_declares_verification_dependency() -> None:
+def test_research_codec_preserves_history_and_declares_verification_dependency() -> None:
     research = ResearchService(InMemoryResearchRepository())
     verification = VerificationService(
         require_canonical_subjects=True,
@@ -45,7 +45,7 @@ def test_issue79_research_codec_preserves_history_and_declares_verification_depe
     item = run(
         research.create_item(
             title="Portable research",
-            question="Can exact Research provenance cross the #79 boundary?",
+            question="Can exact Research provenance cross the portability boundary?",
             research_class=ResearchClass.TASK_RESEARCH,
             owner_ref=OwnerRef(type="user", id="portable-owner"),
             task_id=task_id,

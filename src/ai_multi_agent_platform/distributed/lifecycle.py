@@ -1,8 +1,9 @@
 """Lifecycle adapter routing canonical Run execution through ``DistributedRuntime``.
 
 The platform kernel continues to own Task/Run lifecycle truth. This adapter only translates the
-existing provider-neutral ``LifecycleBackend`` seam into the canonical #14 Worker Job scheduler
-and dispatch path, so a normal Run can execute locally or remotely without Task-specific logic.
+existing provider-neutral ``LifecycleBackend`` seam into the distributed Worker Job
+scheduler and dispatch path, so a Run can execute locally or remotely without Task-specific
+logic.
 """
 
 from __future__ import annotations

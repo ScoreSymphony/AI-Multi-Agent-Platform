@@ -52,7 +52,7 @@ class LocalMaterializationPathProvider(Protocol):
 
 
 class AuthorizedRepositorySnapshotLoader:
-    """Load exact trees through #82/#15 with pre-materialization resource ceilings."""
+    """Load exact trees through Repository authorization with pre-materialization ceilings."""
 
     def __init__(
         self,

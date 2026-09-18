@@ -7,9 +7,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTROL_PLANE = ROOT / "src" / "ai_multi_agent_platform" / "control_plane"
 GOVERNANCE = ROOT / "src" / "ai_multi_agent_platform" / "governance"
 
-# #982 removes inheritance as a *domain ownership/composition* mechanism. It does
-# not outlaw every use of implementation inheritance (the issue explicitly keeps
-# ordinary implementation inheritance out of scope). Keep the few pre-existing,
+# Inheritance is not a domain ownership/composition mechanism. Ordinary implementation
+# inheritance remains out of scope for this boundary. Keep the few pre-existing,
 # reviewed implementation compositions explicit so a new ControlPlane MRO stack
 # cannot be introduced silently while compatibility layers are retired.
 _ALLOWED_IMPLEMENTATION_MULTIPLE_INHERITANCE = {

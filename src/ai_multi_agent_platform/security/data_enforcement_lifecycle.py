@@ -1,4 +1,4 @@
-"""Issue #251 authorization extensions for canonical Memory/Knowledge content."""
+"""Authorization extensions for canonical Memory/Knowledge content."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from .enforcement import AuthorizationGate
 
 
 class AuthorizedDataMemoryProvider(_BaseAuthorizedDataMemoryProvider):
-    """#15 Memory enforcement including the canonical #251 lifecycle semantics."""
+    """Memory authorization enforcement including canonical lifecycle semantics."""
 
     def __init__(self, inner: MemoryProvider, gate: AuthorizationGate) -> None:
         super().__init__(inner, gate)
@@ -79,7 +79,7 @@ class AuthorizedDataMemoryProvider(_BaseAuthorizedDataMemoryProvider):
 
 
 class AuthorizedDataKnowledgeProvider(_BaseAuthorizedDataKnowledgeProvider):
-    """#15 Knowledge enforcement including canonical #251 source discovery/management."""
+    """Knowledge authorization enforcement including canonical source discovery/management."""
 
     def __init__(self, inner: KnowledgeProvider, gate: AuthorizationGate) -> None:
         super().__init__(inner, gate)

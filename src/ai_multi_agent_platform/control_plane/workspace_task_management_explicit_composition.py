@@ -93,7 +93,7 @@ class ControlPlane(
         project_id: str | None = None,
         request_payload_digest: str | None = None,
     ) -> None:
-        """Preserve canonical #15 decision metadata in northbound forbidden errors."""
+        """Preserve canonical authorization metadata in northbound forbidden errors."""
 
         decision = await self._authorization_decision(
             context,

@@ -21,7 +21,7 @@ from .models import (
 
 
 class EgressTelemetryAuditSink(EgressAuditSink):
-    """Project #591 audit evidence into #16 without ever receiving outbound payload values."""
+    """Project egress audit evidence without receiving outbound payload values."""
 
     def __init__(self, telemetry: Telemetry) -> None:
         self.telemetry = telemetry

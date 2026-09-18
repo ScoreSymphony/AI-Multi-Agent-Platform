@@ -156,8 +156,8 @@ class CapabilityInvoker:
         approval_decision: str | None = None
         # Canonical workflows may strengthen the approval requirement for one invocation without
         # weakening CapabilitySpec or policy requirements. Compensation uses this to require a
-        # fresh #15 approval for an undo even when the compensating capability is not globally
-        # approval-gated.
+        # fresh authorization approval for an undo even when the compensating capability is
+        # not globally approval-gated.
         approval_required = (
             request.require_approval
             or policy_decision is PolicyDecision.REQUIRE_APPROVAL

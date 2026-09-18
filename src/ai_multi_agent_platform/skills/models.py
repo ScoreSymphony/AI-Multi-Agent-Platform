@@ -98,7 +98,7 @@ class SkillContent:
 
 @dataclass(frozen=True, slots=True)
 class SkillCapabilityRequirement:
-    """Semantic dependency on a canonical #12 Capability, never on a private tool name."""
+    """Semantic dependency on a canonical Capability, never on a private tool name."""
 
     capability_id: str
     exact_version: str | None = None

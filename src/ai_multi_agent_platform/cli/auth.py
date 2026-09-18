@@ -1,4 +1,4 @@
-"""Issue #214 CLI composition for authentication and Approval decisions.
+"""CLI composition for authentication and Approval decisions.
 
 The established CLI remains the implementation for every earlier command.  This layer
 adds the dependency-bound authentication and approval surfaces and injects resolved
@@ -185,7 +185,7 @@ def _build_parser() -> argparse.ArgumentParser:
     credential_create.add_argument("--expires-at")
     credential_create.add_argument(
         "--scope-json",
-        help="canonical credential scope JSON object as exposed by #36",
+        help="canonical credential scope JSON object exposed by authentication",
     )
     credential_revoke = credential_commands.add_parser("revoke", help="revoke one credential")
     credential_revoke.add_argument("credential_id")
@@ -215,7 +215,7 @@ def _build_parser() -> argparse.ArgumentParser:
     for decision in ("approve", "deny"):
         decision_parser = approval_commands.add_parser(
             decision,
-            help=f"{decision} one exact-action Approval through the #15 gate",
+            help=f"{decision} one exact-action Approval through the authorization gate",
         )
         decision_parser.add_argument("approval_id")
         decision_parser.add_argument("--comment")

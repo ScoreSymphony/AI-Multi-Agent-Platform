@@ -1,4 +1,4 @@
-"""Canonical #592 -> #590 bridge for consumed Agent Handoffs.
+"""Canonical Handoff-to-Context bridge for consumed Agent Handoffs.
 
 The handoff domain remains authoritative for work-transfer identity and consumption.
 This module only projects an already-durable consuming-run binding into the context
@@ -67,7 +67,7 @@ def handoff_context_candidate(
     *,
     mandatory: bool = True,
 ) -> ContextCandidate:
-    """Project one durably consumed Handoff into a canonical #590 context candidate.
+    """Project one durably consumed Handoff into a canonical Context candidate.
 
     Producer statements are deliberately ``UNTRUSTED`` context. Referenced source
     resources retain their own authorization/verification authority and are not copied
@@ -105,7 +105,7 @@ def handoff_context_candidate(
 
 @dataclass(frozen=True, slots=True)
 class ConsumedHandoffContextAdapter:
-    """#590 source adapter over exact Handoffs already bound to consuming Runs."""
+    """Context source adapter over exact Handoffs already bound to consuming Runs."""
 
     runtime_contexts: tuple[HandoffRuntimeContext, ...]
     adapter_id: str = "canonical-agent-handoff"

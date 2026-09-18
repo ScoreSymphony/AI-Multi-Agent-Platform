@@ -1,4 +1,4 @@
-"""Focused organization-management commands that complete issue #87 lifecycle surfaces."""
+"""Focused organization-management commands that complete lifecycle surfaces."""
 
 from __future__ import annotations
 

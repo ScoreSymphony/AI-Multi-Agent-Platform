@@ -1,4 +1,4 @@
-"""Runtime-complete, restart-safe Notification Control Plane composition (#75 hardening)."""
+"""Runtime-complete, restart-safe Notification Control Plane composition."""
 
 from __future__ import annotations
 
@@ -158,7 +158,7 @@ class ControlPlane(_BaseControlPlane):
         now: datetime | None = None,
         approaching_window: timedelta | None = None,
     ) -> tuple[Notification, ...]:
-        """Project #88 attention with per-recipient reminder lead time and enable policy."""
+        """Project task-management attention with recipient reminder policy."""
 
         current = now or datetime.now(UTC)
         if current.utcoffset() is None:

@@ -26,7 +26,7 @@ V = TypeVar("V")
 
 
 class _WriteThroughDict(dict[K, V]):
-    """Small dict-compatible bridge for the existing #36 store contract."""
+    """Small dict-compatible bridge for the existing authentication store contract."""
 
     def __init__(
         self,

@@ -1,4 +1,4 @@
-"""Explicit canonical Control Plane composition for Automation (#18, #982).
+"""Explicit canonical Control Plane composition for Automation.
 
 Automation remains owned by ``AutomationService``. This composition keeps the existing
 scheduler, object-scoped authorization, audit context and Search projection semantics,

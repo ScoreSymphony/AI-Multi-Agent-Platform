@@ -12,10 +12,10 @@ from .reconciliation_policy import derive_reconciliation_result
 
 
 class DistributedRuntimeFailoverReconciler:
-    """Reuse #14 distributed reconciliation as the #89 promotion barrier.
+    """Reuse distributed reconciliation as the high-availability promotion barrier.
 
     The adapter does not redispatch lost work. Promotion first reconciles durable ownership and
-    stale reservations; only after the Control Plane becomes ACTIVE may ordinary #14 failover
+    stale reservations; only after the Control Plane becomes ACTIVE may distributed failover
     fencing/redispatch proceed. The fencing token is validated before and after reconciliation so a
     candidate that loses coordination while recovering cannot become authoritative afterwards.
     """

@@ -1,4 +1,4 @@
-"""#41 integration for the platform-owned durable coordinator store."""
+"""Upgrade integration for the platform-owned durable coordinator store."""
 
 from __future__ import annotations
 

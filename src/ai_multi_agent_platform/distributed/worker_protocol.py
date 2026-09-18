@@ -1,4 +1,4 @@
-"""Authenticated worker-facing registration and heartbeat boundary for issue #14."""
+"""Authenticated worker-facing registration and heartbeat boundary."""
 
 from __future__ import annotations
 
@@ -33,11 +33,11 @@ class WorkerProtocolError(RuntimeError):
 
 
 class WorkerProtocolAuthorizationError(WorkerProtocolError):
-    """Raised when credential scope or #15 rejects a worker protocol action."""
+    """Raised when credential scope or authorization policy rejects a worker protocol action."""
 
 
 class WorkerRequestAuthenticator(Protocol):
-    """Minimal #36 worker-authentication surface consumed by the distributed runtime."""
+    """Minimal worker-authentication surface consumed by the distributed runtime."""
 
     def authenticate_worker_request(
         self,
@@ -98,7 +98,7 @@ class WorkerProtocolReceipt:
 
 
 class WorkerProtocolService:
-    """Security boundary for remote Node reporters using #36 identity and #15 policy.
+    """Security boundary for remote Node reporters using authenticated identity and policy.
 
     Registration and heartbeat are authoritative Node Worker snapshots. The reporter is
     one Worker contained in the snapshot and is bound through ``service_identity_ref``.
@@ -380,7 +380,7 @@ class WorkerProtocolService:
             )
         )
         if not decision.allowed:
-            reason = decision.reason or "worker protocol action denied by #15"
+            reason = decision.reason or "worker protocol action denied by authorization policy"
             raise WorkerProtocolAuthorizationError(reason)
 
     def _safe_registered_node(

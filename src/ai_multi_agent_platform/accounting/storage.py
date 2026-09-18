@@ -1,4 +1,4 @@
-"""Progressive #13 FileProvider storage measurements for Issue #76."""
+"""Progressive FileProvider storage measurements for accounting."""
 
 from __future__ import annotations
 
@@ -28,8 +28,9 @@ class FileStorageAccounting:
     """Reconcile current durable FileProvider bytes into a project-level physical gauge.
 
     Workspace snapshots reference canonical File records and can share the same physical
-    bytes. This reconciler therefore refuses Workspace attribution; #171 exposes separate
-    logical Workspace/Snapshot footprint metrics instead of duplicating physical storage.
+    bytes. This reconciler therefore refuses Workspace attribution; resource accounting
+    exposes separate logical Workspace/Snapshot footprint metrics instead of duplicating
+    physical storage.
     """
 
     def __init__(self, accounting: AccountingRuntime, provider: FileProvider) -> None:

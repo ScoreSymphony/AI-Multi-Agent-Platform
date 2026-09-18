@@ -161,7 +161,7 @@ def accounting_resource_services(
     str,
     UsageRecordResourceService | UsageAggregateResourceService | UsageBudgetResourceService,
 ]:
-    """Registrations for #32 without making the Control Plane own accounting state."""
+    """Register the Task/Run foundation without making the Control Plane own accounting state."""
 
     runtime = runtime_accounting_service(accounting)
     return {

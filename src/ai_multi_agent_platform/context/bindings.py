@@ -1,4 +1,4 @@
-"""AgentRun binding and context-aware orchestrator seam for issue #590."""
+"""AgentRun binding and context-aware orchestrator seam."""
 
 from __future__ import annotations
 
@@ -274,7 +274,7 @@ class _BoundContextMapper(AgentOrchestratorMapper):
 
 
 class ContextBoundAgentRuntime:
-    """Compose #33 AgentRuntime with the canonical #590 context boundary."""
+    """Compose AgentRuntime with the canonical Context boundary."""
 
     def __init__(
         self,

@@ -1,4 +1,4 @@
-"""#309-aware Agent Control Plane assignment authorization."""
+"""Routing-profile-aware Agent Control Plane assignment authorization."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ from .service import AgentService
 
 
 class RoutingProfileAwareAgentCommandHandlers(AgentCommandHandlers):
-    """Authorize exact #309 profile assignment before mutating canonical Agents."""
+    """Authorize exact routing-profile assignment before mutating canonical Agents."""
 
     def __init__(
         self,
@@ -163,7 +163,7 @@ def register_routing_profile_aware_agent_control_plane(
     orchestrator_mappers: Mapping[str, AgentOrchestratorMapper] | None = None,
     execution_environment_resolver: AgentExecutionEnvironmentResolver | None = None,
 ) -> None:
-    """Register #309 management plus #33 assignment-aware Agent boundaries."""
+    """Register routing-profile management plus assignment-aware Agent boundaries."""
 
     _install_nested_assignment_context(control_plane, assignment_gate)
 

@@ -46,7 +46,7 @@ class ControlPlane(_RunControlPlane):
     _trace_projection: TraceProjection | None = None
 
     def bind_observability_timeline(self, timeline: TimelineReader | None) -> None:
-        """Bind derived telemetry and assemble the default #901 read projection."""
+        """Bind derived telemetry and assemble the default trace-explorer read projection."""
 
         self._observability_timeline = timeline
         span_reader = (
@@ -69,7 +69,7 @@ class ControlPlane(_RunControlPlane):
         )
 
     def bind_trace_projection(self, trace: TraceProjection | None) -> None:
-        """Replace the read-only #901 projection without changing telemetry ownership."""
+        """Replace the read-only trace-explorer projection without changing telemetry ownership."""
 
         self._trace_projection = trace
 

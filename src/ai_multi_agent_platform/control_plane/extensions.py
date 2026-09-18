@@ -1,6 +1,6 @@
 """Registration-based Control Plane extensions for later platform domains.
 
-Issue #32 owns the stable Task/Run foundation. Canonical domains implemented by
+The Control Plane owns the stable Task/Run foundation. Canonical domains implemented by
 later issues extend that foundation only when their contracts exist. Generic future
 domains are therefore registered explicitly instead of being predeclared here.
 """
@@ -59,8 +59,8 @@ FOUNDATION_COLLECTIONS = (
     "results",
 )
 
-# These collections are implemented by later completed domain work (#10). They are
-# part of the current composed API, but not part of the issue #32 foundation itself.
+# These collections are implemented by later completed model-domain work. They are
+# part of the current composed API, but not part of the Task/Run foundation itself.
 IMPLEMENTED_DOMAIN_COLLECTIONS = (
     "model-providers",
     "models",
@@ -69,7 +69,7 @@ IMPLEMENTED_DOMAIN_COLLECTIONS = (
 PLATFORM_COLLECTIONS = FOUNDATION_COLLECTIONS + IMPLEMENTED_DOMAIN_COLLECTIONS
 BASE_COLLECTIONS = frozenset(PLATFORM_COLLECTIONS)
 
-# Kept as a compatibility export. #32 no longer predeclares commands owned by future
+# Kept as a compatibility export. the foundation no longer predeclares commands owned by future
 # domains; later domains register their own commands explicitly.
 REQUIRED_COMMANDS: tuple[str, ...] = ()
 
@@ -237,7 +237,7 @@ class InMemoryResourceService:
 
 
 class ControlPlane(BaseControlPlane):
-    """Issue #32 foundation plus explicitly registered later-domain extensions."""
+    """Task/Run foundation plus explicitly registered later-domain extensions."""
 
     def __init__(
         self,
