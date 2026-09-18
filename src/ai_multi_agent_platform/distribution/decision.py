@@ -99,47 +99,15 @@ def _same_release_identity_findings(
     artifact_sha256: str,
     installation: RegistryInstallation | None,
 ) -> tuple[ValidationFinding, ...]:
-    if installation is None:
+    if not _is_same_release_identity(item, installation):
         return ()
 
-    current = installation.current
-    if current.version != item.version or current.source_registry != item.source_registry:
-        return ()
-
-    changed_fields: list[str] = []
-    if current.source_repository != item.source.repository:
-        changed_fields.append("source_repository")
-    if current.package_reference != item.source.package_reference:
-        changed_fields.append("package_reference")
-    if current.revision != item.source.revision:
-        changed_fields.append("revision")
-    if current.license != item.license:
-        changed_fields.append("license")
-    if current.provenance != item.provenance:
-        changed_fields.append("provenance")
-    if current.item_type is not None and current.as_installed().kind != item.kind:
-        changed_fields.append("item_type")
-    if current.artifact_sha256 is not None and current.artifact_sha256 != artifact_sha256:
-        changed_fields.append("artifact_sha256")
-
-    # publisher is present on the current durable state schema and acts as the
-    # backward-compatibility boundary for evidence older snapshots did not retain.
-    if current.publisher is not None:
-        if current.publisher != item.publisher:
-            changed_fields.append("publisher")
-        if current.dependencies is not None and current.dependencies != item.dependencies:
-            changed_fields.append("dependencies")
-        if current.requested_permissions != tuple(sorted(item.requested_permissions)):
-            changed_fields.append("requested_permissions")
-        if current.signature != item.integrity.signature:
-            changed_fields.append("signature")
-        if current.signature_key_id != item.integrity.signature_key_id:
-            changed_fields.append("signature_key_id")
-        if current.trust_status != item.trust_status:
-            changed_fields.append("trust_status")
-        if current.review_reference != item.review_reference:
-            changed_fields.append("review_reference")
-
+    assert installation is not None
+    changed_fields = _same_release_identity_changed_fields(
+        item,
+        artifact_sha256=artifact_sha256,
+        installation=installation,
+    )
     if not changed_fields:
         return ()
 
@@ -156,6 +124,82 @@ def _same_release_identity_findings(
             tuple(("changed_field", field) for field in changed_fields),
         ),
     )
+
+
+def _is_same_release_identity(
+    item: RegistryItem,
+    installation: RegistryInstallation | None,
+) -> bool:
+    if installation is None:
+        return False
+    current = installation.current
+    return (
+        current.version == item.version
+        and current.source_registry == item.source_registry
+    )
+
+
+def _same_release_identity_changed_fields(
+    item: RegistryItem,
+    *,
+    artifact_sha256: str,
+    installation: RegistryInstallation,
+) -> tuple[str, ...]:
+    current = installation.current
+    return (
+        *_changed_field_names(
+            (
+                ("source_repository", current.source_repository != item.source.repository),
+                ("package_reference", current.package_reference != item.source.package_reference),
+                ("revision", current.revision != item.source.revision),
+                ("license", current.license != item.license),
+                ("provenance", current.provenance != item.provenance),
+                (
+                    "item_type",
+                    current.item_type is not None
+                    and current.as_installed().kind != item.kind,
+                ),
+                (
+                    "artifact_sha256",
+                    current.artifact_sha256 is not None
+                    and current.artifact_sha256 != artifact_sha256,
+                ),
+            )
+        ),
+        *_current_schema_release_changed_fields(item, installation),
+    )
+
+
+def _current_schema_release_changed_fields(
+    item: RegistryItem,
+    installation: RegistryInstallation,
+) -> tuple[str, ...]:
+    current = installation.current
+    if current.publisher is None:
+        return ()
+    return _changed_field_names(
+        (
+            ("publisher", current.publisher != item.publisher),
+            (
+                "dependencies",
+                current.dependencies is not None and current.dependencies != item.dependencies,
+            ),
+            (
+                "requested_permissions",
+                current.requested_permissions != tuple(sorted(item.requested_permissions)),
+            ),
+            ("signature", current.signature != item.integrity.signature),
+            ("signature_key_id", current.signature_key_id != item.integrity.signature_key_id),
+            ("trust_status", current.trust_status != item.trust_status),
+            ("review_reference", current.review_reference != item.review_reference),
+        )
+    )
+
+
+def _changed_field_names(
+    comparisons: tuple[tuple[str, bool], ...],
+) -> tuple[str, ...]:
+    return tuple(field for field, changed in comparisons if changed)
 
 
 def _without_direct_dependency_findings(
