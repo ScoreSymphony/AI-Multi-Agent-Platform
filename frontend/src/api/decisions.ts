@@ -1,6 +1,4 @@
 import { ControlPlaneCollectionClient } from "./collections";
-import { ApiTransport } from "./transport";
-import type { ApiTransportOptions } from "./transport";
 import type { JsonValue, ListQuery, Page } from "./types";
 
 export type DecisionOutcome =
@@ -68,18 +66,16 @@ export interface CanonicalDecisionRecord {
   revisit_due: boolean;
 }
 
-export interface DecisionRecordClientOptions extends ApiTransportOptions {
-  transport?: ApiTransport;
+export interface DecisionRecordClientOptions {
+  baseUrl?: string;
+  fetchImpl?: typeof fetch;
 }
 
 export class DecisionRecordClient {
-  readonly baseUrl: string;
   private readonly collections: ControlPlaneCollectionClient;
 
   constructor(options: DecisionRecordClientOptions = {}) {
-    const transport = options.transport ?? new ApiTransport(options);
-    this.baseUrl = transport.baseUrl;
-    this.collections = new ControlPlaneCollectionClient({ transport });
+    this.collections = new ControlPlaneCollectionClient(options);
   }
 
   list(query: ListQuery = {}): Promise<Page<CanonicalDecisionRecord>> {
