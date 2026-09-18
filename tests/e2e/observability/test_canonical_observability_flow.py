@@ -73,7 +73,7 @@ class _TransportingWorkerProvider(FakeWorkerProvider):
         return await super().dispatch(worker_id, request)
 
 
-def test_final_end_to_end_trace_crosses_every_issue_16_layer() -> None:
+def test_final_end_to_end_trace_crosses_every_observability_layer() -> None:
     task_id = new_id("task")
     run_id = new_id("run")
     agent_id = new_id("agent")
