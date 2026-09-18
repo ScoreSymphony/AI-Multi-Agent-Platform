@@ -87,9 +87,9 @@ describe("PortabilityClient", () => {
     const fetchImpl = vi.fn();
     const client = new PortabilityClient({ fetchImpl });
 
-    await expect(client.exportPackage([], undefined, "key")).rejects.toThrow();
-    await expect(client.previewPackage(" ", "key")).rejects.toThrow();
-    await expect(client.importPreview("", "key")).rejects.toThrow();
+    expect(() => client.exportPackage([], undefined, "key")).toThrow();
+    expect(() => client.previewPackage(" ", "key")).toThrow();
+    expect(() => client.importPreview("", "key")).toThrow();
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
