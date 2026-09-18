@@ -13,7 +13,13 @@ _DANGEROUS_GIT_ENV_EXACT = frozenset(
         "GIT_ALTERNATE_OBJECT_DIRECTORIES",
         "GIT_ALLOW_PROTOCOL",
         "GIT_ASKPASS",
+        "GIT_AUTHOR_DATE",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_AUTHOR_NAME",
         "GIT_CEILING_DIRECTORIES",
+        "GIT_COMMITTER_DATE",
+        "GIT_COMMITTER_EMAIL",
+        "GIT_COMMITTER_NAME",
         "GIT_COMMON_DIR",
         "GIT_CONFIG",
         "GIT_CONFIG_COUNT",
@@ -27,18 +33,28 @@ _DANGEROUS_GIT_ENV_EXACT = frozenset(
         "GIT_EXEC_PATH",
         "GIT_EXTERNAL_DIFF",
         "GIT_INDEX_FILE",
+        "GIT_NAMESPACE",
         "GIT_OBJECT_DIRECTORY",
         "GIT_PROTOCOL_FROM_USER",
         "GIT_PROXY_COMMAND",
+        "GIT_REDIRECT_STDERR",
         "GIT_SSH",
         "GIT_SSH_COMMAND",
+        "GIT_SSH_VARIANT",
         "GIT_TEMPLATE_DIR",
         "GIT_TERMINAL_PROMPT",
         "GIT_WORK_TREE",
+        "SSH_AGENT_PID",
         "SSH_ASKPASS",
+        "SSH_ASKPASS_REQUIRE",
+        "SSH_AUTH_SOCK",
     }
 )
-_DANGEROUS_GIT_ENV_PREFIXES = ("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")
+_DANGEROUS_GIT_ENV_PREFIXES = (
+    "GIT_CONFIG_KEY_",
+    "GIT_CONFIG_VALUE_",
+    "GIT_TRACE",
+)
 _DANGEROUS_CONFIG_EXACT = frozenset(
     {
         "commit.gpgsign",
@@ -104,8 +120,10 @@ def controlled_git_environment(
     environment["PATH"] = _absolute_search_path(environment.get("PATH"))
     environment.update(
         {
+            "GIT_ATTR_NOSYSTEM": "1",
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_NO_REPLACE_OBJECTS": "1",
             "GIT_TERMINAL_PROMPT": "0",
             "GCM_INTERACTIVE": "Never",
             "GIT_PAGER": "cat",
