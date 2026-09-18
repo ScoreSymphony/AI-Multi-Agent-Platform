@@ -28,9 +28,7 @@ def test_pending_approval_and_authorization_binding_survive_drain_restart(
 ) -> None:
     async def scenario() -> None:
         root = tmp_path / "approval"
-        first = build_single_node_deployment(
-            SingleNodeConfig(data_dir=root, secure_cookie=False)
-        )
+        first = build_single_node_deployment(SingleNodeConfig(data_dir=root, secure_cookie=False))
         agent_id = new_id("agent")
         first.authorization.register(
             LocalPrincipalPolicy(
@@ -87,9 +85,7 @@ def test_pending_verification_exact_subject_binding_survives_drain_restart(
 ) -> None:
     async def scenario() -> None:
         root = tmp_path / "verification"
-        first = build_single_node_deployment(
-            SingleNodeConfig(data_dir=root, secure_cookie=False)
-        )
+        first = build_single_node_deployment(SingleNodeConfig(data_dir=root, secure_cookie=False))
         first.bootstrap_admin("drain-verification", "correct horse battery staple")
         smoke = await first.run_reference_smoke()
         run = await first.kernel.get_run(smoke.task_id, smoke.run_id)
