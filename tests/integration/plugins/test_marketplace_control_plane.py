@@ -10,6 +10,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, paginate
 from ai_multi_agent_platform.distribution import (
     MARKETPLACE_INSTALL_COMMAND,
+    MARKETPLACE_KIND_COLLECTION,
     MARKETPLACE_PREVIEW_COMMAND,
     MARKETPLACE_UNINSTALL_COMMAND,
     MARKETPLACE_UPDATE_COMMAND,
@@ -688,7 +689,7 @@ def test_control_plane_registers_marketplace_aliases_without_breaking_registry_c
         validation_context_resolver=StaticValidationContext(_context()),
     )
 
-    assert set(control_plane.resources) == {REGISTRY_COLLECTION}
+    assert set(control_plane.resources) == {REGISTRY_COLLECTION, MARKETPLACE_KIND_COLLECTION}
     assert {
         REGISTRY_PREVIEW_COMMAND,
         REGISTRY_ACTIVATE_COMMAND,
