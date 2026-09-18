@@ -54,7 +54,7 @@ def _template() -> TaskTemplate:
 
 async def _automation(service: AutomationService) -> Automation:
     return await service.create_automation(
-        name="issue-1153",
+        name="transient-state-recovery",
         description="startup reconciliation",
         identity=_identity(),
         trigger=TriggerDefinition(type=TriggerType.MANUAL),
