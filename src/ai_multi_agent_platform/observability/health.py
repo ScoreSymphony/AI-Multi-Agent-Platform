@@ -66,7 +66,10 @@ def aggregate_health(
             readiness=ReadinessState.UNAVAILABLE,
             dependencies=dependencies,
         )
-    if draining:
+    if draining or any(
+        dependency.required and dependency.state is ReadinessState.DRAINING
+        for dependency in dependencies
+    ):
         return ServiceHealth(
             alive=True,
             readiness=ReadinessState.DRAINING,
