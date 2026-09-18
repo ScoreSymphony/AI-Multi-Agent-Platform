@@ -13,6 +13,7 @@ The reference policy is intentionally narrow:
 - system Git configuration is disabled;
 - global Git configuration is replaced with the null file;
 - execution-capable `GIT_*` variables are removed;
+- relative/empty child `PATH` entries are removed so repository-relative executable lookup is unavailable;
 - the Git executable is resolved before the child process is launched;
 - local/worktree Git configuration is inspected without following config includes;
 - execution-capable repository configuration is rejected before the requested operation;
@@ -207,6 +208,8 @@ The permanent regression corpus is
 | GS-ENV-01 | `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_*` injection | commit | sanitized/ignored | controlled Git environment |
 | GS-ENV-02 | `GIT_DIR`, `GIT_WORK_TREE`, `GIT_EXEC_PATH`, external diff/SSH env | helper contract | sanitized/ignored | controlled Git environment |
 | GS-GLOBAL-01 | inherited global `core.hooksPath` | commit | sanitized/ignored | null global config + private hooks path |
+| GS-SYSTEM-01 | inherited `GIT_CONFIG_SYSTEM` override | commit | sanitized/ignored | nosystem + env scrub |
+| GS-PATH-01 | relative/empty executable search path | controlled child environment | sanitized/ignored | absolute-only child PATH |
 | GS-HOOK-01 | repository `.git/hooks/pre-commit` | commit | hook never executes | private empty `core.hooksPath` |
 | GS-CONFIG-01 | local `core.hooksPath` / AskPass / worktree / fsmonitor | status/commit | rejected | repository config audit |
 | GS-FILTER-01 | clean/smudge/process filter | add/commit | rejected before filter execution | repository config audit |
