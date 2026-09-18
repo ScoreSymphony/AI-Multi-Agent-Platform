@@ -23,6 +23,10 @@ class DependencyHealth:
     detail: str | None = None
     error_code: str | None = None
     attempts: int = 1
+    retry_count: int = 0
+    last_retry_error_code: str | None = None
+    probe_duration_seconds: float = 0.0
+    degraded_duration_seconds: float | None = None
     failure_count: int = 0
     recovery_count: int = 0
     operator_action: str | None = None
@@ -32,6 +36,12 @@ class DependencyHealth:
             raise ValueError("dependency name must not be blank")
         if self.attempts < 1:
             raise ValueError("dependency health attempts must be positive")
+        if self.retry_count < 0:
+            raise ValueError("dependency health retry_count must not be negative")
+        if self.probe_duration_seconds < 0:
+            raise ValueError("dependency health probe duration must not be negative")
+        if self.degraded_duration_seconds is not None and self.degraded_duration_seconds < 0:
+            raise ValueError("dependency degraded duration must not be negative")
         if self.failure_count < 0 or self.recovery_count < 0:
             raise ValueError("dependency health transition counts must not be negative")
 
