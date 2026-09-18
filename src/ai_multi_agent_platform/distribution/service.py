@@ -227,28 +227,31 @@ class DistributionService:
         for dependent in self.installed_items():
             if dependent.current.item_id == item_id:
                 continue
-            try:
-                dependent_item = self.get(
-                    dependent.current.item_id,
-                    dependent.current.version,
-                    source_registry=dependent.current.source_registry,
-                )
-            except LookupError:
-                reverse_dependencies.append(
-                    DependencyResolution(
-                        required_by=dependent.current.item_id,
-                        item_id=item_id,
-                        item_kind=installation.current.as_installed().kind,
-                        optional=False,
-                        minimum_version=None,
-                        maximum_version=None,
-                        status=DependencyStatus.UNKNOWN_INSTALLED_DEPENDENT,
-                        installed_version=installation.current.version,
-                        path=(dependent.current.item_id, item_id),
+            dependencies = dependent.current.dependencies
+            if dependencies is None:
+                try:
+                    dependent_item = self.get(
+                        dependent.current.item_id,
+                        dependent.current.version,
+                        source_registry=dependent.current.source_registry,
                     )
-                )
-                continue
-            for dependency in dependent_item.dependencies:
+                except LookupError:
+                    reverse_dependencies.append(
+                        DependencyResolution(
+                            required_by=dependent.current.item_id,
+                            item_id=item_id,
+                            item_kind=installation.current.as_installed().kind,
+                            optional=False,
+                            minimum_version=None,
+                            maximum_version=None,
+                            status=DependencyStatus.UNKNOWN_INSTALLED_DEPENDENT,
+                            installed_version=installation.current.version,
+                            path=(dependent.current.item_id, item_id),
+                        )
+                    )
+                    continue
+                dependencies = dependent_item.dependencies
+            for dependency in dependencies:
                 if dependency.optional or dependency.item_id != item_id:
                     continue
                 if not dependency.version_range.contains(installation.current.version):
