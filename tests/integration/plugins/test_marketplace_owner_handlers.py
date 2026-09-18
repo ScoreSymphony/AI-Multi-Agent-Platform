@@ -531,6 +531,7 @@ async def test_plugin_activation_keeps_legacy_route_and_owner_handler_adds_statu
 
     await service.uninstall(item.item_id, authorized=True)
     assert installations.get(item.item_id) is None
+    await handler.uninstall(item)
     with pytest.raises(ContractError) as missing:
         plugin_registry.get(item.item_id)
     assert missing.value.code is ErrorCode.NOT_FOUND
@@ -626,6 +627,7 @@ async def test_tool_handler_uses_plugin_owner_for_full_package_lifecycle(tmp_pat
 
     await service.uninstall(second.item_id, authorized=True)
     assert installations.get(second.item_id) is None
+    await handler.uninstall(second)
     with pytest.raises(ContractError) as missing:
         plugin_registry.get(second.item_id)
     assert missing.value.code is ErrorCode.NOT_FOUND
@@ -796,6 +798,8 @@ async def test_connector_handler_requires_connector_provider_extension() -> None
     assert snapshot.plugin_id == connector_manifest.plugin_id
     assert (await handler.status(item)).plugin_id == connector_manifest.plugin_id
     assert handler.describe(item)["extension_type"] == "connector_provider"
+    await handler.uninstall(item)
+    await handler.uninstall(item)
 
     wrong = replace(
         connector_manifest,
@@ -1037,6 +1041,15 @@ async def test_application_handler_delegates_to_canonical_owner_and_rejects_fake
     assert (await service.status(first.item_id)).instance_id == installed.instance_id
     assert service.describe(first.item_id)["runtime_id"] == "test.process"
 
+    resolved_first = service.get(first.item_id, first.version)
+    retry = await handler.install(
+        resolved_first,
+        provider.fetch_artifact(first.item_id, first.version),
+    )
+    assert retry.instance_id == installed.instance_id
+    assert len(repository.list_applications()) == 1
+    assert len(repository.list_instances(application_id=first_manifest.application_id)) == 1
+
     update_preview = service.preview(second.item_id, second.version, context)
     assert update_preview.activation_allowed is False
     assert any(finding.code == "unsupported_operation" for finding in update_preview.findings)
@@ -1047,6 +1060,7 @@ async def test_application_handler_delegates_to_canonical_owner_and_rejects_fake
     removed = await service.uninstall(first.item_id, authorized=True)
     assert removed.observed_state is ApplicationObservedState.REMOVED
     assert installations.get(first.item_id) is None
+    assert await handler.uninstall(resolved_first) is None
 
     reinstalled = await service.activate(
         service.preview(first.item_id, first.version, context),

@@ -98,7 +98,11 @@ class PluginMarketplaceKindHandler:
         return await self._installer.install_verified_plugin(item, artifact)
 
     async def uninstall(self, item: RegistryItem) -> object:
-        self._registry.remove(item.item_id)
+        try:
+            self._registry.remove(item.item_id)
+        except ContractError as exc:
+            if exc.code is not ErrorCode.NOT_FOUND:
+                raise
         return None
 
     async def status(self, item: RegistryItem) -> object:
@@ -171,7 +175,11 @@ class PluginExtensionMarketplaceKindHandler:
         return await self._installer.install_verified_plugin(item, artifact)
 
     async def uninstall(self, item: RegistryItem) -> object:
-        self._registry.remove(item.item_id)
+        try:
+            self._registry.remove(item.item_id)
+        except ContractError as exc:
+            if exc.code is not ErrorCode.NOT_FOUND:
+                raise
         return None
 
     async def status(self, item: RegistryItem) -> object:
@@ -588,18 +596,48 @@ class SkillMarketplaceKindHandler:
                 ErrorCode.INVALID_CONFIGURATION,
                 "a new Marketplace Skill must provide canonical revision 1",
             )
+        provenance = self._provenance(item)
+        try:
+            current = self._service.get_skill_revision(revision.skill_id)
+        except ContractError as exc:
+            if exc.code is not ErrorCode.NOT_FOUND:
+                raise
+        else:
+            if (
+                current.revision == revision.revision
+                and current.profile == revision.profile
+                and current.owner_ref == revision.owner_ref
+                and current.project_id == revision.project_id
+                and current.workspace_id == revision.workspace_id
+                and current.provenance == provenance
+            ):
+                return current
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Marketplace Skill install targets an existing non-identical canonical Skill",
+            )
         return self._service.create_skill(
             revision.profile,
             owner_ref=revision.owner_ref,
             project_id=revision.project_id,
             workspace_id=revision.workspace_id,
-            provenance=self._provenance(item),
+            provenance=provenance,
             skill_id=revision.skill_id,
         )
 
     async def update(self, item: RegistryItem, artifact: bytes) -> object:
         candidate = self._decode(item, artifact)
         current = self._service.get_skill_revision(candidate.skill_id)
+        provenance = self._provenance(item)
+        if (
+            current.revision == candidate.revision
+            and current.profile == candidate.profile
+            and current.owner_ref == candidate.owner_ref
+            and current.project_id == candidate.project_id
+            and current.workspace_id == candidate.workspace_id
+            and current.provenance == provenance
+        ):
+            return current
         if not self._belongs_to_item(current, item):
             raise ContractError(
                 ErrorCode.CONFLICT,
@@ -630,11 +668,16 @@ class SkillMarketplaceKindHandler:
             owner_ref=current.owner_ref,
             project_id=current.project_id,
             workspace_id=current.workspace_id,
-            provenance=self._provenance(item),
+            provenance=provenance,
         )
 
     async def uninstall(self, item: RegistryItem) -> object:
-        current = self._find_current(item)
+        try:
+            current = self._find_current(item)
+        except ContractError as exc:
+            if exc.code is ErrorCode.NOT_FOUND:
+                return None
+            raise
         self._service.delete_skill(current.skill_id)
         return None
 
@@ -734,6 +777,18 @@ class ApplicationMarketplaceKindHandler:
 
     async def install(self, item: RegistryItem, artifact: bytes) -> object:
         manifest = self._decode(item, artifact)
+        try:
+            application, existing = self._find_instance(item)
+        except ContractError as exc:
+            if exc.code is not ErrorCode.NOT_FOUND:
+                raise
+        else:
+            if application.manifest != manifest:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "Marketplace Application install targets a non-identical canonical manifest",
+                )
+            return existing
         runtime_id = self._runtimes.select_runtime_id(manifest)
         try:
             request = ApplicationInstallRequest(manifest=manifest)
@@ -759,7 +814,12 @@ class ApplicationMarketplaceKindHandler:
         )
 
     async def uninstall(self, item: RegistryItem) -> object:
-        _, instance = self._find_instance(item)
+        try:
+            _, instance = self._find_instance(item)
+        except ContractError as exc:
+            if exc.code is ErrorCode.NOT_FOUND:
+                return None
+            raise
         return await self._lifecycle.remove(instance.instance_id)
 
     async def status(self, item: RegistryItem) -> object:

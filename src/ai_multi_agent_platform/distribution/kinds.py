@@ -181,16 +181,26 @@ BUILTIN_MARKETPLACE_KINDS: tuple[MarketplaceKindDescriptor, ...] = (
         management_path="/plugins",
     ),
     MarketplaceKindDescriptor(
+    MarketplaceKindDescriptor(
         RegistryItemType.WORKFLOW,
         "Workflow",
         DistributionRoute.PORTABLE_IMPORT,
+        supports_install=False,
+        supports_update=False,
+        supports_uninstall=False,
         group="content",
     ),
+    ),
+    MarketplaceKindDescriptor(
     MarketplaceKindDescriptor(
         RegistryItemType.TEMPLATE,
         "Template",
         DistributionRoute.PORTABLE_IMPORT,
+        supports_install=False,
+        supports_update=False,
+        supports_uninstall=False,
         group="content",
+    ),
     ),
     MarketplaceKindDescriptor(
         RegistryItemType.MODEL_CONFIGURATION,

@@ -38,6 +38,19 @@ function cardByHeading(page, name) {
   return page.getByRole("heading", { name, exact: true }).locator("..");
 }
 
+async function expectMarketplaceMutationError(page, mode, expectedMessage) {
+  await page.goto(`${baseUrl}/tests/marketplaceHarness.html?mutation=${mode}`);
+  await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Skills", exact: true }).click();
+  const skillCard = cardByHeading(page, "Code Review Skill");
+  await skillCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Preview install", exact: true }).click();
+  await page.getByRole("button", { name: "Install component", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Install component", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: expectedMessage }).waitFor();
+}
+
 let browser;
 try {
   await waitForVite();
@@ -70,6 +83,12 @@ try {
     "Skills",
     "Applications",
     "Templates / Workflows",
+    "Marketplace source",
+    "Provenance",
+    "Maturity",
+    "Compatibility",
+    "stable",
+    "compatible",
   ]) {
     requireText(initialMarketplaceText, expected, "Unified Marketplace");
   }
@@ -158,6 +177,173 @@ try {
     before,
   );
   await page.getByLabel("Installed state").selectOption("");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByLabel("Compatibility").selectOption("false");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[compatible]=false"),
+      ),
+    before,
+  );
+  await page.getByRole("heading", { name: "Blocked Tool", exact: true }).waitFor();
+  await page.getByLabel("Compatibility").selectOption("");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.locator("label").filter({ hasText: /^Maturity/ }).locator("select").selectOption("beta");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[maturity]=beta"),
+      ),
+    before,
+  );
+  await page.getByRole("heading", { name: "Shared Source Tool", exact: true }).waitFor();
+  await page.locator("label").filter({ hasText: /^Maturity/ }).locator("select").selectOption("");
+  await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByLabel("Tags").fill("repository");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[tag]=repository"),
+      ),
+    before,
+  );
+  await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
+  await page.getByLabel("Tags").fill("");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByLabel("Category").fill("developer-tools");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[category]=developer-tools"),
+      ),
+    before,
+  );
+  await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
+  await page.getByLabel("Category").fill("");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.locator("label").filter({ hasText: /^Publisher/ }).locator("input").fill("ScoreSymphony");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[publisher]=ScoreSymphony"),
+      ),
+    before,
+  );
+  await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
+  await page.locator("label").filter({ hasText: /^Publisher/ }).locator("input").fill("");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.locator("label").filter({ hasText: /^Marketplace source/ }).locator("input").fill("official");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[source]=official"),
+      ),
+    before,
+  );
+  await page.getByRole("heading", { name: "Shared Source Tool", exact: true }).waitFor();
+  await page.locator("label").filter({ hasText: /^Marketplace source/ }).locator("input").fill("");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByLabel("Deprecated state").selectOption("false");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[deprecated]=false"),
+      ),
+    before,
+  );
+  await page.getByLabel("Deprecated state").selectOption("");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByLabel("Yanked state").selectOption("false");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[yanked]=false"),
+      ),
+    before,
+  );
+  await page.getByLabel("Yanked state").selectOption("");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByLabel("Updates only").check();
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[update_available]=true"),
+      ),
+    before,
+  );
+  await page.getByRole("heading", { name: "Example Plugin", exact: true }).waitFor();
+  await page.getByLabel("Updates only").uncheck();
+
+  await searchInput.fill("Shared Source Tool");
+  await page.getByRole("heading", { name: "Shared Source Tool", exact: true }).first().waitFor();
+  const sharedSourceCards = page.locator("article.card").filter({ hasText: "Shared Source Tool" });
+  if ((await sharedSourceCards.count()) !== 2) {
+    throw new Error("Marketplace collapsed same-version items from distinct sources");
+  }
+  const officialSourceCard = sharedSourceCards.filter({ hasText: "official" });
+  const privateSourceCard = sharedSourceCards.filter({ hasText: "private" });
+  const officialSourceText = await officialSourceCard.innerText();
+  const privateSourceText = await privateSourceCard.innerText();
+  requireText(officialSourceText, "stable", "Official-source maturity");
+  requireText(officialSourceText, "installed", "Official-source installed state");
+  requireText(privateSourceText, "beta", "Private-source maturity");
+  requireText(privateSourceText, "source change available", "Same-version source switch state");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await privateSourceCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await page.getByRole("button", { name: "Preview update", exact: true }).waitFor();
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some(
+        (call) =>
+          call.method === "GET" &&
+          decodeURIComponent(call.url).includes("private::shared-source-tool@1.1.0"),
+      ),
+    before,
+  );
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByRole("button", { name: "Preview update", exact: true }).click();
+  await page.getByText("Source changed", { exact: true }).waitFor();
+  const sourcePreviewCalls = await page.evaluate(
+    (count) => window.__marketplaceCalls.slice(count),
+    before,
+  );
+  const sourcePreviewCall = sourcePreviewCalls.find(
+    (call) => call.method === "POST" && call.url.endsWith("/commands/marketplace.preview"),
+  );
+  if (
+    !sourcePreviewCall ||
+    sourcePreviewCall.body?.source_registry !== "private" ||
+    sourcePreviewCall.body?.version !== "1.1.0"
+  ) {
+    throw new Error(`Marketplace preview lost source qualification: ${JSON.stringify(sourcePreviewCalls)}`);
+  }
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByRole("button", { name: "Apply update", exact: true }).click();
+  await page.getByRole("status").filter({ hasText: "Update applied." }).waitFor();
+  const sourceUpdateCalls = await page.evaluate(
+    (count) => window.__marketplaceCalls.slice(count),
+    before,
+  );
+  const sourceUpdateCall = sourceUpdateCalls.find(
+    (call) => call.method === "POST" && call.url.endsWith("/commands/marketplace.update"),
+  );
+  if (!sourceUpdateCall || sourceUpdateCall.body?.source_registry !== "private") {
+    throw new Error(`Marketplace source switch update lost qualification: ${JSON.stringify(sourceUpdateCalls)}`);
+  }
+  await searchInput.fill("");
+  await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
 
   before = await page.evaluate(() => window.__marketplaceCalls.length);
   await page.getByRole("button", { name: "Templates / Workflows", exact: true }).click();
@@ -292,7 +478,7 @@ try {
     throw new Error("Application Marketplace detail does not link to canonical Application management");
   }
   const applicationDetailText = await page.locator("body").innerText();
-  requireText(applicationDetailText, "Application ownership", "Application owner-domain boundary");
+  requireText(applicationDetailText, "Canonical owner management", "Application owner-domain boundary");
   requireText(applicationDetailText, "Definition / manifest", "Application Marketplace manifest");
   requireText(applicationDetailText, "Update unsupported", "Application Marketplace owner capability");
   if (await page.getByRole("button", { name: "Preview update", exact: true }).count()) {
@@ -315,16 +501,18 @@ try {
   await page.goto(`${baseUrl}/tests/marketplaceHarness.html?provider=unavailable`);
   await page.getByRole("status").getByText("Marketplace provider unavailable", { exact: true }).waitFor();
 
-  await page.goto(`${baseUrl}/tests/marketplaceHarness.html?mutation=fail`);
-  await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Skills", exact: true }).click();
-  const failingSkillCard = cardByHeading(page, "Code Review Skill");
-  await failingSkillCard.getByRole("button", { name: "Inspect", exact: true }).click();
-  await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Preview install", exact: true }).click();
-  await page.getByRole("button", { name: "Install component", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Install component", exact: true }).click();
-  await page.getByRole("alert").filter({ hasText: "Marketplace owner mutation failed" }).waitFor();
+  await expectMarketplaceMutationError(page, "fail", "Marketplace owner mutation failed");
+  await expectMarketplaceMutationError(page, "denied", "Marketplace mutation is not authorized");
+  await expectMarketplaceMutationError(
+    page,
+    "approval",
+    "Approval required before Marketplace mutation",
+  );
+  await expectMarketplaceMutationError(
+    page,
+    "stale",
+    "Marketplace candidate changed during pre-mutation revalidation",
+  );
 
   await page.goto(`${baseUrl}/tests/marketplaceHarness.html?mutation=slow`);
   await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();

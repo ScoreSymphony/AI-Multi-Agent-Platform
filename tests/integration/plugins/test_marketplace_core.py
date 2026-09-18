@@ -424,6 +424,63 @@ def test_same_version_source_change_is_treated_as_owner_update(
     assert any(finding.code == "unsupported_operation" for finding in preview.findings)
 
 
+def test_same_version_same_source_artifact_drift_fails_closed_before_owner_status(
+    tmp_path: Path,
+) -> None:
+    item = _item(
+        RegistryItemType.APPLICATION,
+        manifest=RegistryManifestReference(
+            kind="application",
+            reference="applications/example.json",
+        ),
+    )
+    installed_artifact = b"application-manifest-v1"
+    drifted_artifact = b"application-manifest-mutated"
+    installations = JsonRegistryInstallationStore(tmp_path / "immutable-release.json")
+    installations.record(
+        item,
+        provider_id="local",
+        artifact_sha256=hashlib.sha256(installed_artifact).hexdigest(),
+    )
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): drifted_artifact},
+        provider_id="local",
+    )
+
+    class StatusRecordingHandler(RecordingApplicationHandler):
+        async def status(self, item: RegistryItem) -> object:
+            self.calls.append(("status", item.item_id))
+            return {"item_id": item.item_id}
+
+    handler = StatusRecordingHandler()
+    service = DistributionService(
+        provider,
+        installations=installations,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    context = ValidationContext("0.0.1")
+    before = installations.get(item.item_id)
+    assert before is not None
+
+    preview = service.preview(item.item_id, item.version, context)
+
+    assert preview.decision.provenance_diff.artifact_changed is True
+    assert preview.decision.update_state.trust_integrity_issue is True
+    assert preview.activation_allowed is False
+    drift = next(
+        finding for finding in preview.findings if finding.code == "immutable_release_drift"
+    )
+    assert ("changed_field", "artifact_sha256") in drift.details
+
+    with pytest.raises(ContractError) as blocked:
+        asyncio.run(service.activate(preview, context, authorized=True))
+
+    assert blocked.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert handler.calls == []
+    assert installations.get(item.item_id) == before
+
+
 def test_kind_handler_route_is_not_installable_without_owner_handler() -> None:
     item = _item(RegistryItemType.SKILL)
     provider = LocalRegistryProvider((item,), {(item.item_id, item.version): b"skill"})

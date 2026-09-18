@@ -72,6 +72,8 @@ describe("MarketplacePage", () => {
     expect(html).toContain("Marketplace source");
     expect(html).toContain("Installed state");
     expect(html).toContain("Compatibility");
+    expect(html).toContain("Deprecated state");
+    expect(html).toContain("Yanked state");
     expect(html).toContain("Technical components only");
     expect(html).toContain("Updates only");
     expect(html).toContain("Sort");
@@ -101,8 +103,16 @@ describe("MarketplacePage", () => {
       supports_uninstall: true,
     };
 
+    const application: RegistryKindDescriptor = {
+      kind: "application",
+      display_name: "Application",
+      default_route: "kind_handler",
+      supports_install: true,
+      supports_update: false,
+      supports_uninstall: true,
+    };
     const merged = marketplacePresentation.mergeKindDescriptors(
-      [future],
+      [future, application],
       [item({ item_type: "research_surface", route: "kind_handler" })],
     );
 
@@ -112,6 +122,9 @@ describe("MarketplacePage", () => {
     expect(merged.find((entry) => entry.kind === "research_surface")?.display_name).toBe(
       "Research Surface",
     );
+    expect(
+      merged.find((entry) => entry.kind === "application")?.management_path,
+    ).toBe("/applications");
     expect(marketplacePresentation.humanizeKind("future-kind")).toBe("Future Kind");
   });
 

@@ -55,21 +55,39 @@ def resolve_dependency_graph(
     *,
     catalog: tuple[RegistryItem, ...],
     installed_items: tuple[InstalledRegistryItem, ...],
+    context: ValidationContext | None = None,
 ) -> tuple[DependencyResolution, ...]:
     installed = {record.item_id: record for record in installed_items}
+    candidate_overrides: dict[str, RegistryItem] = {}
     resolutions: list[DependencyResolution] = []
-    _walk_item(
-        item,
-        path=(item.item_id,),
-        catalog=catalog,
-        installed=installed,
-        resolutions=resolutions,
-    )
+
+    for _attempt in range(max(2, len(catalog) + 1)):
+        resolutions = []
+        _walk_item(
+            item,
+            path=(item.item_id,),
+            catalog=catalog,
+            installed=installed,
+            resolutions=resolutions,
+            candidate_overrides=candidate_overrides,
+            context=context,
+        )
+        resolved_overrides = _common_candidate_overrides(
+            resolutions,
+            catalog=catalog,
+            installed=installed,
+            context=context,
+        )
+        if resolved_overrides == candidate_overrides:
+            break
+        candidate_overrides = resolved_overrides
+
     _append_constraint_conflicts(
         item,
         resolutions=resolutions,
         catalog=catalog,
         installed=installed,
+        context=context,
     )
     return tuple(resolutions)
 
@@ -81,6 +99,8 @@ def _walk_item(
     catalog: tuple[RegistryItem, ...],
     installed: dict[str, InstalledRegistryItem],
     resolutions: list[DependencyResolution],
+    candidate_overrides: dict[str, RegistryItem],
+    context: ValidationContext | None,
 ) -> None:
     _walk_dependencies(
         parent.item_id,
@@ -89,6 +109,8 @@ def _walk_item(
         catalog=catalog,
         installed=installed,
         resolutions=resolutions,
+        candidate_overrides=candidate_overrides,
+        context=context,
     )
 
 
@@ -100,6 +122,8 @@ def _walk_dependencies(
     catalog: tuple[RegistryItem, ...],
     installed: dict[str, InstalledRegistryItem],
     resolutions: list[DependencyResolution],
+    candidate_overrides: dict[str, RegistryItem],
+    context: ValidationContext | None,
 ) -> None:
     for dependency in dependencies:
         visit = _resolve_dependency(
@@ -108,6 +132,8 @@ def _walk_dependencies(
             path=path,
             catalog=catalog,
             installed=installed,
+            candidate_overrides=candidate_overrides,
+            context=context,
         )
         resolutions.append(visit.resolution)
         if dependency.optional or visit.next_dependencies is None:
@@ -119,6 +145,8 @@ def _walk_dependencies(
             catalog=catalog,
             installed=installed,
             resolutions=resolutions,
+            candidate_overrides=candidate_overrides,
+            context=context,
         )
 
 
@@ -129,6 +157,8 @@ def _resolve_dependency(
     path: tuple[str, ...],
     catalog: tuple[RegistryItem, ...],
     installed: dict[str, InstalledRegistryItem],
+    candidate_overrides: dict[str, RegistryItem],
+    context: ValidationContext | None,
 ) -> _DependencyVisit:
     dependency_path = (*path, dependency.item_id)
     if dependency.item_id == parent_id:
@@ -160,7 +190,50 @@ def _resolve_dependency(
             path=dependency_path,
         )
 
-    candidate, catalog_status = _select_dependency_candidate(dependency, catalog)
+    override = candidate_overrides.get(dependency.item_id)
+    if override is not None:
+        required_kind = dependency.kind_value
+        if required_kind is not None and override.kind != required_kind:
+            return _DependencyVisit(
+                _resolution(
+                    parent_id,
+                    dependency,
+                    DependencyStatus.KIND_CONFLICT,
+                    path=dependency_path,
+                )
+            )
+        if not dependency.version_range.contains(override.version):
+            return _DependencyVisit(
+                _resolution(
+                    parent_id,
+                    dependency,
+                    DependencyStatus.VERSION_CONFLICT,
+                    path=dependency_path,
+                )
+            )
+        compatibility = evaluate_compatibility(override, context) if context is not None else None
+        status = (
+            DependencyStatus.ENVIRONMENT_INCOMPATIBLE
+            if compatibility is not None and not compatibility.compatible
+            else DependencyStatus.AVAILABLE
+        )
+        return _DependencyVisit(
+            _resolution(
+                parent_id,
+                dependency,
+                status,
+                candidate=override,
+                candidate_compatibility=compatibility,
+                path=dependency_path,
+            ),
+            override.dependencies if status is DependencyStatus.AVAILABLE else None,
+        )
+
+    candidate, catalog_status, candidate_compatibility = _select_dependency_candidate(
+        dependency,
+        catalog,
+        context=context,
+    )
     status = catalog_status
     if dependency.optional and status is DependencyStatus.MISSING:
         status = DependencyStatus.OPTIONAL_MISSING
@@ -170,6 +243,7 @@ def _resolve_dependency(
             dependency,
             status,
             candidate=candidate,
+            candidate_compatibility=candidate_compatibility,
             path=dependency_path,
         ),
         candidate.dependencies
@@ -241,24 +315,47 @@ def _installed_catalog_candidate(
 def _select_dependency_candidate(
     dependency: RegistryDependency,
     catalog: tuple[RegistryItem, ...],
-) -> tuple[RegistryItem | None, DependencyStatus]:
+    *,
+    context: ValidationContext | None,
+) -> tuple[RegistryItem | None, DependencyStatus, CompatibilityDecision | None]:
     by_id = tuple(candidate for candidate in catalog if candidate.item_id == dependency.item_id)
     if not by_id:
-        return None, DependencyStatus.MISSING
+        return None, DependencyStatus.MISSING, None
 
     by_kind = _matching_kind_candidates(dependency, by_id)
     if not by_kind:
-        return None, DependencyStatus.KIND_CONFLICT
+        return None, DependencyStatus.KIND_CONFLICT, None
 
-    compatible = tuple(
+    version_compatible = tuple(
         candidate
         for candidate in by_kind
         if dependency.version_range.contains(candidate.version) and not candidate.yanked
     )
-    if not compatible:
-        return None, DependencyStatus.VERSION_CONFLICT
+    if not version_compatible:
+        return None, DependencyStatus.VERSION_CONFLICT, None
+    if len({candidate.source_registry for candidate in version_compatible}) > 1:
+        return None, DependencyStatus.SOURCE_AMBIGUOUS, None
 
-    return _latest_unambiguous_candidate(compatible)
+    if context is None:
+        candidate = max(version_compatible, key=lambda item: version_key(item.version))
+        return candidate, DependencyStatus.AVAILABLE, None
+
+    evaluated = tuple(
+        (candidate, evaluate_compatibility(candidate, context)) for candidate in version_compatible
+    )
+    installable = tuple(pair for pair in evaluated if pair[1].compatible)
+    if installable:
+        candidate, compatibility = max(
+            installable,
+            key=lambda pair: version_key(pair[0].version),
+        )
+        return candidate, DependencyStatus.AVAILABLE, compatibility
+
+    candidate, compatibility = max(
+        evaluated,
+        key=lambda pair: version_key(pair[0].version),
+    )
+    return candidate, DependencyStatus.ENVIRONMENT_INCOMPATIBLE, compatibility
 
 
 def _matching_kind_candidates(
@@ -270,12 +367,99 @@ def _matching_kind_candidates(
     return tuple(candidate for candidate in candidates if candidate.kind == dependency.kind_value)
 
 
-def _latest_unambiguous_candidate(
-    candidates: tuple[RegistryItem, ...],
-) -> tuple[RegistryItem | None, DependencyStatus]:
-    if len({candidate.source_registry for candidate in candidates}) > 1:
-        return None, DependencyStatus.SOURCE_AMBIGUOUS
-    return max(candidates, key=lambda item: version_key(item.version)), DependencyStatus.AVAILABLE
+def _common_candidate_overrides(
+    resolutions: list[DependencyResolution],
+    *,
+    catalog: tuple[RegistryItem, ...],
+    installed: dict[str, InstalledRegistryItem],
+    context: ValidationContext | None,
+) -> dict[str, RegistryItem]:
+    overrides: dict[str, RegistryItem] = {}
+    for item_id, requirements in _group_required_resolutions(resolutions).items():
+        candidate = _common_candidate_override(
+            item_id,
+            requirements=tuple(requirements),
+            catalog=catalog,
+            installed=installed,
+            context=context,
+        )
+        if candidate is not None:
+            overrides[item_id] = candidate
+    return overrides
+
+
+def _common_candidate_override(
+    item_id: str,
+    *,
+    requirements: tuple[DependencyResolution, ...],
+    catalog: tuple[RegistryItem, ...],
+    installed: dict[str, InstalledRegistryItem],
+    context: ValidationContext | None,
+) -> RegistryItem | None:
+    if len(requirements) < 2 or item_id in installed:
+        return None
+    kind_consistent, required_kind = _common_required_kind(requirements)
+    if not kind_consistent:
+        return None
+    version_candidates = _common_version_candidates(
+        item_id,
+        requirements=requirements,
+        required_kind=required_kind,
+        catalog=catalog,
+    )
+    if not version_candidates or _has_multiple_sources(version_candidates):
+        return None
+    installable = tuple(
+        candidate
+        for candidate in version_candidates
+        if context is None or evaluate_compatibility(candidate, context).compatible
+    )
+    if not installable:
+        return None
+    return max(installable, key=lambda candidate: version_key(candidate.version))
+
+
+def _common_required_kind(
+    requirements: tuple[DependencyResolution, ...],
+) -> tuple[bool, str | None]:
+    kinds = {
+        requirement.item_kind for requirement in requirements if requirement.item_kind is not None
+    }
+    if len(kinds) > 1:
+        return False, None
+    return True, next(iter(kinds), None)
+
+
+def _common_version_candidates(
+    item_id: str,
+    *,
+    requirements: tuple[DependencyResolution, ...],
+    required_kind: str | None,
+    catalog: tuple[RegistryItem, ...],
+) -> tuple[RegistryItem, ...]:
+    ranges = _constraint_ranges(requirements)
+    return tuple(
+        candidate
+        for candidate in catalog
+        if candidate.item_id == item_id
+        and not candidate.yanked
+        and (required_kind is None or candidate.kind == required_kind)
+        and all(version_range.contains(candidate.version) for version_range in ranges)
+    )
+
+
+def _has_multiple_sources(candidates: tuple[RegistryItem, ...]) -> bool:
+    return len({candidate.source_registry for candidate in candidates}) > 1
+
+
+def _group_required_resolutions(
+    resolutions: list[DependencyResolution],
+) -> dict[str, list[DependencyResolution]]:
+    grouped: dict[str, list[DependencyResolution]] = {}
+    for resolution in resolutions:
+        if not resolution.optional:
+            grouped.setdefault(resolution.item_id, []).append(resolution)
+    return grouped
 
 
 def _append_constraint_conflicts(
@@ -284,20 +468,16 @@ def _append_constraint_conflicts(
     resolutions: list[DependencyResolution],
     catalog: tuple[RegistryItem, ...],
     installed: dict[str, InstalledRegistryItem],
+    context: ValidationContext | None,
 ) -> None:
-    grouped: dict[str, list[DependencyResolution]] = {}
-    for resolution in resolutions:
-        if resolution.optional:
-            continue
-        grouped.setdefault(resolution.item_id, []).append(resolution)
-
-    for item_id, requirements in grouped.items():
+    for item_id, requirements in _group_required_resolutions(resolutions).items():
         conflict = _constraint_conflict(
             root,
             item_id=item_id,
             requirements=tuple(requirements),
             catalog=catalog,
             installed=installed,
+            context=context,
         )
         if conflict is not None:
             resolutions.append(conflict)
@@ -310,6 +490,7 @@ def _constraint_conflict(
     requirements: tuple[DependencyResolution, ...],
     catalog: tuple[RegistryItem, ...],
     installed: dict[str, InstalledRegistryItem],
+    context: ValidationContext | None,
 ) -> DependencyResolution | None:
     if len(requirements) < 2:
         return None
@@ -324,10 +505,26 @@ def _constraint_conflict(
     record = installed.get(item_id)
     if _installed_record_satisfies(record, ranges, required_kind):
         return None
-    if _catalog_satisfies_all(catalog, item_id, ranges, required_kind):
-        return None
     if _already_has_terminal_graph_error(requirements):
         return None
+
+    common_candidates = _common_version_candidates(
+        item_id,
+        requirements=requirements,
+        required_kind=required_kind,
+        catalog=catalog,
+    )
+    if common_candidates:
+        environment_conflict = _common_environment_conflict(
+            root,
+            item_id=item_id,
+            required_kind=required_kind,
+            ranges=ranges,
+            candidates=common_candidates,
+            context=context,
+        )
+        return environment_conflict
+
     return _aggregate_conflict(
         root,
         item_id,
@@ -336,6 +533,38 @@ def _constraint_conflict(
         minimum_version=_intersection_minimum(ranges),
         maximum_version=_intersection_maximum(ranges),
         installed_version=record.version if record is not None else None,
+    )
+
+
+def _common_environment_conflict(
+    root: RegistryItem,
+    *,
+    item_id: str,
+    required_kind: str | None,
+    ranges: tuple[VersionRange, ...],
+    candidates: tuple[RegistryItem, ...],
+    context: ValidationContext | None,
+) -> DependencyResolution | None:
+    if context is None:
+        return None
+    evaluated = tuple(
+        (candidate, evaluate_compatibility(candidate, context)) for candidate in candidates
+    )
+    if any(compatibility.compatible for _candidate, compatibility in evaluated):
+        return None
+    candidate, compatibility = max(
+        evaluated,
+        key=lambda pair: version_key(pair[0].version),
+    )
+    return _aggregate_conflict(
+        root,
+        item_id,
+        DependencyStatus.ENVIRONMENT_INCOMPATIBLE,
+        item_kind=required_kind,
+        minimum_version=_intersection_minimum(ranges),
+        maximum_version=_intersection_maximum(ranges),
+        candidate=candidate,
+        candidate_compatibility=compatibility,
     )
 
 
@@ -360,31 +589,13 @@ def _installed_record_satisfies(
     return all(version_range.contains(record.version) for version_range in ranges)
 
 
-def _catalog_satisfies_all(
-    catalog: tuple[RegistryItem, ...],
-    item_id: str,
-    ranges: tuple[VersionRange, ...],
-    required_kind: str | None,
-) -> bool:
-    candidates = (
-        candidate
-        for candidate in catalog
-        if candidate.item_id == item_id
-        and not candidate.yanked
-        and (required_kind is None or candidate.kind == required_kind)
-    )
-    return any(
-        all(version_range.contains(candidate.version) for version_range in ranges)
-        for candidate in candidates
-    )
-
-
 def _already_has_terminal_graph_error(
     requirements: tuple[DependencyResolution, ...],
 ) -> bool:
     terminal = {
         DependencyStatus.MISSING,
         DependencyStatus.SOURCE_AMBIGUOUS,
+        DependencyStatus.ENVIRONMENT_INCOMPATIBLE,
         DependencyStatus.SELF_DEPENDENCY,
         DependencyStatus.CYCLE,
     }
@@ -400,6 +611,8 @@ def _aggregate_conflict(
     minimum_version: str | None = None,
     maximum_version: str | None = None,
     installed_version: str | None = None,
+    candidate: RegistryItem | None = None,
+    candidate_compatibility: CompatibilityDecision | None = None,
 ) -> DependencyResolution:
     return DependencyResolution(
         required_by=root.item_id,
@@ -410,6 +623,10 @@ def _aggregate_conflict(
         maximum_version=maximum_version,
         status=status,
         installed_version=installed_version,
+        candidate_version=candidate.version if candidate is not None else None,
+        candidate_kind=candidate.kind if candidate is not None else None,
+        candidate_source_registry=(candidate.source_registry if candidate is not None else None),
+        candidate_compatibility=candidate_compatibility,
         path=(root.item_id, item_id),
     )
 
@@ -436,6 +653,7 @@ def deterministic_install_order(
         DependencyStatus.KIND_UNKNOWN,
         DependencyStatus.KIND_CONFLICT,
         DependencyStatus.SOURCE_AMBIGUOUS,
+        DependencyStatus.ENVIRONMENT_INCOMPATIBLE,
         DependencyStatus.SELF_DEPENDENCY,
         DependencyStatus.CYCLE,
         DependencyStatus.REQUIRED_BY_INSTALLED,
@@ -443,6 +661,17 @@ def deterministic_install_order(
     }
     if any(not resolution.optional and resolution.status in unsafe for resolution in resolutions):
         return ()
+
+    selected_candidates: dict[str, tuple[str, str | None]] = {}
+    for resolution in resolutions:
+        if resolution.optional or resolution.status is not DependencyStatus.AVAILABLE:
+            continue
+        if resolution.candidate_version is None:
+            return ()
+        identity = (resolution.candidate_version, resolution.candidate_source_registry)
+        previous = selected_candidates.setdefault(resolution.item_id, identity)
+        if previous != identity:
+            return ()
 
     ordered: list[InstallPlanStep] = []
     seen: set[tuple[str, str, str | None]] = set()
@@ -561,6 +790,10 @@ def _required_finding_spec(
             "dependency_source_ambiguous",
             f"dependency {item_id} is ambiguous across Marketplace sources",
         ),
+        DependencyStatus.ENVIRONMENT_INCOMPATIBLE: (
+            "dependency_environment_incompatible",
+            f"dependency {item_id} is not installable in the current environment",
+        ),
         DependencyStatus.SELF_DEPENDENCY: (
             "self_dependency",
             f"component {resolution.required_by} depends on itself",
@@ -579,6 +812,7 @@ def _resolution(
     *,
     record: InstalledRegistryItem | None = None,
     candidate: RegistryItem | None = None,
+    candidate_compatibility: CompatibilityDecision | None = None,
     path: tuple[str, ...],
 ) -> DependencyResolution:
     return DependencyResolution(
@@ -593,6 +827,7 @@ def _resolution(
         candidate_version=candidate.version if candidate is not None else None,
         candidate_kind=candidate.kind if candidate is not None else None,
         candidate_source_registry=(candidate.source_registry if candidate is not None else None),
+        candidate_compatibility=candidate_compatibility,
         path=path,
     )
 
@@ -615,6 +850,7 @@ def _finding(
         details.append(("candidate_version", resolution.candidate_version))
     if resolution.candidate_source_registry is not None:
         details.append(("candidate_source_registry", resolution.candidate_source_registry))
+    details.extend(_compatibility_finding_details(resolution.candidate_compatibility))
     return ValidationFinding(
         code,
         severity,
@@ -623,6 +859,31 @@ def _finding(
         resolution.item_id,
         tuple(details),
     )
+
+
+def _compatibility_finding_details(
+    compatibility: CompatibilityDecision | None,
+) -> list[tuple[str, str]]:
+    if compatibility is None:
+        return []
+    details: list[tuple[str, str]] = []
+    if not compatibility.platform_compatible:
+        details.append(("platform_compatible", "false"))
+    if not compatibility.operating_system_compatible:
+        details.append(("operating_system_compatible", "false"))
+    if not compatibility.architecture_compatible:
+        details.append(("architecture_compatible", "false"))
+    if compatibility.missing_runtimes:
+        details.append(("missing_runtimes", ", ".join(compatibility.missing_runtimes)))
+    if compatibility.missing_capabilities:
+        details.append(("missing_capabilities", ", ".join(compatibility.missing_capabilities)))
+    if compatibility.missing_plugins:
+        details.append(("missing_plugins", ", ".join(compatibility.missing_plugins)))
+    if compatibility.missing_connectors:
+        details.append(("missing_connectors", ", ".join(compatibility.missing_connectors)))
+    if compatibility.missing_models:
+        details.append(("missing_models", ", ".join(compatibility.missing_models)))
+    return details
 
 
 def _environment_value_supported(
