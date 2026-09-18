@@ -1,4 +1,4 @@
-"""Notification live-hub behavior migrated from issue #75 coverage."""
+"""Notification live-hub behavior."""
 
 from __future__ import annotations
 
