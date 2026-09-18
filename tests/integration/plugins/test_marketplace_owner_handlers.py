@@ -311,6 +311,46 @@ async def test_agent_team_handler_uses_canonical_team_owner_and_member_validatio
     assert missing.value.code is ErrorCode.NOT_FOUND
 
 
+async def test_agent_team_handler_fails_without_member_and_leaves_no_partial_team() -> None:
+    owner = OwnerRef(type="user", id="marketplace-team-failure-owner")
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    member = source.create_agent(_agent_profile("Missing Team Researcher"), owner_ref=owner)
+    team = source.create_team(
+        AgentTeamProfile(
+            name="Unresolved Research Team",
+            members=(
+                AgentTeamMember(
+                    agent=AgentRevisionRef(member.agent_id, member.revision),
+                    role="researcher",
+                ),
+            ),
+            leader_agent_id=member.agent_id,
+        ),
+        owner_ref=owner,
+    )
+    target_repository = InMemoryAgentRepository()
+    target = AgentService(target_repository)
+    team_item = _item(
+        RegistryItemType.AGENT_TEAM,
+        item_id=team.team_id,
+        version="1.0.0",
+    )
+    handler = AgentTeamMarketplaceKindHandler(target)
+
+    with pytest.raises(ContractError) as missing_member:
+        await handler.install(
+            team_item,
+            _portable_team_artifact(source_repository, team.team_id),
+        )
+
+    assert missing_member.value.code is ErrorCode.NOT_FOUND
+    with pytest.raises(ContractError) as missing_team:
+        target.get_team_revision(team.team_id)
+    assert missing_team.value.code is ErrorCode.NOT_FOUND
+    assert target_repository.list_agent_runs() == ()
+
+
 class _HermesPluginRuntime:
     def __init__(self, manifest, hermes: HermesOrchestrator) -> None:
         self.manifest = manifest
