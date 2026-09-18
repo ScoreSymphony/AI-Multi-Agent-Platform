@@ -158,7 +158,7 @@ def _metadata_from_json(value: JsonValue) -> tuple[AdapterMetadata, ...]:
             items.append(
                 AdapterMetadata(
                     namespace=namespace,
-                    values=cast(dict[str, JsonValue], values),
+                    values=values,
                 )
             )
     return tuple(items)
