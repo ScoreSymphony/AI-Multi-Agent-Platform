@@ -772,7 +772,9 @@ async def test_hermes_marketplace_install_activates_through_canonical_control_pl
     )
     assert item.item_id == manifest.plugin_id
     assert item.item_id != HERMES_ADAPTER_ID
-    assert HERMES_ADAPTER_ID not in json.dumps(handler.describe_candidate(item, _plugin_artifact(manifest)))
+    assert HERMES_ADAPTER_ID not in json.dumps(
+        handler.describe_candidate(item, _plugin_artifact(manifest))
+    )
     service = DistributionService(
         LocalRegistryProvider(
             (item,),
