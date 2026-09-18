@@ -93,6 +93,44 @@ def test_drain_rejects_mutations_and_projects_health_readiness(tmp_path: Path) -
     asyncio.run(scenario())
 
 
+def test_drain_rejects_direct_asgi_streaming_mutation(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        deployment = build_single_node_deployment(
+            SingleNodeConfig(
+                data_dir=tmp_path / "drain-asgi-stream",
+                secure_cookie=False,
+                shutdown_timeout_seconds=1,
+            )
+        )
+        await deployment.drain.begin(reason="test_direct_asgi_mutation")
+
+        sent: list[dict[str, Any]] = []
+
+        async def receive() -> dict[str, Any]:
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message: dict[str, Any]) -> None:
+            sent.append(message)
+
+        await deployment.app(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/v1/conversation-messages/message_test/response/stream",
+                "headers": [],
+                "query_string": b"",
+            },
+            receive,
+            send,
+        )
+
+        response_start = next(message for message in sent if message["type"] == "http.response.start")
+        assert response_start["status"] == 503
+        assert deployment.drain.active_mutations == 0
+
+    asyncio.run(scenario())
+
+
 def test_already_admitted_mutation_may_settle_within_deadline() -> None:
     async def scenario() -> None:
         exporter = InMemoryExporter()
