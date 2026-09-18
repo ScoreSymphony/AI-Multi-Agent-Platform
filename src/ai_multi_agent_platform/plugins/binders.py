@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ai_multi_agent_platform.capabilities.provider import CapabilityToolProvider
 from ai_multi_agent_platform.capabilities.registry import CapabilityRegistry
+from ai_multi_agent_platform.connectors import ConnectorProvider, ConnectorService
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 
 from .models import ExtensionType
@@ -35,3 +36,31 @@ class CapabilityRegistryBinder:
                 "capability_provider extension must implement CapabilityToolProvider",
             )
         self._registry.unregister_provider(registration.instance.descriptor.provider_id)
+
+
+class ConnectorRegistryBinder:
+    """Bind plugin connector providers through the canonical Connector owner."""
+
+    def __init__(self, service: ConnectorService) -> None:
+        self._service = service
+
+    async def register(self, registration: ExtensionRegistration) -> None:
+        if registration.spec.extension_type is not ExtensionType.CONNECTOR_PROVIDER:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION, "connector binder received wrong extension type"
+            )
+        if not isinstance(registration.instance, ConnectorProvider):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "connector_provider extension must implement ConnectorProvider",
+            )
+        await self._service.register_provider(registration.instance)
+
+    async def unregister(self, registration: ExtensionRegistration) -> None:
+        if not isinstance(registration.instance, ConnectorProvider):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "connector_provider extension must implement ConnectorProvider",
+            )
+        definition = registration.instance.definition
+        self._service.registry.unregister(definition.connector_type_id, definition.version)
