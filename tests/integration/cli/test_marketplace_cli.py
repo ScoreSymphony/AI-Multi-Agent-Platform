@@ -391,6 +391,7 @@ def test_marketplace_future_kind_matches_core_control_plane_and_cli(
         MarketplaceKindDescriptor,
         MarketplaceKindHandlerRegistry,
         MarketplaceKindRegistry,
+        MultiRegistryProvider,
         RegistryItem,
         RegistryManifestReference,
         RegistrySource,
@@ -460,10 +461,19 @@ def test_marketplace_future_kind_matches_core_control_plane_and_cli(
     artifact = b"notebook-extension"
     owner = FutureOwner()
     distribution = DistributionService(
-        LocalRegistryProvider(
-            (item,),
-            {(item.item_id, item.version): artifact},
-            provider_id="acceptance",
+        MultiRegistryProvider(
+            (
+                LocalRegistryProvider(
+                    (item,),
+                    {(item.item_id, item.version): artifact},
+                    provider_id="acceptance",
+                ),
+                LocalRegistryProvider(
+                    (item,),
+                    {(item.item_id, item.version): artifact},
+                    provider_id="private",
+                ),
+            )
         ),
         installations=JsonRegistryInstallationStore(tmp_path / "future-kind-installations.json"),
         kind_handlers=MarketplaceKindHandlerRegistry((owner,)),
@@ -565,6 +575,21 @@ def test_marketplace_future_kind_matches_core_control_plane_and_cli(
     assert cli_item["id"] == "acceptance.notebook@1.0.0"
     assert cli_item["qualified_id"] == "acceptance::acceptance.notebook@1.0.0"
     assert "provider_id" not in cli_item
+
+    code, _ambiguous, error = invoke_cli_json(
+        config,
+        transport,
+        "marketplace",
+        "preview",
+        item.item_id,
+        item.version,
+        "--idempotency-key",
+        "cli-ambiguous-preview",
+    )
+    assert code == 3
+    ambiguity = json.loads(error)
+    assert ambiguity["code"] == "conflict"
+    assert ambiguity["details"]["marketplace_reason"] == "source_ambiguous"
 
     preview_body = {
         "resource_ref": item.item_id,
