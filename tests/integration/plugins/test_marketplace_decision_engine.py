@@ -344,6 +344,73 @@ def test_dependency_kind_mismatch_is_explicit_and_blocks_install_plan() -> None:
     assert finding.category is FindingCategory.DEPENDENCY
 
 
+def test_overlapping_transitive_constraints_choose_one_common_candidate() -> None:
+    shared_v2, shared_v2_artifact = _item(
+        "example.shared-common",
+        version="2.0.0",
+    )
+    extra, extra_artifact = _item("example.shared-v3-extra")
+    shared_v3, shared_v3_artifact = _item(
+        shared_v2.item_id,
+        version="3.0.0",
+        dependencies=(RegistryDependency(extra.item_id),),
+    )
+    left, left_artifact = _item(
+        "example.common-left",
+        dependencies=(
+            RegistryDependency(
+                shared_v2.item_id,
+                VersionRange(maximum="2.0.0"),
+            ),
+        ),
+    )
+    right, right_artifact = _item(
+        "example.common-right",
+        dependencies=(
+            RegistryDependency(
+                shared_v2.item_id,
+                VersionRange(minimum="2.0.0", maximum="3.0.0"),
+            ),
+        ),
+    )
+    root, root_artifact = _item(
+        "example.common-root",
+        dependencies=(
+            RegistryDependency(left.item_id),
+            RegistryDependency(right.item_id),
+        ),
+    )
+    service = _service(
+        (
+            (shared_v2, shared_v2_artifact),
+            (shared_v3, shared_v3_artifact),
+            (extra, extra_artifact),
+            (left, left_artifact),
+            (right, right_artifact),
+            (root, root_artifact),
+        )
+    )
+
+    preview = service.preview(root.item_id, root.version, _context())
+
+    shared_resolutions = [
+        resolution
+        for resolution in preview.decision.dependencies
+        if resolution.item_id == shared_v2.item_id
+    ]
+    assert len(shared_resolutions) == 2
+    assert {resolution.candidate_version for resolution in shared_resolutions} == {"2.0.0"}
+    assert not any(
+        resolution.item_id == extra.item_id for resolution in preview.decision.dependencies
+    )
+    assert [(step.item_id, step.version) for step in preview.decision.install_order] == [
+        (shared_v2.item_id, "2.0.0"),
+        (right.item_id, right.version),
+        (left.item_id, left.version),
+        (root.item_id, root.version),
+    ]
+
+
 def test_platform_os_architecture_and_runtime_incompatibility_is_typed() -> None:
     item, artifact = _item(
         "example.environment",

@@ -57,14 +57,28 @@ def resolve_dependency_graph(
     installed_items: tuple[InstalledRegistryItem, ...],
 ) -> tuple[DependencyResolution, ...]:
     installed = {record.item_id: record for record in installed_items}
+    candidate_overrides: dict[str, RegistryItem] = {}
     resolutions: list[DependencyResolution] = []
-    _walk_item(
-        item,
-        path=(item.item_id,),
-        catalog=catalog,
-        installed=installed,
-        resolutions=resolutions,
-    )
+
+    for _attempt in range(max(2, len(catalog) + 1)):
+        resolutions = []
+        _walk_item(
+            item,
+            path=(item.item_id,),
+            catalog=catalog,
+            installed=installed,
+            resolutions=resolutions,
+            candidate_overrides=candidate_overrides,
+        )
+        resolved_overrides = _common_candidate_overrides(
+            resolutions,
+            catalog=catalog,
+            installed=installed,
+        )
+        if resolved_overrides == candidate_overrides:
+            break
+        candidate_overrides = resolved_overrides
+
     _append_constraint_conflicts(
         item,
         resolutions=resolutions,
@@ -81,6 +95,7 @@ def _walk_item(
     catalog: tuple[RegistryItem, ...],
     installed: dict[str, InstalledRegistryItem],
     resolutions: list[DependencyResolution],
+    candidate_overrides: dict[str, RegistryItem],
 ) -> None:
     _walk_dependencies(
         parent.item_id,
@@ -89,6 +104,7 @@ def _walk_item(
         catalog=catalog,
         installed=installed,
         resolutions=resolutions,
+        candidate_overrides=candidate_overrides,
     )
 
 
@@ -100,6 +116,7 @@ def _walk_dependencies(
     catalog: tuple[RegistryItem, ...],
     installed: dict[str, InstalledRegistryItem],
     resolutions: list[DependencyResolution],
+    candidate_overrides: dict[str, RegistryItem],
 ) -> None:
     for dependency in dependencies:
         visit = _resolve_dependency(
@@ -108,6 +125,7 @@ def _walk_dependencies(
             path=path,
             catalog=catalog,
             installed=installed,
+            candidate_overrides=candidate_overrides,
         )
         resolutions.append(visit.resolution)
         if dependency.optional or visit.next_dependencies is None:
@@ -119,6 +137,7 @@ def _walk_dependencies(
             catalog=catalog,
             installed=installed,
             resolutions=resolutions,
+            candidate_overrides=candidate_overrides,
         )
 
 
@@ -129,6 +148,7 @@ def _resolve_dependency(
     path: tuple[str, ...],
     catalog: tuple[RegistryItem, ...],
     installed: dict[str, InstalledRegistryItem],
+    candidate_overrides: dict[str, RegistryItem],
 ) -> _DependencyVisit:
     dependency_path = (*path, dependency.item_id)
     if dependency.item_id == parent_id:
@@ -158,6 +178,38 @@ def _resolve_dependency(
             record=record,
             candidate=_installed_catalog_candidate(dependency, catalog, record),
             path=dependency_path,
+        )
+
+    override = candidate_overrides.get(dependency.item_id)
+    if override is not None:
+        required_kind = dependency.kind_value
+        if required_kind is not None and override.kind != required_kind:
+            return _DependencyVisit(
+                _resolution(
+                    parent_id,
+                    dependency,
+                    DependencyStatus.KIND_CONFLICT,
+                    path=dependency_path,
+                )
+            )
+        if not dependency.version_range.contains(override.version):
+            return _DependencyVisit(
+                _resolution(
+                    parent_id,
+                    dependency,
+                    DependencyStatus.VERSION_CONFLICT,
+                    path=dependency_path,
+                )
+            )
+        return _DependencyVisit(
+            _resolution(
+                parent_id,
+                dependency,
+                DependencyStatus.AVAILABLE,
+                candidate=override,
+                path=dependency_path,
+            ),
+            override.dependencies,
         )
 
     candidate, catalog_status = _select_dependency_candidate(dependency, catalog)
@@ -276,6 +328,47 @@ def _latest_unambiguous_candidate(
     if len({candidate.source_registry for candidate in candidates}) > 1:
         return None, DependencyStatus.SOURCE_AMBIGUOUS
     return max(candidates, key=lambda item: version_key(item.version)), DependencyStatus.AVAILABLE
+
+
+def _common_candidate_overrides(
+    resolutions: list[DependencyResolution],
+    *,
+    catalog: tuple[RegistryItem, ...],
+    installed: dict[str, InstalledRegistryItem],
+) -> dict[str, RegistryItem]:
+    grouped: dict[str, list[DependencyResolution]] = {}
+    for resolution in resolutions:
+        if resolution.optional:
+            continue
+        grouped.setdefault(resolution.item_id, []).append(resolution)
+
+    overrides: dict[str, RegistryItem] = {}
+    for item_id, requirements in grouped.items():
+        if len(requirements) < 2 or item_id in installed:
+            continue
+        kinds = {
+            requirement.item_kind
+            for requirement in requirements
+            if requirement.item_kind is not None
+        }
+        if len(kinds) > 1:
+            continue
+        required_kind = next(iter(kinds), None)
+        ranges = _constraint_ranges(tuple(requirements))
+        candidates = tuple(
+            candidate
+            for candidate in catalog
+            if candidate.item_id == item_id
+            and not candidate.yanked
+            and (required_kind is None or candidate.kind == required_kind)
+            and all(version_range.contains(candidate.version) for version_range in ranges)
+        )
+        if not candidates:
+            continue
+        if len({candidate.source_registry for candidate in candidates}) > 1:
+            continue
+        overrides[item_id] = max(candidates, key=lambda candidate: version_key(candidate.version))
+    return overrides
 
 
 def _append_constraint_conflicts(
@@ -443,6 +536,17 @@ def deterministic_install_order(
     }
     if any(not resolution.optional and resolution.status in unsafe for resolution in resolutions):
         return ()
+
+    selected_candidates: dict[str, tuple[str, str | None]] = {}
+    for resolution in resolutions:
+        if resolution.optional or resolution.status is not DependencyStatus.AVAILABLE:
+            continue
+        if resolution.candidate_version is None:
+            return ()
+        identity = (resolution.candidate_version, resolution.candidate_source_registry)
+        previous = selected_candidates.setdefault(resolution.item_id, identity)
+        if previous != identity:
+            return ()
 
     ordered: list[InstallPlanStep] = []
     seen: set[tuple[str, str, str | None]] = set()

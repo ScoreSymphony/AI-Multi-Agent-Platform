@@ -177,7 +177,16 @@ class JsonRegistryInstallationStore:
             history = (*history, previous.current)
         record = RegistryInstallation(current, pinned_version=pinned_version, history=history)
         self._records[item.item_id] = record
-        self._save()
+        committed = False
+        try:
+            self._save()
+            committed = True
+        finally:
+            if not committed:
+                if previous is None:
+                    self._records.pop(item.item_id, None)
+                else:
+                    self._records[item.item_id] = previous
         return record
 
     def pin(self, item_id: str, version: str) -> RegistryInstallation:
@@ -189,20 +198,38 @@ class JsonRegistryInstallationStore:
             record.current, pinned_version=version, history=record.history
         )
         self._records[item_id] = updated
-        self._save()
+        committed = False
+        try:
+            self._save()
+            committed = True
+        finally:
+            if not committed:
+                self._records[item_id] = record
         return updated
 
     def unpin(self, item_id: str) -> RegistryInstallation:
         record = self._require(item_id)
         updated = RegistryInstallation(record.current, pinned_version=None, history=record.history)
         self._records[item_id] = updated
-        self._save()
+        committed = False
+        try:
+            self._save()
+            committed = True
+        finally:
+            if not committed:
+                self._records[item_id] = record
         return updated
 
     def remove(self, item_id: str) -> RegistryInstallation:
         record = self._require(item_id)
         del self._records[item_id]
-        self._save()
+        committed = False
+        try:
+            self._save()
+            committed = True
+        finally:
+            if not committed:
+                self._records[item_id] = record
         return record
 
     def _require(self, item_id: str) -> RegistryInstallation:
