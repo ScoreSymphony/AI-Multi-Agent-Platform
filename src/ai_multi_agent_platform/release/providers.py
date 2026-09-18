@@ -8,6 +8,7 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from ai_multi_agent_platform.security.git_execution import (
     controlled_git_environment,
@@ -62,21 +63,22 @@ def git_head_revision(source_url: str) -> str:
     except ValueError as exc:
         raise UpdateDiscoveryError("git discovery rejected remote URL") from exc
     try:
-        completed = subprocess.run(
-            [
-                resolve_git_executable("git"),
-                "ls-remote",
-                "--exit-code",
-                safe_source_url,
-                "HEAD",
-            ],
-            env=controlled_git_environment(),
-            stdin=subprocess.DEVNULL,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        with TemporaryDirectory(prefix="aamp-git-discovery-") as home:
+            completed = subprocess.run(
+                [
+                    resolve_git_executable("git"),
+                    "ls-remote",
+                    "--exit-code",
+                    safe_source_url,
+                    "HEAD",
+                ],
+                env=controlled_git_environment(home=home),
+                stdin=subprocess.DEVNULL,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise UpdateDiscoveryError(
             f"git discovery process failed: {type(exc).__name__}"
