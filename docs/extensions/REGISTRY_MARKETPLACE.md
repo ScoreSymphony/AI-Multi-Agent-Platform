@@ -36,7 +36,7 @@ preview / validation
 
 The portable JSON contract is versioned separately as `REGISTRY_ITEM_SCHEMA_VERSION`. Registry trust status is informational input to a decision; it is never itself authorization.
 
-Supported item types are Agents, Agent Teams, Tools, Plugins, Workflows, Templates, Model configurations, Connectors, Evaluation assets, and documentation/example assets.
+Built-in component kinds include Agents, Agent Teams, Tools, Skills, Plugins, Workflows, Templates, Model configurations, Connectors, Applications, Evaluation assets, and documentation/example assets. Kinds are not a closed enum boundary: future canonical kind identifiers remain valid when they carry a kind-owned manifest reference, and dependency metadata can optionally constrain the required component kind without adding Marketplace switch statements.
 
 ## Discovery
 
@@ -46,7 +46,11 @@ Supported item types are Agents, Agent Teams, Tools, Plugins, Workflows, Templat
 
 ## Safe activation workflow
 
-`DistributionService.preview()` fetches metadata and the exact artifact and validates it before mutation. Validation covers platform compatibility, yanked/deprecated releases, checksum integrity, authoritative signature verification, dependency availability, requested permissions, required capabilities/plugins/connectors/models, installed-version pins and license/provenance changes. Untrusted content remains visibly untrusted.
+`DistributionService.preview()` fetches metadata and the exact artifact and validates it before mutation. Validation covers platform compatibility, OS/architecture/runtime constraints, yanked/deprecated releases, checksum integrity, authoritative signature verification, dependency availability, requested permissions, required capabilities/plugins/connectors/models, installed-version pins and license/provenance changes. Untrusted content remains visibly untrusted.
+
+The preview also carries a typed `MarketplaceDecision`. Its dependency graph records the requiring component, required kind/range, installed and candidate versions, source identity and path. Required dependencies can be satisfied, available-but-not-installed, missing, version/kind-conflicting, source-ambiguous, self-dependent or cyclic; optional dependencies remain non-blocking but visible. Transitive constraints are evaluated together so two branches cannot silently select incompatible versions of the same dependency. Marketplace produces a plan/preview only; it does not recursively install dependency trees.
+
+Compatibility, permission, provenance and update state are separate typed projections rather than display strings. Update previews expose previous/requested/added/removed/unchanged permissions, installed and candidate provenance, source/publisher/repository/signature-key/trust changes, installed/latest-compatible versions, pin blocking, incompatible/yanked/deprecated candidates and trust/integrity issues. Findings retain stable code, severity, category, subject and structured details for later API/UI projection.
 
 `preview()` never activates content. Async `activate()` requires explicit authorization, re-fetches the exact metadata/artifact, re-runs server-side validation to prevent preview/apply drift, and only then delegates to the owner domain through `DistributionRouter`. Installation state is recorded only after the owner handoff succeeds. The durable installation snapshot records a SHA-256 digest of the exact bytes that were successfully handed to the owner, even when the Registry metadata did not require its own checksum.
 
@@ -58,19 +62,25 @@ Documentation assets have no automatic activation path. A provider change or met
 
 ## Durable installations, restart reconciliation, updates and pinning
 
-`JsonRegistryInstallationStore` persists Registry distribution state independently from the provider. Each installed item records current version, item type, provider, source repository/package reference/revision, license, provenance and the exact installed-artifact digest. Replacing a version appends the prior snapshot to durable history so source and rollback evidence survive restart. State version 2 remains able to read the earlier version-1 installation documents.
+`JsonRegistryInstallationStore` persists Registry distribution state independently from the provider. Each installed item records current version, item type, exact source registry, publisher, source repository/package reference/revision, license, provenance, requested permissions, signature/key/trust/review metadata and the exact installed-artifact digest. Replacing a version appends the prior snapshot to durable history so source, security and rollback evidence survive restart. Installation-state schema v4 still reads the earlier v1-v3 documents and treats facts absent from older snapshots as unknown rather than inventing provenance.
 
 Registry distribution state is not allowed to claim a plugin that the canonical #20 owner has forgotten after a process restart. During Registry-enabled single-node startup, `reconcile_registry_plugins()` restores only previously persisted plugin installations into the same canonical `PluginRegistry`. Reconciliation requires the configured provider to reproduce the persisted item/version/source/license/provenance and exact artifact digest; declared signatures are rechecked as well. A mismatch fails closed. Restoration never enables a runtime and never restores permission grants.
 
 Pins are explicit durable application policy. `registry.pin` can pin only the currently installed version; `registry.unpin` removes that constraint. A pin does **not** hide newer releases: discovery and `update_available` still report a newer candidate, while preview returns `version_pinned` and blocks application until the pin is removed. Updates are never applied automatically. License/provenance changes and pins are validated before activation.
 
+`preview_uninstall()` provides the same pre-mutation decision shape for uninstall. It blocks removal while another installed Marketplace component has a required dependency on the target. If an installed Marketplace dependent can no longer be resolved from its recorded source, dependency safety is unknown and uninstall fails closed instead of assuming independence.
+
 The graphical Marketplace shows installed version, pin state, update availability and changelog. Issue #42 may additionally surface the same update availability through the wider platform update experience; it does not change the no-silent-update rule.
+
+## Multiple Registry sources
+
+`MultiRegistryProvider` composes independent Registry providers without flattening source identity. Search results retain the originating provider on every item. An unqualified exact lookup that matches more than one source fails with an explicit source conflict; callers must choose a source. Updates default to the installed source, while an intentional source switch must be explicitly selected and is surfaced as provenance/security change. Restart reconciliation likewise re-fetches plugins from their recorded source rather than from the aggregate provider identity.
 
 ## Trust, signatures and supply chain
 
 Registry content is not trusted merely because it is listed. Checksums are enforced when declared. A signed artifact is activation-blocking unless a deployment-owned `RegistrySignatureVerifier` verifies it. The bundled self-hosted reference verifier uses HMAC-SHA256 with keys stored outside canonical Registry state; public/private Registry providers can supply asymmetric implementations behind the same interface.
 
-Requested permissions are compared with grantable permissions resolved from authoritative platform state. Dependency, license, provenance and compatibility changes are surfaced before activation. The distribution layer does not replace repository/package provenance, plugin sandboxing, authorization policy or the broader supply-chain threat model in #43.
+Requested permissions are compared with grantable permissions resolved from authoritative platform state. Dependency, license, provenance and compatibility changes are surfaced before activation. Security-sensitive deltas such as new permissions, source/publisher/repository changes, signature-key changes and trust downgrades are represented as approval requirements, while every mutation still requires the existing platform authorization boundary. Marketplace does not create or execute a competing policy engine; the canonical #15 authorization/approval infrastructure remains authoritative.
 
 ## Production composition
 
