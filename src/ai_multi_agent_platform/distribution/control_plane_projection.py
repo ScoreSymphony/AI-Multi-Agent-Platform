@@ -97,13 +97,9 @@ def _compatibility_resource(
         "architectures": _json_strings(sorted(item.compatibility.architectures)),
         "required_runtimes": _json_strings(sorted(item.compatibility.required_runtimes)),
         "missing_runtimes": _json_strings(decision.missing_runtimes) if decision else [],
-        "missing_capabilities": (
-            _json_strings(decision.missing_capabilities) if decision else []
-        ),
+        "missing_capabilities": (_json_strings(decision.missing_capabilities) if decision else []),
         "missing_plugins": _json_strings(decision.missing_plugins) if decision else [],
-        "missing_connectors": (
-            _json_strings(decision.missing_connectors) if decision else []
-        ),
+        "missing_connectors": (_json_strings(decision.missing_connectors) if decision else []),
         "missing_models": _json_strings(decision.missing_models) if decision else [],
     }
 
@@ -363,8 +359,7 @@ def _decision_update_resource(update: UpdateState) -> dict[str, JsonValue]:
 
 def _decision_resource(decision: MarketplaceDecision) -> dict[str, JsonValue]:
     dependencies: list[JsonValue] = [
-        _dependency_decision_resource(dependency)
-        for dependency in decision.dependencies
+        _dependency_decision_resource(dependency) for dependency in decision.dependencies
     ]
     return {
         "operation": decision.operation.value,
