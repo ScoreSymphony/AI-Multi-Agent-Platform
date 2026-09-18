@@ -85,13 +85,9 @@ def build_aggregate(
         for lane, report in reports.items()
         if int(report.get("pytest_exit_code", 1)) != 0 or report.get("budget_violations")
     )
-    pytest_wall_seconds = {
-        lane: float(report["wall_seconds"])
-        for lane, report in reports.items()
-    }
+    pytest_wall_seconds = {lane: float(report["wall_seconds"]) for lane, report in reports.items()}
     validation_wall_seconds = {
-        lane: float(report["wall_seconds"])
-        for lane, report in validation_reports.items()
+        lane: float(report["wall_seconds"]) for lane, report in validation_reports.items()
     }
     pytest_critical_lane = max(pytest_wall_seconds, key=pytest_wall_seconds.__getitem__)
     validation_critical_lane = max(
@@ -127,24 +123,18 @@ def aggregate_violations(
 ) -> list[str]:
     violations: list[str] = []
     if summary["failed_lanes"]:
-        violations.append(
-            "failed or over-budget lanes: " + ", ".join(summary["failed_lanes"])
-        )
+        violations.append("failed or over-budget lanes: " + ", ".join(summary["failed_lanes"]))
 
     pytest_budget = float(budget["pytest_critical_path_seconds"])
     pytest_path = float(summary["pytest_critical_path_seconds"])
     if pytest_path > pytest_budget:
-        violations.append(
-            f"pytest critical path {pytest_path:.3f}s exceeds "
-            f"{pytest_budget:.3f}s"
-        )
+        violations.append(f"pytest critical path {pytest_path:.3f}s exceeds {pytest_budget:.3f}s")
 
     validation_budget = float(budget["validation_critical_path_seconds"])
     validation_path = float(summary["validation_critical_path_seconds"])
     if validation_path > validation_budget:
         violations.append(
-            f"validation critical path {validation_path:.3f}s exceeds "
-            f"{validation_budget:.3f}s"
+            f"validation critical path {validation_path:.3f}s exceeds {validation_budget:.3f}s"
         )
     return violations
 
@@ -170,10 +160,7 @@ def render_markdown(
             f"(budget {float(budget['validation_critical_path_seconds']):.3f}s)"
         ),
         f"- total pytest compute: **{summary['pytest_total_compute_seconds']:.3f}s**",
-        (
-            "- total validation compute: "
-            f"**{summary['validation_total_compute_seconds']:.3f}s**"
-        ),
+        (f"- total validation compute: **{summary['validation_total_compute_seconds']:.3f}s**"),
         "",
         "### Pytest lanes",
         "",
