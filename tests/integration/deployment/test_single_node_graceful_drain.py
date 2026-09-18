@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from ai_multi_agent_platform.control_plane import HTTPRequest
+from ai_multi_agent_platform.control_plane import ControlPlaneASGI, HTTPRequest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.deployment.config import load_single_node_config
 from ai_multi_agent_platform.deployment.drain import (
@@ -412,6 +412,96 @@ def test_forced_drain_preserves_running_run_for_canonical_restart_recovery(
         assert repeated.unresolved_run_ids == (running.run_id,)
         repeated_run = await restarted.kernel.get_run(task.task_id, running.run_id)
         assert repeated_run.run_id == running.run_id
+
+    asyncio.run(scenario())
+
+
+def test_open_websocket_session_cannot_hold_shutdown_past_drain_deadline(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    async def scenario() -> None:
+        deployment = build_single_node_deployment(
+            SingleNodeConfig(
+                data_dir=tmp_path / "stuck-websocket",
+                secure_cookie=False,
+                shutdown_timeout_seconds=1,
+            )
+        )
+        deployment.drain.timeout_seconds = 0.05
+        websocket_entered = asyncio.Event()
+        never = asyncio.Event()
+        original_call = ControlPlaneASGI.__call__
+
+        async def hold_websocket(
+            app: ControlPlaneASGI,
+            scope: dict[str, Any],
+            receive: Any,
+            send: Any,
+        ) -> None:
+            if scope.get("type") == "websocket":
+                websocket_entered.set()
+                await never.wait()
+                return
+            await original_call(app, scope, receive, send)
+
+        monkeypatch.setattr(ControlPlaneASGI, "__call__", hold_websocket)
+
+        async def websocket_receive() -> dict[str, Any]:
+            return {"type": "websocket.connect"}
+
+        async def websocket_send(message: dict[str, Any]) -> None:
+            del message
+
+        websocket_task = asyncio.create_task(
+            deployment.app(
+                {
+                    "type": "websocket",
+                    "path": "/api/v1/terminal/sessions/session_test/stream",
+                    "headers": [],
+                    "query_string": b"",
+                },
+                websocket_receive,
+                websocket_send,
+            )
+        )
+        await websocket_entered.wait()
+        assert deployment.drain.active_mutations == 1
+
+        messages = iter(
+            (
+                {"type": "lifespan.startup"},
+                {"type": "lifespan.shutdown"},
+            )
+        )
+        sent: list[dict[str, Any]] = []
+
+        async def receive() -> dict[str, Any]:
+            try:
+                return next(messages)
+            except StopIteration:
+                await asyncio.Future()
+                raise AssertionError("unreachable")
+
+        async def send(message: dict[str, Any]) -> None:
+            sent.append(message)
+
+        await deployment.app(
+            {"type": "lifespan", "asgi": {"version": "3.0"}},
+            receive,
+            send,
+        )
+
+        assert any(item.get("type") == "lifespan.shutdown.complete" for item in sent)
+        assert deployment.drain.snapshot().forced is True
+        assert deployment.drain.snapshot().force_reason == "in_flight_mutation_timeout"
+
+        websocket_task.cancel()
+        try:
+            await websocket_task
+        except asyncio.CancelledError:
+            pass
+        assert deployment.drain.active_mutations == 0
 
     asyncio.run(scenario())
 
