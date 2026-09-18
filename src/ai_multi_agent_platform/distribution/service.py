@@ -8,12 +8,12 @@ from typing import Protocol
 
 from .decision import (
     DependencyResolution,
-    DependencyStatus,
     MarketplaceDecision,
     build_marketplace_decision,
     dependency_findings,
     uninstall_decision,
 )
+from .decision_types import DependencyStatus
 from .handlers import MarketplaceKindHandlerRegistry
 from .items import RegistryItem, RegistryQuery
 from .models import DistributionRoute
