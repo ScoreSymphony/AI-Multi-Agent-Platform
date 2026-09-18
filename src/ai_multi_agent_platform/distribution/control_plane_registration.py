@@ -137,7 +137,7 @@ def _marketplace_command_authorizer(
             )
             version = _required_version(payload, command)
             source_registry = _optional_source_registry(payload)
-            _, preview = await handlers._resolve_preview(
+            _, candidate_preview = await handlers._resolve_preview(
                 context,
                 resource_ref,
                 version,
@@ -148,7 +148,7 @@ def _marketplace_command_authorizer(
                 command,
                 resource_ref,
                 request_payload_digest=_payload_digest(
-                    _marketplace_candidate_authorization_payload(preview)
+                    _marketplace_candidate_authorization_payload(candidate_preview)
                 ),
             )
             return
@@ -160,13 +160,13 @@ def _marketplace_command_authorizer(
                 resource_ref,
                 request_payload_digest=_payload_digest(payload),
             )
-            preview = handlers._resolve_uninstall_preview(resource_ref, payload)
+            uninstall_preview = handlers._resolve_uninstall_preview(resource_ref, payload)
             await control_plane._authorize(
                 context,
                 command,
                 resource_ref,
                 request_payload_digest=_payload_digest(
-                    _marketplace_uninstall_authorization_payload(preview)
+                    _marketplace_uninstall_authorization_payload(uninstall_preview)
                 ),
             )
             return
