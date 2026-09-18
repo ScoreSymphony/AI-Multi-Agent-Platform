@@ -19,14 +19,14 @@
     "smoke:ios": "expo export --platform ios --output-dir dist/ios"
   },
   "dependencies": {
-    "expo": "~57.0.17",
-    "expo-secure-store": "~57.0.4",
+    "expo": "57.0.17",
+    "expo-secure-store": "57.0.4",
     "react": "19.2.3",
     "react-native": "0.86.3"
   },
   "devDependencies": {
     "@types/react": "19.2.18",
-    "typescript": "~6.0.3",
+    "typescript": "6.0.3",
     "vitest": "5.0.0"
   }
 }
