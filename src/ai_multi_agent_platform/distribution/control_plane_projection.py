@@ -378,6 +378,15 @@ def _decision_resource(decision: MarketplaceDecision) -> dict[str, JsonValue]:
     return {
         "operation": decision.operation.value,
         "dependencies": dependencies,
+        "install_order": [
+            {
+                "item_id": step.item_id,
+                "item_kind": step.item_kind,
+                "version": step.version,
+                "source_registry": step.source_registry,
+            }
+            for step in decision.install_order
+        ],
         "compatibility": _compatibility_decision_resource(decision.compatibility),
         "permission_diff": _permission_diff_resource(decision.permission_diff),
         "provenance_diff": _provenance_diff_resource(decision.provenance_diff),
