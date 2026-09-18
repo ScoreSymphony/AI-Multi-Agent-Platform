@@ -389,9 +389,15 @@ class DistributionService:
         item: RegistryItem,
         provider: RegistryProvider,
     ) -> RegistryItem:
-        if item.source_registry is not None:
+        if item.source_registry is None:
+            return replace(item, source_registry=provider.provider_id)
+        if isinstance(provider, SourcedRegistryProvider):
             return item
-        return replace(item, source_registry=provider.provider_id)
+        if item.source_registry != provider.provider_id:
+            raise ValueError(
+                "registry provider returned conflicting source_registry identity"
+            )
+        return item
 
     def _require_provider(self) -> RegistryProvider:
         if self._provider is None:
