@@ -59,6 +59,47 @@ def _json_object(artifact: bytes, *, label: str) -> dict[str, object]:
     return value
 
 
+class PluginMarketplaceKindHandler:
+    """Expose existing Plugin owner operations without replacing the legacy install route."""
+
+    kind = RegistryItemType.PLUGIN
+
+    def __init__(
+        self,
+        installer: PluginRegistryArtifactInstaller,
+        registry: PluginRegistry,
+    ) -> None:
+        self._installer = installer
+        self._registry = registry
+
+    def inspect_requirements(self, item: RegistryItem) -> Mapping[str, object]:
+        return _requirements(item, owner_domain="plugins")
+
+    async def install(self, item: RegistryItem, artifact: bytes) -> object:
+        return await self._installer.install_verified_plugin(item, artifact)
+
+    async def update(self, item: RegistryItem, artifact: bytes) -> object:
+        return await self._installer.install_verified_plugin(item, artifact)
+
+    async def uninstall(self, item: RegistryItem) -> object:
+        self._registry.remove(item.item_id)
+        return None
+
+    async def status(self, item: RegistryItem) -> object:
+        return self._registry.get(item.item_id)
+
+    def describe(self, item: RegistryItem) -> Mapping[str, object]:
+        manifest = self._registry.manifest(item.item_id)
+        return {
+            "owner_domain": "plugins",
+            "plugin_id": manifest.plugin_id,
+            "plugin_version": manifest.plugin_version,
+            "extension_types": tuple(
+                sorted({extension.extension_type.value for extension in manifest.extensions})
+            ),
+        }
+
+
 class PluginExtensionMarketplaceKindHandler:
     """Install Tool/Connector provider packages through the existing Plugin owner.
 
@@ -400,5 +441,6 @@ class ApplicationMarketplaceKindHandler:
 __all__ = [
     "ApplicationMarketplaceKindHandler",
     "PluginExtensionMarketplaceKindHandler",
+    "PluginMarketplaceKindHandler",
     "SkillMarketplaceKindHandler",
 ]
