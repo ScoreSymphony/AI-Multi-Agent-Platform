@@ -965,14 +965,18 @@ async def test_real_agent_owner_recovers_marketplace_evidence_after_restart(
         context,
         authorized=True,
     )
-    assert restarted_store.get(first.item_id).current.version == "1.0.0"  # type: ignore[union-attr]
+    persisted = restarted_store.get(first.item_id)
+    assert persisted is not None
+    assert persisted.current.version == "1.0.0"
     assert JsonAgentRepository(agent_path).get_agent(first.item_id).current_revision == 1
 
     update_preview = restarted.preview(second.item_id, second.version, context)
     restarted_store.fail_next_save = True
     with pytest.raises(OSError, match="forced marketplace persistence failure"):
         await restarted.activate(update_preview, context, authorized=True)
-    assert restarted_store.get(first.item_id).current.version == "1.0.0"  # type: ignore[union-attr]
+    persisted = restarted_store.get(first.item_id)
+    assert persisted is not None
+    assert persisted.current.version == "1.0.0"
     assert JsonAgentRepository(agent_path).get_agent(first.item_id).current_revision == 2
 
     after_update_store = _FailOnceInstallationStore(installation_path)
