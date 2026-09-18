@@ -150,7 +150,13 @@ class SkillMarketplaceKindHandler:
     @staticmethod
     def _decode(item: RegistryItem, artifact: bytes) -> SkillRevision:
         revision = skill_revision_from_json(_json_object(artifact, label="skill"))
-        if revision.profile.source is not None and revision.profile.source.license != item.license:
+        source = revision.profile.source
+        if source is None:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "Marketplace Skill artifact must declare canonical third-party source metadata",
+            )
+        if source.license != item.license:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "registry license does not match Skill source license",
