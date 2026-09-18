@@ -1,7 +1,4 @@
-"""Skill portability integration coverage.
-
-Migrated from the historical Issue #588 root-level suite as part of #722.
-"""
+"""Skill portability integration coverage."""
 
 from __future__ import annotations
 
