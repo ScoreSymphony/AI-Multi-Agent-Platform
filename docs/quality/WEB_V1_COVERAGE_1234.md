@@ -44,7 +44,7 @@ invent a raw-byte mutation/download API just to satisfy a generic CRUD checklist
 | Automations | `/automations`, `/automations/:id` | `automations`, `automation-deliveries` + exact lifecycle commands | Create/update, pause/resume/disable, test, delivery history and retry are maintained. Scheduler evaluation and event/webhook ingestion remain system paths. |
 | Notifications | `/notifications` | `notifications` | Inventory and read/dismiss attention actions are maintained; a separate durable-detail lifecycle is not invented where the owner does not require one. |
 | Integrations / Connectors | `/integrations`, definition/connection detail routes | `connector-definitions`, `connections` | Connect/configure/enable/disable/health/sync/remove remain canonical. Connection removal now requires explicit confirmation. Plaintext secrets are never a browser field. |
-| Repositories | `/repositories`, `/repositories/:id` | canonical repository collection/commands | Maintained repository/Git product surface over the Control Plane; no direct provider SDK path. |
+| Repositories | `/repositories`, `/repositories/:id` | canonical repository collection/commands | **Gap found and closed by #1234.** The previous Web page exposed inventory/inspection plus fetch while the canonical V1 contract also supported registration and primary Git mutations. The maintained surface now provides managed local attach, Connection/provider discovery with optional attach, fetch, branch creation, checkout, commit, push and detach, all capability-/policy-gated through the Control Plane. |
 | Marketplace / Registry | `/marketplace` | `registry-items` + Marketplace commands | Existing unified Marketplace surface is maintained and uninstall now requires explicit confirmation. #1174 is consumed; final expanded-kind closure waits for #1221 rather than guessing an unstable contract. |
 | Import / Export | `/import-export`, package/preview/report deep links | `portability-packages`, `portability-import-previews`, `portability-import-reports`; `portability.export|package.validate|preview|import` | **Gap found and closed by #1234.** Export, package validation, server-owned preview and exact-preview import are reachable. Browser code cannot submit an ID mapping or mutation order. |
 | Templates / generated configuration | `/templates`, `/templates/:id`; generated Workflow/Capability Assignment/Model Routing Profile detail routes | canonical Template resources/commands plus owner-domain read projections | Maintained create/version/clone/fork/preview/apply paths; generated owner-domain resources use canonical deep links when a real route exists. |
@@ -107,7 +107,8 @@ Adding generic buttons for these boundaries would weaken, not improve, V1 archit
    browser-session revocation and collaboration removals/revocations could execute without a
    browser confirmation. Added explicit confirmation; the Marketplace browser regression accepts
    and verifies the new confirmation.
-5. **Documentation drift** — #87 was already closed, #79 was already browser-safe and frontend
+5. **Repository workflow reachability** — the typed client already exposed repository reads/fetch/detach and the backend/CLI exposed the wider canonical management/Git contract, but normal browser users could not attach/discover repositories or reach branch/checkout/commit/push/detach workflows. Added those primary actions with capability gating, explicit confirmation for high-impact operations, approval/idempotency propagation and provider/path isolation.
+6. **Documentation drift** — #87 was already closed, #79 was already browser-safe and frontend
    dependency pins had advanced beyond the documented values. `docs/FRONTEND.md` is reconciled in
    the same change.
 
