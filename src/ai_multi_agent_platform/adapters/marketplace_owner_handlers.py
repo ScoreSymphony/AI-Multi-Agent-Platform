@@ -43,6 +43,7 @@ from ai_multi_agent_platform.portability import (
     PortableResource,
     seal_resource,
 )
+from ai_multi_agent_platform.security.redaction import redact_sensitive
 from ai_multi_agent_platform.skills.codec import skill_revision_from_json
 from ai_multi_agent_platform.skills.models import SkillRevision
 from ai_multi_agent_platform.skills.service import SkillService
@@ -73,6 +74,26 @@ def _json_object(artifact: bytes, *, label: str) -> dict[str, object]:
             f"{label} artifact must be a JSON object",
         )
     return value
+
+
+def _assert_no_plaintext_credentials(
+    document: dict[str, object],
+    *,
+    label: str,
+) -> None:
+    """Reject secret-bearing package metadata while allowing value-free configuration schemas."""
+
+    scan_document = dict(document)
+    scan_document["configuration_schema"] = {}
+    json_document = cast(JsonValue, scan_document)
+    if redact_sensitive(json_document) != json_document:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            (
+                f"{label} Marketplace package must not embed plaintext credentials; "
+                "configure canonical secret references after installation"
+            ),
+        )
 
 
 class PluginMarketplaceKindHandler:
@@ -163,6 +184,11 @@ class PluginExtensionMarketplaceKindHandler:
                     f"{item.kind} Marketplace artifact must declare at least one "
                     f"{self._extension_type.value} extension"
                 ),
+            )
+        if self._kind is RegistryItemType.MODEL_PROVIDER:
+            _assert_no_plaintext_credentials(
+                _json_object(artifact, label="model provider"),
+                label="Model Provider",
             )
         return manifest
 
