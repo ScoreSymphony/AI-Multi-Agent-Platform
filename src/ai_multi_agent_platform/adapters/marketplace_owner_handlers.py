@@ -12,7 +12,9 @@ from collections.abc import Mapping
 from jsonschema.exceptions import ValidationError
 
 from ai_multi_agent_platform.applications import (
+    Application,
     ApplicationInstallRequest,
+    ApplicationInstance,
     ApplicationLifecycleService,
     ApplicationManifest,
     ApplicationRepository,
@@ -24,7 +26,7 @@ from ai_multi_agent_platform.distribution import PluginRegistryArtifactInstaller
 from ai_multi_agent_platform.distribution.items import RegistryItem
 from ai_multi_agent_platform.distribution.models import RegistryItemType
 from ai_multi_agent_platform.domain import Provenance
-from ai_multi_agent_platform.plugins import ExtensionType, PluginRegistry
+from ai_multi_agent_platform.plugins import ExtensionType, PluginManifest, PluginRegistry
 from ai_multi_agent_platform.skills.codec import skill_revision_from_json
 from ai_multi_agent_platform.skills.models import SkillRevision
 from ai_multi_agent_platform.skills.service import SkillService
@@ -90,7 +92,7 @@ class PluginExtensionMarketplaceKindHandler:
             "required_extension_type": self._extension_type.value,
         }
 
-    def _validated_manifest(self, item: RegistryItem, artifact: bytes):
+    def _validated_manifest(self, item: RegistryItem, artifact: bytes) -> PluginManifest:
         manifest = self._installer.validated_manifest(item, artifact)
         if not any(
             extension.extension_type is self._extension_type for extension in manifest.extensions
@@ -307,7 +309,7 @@ class ApplicationMarketplaceKindHandler:
             )
         return manifest
 
-    def _find_instance(self, item: RegistryItem):
+    def _find_instance(self, item: RegistryItem) -> tuple[Application, ApplicationInstance]:
         applications = tuple(
             application
             for application in self._repository.list_applications()
