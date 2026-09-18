@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.control_plane import ControlPlane
 from ai_multi_agent_platform.control_plane.models import ActorContext, RequestContext
 from ai_multi_agent_platform.distribution import (
@@ -22,6 +22,7 @@ from ai_multi_agent_platform.distribution import (
 )
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.security import (
+    ActorIdentity,
     ActorType,
     AuthorizationAction,
     AuthorizationGate,
@@ -134,6 +135,7 @@ async def test_marketplace_install_requires_canonical_approval_before_owner_muta
             LocalPrincipalPolicy(
                 principal_ref="user:approval",
                 actor_types=frozenset({ActorType.HUMAN}),
+                allowed_actions=frozenset({AuthorizationAction.READ}),
                 approval_actions=frozenset({AuthorizationAction.CREATE}),
             ),
         )
@@ -159,6 +161,62 @@ async def test_marketplace_install_requires_canonical_approval_before_owner_muta
     assert owner.calls == []
     assert installations.get(item.item_id) is None
     assert gate.audit_records[-1].outcome is AuthorizationOutcome.REQUIRE_APPROVAL
+
+
+async def test_marketplace_install_resumes_after_exact_canonical_approval(tmp_path) -> None:
+    provider = LocalAuthorizationProvider(
+        (
+            LocalPrincipalPolicy(
+                principal_ref="user:approval-retry",
+                actor_types=frozenset({ActorType.HUMAN}),
+                allowed_actions=frozenset({AuthorizationAction.READ}),
+                approval_actions=frozenset({AuthorizationAction.CREATE}),
+            ),
+            LocalPrincipalPolicy(
+                principal_ref="user:approver",
+                actor_types=frozenset({ActorType.HUMAN}),
+                allowed_actions=frozenset({AuthorizationAction.APPROVE}),
+            ),
+        )
+    )
+    control_plane, owner, installations, gate = _control_plane(tmp_path, provider)
+    item = _item()
+    context = RequestContext(
+        "marketplace-approval-retry-request",
+        "marketplace-approval-retry-correlation",
+        actor=ActorContext(principal_ref="user:approval-retry", actor_type="human"),
+        idempotency_key="marketplace-approval-retry-install",
+    )
+
+    with pytest.raises(ContractError) as blocked:
+        await control_plane.execute_command(
+            context,
+            MARKETPLACE_INSTALL_COMMAND,
+            item.item_id,
+            {"version": item.version},
+        )
+    assert blocked.value.code is ErrorCode.FORBIDDEN
+    pending = gate.approvals.all()
+    assert len(pending) == 1
+
+    await gate.decide_approval(
+        pending[0].approval_id,
+        approver=ActorIdentity("user:approver", ActorType.HUMAN),
+        approve=True,
+        operation=OperationContext(correlation_id="marketplace-approval-decision"),
+    )
+
+    result = await control_plane.execute_command(
+        context,
+        MARKETPLACE_INSTALL_COMMAND,
+        item.item_id,
+        {"version": item.version},
+    )
+
+    assert result["status"] == "applied"
+    assert owner.calls == [f"install:{item.item_id}"]
+    assert installations.get(item.item_id) is not None
+    assert gate.audit_records[-1].outcome is AuthorizationOutcome.ALLOW
 
 
 async def test_marketplace_install_denial_stops_before_owner_mutation(tmp_path) -> None:
@@ -190,6 +248,7 @@ async def test_marketplace_approval_digest_binds_resolved_permission_state(tmp_p
         LocalPrincipalPolicy(
             principal_ref="user:approval-digest",
             actor_types=frozenset({ActorType.HUMAN}),
+            allowed_actions=frozenset({AuthorizationAction.READ}),
             approval_actions=frozenset({AuthorizationAction.CREATE}),
         ),
     )
