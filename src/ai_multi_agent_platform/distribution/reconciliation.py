@@ -179,7 +179,12 @@ def _validated_reconciliation_manifest(
     artifact: bytes,
     installer: PluginRegistryArtifactInstaller,
 ) -> PluginManifest:
-    manifest = installer.validated_manifest(item, artifact)
+    try:
+        manifest = installer.validated_manifest(item, artifact)
+    except ContractError as exc:
+        raise RegistryPluginReconciliationError(
+            f"persisted Registry component {item.item_id!r} no longer validates"
+        ) from exc
     expected_extension = _PLUGIN_BACKED_KINDS.get(item.item_type)
     if expected_extension is None:
         return manifest
