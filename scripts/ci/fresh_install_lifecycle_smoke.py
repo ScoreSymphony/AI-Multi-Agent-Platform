@@ -94,7 +94,11 @@ def _start_and_stop_once(
             _wait_until_ready(port, process, log_path)
             process.send_signal(signal.SIGTERM)
             process.wait(timeout=10)
-            if process.returncode != 0:
+            # Uvicorn restores the previous signal handler and re-raises a captured signal
+            # after its graceful shutdown path completes. On POSIX, a clean SIGTERM-driven
+            # shutdown is therefore observable as -SIGTERM rather than only as exit code 0.
+            expected_returncodes = {0, -signal.SIGTERM}
+            if process.returncode not in expected_returncodes:
                 raise RuntimeError(
                     f"platform-server did not shut down cleanly: {process.returncode}\n"
                     f"{log_path.read_text(encoding='utf-8')}"
