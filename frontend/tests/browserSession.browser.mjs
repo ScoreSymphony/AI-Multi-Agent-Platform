@@ -257,6 +257,17 @@ try {
     throw new Error("Blocked Marketplace preview exposed an install action");
   }
 
+  const missingHandlerCard = cardByHeading(page, "Missing Handler Skill");
+  await missingHandlerCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await page.getByText("Owner handler unavailable", { exact: true }).waitFor();
+  if (await page.getByRole("button", { name: "Preview install", exact: true }).count()) {
+    throw new Error("Missing-handler Marketplace item exposed an install preview");
+  }
+
+  const sparseMetadataCard = cardByHeading(page, "Sparse Metadata Tool");
+  await sparseMetadataCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await page.getByText("Partial metadata", { exact: true }).waitFor();
+
   const futureCard = cardByHeading(page, "Notebook Extension");
   await futureCard.getByRole("button", { name: "Inspect", exact: true }).click();
   const futureDetailText = await page.locator("body").innerText();
@@ -314,6 +325,18 @@ try {
   await page.getByRole("button", { name: "Install component", exact: true }).waitFor();
   await page.getByRole("button", { name: "Install component", exact: true }).click();
   await page.getByRole("alert").filter({ hasText: "Marketplace owner mutation failed" }).waitFor();
+
+  await page.goto(`${baseUrl}/tests/marketplaceHarness.html?mutation=slow`);
+  await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Skills", exact: true }).click();
+  const slowSkillCard = cardByHeading(page, "Code Review Skill");
+  await slowSkillCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Preview install", exact: true }).click();
+  await page.getByRole("button", { name: "Install component", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Install component", exact: true }).click();
+  await page.getByText("Marketplace operation pending…", { exact: true }).waitFor();
+  await page.getByRole("status").filter({ hasText: "Component installed." }).waitFor();
 
   await page.goto(`${baseUrl}/tests/memoryTypesHarness.html`);
   await page.getByRole("heading", { name: "Memory", exact: true }).waitFor();
