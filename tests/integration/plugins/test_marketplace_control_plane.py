@@ -18,6 +18,7 @@ from ai_multi_agent_platform.distribution import (
     REGISTRY_COLLECTION,
     REGISTRY_PREVIEW_COMMAND,
     ArtifactIntegrity,
+    DistributionRoute,
     DistributionService,
     JsonRegistryInstallationStore,
     LocalRegistryProvider,
