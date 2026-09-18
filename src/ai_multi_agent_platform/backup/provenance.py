@@ -6,6 +6,11 @@ import os
 import subprocess
 from pathlib import Path
 
+from ai_multi_agent_platform.security.git_execution import (
+    controlled_git_environment,
+    resolve_git_executable,
+)
+
 BUILD_COMMIT_ENV = "AI_MULTI_AGENT_PLATFORM_BUILD_COMMIT"
 
 
