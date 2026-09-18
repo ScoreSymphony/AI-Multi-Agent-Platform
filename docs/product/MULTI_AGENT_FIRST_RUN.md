@@ -29,8 +29,8 @@ The research and approach branches have no dependency on one another. Execution 
 the Plan exposes real parallel-ready work and a fan-in edge. The produced Result is then subject to a
 canonical Agent Verification policy using the scoped reviewer revision.
 
-The baseline does **not** require Hermes, Forge, LiteLLM, MCP, a remote Worker, the standard Agent
-catalog, or a paid model/API provider.
+The baseline does **not** require Hermes, LiteLLM, MCP, a remote Worker, the standard Agent
+catalog, or a paid model/API provider. The retired Forge runtime is not part of this workflow.
 
 ## Clean-checkout startup
 
