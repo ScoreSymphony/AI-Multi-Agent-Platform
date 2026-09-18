@@ -138,7 +138,21 @@ class DistributionService:
         route = self.route_for(item)
         if route is DistributionRoute.KIND_HANDLER:
             return self.kind_descriptor(item) is not None and self.has_kind_handler(item)
-        if route in {DistributionRoute.PLUGIN, DistributionRoute.PORTABLE_IMPORT}:
+        if route is DistributionRoute.PLUGIN:
+            return self._router is not None
+        if route is DistributionRoute.PORTABLE_IMPORT:
+            if item.item_type in {
+                RegistryItemType.TOOL,
+                RegistryItemType.CONNECTOR,
+                RegistryItemType.TEMPLATE,
+                RegistryItemType.WORKFLOW,
+            }:
+                # Legacy Registry activation may still delegate these Marketplace kinds to the
+                # canonical portability owner.
+                # portability. The first-class Marketplace does not advertise the route as
+                # lifecycle-safe until the canonical portability owner can recover an
+                # identical completed import after an evidence-write failure and restart.
+                return False
             return self._router is not None
         return False
 

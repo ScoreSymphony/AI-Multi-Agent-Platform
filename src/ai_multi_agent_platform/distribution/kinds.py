@@ -69,10 +69,20 @@ BUILTIN_MARKETPLACE_KINDS: tuple[MarketplaceKindDescriptor, ...] = (
     MarketplaceKindDescriptor(RegistryItemType.SKILL, "Skill", DistributionRoute.KIND_HANDLER),
     MarketplaceKindDescriptor(RegistryItemType.PLUGIN, "Plugin", DistributionRoute.PLUGIN),
     MarketplaceKindDescriptor(
-        RegistryItemType.WORKFLOW, "Workflow", DistributionRoute.PORTABLE_IMPORT
+        RegistryItemType.WORKFLOW,
+        "Workflow",
+        DistributionRoute.PORTABLE_IMPORT,
+        supports_install=False,
+        supports_update=False,
+        supports_uninstall=False,
     ),
     MarketplaceKindDescriptor(
-        RegistryItemType.TEMPLATE, "Template", DistributionRoute.PORTABLE_IMPORT
+        RegistryItemType.TEMPLATE,
+        "Template",
+        DistributionRoute.PORTABLE_IMPORT,
+        supports_install=False,
+        supports_update=False,
+        supports_uninstall=False,
     ),
     MarketplaceKindDescriptor(
         RegistryItemType.MODEL_CONFIGURATION,
