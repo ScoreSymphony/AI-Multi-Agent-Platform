@@ -126,6 +126,16 @@ _RETRYABLE_HEALTH_ERROR_CODES = frozenset(
 )
 
 
+@dataclass(frozen=True, slots=True)
+class _DependencyProbeResult:
+    state: ReadinessState
+    detail: str | None
+    error_code: str | None
+    retryable: bool
+    attempts: int
+    last_retry_error_code: str | None
+
+
 class AggregatedHealthProvider(ProviderContract):
     """Expose bounded required-vs-optional dependency health through the existing API seam."""
 
@@ -227,6 +237,43 @@ class AggregatedHealthProvider(ProviderContract):
 
     async def _probe_dependency(self, item: ProviderHealthDependency) -> DependencyHealth:
         probe_started = time.monotonic()
+        result = await self._execute_dependency_probe(item)
+        name = item.dependency_name
+        previous, degraded_duration_seconds = self._record_dependency_transition(
+            name,
+            result.state,
+        )
+        currently_impaired = result.state is not ReadinessState.READY
+        operator_action = item.operator_action
+        if currently_impaired and operator_action is None:
+            operator_action = self._default_operator_action(item.required)
+
+        dependency = DependencyHealth(
+            name=name,
+            state=result.state,
+            required=item.required,
+            detail=result.detail,
+            error_code=result.error_code,
+            attempts=result.attempts,
+            retry_count=max(0, result.attempts - 1),
+            last_retry_error_code=result.last_retry_error_code,
+            probe_duration_seconds=time.monotonic() - probe_started,
+            degraded_duration_seconds=degraded_duration_seconds,
+            failure_count=self._failure_counts.get(name, 0),
+            recovery_count=self._recovery_counts.get(name, 0),
+            operator_action=operator_action,
+        )
+        self._observe_dependency_probe(
+            dependency,
+            previous=previous,
+            retryable=result.retryable,
+        )
+        return dependency
+
+    async def _execute_dependency_probe(
+        self,
+        item: ProviderHealthDependency,
+    ) -> _DependencyProbeResult:
         attempts = 0
         state = ReadinessState.UNAVAILABLE
         detail: str | None = None
@@ -284,7 +331,20 @@ class AggregatedHealthProvider(ProviderContract):
             if item.backoff_seconds > 0:
                 await asyncio.sleep(item.backoff_seconds * attempts)
 
-        name = item.dependency_name
+        return _DependencyProbeResult(
+            state=state,
+            detail=detail,
+            error_code=error_code,
+            retryable=retryable,
+            attempts=attempts,
+            last_retry_error_code=last_retry_error_code,
+        )
+
+    def _record_dependency_transition(
+        self,
+        name: str,
+        state: ReadinessState,
+    ) -> tuple[ReadinessState | None, float | None]:
         previous = self._last_states.get(name)
         previously_impaired = previous is not None and previous is not ReadinessState.READY
         currently_impaired = state is not ReadinessState.READY
@@ -303,38 +363,19 @@ class AggregatedHealthProvider(ProviderContract):
             if failure_started is not None:
                 degraded_duration_seconds = transition_time - failure_started
         self._last_states[name] = state
+        return previous, degraded_duration_seconds
 
-        operator_action = item.operator_action
-        if currently_impaired and operator_action is None:
-            operator_action = (
+    @staticmethod
+    def _default_operator_action(required: bool) -> str:
+        if required:
+            return (
                 "restore the required dependency and rerun platform doctor; "
                 "do not mutate canonical lifecycle state directly"
-                if item.required
-                else "restore or disable the optional dependency; unrelated canonical "
-                "operations may continue"
             )
-
-        dependency = DependencyHealth(
-            name=name,
-            state=state,
-            required=item.required,
-            detail=detail,
-            error_code=error_code,
-            attempts=attempts,
-            retry_count=max(0, attempts - 1),
-            last_retry_error_code=last_retry_error_code,
-            probe_duration_seconds=time.monotonic() - probe_started,
-            degraded_duration_seconds=degraded_duration_seconds,
-            failure_count=self._failure_counts.get(name, 0),
-            recovery_count=self._recovery_counts.get(name, 0),
-            operator_action=operator_action,
+        return (
+            "restore or disable the optional dependency; unrelated canonical "
+            "operations may continue"
         )
-        self._observe_dependency_probe(
-            dependency,
-            previous=previous,
-            retryable=retryable,
-        )
-        return dependency
 
     def _observe_retry(
         self,
