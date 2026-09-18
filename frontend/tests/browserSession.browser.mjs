@@ -168,6 +168,9 @@ try {
   await hermesCard.getByRole("button", { name: "Inspect", exact: true }).click();
   const hermesDetailText = await page.locator("body").innerText();
   requireText(hermesDetailText, "Orchestrator", "Semantic Orchestrator Marketplace detail");
+  requireText(hermesDetailText, "Owner status", "Canonical Orchestrator owner status");
+  requireText(hermesDetailText, "enabled", "Enabled Orchestrator owner state");
+  requireText(hermesDetailText, "healthy", "Orchestrator owner health");
   const orchestratorLink = page.getByRole("link", {
     name: "Open Orchestrator management",
     exact: true,
