@@ -25,6 +25,7 @@ from ai_multi_agent_platform.capabilities import (
     InvocationRecord,
     InvocationStatus,
     InvocationTrace,
+    PolicyDecision,
     SideEffectClassification,
     SQLiteExternalEffectRecoveryRepository,
     external_effect_recovery_resource,
@@ -356,3 +357,80 @@ async def test_operator_projection_redacts_private_idempotency_and_metadata_valu
     assert "private-retry-key" not in serialized
     assert "secret-42" not in serialized
     assert "provider_tool_ref" not in resource
+
+
+@pytest.mark.asyncio
+async def test_policy_denial_prevents_dispatch_and_never_creates_uncertain_effect_record() -> None:
+    provider = _ExternalProvider(
+        ExternalEffectRecoveryPolicy(
+            idempotency=ExternalEffectIdempotency.NONE,
+            reconciliation=ExternalEffectReconciliationSupport.UNSUPPORTED,
+        )
+    )
+    registry = CapabilityRegistry()
+    await registry.register_provider(provider)
+    recovery = ExternalEffectRecoveryCoordinator(
+        InMemoryExternalEffectRecoveryRepository()
+    )
+
+    async def deny(
+        request: CapabilityInvocation,
+        capability: CapabilitySpec,
+    ) -> PolicyDecision:
+        del request, capability
+        return PolicyDecision.DENY
+
+    invoker = EgressCapabilityInvoker(
+        registry,
+        policy_hook=deny,
+        external_effect_recovery=recovery,
+    )
+
+    with pytest.raises(ContractError) as caught:
+        await invoker.invoke(_request(invocation_id="denied-effect", key="denied-key"))
+
+    assert caught.value.code is ErrorCode.FORBIDDEN
+    assert provider.effects == 0
+    assert recovery.list_records() == ()
+
+
+@pytest.mark.asyncio
+async def test_cancellation_after_external_dispatch_becomes_uncertain_and_non_retryable() -> None:
+    provider = _ExternalProvider(
+        ExternalEffectRecoveryPolicy(
+            idempotency=ExternalEffectIdempotency.NONE,
+            reconciliation=ExternalEffectReconciliationSupport.UNSUPPORTED,
+        ),
+        timeout_seconds=2.0,
+    )
+    registry = CapabilityRegistry()
+    await registry.register_provider(provider)
+    recovery = ExternalEffectRecoveryCoordinator(
+        InMemoryExternalEffectRecoveryRepository()
+    )
+    invoker = EgressCapabilityInvoker(
+        registry,
+        external_effect_recovery=recovery,
+    )
+    request = _request(invocation_id="cancelled-effect", key="cancelled-key")
+
+    task = asyncio.create_task(invoker.invoke(request))
+    for _ in range(100):
+        if provider.effects:
+            break
+        await asyncio.sleep(0)
+    assert provider.effects == 1
+    task.cancel()
+
+    with pytest.raises(ContractError) as caught:
+        await task
+
+    assert caught.value.code is ErrorCode.CANCELLED
+    assert caught.value.retryable is False
+    record = recovery.find_record_by_invocation(request.invocation_id)
+    assert record is not None
+    assert record.status is ExternalEffectRecoveryStatus.BLOCKED
+    assert (
+        record.disposition
+        is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
+    )
