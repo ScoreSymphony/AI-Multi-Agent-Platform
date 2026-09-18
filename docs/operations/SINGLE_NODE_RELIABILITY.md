@@ -125,11 +125,20 @@ No leader election, standby Control Plane, fencing epoch or shared HA persistenc
 
 The reliability principle is intentionally stronger than "HA will recover it later": a single Control Plane should first be able to crash, restart and return to a deterministic canonical state on its own.
 
-## Remaining #707 scope
+## Relationship to graceful shutdown
 
-This startup slice does **not** close #707. Remaining reliability work includes, among other items:
+#1152 owns the process-local graceful-drain/shutdown path layered in front of this recovery
+authority. Drain never persists a second lifecycle: work that does not settle before the bounded
+shutdown deadline remains canonical owner state for this startup reconciliation pass.
 
-- graceful drain/shutdown hardening;
+See `SINGLE_NODE_DRAIN_SHUTDOWN.md` for the shutdown-side disposition policy.
+
+## Remaining reliability scope
+
+The startup-recovery slice remains intentionally narrower than all reliability work. Remaining
+items outside the completed #1152 drain boundary include, among other items:
+
+- stale non-Worker session/materialization cleanup;
 - stale non-Worker session/materialization cleanup;
 - explicit uncertain-side-effect recovery states;
 - persistence/filesystem fault injection and recovery;
