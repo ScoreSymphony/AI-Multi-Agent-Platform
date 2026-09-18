@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 
@@ -40,6 +41,7 @@ from ai_multi_agent_platform.distribution import (
     RegistrySource,
     TrustStatus,
     ValidationContext,
+    reconcile_registry_plugins,
 )
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.plugins import (
@@ -221,6 +223,69 @@ async def test_tool_handler_uses_plugin_owner_for_full_package_lifecycle(tmp_pat
     assert installations.get(second.item_id) is None
     with pytest.raises(ContractError) as missing:
         plugin_registry.get(second.item_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
+
+
+async def test_manifest_backed_tool_reconciles_into_plugin_owner_after_restart(
+    tmp_path,
+) -> None:
+    manifest = reference_manifest()
+    item = _item(
+        RegistryItemType.TOOL,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    artifact = _plugin_artifact(manifest)
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "restart-installations.json")
+    installations.record(
+        item,
+        provider_id=provider.provider_id,
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+    )
+
+    restored = await reconcile_registry_plugins(provider, installations, plugin_registry)
+
+    assert restored == (item.item_id,)
+    assert plugin_registry.get(item.item_id).plugin_version == item.version
+
+
+async def test_portable_tool_installation_is_not_reconciled_as_plugin_package(tmp_path) -> None:
+    item = _item(
+        RegistryItemType.TOOL,
+        item_id="example.portable-tool",
+        version="1.0.0",
+    )
+    artifact = b"portable-tool"
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "portable-installations.json")
+    installations.record(
+        item,
+        provider_id=provider.provider_id,
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+    )
+
+    restored = await reconcile_registry_plugins(provider, installations, plugin_registry)
+
+    assert restored == ()
+    with pytest.raises(ContractError) as missing:
+        plugin_registry.get(item.item_id)
     assert missing.value.code is ErrorCode.NOT_FOUND
 
 
