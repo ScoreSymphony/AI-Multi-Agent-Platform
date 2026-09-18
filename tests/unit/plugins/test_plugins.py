@@ -135,8 +135,6 @@ def test_reference_plugin_registers_disables_and_removes_cleanly() -> None:
     assert registry.list_plugins() == ()
 
 
-
-
 def test_connector_registry_binder_registers_and_unregisters_canonical_provider() -> None:
     connector_registry = ConnectorRegistry()
     service = ConnectorService(InMemoryConnectorRepository(), connector_registry)
