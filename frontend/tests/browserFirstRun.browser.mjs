@@ -361,11 +361,21 @@ try {
   }
 
   // Recover through the maintained onboarding UI, then execute the real multi-agent workflow.
+  // Re-validating and saving replaces the runtime provider attachment with a freshly healthy
+  // instance while preserving the canonical model configuration identity.
   await listen(modelServer, modelPort);
   await page.reload();
-  await page.getByRole("heading", { name: "Revalidate an existing provider", exact: true }).waitFor();
-  await (await waitForButton(page, "Revalidate provider health")).click();
-  await page.getByRole("status").filter({ hasText: "Provider health revalidated" }).waitFor();
+  await page.getByRole("heading", { name: "Model setup", exact: true }).waitFor();
+  await page.locator('select[name="adapter_id"]').selectOption("openai-compatible");
+  await page.locator('select[name="location"]').selectOption("local");
+  await page.getByLabel("Provider ID", { exact: true }).fill("browser-local-provider");
+  await page.getByLabel("Model configuration ID", { exact: true }).fill("browser-local-model");
+  await page.getByLabel("Provider-native model name", { exact: true }).fill("browser-model-native");
+  await page.getByLabel("Display name", { exact: true }).fill("Browser local model");
+  await page.getByLabel("Base URL", { exact: true }).fill(`http://${host}:${modelPort}/v1`);
+  await page.getByLabel("Context window", { exact: true }).fill("32768");
+  await page.getByLabel("Structured output", { exact: true }).check();
+  await (await waitForButton(page, "Validate and save model")).click();
   await page.getByRole("heading", { name: "Official first run: multi-agent goal", exact: true }).waitFor();
 
   const successfulRunButton = await waitForButton(page, "Run official multi-agent first run");
