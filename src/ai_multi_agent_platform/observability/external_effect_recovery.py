@@ -8,6 +8,7 @@ from ai_multi_agent_platform.capabilities import (
     ExternalEffectRecoveryEventObserver,
     ExternalEffectRecoveryStatus,
 )
+from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .exporters import Telemetry
 from .models import (
@@ -35,7 +36,7 @@ class ObservabilityExternalEffectRecoveryObserver(ExternalEffectRecoveryEventObs
             capability_id=event.capability_id,
             provider_id=event.provider_id,
         )
-        attributes = {
+        attributes: dict[str, JsonValue] = {
             "external_effect_id": event.effect_id,
             "status": event.status.value,
             "disposition": event.disposition.value,
