@@ -129,7 +129,9 @@ def _control_plane(
     return control_plane, owner, installations, gate
 
 
-async def test_marketplace_install_requires_canonical_approval_before_owner_mutation(tmp_path) -> None:
+async def test_marketplace_install_requires_canonical_approval_before_owner_mutation(
+    tmp_path,
+) -> None:
     provider = LocalAuthorizationProvider(
         (
             LocalPrincipalPolicy(
@@ -295,4 +297,3 @@ async def test_marketplace_approval_digest_binds_resolved_permission_state(tmp_p
     assert baseline_record.requested_action_digest is not None
     assert escalated_record.requested_action_digest is not None
     assert baseline_record.requested_action_digest != escalated_record.requested_action_digest
-
