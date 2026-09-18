@@ -652,35 +652,22 @@ class LocalGitRepositoryProvider(RepositoryProvider):
                 provider_id=self.provider_id,
             )
 
-        for metadata_name in ("commondir",):
-            metadata_path = git_dir / metadata_name
-            if not metadata_path.exists():
-                continue
-            if metadata_path.is_symlink() or not metadata_path.is_file():
+        commondir = git_dir / "commondir"
+        if commondir.exists():
+            if commondir.is_symlink() or not commondir.is_file():
                 raise ContractError(
                     ErrorCode.INVALID_CONFIGURATION,
                     "repository Git metadata contains unsupported path indirection",
                     retryable=False,
                     provider_id=self.provider_id,
                 )
-            target_text = metadata_path.read_text(encoding="utf-8", errors="replace").strip()
-            if not target_text:
-                continue
-            target = Path(target_text)
-            resolved = (
-                target.resolve()
-                if target.is_absolute()
-                else (git_dir / target).resolve()
-            )
-            try:
-                resolved.relative_to(self._root)
-            except ValueError as exc:
+            if commondir.read_text(encoding="utf-8", errors="replace").strip():
                 raise ContractError(
                     ErrorCode.INVALID_CONFIGURATION,
-                    "repository Git metadata escapes the managed repository root",
+                    "shared Git common directories are not supported",
                     retryable=False,
                     provider_id=self.provider_id,
-                ) from exc
+                )
 
         for alternates_name in ("alternates", "http-alternates"):
             alternates = git_dir / "objects" / "info" / alternates_name
