@@ -171,7 +171,7 @@ def test_registry_installation_store_migrates_v1_state_without_losing_evidence(
 
     store.unpin("example.legacy")
     persisted = json.loads(path.read_text(encoding="utf-8"))
-    assert persisted["version"] == "2"
+    assert persisted["version"] == "3"
 
 
 def test_successful_activation_persists_exact_artifact_digest(tmp_path: Path) -> None:
