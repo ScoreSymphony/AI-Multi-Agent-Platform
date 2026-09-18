@@ -116,6 +116,10 @@ def test_optional_hanging_dependency_is_bounded_and_degraded() -> None:
         assert dependency.state is ReadinessState.UNAVAILABLE
         assert dependency.error_code == ErrorCode.TIMEOUT.value
         assert dependency.attempts == 2
+        assert dependency.retry_count == 1
+        assert dependency.last_retry_error_code == ErrorCode.TIMEOUT.value
+        assert dependency.probe_duration_seconds > 0
+        assert dependency.degraded_duration_seconds is None
         assert dependency.failure_count == 1
         assert dependency.recovery_count == 0
         assert provider.calls == 2
@@ -144,6 +148,8 @@ def test_required_transient_failure_retries_only_to_configured_bound() -> None:
         dependency = health.service_health.dependencies[0]
         assert dependency.error_code == ErrorCode.TRANSIENT_FAILURE.value
         assert dependency.attempts == 3
+        assert dependency.retry_count == 2
+        assert dependency.last_retry_error_code == ErrorCode.TRANSIENT_FAILURE.value
         assert provider.calls == 3
         assert not health.service_health.ready
 
@@ -178,6 +184,9 @@ def test_dependency_recovery_and_repeated_flaps_are_counted_without_extra_attemp
             observed.append((dependency.failure_count, dependency.recovery_count))
 
         assert observed == [(1, 0), (1, 1), (2, 1), (2, 2)]
+        dependency = health.service_health.dependencies[0]
+        assert dependency.degraded_duration_seconds is not None
+        assert dependency.degraded_duration_seconds >= 0
         assert provider.calls == 4
         assert health.service_health.ready
 
