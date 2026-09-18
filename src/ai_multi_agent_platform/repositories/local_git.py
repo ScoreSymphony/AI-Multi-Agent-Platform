@@ -690,7 +690,7 @@ class LocalGitRepositoryProvider(RepositoryProvider):
                 "repository Git configuration contains unsupported execution-capable settings",
                 retryable=False,
                 provider_id=self.provider_id,
-                details={"unsafe_config_keys": list(unsafe)},
+                details={"unsafe_config_count": len(unsafe)},
             )
 
     def _assert_safe_remote_urls(
