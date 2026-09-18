@@ -113,6 +113,12 @@ def _update_state_resource(
     return {
         "installed": installation is not None,
         "installed_version": installation.current.version if installation else None,
+        "installed_source_registry": (
+            installation.current.source_registry if installation else None
+        ),
+        "installation_source_matches": (
+            installation.current.source_registry == item.source_registry if installation else None
+        ),
         "candidate_version": item.version,
         "pinned_version": installation.pinned_version if installation else None,
         "update_available": update_available,
@@ -166,6 +172,8 @@ def _item_resource(
         "categories": _json_strings(sorted(item.categories)),
         "trust_status": item.trust_status.value,
         "trust": item.trust_status.value,
+        "maturity": item.maturity.value if item.maturity is not None else None,
+        "stability": item.maturity.value if item.maturity is not None else None,
         "review_reference": item.review_reference,
         "released_at": item.released_at,
         "release_date": item.released_at,
