@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.plugins import PluginRegistry
+from ai_multi_agent_platform.plugins import ExtensionType, PluginRegistry
 
 from .items import RegistryItem
 from .models import RegistryItemType
@@ -13,6 +13,12 @@ from .plugin_adapter import PluginRegistryArtifactInstaller
 from .provider import RegistryProvider
 from .signatures import RegistrySignatureVerifier
 from .state import RegistryInstallationSnapshot, RegistryInstallationStore
+
+
+_PLUGIN_BACKED_KINDS = {
+    RegistryItemType.TOOL: ExtensionType.CAPABILITY_PROVIDER,
+    RegistryItemType.CONNECTOR: ExtensionType.CONNECTOR_PROVIDER,
+}
 
 
 class RegistryPluginReconciliationError(RuntimeError):
@@ -26,19 +32,23 @@ async def reconcile_registry_plugins(
     *,
     signature_verifier: RegistrySignatureVerifier | None = None,
 ) -> tuple[str, ...]:
-    """Restore previously installed Registry plugins into the canonical #20 registry.
+    """Restore Registry installations whose artifact lifecycle is owned by #20.
 
     Reconciliation is not a new installation decision. It restores only a previously persisted
-    Registry installation, never enables a runtime, never restores permission grants, and fails
-    closed if the current catalog cannot reproduce the exact persisted plugin artifact/source.
-    Non-plugin Registry installations remain owned by their already-persistent import domains.
+    plugin-backed installation, never enables a runtime, never restores permission grants, and
+    fails closed if the current catalog cannot reproduce the exact persisted artifact/source.
+    Skills, Applications and portable imports retain their own durable owner state.
     """
 
     installer = PluginRegistryArtifactInstaller(plugin_registry)
     restored: list[str] = []
     for installation in installations.list():
         snapshot = installation.current
-        if snapshot.item_type is not None and snapshot.item_type is not RegistryItemType.PLUGIN:
+        if (
+            snapshot.item_type is not None
+            and snapshot.item_type is not RegistryItemType.PLUGIN
+            and snapshot.item_type not in _PLUGIN_BACKED_KINDS
+        ):
             continue
 
         try:
@@ -53,12 +63,23 @@ async def reconcile_registry_plugins(
             # is no safe basis for guessing that it was executable plugin code.
             continue
 
-        if item.item_type is not RegistryItemType.PLUGIN:
-            if snapshot.item_type is RegistryItemType.PLUGIN:
+        plugin_backed = (
+            item.item_type is RegistryItemType.PLUGIN
+            or item.item_type in _PLUGIN_BACKED_KINDS
+        )
+        if not plugin_backed:
+            if (
+                snapshot.item_type is RegistryItemType.PLUGIN
+                or snapshot.item_type in _PLUGIN_BACKED_KINDS
+            ):
                 raise RegistryPluginReconciliationError(
-                    f"persisted Registry plugin {snapshot.item_id!r} changed item type"
+                    f"persisted Registry component {snapshot.item_id!r} changed item type"
                 )
             continue
+        if snapshot.item_type is not None and snapshot.item_type is not item.item_type:
+            raise RegistryPluginReconciliationError(
+                f"persisted Registry component {snapshot.item_id!r} changed item type"
+            )
 
         _validate_snapshot(provider.provider_id, snapshot, item)
         artifact = provider.fetch_artifact(item.item_id, item.version)
@@ -85,6 +106,18 @@ async def reconcile_registry_plugins(
             if verified is not True:
                 raise RegistryPluginReconciliationError(
                     f"persisted Registry plugin {item.item_id!r} signature cannot be verified"
+                )
+
+        expected_extension = _PLUGIN_BACKED_KINDS.get(item.item_type)
+        if expected_extension is not None:
+            manifest = installer.validated_manifest(item, artifact)
+            if not any(
+                extension.extension_type is expected_extension
+                for extension in manifest.extensions
+            ):
+                raise RegistryPluginReconciliationError(
+                    f"persisted Registry {item.kind} {item.item_id!r} no longer declares "
+                    f"{expected_extension.value}"
                 )
 
         try:
