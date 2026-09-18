@@ -1,6 +1,12 @@
 """Versioned plugin SDK and lifecycle foundation."""
 
-from .binders import CapabilityRegistryBinder, ConnectorRegistryBinder
+from .binders import (
+    CapabilityRegistryBinder,
+    ConnectorRegistryBinder,
+    ExecutorRegistryBinder,
+    ModelProviderRegistryBinder,
+    OrchestratorRegistryBinder,
+)
 from .discovery import (
     DiscoveredPlugin,
     PluginCatalog,
@@ -40,6 +46,9 @@ __all__ = [
     "CapabilityRegistryBinder",
     "CompatibilityState",
     "ConnectorRegistryBinder",
+    "ExecutorRegistryBinder",
+    "ModelProviderRegistryBinder",
+    "OrchestratorRegistryBinder",
     "DiscoveredPlugin",
     "ExtensionBinder",
     "ExtensionRegistration",
