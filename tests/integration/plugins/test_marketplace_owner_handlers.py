@@ -536,3 +536,11 @@ async def test_application_handler_delegates_to_1173_and_rejects_fake_update(tmp
     removed = await service.uninstall(first.item_id, authorized=True)
     assert removed.observed_state is ApplicationObservedState.REMOVED
     assert installations.get(first.item_id) is None
+
+    reinstalled = await service.activate(
+        service.preview(first.item_id, first.version, context),
+        context,
+        authorized=True,
+    )
+    assert reinstalled.instance_id != removed.instance_id
+    assert (await service.status(first.item_id)).instance_id == reinstalled.instance_id
