@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from datetime import UTC, datetime
 import threading
 import time
 from pathlib import Path
 
 import pytest
 
+import ai_multi_agent_platform.data.reference_file as reference_file
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.data import (
@@ -18,6 +20,7 @@ from ai_multi_agent_platform.data import (
 )
 from ai_multi_agent_platform.data._async_offload import AsyncDataOffload
 from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.testing import FailOnceFilesystemOperation
 
 
 def _context() -> DataAccessContext:
@@ -251,6 +254,131 @@ def test_file_state_and_bytes_survive_restart(tmp_path: Path) -> None:
         assert await restarted.verify_checksum(record.file_id, context) is True
 
     asyncio.run(scenario())
+
+
+def test_file_restart_tombstones_only_owned_pending_crash_state(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        context = _context()
+        root = tmp_path / "objects"
+        database = tmp_path / "files.sqlite3"
+        LocalFileProvider(root, database)
+        file_id = new_id("file")
+        now = datetime.now(UTC).isoformat()
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                """
+                INSERT INTO data_files (
+                    file_id, project_id, owner_ref, created_by, created_at, size_bytes,
+                    sha256, state, content_type, artifact_ids_json, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    file_id,
+                    context.project_id,
+                    context.actor_ref,
+                    context.actor_ref,
+                    now,
+                    7,
+                    "0" * 64,
+                    "pending",
+                    "application/octet-stream",
+                    "[]",
+                    "{}",
+                ),
+            )
+        pending = root / f".{file_id}.pending"
+        final = root / file_id
+        unrelated = root / ".unowned.pending"
+        pending.write_bytes(b"partial")
+        final.write_bytes(b"replaced-before-metadata-commit")
+        unrelated.write_bytes(b"leave-me")
+
+        restarted = LocalFileProvider(root, database)
+
+        assert not pending.exists()
+        assert not final.exists()
+        assert unrelated.read_bytes() == b"leave-me"
+        with sqlite3.connect(database) as connection:
+            row = connection.execute(
+                "SELECT state FROM data_files WHERE file_id = ?",
+                (file_id,),
+            ).fetchone()
+        assert row == ("tombstoned",)
+        with pytest.raises(ContractError) as raised:
+            await restarted.get_file(file_id, context)
+        assert raised.value.code is ErrorCode.NOT_FOUND
+
+    asyncio.run(scenario())
+
+
+def test_file_atomic_replace_failure_never_becomes_canonical(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    async def scenario() -> None:
+        context = _context()
+        root = tmp_path / "objects"
+        database = tmp_path / "files.sqlite3"
+        provider = LocalFileProvider(root, database)
+        file_id = new_id("file")
+        failure = FailOnceFilesystemOperation(reference_file.os.replace)
+        monkeypatch.setattr(reference_file.os, "replace", failure)
+
+        with pytest.raises(ContractError) as raised:
+            await provider.create_file(b"payload", context, file_id=file_id)
+
+        assert raised.value.code is ErrorCode.BACKEND_ERROR
+        assert not (root / file_id).exists()
+        assert not (root / f".{file_id}.pending").exists()
+        with pytest.raises(ContractError) as missing:
+            await provider.get_file(file_id, context)
+        assert missing.value.code is ErrorCode.NOT_FOUND
+
+        restarted = LocalFileProvider(root, database)
+        with pytest.raises(ContractError) as still_missing:
+            await restarted.get_file(file_id, context)
+        assert still_missing.value.code is ErrorCode.NOT_FOUND
+
+    asyncio.run(scenario())
+
+
+def test_file_restart_fails_closed_when_owned_pending_state_cannot_be_cleaned(
+    tmp_path: Path,
+) -> None:
+    context = _context()
+    root = tmp_path / "objects"
+    database = tmp_path / "files.sqlite3"
+    LocalFileProvider(root, database)
+    file_id = new_id("file")
+    now = datetime.now(UTC).isoformat()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO data_files (
+                file_id, project_id, owner_ref, created_by, created_at, size_bytes,
+                sha256, state, content_type, artifact_ids_json, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                file_id,
+                context.project_id,
+                context.actor_ref,
+                context.actor_ref,
+                now,
+                0,
+                "0" * 64,
+                "pending",
+                None,
+                "[]",
+                "{}",
+            ),
+        )
+    (root / f".{file_id}.pending").mkdir()
+
+    with pytest.raises(ContractError) as raised:
+        LocalFileProvider(root, database)
+
+    assert raised.value.code is ErrorCode.BACKEND_ERROR
 
 
 def test_file_offload_repeated_cancellation_waits_for_worker_boundary() -> None:
