@@ -253,7 +253,9 @@ def _application_artifact() -> tuple[RegistryItem, bytes]:
     )
 
 
-async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(tmp_path: Path) -> None:
+async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(
+    tmp_path: Path,
+) -> None:
     skill_v1, skill_v2, skill_artifact_v1, skill_artifact_v2, skill_id = _skill_artifacts()
     application, application_artifact = _application_artifact()
     future = _item(
@@ -350,9 +352,12 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(tmp
         "tool",
         "workflow",
     }
-    assert next(
-        resource for resource in resources if resource["kind"] == "notebook_extension"
-    )["maturity"] == "beta"
+    assert (
+        next(resource for resource in resources if resource["kind"] == "notebook_extension")[
+            "maturity"
+        ]
+        == "beta"
+    )
 
     filtered = await resource_service.list_resources(
         request,
