@@ -146,9 +146,7 @@ def _validate_artifact(
         )
     if item.integrity.signature is not None:
         verified = (
-            signature_verifier.verify(item, artifact)
-            if signature_verifier is not None
-            else None
+            signature_verifier.verify(item, artifact) if signature_verifier is not None else None
         )
         if verified is not True:
             raise RegistryPluginReconciliationError(
@@ -165,9 +163,7 @@ def _validate_expected_extension(
     if expected_extension is None:
         return
     manifest = installer.validated_manifest(item, artifact)
-    if not any(
-        extension.extension_type is expected_extension for extension in manifest.extensions
-    ):
+    if not any(extension.extension_type is expected_extension for extension in manifest.extensions):
         raise RegistryPluginReconciliationError(
             f"persisted Registry {item.kind} {item.item_id!r} no longer declares "
             f"{expected_extension.value}"
@@ -213,6 +209,5 @@ def _validate_snapshot(
         mismatches.append("item type")
     if mismatches:
         raise RegistryPluginReconciliationError(
-            f"persisted Registry component {snapshot.item_id!r} changed "
-            + ", ".join(mismatches)
+            f"persisted Registry component {snapshot.item_id!r} changed " + ", ".join(mismatches)
         )
