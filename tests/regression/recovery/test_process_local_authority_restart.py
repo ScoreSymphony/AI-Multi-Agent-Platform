@@ -58,8 +58,8 @@ def test_terminal_session_handle_is_not_restored_into_new_process_owner() -> Non
     async def scenario() -> None:
         project_id = new_id("project")
         workspace_id = new_id("workspace")
-        principal = "user:issue-1153-terminal"
-        operation = OperationContext(correlation_id="issue-1153-terminal", project_id=project_id)
+        principal = "user:terminal-restart"
+        operation = OperationContext(correlation_id="terminal-restart", project_id=project_id)
         context = SessionContext(project_id=project_id, workspace_id=workspace_id)
         original = _terminal_stack(
             project_id=project_id,
@@ -100,7 +100,7 @@ def test_reference_browser_does_not_resolve_pre_restart_process_session_id(
         files = LocalFileProvider(tmp_path / "objects", tmp_path / "files.sqlite3")
         restarted = StdlibBrowserProvider(files)
         operation = OperationContext(
-            correlation_id="issue-1153-browser",
+            correlation_id="browser-restart",
             project_id=new_id("project"),
         )
         stale_session_id = new_id("browser_session")
