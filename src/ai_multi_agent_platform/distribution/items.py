@@ -6,14 +6,19 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+from .kinds import builtin_marketplace_kind
 from .models import (
     ArtifactIntegrity,
     DistributionRoute,
     RegistryDependency,
+    RegistryItemKind,
     RegistryItemType,
+    RegistryManifestReference,
     RegistrySource,
     TrustStatus,
     VersionRange,
+    parse_registry_item_kind,
+    registry_item_kind_value,
     version_key,
 )
 
@@ -23,7 +28,7 @@ _ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 @dataclass(frozen=True, slots=True)
 class RegistryItem:
     item_id: str
-    item_type: RegistryItemType
+    item_type: RegistryItemKind
     name: str
     description: str
     version: str
@@ -48,9 +53,11 @@ class RegistryItem:
     deprecated: bool = False
     yanked: bool = False
     distribution_route: DistributionRoute | None = None
+    manifest: RegistryManifestReference | None = None
 
     def __post_init__(self) -> None:
         _require_id(self.item_id, "item_id")
+        object.__setattr__(self, "item_type", parse_registry_item_kind(self.item_type))
         version_key(self.version)
         for value, field_name in (
             (self.name, "name"),
@@ -75,6 +82,10 @@ class RegistryItem:
             and self.distribution_route is not DistributionRoute.MANUAL
         ):
             raise ValueError("distribution_route override may only select the manual route")
+        if self.manifest is not None and self.manifest.kind_value != self.kind:
+            raise ValueError("manifest kind must match registry item kind")
+        if not isinstance(self.item_type, RegistryItemType) and self.manifest is None:
+            raise ValueError("future marketplace kinds require a kind-specific manifest reference")
         for optional_value, optional_field_name in (
             (self.review_reference, "review_reference"),
             (self.released_at, "released_at"),
@@ -84,23 +95,25 @@ class RegistryItem:
                 _require_text(optional_value, optional_field_name)
 
     @property
+    def kind(self) -> str:
+        return registry_item_kind_value(self.item_type)
+
+    @property
     def route(self) -> DistributionRoute:
         if self.distribution_route is not None:
             return self.distribution_route
-        if self.item_type is RegistryItemType.PLUGIN:
-            return DistributionRoute.PLUGIN
-        if self.item_type in {
-            RegistryItemType.APPLICATION,
-            RegistryItemType.DOCUMENTATION,
-        }:
+        if self.item_type is RegistryItemType.APPLICATION and self.manifest is None:
             return DistributionRoute.MANUAL
-        return DistributionRoute.PORTABLE_IMPORT
+        descriptor = builtin_marketplace_kind(self.item_type)
+        if descriptor is not None:
+            return descriptor.default_route
+        return DistributionRoute.KIND_HANDLER
 
 
 @dataclass(frozen=True, slots=True)
 class RegistryQuery:
     text: str | None = None
-    item_types: frozenset[RegistryItemType] = frozenset()
+    item_types: frozenset[RegistryItemKind] = frozenset()
     tags: frozenset[str] = frozenset()
     categories: frozenset[str] = frozenset()
     licenses: frozenset[str] = frozenset()
@@ -120,6 +133,11 @@ class RegistryQuery:
             version_key(self.platform_version)
         if self.update_for_item_id is not None:
             _require_id(self.update_for_item_id, "update_for_item_id")
+        object.__setattr__(
+            self,
+            "item_types",
+            frozenset(parse_registry_item_kind(value) for value in self.item_types),
+        )
         for values, field_name in (
             (self.tags, "query tags"),
             (self.categories, "query categories"),
@@ -128,6 +146,10 @@ class RegistryQuery:
             (self.required_capabilities, "query required_capabilities"),
         ):
             _require_nonblank_values(values, field_name)
+
+    @property
+    def item_kinds(self) -> frozenset[str]:
+        return frozenset(registry_item_kind_value(value) for value in self.item_types)
 
 
 @dataclass(frozen=True, slots=True)
