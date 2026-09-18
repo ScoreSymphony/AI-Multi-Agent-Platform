@@ -30,8 +30,10 @@ from ai_multi_agent_platform.distribution import (
     FilesystemRegistryProvider,
     HmacSha256SignatureVerifier,
     JsonRegistryInstallationStore,
+    MarketplaceKindHandlerRegistry,
     PlatformRegistryValidationContextResolver,
     PluginRegistryArtifactInstaller,
+    RegistryItemType,
     load_hmac_signature_keys,
     reconcile_registry_plugins,
     register_distribution_control_plane,
@@ -50,6 +52,7 @@ from ai_multi_agent_platform.onboarding.setup_registry_planning import (
 )
 from ai_multi_agent_platform.plugins import (
     CapabilityRegistryBinder,
+    ConnectorRegistryBinder,
     ExtensionType,
     PluginRegistry,
 )
@@ -63,6 +66,12 @@ from ai_multi_agent_platform.repository_intelligence.wiring import (
 )
 
 from .application_runtime import ApplicationRuntimeComposition, compose_application_runtime
+from .marketplace_owner_handlers import (
+    ApplicationMarketplaceKindHandler,
+    PluginExtensionMarketplaceKindHandler,
+    PluginMarketplaceKindHandler,
+    SkillMarketplaceKindHandler,
+)
 from .onboarding_openai_compatible import OpenAICompatibleOnboardingAdapter
 from .setup_registry import DistributionSetupRegistryPort
 
@@ -88,7 +97,7 @@ def build_default_single_node_deployment(
     *,
     enable_distributed_execution: bool = False,
 ) -> SingleNodeDeployment:
-    """Build the shipped profile with installed bridges and optional #240 execution routing."""
+    """Build the shipped single-node profile with optional distributed execution."""
 
     secrets = LocalSecretProvider()
     release_gate_policy = (
@@ -103,7 +112,7 @@ def build_default_single_node_deployment(
         enable_distributed_execution=enable_distributed_execution,
         application_release_gate_policy=release_gate_policy,
     )
-    application_runtime = compose_application_runtime(
+    applications = compose_application_runtime(
         config,
         deployment,
         secret_provider=secrets,
@@ -142,11 +151,7 @@ def build_default_single_node_deployment(
             )
         )
     )
-    distribution, registry_commands = _configure_registry(
-        config,
-        deployment,
-        application_runtime=application_runtime,
-    )
+    distribution, registry_commands = _configure_registry(config, deployment, applications)
     setup_registry = (
         None
         if distribution is None
@@ -162,13 +167,95 @@ def build_default_single_node_deployment(
     return deployment
 
 
+def _registry_plugin_runtime(deployment: SingleNodeDeployment) -> PluginRegistry:
+    plugin_registry = deployment.control_plane.plugin_registry
+    if plugin_registry is not None:
+        return plugin_registry
+
+    plugin_registry = PluginRegistry(
+        platform_version=__version__,
+        supported_interfaces={
+            ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"}),
+            ExtensionType.CONNECTOR_PROVIDER: frozenset({"1.0"}),
+        },
+        binders={
+            ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(deployment.capabilities),
+            ExtensionType.CONNECTOR_PROVIDER: ConnectorRegistryBinder(deployment.connectors),
+        },
+    )
+    deployment.control_plane.attach_plugin_runtime(plugin_registry)
+    return plugin_registry
+
+
+def _marketplace_kind_handlers(
+    deployment: SingleNodeDeployment,
+    applications: ApplicationRuntimeComposition,
+    *,
+    plugin_registry: PluginRegistry,
+    plugin_installer: PluginRegistryArtifactInstaller,
+) -> MarketplaceKindHandlerRegistry:
+    return MarketplaceKindHandlerRegistry(
+        (
+            PluginMarketplaceKindHandler(plugin_installer, plugin_registry),
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.TOOL,
+                extension_type=ExtensionType.CAPABILITY_PROVIDER,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
+            SkillMarketplaceKindHandler(deployment.context.skills),
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.CONNECTOR,
+                extension_type=ExtensionType.CONNECTOR_PROVIDER,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
+            ApplicationMarketplaceKindHandler(
+                applications.lifecycle,
+                applications.repository,
+                applications.runtimes,
+            ),
+        )
+    )
+
+
+def _registry_validation_resolver(
+    deployment: SingleNodeDeployment,
+    installations: JsonRegistryInstallationStore,
+    plugin_registry: PluginRegistry,
+    applications: ApplicationRuntimeComposition,
+) -> PlatformRegistryValidationContextResolver:
+    return PlatformRegistryValidationContextResolver(
+        platform_version=__version__,
+        installations=installations,
+        capabilities=lambda: (
+            capability.capability_id
+            for capability in deployment.capabilities.inventory_capabilities(
+                include_unavailable=False
+            )
+        ),
+        plugins=lambda: (snapshot.plugin_id for snapshot in plugin_registry.list_plugins()),
+        connectors=lambda: (
+            definition.id for definition in deployment.connector_registry.definitions()
+        ),
+        models=lambda: (model.config_id for model in deployment.models.list_models(enabled=True)),
+        runtimes=applications.runtimes.list_runtime_ids,
+        grantable_permissions=lambda context: (
+            action.value
+            for action in deployment.authorization.globally_grantable_actions(
+                context.actor.principal_ref,
+                actor_type=context.actor.actor_type,
+            )
+        ),
+    )
+
+
 def _configure_registry(
     config: SingleNodeConfig,
     deployment: SingleNodeDeployment,
-    *,
-    application_runtime: ApplicationRuntimeComposition,
+    applications: ApplicationRuntimeComposition,
 ) -> tuple[DistributionService | None, RegistryCommandHandlers | None]:
-    """Attach #81 only when an operator explicitly configures a local Registry catalog."""
+    """Attach the optional Registry only when an operator configures a local catalog."""
 
     if config.registry_catalog is None:
         return None, None
@@ -177,22 +264,12 @@ def _configure_registry(
     installations = JsonRegistryInstallationStore(
         deployment.config.database_dir / "registry-installations.json"
     )
-    plugin_registry = deployment.control_plane.plugin_registry
-    if plugin_registry is None:
-        plugin_registry = PluginRegistry(
-            platform_version=__version__,
-            supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
-            binders={
-                ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(deployment.capabilities)
-            },
-        )
-        deployment.control_plane.attach_plugin_runtime(plugin_registry)
-
-    signature_verifier = None
-    if config.registry_signature_keys is not None:
-        signature_verifier = HmacSha256SignatureVerifier(
-            load_hmac_signature_keys(config.registry_signature_keys)
-        )
+    plugin_registry = _registry_plugin_runtime(deployment)
+    signature_verifier = (
+        HmacSha256SignatureVerifier(load_hmac_signature_keys(config.registry_signature_keys))
+        if config.registry_signature_keys is not None
+        else None
+    )
     asyncio.run(
         reconcile_registry_plugins(
             provider,
@@ -208,38 +285,26 @@ def _configure_registry(
         raise RuntimeError(
             "single-node Registry composition requires the canonical portability workflow"
         )
-    router = CanonicalDistributionRouter(
-        plugin_installer=plugin_installer,
-        portability=portability,
-    )
     distribution = DistributionService(
         provider,
-        router,
+        CanonicalDistributionRouter(
+            plugin_installer=plugin_installer,
+            portability=portability,
+        ),
         installations=installations,
         signature_verifier=signature_verifier,
+        kind_handlers=_marketplace_kind_handlers(
+            deployment,
+            applications,
+            plugin_registry=plugin_registry,
+            plugin_installer=plugin_installer,
+        ),
     )
-    validation = PlatformRegistryValidationContextResolver(
-        platform_version=__version__,
-        installations=installations,
-        capabilities=lambda: (
-            capability.capability_id
-            for capability in deployment.capabilities.inventory_capabilities(
-                include_unavailable=False
-            )
-        ),
-        plugins=lambda: (snapshot.plugin_id for snapshot in plugin_registry.list_plugins()),
-        connectors=lambda: (
-            definition.id for definition in deployment.connector_registry.definitions()
-        ),
-        models=lambda: (model.config_id for model in deployment.models.list_models(enabled=True)),
-        runtimes=application_runtime.runtimes.list_runtime_ids,
-        grantable_permissions=lambda context: (
-            action.value
-            for action in deployment.authorization.globally_grantable_actions(
-                context.actor.principal_ref,
-                actor_type=context.actor.actor_type,
-            )
-        ),
+    validation = _registry_validation_resolver(
+        deployment,
+        installations,
+        plugin_registry,
+        applications,
     )
     register_distribution_control_plane(
         deployment.control_plane,
