@@ -579,6 +579,7 @@ class LocalGitRepositoryProvider(RepositoryProvider):
         binary = resolve_git_executable(self._git_binary)
         environment = controlled_git_environment()
         if (self._root / ".git").exists():
+            self._assert_repository_metadata_boundary()
             self._assert_safe_local_configuration(binary, environment)
             if args and args[0] in {"fetch", "push"}:
                 self._assert_safe_remote_urls(binary, environment)
@@ -640,6 +641,59 @@ class LocalGitRepositoryProvider(RepositoryProvider):
                 "operation": operation,
             },
         )
+
+    def _assert_repository_metadata_boundary(self) -> None:
+        git_dir = self._root / ".git"
+        if git_dir.is_symlink() or not git_dir.is_dir():
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "repository Git metadata must be a local directory inside the managed root",
+                retryable=False,
+                provider_id=self.provider_id,
+            )
+
+        for metadata_name in ("commondir",):
+            metadata_path = git_dir / metadata_name
+            if not metadata_path.exists():
+                continue
+            if metadata_path.is_symlink() or not metadata_path.is_file():
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "repository Git metadata contains unsupported path indirection",
+                    retryable=False,
+                    provider_id=self.provider_id,
+                )
+            target_text = metadata_path.read_text(encoding="utf-8", errors="replace").strip()
+            if not target_text:
+                continue
+            target = Path(target_text)
+            resolved = (
+                target.resolve()
+                if target.is_absolute()
+                else (git_dir / target).resolve()
+            )
+            try:
+                resolved.relative_to(self._root)
+            except ValueError as exc:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "repository Git metadata escapes the managed repository root",
+                    retryable=False,
+                    provider_id=self.provider_id,
+                ) from exc
+
+        for alternates_name in ("alternates", "http-alternates"):
+            alternates = git_dir / "objects" / "info" / alternates_name
+            if alternates.exists() and alternates.read_text(
+                encoding="utf-8",
+                errors="replace",
+            ).strip():
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "repository Git object indirection is not supported",
+                    retryable=False,
+                    provider_id=self.provider_id,
+                )
 
     def _assert_safe_local_configuration(
         self,
