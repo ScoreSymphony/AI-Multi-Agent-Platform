@@ -262,7 +262,7 @@ def test_official_first_run_reports_actionable_missing_model_guidance(tmp_path: 
                 _context(admin.user_id, "missing-model-first-run"),
                 ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
                 FIRST_RUN_RESOURCE_ID,
-                _payload(project.id, workspace_id),
+                _payload(project.id, workspace.id),
             )
         assert error.value.code is ErrorCode.INVALID_CONFIGURATION
         assert error.value.details["action"] == "onboarding.configure-model"
