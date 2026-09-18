@@ -12,9 +12,13 @@ The ordinary capability pipeline remains authoritative:
 authorization / approval
         |
         v
-InvocationStatus.RUNNING
+expiry + canonical binding validation
         |
-        +-- durable external-effect journal entry
+        v
+durable external-effect dispatch intent
+        |
+        v
+InvocationStatus.RUNNING
         |
         v
 provider dispatch
@@ -24,9 +28,12 @@ provider dispatch
         +-- process loss before ack --------> classify on startup
 ```
 
-The journal is created only at the existing `RUNNING` transition, immediately before provider
-execution. Policy/approval failures therefore do not create false evidence that an external effect
-may have happened.
+The journal is written through an explicit pre-provider dispatch hook after policy, approval,
+expiry and canonical-binding validation have succeeded. Those pre-dispatch failures therefore do
+not create false evidence that an external effect may have happened. A process loss after the
+durable dispatch intent but before the provider call can conservatively surface as uncertain; this
+is intentionally fail-closed because the platform cannot atomically commit local state and an
+arbitrary external effect.
 
 The journal is recovery evidence, not a second Task/Run lifecycle. Canonical Task, Run, Plan, Step
 and Event ownership stays with their existing platform owners.
