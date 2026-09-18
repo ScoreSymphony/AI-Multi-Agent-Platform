@@ -577,7 +577,7 @@ class LocalGitRepositoryProvider(RepositoryProvider):
 
     def _run(self, *args: str, allow_failure: bool = False) -> subprocess.CompletedProcess[bytes]:
         binary = resolve_git_executable(self._git_binary)
-        environment = controlled_git_environment()
+        environment = controlled_git_environment(home=self._runtime_directory.name)
         if (self._root / ".git").exists():
             self._assert_repository_metadata_boundary()
             self._assert_safe_local_configuration(binary, environment)
