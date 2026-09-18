@@ -1004,3 +1004,41 @@ def test_persisted_installed_dependency_detects_cycle_after_catalog_drift(
     )
     assert any(finding.code == "dependency_cycle" for finding in preview.findings)
 
+def test_installed_dependency_evidence_wins_over_same_version_catalog_drift(
+    tmp_path: Path,
+) -> None:
+    installed, installed_artifact = _item(
+        "example.same-version-installed",
+        RegistryItemType.TOOL,
+    )
+    drifted = replace(
+        installed,
+        dependencies=(RegistryDependency("example.catalog-only-transitive"),),
+    )
+    root, root_artifact = _item(
+        "example.same-version-root",
+        dependencies=(
+            RegistryDependency(
+                installed.item_id,
+                item_kind=RegistryItemType.TOOL,
+            ),
+        ),
+    )
+    state_path = tmp_path / "installations.json"
+    store = JsonRegistryInstallationStore(state_path)
+    store.record(installed, provider_id="local")
+    store = JsonRegistryInstallationStore(state_path)
+    service = _service(
+        ((drifted, installed_artifact), (root, root_artifact)),
+        store=store,
+    )
+
+    preview = service.preview(root.item_id, root.version, _context())
+
+    assert preview.activation_allowed is True
+    assert preview.decision.dependencies[0].status is DependencyStatus.SATISFIED
+    assert all(
+        dependency.item_id != "example.catalog-only-transitive"
+        for dependency in preview.decision.dependencies
+    )
+
