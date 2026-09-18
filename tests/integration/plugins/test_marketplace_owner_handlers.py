@@ -63,6 +63,7 @@ from ai_multi_agent_platform.distribution import (
     RegistryItemType,
     RegistryManifestReference,
     RegistryPluginReconciliationError,
+    RegistryQuery,
     RegistrySource,
     TrustStatus,
     ValidationContext,
@@ -404,6 +405,108 @@ class _SingleExtensionRuntime:
 
     async def shutdown(self) -> None:
         return None
+
+
+async def test_hermes_full_marketplace_flow_preserves_replaceable_orchestrator_owner(
+    tmp_path,
+) -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id=HERMES_ADAPTER_ID,
+        name="Hermes",
+        description="Replaceable Hermes orchestrator adapter.",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="orchestrator.hermes",
+                extension_type=ExtensionType.ORCHESTRATOR,
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={"type": "object", "additionalProperties": False},
+    )
+    reference = ReferenceOrchestrator()
+    orchestrators = OrchestratorRegistry(
+        {reference.descriptor.provider_id: reference}
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.ORCHESTRATOR: frozenset({"1.0"})},
+        binders={ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(orchestrators)},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.ORCHESTRATOR,
+        extension_type=ExtensionType.ORCHESTRATOR,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.ORCHESTRATOR,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    artifact = _plugin_artifact(manifest)
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+        ),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / "hermes-marketplace-installations.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    context = ValidationContext("0.0.1")
+
+    discovered = service.search(
+        RegistryQuery(
+            text="Hermes",
+            item_types=frozenset({RegistryItemType.ORCHESTRATOR}),
+        )
+    )
+    assert discovered == (item,)
+    requirements = service.inspect_requirements(item)
+    assert requirements is not None
+    assert requirements["required_extension_type"] == "orchestrator"
+
+    preview = service.preview(item.item_id, item.version, context)
+    assert preview.activation_allowed is True
+    installed = await service.activate(preview, context, authorized=True)
+    assert installed.state.value == "installed"
+    assert service.installed(item.item_id) is not None
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+    assert orchestrators.select(
+        OrchestratorSelection(reference.descriptor.provider_id)
+    ) is reference
+
+    plugin_registry.configure(HERMES_ADAPTER_ID, {})
+    hermes = HermesOrchestrator(
+        HermesAdapterConfig(enabled=True),
+        secret_resolver=lambda _: None,
+    )
+    runtime = _HermesPluginRuntime(manifest, hermes)
+    await plugin_registry.enable(HERMES_ADAPTER_ID, runtime)
+
+    assert orchestrators.select(OrchestratorSelection(HERMES_ADAPTER_ID)) is hermes
+    assert orchestrators.select(
+        OrchestratorSelection(reference.descriptor.provider_id)
+    ) is reference
+
+    await plugin_registry.disable(HERMES_ADAPTER_ID)
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+    assert orchestrators.select(
+        OrchestratorSelection(reference.descriptor.provider_id)
+    ) is reference
+
+    await service.uninstall(item.item_id, authorized=True)
+    assert service.installed(item.item_id) is None
+    with pytest.raises(ContractError) as removed:
+        plugin_registry.get(HERMES_ADAPTER_ID)
+    assert removed.value.code is ErrorCode.NOT_FOUND
 
 
 async def test_model_provider_marketplace_install_does_not_create_configured_model() -> None:
