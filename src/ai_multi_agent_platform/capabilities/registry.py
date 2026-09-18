@@ -171,6 +171,23 @@ class CapabilityRegistry:
             self._providers[provider_id].descriptor for provider_id in sorted(self._providers)
         )
 
+    def runtime_provider(self, provider_id: str) -> CapabilityToolProvider:
+        """Return one provider only to internal runtime/composition infrastructure.
+
+        Northbound inventory continues to expose descriptors only. Recovery needs the exact
+        provider instance that owns a previously dispatched external action so a read-only
+        reconciler cannot silently migrate to a different provider after restart.
+        """
+
+        try:
+            return self._providers[provider_id]
+        except KeyError as exc:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"provider {provider_id!r} is not registered",
+                provider_id=provider_id,
+            ) from exc
+
     def list_capabilities(
         self,
         *,
