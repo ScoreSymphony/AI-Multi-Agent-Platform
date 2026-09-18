@@ -948,6 +948,12 @@ function InstallPreview({
       <RequirementList title="Integrity notices" values={integrityNotices} />
       <RequirementList title="Blockers" values={blockers} />
 
+      {decision?.dependency_blocked ? (
+        <DegradedState
+          title="Dependency plan blocked"
+          detail="One or more required Marketplace dependencies cannot be satisfied for this operation."
+        />
+      ) : null}
       {decision?.update_state.blocked_by_pin ? (
         <DegradedState
           title="Update blocked by version pin"
@@ -1014,6 +1020,7 @@ function DecisionDependencyList({
             {dependency.item_kind ? `${humanizeKind(dependency.item_kind)} · ` : ""}
             <CanonicalId value={dependency.item_id} /> — {dependency.optional ? "optional" : "required"}
             {" · "}<StatusBadge value={dependency.status} />
+            {dependency.blocking ? <> · <StatusBadge value="blocking" /></> : null}
             {dependency.installed_version ? ` · installed ${dependency.installed_version}` : ""}
             {dependency.candidate_version ? ` · candidate ${dependency.candidate_version}` : ""}
             {dependency.path.length > 1 ? ` · path ${dependency.path.join(" → ")}` : ""}
