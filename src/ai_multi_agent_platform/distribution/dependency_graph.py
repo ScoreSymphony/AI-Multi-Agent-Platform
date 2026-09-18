@@ -17,7 +17,7 @@ from .validation import FindingCategory, FindingSeverity, ValidationContext, Val
 @dataclass(frozen=True, slots=True)
 class _DependencyVisit:
     resolution: DependencyResolution
-    next_item: RegistryItem | None = None
+    next_dependencies: tuple[RegistryDependency, ...] | None = None
 
 
 def evaluate_compatibility(
@@ -81,19 +81,39 @@ def _walk_item(
     installed: dict[str, InstalledRegistryItem],
     resolutions: list[DependencyResolution],
 ) -> None:
-    for dependency in parent.dependencies:
+    _walk_dependencies(
+        parent.item_id,
+        parent.dependencies,
+        path=path,
+        catalog=catalog,
+        installed=installed,
+        resolutions=resolutions,
+    )
+
+
+def _walk_dependencies(
+    parent_id: str,
+    dependencies: tuple[RegistryDependency, ...],
+    *,
+    path: tuple[str, ...],
+    catalog: tuple[RegistryItem, ...],
+    installed: dict[str, InstalledRegistryItem],
+    resolutions: list[DependencyResolution],
+) -> None:
+    for dependency in dependencies:
         visit = _resolve_dependency(
-            parent,
+            parent_id,
             dependency,
             path=path,
             catalog=catalog,
             installed=installed,
         )
         resolutions.append(visit.resolution)
-        if dependency.optional or visit.next_item is None:
+        if dependency.optional or visit.next_dependencies is None:
             continue
-        _walk_item(
-            visit.next_item,
+        _walk_dependencies(
+            dependency.item_id,
+            visit.next_dependencies,
             path=(*path, dependency.item_id),
             catalog=catalog,
             installed=installed,
@@ -102,7 +122,7 @@ def _walk_item(
 
 
 def _resolve_dependency(
-    parent: RegistryItem,
+    parent_id: str,
     dependency: RegistryDependency,
     *,
     path: tuple[str, ...],
@@ -110,10 +130,10 @@ def _resolve_dependency(
     installed: dict[str, InstalledRegistryItem],
 ) -> _DependencyVisit:
     dependency_path = (*path, dependency.item_id)
-    if dependency.item_id == parent.item_id:
+    if dependency.item_id == parent_id:
         return _DependencyVisit(
             _resolution(
-                parent,
+                parent_id,
                 dependency,
                 DependencyStatus.SELF_DEPENDENCY,
                 path=dependency_path,
@@ -122,7 +142,7 @@ def _resolve_dependency(
     if dependency.item_id in path:
         return _DependencyVisit(
             _resolution(
-                parent,
+                parent_id,
                 dependency,
                 DependencyStatus.CYCLE,
                 path=dependency_path,
@@ -132,7 +152,7 @@ def _resolve_dependency(
     record = installed.get(dependency.item_id)
     if record is not None:
         return _installed_visit(
-            parent,
+            parent_id,
             dependency,
             record=record,
             candidate=_installed_catalog_candidate(dependency, catalog, record),
@@ -145,18 +165,20 @@ def _resolve_dependency(
         status = DependencyStatus.OPTIONAL_MISSING
     return _DependencyVisit(
         _resolution(
-            parent,
+            parent_id,
             dependency,
             status,
             candidate=candidate,
             path=dependency_path,
         ),
-        candidate if status is DependencyStatus.AVAILABLE else None,
+        candidate.dependencies
+        if status is DependencyStatus.AVAILABLE and candidate is not None
+        else None,
     )
 
 
 def _installed_visit(
-    parent: RegistryItem,
+    parent_id: str,
     dependency: RegistryDependency,
     *,
     record: InstalledRegistryItem,
@@ -164,17 +186,19 @@ def _installed_visit(
     path: tuple[str, ...],
 ) -> _DependencyVisit:
     status = _installed_dependency_status(dependency, record)
-    next_item = candidate if status is DependencyStatus.SATISFIED else None
+    next_dependencies = None
+    if status is DependencyStatus.SATISFIED:
+        next_dependencies = candidate.dependencies if candidate is not None else record.dependencies
     return _DependencyVisit(
         _resolution(
-            parent,
+            parent_id,
             dependency,
             status,
             record=record,
             candidate=candidate,
             path=path,
         ),
-        next_item,
+        next_dependencies,
     )
 
 
@@ -492,7 +516,7 @@ def _required_finding_spec(
 
 
 def _resolution(
-    parent: RegistryItem,
+    parent_id: str,
     dependency: RegistryDependency,
     status: DependencyStatus,
     *,
@@ -501,7 +525,7 @@ def _resolution(
     path: tuple[str, ...],
 ) -> DependencyResolution:
     return DependencyResolution(
-        required_by=parent.item_id,
+        required_by=parent_id,
         item_id=dependency.item_id,
         item_kind=dependency.kind_value,
         optional=dependency.optional,
