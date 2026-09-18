@@ -1,7 +1,4 @@
-"""Skill service, resolution, rendering, and trust lifecycle unit coverage.
-
-Migrated from the historical Issue #588 root-level suite as part of #722.
-"""
+"""Skill service, resolution, rendering, and trust lifecycle unit coverage."""
 
 from __future__ import annotations
 
