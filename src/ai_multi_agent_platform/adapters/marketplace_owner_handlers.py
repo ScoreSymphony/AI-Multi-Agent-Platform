@@ -281,6 +281,44 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
             )
         return value
 
+    @staticmethod
+    def _same_revision(current: AgentRevision, candidate: AgentRevision) -> bool:
+        return (
+            current.agent_id == candidate.agent_id
+            and current.revision == candidate.revision
+            and current.profile == candidate.profile
+            and current.owner_ref == candidate.owner_ref
+            and current.project_id == candidate.project_id
+            and current.workspace_id == candidate.workspace_id
+        )
+
+    def _assert_history_prefix(
+        self,
+        snapshot: AgentPortableSnapshot,
+        through_revision: int,
+        *,
+        provenance: Provenance | None = None,
+    ) -> None:
+        if through_revision > snapshot.definition.current_revision:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Marketplace Agent artifact is older than the canonical Agent",
+            )
+        for candidate in snapshot.revisions[:through_revision]:
+            current = self._service.get_agent_revision(candidate.agent_id, candidate.revision)
+            if not self._same_revision(current, candidate):
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "Marketplace Agent artifact diverges from immutable canonical revision history",
+                    details={"revision": candidate.revision},
+                )
+            if provenance is not None and current.provenance != provenance:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "canonical Agent revision is not owned by this Marketplace release",
+                    details={"revision": candidate.revision},
+                )
+
     def _current(self, item: RegistryItem) -> AgentRevision:
         current = self._service.get_agent_revision(item.item_id)
         if not self._belongs_to_item(current.provenance, item):
@@ -292,16 +330,39 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
 
     async def install(self, item: RegistryItem, artifact: bytes) -> object:
         snapshot = self._decode(item, artifact)
-        created: AgentRevision | None = None
+        provenance = self._provenance(item)
+        existing: AgentRevision | None = None
         try:
-            for candidate in snapshot.revisions:
+            existing = self._service.get_agent_revision(snapshot.definition.agent_id)
+        except ContractError as exc:
+            if exc.code is not ErrorCode.NOT_FOUND:
+                raise
+
+        if existing is not None:
+            if not self._belongs_to_item(existing.provenance, item):
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "Marketplace Agent install targets an existing non-Marketplace Agent",
+                )
+            self._assert_history_prefix(
+                snapshot,
+                existing.revision,
+                provenance=provenance,
+            )
+            if existing.revision == snapshot.definition.current_revision:
+                return existing
+
+        created = existing
+        start_revision = 0 if existing is None else existing.revision
+        try:
+            for candidate in snapshot.revisions[start_revision:]:
                 if candidate.revision == 1:
                     created = self._service.create_agent(
                         candidate.profile,
                         owner_ref=candidate.owner_ref,
                         project_id=candidate.project_id,
                         workspace_id=candidate.workspace_id,
-                        provenance=self._provenance(item),
+                        provenance=provenance,
                         agent_id=snapshot.definition.agent_id,
                     )
                 else:
@@ -312,7 +373,7 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
                         owner_ref=candidate.owner_ref,
                         project_id=candidate.project_id,
                         workspace_id=candidate.workspace_id,
-                        provenance=self._provenance(item),
+                        provenance=provenance,
                     )
             if created is None:
                 raise ContractError(
@@ -320,8 +381,8 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
                     "Marketplace Agent artifact contains no canonical revisions",
                 )
             return created
-        except BaseException:
-            if created is not None:
+        except Exception:
+            if existing is None and created is not None:
                 try:
                     self._service.delete_agent(snapshot.definition.agent_id)
                 except ContractError:
@@ -332,7 +393,7 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
         snapshot = self._decode(item, artifact)
         current = self._current(item)
         candidate = snapshot.revisions[-1]
-        if candidate.revision != current.revision + 1:
+        if candidate.revision < current.revision or candidate.revision > current.revision + 1:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "Marketplace Agent update must advance the canonical revision by exactly one",
@@ -340,6 +401,15 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
                     "current_revision": current.revision,
                     "candidate_revision": candidate.revision,
                 },
+            )
+        self._assert_history_prefix(snapshot, current.revision)
+        provenance = self._provenance(item)
+        if candidate.revision == current.revision:
+            if self._same_revision(current, candidate) and current.provenance == provenance:
+                return current
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Marketplace Agent update retry does not match canonical owner state",
             )
         if (
             candidate.owner_ref != current.owner_ref
@@ -357,11 +427,16 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
             owner_ref=current.owner_ref,
             project_id=current.project_id,
             workspace_id=current.workspace_id,
-            provenance=self._provenance(item),
+            provenance=provenance,
         )
 
     async def uninstall(self, item: RegistryItem) -> object:
-        current = self._current(item)
+        try:
+            current = self._current(item)
+        except ContractError as exc:
+            if exc.code is ErrorCode.NOT_FOUND:
+                return None
+            raise
         self._service.delete_agent(current.agent_id, expected_owner_ref=current.owner_ref)
         return None
 
@@ -382,7 +457,11 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
                 if not constraint.required
             ),
             "memory_scopes": tuple(
-                scope.value for scope in sorted(current.profile.data_access.memory_scopes, key=lambda value: value.value)
+                scope.value
+                for scope in sorted(
+                    current.profile.data_access.memory_scopes,
+                    key=lambda value: value.value,
+                )
             ),
         }
 
@@ -417,6 +496,47 @@ class AgentTeamMarketplaceKindHandler(_AgentMarketplaceBase):
             )
         return value
 
+    @staticmethod
+    def _same_revision(
+        current: AgentTeamRevision,
+        candidate: AgentTeamRevision,
+    ) -> bool:
+        return (
+            current.team_id == candidate.team_id
+            and current.revision == candidate.revision
+            and current.profile == candidate.profile
+            and current.owner_ref == candidate.owner_ref
+            and current.project_id == candidate.project_id
+            and current.workspace_id == candidate.workspace_id
+        )
+
+    def _assert_history_prefix(
+        self,
+        snapshot: AgentTeamPortableSnapshot,
+        through_revision: int,
+        *,
+        provenance: Provenance | None = None,
+    ) -> None:
+        if through_revision > snapshot.definition.current_revision:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Marketplace Agent Team artifact is older than the canonical Team",
+            )
+        for candidate in snapshot.revisions[:through_revision]:
+            current = self._service.get_team_revision(candidate.team_id, candidate.revision)
+            if not self._same_revision(current, candidate):
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "Marketplace Agent Team artifact diverges from immutable canonical revision history",
+                    details={"revision": candidate.revision},
+                )
+            if provenance is not None and current.provenance != provenance:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "canonical Agent Team revision is not owned by this Marketplace release",
+                    details={"revision": candidate.revision},
+                )
+
     def _current(self, item: RegistryItem) -> AgentTeamRevision:
         current = self._service.get_team_revision(item.item_id)
         if not self._belongs_to_item(current.provenance, item):
@@ -428,16 +548,39 @@ class AgentTeamMarketplaceKindHandler(_AgentMarketplaceBase):
 
     async def install(self, item: RegistryItem, artifact: bytes) -> object:
         snapshot = self._decode(item, artifact)
-        created: AgentTeamRevision | None = None
+        provenance = self._provenance(item)
+        existing: AgentTeamRevision | None = None
         try:
-            for candidate in snapshot.revisions:
+            existing = self._service.get_team_revision(snapshot.definition.team_id)
+        except ContractError as exc:
+            if exc.code is not ErrorCode.NOT_FOUND:
+                raise
+
+        if existing is not None:
+            if not self._belongs_to_item(existing.provenance, item):
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "Marketplace Agent Team install targets an existing non-Marketplace Team",
+                )
+            self._assert_history_prefix(
+                snapshot,
+                existing.revision,
+                provenance=provenance,
+            )
+            if existing.revision == snapshot.definition.current_revision:
+                return existing
+
+        created = existing
+        start_revision = 0 if existing is None else existing.revision
+        try:
+            for candidate in snapshot.revisions[start_revision:]:
                 if candidate.revision == 1:
                     created = self._service.create_team(
                         candidate.profile,
                         owner_ref=candidate.owner_ref,
                         project_id=candidate.project_id,
                         workspace_id=candidate.workspace_id,
-                        provenance=self._provenance(item),
+                        provenance=provenance,
                         team_id=snapshot.definition.team_id,
                     )
                 else:
@@ -448,7 +591,7 @@ class AgentTeamMarketplaceKindHandler(_AgentMarketplaceBase):
                         owner_ref=candidate.owner_ref,
                         project_id=candidate.project_id,
                         workspace_id=candidate.workspace_id,
-                        provenance=self._provenance(item),
+                        provenance=provenance,
                     )
             if created is None:
                 raise ContractError(
@@ -456,8 +599,8 @@ class AgentTeamMarketplaceKindHandler(_AgentMarketplaceBase):
                     "Marketplace Agent Team artifact contains no canonical revisions",
                 )
             return created
-        except BaseException:
-            if created is not None:
+        except Exception:
+            if existing is None and created is not None:
                 try:
                     self._service.delete_team(snapshot.definition.team_id)
                 except ContractError:
@@ -468,7 +611,7 @@ class AgentTeamMarketplaceKindHandler(_AgentMarketplaceBase):
         snapshot = self._decode(item, artifact)
         current = self._current(item)
         candidate = snapshot.revisions[-1]
-        if candidate.revision != current.revision + 1:
+        if candidate.revision < current.revision or candidate.revision > current.revision + 1:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "Marketplace Agent Team update must advance the canonical revision by exactly one",
@@ -476,6 +619,15 @@ class AgentTeamMarketplaceKindHandler(_AgentMarketplaceBase):
                     "current_revision": current.revision,
                     "candidate_revision": candidate.revision,
                 },
+            )
+        self._assert_history_prefix(snapshot, current.revision)
+        provenance = self._provenance(item)
+        if candidate.revision == current.revision:
+            if self._same_revision(current, candidate) and current.provenance == provenance:
+                return current
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Marketplace Agent Team update retry does not match canonical owner state",
             )
         if (
             candidate.owner_ref != current.owner_ref
@@ -493,11 +645,16 @@ class AgentTeamMarketplaceKindHandler(_AgentMarketplaceBase):
             owner_ref=current.owner_ref,
             project_id=current.project_id,
             workspace_id=current.workspace_id,
-            provenance=self._provenance(item),
+            provenance=provenance,
         )
 
     async def uninstall(self, item: RegistryItem) -> object:
-        current = self._current(item)
+        try:
+            current = self._current(item)
+        except ContractError as exc:
+            if exc.code is ErrorCode.NOT_FOUND:
+                return None
+            raise
         self._service.delete_team(current.team_id, expected_owner_ref=current.owner_ref)
         return None
 
