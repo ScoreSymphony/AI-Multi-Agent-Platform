@@ -285,15 +285,11 @@ class RegistryResourceService:
         try:
             requirements = self.distribution.inspect_requirements(item)
             status_item = self._installed_status_item(item, installation)
-            if status_item is not None:
-                details = self.distribution.describe(status_item)
-            else:
-                try:
-                    details = self.distribution.describe(item)
-                except ContractError as exc:
-                    if exc.code is not ErrorCode.NOT_FOUND:
-                        raise
-                    details = None
+            details = (
+                self.distribution.describe(status_item)
+                if status_item is not None
+                else self.distribution.describe_candidate(item)
+            )
             status = (
                 await self.distribution.status(status_item) if status_item is not None else None
             )
