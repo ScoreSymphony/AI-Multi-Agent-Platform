@@ -151,8 +151,8 @@ def test_issue_reference_must_be_secondary_provenance_in_docstring() -> None:
     assert len(source_violations("src/package/reference.py", bad)) == 1
     assert source_violations("src/package/reference.py", good) == ()
 
-def test_bare_hash_issue_reference_must_be_secondary_provenance() -> None:
-    bad = '"""Canonical contract for #33 runtime behavior."""\n'
+def test_issue_number_cannot_be_the_subject_of_docstring_behavior() -> None:
+    bad = '"""#33 runtime behavior contract."""\n'
     good = (
         '"""Canonical runtime behavior contract.\n\n'
         "Historical context: issue #33.\n"
@@ -161,6 +161,18 @@ def test_bare_hash_issue_reference_must_be_secondary_provenance() -> None:
 
     assert len(source_violations("src/package/runtime.py", bad)) == 1
     assert source_violations("src/package/runtime.py", good) == ()
+
+
+def test_behavior_first_docstring_may_retain_secondary_issue_provenance() -> None:
+    source = '"""Canonical runtime behavior contract for issue #33."""\n'
+
+    assert source_violations("src/package/runtime.py", source) == ()
+
+
+def test_migration_only_docstring_requires_behavior_or_explicit_provenance() -> None:
+    source = '"""Migrated under #722; original coverage tracked issue #310."""\n'
+
+    assert len(source_violations("tests/integration/test_policy.py", source)) == 1
 
 
 def test_compact_issue_numbered_semantic_strings_are_rejected() -> None:
