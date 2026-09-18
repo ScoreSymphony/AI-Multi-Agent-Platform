@@ -386,6 +386,15 @@ def test_gitspawn_release_discovery_rejects_remote_helper_before_spawn(tmp_path:
     assert not marker.exists()
 
 
+def test_gitspawn_rejected_remote_diagnostics_do_not_echo_credentials() -> None:
+    secret = "issue-1220-secret-token"
+
+    with pytest.raises(UpdateDiscoveryError) as error:
+        git_head_revision(f"evil://{secret}@repository.example.invalid/project")
+
+    assert secret not in str(error.value)
+
+
 def test_gitspawn_benign_repository_operations_remain_supported(tmp_path: Path) -> None:
     async def scenario() -> None:
         provider, repository, operation, root = await _initialized_provider(tmp_path)
