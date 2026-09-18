@@ -1,3 +1,4 @@
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { CanonicalApplication, CanonicalApplicationConfigurationField, CanonicalApplicationInstance } from "../api/applications";
@@ -136,17 +137,17 @@ describe("Application configuration Web contract", () => {
     current.configuration.fixed = "stable";
 
     const html = renderToStaticMarkup(
-      <ApplicationConfigurationForm
-        application={application([
+      createElement(ApplicationConfigurationForm, {
+        application: application([
           field("label", "string", { required: true }),
           field("workers", "integer"),
           field("enabled", "boolean", { default: true }),
           field("fixed", "string", { mutable: false }),
-        ])}
-        instance={current}
-        busy={false}
-        onConfigure={vi.fn()}
-      />,
+        ]),
+        instance: current,
+        busy: false,
+        onConfigure: vi.fn(),
+      }),
     );
 
     expect(html).toContain('name="label"');
