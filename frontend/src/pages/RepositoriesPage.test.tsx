@@ -7,7 +7,10 @@ describe("RepositoriesPage", () => {
   it("renders canonical repository registration and discovery workflows", () => {
     const fetchImpl = vi.fn();
     const html = renderToStaticMarkup(
-      <RepositoriesPage client={new RepositoryCollectionClient({ fetchImpl })} />,
+      <RepositoriesPage
+        client={new RepositoryCollectionClient({ fetchImpl })}
+        management={{ attachLocal: true, discover: true, detach: true }}
+      />,
     );
 
     expect(html).toContain("Repositories");
