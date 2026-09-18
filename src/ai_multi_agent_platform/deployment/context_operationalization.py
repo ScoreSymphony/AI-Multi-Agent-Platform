@@ -459,9 +459,7 @@ def install_single_node_context(
             base.control_plane,
             external_effect_recovery,
         )
-        startup_recovery_extensions = (
-            ExternalEffectStartupRecovery(external_effect_recovery),
-        )
+        startup_recovery_extensions = (ExternalEffectStartupRecovery(external_effect_recovery),)
 
     trace_hierarchy = TraceHierarchy(base.telemetry)
     capability_turn = (
