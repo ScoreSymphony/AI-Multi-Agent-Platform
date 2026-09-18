@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from .models import TrustStatus
+from .models import RegistryDependency, TrustStatus
 
 
 class DistributionOperation(StrEnum):
@@ -82,6 +82,28 @@ class CompatibilityDecision:
             and not self.missing_connectors
             and not self.missing_models
         )
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyChange:
+    previous: RegistryDependency
+    requested: RegistryDependency
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyDiff:
+    installed: bool
+    previous_known: bool
+    previous: tuple[RegistryDependency, ...]
+    requested: tuple[RegistryDependency, ...]
+    added: tuple[RegistryDependency, ...]
+    removed: tuple[RegistryDependency, ...]
+    changes: tuple[DependencyChange, ...]
+    unchanged: tuple[RegistryDependency, ...]
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.added or self.removed or self.changes)
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,6 +265,7 @@ class MarketplaceDecision:
     dependencies: tuple[DependencyResolution, ...]
     install_order: tuple[InstallPlanStep, ...]
     compatibility: CompatibilityDecision
+    dependency_diff: DependencyDiff
     permission_diff: PermissionDiff
     provenance_diff: ProvenanceDiff
     approval: ApprovalRequirement
