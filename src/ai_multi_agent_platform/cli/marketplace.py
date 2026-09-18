@@ -31,6 +31,9 @@ def add_marketplace_parser(
     list_command = commands.add_parser("list", help="list Marketplace components")
     _add_search_arguments(list_command)
 
+    kinds = commands.add_parser("kinds", help="list registered Marketplace component kinds")
+    kinds.add_argument("--limit", type=int, default=200)
+
     updates = commands.add_parser("updates", help="list available Marketplace updates")
     _add_search_arguments(updates, include_update_available=False)
     updates.set_defaults(update_available="true")
@@ -78,6 +81,12 @@ def execute_marketplace(
     client: ControlPlaneClient,
     confirm: Confirmation,
 ) -> ClientResponse:
+    if args.command == "kinds":
+        return client.get(
+            "/marketplace-kinds",
+            query={"limit": str(args.limit), "sort": "kind", "direction": "asc"},
+        )
+
     if args.command in {"search", "list", "updates"}:
         query_text = getattr(args, "query", None)
         return client.get(
