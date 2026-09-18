@@ -82,17 +82,40 @@ class HttpBundle:
     app: ControlPlaneASGI
 
 
+_BASE_PERSISTENCE_OWNERS = frozenset(
+    {
+        "kernel",
+        "coordination",
+        "control-plane",
+        "data",
+        "workspaces",
+        "repositories",
+        "research",
+        "verification",
+        "evaluation",
+        "security",
+        "automation",
+        "notifications",
+    }
+)
+
+
 def build_health(
     config: SingleNodeConfig,
     storage: StorageBundle,
     execution: ExecutionBundle,
     observability: ObservabilityBundle,
+    *,
+    require_full_persistence_inventory: bool = False,
 ) -> HealthBundle:
     """Build required single-node health dependencies explicitly."""
 
     persistence = SingleNodePersistenceHealthProvider(
         config,
         telemetry=observability.telemetry,
+        required_store_owners=(
+            None if require_full_persistence_inventory else _BASE_PERSISTENCE_OWNERS
+        ),
     )
     return HealthBundle(
         provider=AggregatedHealthProvider(
