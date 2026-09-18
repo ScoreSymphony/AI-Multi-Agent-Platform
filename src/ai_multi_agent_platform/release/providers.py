@@ -80,13 +80,9 @@ def git_head_revision(source_url: str) -> str:
                 timeout=30,
             )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise UpdateDiscoveryError(
-            f"git discovery process failed: {type(exc).__name__}"
-        ) from exc
+        raise UpdateDiscoveryError(f"git discovery process failed: {type(exc).__name__}") from exc
     if completed.returncode != 0:
-        raise UpdateDiscoveryError(
-            f"git discovery failed with exit status {completed.returncode}"
-        )
+        raise UpdateDiscoveryError(f"git discovery failed with exit status {completed.returncode}")
     line = completed.stdout.strip().splitlines()
     if len(line) != 1:
         raise UpdateDiscoveryError("git discovery returned an unexpected HEAD")
