@@ -114,6 +114,8 @@ def test_marketplace_search_uses_unified_collection_and_first_class_filters(
             "MIT",
             "--trust",
             "reviewed",
+            "--maturity",
+            "stable",
             "--installed",
             "true",
             "--update-available",
@@ -145,6 +147,7 @@ def test_marketplace_search_uses_unified_collection_and_first_class_filters(
     assert query["filter[source]"] == ["source-a"]
     assert query["filter[license]"] == ["MIT"]
     assert query["filter[trust]"] == ["reviewed"]
+    assert query["filter[maturity]"] == ["stable"]
     assert query["filter[installed]"] == ["true"]
     assert query["filter[update_available]"] == ["false"]
     assert query["filter[compatible]"] == ["true"]
