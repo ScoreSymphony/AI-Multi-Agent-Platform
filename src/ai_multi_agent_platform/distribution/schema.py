@@ -282,12 +282,8 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
             else None
         ),
         compatibility=RegistryCompatibility(
-            operating_systems=frozenset(
-                compatibility_document.get("operating_systems", [])
-            ),
+            operating_systems=frozenset(compatibility_document.get("operating_systems", [])),
             architectures=frozenset(compatibility_document.get("architectures", [])),
-            required_runtimes=frozenset(
-                compatibility_document.get("required_runtimes", [])
-            ),
+            required_runtimes=frozenset(compatibility_document.get("required_runtimes", [])),
         ),
     )
