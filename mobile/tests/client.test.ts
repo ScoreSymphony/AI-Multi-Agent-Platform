@@ -58,6 +58,41 @@ describe("MobileControlPlaneClient", () => {
     expect(client.isOffline()).toBe(true);
   });
 
+  it("maps a human authenticated actor to the canonical user Task owner", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "task-1", title: "Task", objective: "Do work", status: "created" }), { status: 201 }),
+    );
+    const client = new MobileControlPlaneClient({
+      baseUrl: "https://platform.example",
+      credentialSource,
+      fetchImpl,
+    });
+
+    await client.createTask(
+      {
+        actor_id: "user-1",
+        actor_type: "human",
+        authentication_method: "personal_access",
+        credential_id: "cred-1",
+        authenticated_at: "2026-09-19T00:00:00Z",
+        expires_at: null,
+        organization_id: null,
+        project_id: null,
+      },
+      "Task",
+      "Do work",
+    );
+
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://platform.example/api/v1/tasks");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      owner_type: "user",
+      owner_id: "user-1",
+      title: "Task",
+      objective: "Do work",
+    });
+  });
+
   it("fails closed for mutations while offline and never queues them", async () => {
     const fetchImpl = vi.fn().mockRejectedValue(new Error("offline"));
     const client = new MobileControlPlaneClient({
@@ -71,7 +106,7 @@ describe("MobileControlPlaneClient", () => {
       client.createTask(
         {
           actor_id: "user-1",
-          actor_type: "user",
+          actor_type: "human",
           authentication_method: "credential",
           credential_id: "cred-1",
           authenticated_at: "2026-09-19T00:00:00Z",
@@ -84,6 +119,24 @@ describe("MobileControlPlaneClient", () => {
       ),
     ).rejects.toBeInstanceOf(OfflineMutationError);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not disguise invalid server JSON as an offline stale read", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [], next_cursor: null, total: 0, limit: 50 }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(new Response("not-json", { status: 200 }));
+    const client = new MobileControlPlaneClient({
+      baseUrl: "https://platform.example",
+      credentialSource,
+      fetchImpl,
+    });
+
+    await client.listTasks();
+    await expect(client.listTasks()).rejects.toThrow("invalid JSON");
+    expect(client.isOffline()).toBe(false);
   });
 
   it("clears the active secure session hook when the server revokes a credential", async () => {
