@@ -314,6 +314,36 @@ def test_conflicting_transitive_dependency_constraints_are_rejected() -> None:
     assert any(finding.code == "dependency_version" for finding in preview.findings)
 
 
+def test_dependency_kind_mismatch_is_explicit_and_blocks_install_plan() -> None:
+    tool, tool_artifact = _item(
+        "example.kind-specific-dependency",
+        RegistryItemType.TOOL,
+    )
+    root, root_artifact = _item(
+        "example.kind-specific-root",
+        dependencies=(
+            RegistryDependency(
+                tool.item_id,
+                item_kind=RegistryItemType.SKILL,
+            ),
+        ),
+    )
+    service = _service(((tool, tool_artifact), (root, root_artifact)))
+
+    preview = service.preview(root.item_id, root.version, _context())
+
+    dependency = next(
+        resolution
+        for resolution in preview.decision.dependencies
+        if resolution.item_id == tool.item_id
+    )
+    assert dependency.status is DependencyStatus.KIND_CONFLICT
+    assert preview.activation_allowed is False
+    assert preview.decision.install_order == ()
+    finding = next(finding for finding in preview.findings if finding.code == "dependency_kind")
+    assert finding.category is FindingCategory.DEPENDENCY
+
+
 def test_platform_os_architecture_and_runtime_incompatibility_is_typed() -> None:
     item, artifact = _item(
         "example.environment",
@@ -347,6 +377,35 @@ def test_platform_os_architecture_and_runtime_incompatibility_is_typed() -> None
         "incompatible_operating_system",
         "incompatible_architecture",
         "missing_runtime",
+    } <= codes
+
+
+def test_capability_plugin_connector_and_model_requirements_are_typed() -> None:
+    base, artifact = _item("example.owner-requirements")
+    item = replace(
+        base,
+        required_capabilities=frozenset({"capability.example"}),
+        required_plugins=("plugin.example",),
+        required_connectors=("connector.example",),
+        required_models=("model.example",),
+    )
+    service = _service(((item, artifact),))
+
+    preview = service.preview(item.item_id, item.version, ValidationContext("0.0.1"))
+
+    compatibility = preview.decision.compatibility
+    assert compatibility.compatible is False
+    assert compatibility.missing_capabilities == ("capability.example",)
+    assert compatibility.missing_plugins == ("plugin.example",)
+    assert compatibility.missing_connectors == ("connector.example",)
+    assert compatibility.missing_models == ("model.example",)
+    assert preview.activation_allowed is False
+    codes = {finding.code for finding in preview.findings}
+    assert {
+        "missing_capability",
+        "missing_plugin",
+        "missing_connector",
+        "missing_model",
     } <= codes
 
 
