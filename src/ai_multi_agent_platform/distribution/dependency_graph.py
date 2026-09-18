@@ -441,10 +441,7 @@ def deterministic_install_order(
         DependencyStatus.REQUIRED_BY_INSTALLED,
         DependencyStatus.UNKNOWN_INSTALLED_DEPENDENT,
     }
-    if any(
-        not resolution.optional and resolution.status in unsafe
-        for resolution in resolutions
-    ):
+    if any(not resolution.optional and resolution.status in unsafe for resolution in resolutions):
         return ()
 
     ordered: list[InstallPlanStep] = []
