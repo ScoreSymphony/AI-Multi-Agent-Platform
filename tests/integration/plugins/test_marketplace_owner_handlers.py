@@ -486,9 +486,13 @@ async def test_hermes_full_marketplace_flow_preserves_replaceable_orchestrator_o
     assert requirements["required_extension_type"] == "orchestrator"
     details = service.describe(item.item_id)
     assert details["extension_type"] == "orchestrator"
-    assert details["extension_metadata"]["orchestrator.hermes"]["planning"] is True
-    assert details["extension_metadata"]["orchestrator.hermes"]["team_support"] is True
-    assert details["extension_metadata"]["orchestrator.hermes"]["reconciliation"] is True
+    extension_metadata = details["extension_metadata"]
+    assert isinstance(extension_metadata, dict)
+    hermes_metadata = extension_metadata["orchestrator.hermes"]
+    assert isinstance(hermes_metadata, dict)
+    assert hermes_metadata["planning"] is True
+    assert hermes_metadata["team_support"] is True
+    assert hermes_metadata["reconciliation"] is True
 
     preview = service.preview(item.item_id, item.version, context)
     assert preview.activation_allowed is True
