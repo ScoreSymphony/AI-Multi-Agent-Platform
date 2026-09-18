@@ -20,7 +20,9 @@ from ai_multi_agent_platform.distribution import (
     DistributionService,
     JsonRegistryInstallationStore,
     LocalRegistryProvider,
+    MarketplaceKindDescriptor,
     MarketplaceKindHandlerRegistry,
+    MarketplaceKindRegistry,
     MultiRegistryProvider,
     RegistryCommandHandlers,
     RegistryCompatibility,
@@ -28,6 +30,7 @@ from ai_multi_agent_platform.distribution import (
     RegistryItem,
     RegistryItemType,
     RegistryManifestReference,
+    RegistryMaturity,
     RegistryResourceService,
     RegistrySource,
     RegistryUnavailableError,
@@ -401,6 +404,38 @@ def test_marketplace_sort_validation_and_canonical_pagination_are_deterministic(
     assert invalid_sort.value.code is ErrorCode.INVALID_REQUEST
 
 
+def test_maturity_filter_and_sort_are_first_class_marketplace_metadata() -> None:
+    stable = replace(
+        _tool("example.stable", "Stable"),
+        maturity=RegistryMaturity.STABLE,
+    )
+    experimental = replace(
+        _tool("example.experimental", "Experimental"),
+        maturity=RegistryMaturity.EXPERIMENTAL,
+    )
+    service = RegistryResourceService(
+        DistributionService(LocalRegistryProvider((experimental, stable)))
+    )
+
+    filtered = asyncio.run(
+        service.list_resources(
+            _request(),
+            PageQuery(filters={"maturity": "stable"}),
+        )
+    )
+    ordered = asyncio.run(
+        service.list_resources(
+            _request(),
+            PageQuery(sort="maturity", direction="asc"),
+        )
+    )
+
+    assert [item["item_id"] for item in filtered] == ["example.stable"]
+    assert filtered[0]["maturity"] == "stable"
+    assert filtered[0]["stability"] == "stable"
+    assert [item["maturity"] for item in ordered] == ["experimental", "stable"]
+
+
 def test_version_sort_is_numeric_and_deterministic() -> None:
     items = (
         _application("example.sort", "2.0.0"),
@@ -552,6 +587,8 @@ def test_detail_exposes_manifest_update_state_compatibility_and_owner_extension(
     assert detail["update_state"] == {
         "installed": True,
         "installed_version": "1.0.0",
+        "installed_source_registry": "local",
+        "installation_source_matches": True,
         "candidate_version": "2.0.0",
         "pinned_version": None,
         "update_available": True,
@@ -1044,3 +1081,114 @@ def test_marketplace_preview_serializes_structured_decision_findings(
     assert decision["permission_diff"]["added"] == ["filesystem.write"]  # type: ignore[index]
     findings = preview["findings"]
     assert {finding["category"] for finding in findings} >= {"dependency", "permission"}  # type: ignore[index]
+
+
+def test_future_kind_registry_controls_operations_and_same_version_source_switch(
+    tmp_path: Path,
+) -> None:
+    class FutureHandler:
+        kind = "notebook_extension"
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str | None]] = []
+
+        def inspect_requirements(self, item: RegistryItem) -> dict[str, object]:
+            return {"kind": item.kind}
+
+        async def install(self, item: RegistryItem, artifact: bytes) -> object:
+            del artifact
+            self.calls.append(("install", item.source_registry))
+            return item.item_id
+
+        async def update(self, item: RegistryItem, artifact: bytes) -> object:
+            del artifact
+            self.calls.append(("update", item.source_registry))
+            return item.item_id
+
+        async def uninstall(self, item: RegistryItem) -> object:
+            self.calls.append(("uninstall", item.source_registry))
+            return item.item_id
+
+        async def status(self, item: RegistryItem) -> object:
+            return {"source_registry": item.source_registry}
+
+        def describe(self, item: RegistryItem) -> dict[str, object]:
+            return {"source_registry": item.source_registry}
+
+    base = _future_kind()
+    artifact = b"future-kind"
+    official = LocalRegistryProvider(
+        (base,),
+        {(base.item_id, base.version): artifact},
+        provider_id="official",
+    )
+    private = LocalRegistryProvider(
+        (base,),
+        {(base.item_id, base.version): artifact},
+        provider_id="private",
+    )
+    provider = MultiRegistryProvider((official, private))
+    installations = JsonRegistryInstallationStore(tmp_path / "future-source-switch.json")
+    installed = provider.get_from_source("official", base.item_id, base.version)
+    installations.record(
+        installed,
+        provider_id="official",
+        artifact_sha256="0" * 64,
+    )
+    handler = FutureHandler()
+    kind_registry = MarketplaceKindRegistry(
+        (
+            MarketplaceKindDescriptor(
+                "notebook_extension",
+                "Notebook Extension",
+                DistributionRoute.KIND_HANDLER,
+                supports_install=True,
+                supports_update=True,
+                supports_uninstall=True,
+            ),
+        )
+    )
+    distribution = DistributionService(
+        provider,
+        installations=installations,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+        kind_registry=kind_registry,
+    )
+    service = RegistryResourceService(
+        distribution,
+        StaticValidationContext(_context()),
+    )
+    detail = asyncio.run(
+        service.get_resource(
+            _request(),
+            f"private::{base.item_id}@{base.version}",
+        )
+    )
+
+    assert detail["installed"] is True
+    assert detail["installed_source_registry"] == "official"
+    assert detail["installation_source_matches"] is False
+    assert detail["owner_extension"]["supported_operations"] == [  # type: ignore[index]
+        "install",
+        "update",
+        "uninstall",
+    ]
+
+    commands = RegistryCommandHandlers(
+        distribution,
+        StaticValidationContext(_context()),
+    )
+    result = asyncio.run(
+        commands.marketplace_update(
+            _request(),
+            base.item_id,
+            {"version": base.version, "source_registry": "private"},
+        )
+    )
+
+    assert result["action"] == "update"
+    assert handler.calls[-1] == ("update", "private")
+    current = installations.get(base.item_id)
+    assert current is not None
+    assert current.current.version == base.version
+    assert current.current.source_registry == "private"
