@@ -38,18 +38,14 @@ def test_drain_rejects_mutations_and_projects_health_readiness(tmp_path: Path) -
             )
         )
 
-        ready = await deployment.http.handle(
-            HTTPRequest(method="GET", path="/api/v1/readiness")
-        )
+        ready = await deployment.http.handle(HTTPRequest(method="GET", path="/api/v1/readiness"))
         assert ready.status == 200
         assert isinstance(ready.body, dict)
         assert ready.body["ready"] is True
 
         await deployment.drain.begin(reason="test_shutdown")
 
-        health = await deployment.http.handle(
-            HTTPRequest(method="GET", path="/api/v1/health")
-        )
+        health = await deployment.http.handle(HTTPRequest(method="GET", path="/api/v1/health"))
         readiness = await deployment.http.handle(
             HTTPRequest(method="GET", path="/api/v1/readiness")
         )
@@ -124,7 +120,9 @@ def test_drain_rejects_direct_asgi_streaming_mutation(tmp_path: Path) -> None:
             send,
         )
 
-        response_start = next(message for message in sent if message["type"] == "http.response.start")
+        response_start = next(
+            message for message in sent if message["type"] == "http.response.start"
+        )
         assert response_start["status"] == 503
         assert deployment.drain.active_mutations == 0
 
@@ -321,9 +319,7 @@ def test_drain_timeout_is_forced_and_observable() -> None:
 def test_process_local_drain_state_is_not_revived_after_restart(tmp_path: Path) -> None:
     async def scenario() -> None:
         root = tmp_path / "restart"
-        first = build_single_node_deployment(
-            SingleNodeConfig(data_dir=root, secure_cookie=False)
-        )
+        first = build_single_node_deployment(SingleNodeConfig(data_dir=root, secure_cookie=False))
         await first.drain.begin(reason="first_process_shutdown")
         assert first.drain.draining is True
 
