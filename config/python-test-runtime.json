@@ -156,7 +156,8 @@
     "frontend-independent-python-ci": {
       "matrix_job_timeout_seconds": 360,
       "pytest_critical_path_seconds": 330,
-      "rationale": "The sharded integration lane has completed healthy runs at 120.435s, 122.020s and 277.123s. A 330-second hard guard leaves about 19% headroom above the observed runner-slow maximum while still detecting a major regression. Typical measured critical-path performance remains about 122s versus the pre-sharding 224s median non-unit lane. The 360-second matrix timeout includes bootstrap and non-pytest validation overhead."
+      "rationale": "The integration lane has healthy pytest runs at 120.435s, 122.020s and 277.123s; its full matrix-job wall times include 140s, 148s and 315s observations. A 330-second pytest guard and 350-second frontend-independent Python validation guard leave measured runner-variance headroom while still detecting major regressions. The six-minute matrix timeout is an outer fail-safe, not the normal target.",
+      "validation_critical_path_seconds": 350
     },
     "full-local-python-suite": {
       "wall_seconds": 480,
