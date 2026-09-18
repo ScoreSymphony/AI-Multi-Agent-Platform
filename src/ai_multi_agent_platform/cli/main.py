@@ -610,12 +610,15 @@ def _doctor_health(body: JsonValue) -> tuple[str, list[JsonValue]]:
         provider_type = provider.get("type")
         status = provider.get("status")
         available = provider.get("available")
+        diagnostics = provider.get("diagnostics", [])
         if (
             not isinstance(provider_id, str)
             or not isinstance(provider_type, str)
             or not isinstance(status, str)
             or not isinstance(available, bool)
             or status not in {"healthy", "degraded", "unknown", "unavailable"}
+            or not isinstance(diagnostics, list)
+            or not all(isinstance(item, dict) for item in diagnostics)
         ):
             overall = "blocking"
             checks.append(
@@ -644,6 +647,7 @@ def _doctor_health(body: JsonValue) -> tuple[str, list[JsonValue]]:
                 "provider_type": provider_type,
                 "provider_status": status,
                 "available": available,
+                "diagnostics": diagnostics,
             }
         )
     return overall, checks
