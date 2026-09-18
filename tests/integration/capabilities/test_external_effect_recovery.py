@@ -132,7 +132,9 @@ class _ExternalProvider(CapabilityToolProvider, ExternalEffectReconciler):
         )
 
 
-def _request(*, invocation_id: str = "publish-1", key: str | None = "publish-key") -> CapabilityInvocation:
+def _request(
+    *, invocation_id: str = "publish-1", key: str | None = "publish-key"
+) -> CapabilityInvocation:
     correlation_id = new_id("correlation")
     return CapabilityInvocation(
         invocation_id=invocation_id,
@@ -165,9 +167,13 @@ async def _runtime(
         repository or InMemoryExternalEffectRecoveryRepository()
     )
     recovery.register_reconciler(provider.descriptor.provider_id, provider)
-    return provider, recovery, EgressCapabilityInvoker(
-        registry,
-        external_effect_recovery=recovery,
+    return (
+        provider,
+        recovery,
+        EgressCapabilityInvoker(
+            registry,
+            external_effect_recovery=recovery,
+        ),
     )
 
 
@@ -189,10 +195,7 @@ async def test_non_idempotent_timeout_blocks_blind_replay_and_is_not_retryable()
     record = recovery.find_record_by_invocation(request.invocation_id)
     assert record is not None
     assert record.status is ExternalEffectRecoveryStatus.BLOCKED
-    assert (
-        record.disposition
-        is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
-    )
+    assert record.disposition is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
 
     with pytest.raises(ContractError) as replay:
         await invoker.invoke(request)
@@ -246,10 +249,7 @@ async def test_provider_reconciliation_confirms_effect_without_reexecution() -> 
 
     record = recovery.find_record_by_invocation(request.invocation_id)
     assert record is not None
-    assert (
-        record.disposition
-        is ExternalEffectRecoveryDisposition.RECONCILE_WITH_PROVIDER
-    )
+    assert record.disposition is ExternalEffectRecoveryDisposition.RECONCILE_WITH_PROVIDER
 
     resolved = await recovery.reconcile_effect(record.effect_id)
     repeated = await recovery.reconcile_effect(record.effect_id)
@@ -272,9 +272,7 @@ async def test_restart_reconciles_dispatch_with_missing_canonical_ack(tmp_path) 
     )
     request = _request(invocation_id="crash-window", key="crash-key")
     registration = CapabilityRegistration(
-        capability=(
-            await provider.capability_registrations()
-        )[0].capability,
+        capability=(await provider.capability_registrations())[0].capability,
         provider_id=provider.descriptor.provider_id,
         provider_tool_ref="publish",
     )
@@ -330,10 +328,7 @@ async def test_late_success_callback_cannot_overwrite_manual_review() -> None:
 
     record = recovery.find_record_by_invocation(request.invocation_id)
     assert record is not None
-    assert (
-        record.disposition
-        is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
-    )
+    assert record.disposition is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
     assert record.duplicate_callbacks_ignored == 1
 
 
@@ -378,9 +373,7 @@ async def test_policy_denial_prevents_dispatch_and_never_creates_uncertain_effec
     )
     registry = CapabilityRegistry()
     await registry.register_provider(provider)
-    recovery = ExternalEffectRecoveryCoordinator(
-        InMemoryExternalEffectRecoveryRepository()
-    )
+    recovery = ExternalEffectRecoveryCoordinator(InMemoryExternalEffectRecoveryRepository())
 
     async def deny(
         request: CapabilityInvocation,
@@ -414,9 +407,7 @@ async def test_cancellation_after_external_dispatch_becomes_uncertain_and_non_re
     )
     registry = CapabilityRegistry()
     await registry.register_provider(provider)
-    recovery = ExternalEffectRecoveryCoordinator(
-        InMemoryExternalEffectRecoveryRepository()
-    )
+    recovery = ExternalEffectRecoveryCoordinator(InMemoryExternalEffectRecoveryRepository())
     invoker = EgressCapabilityInvoker(
         registry,
         external_effect_recovery=recovery,
@@ -439,10 +430,7 @@ async def test_cancellation_after_external_dispatch_becomes_uncertain_and_non_re
     record = recovery.find_record_by_invocation(request.invocation_id)
     assert record is not None
     assert record.status is ExternalEffectRecoveryStatus.BLOCKED
-    assert (
-        record.disposition
-        is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
-    )
+    assert record.disposition is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
 
 
 @pytest.mark.asyncio
@@ -489,10 +477,7 @@ async def test_recovery_telemetry_reports_uncertainty_without_private_recovery_v
     assert "external_effect.retry_safe" in event_names
 
     public_telemetry = repr(
-        [
-            (entry.event_name, entry.context.fields(), entry.attributes)
-            for entry in exporter.logs
-        ]
+        [(entry.event_name, entry.context.fields(), entry.attributes) for entry in exporter.logs]
     )
     assert "private-telemetry-idempotency-key" not in public_telemetry
     assert "provider_tool_ref" not in public_telemetry
@@ -509,9 +494,7 @@ async def test_reusable_failure_injector_models_effect_before_lost_acknowledgeme
     )
     registry = CapabilityRegistry()
     await registry.register_provider(provider)
-    recovery = ExternalEffectRecoveryCoordinator(
-        InMemoryExternalEffectRecoveryRepository()
-    )
+    recovery = ExternalEffectRecoveryCoordinator(InMemoryExternalEffectRecoveryRepository())
     invoker = EgressCapabilityInvoker(
         registry,
         external_effect_recovery=recovery,
@@ -540,7 +523,4 @@ async def test_reusable_failure_injector_models_effect_before_lost_acknowledgeme
     assert provider.effects == 1
     record = recovery.find_record_by_invocation(request.invocation_id)
     assert record is not None
-    assert (
-        record.disposition
-        is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
-    )
+    assert record.disposition is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
