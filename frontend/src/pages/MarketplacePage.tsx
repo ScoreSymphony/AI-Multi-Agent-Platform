@@ -867,10 +867,10 @@ function MarketplaceDetail({
             {busy ? "Operation pending…" : operation === "update" ? "Preview update" : "Preview install"}
           </button>
         ) : null}
-        {item.installed && !item.pinned_version ? (
+        {candidateIsInstalled(item) && !item.pinned_version ? (
           <button type="button" disabled={busy} onClick={onPin}>Pin installed version</button>
         ) : null}
-        {item.pinned_version ? (
+        {candidateIsInstalled(item) && item.pinned_version ? (
           <button type="button" disabled={busy} onClick={onUnpin}>Unpin</button>
         ) : null}
         {uninstallSupported(item) ? (
@@ -1308,7 +1308,7 @@ function operationSupported(item: RegistryItem, operation: "install" | "update")
 }
 
 function uninstallSupported(item: RegistryItem): boolean {
-  if (!item.installed || !["kind_handler", "plugin"].includes(item.route)) return false;
+  if (!candidateIsInstalled(item) || !["kind_handler", "plugin"].includes(item.route)) return false;
   if (item.owner_extension?.handler_available !== true) return false;
   const advertised = item.owner_extension.supported_operations;
   if (advertised && !advertised.includes("uninstall")) return false;
