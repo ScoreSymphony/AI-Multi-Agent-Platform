@@ -127,4 +127,14 @@ jobs:
       - name: Run real browser session regression
         run: node tests/browserSession.browser.mjs
       - name: Run clean browser-first deployment regression
+        env:
+          BROWSER_E2E_ARTIFACT_DIR: ${{ runner.temp }}/browser-first-run-artifacts
         run: node tests/browserFirstRun.browser.mjs
+      - name: Upload browser first-run failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-first-run-failure
+          path: ${{ runner.temp }}/browser-first-run-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
