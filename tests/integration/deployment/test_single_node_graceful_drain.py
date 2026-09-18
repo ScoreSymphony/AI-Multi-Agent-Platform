@@ -161,7 +161,10 @@ def test_drain_lifecycle_does_not_depend_on_telemetry_exporter() -> None:
     async def scenario() -> None:
         drain = SingleNodeDrainController(
             timeout_seconds=1,
-            telemetry=Telemetry(FailingExporter()),
+            telemetry=Telemetry(
+                FailingExporter(),
+                strict_exporter_errors=True,
+            ),
         )
         assert await drain.begin(reason="telemetry_failure") is True
         await drain.mark_forced("teardown_failure")
@@ -219,6 +222,12 @@ def test_drain_timeout_is_forced_and_observable() -> None:
         names = [entry.event_name for entry in exporter.timeline]
         assert "platform.single_node.drain.timeout" in names
         assert "platform.single_node.drain.completed" in names
+        completed = next(
+            entry
+            for entry in exporter.timeline
+            if entry.event_name == "platform.single_node.drain.completed"
+        )
+        assert completed.outcome.value == "timed_out"
 
     asyncio.run(scenario())
 
