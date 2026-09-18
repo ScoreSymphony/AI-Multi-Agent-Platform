@@ -584,6 +584,20 @@ class ExternalEffectRecoveryCoordinator:
                         updated_at=_utc_now(),
                     )
                 )
+                await self._emit("external_effect.uncertain_outcome_detected", record)
+                await self._emit(
+                    (
+                        "external_effect.retry_safe"
+                        if disposition is ExternalEffectRecoveryDisposition.SAFE_TO_RETRY
+                        else "external_effect.retry_unsafe"
+                    ),
+                    record,
+                )
+                if (
+                    disposition
+                    is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
+                ):
+                    await self._emit("external_effect.manual_review_required", record)
             elif record.status is ExternalEffectRecoveryStatus.RECONCILING:
                 record = self.repository.save(
                     replace(
