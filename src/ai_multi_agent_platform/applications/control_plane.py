@@ -170,9 +170,7 @@ def _command_handlers(
     ) -> dict[str, JsonValue]:
         del context
         configuration = _configuration_patch(payload)
-        instance = await _runtime_boundary(
-            lifecycle.configure(resource_ref, configuration)
-        )
+        instance = await _runtime_boundary(lifecycle.configure(resource_ref, configuration))
         return _instance_resource(repository, instance)
 
     async def transition(
