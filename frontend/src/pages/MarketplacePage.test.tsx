@@ -69,6 +69,7 @@ describe("MarketplacePage", () => {
     expect(html).toContain("Component kind");
     expect(html).toContain("All trust states");
     expect(html).toContain("All maturity levels");
+    expect(html).toContain("Marketplace source");
     expect(html).toContain("Installed state");
     expect(html).toContain("Compatibility");
     expect(html).toContain("Technical components only");
