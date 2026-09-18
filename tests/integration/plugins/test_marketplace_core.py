@@ -85,7 +85,34 @@ def test_builtin_marketplace_kinds_include_new_first_class_families() -> None:
     registry = marketplace_kind_registry_with_builtins()
     kinds = {descriptor.kind_value for descriptor in registry.list()}
 
-    assert {"tool", "skill", "plugin", "connector", "application", "template"} <= kinds
+    assert {
+        "agent",
+        "agent_team",
+        "orchestrator",
+        "executor",
+        "model_provider",
+        "capability_provider",
+        "memory_provider",
+        "file_provider",
+        "knowledge_provider",
+        "observability_exporter",
+        "automation_provider",
+        "evaluator",
+        "tool",
+        "skill",
+        "plugin",
+        "connector",
+        "application",
+        "template",
+    } <= kinds
+    assert registry.require("agent").default_route is DistributionRoute.KIND_HANDLER
+    assert registry.require("agent").management_path == "/agents"
+    assert registry.require("agent_team").management_path == "/agent-teams"
+    assert registry.require("orchestrator").group == "ai_agents"
+    assert registry.require("orchestrator").management_path == "/plugins"
+    assert registry.require("model_provider").group == "models"
+    assert registry.require("model_provider").management_path == "/models"
+    assert registry.require("executor").group == "platform_extensions"
     assert registry.require("application").default_route is DistributionRoute.KIND_HANDLER
     assert (
         registry.require(RegistryItemType.TOOL).default_route is DistributionRoute.PORTABLE_IMPORT
