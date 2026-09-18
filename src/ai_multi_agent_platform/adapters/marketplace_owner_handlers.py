@@ -60,7 +60,7 @@ def _json_object(artifact: bytes, *, label: str) -> dict[str, object]:
 class PluginExtensionMarketplaceKindHandler:
     """Install Tool/Connector provider packages through the existing Plugin owner.
 
-    Installation/update/removal remain #20 Plugin lifecycle operations.  On enable, the normal
+    Installation/update/removal remain canonical Plugin lifecycle operations.  On enable, the normal
     Plugin binders hand provider instances to CapabilityRegistry or ConnectorService; this adapter
     never owns provider runtime state itself.
     """
@@ -269,7 +269,7 @@ class SkillMarketplaceKindHandler:
 
 
 class ApplicationMarketplaceKindHandler:
-    """Thin #1174 adapter over the canonical #1173 Application lifecycle owner."""
+    """Thin Marketplace adapter over the canonical Application lifecycle owner."""
 
     kind = RegistryItemType.APPLICATION
 
