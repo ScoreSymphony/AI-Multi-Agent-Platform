@@ -212,7 +212,15 @@ class SkillMarketplaceKindHandler:
 
     @staticmethod
     def _decode(item: RegistryItem, artifact: bytes) -> SkillRevision:
-        revision = skill_revision_from_json(_json_object(artifact, label="skill"))
+        try:
+            revision = skill_revision_from_json(_json_object(artifact, label="skill"))
+        except ContractError:
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "invalid canonical Skill artifact",
+            ) from exc
         source = revision.profile.source
         if source is None:
             raise ContractError(
