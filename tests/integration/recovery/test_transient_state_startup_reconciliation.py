@@ -7,6 +7,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
+
 from ai_multi_agent_platform.automation import (
     Automation,
     AutomationService,
@@ -30,7 +32,13 @@ from ai_multi_agent_platform.deployment.transient_recovery import (
     SingleNodeTransientStateRecoveryExtension,
 )
 from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.security import BrowserSession, LocalUserAccount
+from ai_multi_agent_platform.security import (
+    AuthenticationError,
+    AuthenticationFailure,
+    BrowserSession,
+    LocalAuthenticationService,
+    LocalUserAccount,
+)
 from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 
 
@@ -393,37 +401,37 @@ def test_auth_session_expiry_and_revocation_survive_sqlite_restart(tmp_path: Pat
         password_changed_at=NOW - timedelta(days=1),
     )
     store.users[user.user_id] = user
-    expired = BrowserSession(
-        session_id="session-expired-restart",
-        user_id=user.user_id,
-        token_verifier="expired-verifier",
-        csrf_verifier="expired-csrf",
-        created_at=NOW - timedelta(hours=2),
-        authenticated_at=NOW - timedelta(hours=2),
-        expires_at=NOW - timedelta(hours=1),
+    authentication = LocalAuthenticationService(
+        store=store,
+        session_ttl=timedelta(hours=1),
     )
-    revoked = BrowserSession(
-        session_id="session-revoked-restart",
-        user_id=user.user_id,
-        token_verifier="revoked-verifier",
-        csrf_verifier="revoked-csrf",
-        created_at=NOW - timedelta(minutes=10),
-        authenticated_at=NOW - timedelta(minutes=10),
-        expires_at=NOW + timedelta(hours=1),
-        revoked_at=NOW - timedelta(minutes=1),
+    expired = authentication.create_browser_session(
+        user.user_id,
+        now=NOW - timedelta(hours=2),
     )
-    store.sessions[expired.session_id] = expired
-    store.sessions[revoked.session_id] = revoked
+    revoked = authentication.create_browser_session(
+        user.user_id,
+        now=NOW - timedelta(minutes=10),
+    )
+    authentication.revoke_session(
+        user.user_id,
+        revoked.session_id,
+        now=NOW - timedelta(minutes=1),
+    )
 
-    restarted = SqliteAuthenticationStore(path)
+    restarted_store = SqliteAuthenticationStore(path)
+    restarted = LocalAuthenticationService(
+        store=restarted_store,
+        session_ttl=timedelta(hours=1),
+    )
 
-    restored_expired = restarted.sessions[expired.session_id]
-    restored_revoked = restarted.sessions[revoked.session_id]
-    assert restored_expired.expires_at == expired.expires_at
-    assert restored_expired.active(now=NOW) is False
-    assert restored_revoked.revoked_at == revoked.revoked_at
-    assert restored_revoked.active(now=NOW) is False
+    with pytest.raises(AuthenticationError) as expired_error:
+        restarted.authenticate_session(expired.token, now=NOW)
+    assert expired_error.value.failure is AuthenticationFailure.SESSION_EXPIRED
 
+    with pytest.raises(AuthenticationError) as revoked_error:
+        restarted.authenticate_session(revoked.token, now=NOW)
+    assert revoked_error.value.failure is AuthenticationFailure.SESSION_REVOKED
 
 def test_cleanup_failure_is_machine_readable_and_blocks_readiness(tmp_path: Path) -> None:
     class FailingAutomation:
