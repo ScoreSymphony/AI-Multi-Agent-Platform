@@ -560,6 +560,30 @@ def test_gitspawn_release_discovery_rejects_remote_helper_before_spawn(tmp_path:
     assert not marker.exists()
 
 
+def test_gitspawn_rejected_config_key_diagnostics_do_not_echo_credentials(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        provider, repository, operation, root = await _initialized_provider(tmp_path)
+        secret = "issue-1220-config-secret"
+        _raw_git(
+            root,
+            "config",
+            "--local",
+            f"url.https://{secret}@repository.example.invalid/.insteadOf",
+            "safe:",
+        )
+
+        with pytest.raises(ContractError) as error:
+            await provider.status(repository, operation)
+
+        retained = f"{error.value} {error.value.details}"
+        assert secret not in retained
+        assert error.value.details["unsafe_config_count"] == 1
+
+    asyncio.run(scenario())
+
+
 def test_gitspawn_rejected_remote_diagnostics_do_not_echo_credentials() -> None:
     secret = "issue-1220-secret-token"
 
