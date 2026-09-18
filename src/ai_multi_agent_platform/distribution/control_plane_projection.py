@@ -132,9 +132,11 @@ def _item_resource(
     update_available: bool = False,
     platform_compatible: bool | None = None,
     compatibility_decision: CompatibilityDecision | None = None,
+    route: DistributionRoute | None = None,
     route_available: bool | None = None,
     owner_extension: dict[str, JsonValue] | None = None,
 ) -> dict[str, JsonValue]:
+    effective_route = route or item.route
     qualified_id = (
         f"{item.source_registry}::{item.item_id}@{item.version}"
         if item.source_registry is not None
@@ -180,7 +182,7 @@ def _item_resource(
         "changelog": item.changelog,
         "deprecated": item.deprecated,
         "yanked": item.yanked,
-        "route": item.route.value,
+        "route": effective_route.value,
         "route_available": route_available,
         "manifest_reference": _manifest_resource(item),
         "integrity": _integrity_resource(item),
@@ -433,6 +435,7 @@ def _preview_resource(
             preview.item,
             installation,
             update_available=_is_update(preview.item, installation),
+            route=preview.route,
             route_available=route_available,
         ),
         "route": preview.route.value,
