@@ -349,6 +349,7 @@ export interface RegistryClientOptions extends ApiTransportOptions {
 }
 
 const REGISTRY_ITEMS = "registry-items";
+const MARKETPLACE_KINDS = "marketplace-kinds";
 
 type RegistryCommand =
   | "registry.activate"
@@ -372,6 +373,10 @@ export class RegistryClient {
 
   list(query: ListQuery = {}): Promise<Page<RegistryItem>> {
     return this.collections.list<RegistryItem>(REGISTRY_ITEMS, query);
+  }
+
+  listKinds(query: ListQuery = {}): Promise<Page<RegistryKindDescriptor>> {
+    return this.collections.list<RegistryKindDescriptor>(MARKETPLACE_KINDS, query);
   }
 
   get(itemId: string, version: string, sourceRegistry?: string | null): Promise<RegistryItem> {
