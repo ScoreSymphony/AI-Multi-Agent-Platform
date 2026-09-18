@@ -5,12 +5,19 @@ from __future__ import annotations
 import subprocess
 from dataclasses import replace
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from uuid import uuid4
 
 from ai_multi_agent_platform.connectors import ExternalNativeReference, ExternalResourceReference
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.security.git_execution import (
+    controlled_git_environment,
+    resolve_git_executable,
+    unsafe_local_git_config_keys,
+    validate_git_remote_url,
+)
 
 from .capabilities import LOCAL_GIT_CAPABILITIES
 from .contracts import RepositoryProvider
@@ -45,6 +52,9 @@ class LocalGitRepositoryProvider(RepositoryProvider):
         self._git_binary = git_binary
         self._repository = repository
         self._provider_id = provider_id
+        self._runtime_directory = TemporaryDirectory(prefix="aamp-local-git-")
+        self._disabled_hooks_path = Path(self._runtime_directory.name) / "hooks"
+        self._disabled_hooks_path.mkdir(mode=0o700)
         if not provider_id.strip():
             raise ValueError("local Git provider_id must not be blank")
         if not git_binary.strip():
@@ -371,10 +381,22 @@ class LocalGitRepositoryProvider(RepositoryProvider):
         if selected_base is None:
             return RepositoryDiff(repository.id, None, "", ())
         resolved = self._text("rev-parse", "--verify", f"{selected_base}^{{commit}}").strip()
-        patch = self._run("diff", "--binary", resolved, "--").stdout.decode(
-            "utf-8", errors="replace"
+        patch = self._run(
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--binary",
+            resolved,
+            "--",
+        ).stdout.decode("utf-8", errors="replace")
+        paths = self._lines(
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--name-only",
+            resolved,
+            "--",
         )
-        paths = self._lines("diff", "--name-only", resolved, "--")
         return RepositoryDiff(repository.id, resolved, patch, paths)
 
     async def create_branch(
@@ -464,10 +486,23 @@ class LocalGitRepositoryProvider(RepositoryProvider):
         del context
         if not remote.strip():
             raise ValueError("remote must not be blank")
-        args = ["push", remote]
+        configured_remotes = set(self._lines("remote"))
+        if remote not in configured_remotes:
+            try:
+                validate_git_remote_url(remote)
+            except ValueError as exc:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "Git push target uses unsupported executable-indirection",
+                    retryable=False,
+                    provider_id=self.provider_id,
+                ) from exc
+        args = ["push", "--", remote]
         if refspec is not None:
             if not refspec.strip():
                 raise ValueError("refspec must not be blank when provided")
+            if refspec.startswith("-"):
+                raise ValueError("refspec must not start with '-'")
             args.append(refspec)
         self._run(*args)
         head = self._head_revision()
@@ -541,10 +576,36 @@ class LocalGitRepositoryProvider(RepositoryProvider):
         return completed.stdout.decode("utf-8", errors="replace")
 
     def _run(self, *args: str, allow_failure: bool = False) -> subprocess.CompletedProcess[bytes]:
+        binary = resolve_git_executable(self._git_binary)
+        environment = controlled_git_environment(home=self._runtime_directory.name)
+        if (self._root / ".git").exists():
+            self._assert_repository_metadata_boundary()
+            self._assert_safe_local_configuration(binary, environment)
+            if args and args[0] in {"fetch", "push"}:
+                self._assert_safe_remote_urls(binary, environment)
+        command = [
+            binary,
+            "-c",
+            f"core.hooksPath={self._disabled_hooks_path}",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "commit.gpgSign=false",
+            "-c",
+            "tag.gpgSign=false",
+            "-c",
+            "submodule.recurse=false",
+            "-c",
+            "fetch.recurseSubmodules=false",
+            "-c",
+            "push.recurseSubmodules=off",
+            *args,
+        ]
         try:
             completed = subprocess.run(
-                [self._git_binary, *args],
+                command,
                 cwd=self._root,
+                env=environment,
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 check=False,
@@ -569,13 +630,152 @@ class LocalGitRepositoryProvider(RepositoryProvider):
             code = ErrorCode.UNAUTHORIZED
         else:
             code = ErrorCode.BACKEND_ERROR
+        operation = args[0] if args else "git"
         raise ContractError(
             code,
-            stderr or f"Git command failed: {' '.join(args)}",
+            f"Git command failed during {operation}",
             retryable=False,
             provider_id=self.provider_id,
             details={
                 "git_exit_code": completed.returncode,
-                "operation": args[0] if args else "git",
+                "operation": operation,
             },
         )
+
+    def _assert_repository_metadata_boundary(self) -> None:
+        git_dir = self._root / ".git"
+        if git_dir.is_symlink() or not git_dir.is_dir():
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "repository Git metadata must be a local directory inside the managed root",
+                retryable=False,
+                provider_id=self.provider_id,
+            )
+
+        commondir = git_dir / "commondir"
+        if commondir.exists():
+            if commondir.is_symlink() or not commondir.is_file():
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "repository Git metadata contains unsupported path indirection",
+                    retryable=False,
+                    provider_id=self.provider_id,
+                )
+            if commondir.read_text(encoding="utf-8", errors="replace").strip():
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "shared Git common directories are not supported",
+                    retryable=False,
+                    provider_id=self.provider_id,
+                )
+
+        for alternates_name in ("alternates", "http-alternates"):
+            alternates = git_dir / "objects" / "info" / alternates_name
+            if not alternates.exists():
+                continue
+            if alternates.is_symlink() or not alternates.is_file():
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "repository Git object indirection is not supported",
+                    retryable=False,
+                    provider_id=self.provider_id,
+                )
+            if alternates.read_text(encoding="utf-8", errors="replace").strip():
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "repository Git object indirection is not supported",
+                    retryable=False,
+                    provider_id=self.provider_id,
+                )
+
+    def _assert_safe_local_configuration(
+        self,
+        binary: str,
+        environment: dict[str, str],
+    ) -> None:
+        try:
+            completed = subprocess.run(
+                [
+                    binary,
+                    "config",
+                    "--no-includes",
+                    "--name-only",
+                    "--null",
+                    "--list",
+                ],
+                cwd=self._root,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "Git executable is unavailable",
+                retryable=False,
+                provider_id=self.provider_id,
+                details={"binary": self._git_binary},
+            ) from exc
+        if completed.returncode != 0:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "repository Git configuration could not be inspected safely",
+                retryable=False,
+                provider_id=self.provider_id,
+                details={"git_exit_code": completed.returncode},
+            )
+        keys = tuple(
+            value.decode("utf-8", errors="replace")
+            for value in completed.stdout.split(b"\0")
+            if value
+        )
+        unsafe = unsafe_local_git_config_keys(keys)
+        if unsafe:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "repository Git configuration contains unsupported execution-capable settings",
+                retryable=False,
+                provider_id=self.provider_id,
+                details={"unsafe_config_count": len(unsafe)},
+            )
+
+    def _assert_safe_remote_urls(
+        self,
+        binary: str,
+        environment: dict[str, str],
+    ) -> None:
+        completed = subprocess.run(
+            [
+                binary,
+                "config",
+                "--no-includes",
+                "--get-regexp",
+                r"^remote\..*\.(url|pushurl)$",
+            ],
+            cwd=self._root,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        if completed.returncode not in {0, 1}:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "Git remote configuration could not be inspected safely",
+                retryable=False,
+                provider_id=self.provider_id,
+                details={"git_exit_code": completed.returncode},
+            )
+        for line in completed.stdout.splitlines():
+            try:
+                _key, url = line.split(maxsplit=1)
+                validate_git_remote_url(url)
+            except ValueError as exc:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "Git remote uses unsupported executable-indirection",
+                    retryable=False,
+                    provider_id=self.provider_id,
+                ) from exc
