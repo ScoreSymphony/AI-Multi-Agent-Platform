@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .items import InstalledRegistryItem, RegistryItem
-from .models import RegistryDependency, TrustStatus, version_key
-from .state import RegistryInstallation, RegistryInstallationSnapshot
+from .models import RegistryDependency, TrustStatus, VersionRange, version_key
+from .state import RegistryInstallation
 from .validation import (
     FindingCategory,
     FindingSeverity,
@@ -365,7 +365,107 @@ def resolve_dependency_graph(
                 walk(candidate, (*path, dependency.item_id))
 
     walk(item, (item.item_id,))
+    _append_constraint_conflicts(
+        item,
+        resolutions=resolutions,
+        catalog=catalog,
+        installed=installed,
+    )
     return tuple(resolutions)
+
+
+def _append_constraint_conflicts(
+    root: RegistryItem,
+    *,
+    resolutions: list[DependencyResolution],
+    catalog: tuple[RegistryItem, ...],
+    installed: dict[str, InstalledRegistryItem],
+) -> None:
+    grouped: dict[str, list[DependencyResolution]] = {}
+    for resolution in resolutions:
+        if resolution.optional:
+            continue
+        grouped.setdefault(resolution.item_id, []).append(resolution)
+
+    for item_id, requirements in grouped.items():
+        if len(requirements) < 2:
+            continue
+        kinds = {requirement.item_kind for requirement in requirements if requirement.item_kind is not None}
+        if len(kinds) > 1:
+            resolutions.append(
+                DependencyResolution(
+                    required_by=root.item_id,
+                    item_id=item_id,
+                    item_kind=None,
+                    optional=False,
+                    minimum_version=None,
+                    maximum_version=None,
+                    status=DependencyStatus.KIND_CONFLICT,
+                    path=(root.item_id, item_id),
+                )
+            )
+            continue
+
+        ranges = tuple(
+            VersionRange(requirement.minimum_version, requirement.maximum_version)
+            for requirement in requirements
+        )
+        installed_record = installed.get(item_id)
+        required_kind = next(iter(kinds), None)
+        if installed_record is not None and all(
+            version_range.contains(installed_record.version) for version_range in ranges
+        ):
+            if required_kind is None or installed_record.kind == required_kind:
+                continue
+
+        candidates = tuple(
+            candidate
+            for candidate in catalog
+            if candidate.item_id == item_id
+            and not candidate.yanked
+            and (required_kind is None or candidate.kind == required_kind)
+        )
+        if candidates and any(
+            all(version_range.contains(candidate.version) for version_range in ranges)
+            for candidate in candidates
+        ):
+            continue
+
+        if not any(
+            resolution.status
+            in {
+                DependencyStatus.MISSING,
+                DependencyStatus.SOURCE_AMBIGUOUS,
+                DependencyStatus.SELF_DEPENDENCY,
+                DependencyStatus.CYCLE,
+            }
+            for resolution in requirements
+        ):
+            resolutions.append(
+                DependencyResolution(
+                    required_by=root.item_id,
+                    item_id=item_id,
+                    item_kind=required_kind,
+                    optional=False,
+                    minimum_version=_intersection_minimum(ranges),
+                    maximum_version=_intersection_maximum(ranges),
+                    status=DependencyStatus.VERSION_CONFLICT,
+                    installed_version=(
+                        installed_record.version if installed_record is not None else None
+                    ),
+                    path=(root.item_id, item_id),
+                )
+            )
+
+
+def _intersection_minimum(ranges: tuple[VersionRange, ...]) -> str | None:
+    values = tuple(version_range.minimum for version_range in ranges if version_range.minimum)
+    return max(values, key=version_key) if values else None
+
+
+def _intersection_maximum(ranges: tuple[VersionRange, ...]) -> str | None:
+    values = tuple(version_range.maximum for version_range in ranges if version_range.maximum)
+    return min(values, key=version_key) if values else None
 
 
 def dependency_findings(
