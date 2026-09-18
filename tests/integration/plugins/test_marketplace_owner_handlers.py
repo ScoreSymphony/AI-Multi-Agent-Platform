@@ -821,6 +821,69 @@ async def test_model_provider_marketplace_rejects_plaintext_package_credentials(
     assert installed.plugin_id == item.item_id
 
 
+async def test_model_provider_secret_package_is_blocked_during_marketplace_preview(
+    tmp_path,
+) -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.preview-secret-model-provider",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="model-provider.preview-secret",
+                extension_type=ExtensionType.MODEL_PROVIDER,
+                metadata={"api_key": "plaintext-provider-token"},
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={"type": "object", "additionalProperties": False},
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.MODEL_PROVIDER: frozenset({"1.0"})},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.MODEL_PROVIDER,
+        extension_type=ExtensionType.MODEL_PROVIDER,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.MODEL_PROVIDER,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    artifact = _plugin_artifact(manifest)
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+        ),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / "model-provider-secret-preview.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+
+    preview = service.preview(
+        item.item_id,
+        item.version,
+        ValidationContext("0.0.1"),
+    )
+
+    assert preview.activation_allowed is False
+    assert any(
+        finding.code == "owner_candidate_invalid"
+        and "credentials" in finding.message.lower()
+        for finding in preview.findings
+    )
+    assert plugin_registry.list_plugins() == ()
+
+
 async def test_executor_marketplace_install_activates_only_through_plugin_owner(tmp_path) -> None:
     base = reference_manifest()
     manifest = replace(
