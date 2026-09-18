@@ -594,17 +594,13 @@ def test_gitspawn_git_dir_symlink_escape_is_rejected(tmp_path: Path) -> None:
 def test_gitspawn_common_git_dir_escape_is_rejected(tmp_path: Path) -> None:
     async def scenario() -> None:
         provider, repository, operation, root = await _initialized_provider(tmp_path)
-        del repository
         (root / ".git" / "commondir").write_text(
             str(tmp_path / "outside-common"),
             encoding="utf-8",
         )
 
         with pytest.raises(ContractError) as error:
-            await provider.status(
-                provider._repository,  # type: ignore[arg-type,attr-defined]
-                operation,
-            )
+            await provider.status(repository, operation)
 
         assert error.value.code is ErrorCode.INVALID_CONFIGURATION
 
