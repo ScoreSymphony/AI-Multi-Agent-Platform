@@ -658,9 +658,11 @@ def test_uninstall_preview_uses_persisted_dependency_evidence_after_catalog_drif
         ),
     )
     drifted_workflow = replace(installed_workflow, dependencies=())
-    store = JsonRegistryInstallationStore(tmp_path / "installations.json")
+    state_path = tmp_path / "installations.json"
+    store = JsonRegistryInstallationStore(state_path)
     store.record(tool, provider_id="local")
     store.record(installed_workflow, provider_id="local")
+    store = JsonRegistryInstallationStore(state_path)
     service = _service(
         ((tool, tool_artifact), (drifted_workflow, workflow_artifact)),
         store=store,
