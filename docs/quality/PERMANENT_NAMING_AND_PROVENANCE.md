@@ -22,14 +22,14 @@ issue725_materialize_runtime_assets.py
 test_issue_20_manifest_contract()
 ```
 
-The same rule applies to comments and docstrings. State the invariant or responsibility first. If the originating issue still adds useful context, keep it as secondary provenance:
+The same rule applies to comments and docstrings. State the invariant or responsibility first. A historical issue reference may remain when the text is self-contained without opening GitHub; for non-trivial provenance, prefer an explicit secondary line:
 
 ```python
 # Prevent duplicate completion events after recovery.
 # Historical context: issue #439.
 ```
 
-A comment whose meaning is only `Issue #439 final hardening` is not durable documentation.
+Behavior-first wording such as `Canonical runtime behavior contract for issue #33` is self-contained and may retain that secondary provenance. Issue-led or migration-only text such as `Issue #439 final hardening`, `#33 runtime boundary`, or `Migrated under #722` is not durable documentation.
 
 ## Where issue numbers remain appropriate
 
@@ -50,7 +50,7 @@ The repository contains historical production comments and scripts created befor
 
 1. Newly introduced permanent paths and identifiers must be behavior-oriented.
 2. When a Python source/test/script file is changed, issue-numbered identifiers in that file must be renamed in the same change.
-3. When a changed Python file retains a useful issue reference in a comment or docstring, the reference must be secondary `Historical context:` or `Provenance:` text.
+3. When a changed Python file retains a useful issue reference in a comment or docstring, the maintained behavior must remain understandable without that reference. Prefer `Historical context:` or `Provenance:` for non-trivial historical notes; issue-led and migration-only prose is rejected.
 4. Changed GitHub workflow files must keep workflow, job and step names behavior-oriented; concrete issue numbers belong in provenance rather than maintained workflow semantics.
 5. Only explicitly issue-scoped evidence directories under `tests/evidence/issue_<number>/` are exempt from issue-number naming checks; the `tests/evidence/` root is not a blanket allowlist.
 6. Focused cleanup batches should update callers, CI configuration and documentation together when a permanent script/module is renamed.
