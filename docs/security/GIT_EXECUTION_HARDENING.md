@@ -16,6 +16,8 @@ The reference policy is intentionally narrow:
 - relative/empty child `PATH` entries are removed so repository-relative executable lookup is unavailable;
 - the Git executable is resolved before the child process is launched;
 - local/worktree Git configuration is inspected without following config includes;
+- `.git` metadata must stay inside the managed repository root; symlinked metadata,
+  escaping `commondir` targets and repository object alternates are rejected;
 - execution-capable repository configuration is rejected before the requested operation;
 - ordinary repository hooks are disabled through a provider-private empty hooks directory;
 - external diff/textconv execution is disabled for canonical diff operations;
@@ -185,7 +187,7 @@ than being promoted directly into production.
 | Operation | Supported | Execution-capable semantics |
 | --- | --- | --- |
 | init | yes | controlled environment; hooks/config injection cannot come from parent `GIT_*` |
-| open/rev-parse | yes | repository/worktree config audited first once a repository exists |
+| open/rev-parse | yes | Git metadata containment and repository/worktree config audited first once a repository exists |
 | status | yes | fsmonitor command disabled; unsafe repository config rejected |
 | log/show/tree | yes | unsafe repository config rejected; tree materialization reads blob bytes |
 | diff | yes | `--no-ext-diff --no-textconv`; unsafe diff config rejected |
@@ -210,6 +212,9 @@ The permanent regression corpus is
 | GS-GLOBAL-01 | inherited global `core.hooksPath` | commit | sanitized/ignored | null global config + private hooks path |
 | GS-SYSTEM-01 | inherited `GIT_CONFIG_SYSTEM` override | commit | sanitized/ignored | nosystem + env scrub |
 | GS-PATH-01 | relative/empty executable search path | controlled child environment | sanitized/ignored | absolute-only child PATH |
+| GS-META-01 | symlinked `.git` metadata | open | rejected before Git operation | metadata boundary audit |
+| GS-META-02 | escaping `commondir` | status | rejected before Git operation | metadata boundary audit |
+| GS-OBJECT-01 | repository object alternates | status | rejected before object traversal | metadata boundary audit |
 | GS-HOOK-01 | repository `.git/hooks/pre-commit` | commit | hook never executes | private empty `core.hooksPath` |
 | GS-CONFIG-01 | local `core.hooksPath` / AskPass / worktree / fsmonitor | status/commit | rejected | repository config audit |
 | GS-FILTER-01 | clean/smudge/process filter | add/commit | rejected before filter execution | repository config audit |
