@@ -128,8 +128,10 @@ def validate_item(
                     )
                 )
             continue
-        if dependency.kind_value is not None:
-            if record.kind is None:
+        required_kind = dependency.kind_value
+        installed_kind = record.kind
+        if required_kind is not None:
+            if installed_kind is None:
                 findings.append(
                     _error(
                         "dependency_kind_unknown",
@@ -141,7 +143,7 @@ def validate_item(
                         dependency.item_id,
                     )
                 )
-            elif record.kind != dependency.kind_value:
+            elif installed_kind != required_kind:
                 findings.append(
                     _error(
                         "dependency_kind",
@@ -149,8 +151,8 @@ def validate_item(
                         FindingCategory.DEPENDENCY,
                         dependency.item_id,
                         (
-                            ("required_kind", dependency.kind_value),
-                            ("installed_kind", record.kind),
+                            ("required_kind", required_kind),
+                            ("installed_kind", installed_kind),
                         ),
                     )
                 )
