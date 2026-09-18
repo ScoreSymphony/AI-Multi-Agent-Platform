@@ -12,7 +12,9 @@ from ai_multi_agent_platform.deployment.drain import (
     SingleNodeDrainState,
 )
 from ai_multi_agent_platform.deployment.startup_recovery import reconcile_single_node_startup
+from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
 from ai_multi_agent_platform.observability import InMemoryExporter, Telemetry
+from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
 
 
 def test_shutdown_timeout_is_explicit_single_node_configuration(tmp_path: Path) -> None:
@@ -185,6 +187,75 @@ def test_process_local_drain_state_is_not_revived_after_restart(tmp_path: Path) 
         )
         assert recovery.ready_for_service is True
         assert recovery.unresolved_run_ids == ()
+
+    asyncio.run(scenario())
+
+
+def test_forced_drain_preserves_running_run_for_canonical_restart_recovery(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        root = tmp_path / "forced-running-run"
+        (root / "db").mkdir(parents=True)
+        (root / "files").mkdir()
+        (root / "workspaces").mkdir()
+
+        original = PlatformKernel(
+            orchestrator=FakeOrchestrator(),
+            lifecycle=FakeLifecycleBackend(),
+            repository=SqliteKernelRepository(root / "db" / "kernel.sqlite3"),
+        )
+        task = await original.create_task(
+            idempotency_key="drain:create",
+            title="Interrupted work",
+            objective="Remain canonical across forced process teardown",
+            owner_type="service",
+            owner_id="graceful-drain-test",
+        )
+        await original.ready_task(idempotency_key="drain:ready", task_id=task.task_id)
+        running = await original.start_task(
+            idempotency_key="drain:start",
+            task_id=task.task_id,
+        )
+        assert running.status.value == "running"
+
+        stopping = build_single_node_deployment(
+            SingleNodeConfig(data_dir=root, secure_cookie=False)
+        )
+        await stopping.drain.begin(reason="test_forced_shutdown")
+        await stopping.drain.mark_forced("test_forced_shutdown", timed_out=True)
+        await stopping.drain.mark_completed()
+
+        restarted = build_single_node_deployment(
+            SingleNodeConfig(data_dir=root, secure_cookie=False)
+        )
+        recovery = await reconcile_single_node_startup(
+            data_dir=root,
+            kernel=restarted.kernel,
+            coordinator=restarted.coordination,
+            distributed_runtime=restarted.distributed_runtime,
+            extensions=restarted.startup_recovery_extensions,
+            reviewer_reconciler=restarted.reviewer_recovery,
+        )
+        recovered = await restarted.kernel.get_run(task.task_id, running.run_id)
+
+        assert recovery.ready_for_service is False
+        assert recovery.unresolved_run_ids == (running.run_id,)
+        assert recovered.run_id == running.run_id
+        assert recovered.status.value == "running"
+        assert recovered.recovery_required is True
+        assert recovered.recovery_reason == "canonical_running_backend_not_found"
+
+        repeated = await reconcile_single_node_startup(
+            data_dir=root,
+            kernel=restarted.kernel,
+            coordinator=restarted.coordination,
+            distributed_runtime=restarted.distributed_runtime,
+            extensions=restarted.startup_recovery_extensions,
+            reviewer_reconciler=restarted.reviewer_recovery,
+        )
+        assert repeated.unresolved_run_ids == (running.run_id,)
+        assert (await restarted.kernel.get_run(task.task_id, running.run_id)).run_id == running.run_id
 
     asyncio.run(scenario())
 
