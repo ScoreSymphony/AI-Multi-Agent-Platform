@@ -979,6 +979,13 @@ function InstallPreview({
         <DependencyList dependencies={dependencies} />
       )}
       <RequirementList
+        title="Deterministic install order"
+        values={(decision?.install_order ?? []).map(
+          (step, index) =>
+            `${index + 1}. ${step.item_id}@${step.version} · ${humanizeKind(step.item_kind)} · ${step.source_registry ?? "unknown source"}`,
+        )}
+      />
+      <RequirementList
         title="Missing requirements"
         values={[...(preview.missing_requirements ?? []), ...structuredMissing]}
       />
