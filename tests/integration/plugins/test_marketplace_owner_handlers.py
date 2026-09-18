@@ -185,6 +185,41 @@ def _portable_team_artifact(repository: InMemoryAgentRepository, team_id: str) -
     return json.dumps(exported.payload, sort_keys=True).encode("utf-8")
 
 
+async def test_malformed_skill_candidate_fails_preview_without_owner_mutation(
+    tmp_path,
+) -> None:
+    item = _item(
+        RegistryItemType.SKILL,
+        item_id="malformed.skill",
+        version="1.0.0",
+    )
+    artifact = b"{}"
+    skills = SkillService(InMemorySkillRepository())
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+        ),
+        installations=JsonRegistryInstallationStore(tmp_path / "malformed-skill.json"),
+        kind_handlers=MarketplaceKindHandlerRegistry((SkillMarketplaceKindHandler(skills),)),
+    )
+
+    preview = service.preview(
+        item.item_id,
+        item.version,
+        ValidationContext("0.0.1"),
+    )
+
+    assert preview.activation_allowed is False
+    assert any(
+        finding.code == "owner_candidate_invalid"
+        and "invalid canonical Skill artifact" in finding.message
+        for finding in preview.findings
+    )
+    assert skills.repository.list_definitions() == ()
+    assert service.installed(item.item_id) is None
+
+
 async def test_agent_handler_installs_canonical_revisions_without_runtime_instance() -> None:
     owner = OwnerRef(type="user", id="marketplace-agent-owner")
     source_repository = InMemoryAgentRepository()
