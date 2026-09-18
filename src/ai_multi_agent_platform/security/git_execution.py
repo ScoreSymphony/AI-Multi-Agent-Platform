@@ -42,13 +42,22 @@ _DANGEROUS_GIT_ENV_PREFIXES = ("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")
 _DANGEROUS_CONFIG_EXACT = frozenset(
     {
         "commit.gpgsign",
+        "core.askpass",
         "core.fsmonitor",
         "core.gitproxy",
         "core.hookspath",
         "core.sshcommand",
+        "core.worktree",
         "credential.helper",
+        "diff.external",
         "gpg.program",
         "gpg.ssh.program",
+        "http.cookiefile",
+        "http.proxy",
+        "http.savecookies",
+        "http.sslcert",
+        "http.sslkey",
+        "interactive.difffilter",
         "protocol.ext.allow",
         "tag.gpgsign",
     }
@@ -128,6 +137,9 @@ def unsafe_local_git_config_keys(keys: Iterable[str]) -> tuple[str, ...]:
         if normalized.startswith("diff.") and normalized.endswith((".command", ".textconv")):
             unsafe.add(normalized)
             continue
+        if normalized.startswith("merge.") and normalized.endswith(".driver"):
+            unsafe.add(normalized)
+            continue
         if normalized.startswith("credential.") and normalized.endswith(".helper"):
             unsafe.add(normalized)
             continue
@@ -137,7 +149,7 @@ def unsafe_local_git_config_keys(keys: Iterable[str]) -> tuple[str, ...]:
             unsafe.add(normalized)
             continue
         if normalized.startswith("remote.") and normalized.endswith(
-            (".proxy", ".receivepack", ".uploadpack")
+            (".proxy", ".receivepack", ".uploadpack", ".vcs")
         ):
             unsafe.add(normalized)
             continue
