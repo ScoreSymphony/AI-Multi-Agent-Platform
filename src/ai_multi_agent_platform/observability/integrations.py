@@ -166,7 +166,9 @@ class AggregatedHealthProvider(ProviderContract):
             ReadinessState.OPERATOR_INTERVENTION_REQUIRED,
             ReadinessState.DRAINING,
         }:
-            raise ValueError("operational state must be reconciling, operator-required, draining or None")
+            raise ValueError(
+                "operational state must be reconciling, operator-required, draining or None"
+            )
         self._operational_state = state
         self._operational_detail = detail
         self._operational_action = operator_action
