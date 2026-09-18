@@ -125,6 +125,24 @@ def test_builtin_marketplace_kinds_include_new_first_class_families() -> None:
     assert registry.require(RegistryItemType.APPLICATION).supports_update is False
 
 
+@pytest.mark.parametrize(
+    "runtime_kind",
+    (
+        "agent_run",
+        "agent_runtime",
+        "task",
+        "run",
+        "worker",
+        "node",
+        "orchestration_session",
+        "provider_runtime",
+    ),
+)
+def test_runtime_instance_kinds_are_not_marketplace_content(runtime_kind: str) -> None:
+    with pytest.raises(ValueError, match="runtime instance kind"):
+        _item(runtime_kind)
+
+
 def test_manifest_backed_tool_and_connector_use_owner_handlers_and_preserve_legacy_routes() -> None:
     tool = _item(
         RegistryItemType.TOOL,
