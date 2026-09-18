@@ -471,6 +471,139 @@ async def test_agent_and_team_full_marketplace_flow_uses_canonical_owner(tmp_pat
     assert target_repository.list_agent_runs() == ()
 
 
+async def test_agent_pack_uses_agent_dependencies_and_canonical_team_owner(tmp_path) -> None:
+    owner = OwnerRef(type="user", id="marketplace-agent-pack-owner")
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    researcher = source.create_agent(_agent_profile("Pack Researcher"), owner_ref=owner)
+    reviewer = source.create_agent(_agent_profile("Pack Reviewer"), owner_ref=owner)
+    team = source.create_team(
+        AgentTeamProfile(
+            name="Research Pack",
+            members=(
+                AgentTeamMember(
+                    agent=AgentRevisionRef(researcher.agent_id, researcher.revision),
+                    role="researcher",
+                ),
+                AgentTeamMember(
+                    agent=AgentRevisionRef(reviewer.agent_id, reviewer.revision),
+                    role="reviewer",
+                ),
+            ),
+            leader_agent_id=researcher.agent_id,
+        ),
+        owner_ref=owner,
+    )
+
+    researcher_item = replace(
+        _item(
+            RegistryItemType.AGENT,
+            item_id=researcher.agent_id,
+            version="1.0.0",
+        ),
+        name="Pack Researcher",
+    )
+    reviewer_item = replace(
+        _item(
+            RegistryItemType.AGENT,
+            item_id=reviewer.agent_id,
+            version="1.0.0",
+        ),
+        name="Pack Reviewer",
+    )
+    team_item = replace(
+        _item(
+            RegistryItemType.AGENT_TEAM,
+            item_id=team.team_id,
+            version="1.0.0",
+        ),
+        name="Research Pack",
+        dependencies=(
+            RegistryDependency(
+                researcher_item.item_id,
+                item_kind=RegistryItemType.AGENT,
+            ),
+            RegistryDependency(
+                reviewer_item.item_id,
+                item_kind=RegistryItemType.AGENT,
+            ),
+        ),
+    )
+    artifacts = {
+        (researcher_item.item_id, researcher_item.version): _portable_agent_artifact(
+            source_repository,
+            researcher.agent_id,
+        ),
+        (reviewer_item.item_id, reviewer_item.version): _portable_agent_artifact(
+            source_repository,
+            reviewer.agent_id,
+        ),
+        (team_item.item_id, team_item.version): _portable_team_artifact(
+            source_repository,
+            team.team_id,
+        ),
+    }
+    target_repository = InMemoryAgentRepository()
+    target = AgentService(target_repository)
+    service = DistributionService(
+        LocalRegistryProvider((researcher_item, reviewer_item, team_item), artifacts),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / "agent-pack-marketplace-installations.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (
+                AgentMarketplaceKindHandler(target),
+                AgentTeamMarketplaceKindHandler(target),
+            )
+        ),
+    )
+    context = ValidationContext("0.0.1")
+
+    blocked_team = service.preview(team_item.item_id, team_item.version, context)
+    assert blocked_team.activation_allowed is False
+    assert {
+        (step.item_id, step.item_kind)
+        for step in blocked_team.decision.install_order
+    } == {
+        (researcher_item.item_id, RegistryItemType.AGENT.value),
+        (reviewer_item.item_id, RegistryItemType.AGENT.value),
+        (team_item.item_id, RegistryItemType.AGENT_TEAM.value),
+    }
+
+    for agent_item in (researcher_item, reviewer_item):
+        preview = service.preview(agent_item.item_id, agent_item.version, context)
+        assert preview.activation_allowed is True
+        await service.activate(preview, context, authorized=True)
+
+    team_preview = service.preview(team_item.item_id, team_item.version, context)
+    assert team_preview.activation_allowed is True
+    assert {
+        dependency.item_id for dependency in team_preview.decision.dependencies
+    } == {researcher_item.item_id, reviewer_item.item_id}
+    installed_team = await service.activate(team_preview, context, authorized=True)
+
+    assert installed_team.team_id == team.team_id
+    assert {
+        member.agent.agent_id for member in installed_team.profile.members
+    } == {researcher.agent_id, reviewer.agent_id}
+    assert {revision.agent_id for revision in target_repository.list_agents()} == {
+        researcher.agent_id,
+        reviewer.agent_id,
+    }
+    assert target.get_team_revision(team.team_id).profile.name == "Research Pack"
+    assert target_repository.list_agent_runs() == ()
+
+    blocked_member_removal = service.preview_uninstall(researcher_item.item_id)
+    assert blocked_member_removal.activation_allowed is False
+
+    await service.uninstall(team_item.item_id, authorized=True)
+    await service.uninstall(researcher_item.item_id, authorized=True)
+    await service.uninstall(reviewer_item.item_id, authorized=True)
+    assert target_repository.list_teams() == ()
+    assert target_repository.list_agents() == ()
+    assert target_repository.list_agent_runs() == ()
+
+
 async def test_agent_team_handler_fails_without_member_and_leaves_no_partial_team() -> None:
     owner = OwnerRef(type="user", id="marketplace-team-failure-owner")
     source_repository = InMemoryAgentRepository()
