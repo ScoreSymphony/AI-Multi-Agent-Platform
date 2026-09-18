@@ -8,6 +8,7 @@ from .canonical_router import (
 from .composition import PlatformRegistryValidationContextResolver
 from .control_plane import (
     MARKETPLACE_INSTALL_COMMAND,
+    MARKETPLACE_KIND_COLLECTION,
     MARKETPLACE_PREVIEW_COMMAND,
     MARKETPLACE_UNINSTALL_COMMAND,
     MARKETPLACE_UPDATE_COMMAND,
@@ -16,6 +17,7 @@ from .control_plane import (
     REGISTRY_PIN_COMMAND,
     REGISTRY_PREVIEW_COMMAND,
     REGISTRY_UNPIN_COMMAND,
+    MarketplaceKindResourceService,
     RegistryCommandHandlers,
     RegistryResourceService,
     RegistryValidationContextResolver,
@@ -156,7 +158,9 @@ __all__ = [
     "MarketplaceKindHandler",
     "MarketplaceKindHandlerRegistry",
     "MarketplaceKindRegistry",
+    "MarketplaceKindResourceService",
     "MARKETPLACE_INSTALL_COMMAND",
+    "MARKETPLACE_KIND_COLLECTION",
     "MARKETPLACE_PREVIEW_COMMAND",
     "MARKETPLACE_UNINSTALL_COMMAND",
     "MARKETPLACE_UPDATE_COMMAND",
