@@ -278,7 +278,6 @@ def test_transient_extension_reports_durable_auth_session_authority() -> None:
     asyncio.run(scenario())
 
 
-
 def test_auth_session_expiry_and_revocation_survive_sqlite_restart(tmp_path: Path) -> None:
     path = tmp_path / "authentication.sqlite3"
     store = SqliteAuthenticationStore(path)
@@ -322,7 +321,6 @@ def test_auth_session_expiry_and_revocation_survive_sqlite_restart(tmp_path: Pat
     assert restored_expired.active(now=NOW) is False
     assert restored_revoked.revoked_at == revoked.revoked_at
     assert restored_revoked.active(now=NOW) is False
-
 
 
 def test_cleanup_failure_is_machine_readable_and_blocks_readiness(tmp_path: Path) -> None:
