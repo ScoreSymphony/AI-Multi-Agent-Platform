@@ -133,10 +133,7 @@ def _is_same_release_identity(
     if installation is None:
         return False
     current = installation.current
-    return (
-        current.version == item.version
-        and current.source_registry == item.source_registry
-    )
+    return current.version == item.version and current.source_registry == item.source_registry
 
 
 def _same_release_identity_changed_fields(
@@ -156,8 +153,7 @@ def _same_release_identity_changed_fields(
                 ("provenance", current.provenance != item.provenance),
                 (
                     "item_type",
-                    current.item_type is not None
-                    and current.as_installed().kind != item.kind,
+                    current.item_type is not None and current.as_installed().kind != item.kind,
                 ),
                 (
                     "artifact_sha256",
