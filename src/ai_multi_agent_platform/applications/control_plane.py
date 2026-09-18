@@ -41,6 +41,7 @@ APPLICATION_COLLECTIONS = (APPLICATION_COLLECTION, APPLICATION_INSTANCE_COLLECTI
 APPLICATION_MODULE = "applications"
 APPLICATION_COMMANDS = (
     "application.install",
+    "application.configure",
     "application.start",
     "application.stop",
     "application.restart",
@@ -162,6 +163,18 @@ def _command_handlers(
         )
         return _instance_resource(repository, instance)
 
+    async def configure(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        del context
+        configuration = _configuration_patch(payload)
+        instance = await _runtime_boundary(
+            lifecycle.configure(resource_ref, configuration)
+        )
+        return _instance_resource(repository, instance)
+
     async def transition(
         operation: Callable[[str], Awaitable[ApplicationInstance]],
         resource_ref: str,
@@ -213,6 +226,7 @@ def _command_handlers(
 
     return {
         "application.install": install,
+        "application.configure": configure,
         "application.start": start,
         "application.stop": stop,
         "application.restart": restart,
@@ -442,6 +456,22 @@ def _volume_binding(value: JsonValue) -> ApplicationVolumeBinding:
         source_ref=_object_string(data, "source_ref", "volume_bindings[]"),
         read_only=read_only,
     )
+
+
+def _configuration_patch(payload: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    unknown = sorted(set(payload).difference({"configuration"}))
+    if unknown:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"unknown application configuration update fields: {unknown!r}",
+        )
+    configuration = _required_object(payload, "configuration")
+    if not configuration:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "application configuration update must not be empty",
+        )
+    return configuration
 
 
 def _require_empty_payload(payload: dict[str, JsonValue]) -> None:
