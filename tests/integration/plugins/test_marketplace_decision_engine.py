@@ -13,6 +13,7 @@ from ai_multi_agent_platform.distribution import (
     DependencyStatus,
     DistributionService,
     FindingCategory,
+    InstalledRegistryItem,
     JsonRegistryInstallationStore,
     LocalRegistryProvider,
     MarketplaceKindHandlerRegistry,
@@ -323,6 +324,51 @@ def test_agent_dependency_plan_reuses_cross_kind_decision_engine(tmp_path: Path)
             DependencyStatus.SATISFIED,
         ),
     }
+
+
+def test_marketplace_store_preserves_non_marketplace_installed_dependency(
+    tmp_path: Path,
+) -> None:
+    persisted, persisted_artifact = _item(
+        "example.marketplace-installed",
+        RegistryItemType.SKILL,
+    )
+    root, root_artifact = _item(
+        "example.local-dependent",
+        RegistryItemType.WORKFLOW,
+        dependencies=(
+            RegistryDependency(
+                "example.local-tool",
+                item_kind=RegistryItemType.TOOL,
+            ),
+        ),
+    )
+    store = JsonRegistryInstallationStore(tmp_path / "mixed-installed.json")
+    store.record(persisted, provider_id="local")
+    service = _service(
+        ((persisted, persisted_artifact), (root, root_artifact)),
+        store=store,
+    )
+    local_tool = InstalledRegistryItem(
+        "example.local-tool",
+        "1.0.0",
+        item_type=RegistryItemType.TOOL,
+    )
+
+    preview = service.preview(
+        root.item_id,
+        root.version,
+        ValidationContext("0.0.1", installed_items=(local_tool,)),
+    )
+
+    local_resolution = next(
+        resolution
+        for resolution in preview.decision.dependencies
+        if resolution.item_id == local_tool.item_id
+    )
+    assert local_resolution.status is DependencyStatus.SATISFIED
+    assert local_resolution.installed_version == local_tool.version
+    assert preview.activation_allowed is True
 
 
 def test_missing_and_optional_dependencies_are_distinguished() -> None:
