@@ -17,48 +17,106 @@ EXPECTED_LANES = frozenset(
         "system-regression",
     }
 )
+EXPECTED_VALIDATION_LANES = EXPECTED_LANES | {"quality"}
 
 
-def load_lane_reports(root: Path) -> dict[str, dict[str, Any]]:
+def _load_reports(
+    root: Path,
+    *,
+    expected: frozenset[str],
+    kind: str,
+) -> dict[str, dict[str, Any]]:
     reports: dict[str, dict[str, Any]] = {}
     for path in sorted(root.rglob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
         lane = payload.get("lane")
-        if not isinstance(lane, str) or lane not in EXPECTED_LANES:
+        if not isinstance(lane, str) or lane not in expected:
             continue
         if lane in reports:
-            raise ValueError(f"duplicate runtime report for lane: {lane}")
+            raise ValueError(f"duplicate {kind} runtime report for lane: {lane}")
         reports[lane] = payload
     return reports
 
 
-def build_aggregate(reports: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    missing = sorted(EXPECTED_LANES - reports.keys())
-    unexpected = sorted(reports.keys() - EXPECTED_LANES)
-    if missing or unexpected:
-        details: list[str] = []
-        if missing:
-            details.append("missing=" + ",".join(missing))
-        if unexpected:
-            details.append("unexpected=" + ",".join(unexpected))
-        raise ValueError("invalid runtime report set: " + "; ".join(details))
+def load_lane_reports(root: Path) -> dict[str, dict[str, Any]]:
+    return _load_reports(root, expected=EXPECTED_LANES, kind="pytest")
+
+
+def load_validation_reports(root: Path) -> dict[str, dict[str, Any]]:
+    return _load_reports(
+        root,
+        expected=EXPECTED_VALIDATION_LANES,
+        kind="validation",
+    )
+
+
+def _require_exact_lanes(
+    reports: dict[str, dict[str, Any]],
+    expected: frozenset[str],
+    *,
+    kind: str,
+) -> None:
+    missing = sorted(expected - reports.keys())
+    unexpected = sorted(reports.keys() - expected)
+    if not missing and not unexpected:
+        return
+
+    details: list[str] = []
+    if missing:
+        details.append("missing=" + ",".join(missing))
+    if unexpected:
+        details.append("unexpected=" + ",".join(unexpected))
+    raise ValueError(f"invalid {kind} runtime report set: " + "; ".join(details))
+
+
+def build_aggregate(
+    reports: dict[str, dict[str, Any]],
+    validation_reports: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    _require_exact_lanes(reports, EXPECTED_LANES, kind="pytest")
+    _require_exact_lanes(
+        validation_reports,
+        EXPECTED_VALIDATION_LANES,
+        kind="validation",
+    )
 
     failed_lanes = sorted(
         lane
         for lane, report in reports.items()
         if int(report.get("pytest_exit_code", 1)) != 0 or report.get("budget_violations")
     )
-    wall_seconds = {
+    pytest_wall_seconds = {
         lane: float(report["wall_seconds"])
         for lane, report in reports.items()
     }
-    critical_lane = max(wall_seconds, key=wall_seconds.__getitem__)
+    validation_wall_seconds = {
+        lane: float(report["wall_seconds"])
+        for lane, report in validation_reports.items()
+    }
+    pytest_critical_lane = max(pytest_wall_seconds, key=pytest_wall_seconds.__getitem__)
+    validation_critical_lane = max(
+        validation_wall_seconds,
+        key=validation_wall_seconds.__getitem__,
+    )
     return {
         "schema_version": 1,
-        "lanes": wall_seconds,
-        "critical_lane": critical_lane,
-        "pytest_critical_path_seconds": round(wall_seconds[critical_lane], 3),
-        "pytest_total_compute_seconds": round(sum(wall_seconds.values()), 3),
+        "pytest_lanes": pytest_wall_seconds,
+        "pytest_critical_lane": pytest_critical_lane,
+        "pytest_critical_path_seconds": round(
+            pytest_wall_seconds[pytest_critical_lane],
+            3,
+        ),
+        "pytest_total_compute_seconds": round(sum(pytest_wall_seconds.values()), 3),
+        "validation_lanes": validation_wall_seconds,
+        "validation_critical_lane": validation_critical_lane,
+        "validation_critical_path_seconds": round(
+            validation_wall_seconds[validation_critical_lane],
+            3,
+        ),
+        "validation_total_compute_seconds": round(
+            sum(validation_wall_seconds.values()),
+            3,
+        ),
         "failed_lanes": failed_lanes,
     }
 
@@ -73,12 +131,20 @@ def aggregate_violations(
             "failed or over-budget lanes: " + ", ".join(summary["failed_lanes"])
         )
 
-    critical_budget = float(budget["pytest_critical_path_seconds"])
-    critical_path = float(summary["pytest_critical_path_seconds"])
-    if critical_path > critical_budget:
+    pytest_budget = float(budget["pytest_critical_path_seconds"])
+    pytest_path = float(summary["pytest_critical_path_seconds"])
+    if pytest_path > pytest_budget:
         violations.append(
-            f"pytest critical path {critical_path:.3f}s exceeds "
-            f"{critical_budget:.3f}s"
+            f"pytest critical path {pytest_path:.3f}s exceeds "
+            f"{pytest_budget:.3f}s"
+        )
+
+    validation_budget = float(budget["validation_critical_path_seconds"])
+    validation_path = float(summary["validation_critical_path_seconds"])
+    if validation_path > validation_budget:
+        violations.append(
+            f"validation critical path {validation_path:.3f}s exceeds "
+            f"{validation_budget:.3f}s"
         )
     return violations
 
@@ -89,21 +155,47 @@ def render_markdown(
     violations: list[str],
 ) -> str:
     lines = [
-        "## Frontend-independent Python test aggregate",
+        "## Frontend-independent Python validation aggregate",
         "",
-        f"- critical lane: **{summary['critical_lane']}**",
+        f"- pytest critical lane: **{summary['pytest_critical_lane']}**",
         (
             "- pytest critical path: "
             f"**{summary['pytest_critical_path_seconds']:.3f}s** "
             f"(budget {float(budget['pytest_critical_path_seconds']):.3f}s)"
         ),
+        f"- validation critical lane: **{summary['validation_critical_lane']}**",
+        (
+            "- validation critical path: "
+            f"**{summary['validation_critical_path_seconds']:.3f}s** "
+            f"(budget {float(budget['validation_critical_path_seconds']):.3f}s)"
+        ),
         f"- total pytest compute: **{summary['pytest_total_compute_seconds']:.3f}s**",
+        (
+            "- total validation compute: "
+            f"**{summary['validation_total_compute_seconds']:.3f}s**"
+        ),
+        "",
+        "### Pytest lanes",
         "",
         "| lane | wall seconds |",
         "| --- | ---: |",
     ]
-    for lane in sorted(summary["lanes"]):
-        lines.append(f"| {lane} | {float(summary['lanes'][lane]):.3f} |")
+    for lane in sorted(summary["pytest_lanes"]):
+        seconds = float(summary["pytest_lanes"][lane])
+        lines.append(f"| {lane} | {seconds:.3f} |")
+
+    lines.extend(
+        [
+            "",
+            "### Full Python validation lanes",
+            "",
+            "| lane | wall seconds |",
+            "| --- | ---: |",
+        ]
+    )
+    for lane in sorted(summary["validation_lanes"]):
+        seconds = float(summary["validation_lanes"][lane])
+        lines.append(f"| {lane} | {seconds:.3f} |")
 
     lines.extend(["", "### Aggregate budget status", ""])
     if violations:
@@ -115,9 +207,10 @@ def render_markdown(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Verify retained pytest lane reports against aggregate CI budgets."
+        description="Verify retained Python lane reports against aggregate CI budgets."
     )
     parser.add_argument("--reports", type=Path, required=True)
+    parser.add_argument("--validation-reports", type=Path, required=True)
     parser.add_argument("--budget-config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
@@ -126,7 +219,10 @@ def main() -> int:
     budget = config["aggregate_budgets"]["frontend-independent-python-ci"]
 
     try:
-        summary = build_aggregate(load_lane_reports(args.reports))
+        summary = build_aggregate(
+            load_lane_reports(args.reports),
+            load_validation_reports(args.validation_reports),
+        )
     except (OSError, ValueError, json.JSONDecodeError, KeyError, TypeError) as exc:
         print(f"runtime aggregate verification failed: {exc}", file=sys.stderr)
         return 2
