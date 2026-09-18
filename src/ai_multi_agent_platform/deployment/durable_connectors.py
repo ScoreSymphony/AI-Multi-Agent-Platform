@@ -165,7 +165,7 @@ def _extend_base_deployment(
 ) -> SingleNodeDeployment:
     """Promote the base deployment to the durable public profile explicitly."""
 
-    return SingleNodeDeployment(
+    deployment = SingleNodeDeployment(
         config=base.config,
         kernel_repository=base.kernel_repository,
         scopes=base.scopes,
@@ -233,13 +233,16 @@ def _extend_base_deployment(
         handoffs=extensions.handoffs,
         automatic_reviewer=automatic_review.workflow,
         reviewer_recovery=automatic_review.recovery,
-        startup_recovery_extensions=(
-            SingleNodeTransientStateRecoveryExtension(
-                automation=base.control_plane.automation_service,
-                authentication_sessions=base.authentication.store.sessions,
-            ),
+        startup_recovery_extensions=(),
+    )
+    deployment.startup_recovery_extensions = (
+        *deployment.startup_recovery_extensions,
+        SingleNodeTransientStateRecoveryExtension(
+            automation=deployment.control_plane.automation_service,
+            authentication_sessions=deployment.authentication.store.sessions,
         ),
     )
+    return deployment
 
 
 __all__ = [
