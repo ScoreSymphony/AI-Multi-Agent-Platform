@@ -9,8 +9,10 @@ from typing import Protocol
 
 from .items import InstalledRegistryItem, RegistryItem
 from .models import (
+    RegistryDependency,
     RegistryItemKind,
     TrustStatus,
+    VersionRange,
     parse_registry_item_kind,
     registry_item_kind_value,
     version_key,
@@ -31,6 +33,7 @@ class RegistryInstallationSnapshot:
     license: str
     provenance: str
     item_type: RegistryItemKind | None = None
+    dependencies: tuple[RegistryDependency, ...] | None = None
     artifact_sha256: str | None = None
     publisher: str | None = None
     requested_permissions: tuple[str, ...] = ()
@@ -152,6 +155,7 @@ class JsonRegistryInstallationStore:
             license=item.license,
             provenance=item.provenance,
             item_type=item.item_type,
+            dependencies=item.dependencies,
             artifact_sha256=artifact_sha256 or item.integrity.sha256,
             publisher=item.publisher,
             requested_permissions=tuple(sorted(item.requested_permissions)),
@@ -245,6 +249,22 @@ def _snapshot_to_json(snapshot: RegistryInstallationSnapshot) -> dict[str, objec
         "item_type": (
             registry_item_kind_value(snapshot.item_type) if snapshot.item_type is not None else None
         ),
+        "dependencies": (
+            [
+                {
+                    "item_id": dependency.item_id,
+                    "item_kind": dependency.kind_value,
+                    "version_range": {
+                        "minimum": dependency.version_range.minimum,
+                        "maximum": dependency.version_range.maximum,
+                    },
+                    "optional": dependency.optional,
+                }
+                for dependency in snapshot.dependencies
+            ]
+            if snapshot.dependencies is not None
+            else None
+        ),
         "artifact_sha256": snapshot.artifact_sha256,
         "publisher": snapshot.publisher,
         "requested_permissions": list(snapshot.requested_permissions),
@@ -270,6 +290,7 @@ def _snapshot_from_json(value: object) -> RegistryInstallationSnapshot:
         license=_string(value, "license"),
         provenance=_string(value, "provenance"),
         item_type=_optional_item_type(value, "item_type"),
+        dependencies=_optional_dependencies(value, "dependencies"),
         artifact_sha256=_optional_string(value, "artifact_sha256"),
         publisher=_optional_string(value, "publisher"),
         requested_permissions=_string_tuple(value, "requested_permissions"),
@@ -317,6 +338,60 @@ def _optional_string(value: dict[object, object], key: str) -> str | None:
     if not isinstance(result, str) or not result.strip():
         raise ValueError(f"registry installation field {key!r} must be null or non-blank string")
     return result
+
+
+def _optional_dependencies(
+    value: dict[object, object],
+    key: str,
+) -> tuple[RegistryDependency, ...] | None:
+    raw = value.get(key)
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise ValueError(f"registry installation field {key!r} must be null or an array")
+    dependencies: list[RegistryDependency] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise ValueError(f"registry installation field {key!r} must contain objects")
+        version_range = entry.get("version_range", {})
+        if not isinstance(version_range, dict):
+            raise ValueError(
+                f"registry installation field {key!r} dependency version_range must be an object"
+            )
+        item_id = entry.get("item_id")
+        item_kind = entry.get("item_kind")
+        optional = entry.get("optional", False)
+        minimum = version_range.get("minimum")
+        maximum = version_range.get("maximum")
+        if not isinstance(item_id, str):
+            raise ValueError(
+                f"registry installation field {key!r} dependency item_id must be a string"
+            )
+        if item_kind is not None and not isinstance(item_kind, str):
+            raise ValueError(
+                f"registry installation field {key!r} dependency item_kind must be null or string"
+            )
+        if not isinstance(optional, bool):
+            raise ValueError(
+                f"registry installation field {key!r} dependency optional must be a boolean"
+            )
+        if minimum is not None and not isinstance(minimum, str):
+            raise ValueError(
+                f"registry installation field {key!r} dependency minimum must be null or string"
+            )
+        if maximum is not None and not isinstance(maximum, str):
+            raise ValueError(
+                f"registry installation field {key!r} dependency maximum must be null or string"
+            )
+        dependencies.append(
+            RegistryDependency(
+                item_id=item_id,
+                item_kind=item_kind,
+                version_range=VersionRange(minimum, maximum),
+                optional=optional,
+            )
+        )
+    return tuple(dependencies)
 
 
 def _string_tuple(value: dict[object, object], key: str) -> tuple[str, ...]:
