@@ -190,9 +190,7 @@ def test_doctor_reports_blocking_when_canonical_readiness_fails(tmp_path: Path) 
         for check in payload["data"]["checks"]
     )
     provider_check = next(
-        check
-        for check in payload["data"]["checks"]
-        if check.get("provider_id") == "provider_model"
+        check for check in payload["data"]["checks"] if check.get("provider_id") == "provider_model"
     )
     assert provider_check["status"] == "blocking"
     assert provider_check["diagnostics"][0]["dependency"] == "persistence"
