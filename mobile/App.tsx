@@ -61,6 +61,8 @@ export default function App() {
 
   const [taskTitle, setTaskTitle] = useState("");
   const [taskObjective, setTaskObjective] = useState("");
+  const [takeoverMessageId, setTakeoverMessageId] = useState("");
+  const [takeoverTaskId, setTakeoverTaskId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 
@@ -246,6 +248,22 @@ export default function App() {
     try {
       if (decision === "approve") await client.approve(approval);
       else await client.deny(approval);
+      await refreshCurrentTab("decisions");
+    } catch (error) {
+      setNotice(messageFor(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resumeWaitingTask(): Promise<void> {
+    if (!client) return;
+    setBusy(true);
+    try {
+      const task = await client.resumeWaitingTask(takeoverMessageId, takeoverTaskId);
+      setTakeoverMessageId("");
+      setTakeoverTaskId("");
+      setNotice(`Resumed canonical waiting Task ${task.id} from Conversation input.`);
       await refreshCurrentTab("decisions");
     } catch (error) {
       setNotice(messageFor(error));
@@ -442,6 +460,29 @@ export default function App() {
                   ) : null}
                 </View>
               ))}
+            </Section>
+            <Section title="Human takeover / waiting Task">
+              <Text style={styles.muted}>
+                Resume only from an already persisted authenticated user Conversation message.
+                The canonical Task remains server-owned.
+              </Text>
+              <TextInput
+                placeholder="Conversation message ID"
+                value={takeoverMessageId}
+                onChangeText={setTakeoverMessageId}
+                style={styles.input}
+              />
+              <TextInput
+                placeholder="Waiting Task ID"
+                value={takeoverTaskId}
+                onChangeText={setTakeoverTaskId}
+                style={styles.input}
+              />
+              <Button
+                title="Resume waiting Task"
+                disabled={stale || busy}
+                onPress={() => void resumeWaitingTask()}
+              />
             </Section>
             <Section title="Verification review">
               {verifications.map((verification) => (
