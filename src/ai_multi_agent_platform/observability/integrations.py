@@ -99,6 +99,7 @@ class AggregatedHealthProvider(ProviderContract):
         self._provider_id = provider_id
         self._status = HealthStatus.UNKNOWN
         self._service_health = ServiceHealth(alive=True, readiness=ReadinessState.READY)
+        self._health_diagnostics: tuple[dict[str, JsonValue], ...] = ()
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -114,8 +115,13 @@ class AggregatedHealthProvider(ProviderContract):
     def service_health(self) -> ServiceHealth:
         return self._service_health
 
+    @property
+    def health_diagnostics(self) -> tuple[dict[str, JsonValue], ...]:
+        return self._health_diagnostics
+
     async def health(self) -> HealthStatus:
         dependencies: list[DependencyHealth] = []
+        diagnostics: list[dict[str, JsonValue]] = []
         for item in self._dependencies:
             status = await item.provider.health()
             dependencies.append(
@@ -126,6 +132,18 @@ class AggregatedHealthProvider(ProviderContract):
                     detail=status.value,
                 )
             )
+            provider_diagnostics = getattr(item.provider, "health_diagnostics", ())
+            if status is not HealthStatus.HEALTHY or provider_diagnostics:
+                diagnostic: dict[str, JsonValue] = {
+                    "dependency": item.dependency_name,
+                    "provider_id": item.provider.descriptor.provider_id,
+                    "status": status.value,
+                    "required": item.required,
+                }
+                if provider_diagnostics:
+                    diagnostic["diagnostics"] = list(provider_diagnostics)
+                diagnostics.append(diagnostic)
+        self._health_diagnostics = tuple(diagnostics)
         self._service_health = aggregate_health(tuple(dependencies))
         if not self._service_health.ready:
             self._status = HealthStatus.UNAVAILABLE
