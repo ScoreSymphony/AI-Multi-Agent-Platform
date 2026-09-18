@@ -17,6 +17,7 @@ from .decision_types import (
     UpdateState,
 )
 from .items import RegistryItem
+from .models import DistributionRoute
 from .service import DistributionPreview
 from .state import (
     RegistryInstallation,
