@@ -8,14 +8,14 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.plugins import PluginRegistry
 
 from .items import RegistryItem
-from .models import DistributionRoute, RegistryItemType
+from .models import DistributionRoute, RegistryItemKind, RegistryItemType
 from .plugin_adapter import PluginRegistryArtifactInstaller
 from .provider import RegistryProvider
 from .signatures import RegistrySignatureVerifier
 from .state import RegistryInstallationSnapshot, RegistryInstallationStore
 
 
-_PLUGIN_BACKED_KINDS = {
+_PLUGIN_BACKED_KINDS: dict[RegistryItemKind, str] = {
     RegistryItemType.TOOL: "capability_provider",
     RegistryItemType.CONNECTOR: "connector_provider",
 }
