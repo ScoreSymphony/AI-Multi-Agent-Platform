@@ -238,9 +238,7 @@ class DistributionService:
                     DependencyResolution(
                         required_by=dependent.current.item_id,
                         item_id=item_id,
-                        item_kind=installation.current.item_type.value
-                        if installation.current.item_type is not None
-                        else None,
+                        item_kind=installation.current.as_installed().kind,
                         optional=False,
                         minimum_version=None,
                         maximum_version=None,
