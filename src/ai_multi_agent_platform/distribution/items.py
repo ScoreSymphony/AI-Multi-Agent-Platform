@@ -50,6 +50,8 @@ class RegistryItem:
     maturity: RegistryMaturity | None = None
     integrity: ArtifactIntegrity = field(default_factory=ArtifactIntegrity)
     trust_status: TrustStatus = TrustStatus.UNTRUSTED
+    homepage: str | None = None
+    documentation: str | None = None
     review_reference: str | None = None
     released_at: str | None = None
     changelog: str | None = None
@@ -96,6 +98,8 @@ class RegistryItem:
         if self.source_registry is not None:
             _require_text(self.source_registry, "source_registry")
         for optional_value, optional_field_name in (
+            (self.homepage, "homepage"),
+            (self.documentation, "documentation"),
             (self.review_reference, "review_reference"),
             (self.released_at, "released_at"),
             (self.changelog, "changelog"),
@@ -176,7 +180,7 @@ class RegistryQuery:
 class InstalledRegistryItem:
     item_id: str
     version: str
-    source_registry: str
+    source_registry: str | None = None
     pinned_version: str | None = None
     license: str | None = None
     provenance: str | None = None
@@ -186,7 +190,8 @@ class InstalledRegistryItem:
     def __post_init__(self) -> None:
         _require_id(self.item_id, "installed item_id")
         version_key(self.version)
-        _require_text(self.source_registry, "source_registry")
+        if self.source_registry is not None:
+            _require_text(self.source_registry, "source_registry")
         if self.pinned_version is not None:
             version_key(self.pinned_version)
         if self.license is not None:

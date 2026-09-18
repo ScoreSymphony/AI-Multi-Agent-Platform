@@ -264,7 +264,7 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(
         source=_source(skill_v2.item_id, "1.2.0"),
     )
     application, application_artifact = _application_artifact()
-    future = replace(
+    future_v1 = replace(
         _item(
             "notebook_extension",
             "acceptance.notebook",
@@ -279,6 +279,11 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(
             ),
         ),
     )
+    future_v2 = replace(
+        future_v1,
+        version="1.1.0",
+        source=_source(future_v1.item_id, "1.1.0"),
+    )
     tool = _item(RegistryItemType.TOOL, "acceptance.tool", "1.0.0")
     plugin = _item(RegistryItemType.PLUGIN, "acceptance.plugin", "1.0.0")
     connector = _item(RegistryItemType.CONNECTOR, "acceptance.connector", "1.0.0")
@@ -288,7 +293,8 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(
         (skill_v1.item_id, skill_v1.version): skill_artifact_v1,
         (skill_v2.item_id, skill_v2.version): skill_artifact_v2,
         (application.item_id, application.version): application_artifact,
-        (future.item_id, future.version): b"future-owner-artifact",
+        (future_v1.item_id, future_v1.version): b"future-owner-artifact-v1",
+        (future_v2.item_id, future_v2.version): b"future-owner-artifact-v2",
         (tool.item_id, tool.version): b"tool-artifact",
         (plugin.item_id, plugin.version): b"plugin-artifact",
         (connector.item_id, connector.version): b"connector-artifact",
@@ -301,7 +307,8 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(
             skill_v2,
             skill_v3,
             application,
-            future,
+            future_v1,
+            future_v2,
             tool,
             plugin,
             connector,
@@ -403,11 +410,20 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(
     )
     assert installed_application.application_version == application.version
 
-    await distribution.activate(
-        distribution.preview(future.item_id, future.version, context),
+    installed_future = await distribution.activate(
+        distribution.preview(future_v1.item_id, future_v1.version, context),
         context,
         authorized=True,
     )
+    assert installed_future["operation"] == "install"
+
+    updated_future = await distribution.activate(
+        distribution.preview(future_v2.item_id, future_v2.version, context),
+        context,
+        authorized=True,
+    )
+    assert updated_future["operation"] == "update"
+    assert updated_future["version"] == future_v2.version
 
     restarted_skills = SkillService(JsonSkillRepository(skill_path))
     restarted_application_repository = SqliteApplicationRepository(application_path)
@@ -438,7 +454,9 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(
     assert (
         await restarted_distribution.status(application.item_id)
     ).application_version == application.version
-    assert (await restarted_distribution.status(future.item_id))["operation"] == "install"
+    restarted_future_status = await restarted_distribution.status(future_v2.item_id)
+    assert restarted_future_status["operation"] == "update"
+    assert restarted_future_status["version"] == future_v2.version
 
     restarted_skill_installation = restarted_distribution.installed(skill_v2.item_id)
     assert restarted_skill_installation is not None
@@ -458,22 +476,22 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(
     assert restarted_application_installation.current.provenance == application.provenance
     assert restarted_application_installation.current.dependencies == application.dependencies
 
-    restarted_future_installation = restarted_distribution.installed(future.item_id)
+    restarted_future_installation = restarted_distribution.installed(future_v2.item_id)
     assert restarted_future_installation is not None
-    assert restarted_future_installation.current.version == future.version
+    assert restarted_future_installation.current.version == future_v2.version
     assert restarted_future_installation.current.source_registry == "acceptance"
-    assert restarted_future_installation.current.provenance == future.provenance
-    assert restarted_future_installation.current.dependencies == future.dependencies
+    assert restarted_future_installation.current.provenance == future_v2.provenance
+    assert restarted_future_installation.current.dependencies == future_v2.dependencies
     assert restarted_future_installation.current.item_type.value == "notebook_extension"
 
     await restarted_distribution.uninstall(skill_v2.item_id, authorized=True)
     await restarted_distribution.uninstall(application.item_id, authorized=True)
-    await restarted_distribution.uninstall(future.item_id, authorized=True)
+    await restarted_distribution.uninstall(future_v2.item_id, authorized=True)
 
     final_store = JsonRegistryInstallationStore(installation_path)
     assert final_store.get(skill_v2.item_id) is None
     assert final_store.get(application.item_id) is None
-    assert final_store.get(future.item_id) is None
+    assert final_store.get(future_v2.item_id) is None
     with pytest.raises(ContractError) as missing_skill:
         SkillService(JsonSkillRepository(skill_path)).get_skill_revision(skill_id)
     assert missing_skill.value.code is ErrorCode.NOT_FOUND
