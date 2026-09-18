@@ -296,10 +296,12 @@ async def test_restart_reconciles_dispatch_with_missing_canonical_ack(tmp_path) 
     )
     restarted.register_reconciler(provider.descriptor.provider_id, provider)
     results = await restarted.reconcile_all()
+    repeated = await restarted.reconcile_all()
 
     assert len(results) == 1
     assert results[0].status is ExternalEffectRecoveryStatus.SUCCEEDED
     assert results[0].reason == "provider_reconciliation_confirmed_applied"
+    assert repeated == ()
     assert provider.reconciliations == 1
 
 
