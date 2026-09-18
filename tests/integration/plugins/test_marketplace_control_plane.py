@@ -452,6 +452,53 @@ def test_compatible_filter_uses_full_current_environment() -> None:
     assert blocked[0]["compatibility"]["missing_runtimes"] == ["docker"]  # type: ignore[index]
 
 
+def test_plugin_route_exposes_owner_extension_and_supports_marketplace_uninstall(
+    tmp_path: Path,
+) -> None:
+    class RecordingPluginHandler(RecordingHandler):
+        kind = RegistryItemType.PLUGIN
+
+    item = RegistryItem(
+        item_id="example.plugin",
+        item_type=RegistryItemType.PLUGIN,
+        name="Plugin",
+        description="Plugin fixture",
+        version="1.0.0",
+        publisher="example",
+        source=_source("example.plugin", "1.0.0"),
+        license="MIT",
+        provenance="source-release",
+        trust_status=TrustStatus.REVIEWED,
+    )
+    provider = LocalRegistryProvider((item,))
+    store = JsonRegistryInstallationStore(tmp_path / "plugin-owner.json")
+    store.record(item, provider_id=provider.provider_id)
+    handler = RecordingPluginHandler()
+    distribution = DistributionService(
+        provider,
+        installations=store,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+
+    detail = asyncio.run(RegistryResourceService(distribution).get_resource(_request(), item.item_id))
+    owner_extension = detail["owner_extension"]
+    assert isinstance(owner_extension, dict)
+    assert owner_extension["handler_available"] is True
+    assert owner_extension["status"] == {
+        "owner_state": "installed",
+        "item_id": item.item_id,
+    }
+
+    commands = RegistryCommandHandlers(
+        distribution,
+        StaticValidationContext(_context()),
+    )
+    asyncio.run(commands.marketplace_uninstall(_request(), item.item_id, {}))
+
+    assert handler.calls[-1] == ("uninstall", item.item_id, item.version)
+    assert store.get(item.item_id) is None
+
+
 def test_detail_exposes_manifest_update_state_compatibility_and_owner_extension(
     tmp_path: Path,
 ) -> None:
