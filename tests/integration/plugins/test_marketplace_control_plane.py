@@ -908,10 +908,7 @@ def test_marketplace_multi_source_discovery_detail_and_preview_are_source_qualif
     )
     assert len(source_b_results) == 1
     assert source_b_results[0]["source_registry"] == "source-b"
-    assert (
-        source_b_results[0]["qualified_id"]
-        == "source-b::example.shared@1.0.0"
-    )
+    assert source_b_results[0]["qualified_id"] == "source-b::example.shared@1.0.0"
 
     detail = asyncio.run(
         service.get_resource(
