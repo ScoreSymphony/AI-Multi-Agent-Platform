@@ -130,6 +130,16 @@ class PluginMarketplaceKindHandler:
     def inspect_requirements(self, item: RegistryItem) -> Mapping[str, object]:
         return _requirements(item, owner_domain="plugins")
 
+    def validate_candidate(self, item: RegistryItem, artifact: bytes) -> None:
+        self._installer.validated_manifest(item, artifact)
+
+    def describe_candidate(
+        self,
+        item: RegistryItem,
+        artifact: bytes,
+    ) -> Mapping[str, object]:
+        return self._describe_manifest(self._installer.validated_manifest(item, artifact))
+
     async def install(self, item: RegistryItem, artifact: bytes) -> object:
         return await self._installer.install_verified_plugin(item, artifact)
 
@@ -148,7 +158,10 @@ class PluginMarketplaceKindHandler:
         return self._registry.get(item.item_id)
 
     def describe(self, item: RegistryItem) -> Mapping[str, object]:
-        manifest = self._registry.manifest(item.item_id)
+        return self._describe_manifest(self._registry.manifest(item.item_id))
+
+    @staticmethod
+    def _describe_manifest(manifest: PluginManifest) -> Mapping[str, object]:
         return {
             "owner_domain": "plugins",
             "plugin_id": manifest.plugin_id,
@@ -207,6 +220,16 @@ class PluginExtensionMarketplaceKindHandler:
             _reject_embedded_provider_credentials(manifest)
         return manifest
 
+    def validate_candidate(self, item: RegistryItem, artifact: bytes) -> None:
+        self._validated_manifest(item, artifact)
+
+    def describe_candidate(
+        self,
+        item: RegistryItem,
+        artifact: bytes,
+    ) -> Mapping[str, object]:
+        return self._describe_manifest(self._validated_manifest(item, artifact))
+
     async def install(self, item: RegistryItem, artifact: bytes) -> object:
         self._validated_manifest(item, artifact)
         return await self._installer.install_verified_plugin(item, artifact)
@@ -227,7 +250,9 @@ class PluginExtensionMarketplaceKindHandler:
         return self._registry.get(item.item_id)
 
     def describe(self, item: RegistryItem) -> Mapping[str, object]:
-        manifest = self._registry.manifest(item.item_id)
+        return self._describe_manifest(self._registry.manifest(item.item_id))
+
+    def _describe_manifest(self, manifest: PluginManifest) -> Mapping[str, object]:
         matching_extensions = tuple(
             extension
             for extension in manifest.extensions
@@ -320,6 +345,16 @@ class SkillMarketplaceKindHandler:
                 f"Marketplace Skill maps to multiple canonical Skills: {item.item_id}",
             )
         return matches[0]
+
+    def validate_candidate(self, item: RegistryItem, artifact: bytes) -> None:
+        self._decode(item, artifact)
+
+    def describe_candidate(
+        self,
+        item: RegistryItem,
+        artifact: bytes,
+    ) -> Mapping[str, object]:
+        return self._describe_revision(self._decode(item, artifact))
 
     async def install(self, item: RegistryItem, artifact: bytes) -> object:
         revision = self._decode(item, artifact)
@@ -417,16 +452,19 @@ class SkillMarketplaceKindHandler:
         return self._find_current(item)
 
     def describe(self, item: RegistryItem) -> Mapping[str, object]:
-        current = self._find_current(item)
+        return self._describe_revision(self._find_current(item))
+
+    @staticmethod
+    def _describe_revision(revision: SkillRevision) -> Mapping[str, object]:
         return {
             "owner_domain": "skills",
-            "skill_id": current.skill_id,
-            "revision": current.revision,
-            "name": current.profile.name,
-            "enabled": current.profile.enabled,
-            "deprecated": current.profile.deprecated,
-            "trust_status": current.profile.trust_status.value,
-            "evaluation_status": current.profile.evaluation_status.value,
+            "skill_id": revision.skill_id,
+            "revision": revision.revision,
+            "name": revision.profile.name,
+            "enabled": revision.profile.enabled,
+            "deprecated": revision.profile.deprecated,
+            "trust_status": revision.profile.trust_status.value,
+            "evaluation_status": revision.profile.evaluation_status.value,
         }
 
 
@@ -506,6 +544,23 @@ class ApplicationMarketplaceKindHandler:
                 f"Marketplace Application maps to multiple canonical instances: {item.item_id}",
             )
         return application, instances[0]
+
+    def validate_candidate(self, item: RegistryItem, artifact: bytes) -> None:
+        self._decode(item, artifact)
+
+    def describe_candidate(
+        self,
+        item: RegistryItem,
+        artifact: bytes,
+    ) -> Mapping[str, object]:
+        manifest = self._decode(item, artifact)
+        return {
+            "owner_domain": "applications",
+            "application_id": manifest.application_id,
+            "application_version": manifest.version,
+            "name": manifest.name,
+            "service_count": len(manifest.services),
+        }
 
     async def install(self, item: RegistryItem, artifact: bytes) -> object:
         manifest = self._decode(item, artifact)
