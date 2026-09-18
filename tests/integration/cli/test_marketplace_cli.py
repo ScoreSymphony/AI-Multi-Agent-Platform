@@ -108,6 +108,8 @@ def test_marketplace_search_uses_unified_collection_and_first_class_filters(
             "tools",
             "--publisher",
             "example",
+            "--source",
+            "source-a",
             "--license",
             "MIT",
             "--trust",
@@ -140,6 +142,7 @@ def test_marketplace_search_uses_unified_collection_and_first_class_filters(
     assert query["filter[tag]"] == ["developer"]
     assert query["filter[category]"] == ["tools"]
     assert query["filter[publisher]"] == ["example"]
+    assert query["filter[source]"] == ["source-a"]
     assert query["filter[license]"] == ["MIT"]
     assert query["filter[trust]"] == ["reviewed"]
     assert query["filter[installed]"] == ["true"]
@@ -161,6 +164,8 @@ def test_marketplace_show_and_status_share_unified_detail_surface(tmp_path: Path
                 command,
                 "example.asset",
                 "1.2.3",
+                "--source",
+                "source-a",
             ],
             transport=transport,
             stdout=StringIO(),
@@ -168,8 +173,8 @@ def test_marketplace_show_and_status_share_unified_detail_surface(tmp_path: Path
         assert code == 0
 
     assert [call[:2] for call in transport.calls] == [
-        ("GET", "/api/v1/registry-items/example.asset%401.2.3"),
-        ("GET", "/api/v1/registry-items/example.asset%401.2.3"),
+        ("GET", "/api/v1/registry-items/source-a%3A%3Aexample.asset%401.2.3"),
+        ("GET", "/api/v1/registry-items/source-a%3A%3Aexample.asset%401.2.3"),
     ]
 
 
@@ -187,6 +192,8 @@ def test_marketplace_preview_and_mutations_dispatch_canonical_commands(
             "preview",
             "example.asset",
             "1.2.3",
+            "--source",
+            "source-a",
             "--idempotency-key",
             "preview-key",
         ],
@@ -205,6 +212,8 @@ def test_marketplace_preview_and_mutations_dispatch_canonical_commands(
                 action,
                 "example.asset",
                 "1.2.3",
+                "--source",
+                "source-a",
                 "--idempotency-key",
                 f"{action}-key",
             ],
@@ -239,9 +248,20 @@ def test_marketplace_preview_and_mutations_dispatch_canonical_commands(
     assert transport.calls[0][4] == {
         "resource_ref": "example.asset",
         "version": "1.2.3",
+        "source_registry": "source-a",
     }
     assert transport.calls[1][3]["idempotency-key"] == "install-key"
+    assert transport.calls[1][4] == {
+        "resource_ref": "example.asset",
+        "version": "1.2.3",
+        "source_registry": "source-a",
+    }
     assert transport.calls[2][3]["idempotency-key"] == "update-key"
+    assert transport.calls[2][4] == {
+        "resource_ref": "example.asset",
+        "version": "1.2.3",
+        "source_registry": "source-a",
+    }
     assert transport.calls[3][3]["idempotency-key"] == "uninstall-key"
     assert transport.calls[3][4] == {"resource_ref": "example.asset"}
 
