@@ -22,4 +22,21 @@ describe("RepositoriesPage", () => {
     expect(html).toContain("arbitrary host");
     expect(html).toContain("Provider-native");
   });
+
+  it("keeps read-only repository access while optional management commands are absent", () => {
+    const fetchImpl = vi.fn();
+    const html = renderToStaticMarkup(
+      <RepositoriesPage
+        client={new RepositoryCollectionClient({ fetchImpl })}
+        management={{ attachLocal: false, discover: false, detach: false }}
+      />,
+    );
+
+    expect(html).toContain("Repository inventory");
+    expect(html).toContain("Local repository management unavailable");
+    expect(html).toContain("Repository provider discovery unavailable");
+    expect(html).not.toContain('name="project_id"');
+    expect(html).not.toContain('name="provider_id"');
+  });
+
 });
