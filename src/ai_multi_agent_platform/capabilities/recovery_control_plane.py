@@ -37,8 +37,7 @@ class ExternalEffectRecoveryResourceService:
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
         return tuple(
-            external_effect_recovery_resource(record)
-            for record in self.recovery.list_records()
+            external_effect_recovery_resource(record) for record in self.recovery.list_records()
         )
 
     async def get_resource(
@@ -61,9 +60,7 @@ class ExternalEffectRecoveryCommands:
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         del context, payload
-        return external_effect_recovery_resource(
-            await self.recovery.reconcile_effect(resource_ref)
-        )
+        return external_effect_recovery_resource(await self.recovery.reconcile_effect(resource_ref))
 
     async def authorize_retry(
         self,
@@ -100,9 +97,7 @@ class ExternalEffectRecoveryCommands:
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         result_ref = payload.get("result_ref")
-        if result_ref is not None and (
-            not isinstance(result_ref, str) or not result_ref.strip()
-        ):
+        if result_ref is not None and (not isinstance(result_ref, str) or not result_ref.strip()):
             raise ContractError(ErrorCode.INVALID_REQUEST, "result_ref must be a non-blank string")
         raw_evidence = payload.get("evidence_refs", [])
         if not isinstance(raw_evidence, list):
