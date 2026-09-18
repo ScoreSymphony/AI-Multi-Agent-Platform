@@ -6,6 +6,11 @@ from dataclasses import replace
 
 import pytest
 
+from ai_multi_agent_platform.adapters.hermes import (
+    HERMES_ADAPTER_ID,
+    HermesAdapterConfig,
+    HermesOrchestrator,
+)
 from ai_multi_agent_platform.adapters.marketplace_owner_handlers import (
     AgentMarketplaceKindHandler,
     AgentTeamMarketplaceKindHandler,
@@ -14,6 +19,16 @@ from ai_multi_agent_platform.adapters.marketplace_owner_handlers import (
     PluginMarketplaceKindHandler,
     SkillMarketplaceKindHandler,
 )
+from ai_multi_agent_platform.agents.models import (
+    AgentInstructions,
+    AgentProfile,
+    AgentRevisionRef,
+    AgentTeamMember,
+    AgentTeamProfile,
+    InstructionSource,
+)
+from ai_multi_agent_platform.agents.repository import InMemoryAgentRepository
+from ai_multi_agent_platform.agents.service import AgentService
 from ai_multi_agent_platform.applications import (
     ApplicationDesiredState,
     ApplicationHealthStatus,
@@ -29,27 +44,12 @@ from ai_multi_agent_platform.applications import (
     InMemoryApplicationRepository,
 )
 from ai_multi_agent_platform.applications.serialization import application_manifest_to_document
-from ai_multi_agent_platform.agents.models import (
-    AgentInstructions,
-    AgentProfile,
-    AgentRevisionRef,
-    AgentTeamMember,
-    AgentTeamProfile,
-    InstructionSource,
-)
-from ai_multi_agent_platform.agents.repository import InMemoryAgentRepository
-from ai_multi_agent_platform.agents.service import AgentService
 from ai_multi_agent_platform.connectors import (
     ConnectorDefinition,
     ConnectorRegistry,
     ConnectorService,
     InMemoryConnectorRepository,
     ReferenceConnectorProvider,
-)
-from ai_multi_agent_platform.adapters.hermes import (
-    HERMES_ADAPTER_ID,
-    HermesAdapterConfig,
-    HermesOrchestrator,
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane.plugin_api import _manifest_document
@@ -71,6 +71,13 @@ from ai_multi_agent_platform.distribution import (
     reconcile_registry_plugins,
 )
 from ai_multi_agent_platform.domain import OwnerRef, new_id
+from ai_multi_agent_platform.execution import ExecutorRegistry, ReferenceExecutor
+from ai_multi_agent_platform.models import ModelRegistry
+from ai_multi_agent_platform.orchestration import (
+    OrchestratorRegistry,
+    OrchestratorSelection,
+    ReferenceOrchestrator,
+)
 from ai_multi_agent_platform.plugins import (
     ConnectorRegistryBinder,
     ExecutorRegistryBinder,
@@ -79,9 +86,9 @@ from ai_multi_agent_platform.plugins import (
     ModelProviderRegistryBinder,
     OrchestratorRegistryBinder,
     PluginContext,
+    PluginExtensionSpec,
     PluginHealth,
     PluginHealthReport,
-    PluginExtensionSpec,
     PluginRegistry,
     reference_manifest,
 )
@@ -90,13 +97,6 @@ from ai_multi_agent_platform.portability import (
     AgentTeamPortableCodec,
     snapshot_agent,
     snapshot_agent_team,
-)
-from ai_multi_agent_platform.execution import ExecutorRegistry, ReferenceExecutor
-from ai_multi_agent_platform.models import ModelRegistry
-from ai_multi_agent_platform.orchestration import (
-    OrchestratorRegistry,
-    OrchestratorSelection,
-    ReferenceOrchestrator,
 )
 from ai_multi_agent_platform.skills.codec import skill_revision_to_json
 from ai_multi_agent_platform.skills.models import (
