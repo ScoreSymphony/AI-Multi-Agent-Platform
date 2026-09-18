@@ -21,7 +21,6 @@ from .decision import (
     ApprovalRequirement,
     CompatibilityDecision,
     DependencyResolution,
-    DependencyStatus,
     DistributionOperation,
     MarketplaceDecision,
     PermissionDiff,
@@ -30,6 +29,7 @@ from .decision import (
     evaluate_compatibility,
     resolve_dependency_graph,
 )
+from .decision_types import DependencyStatus
 from .discovery import (
     CuratedCandidateReview,
     DiscoveryCandidate,
