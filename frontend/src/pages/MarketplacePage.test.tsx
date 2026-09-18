@@ -60,12 +60,12 @@ describe("MarketplacePage", () => {
     expect(html).toContain("Unified component catalog");
     expect(html).toContain("Component kinds");
     expect(html).toContain(">All<");
-    expect(html).toContain("Tools");
-    expect(html).toContain("Skills");
-    expect(html).toContain("Plugins");
-    expect(html).toContain("Connectors");
+    expect(html).toContain("AI &amp; Agents");
+    expect(html).toContain("Models");
+    expect(html).toContain("Tools &amp; Integrations");
     expect(html).toContain("Applications");
-    expect(html).toContain("Templates / Workflows");
+    expect(html).toContain("Platform Extensions");
+    expect(html).toContain("Content");
     expect(html).toContain("Component kind");
     expect(html).toContain("All trust states");
     expect(html).toContain("All maturity levels");
@@ -77,6 +77,18 @@ describe("MarketplacePage", () => {
     expect(html).toContain("Sort");
     expect(html).toContain("Direction");
     expect(html).toContain("Loading Marketplace");
+  });
+
+  it("keeps semantic Marketplace kinds separate from their technical packaging", () => {
+    const merged = marketplacePresentation.mergeKindDescriptors([], [
+      item({ item_type: "orchestrator", route: "kind_handler" }),
+      item({ item_type: "model_provider", route: "kind_handler" }),
+      item({ item_type: "agent", route: "kind_handler" }),
+    ]);
+
+    expect(merged.find((entry) => entry.kind === "orchestrator")?.management_path).toBe("/plugins");
+    expect(merged.find((entry) => entry.kind === "model_provider")?.management_path).toBe("/models");
+    expect(merged.find((entry) => entry.kind === "agent")?.management_path).toBe("/agents");
   });
 
   it("keeps future kinds renderable without a frontend enum change", () => {
