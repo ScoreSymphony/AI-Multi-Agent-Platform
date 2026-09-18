@@ -33,7 +33,11 @@ from ai_multi_agent_platform.evaluation.single_node import (
     SingleNodeEvaluationComposition,
     build_single_node_evaluation,
 )
-from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, ReferenceExecutor
+from ai_multi_agent_platform.execution import (
+    ExecutorLifecycleBackend,
+    ExecutorRegistry,
+    ReferenceExecutor,
+)
 from ai_multi_agent_platform.kernel import EventSourcedTaskRepository, PlatformKernel
 from ai_multi_agent_platform.observability import (
     ObservabilityEventProvider,
@@ -41,7 +45,7 @@ from ai_multi_agent_platform.observability import (
     ObservedOrchestrator,
 )
 from ai_multi_agent_platform.onboarding import FirstRunAgentLifecycleBackend, FirstRunTaskService
-from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
+from ai_multi_agent_platform.orchestration import OrchestratorRegistry, ReferenceOrchestrator
 from ai_multi_agent_platform.security import AuthorizedLifecycleBackend
 from ai_multi_agent_platform.verification import (
     CanonicalVerificationRuntime,
@@ -96,6 +100,8 @@ class ExecutionBundle:
     reference_executor: ReferenceExecutor
     orchestrator: ObservedOrchestrator
     executor: ObservedExecutor
+    orchestrators: OrchestratorRegistry
+    executors: ExecutorRegistry
     execution_lifecycle: LifecycleBackend
     pre_authorization_lifecycle: LifecycleBackend
     lifecycle: StartupLifecycleBinding
@@ -148,6 +154,9 @@ def build_execution(
     reference_executor = ReferenceExecutor(storage.workspaces.materialization_root)
     orchestrator = ObservedOrchestrator(reference_orchestrator, observability.telemetry)
     executor = ObservedExecutor(reference_executor, observability.telemetry)
+    orchestrators = OrchestratorRegistry({orchestrator.descriptor.provider_id: orchestrator})
+    executors = ExecutorRegistry()
+    executors.register(executor.descriptor.executor_id, executor)
 
     reference_lifecycle = ExecutorLifecycleBackend(
         executor,
@@ -192,6 +201,8 @@ def build_execution(
         reference_executor=reference_executor,
         orchestrator=orchestrator,
         executor=executor,
+        orchestrators=orchestrators,
+        executors=executors,
         execution_lifecycle=execution_lifecycle,
         pre_authorization_lifecycle=pre_authorization_lifecycle,
         lifecycle=lifecycle,
