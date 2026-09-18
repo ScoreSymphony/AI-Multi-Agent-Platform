@@ -81,7 +81,7 @@ Hardening:
   `push.recurseSubmodules=off`;
 - canonical diff uses `--no-ext-diff --no-textconv`;
 - fetch/push inspect configured URLs and reject external/custom remote-helper transports and
-  same-host filesystem remotes;
+  same-host filesystem remotes; direct `push <target>` arguments are validated with the same policy;
 - raw Git stderr is used only to classify the error and is not retained in the public
   `ContractError`.
 
@@ -218,7 +218,7 @@ The permanent regression corpus is
 | GS-INCLUDE-01 | `include.path` / `includeIf` | status | rejected without following include | `--no-includes` audit |
 | GS-CRED-01 | credential helper / AskPass / credential-file indirection | repository operation | rejected/sanitized | config audit + controlled env |
 | GS-URL-01 | `url.*.insteadOf` / pushInsteadOf | repository operation | rejected | repository config audit |
-| GS-REMOTE-01 | `ext::` or custom remote helper | fetch | rejected before helper spawn | remote URL validation |
+| GS-REMOTE-01 | `ext::` or custom remote helper | fetch/direct push | rejected before helper spawn | remote URL validation |
 | GS-REMOTE-02 | local/path remote with malicious `pre-receive` | push | rejected before target hook | remote URL validation |
 | GS-SUBMODULE-01 | executable submodule update / implicit recursion | checkout/fetch | rejected/disabled | config audit + recurse=false |
 | GS-DIAG-01 | secret-like remote userinfo in rejected URL | release discovery | rejected without secret echo | diagnostic minimization |
