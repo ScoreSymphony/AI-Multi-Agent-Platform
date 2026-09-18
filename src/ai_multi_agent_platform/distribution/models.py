@@ -1,4 +1,4 @@
-"""Canonical metadata for optional distribution registries (issue #81)."""
+"""Canonical metadata for optional distribution registries."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ class RegistryItemType(StrEnum):
     TEMPLATE = "template"
     MODEL_CONFIGURATION = "model_configuration"
     CONNECTOR = "connector"
+    APPLICATION = "application"
     EVALUATION = "evaluation"
     DOCUMENTATION = "documentation"
 

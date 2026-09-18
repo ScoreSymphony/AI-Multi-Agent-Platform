@@ -12,6 +12,7 @@ export type RegistryItemType =
   | "template"
   | "model_configuration"
   | "connector"
+  | "application"
   | "evaluation"
   | "documentation";
 

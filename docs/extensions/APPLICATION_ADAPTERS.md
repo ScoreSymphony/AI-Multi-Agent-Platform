@@ -105,7 +105,11 @@ Applications may declare resource and placement requirements, but `applications`
 
 ## Registry and Marketplace
 
-Application definitions integrate with the existing `distribution` Registry/Marketplace boundary. The Application domain owns runtime lifecycle after a definition is selected/installed; the distribution domain continues to own generic catalog discovery, provenance and install routing. Issue #1174 may generalize Marketplace treatment across heterogeneous component types, but it does not replace #1173's Application lifecycle ownership.
+Application definitions integrate with the existing `distribution` Registry/Marketplace boundary. Registry schema v2 accepts `application` as a first-class catalog item type, so available definitions can use the same version, compatibility, source/provenance, dependency, capability, trust and update-discovery metadata as other Registry entries. Application maturity and runtime/backend requirements remain declarative Application metadata; catalog entries may surface indexed summaries through tags and `required_capabilities` without making those summaries lifecycle authority.
+
+An Application catalog entry is deliberately routed as `manual` today. The Registry can therefore discover and preview the definition, but generic Registry activation cannot silently route an Application artifact through plugin installation or portable import. Installation still enters the canonical `applications` boundary through `application.install`, where the validated Application manifest and selected runtime adapter become authoritative. Installed/running state remains owned by `ApplicationRepository` and the `applications` Control Plane resources rather than being shadowed in Distribution state.
+
+Issue #1174 may generalize Marketplace treatment and cross-kind installation handoff across heterogeneous component types. That future dispatch must call the canonical owner rather than moving Application lifecycle into `distribution`; it is not required for Registry discovery under #1173.
 
 ## Security
 

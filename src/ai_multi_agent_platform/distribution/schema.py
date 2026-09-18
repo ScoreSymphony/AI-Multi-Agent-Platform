@@ -139,6 +139,7 @@ REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
 
 REGISTRY_ITEM_SCHEMA_V2: dict[str, Any] = deepcopy(REGISTRY_ITEM_SCHEMA_V1)
 REGISTRY_ITEM_SCHEMA_V2["properties"]["schema_version"] = {"const": REGISTRY_ITEM_SCHEMA_VERSION}
+REGISTRY_ITEM_SCHEMA_V2["properties"]["item_type"]["enum"].append("application")
 REGISTRY_ITEM_SCHEMA_V2["properties"]["distribution_route"] = {"const": "manual"}
 _REGISTRY_ITEM_SCHEMAS = {
     "1": REGISTRY_ITEM_SCHEMA_V1,
