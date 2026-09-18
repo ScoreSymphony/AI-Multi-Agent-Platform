@@ -283,6 +283,50 @@ def build_single_node_deployment(
     )
 
 
+def _build_runtime_execution_stage(
+    config: SingleNodeConfig,
+    foundation: SingleNodeFoundationBundle,
+    *,
+    onboarding_model_adapters: Iterable[OnboardingModelAdapter],
+    distributed_runtime: DistributedRuntime | None,
+    enable_distributed_execution: bool,
+    repository_discovery_resolver: RepositoryDiscoveryResolver | None,
+    model_runtime_factory: ModelRuntimeFactory | None,
+) -> tuple[
+    RuntimeServicesBundle,
+    PlatformServicesBundle,
+    RepositoryFoundationBundle,
+    ExecutionBundle,
+]:
+    storage = foundation.storage
+    security = foundation.security
+    runtime = build_runtime_services(
+        config,
+        storage,
+        security,
+        onboarding_model_adapters=onboarding_model_adapters,
+        model_runtime_factory=model_runtime_factory,
+    )
+    platform_services = build_platform_services(config, storage, security, runtime)
+    repositories = build_repository_foundation(
+        config,
+        storage,
+        security,
+        repository_discovery_resolver=repository_discovery_resolver,
+    )
+    execution = build_execution(
+        config,
+        storage,
+        security,
+        foundation.observability,
+        runtime,
+        repositories,
+        distributed_runtime=distributed_runtime,
+        enable_distributed_execution=enable_distributed_execution,
+    )
+    return runtime, platform_services, repositories, execution
+
+
 def build_single_node_deployment_from_foundation(
     config: SingleNodeConfig,
     foundation: SingleNodeFoundationBundle,
@@ -299,29 +343,16 @@ def build_single_node_deployment_from_foundation(
     storage = foundation.storage
     observability = foundation.observability
     security = foundation.security
-    runtime = build_runtime_services(
-        config,
-        storage,
-        security,
-        onboarding_model_adapters=onboarding_model_adapters,
-        model_runtime_factory=model_runtime_factory,
-    )
-    platform_services = build_platform_services(config, storage, security, runtime)
-    repository_foundation = build_repository_foundation(
-        config,
-        storage,
-        security,
-        repository_discovery_resolver=repository_discovery_resolver,
-    )
-    execution = build_execution(
-        config,
-        storage,
-        security,
-        observability,
-        runtime,
-        repository_foundation,
-        distributed_runtime=distributed_runtime,
-        enable_distributed_execution=enable_distributed_execution,
+    runtime, platform_services, repository_foundation, execution = (
+        _build_runtime_execution_stage(
+            config,
+            foundation,
+            onboarding_model_adapters=onboarding_model_adapters,
+            distributed_runtime=distributed_runtime,
+            enable_distributed_execution=enable_distributed_execution,
+            repository_discovery_resolver=repository_discovery_resolver,
+            model_runtime_factory=model_runtime_factory,
+        )
     )
     verification = build_verification(config)
     kernel = build_kernel(
