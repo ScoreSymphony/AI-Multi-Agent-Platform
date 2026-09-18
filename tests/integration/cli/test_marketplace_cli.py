@@ -372,3 +372,274 @@ def test_marketplace_json_error_preserves_canonical_machine_contract(tmp_path: P
     assert payload["code"] == "conflict"
     assert payload["category"] == "conflict"
     assert payload["details"]["marketplace_reason"] == "dependency_block"
+
+def test_marketplace_future_kind_matches_core_control_plane_and_cli(
+    tmp_path: Path,
+) -> None:
+    import asyncio
+
+    from cli_test_helpers import ControlPlaneRecordingTransport, invoke_cli_json, page_items
+
+    from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
+    from ai_multi_agent_platform.control_plane.models import RequestContext
+    from ai_multi_agent_platform.distribution import (
+        DistributionRoute,
+        DistributionService,
+        JsonRegistryInstallationStore,
+        LocalRegistryProvider,
+        MarketplaceKindDescriptor,
+        MarketplaceKindHandlerRegistry,
+        MarketplaceKindRegistry,
+        RegistryItem,
+        RegistryManifestReference,
+        RegistrySource,
+        TrustStatus,
+        ValidationContext,
+        register_distribution_control_plane,
+    )
+    from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
+    from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
+
+    class ValidationResolver:
+        async def resolve(self, context: RequestContext) -> ValidationContext:
+            del context
+            return ValidationContext("1.0.0")
+
+    class FutureOwner:
+        kind = "notebook_extension"
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        def inspect_requirements(self, item: RegistryItem) -> dict[str, object]:
+            del item
+            return {"runtime": "notebook-host"}
+
+        async def install(self, item: RegistryItem, artifact: bytes) -> object:
+            del artifact
+            self.calls.append(("install", item.item_id))
+            return item.item_id
+
+        async def update(self, item: RegistryItem, artifact: bytes) -> object:
+            del artifact
+            self.calls.append(("update", item.item_id))
+            return item.item_id
+
+        async def uninstall(self, item: RegistryItem) -> object:
+            self.calls.append(("uninstall", item.item_id))
+            return item.item_id
+
+        async def status(self, item: RegistryItem) -> object:
+            return {"item_id": item.item_id, "owner_state": "installed"}
+
+        def describe(self, item: RegistryItem) -> dict[str, object]:
+            return {"item_id": item.item_id, "owner": "notebook"}
+
+    item = RegistryItem(
+        item_id="acceptance.notebook",
+        item_type="notebook_extension",
+        name="Notebook Extension",
+        description="Cross-layer future-kind fixture",
+        version="1.0.0",
+        publisher="acceptance",
+        source=RegistrySource(
+            "https://example.invalid/notebook",
+            "acceptance.notebook@1.0.0",
+            revision="v1",
+        ),
+        license="MIT",
+        provenance="acceptance-release",
+        trust_status=TrustStatus.REVIEWED,
+        manifest=RegistryManifestReference(
+            kind="notebook_extension",
+            reference="manifests/notebook.json",
+            schema_version="1",
+        ),
+    )
+    artifact = b"notebook-extension"
+    owner = FutureOwner()
+    distribution = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+            provider_id="acceptance",
+        ),
+        installations=JsonRegistryInstallationStore(tmp_path / "future-kind-installations.json"),
+        kind_handlers=MarketplaceKindHandlerRegistry((owner,)),
+        kind_registry=MarketplaceKindRegistry(
+            (
+                MarketplaceKindDescriptor(
+                    "notebook_extension",
+                    "Notebook Extension",
+                    DistributionRoute.KIND_HANDLER,
+                    supports_install=True,
+                    supports_update=True,
+                    supports_uninstall=True,
+                ),
+            )
+        ),
+    )
+    validation = ValidationContext("1.0.0")
+    core_item = distribution.get(
+        item.item_id,
+        item.version,
+        source_registry="acceptance",
+    )
+    core_preview = distribution.preview(
+        item.item_id,
+        item.version,
+        validation,
+        source_registry="acceptance",
+    )
+    assert core_item.kind == "notebook_extension"
+    assert core_item.source_registry == "acceptance"
+    assert core_preview.item == core_item
+    assert core_preview.decision.operation.value == "install"
+
+    events = InMemoryKernelRepository()
+    control_plane = ControlPlane(
+        kernel=PlatformKernel(
+            orchestrator=FakeOrchestrator(),
+            lifecycle=FakeLifecycleBackend(),
+            repository=events,
+        ),
+        events=events,
+    )
+    register_distribution_control_plane(
+        control_plane,
+        distribution,
+        validation_context_resolver=ValidationResolver(),
+    )
+    http = ControlPlaneHTTP(control_plane)
+    headers = {
+        "x-request-id": "request_marketplace_cross_layer",
+        "x-correlation-id": "corr_marketplace_cross_layer",
+        "x-principal-ref": "user:test",
+    }
+
+    api_list = asyncio.run(
+        http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/registry-items",
+                headers=headers,
+                query={
+                    "filter[kind]": "notebook_extension",
+                    "filter[source]": "acceptance",
+                    "sort": "id",
+                    "direction": "asc",
+                    "limit": "50",
+                },
+                body={},
+            )
+        )
+    )
+    assert api_list.status == 200
+    api_items = api_list.body["items"]  # type: ignore[index]
+    assert isinstance(api_items, list)
+    assert len(api_items) == 1
+    api_item = api_items[0]
+    assert isinstance(api_item, dict)
+
+    transport = ControlPlaneRecordingTransport(http)
+    config = _config(tmp_path)
+    code, listed, error = invoke_cli_json(
+        config,
+        transport,
+        "marketplace",
+        "list",
+        "--kind",
+        "notebook_extension",
+        "--source",
+        "acceptance",
+    )
+    assert code == 0
+    assert error == ""
+    cli_item = page_items(listed)[0]
+    assert cli_item == api_item
+    assert cli_item["item_id"] == core_item.item_id
+    assert cli_item["kind"] == core_item.kind
+    assert cli_item["version"] == core_item.version
+    assert cli_item["source_registry"] == core_item.source_registry
+    assert cli_item["id"] == "acceptance.notebook@1.0.0"
+    assert cli_item["qualified_id"] == "acceptance::acceptance.notebook@1.0.0"
+    assert "provider_id" not in cli_item
+
+    preview_body = {
+        "resource_ref": item.item_id,
+        "version": item.version,
+        "source_registry": "acceptance",
+    }
+    api_preview = asyncio.run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/marketplace.preview",
+                headers={**headers, "idempotency-key": "api-preview"},
+                query={},
+                body=preview_body,
+            )
+        )
+    )
+    assert api_preview.status == 200
+    assert isinstance(api_preview.body, dict)
+
+    code, previewed, error = invoke_cli_json(
+        config,
+        transport,
+        "marketplace",
+        "preview",
+        item.item_id,
+        item.version,
+        "--source",
+        "acceptance",
+        "--idempotency-key",
+        "cli-preview",
+    )
+    assert code == 0
+    assert error == ""
+    cli_preview = previewed["data"]
+    assert cli_preview == api_preview.body
+    assert cli_preview["decision"]["operation"] == core_preview.decision.operation.value
+    assert cli_preview["item"]["owner_extension"]["requirements"] == {
+        "runtime": "notebook-host"
+    }
+    assert cli_preview["item"]["owner_extension"]["details"] is None
+    assert cli_preview["item"]["integrity"]["sha256"] == core_item.integrity.sha256
+    assert cli_preview["item"]["trust"] == core_item.trust_status.value
+
+    code, installed, error = invoke_cli_json(
+        config,
+        transport,
+        "--yes",
+        "marketplace",
+        "install",
+        item.item_id,
+        item.version,
+        "--source",
+        "acceptance",
+        "--idempotency-key",
+        "cli-install",
+    )
+    assert code == 0
+    assert error == ""
+    assert installed["data"]["status"] == "applied"
+    assert owner.calls == [("install", item.item_id)]
+
+    code, status, error = invoke_cli_json(
+        config,
+        transport,
+        "marketplace",
+        "status",
+        item.item_id,
+        item.version,
+        "--source",
+        "acceptance",
+    )
+    assert code == 0
+    assert error == ""
+    status_item = status["data"]
+    assert status_item["installed"] is True
+    assert status_item["owner_extension"]["status"]["owner_state"] == "installed"
+    assert status_item["owner_extension"]["details"]["owner"] == "notebook"
+
