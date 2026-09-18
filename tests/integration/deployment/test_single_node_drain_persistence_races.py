@@ -38,12 +38,13 @@ def test_terminal_callback_persistence_started_before_drain_settles_once(
         first = build_single_node_deployment(
             SingleNodeConfig(data_dir=root, secure_cookie=False, shutdown_timeout_seconds=1)
         )
+        admin = first.bootstrap_admin("drain-callback", "correct horse battery staple")
         task = await first.kernel.create_task(
             idempotency_key="callback-race:create",
             title="Callback persistence race",
             objective="Persist one terminal callback while drain starts",
-            owner_type="service",
-            owner_id="drain-race-test",
+            owner_type="user",
+            owner_id=admin.user_id,
         )
         await first.kernel.ready_task(
             idempotency_key="callback-race:ready",
@@ -123,12 +124,13 @@ def test_cancellation_started_before_drain_settles_without_duplicate_run(
         first = build_single_node_deployment(
             SingleNodeConfig(data_dir=root, secure_cookie=False, shutdown_timeout_seconds=1)
         )
+        admin = first.bootstrap_admin("drain-cancel", "correct horse battery staple")
         task = await first.kernel.create_task(
             idempotency_key="cancel-race:create",
             title="Cancellation drain race",
             objective="Settle one admitted cancellation while drain starts",
-            owner_type="service",
-            owner_id="drain-race-test",
+            owner_type="user",
+            owner_id=admin.user_id,
         )
         await first.kernel.ready_task(
             idempotency_key="cancel-race:ready",
