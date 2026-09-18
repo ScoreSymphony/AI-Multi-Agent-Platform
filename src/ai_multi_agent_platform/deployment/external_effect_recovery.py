@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from ai_multi_agent_platform.capabilities import (
-    ExternalEffectRecoveryCoordinator,
-    external_effect_recovery_resource,
-)
+from ai_multi_agent_platform.capabilities import ExternalEffectRecoveryCoordinator
 
 from .startup_recovery import StartupRecoveryExtensionReport
 
 
 class ExternalEffectStartupRecovery:
-    """Reconcile provider-observable effects without blocking operator access to the Control Plane."""
+    """Reconcile provider-observable effects without blocking operator Control Plane access."""
 
     def __init__(self, recovery: ExternalEffectRecoveryCoordinator) -> None:
         self.recovery = recovery
@@ -35,8 +32,8 @@ class ExternalEffectStartupRecovery:
             }
             for record in unresolved
         )
-        # Uncertain effects block replay of that exact action, not the whole Control Plane. Operators
-        # need the northbound diagnostics to reconcile/confirm them after startup.
+        # Uncertain effects block replay of that exact action, not the whole Control Plane.
+        # Operators need the northbound diagnostics to reconcile/confirm them after startup.
         return StartupRecoveryExtensionReport(
             name="external-effect-recovery",
             items_checked=len(before),
