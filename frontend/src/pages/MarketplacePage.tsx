@@ -25,25 +25,25 @@ const TRUST_STATES: RegistryTrustStatus[] = ["trusted", "reviewed", "local", "un
 const MATURITY_STATES: RegistryMaturity[] = ["stable", "beta", "experimental"];
 const PAGE_SIZE = 24;
 
-const PRIMARY_KIND_GROUPS: Array<{ value: string; label: string; kinds: string[] }> = [
+const PRIMARY_KIND_GROUPS: Array<{ group: string; label: string; kinds: string[] }> = [
   {
-    value: "agent,agent_team,skill,orchestrator",
+    group: "ai_agents",
     label: "AI & Agents",
     kinds: ["agent", "agent_team", "skill", "orchestrator"],
   },
   {
-    value: "model_provider,model_configuration",
+    group: "models",
     label: "Models",
     kinds: ["model_provider", "model_configuration"],
   },
   {
-    value: "tool,connector,capability_provider",
+    group: "tools_integrations",
     label: "Tools & Integrations",
     kinds: ["tool", "connector", "capability_provider"],
   },
-  { value: "application", label: "Applications", kinds: ["application"] },
+  { group: "applications", label: "Applications", kinds: ["application"] },
   {
-    value: "plugin,executor,memory_provider,file_provider,knowledge_provider,observability_exporter,automation_provider,evaluator",
+    group: "platform_extensions",
     label: "Platform Extensions",
     kinds: [
       "plugin",
@@ -56,8 +56,12 @@ const PRIMARY_KIND_GROUPS: Array<{ value: string; label: string; kinds: string[]
       "evaluator",
     ],
   },
-  { value: "template,workflow", label: "Content", kinds: ["template", "workflow"] },
+  { group: "content", label: "Content", kinds: ["template", "workflow"] },
 ];
+
+const FALLBACK_KIND_GROUPS: Record<string, string> = Object.fromEntries(
+  PRIMARY_KIND_GROUPS.flatMap((entry) => entry.kinds.map((kind) => [kind, entry.group])),
+);
 
 const FALLBACK_KIND_DESCRIPTORS: RegistryKindDescriptor[] = [
   descriptor("agent", "Agent", "kind_handler", "/agents"),
@@ -94,6 +98,7 @@ function descriptor(
     supports_install: default_route !== "manual",
     supports_update: default_route !== "manual",
     supports_uninstall: default_route === "kind_handler" || default_route === "plugin",
+    group: FALLBACK_KIND_GROUPS[kind] ?? null,
     management_path,
   };
 }
@@ -208,12 +213,32 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     [kindDescriptors, page, selected],
   );
 
+  const effectivePrimaryKindGroups = useMemo(
+    () =>
+      PRIMARY_KIND_GROUPS.map((group) => {
+        const extras = effectiveKindDescriptors
+          .filter(
+            (descriptor) =>
+              descriptor.group === group.group && !group.kinds.includes(descriptor.kind),
+          )
+          .sort((left, right) => kindLabel(left).localeCompare(kindLabel(right)))
+          .map((descriptor) => descriptor.kind);
+        const kinds = [...group.kinds, ...extras];
+        return {
+          ...group,
+          kinds,
+          value: kinds.join(","),
+        };
+      }),
+    [effectiveKindDescriptors],
+  );
+
   const dynamicKinds = useMemo(() => {
-    const primary = new Set(PRIMARY_KIND_GROUPS.flatMap((entry) => entry.kinds));
+    const primary = new Set(effectivePrimaryKindGroups.flatMap((entry) => entry.kinds));
     return effectiveKindDescriptors
       .filter((entry) => !primary.has(entry.kind))
       .sort((left, right) => kindLabel(left).localeCompare(kindLabel(right)));
-  }, [effectiveKindDescriptors]);
+  }, [effectiveKindDescriptors, effectivePrimaryKindGroups]);
 
   const selectedKind = selected
     ? effectiveKindDescriptors.find((entry) => entry.kind === selected.item_type) ??
@@ -425,7 +450,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
           <button type="button" aria-pressed={!kindFilter} onClick={() => setKindFilter("")}>
             All
           </button>
-          {PRIMARY_KIND_GROUPS.map((entry) => (
+          {effectivePrimaryKindGroups.map((entry) => (
             <button
               type="button"
               key={entry.value}
@@ -1455,6 +1480,7 @@ function mergeKindDescriptors(
     merged.set(entry.kind, {
       ...fallback,
       ...entry,
+      group: entry.group ?? fallback?.group ?? null,
       management_path: entry.management_path ?? fallback?.management_path ?? null,
     });
   }
