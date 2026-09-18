@@ -250,7 +250,10 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
         final_path = self._root / canonical_id
         temp_path = self._root / f".{canonical_id}.pending"
         try:
-            temp_path.write_bytes(data)
+            with temp_path.open("xb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
             os.replace(temp_path, final_path)
             with self._connect() as connection:
                 connection.execute(
