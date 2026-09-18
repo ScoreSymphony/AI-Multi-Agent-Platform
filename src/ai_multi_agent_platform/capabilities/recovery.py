@@ -848,6 +848,17 @@ def external_effect_recovery_resource(
 ) -> dict[str, JsonValue]:
     """Redacted operator projection. Private idempotency/native metadata never cross northbound."""
 
+    artifact_refs: list[JsonValue] = []
+    artifact_refs.extend(record.artifact_refs)
+    evidence_refs: list[JsonValue] = []
+    evidence_refs.extend(record.evidence_refs)
+    metadata_namespaces: list[JsonValue] = []
+    metadata_namespaces.extend(
+        sorted({metadata.namespace for metadata in record.adapter_metadata})
+    )
+    permitted_actions: list[JsonValue] = []
+    permitted_actions.extend(record.permitted_actions)
+
     return {
         "id": record.effect_id,
         "type": "external_effect_recovery",
@@ -869,76 +880,92 @@ def external_effect_recovery_resource(
         "reconciliation_attempts": record.reconciliation_attempts,
         "duplicate_callbacks_ignored": record.duplicate_callbacks_ignored,
         "result_ref": record.result_ref,
-        "artifact_refs": list(record.artifact_refs),
-        "evidence_refs": list(record.evidence_refs),
-        "adapter_metadata_namespaces": sorted(
-            {metadata.namespace for metadata in record.adapter_metadata}
-        ),
+        "artifact_refs": artifact_refs,
+        "evidence_refs": evidence_refs,
+        "adapter_metadata_namespaces": metadata_namespaces,
         "last_operator_actor": record.last_operator_actor,
         "last_operator_reason": record.last_operator_reason,
-        "permitted_actions": list(record.permitted_actions),
+        "permitted_actions": permitted_actions,
         "created_at": record.created_at.isoformat(),
         "updated_at": record.updated_at.isoformat(),
     }
+
+
+def _replace_with_observation(
+    record: ExternalEffectRecoveryRecord,
+    observation: ExternalEffectObservation,
+    *,
+    status: ExternalEffectRecoveryStatus,
+    disposition: ExternalEffectRecoveryDisposition,
+    reason: str,
+) -> ExternalEffectRecoveryRecord:
+    return replace(
+        record,
+        status=status,
+        disposition=disposition,
+        reason=reason,
+        result_ref=observation.result_ref or record.result_ref,
+        artifact_refs=tuple(
+            dict.fromkeys((*record.artifact_refs, *observation.artifact_refs))
+        ),
+        evidence_refs=tuple(
+            dict.fromkeys((*record.evidence_refs, *observation.evidence_refs))
+        ),
+        adapter_metadata=observation.adapter_metadata or record.adapter_metadata,
+        updated_at=_utc_now(),
+    )
 
 
 def _apply_observation(
     record: ExternalEffectRecoveryRecord,
     observation: ExternalEffectObservation,
 ) -> ExternalEffectRecoveryRecord:
-    common = {
-        "result_ref": observation.result_ref or record.result_ref,
-        "artifact_refs": tuple(dict.fromkeys((*record.artifact_refs, *observation.artifact_refs))),
-        "evidence_refs": tuple(dict.fromkeys((*record.evidence_refs, *observation.evidence_refs))),
-        "adapter_metadata": observation.adapter_metadata or record.adapter_metadata,
-        "updated_at": _utc_now(),
-    }
     if observation.status is ExternalEffectObservationStatus.APPLIED:
-        return replace(
+        return _replace_with_observation(
             record,
+            observation,
             status=ExternalEffectRecoveryStatus.SUCCEEDED,
             disposition=ExternalEffectRecoveryDisposition.TERMINAL_SUCCESS,
             reason=observation.detail or "provider_reconciliation_confirmed_applied",
-            **common,
         )
     if observation.status is ExternalEffectObservationStatus.NOT_APPLIED:
-        return replace(
+        return _replace_with_observation(
             record,
+            observation,
             status=ExternalEffectRecoveryStatus.UNCERTAIN,
             disposition=ExternalEffectRecoveryDisposition.SAFE_TO_RETRY,
             reason=observation.detail or "provider_reconciliation_confirmed_not_applied",
-            **common,
         )
     if observation.status is ExternalEffectObservationStatus.IN_PROGRESS:
-        return replace(
+        return _replace_with_observation(
             record,
+            observation,
             status=ExternalEffectRecoveryStatus.UNCERTAIN,
             disposition=ExternalEffectRecoveryDisposition.SAFE_TO_RESUME,
             reason=observation.detail or "provider_reconciliation_confirmed_in_progress",
-            **common,
         )
     if observation.status is ExternalEffectObservationStatus.FAILED:
-        return replace(
+        return _replace_with_observation(
             record,
+            observation,
             status=ExternalEffectRecoveryStatus.FAILED,
             disposition=ExternalEffectRecoveryDisposition.TERMINAL_FAILURE,
             reason=observation.detail or "provider_reconciliation_confirmed_failure",
-            **common,
         )
     if observation.status is ExternalEffectObservationStatus.UNAVAILABLE:
-        return replace(
+        return _replace_with_observation(
             record,
+            observation,
             status=ExternalEffectRecoveryStatus.BLOCKED,
             disposition=ExternalEffectRecoveryDisposition.BLOCKED_DEPENDENCY,
             reason=observation.detail or "provider_reconciliation_unavailable",
-            **common,
         )
-    return replace(
+    return _replace_with_observation(
         record,
+        observation,
         status=ExternalEffectRecoveryStatus.BLOCKED,
         disposition=ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW,
         reason=observation.detail or "provider_reconciliation_outcome_unknown",
-        **common,
     )
 
 
