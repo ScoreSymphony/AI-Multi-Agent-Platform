@@ -14,6 +14,7 @@ from .hermes_config import (
     HermesRuntimeMode,
 )
 from .hermes_http import HermesHttpResponse, HermesHttpTransport, UrllibHermesHttpTransport
+from .hermes_mapping import HermesAgentMapper
 from .hermes_plugin import (
     HERMES_EXTENSION_ID,
     HERMES_PLUGIN_ID,
@@ -21,7 +22,6 @@ from .hermes_plugin import (
     HermesOrchestratorPlugin,
     hermes_plugin_manifest,
 )
-from .hermes_mapping import HermesAgentMapper
 from .litellm import (
     LiteLLMMode,
     LiteLLMModelProvider,
