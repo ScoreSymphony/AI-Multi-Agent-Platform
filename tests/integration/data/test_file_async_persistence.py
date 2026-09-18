@@ -434,6 +434,41 @@ def test_file_atomic_replace_failure_never_becomes_canonical(
     asyncio.run(scenario())
 
 
+def test_failed_artifact_link_does_not_materialize_after_restart(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        context = _context()
+        root = tmp_path / "objects"
+        database = tmp_path / "files.sqlite3"
+        provider = LocalFileProvider(root, database)
+        record = await provider.create_file(b"artifact-bytes", context)
+        artifact_id = new_id("artifact")
+
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                """
+                CREATE TRIGGER fail_artifact_link
+                BEFORE UPDATE OF artifact_ids_json ON data_files
+                BEGIN
+                    SELECT RAISE(ABORT, 'injected artifact link failure');
+                END
+                """
+            )
+
+        with pytest.raises(ContractError) as raised:
+            await provider.link_artifact(record.file_id, artifact_id, context)
+
+        assert raised.value.code is ErrorCode.BACKEND_ERROR
+        with sqlite3.connect(database) as connection:
+            connection.execute("DROP TRIGGER fail_artifact_link")
+
+        restarted = LocalFileProvider(root, database)
+        recovered = await restarted.get_file(record.file_id, context)
+        assert recovered.artifact_ids == ()
+        assert await restarted.read(record.file_id, context.operation) == b"artifact-bytes"
+
+    asyncio.run(scenario())
+
+
 def test_file_restart_fails_closed_when_owned_pending_state_cannot_be_cleaned(
     tmp_path: Path,
 ) -> None:
