@@ -867,10 +867,10 @@ function MarketplaceDetail({
             {busy ? "Operation pending…" : operation === "update" ? "Preview update" : "Preview install"}
           </button>
         ) : null}
-        {candidateIsInstalled(item) && !item.pinned_version ? (
+        {installationSourceMatches(item) && !item.pinned_version ? (
           <button type="button" disabled={busy} onClick={onPin}>Pin installed version</button>
         ) : null}
-        {candidateIsInstalled(item) && item.pinned_version ? (
+        {installationSourceMatches(item) && item.pinned_version ? (
           <button type="button" disabled={busy} onClick={onUnpin}>Unpin</button>
         ) : null}
         {uninstallSupported(item) ? (
@@ -1308,7 +1308,7 @@ function operationSupported(item: RegistryItem, operation: "install" | "update")
 }
 
 function uninstallSupported(item: RegistryItem): boolean {
-  if (!candidateIsInstalled(item) || !["kind_handler", "plugin"].includes(item.route)) return false;
+  if (!installationSourceMatches(item) || !["kind_handler", "plugin"].includes(item.route)) return false;
   if (item.owner_extension?.handler_available !== true) return false;
   const advertised = item.owner_extension.supported_operations;
   if (advertised && !advertised.includes("uninstall")) return false;
@@ -1339,8 +1339,8 @@ function mutationOperation(item: RegistryItem): "install" | "update" | null {
   return null;
 }
 
-function candidateIsInstalled(item: RegistryItem): boolean {
-  if (!item.installed || item.installed_version !== item.version) return false;
+function installationSourceMatches(item: RegistryItem): boolean {
+  if (!item.installed) return false;
   if (typeof item.installation_source_matches === "boolean") {
     return item.installation_source_matches;
   }
@@ -1348,6 +1348,10 @@ function candidateIsInstalled(item: RegistryItem): boolean {
     return item.installed_source_registry === item.source_registry;
   }
   return true;
+}
+
+function candidateIsInstalled(item: RegistryItem): boolean {
+  return item.installed_version === item.version && installationSourceMatches(item);
 }
 
 function sameVersionSourceSwitch(item: RegistryItem): boolean {
