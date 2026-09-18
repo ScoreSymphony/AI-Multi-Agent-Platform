@@ -35,6 +35,7 @@ from .validation import (
     ValidationContext,
     ValidationFinding,
     has_errors,
+    merge_installed_items,
     validate_item,
 )
 
@@ -670,10 +671,12 @@ class DistributionService:
     ) -> ValidationContext:
         resolved = context
         if self._installations is not None:
+            persisted = tuple(record.as_installed() for record in self._installations.list())
             resolved = replace(
                 resolved,
-                installed_items=tuple(
-                    record.as_installed() for record in self._installations.list()
+                installed_items=merge_installed_items(
+                    persisted,
+                    resolved.installed_items,
                 ),
             )
         if item.integrity.signature is not None:

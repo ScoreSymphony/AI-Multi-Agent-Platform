@@ -48,6 +48,17 @@ def test_registry_query_rejects_invalid_filters_before_provider_use() -> None:
         RegistryQuery(update_for_item_id="Bad ID")
 
 
+def test_installed_registry_item_supports_unknown_marketplace_origin() -> None:
+    installed = InstalledRegistryItem(
+        "example.local",
+        "1.0.0",
+        item_type=RegistryItemType.TOOL,
+    )
+
+    assert installed.source_registry is None
+    assert installed.kind == "tool"
+
+
 def test_installed_registry_item_validates_persisted_update_metadata() -> None:
     with pytest.raises(ValueError, match="source_registry"):
         InstalledRegistryItem("example.valid", "1.0.0", " ")
