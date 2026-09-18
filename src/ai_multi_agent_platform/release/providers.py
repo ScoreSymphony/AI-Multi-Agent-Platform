@@ -8,6 +8,13 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from ai_multi_agent_platform.security.git_execution import (
+    controlled_git_environment,
+    resolve_git_executable,
+    validate_git_remote_url,
+)
 
 from .discovery import (
     UPDATE_OBSERVATION_SCHEMA_VERSION,
@@ -52,24 +59,36 @@ def git_head_revision(source_url: str) -> str:
     """Resolve a repository HEAD without cloning or mutating a working tree."""
 
     try:
-        completed = subprocess.run(
-            ["git", "ls-remote", "--exit-code", source_url, "HEAD"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        safe_source_url = validate_git_remote_url(source_url)
+    except ValueError as exc:
+        raise UpdateDiscoveryError("git discovery rejected remote URL") from exc
+    try:
+        with TemporaryDirectory(prefix="aamp-git-discovery-") as home:
+            completed = subprocess.run(
+                [
+                    resolve_git_executable("git"),
+                    "ls-remote",
+                    "--exit-code",
+                    safe_source_url,
+                    "HEAD",
+                ],
+                env=controlled_git_environment(home=home),
+                stdin=subprocess.DEVNULL,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise UpdateDiscoveryError(f"git discovery failed for {source_url}: {exc}") from exc
+        raise UpdateDiscoveryError(f"git discovery process failed: {type(exc).__name__}") from exc
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or f"git exited with {completed.returncode}"
-        raise UpdateDiscoveryError(f"git discovery failed for {source_url}: {detail}")
+        raise UpdateDiscoveryError(f"git discovery failed with exit status {completed.returncode}")
     line = completed.stdout.strip().splitlines()
     if len(line) != 1:
-        raise UpdateDiscoveryError(f"git discovery returned an unexpected HEAD for {source_url}")
+        raise UpdateDiscoveryError("git discovery returned an unexpected HEAD")
     revision = line[0].split(maxsplit=1)[0].lower()
     if _GIT_COMMIT.fullmatch(revision) is None:
-        raise UpdateDiscoveryError(f"git discovery returned a non-immutable HEAD for {source_url}")
+        raise UpdateDiscoveryError("git discovery returned a non-immutable HEAD")
     return revision
 
 

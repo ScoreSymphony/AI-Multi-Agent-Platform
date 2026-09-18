@@ -20,6 +20,10 @@ from pathlib import Path
 from time import monotonic
 
 from ai_multi_agent_platform.conformance.evidence import parse_runtime_evidence
+from ai_multi_agent_platform.security.git_execution import (
+    controlled_git_environment,
+    resolve_git_executable,
+)
 
 REPORT_SCHEMA = "ai-multi-agent-platform/platform-conformance/v1"
 _PACKAGE_NAME = "ai-multi-agent-platform"
@@ -719,8 +723,10 @@ def _component_versions(values: Mapping[str, str] | None) -> tuple[ComponentVers
 def _git_commit(root: Path) -> str | None:
     try:
         process = subprocess.run(
-            ("git", "rev-parse", "HEAD"),
+            (resolve_git_executable("git"), "rev-parse", "HEAD"),
             cwd=root,
+            env=controlled_git_environment(),
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             check=False,
