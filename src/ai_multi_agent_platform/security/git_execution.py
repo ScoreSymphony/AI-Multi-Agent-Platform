@@ -124,7 +124,7 @@ def resolve_git_executable(binary: str) -> str:
     candidate = Path(binary).expanduser()
     if candidate.is_absolute():
         return str(candidate)
-    if candidate.parent != Path("."):
+    if "/" in binary or "\\" in binary:
         return str(candidate.resolve())
     resolved = shutil.which(binary, path=_absolute_search_path(os.environ.get("PATH")))
     return str(Path(resolved).resolve()) if resolved is not None else binary
