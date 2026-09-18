@@ -796,6 +796,16 @@ def _require_marketplace_activation(
             "marketplace item requires manual installation",
             details={"marketplace_reason": "manual_route"},
         )
+    if preview.route is DistributionRoute.KIND_HANDLER and not route_available:
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "marketplace owner handler is unavailable",
+            details={
+                "marketplace_reason": "missing_handler",
+                "kind": preview.item.kind,
+                "route": preview.route.value,
+            },
+        )
 
     errors = tuple(finding for finding in preview.findings if finding.severity.value == "error")
     error_codes = {finding.code for finding in errors}
