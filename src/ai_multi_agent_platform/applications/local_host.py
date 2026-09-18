@@ -88,8 +88,7 @@ def local_host_resource_rejections(
     ):
         rejected.append("memory")
     if requirements.disk_bytes is not None and (
-        host.disk_available_bytes is None
-        or host.disk_available_bytes < requirements.disk_bytes
+        host.disk_available_bytes is None or host.disk_available_bytes < requirements.disk_bytes
     ):
         rejected.append("disk")
     if host.gpu_count < requirements.gpu_count:
