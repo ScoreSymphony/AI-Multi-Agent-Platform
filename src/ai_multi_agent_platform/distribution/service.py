@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, replace
 from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
