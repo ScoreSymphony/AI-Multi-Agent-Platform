@@ -208,3 +208,40 @@ def test_cancellation_interrupts_health_retry_immediately() -> None:
         assert provider.cancelled == 1
 
     asyncio.run(scenario())
+
+
+def test_operational_reconciliation_and_operator_blockers_are_projected_as_required() -> None:
+    async def scenario() -> None:
+        provider = _HealthProvider([HealthStatus.HEALTHY])
+        health = AggregatedHealthProvider(
+            (ProviderHealthDependency(provider, required=True, max_retries=0),)
+        )
+
+        health.set_operational_state(
+            ReadinessState.RECONCILING,
+            detail="startup reconciliation is in progress",
+        )
+        assert await health.health() is HealthStatus.UNAVAILABLE
+        assert health.service_health.readiness is ReadinessState.RECONCILING
+        runtime = next(
+            dependency
+            for dependency in health.service_health.dependencies
+            if dependency.name == "platform-runtime"
+        )
+        assert runtime.required is True
+
+        health.set_operational_state(
+            ReadinessState.OPERATOR_INTERVENTION_REQUIRED,
+            detail="canonical recovery requires an operator decision",
+        )
+        assert await health.health() is HealthStatus.UNAVAILABLE
+        assert (
+            health.service_health.readiness
+            is ReadinessState.OPERATOR_INTERVENTION_REQUIRED
+        )
+
+        health.set_operational_state(None)
+        assert await health.health() is HealthStatus.HEALTHY
+        assert health.service_health.readiness is ReadinessState.READY
+
+    asyncio.run(scenario())
