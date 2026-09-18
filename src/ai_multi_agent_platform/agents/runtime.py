@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Protocol, cast
+from typing import Protocol, cast, runtime_checkable
 
 from ai_multi_agent_platform.capabilities import (
     CapabilityCompatibilityRequest,
@@ -36,6 +36,7 @@ from .models import (
 from .service import AgentService
 
 
+@runtime_checkable
 class AgentOrchestratorMapper(Protocol):
     """Maps a canonical Agent execution snapshot into one private runtime representation."""
 
@@ -43,6 +44,66 @@ class AgentOrchestratorMapper(Protocol):
     def adapter_id(self) -> str: ...
 
     async def map_agent(self, spec: AgentExecutionSpec) -> OrchestratorMapping: ...
+
+
+class AgentOrchestratorMapperRegistry(Mapping[str, AgentOrchestratorMapper]):
+    """Mutable server-side registry for replaceable Agent orchestrator mappers."""
+
+    def __init__(
+        self,
+        mappers: Mapping[str, AgentOrchestratorMapper] | None = None,
+    ) -> None:
+        self._mappers: dict[str, AgentOrchestratorMapper] = {}
+        for adapter_id, mapper in (mappers or {}).items():
+            self.register(mapper, adapter_id=adapter_id)
+
+    def register(
+        self,
+        mapper: AgentOrchestratorMapper,
+        *,
+        adapter_id: str | None = None,
+    ) -> None:
+        resolved_id = adapter_id or mapper.adapter_id
+        if not resolved_id.strip():
+            raise ValueError("orchestrator mapper adapter_id must not be blank")
+        if resolved_id != mapper.adapter_id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "orchestrator mapper registry key must match mapper.adapter_id",
+            )
+        if resolved_id == ReferenceOrchestratorMapper.adapter_id:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "reference-orchestrator is reserved by the Agent runtime",
+            )
+        if resolved_id in self._mappers:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"orchestrator mapper is already registered: {resolved_id}",
+            )
+        self._mappers[resolved_id] = mapper
+
+    def unregister(self, adapter_id: str) -> AgentOrchestratorMapper:
+        try:
+            return self._mappers.pop(adapter_id)
+        except KeyError as exc:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"orchestrator mapper is not registered: {adapter_id}",
+            ) from exc
+
+    def __getitem__(self, adapter_id: str) -> AgentOrchestratorMapper:
+        return self._mappers[adapter_id]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._mappers)
+
+    def __len__(self) -> int:
+        return len(self._mappers)
+
+    @property
+    def adapter_ids(self) -> tuple[str, ...]:
+        return tuple(sorted(self._mappers))
 
 
 class ReferenceOrchestratorMapper:
