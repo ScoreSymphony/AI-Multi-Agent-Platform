@@ -31,6 +31,7 @@ const ITEM_TYPES: Array<{ value: RegistryItemType; label: string }> = [
   { value: "template", label: "Templates" },
   { value: "model_configuration", label: "Model configurations" },
   { value: "connector", label: "Connectors" },
+  { value: "application", label: "Applications" },
   { value: "evaluation", label: "Evaluations" },
   { value: "documentation", label: "Documentation" },
 ];
