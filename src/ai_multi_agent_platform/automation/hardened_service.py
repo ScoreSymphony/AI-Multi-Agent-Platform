@@ -573,7 +573,6 @@ class AutomationService(_BaseAutomationService):
             payload=payload,
         )
 
-
     async def reconcile_startup_deliveries(self) -> AutomationStartupRecoveryReport:
         """Reconcile durable deliveries whose process-local processing owner disappeared.
 
