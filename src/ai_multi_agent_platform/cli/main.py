@@ -796,7 +796,8 @@ def _doctor_guidance(state: str, *, required: bool) -> str:
         )
     if state in {"degraded", "unknown"}:
         return (
-            "restore or disable the optional dependency; unrelated canonical operations may continue"
+            "restore or disable the optional dependency; unrelated canonical operations "
+            "may continue"
         )
     return "no operator action required"
 
