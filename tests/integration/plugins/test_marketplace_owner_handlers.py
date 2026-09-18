@@ -810,4 +810,3 @@ async def test_application_handler_preserves_marketplace_source_identity() -> No
     assert second.instance_id != first.instance_id
     assert (await handler.status(private_item)).instance_id == second.instance_id
     assert handler.describe(private_item)["application_id"] == second_manifest.application_id
-
