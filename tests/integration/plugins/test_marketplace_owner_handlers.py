@@ -11,6 +11,10 @@ from ai_multi_agent_platform.adapters.hermes import (
     HermesAdapterConfig,
     HermesOrchestrator,
 )
+from ai_multi_agent_platform.adapters.hermes_plugin import (
+    HermesOrchestratorPlugin,
+    hermes_plugin_manifest,
+)
 from ai_multi_agent_platform.adapters.marketplace_owner_handlers import (
     AgentMarketplaceKindHandler,
     AgentTeamMarketplaceKindHandler,
@@ -52,7 +56,12 @@ from ai_multi_agent_platform.connectors import (
     ReferenceConnectorProvider,
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.control_plane.plugin_api import _manifest_document
+from ai_multi_agent_platform.control_plane.plugin_module import (
+    PluginControlPlaneBinding,
+    _manifest_digest,
+)
 from ai_multi_agent_platform.distribution import (
     DistributionService,
     JsonRegistryInstallationStore,
@@ -80,6 +89,7 @@ from ai_multi_agent_platform.orchestration import (
 )
 from ai_multi_agent_platform.plugins import (
     ConnectorRegistryBinder,
+    DiscoveredPlugin,
     ExecutorRegistryBinder,
     ExtensionRegistration,
     ExtensionType,
@@ -90,6 +100,8 @@ from ai_multi_agent_platform.plugins import (
     PluginHealth,
     PluginHealthReport,
     PluginRegistry,
+    StaticPluginSource,
+    PluginCatalog,
     reference_manifest,
 )
 from ai_multi_agent_platform.portability import (
@@ -599,6 +611,83 @@ class _SingleExtensionRuntime:
 
     async def shutdown(self) -> None:
         return None
+
+
+async def test_hermes_marketplace_install_activates_through_canonical_control_plane() -> None:
+    manifest = hermes_plugin_manifest()
+    reference = ReferenceOrchestrator()
+    orchestrators = OrchestratorRegistry({reference.descriptor.provider_id: reference})
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.ORCHESTRATOR: frozenset({"1.0"})},
+        binders={ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(orchestrators)},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.ORCHESTRATOR,
+        extension_type=ExtensionType.ORCHESTRATOR,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.ORCHESTRATOR,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    installed = await handler.install(item, _plugin_artifact(manifest))
+    assert installed.state.value == "installed"
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+
+    catalog = PluginCatalog(
+        StaticPluginSource(
+            DiscoveredPlugin(
+                manifest=manifest,
+                runtime_factory=HermesOrchestratorPlugin,
+                install_source="bundled:hermes-adapter",
+            )
+        )
+    )
+
+    async def grants(context: RequestContext, candidate_manifest):
+        del context
+        assert candidate_manifest == manifest
+        return candidate_manifest.requested_permissions
+
+    binding = PluginControlPlaneBinding(
+        plugin_registry,
+        plugin_catalog=catalog,
+        plugin_permission_resolver=grants,
+    )
+    context = RequestContext("hermes-plugin", "hermes-plugin")
+    configured = await binding.configure(
+        context,
+        manifest.plugin_id,
+        {"configuration": {"enabled": True}},
+    )
+    assert configured["state"] == "configured"
+
+    enabled = await binding.enable(
+        context,
+        manifest.plugin_id,
+        {"manifest_digest": _manifest_digest(manifest)},
+    )
+    assert enabled["state"] == "enabled"
+    assert set(enabled["granted_permissions"]) == {"network_access", "secret_consumption"}
+    selected = orchestrators.select(OrchestratorSelection(HERMES_ADAPTER_ID))
+    assert isinstance(selected, HermesOrchestrator)
+    assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
+
+    disabled = await binding.disable(context, manifest.plugin_id, {})
+    assert disabled["state"] == "disabled"
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+    assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
+
+    removed = await binding.remove(context, manifest.plugin_id, {})
+    assert removed["removed"] is True
+    with pytest.raises(ContractError) as missing:
+        plugin_registry.get(manifest.plugin_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
 
 
 async def test_hermes_full_marketplace_flow_preserves_replaceable_orchestrator_owner(
