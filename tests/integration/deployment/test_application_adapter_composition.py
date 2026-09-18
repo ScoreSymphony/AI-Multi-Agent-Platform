@@ -39,9 +39,7 @@ def _manifest() -> ApplicationManifest:
                 process=(sys.executable, "-c", "print('ready')"),
             ),
         ),
-        resource_associations=(
-            ApplicationResourceAssociation(media_types=("text/plain",)),
-        ),
+        resource_associations=(ApplicationResourceAssociation(media_types=("text/plain",)),),
         runtime_requirements=("local", "process"),
     )
 
