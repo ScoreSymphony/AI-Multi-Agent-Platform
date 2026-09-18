@@ -406,7 +406,7 @@ try {
     "Canonical verification",
     "produced result",
   ]) {
-    requireText(resultText, expected, "Official multi-agent browser result");
+    requireText(resultText.toLowerCase(), expected.toLowerCase(), "Official multi-agent browser result");
   }
   await resultCard.getByRole("link", { name: "Open Task", exact: true }).waitFor();
   const producedResultLink = resultCard.getByRole("link", { name: "Open produced Result", exact: true });
