@@ -8,10 +8,10 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode, Operatio
 from ai_multi_agent_platform.control_plane import ControlPlane
 from ai_multi_agent_platform.control_plane.models import ActorContext, RequestContext
 from ai_multi_agent_platform.distribution import (
+    MARKETPLACE_INSTALL_COMMAND,
     DistributionService,
     JsonRegistryInstallationStore,
     LocalRegistryProvider,
-    MARKETPLACE_INSTALL_COMMAND,
     MarketplaceKindHandlerRegistry,
     RegistryItem,
     RegistryItemType,
