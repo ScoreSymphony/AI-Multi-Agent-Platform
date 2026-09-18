@@ -154,6 +154,34 @@ def test_marketplace_search_uses_unified_collection_and_first_class_filters(
     assert query["filter[platform_version]"] == ["1.0.0"]
 
 
+def test_marketplace_cli_accepts_semantic_platform_kind_without_shadow_command(
+    tmp_path: Path,
+) -> None:
+    transport = MarketplaceTransport()
+
+    code = run_cli(
+        [
+            "--config",
+            str(_config(tmp_path)),
+            "marketplace",
+            "search",
+            "Hermes",
+            "--kind",
+            "orchestrator",
+        ],
+        transport=transport,
+        stdout=StringIO(),
+    )
+
+    assert code == 0
+    method, path, query, _headers, body = transport.calls[0]
+    assert method == "GET"
+    assert path == "/api/v1/registry-items"
+    assert body is None
+    assert query["q"] == ["Hermes"]
+    assert query["filter[kind]"] == ["orchestrator"]
+
+
 def test_marketplace_kinds_lists_registered_component_metadata(tmp_path: Path) -> None:
     transport = MarketplaceTransport()
 
