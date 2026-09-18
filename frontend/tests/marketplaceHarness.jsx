@@ -493,7 +493,7 @@ const fetchImpl = async (input, init = {}) => {
     parsed.pathname === "/api/v1/commands/marketplace.update"
   ) {
     if (mutationMode === "slow") {
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
     if (mutationMode === "fail") {
       return errorResponse(500, "backend_error", "Marketplace owner mutation failed");
