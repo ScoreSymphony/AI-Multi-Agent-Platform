@@ -92,9 +92,7 @@ def test_configured_single_node_composes_manifest_backed_tool_owner_handler(tmp_
                                     manifest.provenance.source_repository
                                     or "https://example.invalid/tool"
                                 ),
-                                "package_reference": (
-                                    f"{manifest.plugin_id}@{manifest.plugin_version}"
-                                ),
+                                "package_reference": f"{manifest.plugin_id}@{manifest.plugin_version}",
                             },
                             "license": manifest.provenance.license,
                             "provenance": "registry-release",
