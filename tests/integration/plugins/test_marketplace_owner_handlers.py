@@ -618,6 +618,25 @@ async def test_model_provider_marketplace_rejects_plaintext_package_credentials(
     assert embedded_secret.value.code is ErrorCode.INVALID_CONFIGURATION
     assert plugin_registry.list_plugins() == ()
 
+    schema_secret_manifest = replace(
+        manifest,
+        configuration_schema={
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string",
+                    "default": "plaintext-provider-token",
+                }
+            },
+            "additionalProperties": False,
+        },
+    )
+    with pytest.raises(ContractError) as embedded_schema_secret:
+        await handler.install(item, _plugin_artifact(schema_secret_manifest))
+
+    assert embedded_schema_secret.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert plugin_registry.list_plugins() == ()
+
     installed = await handler.install(item, _plugin_artifact(manifest))
     assert installed.plugin_id == item.item_id
 
