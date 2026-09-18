@@ -8,10 +8,15 @@ from pathlib import Path
 from typing import Protocol
 
 from .items import InstalledRegistryItem, RegistryItem
-from .models import RegistryItemType, version_key
+from .models import (
+    RegistryItemKind,
+    parse_registry_item_kind,
+    registry_item_kind_value,
+    version_key,
+)
 
-_STATE_VERSION = "2"
-_SUPPORTED_STATE_VERSIONS = frozenset({"1", _STATE_VERSION})
+_STATE_VERSION = "3"
+_SUPPORTED_STATE_VERSIONS = frozenset({"1", "2", _STATE_VERSION})
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +29,7 @@ class RegistryInstallationSnapshot:
     revision: str | None
     license: str
     provenance: str
-    item_type: RegistryItemType | None = None
+    item_type: RegistryItemKind | None = None
     artifact_sha256: str | None = None
 
     def __post_init__(self) -> None:
@@ -35,6 +40,8 @@ class RegistryInstallationSnapshot:
             license=self.license,
             provenance=self.provenance,
         )
+        if self.item_type is not None:
+            object.__setattr__(self, "item_type", parse_registry_item_kind(self.item_type))
         if not self.source_repository.strip():
             raise ValueError("source_repository must be non-blank")
         if not self.package_reference.strip():
@@ -205,7 +212,9 @@ def _snapshot_to_json(snapshot: RegistryInstallationSnapshot) -> dict[str, objec
         "revision": snapshot.revision,
         "license": snapshot.license,
         "provenance": snapshot.provenance,
-        "item_type": snapshot.item_type.value if snapshot.item_type is not None else None,
+        "item_type": (
+            registry_item_kind_value(snapshot.item_type) if snapshot.item_type is not None else None
+        ),
         "artifact_sha256": snapshot.artifact_sha256,
     }
 
@@ -267,13 +276,13 @@ def _optional_string(value: dict[object, object], key: str) -> str | None:
 def _optional_item_type(
     value: dict[object, object],
     key: str,
-) -> RegistryItemType | None:
+) -> RegistryItemKind | None:
     result = value.get(key)
     if result is None:
         return None
     if not isinstance(result, str):
         raise ValueError(f"registry installation field {key!r} must be null or a string")
     try:
-        return RegistryItemType(result)
+        return parse_registry_item_kind(result)
     except ValueError as exc:
         raise ValueError(f"registry installation field {key!r} has an invalid item type") from exc
