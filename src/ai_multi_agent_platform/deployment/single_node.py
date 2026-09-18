@@ -103,6 +103,7 @@ from .composition.services import (
     RuntimeServicesBundle,
 )
 from .config import SingleNodeConfig
+from .drain import SingleNodeDrainController
 
 _SMOKE_PROJECT_KEY = "deployment-smoke-project-v1"
 _SMOKE_TASK_KEY = "deployment-smoke-task-v1"
@@ -162,6 +163,7 @@ class SingleNodeDeployment:
     observability_exporter: InMemoryExporter
     telemetry: Telemetry
     health_provider: AggregatedHealthProvider
+    drain: SingleNodeDrainController
     distributed_runtime: DistributedRuntime | None
     pre_authorization_lifecycle: LifecycleBackend
     lifecycle_binding: StartupLifecycleBinding
@@ -346,6 +348,10 @@ def build_single_node_deployment_from_foundation(
         accounting_service=accounting_service,
     )
     health = build_health(storage, execution)
+    drain = SingleNodeDrainController(
+        timeout_seconds=config.shutdown_timeout_seconds,
+        telemetry=observability.telemetry,
+    )
     control_plane = build_control_plane(
         config,
         storage,
@@ -361,7 +367,7 @@ def build_single_node_deployment_from_foundation(
         health,
         accounting_service=accounting_service,
     )
-    http = build_http(config, security, control_plane)
+    http = build_http(config, security, control_plane, drain)
     return _assemble_deployment(
         config=config,
         foundation=foundation,
@@ -374,6 +380,7 @@ def build_single_node_deployment_from_foundation(
         kernel=kernel,
         evaluation=evaluation,
         health=health,
+        drain=drain,
         control_plane=control_plane,
         http=http,
         accounting_service=accounting_service,
@@ -393,6 +400,7 @@ def _assemble_deployment(
     kernel: KernelBundle,
     evaluation: EvaluationBundle,
     health: HealthBundle,
+    drain: SingleNodeDrainController,
     control_plane: ControlPlaneBundle,
     http: HttpBundle,
     accounting_service: AccountingService | None,
@@ -438,6 +446,7 @@ def _assemble_deployment(
         observability_exporter=observability.exporter,
         telemetry=observability.telemetry,
         health_provider=health.provider,
+        drain=drain,
         distributed_runtime=execution.distributed_runtime,
         pre_authorization_lifecycle=execution.pre_authorization_lifecycle,
         lifecycle_binding=execution.lifecycle,
