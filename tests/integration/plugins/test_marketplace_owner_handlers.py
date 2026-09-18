@@ -920,6 +920,60 @@ async def test_semantic_orchestrator_installation_reconciles_only_into_plugin_ow
     assert "reference" in orchestrators.orchestrator_ids
 
 
+async def test_model_provider_reconciliation_rejects_secret_bearing_package(
+    tmp_path,
+) -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.secret-model-provider",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="model-provider.secret",
+                extension_type=ExtensionType.MODEL_PROVIDER,
+                metadata={"token": "plaintext-provider-token"},
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+    )
+    item = _item(
+        RegistryItemType.MODEL_PROVIDER,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    artifact = _plugin_artifact(manifest)
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+    )
+    installations = JsonRegistryInstallationStore(
+        tmp_path / "secret-model-provider-restart.json"
+    )
+    installations.record(
+        item,
+        provider_id=provider.provider_id,
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.MODEL_PROVIDER: frozenset({"1.0"})},
+    )
+
+    with pytest.raises(
+        RegistryPluginReconciliationError,
+        match="no longer validates",
+    ):
+        await reconcile_registry_plugins(provider, installations, plugin_registry)
+
+    with pytest.raises(ContractError) as missing:
+        plugin_registry.get(item.item_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
+
+
 async def test_reconciliation_rejects_same_version_with_different_owner_manifest(
     tmp_path,
 ) -> None:
