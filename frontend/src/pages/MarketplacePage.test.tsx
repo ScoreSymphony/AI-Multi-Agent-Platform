@@ -196,9 +196,22 @@ describe("MarketplacePage", () => {
     expect(marketplacePresentation.uninstallSupported(uninstallable)).toBe(true);
     expect(
       marketplacePresentation.uninstallSupported(
-        item({ route: "plugin", installed: true, installed_version: "1.0.0" }),
+        item({
+          item_type: "plugin",
+          route: "plugin",
+          route_available: true,
+          installed: true,
+          installed_version: "1.0.0",
+          owner_extension: {
+            handler_available: true,
+            requirements: null,
+            details: null,
+            status: null,
+            supported_operations: ["install", "update", "uninstall"],
+          },
+        }),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("fails closed for owner operations that are intentionally unsupported", () => {
