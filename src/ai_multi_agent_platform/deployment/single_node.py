@@ -31,7 +31,6 @@ from ai_multi_agent_platform.models import (
     ModelRoutingProfileService,
     ModelRuntime,
 )
-from ai_multi_agent_platform.orchestration import OrchestratorRegistry
 from ai_multi_agent_platform.observability import (
     AggregatedHealthProvider,
     InMemoryExporter,
@@ -42,6 +41,7 @@ from ai_multi_agent_platform.onboarding import (
     OnboardingModelAdapter,
     OnboardingService,
 )
+from ai_multi_agent_platform.orchestration import OrchestratorRegistry
 from ai_multi_agent_platform.repositories import (
     RepositoryDiscoveryResolver,
     RepositoryEventRuntimeIngress,
