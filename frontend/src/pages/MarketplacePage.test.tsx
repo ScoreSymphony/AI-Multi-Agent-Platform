@@ -68,6 +68,7 @@ describe("MarketplacePage", () => {
     expect(html).toContain("Templates / Workflows");
     expect(html).toContain("Component kind");
     expect(html).toContain("All trust states");
+    expect(html).toContain("All maturity levels");
     expect(html).toContain("Installed state");
     expect(html).toContain("Compatibility");
     expect(html).toContain("Technical components only");
@@ -118,6 +119,30 @@ describe("MarketplacePage", () => {
         item({ installed: true, installed_version: "1.0.0", update_available: false }),
       ),
     ).toBeNull();
+  });
+
+  it("treats a same-version candidate from another source as an explicit update", () => {
+    const sourceSwitch = item({
+      installed: true,
+      installed_version: "1.0.0",
+      installed_source_registry: "official",
+      installation_source_matches: false,
+      source_registry: "private",
+      version: "1.0.0",
+      route: "kind_handler",
+      route_available: true,
+      owner_extension: {
+        handler_available: true,
+        requirements: null,
+        details: null,
+        status: null,
+        supported_operations: ["install", "update", "uninstall"],
+      },
+    });
+
+    expect(marketplacePresentation.mutationOperation(sourceSwitch)).toBe("update");
+    expect(marketplacePresentation.operationSupported(sourceSwitch, "update")).toBe(true);
+    expect(marketplacePresentation.itemStateLabel(sourceSwitch)).toBe("source change available");
   });
 
   it("presents manual, pinned-update and blocked states distinctly", () => {
