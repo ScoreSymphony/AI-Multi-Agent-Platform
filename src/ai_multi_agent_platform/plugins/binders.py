@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from ai_multi_agent_platform.agents.runtime import (
+    AgentOrchestratorMapper,
+    AgentOrchestratorMapperRegistry,
+)
 from ai_multi_agent_platform.capabilities.provider import CapabilityToolProvider
 from ai_multi_agent_platform.capabilities.registry import CapabilityRegistry
 from ai_multi_agent_platform.connectors import ConnectorProvider, ConnectorService
@@ -43,10 +47,16 @@ class CapabilityRegistryBinder:
 
 
 class OrchestratorRegistryBinder:
-    """Bind Orchestrator extensions to the canonical provider-neutral registry."""
+    """Bind Orchestrator extensions to canonical orchestration and Agent mapper registries."""
 
-    def __init__(self, registry: OrchestratorRegistry) -> None:
+    def __init__(
+        self,
+        registry: OrchestratorRegistry,
+        *,
+        agent_mappers: AgentOrchestratorMapperRegistry | None = None,
+    ) -> None:
         self._registry = registry
+        self._agent_mappers = agent_mappers
 
     async def register(self, registration: ExtensionRegistration) -> None:
         if registration.spec.extension_type is not ExtensionType.ORCHESTRATOR:
@@ -59,7 +69,27 @@ class OrchestratorRegistryBinder:
                 "orchestrator extension must implement the canonical Orchestrator contract",
             )
         orchestrator = registration.instance
-        self._registry.register(orchestrator.descriptor.provider_id, orchestrator)
+        provider_id = orchestrator.descriptor.provider_id
+        self._registry.register(provider_id, orchestrator)
+        if self._agent_mappers is None or not isinstance(orchestrator, AgentOrchestratorMapper):
+            return
+        if orchestrator.adapter_id != provider_id:
+            self._registry.unregister(provider_id)
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "Agent orchestrator mapper adapter_id must match provider_id",
+            )
+        try:
+            self._agent_mappers.register(orchestrator)
+        except ContractError as exc:
+            try:
+                self._registry.unregister(provider_id)
+            except ContractError as rollback_error:
+                exc.add_note(
+                    "orchestrator registration rollback failed after Agent mapper registration error"
+                )
+                exc.add_note(str(rollback_error))
+            raise
 
     async def unregister(self, registration: ExtensionRegistration) -> None:
         if not isinstance(registration.instance, Orchestrator):
@@ -67,7 +97,24 @@ class OrchestratorRegistryBinder:
                 ErrorCode.CONTRACT_VIOLATION,
                 "orchestrator extension must implement the canonical Orchestrator contract",
             )
-        self._registry.unregister(registration.instance.descriptor.provider_id)
+        orchestrator = registration.instance
+        provider_id = orchestrator.descriptor.provider_id
+        removed_mapper = False
+        if self._agent_mappers is not None and isinstance(orchestrator, AgentOrchestratorMapper):
+            self._agent_mappers.unregister(orchestrator.adapter_id)
+            removed_mapper = True
+        try:
+            self._registry.unregister(provider_id)
+        except ContractError as exc:
+            if removed_mapper and self._agent_mappers is not None:
+                try:
+                    self._agent_mappers.register(orchestrator)
+                except ContractError as rollback_error:
+                    exc.add_note(
+                        "Agent mapper rollback failed after orchestrator unregister error"
+                    )
+                    exc.add_note(str(rollback_error))
+            raise
 
 
 class ExecutorRegistryBinder:
