@@ -23,11 +23,8 @@ from .control_plane import (
     register_application_control_plane,
 )
 from .definition import Application
-from .local_process_runtime import (
-    LocalApplicationHostProfile,
-    LocalProcessApplicationRuntime,
-    detect_local_application_host_profile,
-)
+from .local_host import LocalApplicationHostProfile, detect_local_application_host_profile
+from .local_process_runtime import LocalProcessApplicationRuntime
 from .log_control_plane import (
     APPLICATION_LOG_COLLECTION,
     APPLICATION_LOG_MODULE,
