@@ -47,7 +47,8 @@ _SECURITY_BOUNDARY_CLAIMS = (
             "test_credential_scope_denies_even_when_15_policy_allows",
             "tests/integration/security/test_authorization_final_boundaries.py::"
             "test_composed_control_plane_is_fail_closed_without_explicit_dev_opt_out",
-            "tests/unit/security/test_authentication_service.py::test_expired_session_and_csrf_validation",
+            "tests/integration/cli/test_authentication_and_approvals.py::"
+            "test_auth_cli_reports_unauthenticated_revoked_and_expired_credentials",
         ),
     ),
     SecurityBoundaryClaim(
@@ -69,6 +70,8 @@ _SECURITY_BOUNDARY_CLAIMS = (
             "test_approval_required_is_bound_to_canonical_tool_invocation",
             "tests/unit/capabilities/test_capabilities.py::test_cancellation_is_mapped_to_canonical_error",
             "tests/unit/capabilities/test_capabilities.py::test_provider_error_is_mapped",
+            "tests/contract/execution/test_reference_executor.py::"
+            "test_unexpected_executor_failure_is_contained_without_raw_diagnostics",
         ),
     ),
     SecurityBoundaryClaim(
@@ -128,6 +131,8 @@ _SECURITY_BOUNDARY_CLAIMS = (
             "tests/integration/security/test_terminal_sessions.py::test_unregistered_actor_cannot_read_or_attach_session",
             "tests/integration/security/test_terminal_sessions.py::"
             "test_default_terminal_redaction_scrubs_sensitive_environment_assignments",
+            "tests/integration/security/test_acceptance.py::"
+            "test_workspace_policy_prevents_cross_workspace_session_creation",
             "tests/e2e/security/test_terminal_run_cancel_authorization.py::"
             "test_terminal_termination_cannot_bypass_run_cancel_authorization",
         ),
@@ -284,6 +289,8 @@ _SECURITY_BOUNDARY_CLAIMS = (
             "tests/unit/automation/test_automation.py::test_spoofed_webhook_is_rejected_and_queryable",
             "tests/integration/goals/test_automation_runtime.py::"
             "test_stale_goal_revision_in_automation_delivery_cannot_mutate_new_revision",
+            "tests/integration/security/test_runtime_security.py::"
+            "test_idempotent_replay_rechecks_current_authorization",
         ),
     ),
     SecurityBoundaryClaim(
