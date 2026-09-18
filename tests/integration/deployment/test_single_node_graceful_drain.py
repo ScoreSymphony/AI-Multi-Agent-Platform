@@ -347,7 +347,6 @@ def test_process_local_drain_state_is_not_revived_after_restart(tmp_path: Path) 
 @pytest.mark.parametrize("forced", [False, True], ids=["graceful", "forced"])
 def test_drain_preserves_running_run_for_canonical_restart_recovery(
     tmp_path: Path,
-    *,
     forced: bool,
 ) -> None:
     async def scenario() -> None:
