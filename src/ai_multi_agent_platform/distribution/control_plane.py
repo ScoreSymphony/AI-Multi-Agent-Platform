@@ -41,6 +41,7 @@ from .state import RegistryInstallation
 from .validation import ValidationContext
 
 REGISTRY_COLLECTION = "registry-items"
+MARKETPLACE_KIND_COLLECTION = "marketplace-kinds"
 REGISTRY_PREVIEW_COMMAND = "registry.preview"
 REGISTRY_ACTIVATE_COMMAND = "registry.activate"
 REGISTRY_PIN_COMMAND = "registry.pin"
@@ -338,6 +339,59 @@ class RegistryResourceService:
         if self.validation_context_resolver is None:
             return None
         return await self.validation_context_resolver.resolve(context)
+
+
+class MarketplaceKindResourceService:
+    """Read-only metadata for registered Marketplace component kinds."""
+
+    def __init__(self, distribution: DistributionService) -> None:
+        self.distribution = distribution
+
+    async def list_resources(
+        self,
+        context: RequestContext,
+        query: PageQuery,
+    ) -> tuple[dict[str, JsonValue], ...]:
+        del context, query
+        return tuple(self._resource(descriptor) for descriptor in self.distribution.kind_descriptors())
+
+    async def get_resource(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> dict[str, JsonValue]:
+        del context
+        descriptor = next(
+            (
+                candidate
+                for candidate in self.distribution.kind_descriptors()
+                if candidate.kind_value == resource_id
+            ),
+            None,
+        )
+        if descriptor is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"Marketplace kind is not registered: {resource_id}",
+            )
+        return self._resource(descriptor)
+
+    @staticmethod
+    def _resource(descriptor: object) -> dict[str, JsonValue]:
+        from .kinds import MarketplaceKindDescriptor
+
+        if not isinstance(descriptor, MarketplaceKindDescriptor):
+            raise TypeError("invalid Marketplace kind descriptor")
+        return {
+            "id": descriptor.kind_value,
+            "type": "marketplace-kind",
+            "kind": descriptor.kind_value,
+            "display_name": descriptor.display_name,
+            "default_route": descriptor.default_route.value,
+            "supports_install": descriptor.supports_install,
+            "supports_update": descriptor.supports_update,
+            "supports_uninstall": descriptor.supports_uninstall,
+        }
 
 
 class RegistryCommandHandlers:
@@ -801,6 +855,10 @@ def register_distribution_control_plane(
     control_plane.register_resource_service(
         REGISTRY_COLLECTION,
         RegistryResourceService(distribution, validation_context_resolver),
+    )
+    control_plane.register_resource_service(
+        MARKETPLACE_KIND_COLLECTION,
+        MarketplaceKindResourceService(distribution),
     )
     if validation_context_resolver is not None:
         handlers = RegistryCommandHandlers(distribution, validation_context_resolver)
