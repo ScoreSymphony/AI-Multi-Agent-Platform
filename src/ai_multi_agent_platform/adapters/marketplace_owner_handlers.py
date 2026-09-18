@@ -43,6 +43,7 @@ from ai_multi_agent_platform.portability import (
     PortableResource,
     seal_resource,
 )
+from ai_multi_agent_platform.security.redaction import redact_sensitive
 from ai_multi_agent_platform.skills.codec import skill_revision_from_json
 from ai_multi_agent_platform.skills.models import SkillRevision
 from ai_multi_agent_platform.skills.service import SkillService
@@ -187,16 +188,24 @@ class PluginExtensionMarketplaceKindHandler:
 
     def describe(self, item: RegistryItem) -> Mapping[str, object]:
         manifest = self._registry.manifest(item.item_id)
+        matching_extensions = tuple(
+            extension
+            for extension in manifest.extensions
+            if extension.extension_type is self._extension_type
+        )
         return {
             "owner_domain": "plugins",
             "plugin_id": manifest.plugin_id,
             "plugin_version": manifest.plugin_version,
             "extension_type": self._extension_type.value,
-            "extensions": tuple(
-                extension.extension_id
-                for extension in manifest.extensions
-                if extension.extension_type is self._extension_type
-            ),
+            "extensions": tuple(extension.extension_id for extension in matching_extensions),
+            "capabilities": tuple(manifest.capabilities),
+            "extension_metadata": {
+                extension.extension_id: redact_sensitive(
+                    cast(JsonValue, dict(extension.metadata))
+                )
+                for extension in matching_extensions
+            },
         }
 
 
