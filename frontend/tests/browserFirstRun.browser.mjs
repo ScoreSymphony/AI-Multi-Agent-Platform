@@ -156,8 +156,10 @@ async function taskInventory(page) {
     ]);
     const session = new BrowserSessionClient();
     const client = new ControlPlaneClient({ transport: session.transport });
-    const tasks = await client.listTasks({ limit: 100, sort: "created_at", direction: "asc" });
-    return tasks.items.map((task) => ({ id: task.id, status: task.status }));
+    const tasks = await client.listTasks({ limit: 100 });
+    return tasks.items
+      .map((task) => ({ id: task.id, status: task.status }))
+      .sort((left, right) => left.id.localeCompare(right.id));
   });
 }
 
