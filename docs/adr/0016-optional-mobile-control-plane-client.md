@@ -34,7 +34,9 @@ The mobile client:
 8. uses allowlisted deep links that identify canonical resources but never encode commands;
 9. reads canonical Notifications; OS push delivery is deferred and may never become another
    notification authority;
-10. remains an optional repository client and never becomes a server/runtime dependency.
+10. performs human takeover only through the existing Conversation-input resume route for an
+    already persisted user message and waiting canonical Task;
+11. remains an optional repository client and never becomes a server/runtime dependency.
 
 The first slice does not expose credential issuance, secret management, administrator-only
 configuration, local model hosting or every Web administration surface.
