@@ -218,7 +218,7 @@ def test_official_first_run_exposes_real_plan_agents_artifact_and_verification(
                 _context(admin.user_id, _COMMAND_KEY),
                 ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
                 FIRST_RUN_RESOURCE_ID,
-                _payload(project.id, workspace.id),
+                _payload(project.id, workspace_id),
             )
         assert missing_health.value.code is ErrorCode.INVALID_CONFIGURATION
         assert missing_health.value.details["action"] == "onboarding.configure-model"
@@ -231,7 +231,7 @@ def test_official_first_run_exposes_real_plan_agents_artifact_and_verification(
             _context(admin.user_id, _COMMAND_KEY),
             ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
             FIRST_RUN_RESOURCE_ID,
-            _payload(project.id, workspace.id),
+            _payload(project.id, workspace_id),
         )
         assert restored["task_id"] == result["task_id"]
         assert restored["result_id"] == result["result_id"]
@@ -262,7 +262,7 @@ def test_official_first_run_reports_actionable_missing_model_guidance(tmp_path: 
                 _context(admin.user_id, "missing-model-first-run"),
                 ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
                 FIRST_RUN_RESOURCE_ID,
-                _payload(project.id, workspace.id),
+                _payload(project.id, workspace_id),
             )
         assert error.value.code is ErrorCode.INVALID_CONFIGURATION
         assert error.value.details["action"] == "onboarding.configure-model"
