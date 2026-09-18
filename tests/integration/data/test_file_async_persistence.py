@@ -311,6 +311,33 @@ def test_file_restart_tombstones_only_owned_pending_crash_state(tmp_path: Path) 
     asyncio.run(scenario())
 
 
+def test_file_create_refuses_unowned_temp_collision_without_deleting_it(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        context = _context()
+        root = tmp_path / "objects"
+        database = tmp_path / "files.sqlite3"
+        provider = LocalFileProvider(root, database)
+        file_id = new_id("file")
+        unowned = root / f".{file_id}.pending"
+        unowned.write_bytes(b"pre-existing-unowned-state")
+
+        with pytest.raises(ContractError) as raised:
+            await provider.create_file(b"payload", context, file_id=file_id)
+
+        assert raised.value.code is ErrorCode.CONFLICT
+        assert unowned.read_bytes() == b"pre-existing-unowned-state"
+        with sqlite3.connect(database) as connection:
+            row = connection.execute(
+                "SELECT state FROM data_files WHERE file_id = ?",
+                (file_id,),
+            ).fetchone()
+        assert row is None
+
+    asyncio.run(scenario())
+
+
 def test_file_fsync_failure_never_becomes_canonical(
     tmp_path: Path,
     monkeypatch,
