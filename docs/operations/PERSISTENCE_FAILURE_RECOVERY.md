@@ -26,12 +26,19 @@ Each probe checks:
 - a short write + flush + `fsync` + atomic rename + delete round-trip succeeds in each required
   filesystem root;
 - free space is measurable;
-- every required durable store from the current single-node inventory exists;
+- every required durable store for the **active deployment profile** exists;
 - existing SQLite stores open read-only and pass `PRAGMA quick_check(1)`;
 - existing JSON stores are readable UTF-8 JSON.
 
+The public `platform-server`/durable single-node profile declares the complete current required
+single-node durable-store inventory. The lower-level internal base composition declares only stores
+owned by the domains it actually composes; Connector/Context/Learning/Handoff stores do not become
+required merely because they exist in the wider backup inventory. This is an explicit composition
+contract, not an existence heuristic, so once the public profile is selected a later disappearance
+of one of those extension stores is still blocking.
+
 Optional-store corruption degrades health but does not by itself make the required platform
-persistence unavailable. Required-store failure is blocking.
+persistence unavailable. Required-store failure for the active profile is blocking.
 
 The reference free-space policy is:
 
