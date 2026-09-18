@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Protocol, cast
+from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, json_value
 
-from .decision_types import CompatibilityDecision, MarketplaceDecision
 from .dependency_graph import evaluate_compatibility
+from .control_plane_projection import (
+    _decision_resource,
+    _installation_resource,
+    _is_update,
+    _item_resource,
+    _json_strings,
+    _marketplace_mutation_resource,
+    _preview_resource,
+)
 from .items import RegistryItem, RegistryQuery
 from .models import DistributionRoute, TrustStatus, version_key
 from .provider import RegistrySourceConflictError, RegistryUnavailableError
@@ -21,8 +28,7 @@ from .service import (
     DistributionService,
     DistributionUninstallPreview,
 )
-from .state import RegistryInstallation
-from .validation import ValidationContext, ValidationFinding
+from .validation import ValidationContext
 
 REGISTRY_COLLECTION = "registry-items"
 REGISTRY_PREVIEW_COMMAND = "registry.preview"
@@ -916,194 +922,6 @@ def _split_resource_id(resource_id: str) -> tuple[str, str | None, str | None]:
     return item_id, version, source_registry
 
 
-def _json_strings(values: Iterable[str]) -> list[JsonValue]:
-    return [cast(JsonValue, value) for value in values]
-
-
-def _is_update(item: RegistryItem, installation: RegistryInstallation | None) -> bool:
-    return installation is not None and installation.as_installed().accepts_update(item)
-
-
-def _item_resource(
-    item: RegistryItem,
-    installation: RegistryInstallation | None = None,
-    *,
-    update_available: bool = False,
-    platform_compatible: bool | None = None,
-    compatibility_decision: CompatibilityDecision | None = None,
-    route_available: bool | None = None,
-    owner_extension: dict[str, JsonValue] | None = None,
-) -> dict[str, JsonValue]:
-    dependencies: list[JsonValue] = [
-        {
-            "item_id": dependency.item_id,
-            "item_kind": dependency.kind_value,
-            "minimum_version": dependency.version_range.minimum,
-            "maximum_version": dependency.version_range.maximum,
-            "optional": dependency.optional,
-        }
-        for dependency in item.dependencies
-    ]
-    qualified_id = (
-        f"{item.source_registry}::{item.item_id}@{item.version}"
-        if item.source_registry is not None
-        else f"{item.item_id}@{item.version}"
-    )
-    return {
-        "id": f"{item.item_id}@{item.version}",
-        "qualified_id": qualified_id,
-        "type": "registry-item",
-        "item_id": item.item_id,
-        "item_type": item.kind,
-        "kind": item.kind,
-        "name": item.name,
-        "description": item.description,
-        "version": item.version,
-        "publisher": item.publisher,
-        "source_registry": item.source_registry,
-        "source": {
-            "registry": item.source_registry,
-            "repository": item.source.repository,
-            "package_reference": item.source.package_reference,
-            "revision": item.source.revision,
-        },
-        "license": item.license,
-        "provenance": item.provenance,
-        "minimum_platform_version": item.supported_platform.minimum,
-        "maximum_platform_version": item.supported_platform.maximum,
-        "compatibility": {
-            "minimum_platform_version": item.supported_platform.minimum,
-            "maximum_platform_version": item.supported_platform.maximum,
-            "compatible": (
-                compatibility_decision.compatible
-                if compatibility_decision is not None
-                else platform_compatible
-            ),
-            "platform_compatible": platform_compatible,
-            "operating_system_compatible": (
-                compatibility_decision.operating_system_compatible
-                if compatibility_decision is not None
-                else None
-            ),
-            "architecture_compatible": (
-                compatibility_decision.architecture_compatible
-                if compatibility_decision is not None
-                else None
-            ),
-            "operating_systems": _json_strings(sorted(item.compatibility.operating_systems)),
-            "architectures": _json_strings(sorted(item.compatibility.architectures)),
-            "required_runtimes": _json_strings(sorted(item.compatibility.required_runtimes)),
-            "missing_runtimes": (
-                _json_strings(compatibility_decision.missing_runtimes)
-                if compatibility_decision is not None
-                else []
-            ),
-            "missing_capabilities": (
-                _json_strings(compatibility_decision.missing_capabilities)
-                if compatibility_decision is not None
-                else []
-            ),
-            "missing_plugins": (
-                _json_strings(compatibility_decision.missing_plugins)
-                if compatibility_decision is not None
-                else []
-            ),
-            "missing_connectors": (
-                _json_strings(compatibility_decision.missing_connectors)
-                if compatibility_decision is not None
-                else []
-            ),
-            "missing_models": (
-                _json_strings(compatibility_decision.missing_models)
-                if compatibility_decision is not None
-                else []
-            ),
-        },
-        "dependencies": dependencies,
-        "requested_permissions": _json_strings(sorted(item.requested_permissions)),
-        "required_capabilities": _json_strings(sorted(item.required_capabilities)),
-        "required_plugins": _json_strings(item.required_plugins),
-        "required_connectors": _json_strings(item.required_connectors),
-        "required_models": _json_strings(item.required_models),
-        "tags": _json_strings(sorted(item.tags)),
-        "categories": _json_strings(sorted(item.categories)),
-        "trust_status": item.trust_status.value,
-        "trust": item.trust_status.value,
-        "review_reference": item.review_reference,
-        "released_at": item.released_at,
-        "release_date": item.released_at,
-        "changelog": item.changelog,
-        "deprecated": item.deprecated,
-        "yanked": item.yanked,
-        "route": item.route.value,
-        "route_available": route_available,
-        "manifest_reference": (
-            {
-                "kind": item.manifest.kind_value,
-                "reference": item.manifest.reference,
-                "schema_version": item.manifest.schema_version,
-            }
-            if item.manifest is not None
-            else None
-        ),
-        "integrity": {
-            "sha256": item.integrity.sha256,
-            "signature_present": item.integrity.signature is not None,
-            "signature_key_id": item.integrity.signature_key_id,
-        },
-        "installed": installation is not None,
-        "installed_version": installation.current.version if installation else None,
-        "pinned_version": installation.pinned_version if installation else None,
-        "update_available": update_available,
-        "installation": _installation_resource(installation) if installation else None,
-        "update_state": {
-            "installed": installation is not None,
-            "installed_version": installation.current.version if installation else None,
-            "candidate_version": item.version,
-            "pinned_version": installation.pinned_version if installation else None,
-            "update_available": update_available,
-        },
-        "owner_extension": owner_extension,
-    }
-
-
-def _installation_resource(installation: RegistryInstallation) -> dict[str, JsonValue]:
-    current = installation.current
-    history: list[JsonValue] = [
-        {
-            "version": snapshot.version,
-            "source_registry": snapshot.source_registry,
-            "source_repository": snapshot.source_repository,
-            "package_reference": snapshot.package_reference,
-            "revision": snapshot.revision,
-            "license": snapshot.license,
-            "provenance": snapshot.provenance,
-        }
-        for snapshot in installation.history
-    ]
-    return {
-        "id": current.item_id,
-        "type": "registry-installation",
-        "item_id": current.item_id,
-        "version": current.version,
-        "pinned_version": installation.pinned_version,
-        "source_registry": current.source_registry,
-        "source_repository": current.source_repository,
-        "package_reference": current.package_reference,
-        "revision": current.revision,
-        "license": current.license,
-        "provenance": current.provenance,
-        "publisher": current.publisher,
-        "requested_permissions": _json_strings(current.requested_permissions),
-        "trust_status": current.trust_status.value if current.trust_status is not None else None,
-        "review_reference": current.review_reference,
-        "artifact_sha256": current.artifact_sha256,
-        "deprecated": current.deprecated,
-        "yanked": current.yanked,
-        "history": history,
-    }
-
-
 def _require_marketplace_activation(
     preview: DistributionPreview,
     *,
@@ -1172,164 +990,3 @@ def _require_marketplace_uninstall(preview: DistributionUninstallPreview) -> Non
             "route": preview.item.route.value,
         },
     )
-
-
-def _marketplace_mutation_resource(
-    action: str,
-    preview: DistributionPreview,
-    installation: RegistryInstallation | None,
-) -> dict[str, JsonValue]:
-    return {
-        "id": f"{preview.item.item_id}@{preview.item.version}",
-        "type": "marketplace-mutation",
-        "action": action,
-        "status": "applied",
-        "route": preview.route.value,
-        "decision": _decision_resource(preview.decision),
-        "installation": _installation_resource(installation) if installation else None,
-    }
-
-
-def _preview_resource(
-    preview: DistributionPreview,
-    installation: RegistryInstallation | None = None,
-    *,
-    route_available: bool | None = None,
-    activation_allowed: bool | None = None,
-    include_decision: bool = False,
-) -> dict[str, JsonValue]:
-    resource: dict[str, JsonValue] = {
-        "id": f"{preview.item.item_id}@{preview.item.version}",
-        "type": "registry-preview",
-        "provider_id": preview.provider_id,
-        "artifact_sha256": preview.artifact_sha256,
-        "item": _item_resource(
-            preview.item,
-            installation,
-            update_available=_is_update(preview.item, installation),
-            route_available=route_available,
-        ),
-        "route": preview.route.value,
-        "activation_allowed": (
-            preview.activation_allowed if activation_allowed is None else activation_allowed
-        ),
-        "findings": [_finding_resource(finding) for finding in preview.findings],
-    }
-    if include_decision:
-        resource["decision"] = _decision_resource(preview.decision)
-    return resource
-
-
-def _finding_resource(finding: ValidationFinding) -> dict[str, JsonValue]:
-    return {
-        "code": finding.code,
-        "severity": finding.severity.value,
-        "category": finding.category.value,
-        "subject": finding.subject,
-        "message": finding.message,
-        "details": {key: value for key, value in finding.details},
-    }
-
-
-def _decision_resource(decision: MarketplaceDecision) -> dict[str, JsonValue]:
-    provenance = decision.provenance_diff
-    update = decision.update_state
-    return {
-        "operation": decision.operation.value,
-        "dependencies": [
-            {
-                "required_by": dependency.required_by,
-                "item_id": dependency.item_id,
-                "item_kind": dependency.item_kind,
-                "optional": dependency.optional,
-                "minimum_version": dependency.minimum_version,
-                "maximum_version": dependency.maximum_version,
-                "status": dependency.status.value,
-                "installed_version": dependency.installed_version,
-                "candidate_version": dependency.candidate_version,
-                "candidate_kind": dependency.candidate_kind,
-                "candidate_source_registry": dependency.candidate_source_registry,
-                "path": _json_strings(dependency.path),
-                "blocking": dependency.blocking,
-            }
-            for dependency in decision.dependencies
-        ],
-        "compatibility": {
-            "compatible": decision.compatibility.compatible,
-            "platform_compatible": decision.compatibility.platform_compatible,
-            "operating_system_compatible": decision.compatibility.operating_system_compatible,
-            "architecture_compatible": decision.compatibility.architecture_compatible,
-            "missing_runtimes": _json_strings(decision.compatibility.missing_runtimes),
-            "missing_capabilities": _json_strings(decision.compatibility.missing_capabilities),
-            "missing_plugins": _json_strings(decision.compatibility.missing_plugins),
-            "missing_connectors": _json_strings(decision.compatibility.missing_connectors),
-            "missing_models": _json_strings(decision.compatibility.missing_models),
-        },
-        "permission_diff": {
-            "previous": _json_strings(decision.permission_diff.previous),
-            "requested": _json_strings(decision.permission_diff.requested),
-            "added": _json_strings(decision.permission_diff.added),
-            "removed": _json_strings(decision.permission_diff.removed),
-            "unchanged": _json_strings(decision.permission_diff.unchanged),
-            "changed": decision.permission_diff.changed,
-            "escalated": decision.permission_diff.escalated,
-        },
-        "provenance_diff": {
-            "installed": provenance.installed,
-            "previous_source_registry": provenance.previous_source_registry,
-            "candidate_source_registry": provenance.candidate_source_registry,
-            "previous_publisher": provenance.previous_publisher,
-            "candidate_publisher": provenance.candidate_publisher,
-            "previous_repository": provenance.previous_repository,
-            "candidate_repository": provenance.candidate_repository,
-            "previous_package_reference": provenance.previous_package_reference,
-            "candidate_package_reference": provenance.candidate_package_reference,
-            "previous_revision": provenance.previous_revision,
-            "candidate_revision": provenance.candidate_revision,
-            "previous_artifact_sha256": provenance.previous_artifact_sha256,
-            "candidate_artifact_sha256": provenance.candidate_artifact_sha256,
-            "previous_signature_key_id": provenance.previous_signature_key_id,
-            "candidate_signature_key_id": provenance.candidate_signature_key_id,
-            "previous_trust_status": (
-                provenance.previous_trust_status.value
-                if provenance.previous_trust_status is not None
-                else None
-            ),
-            "candidate_trust_status": provenance.candidate_trust_status.value,
-            "previous_review_reference": provenance.previous_review_reference,
-            "candidate_review_reference": provenance.candidate_review_reference,
-            "source_changed": provenance.source_changed,
-            "publisher_changed": provenance.publisher_changed,
-            "repository_changed": provenance.repository_changed,
-            "package_reference_changed": provenance.package_reference_changed,
-            "revision_changed": provenance.revision_changed,
-            "artifact_changed": provenance.artifact_changed,
-            "signature_changed": provenance.signature_changed,
-            "signature_key_changed": provenance.signature_key_changed,
-            "trust_changed": provenance.trust_changed,
-            "trust_downgraded": provenance.trust_downgraded,
-            "review_changed": provenance.review_changed,
-            "changed": provenance.changed,
-        },
-        "approval": {
-            "required": decision.approval.required,
-            "reasons": _json_strings(decision.approval.reasons),
-            "authorization_required": decision.approval.authorization_required,
-        },
-        "update_state": {
-            "installed_version": update.installed_version,
-            "candidate_version": update.candidate_version,
-            "latest_compatible_version": update.latest_compatible_version,
-            "update_available": update.update_available,
-            "pinned": update.pinned,
-            "blocked_by_pin": update.blocked_by_pin,
-            "incompatible_update": update.incompatible_update,
-            "current_yanked": update.current_yanked,
-            "candidate_yanked": update.candidate_yanked,
-            "candidate_deprecated": update.candidate_deprecated,
-            "source_change": update.source_change,
-            "permission_change": update.permission_change,
-            "trust_integrity_issue": update.trust_integrity_issue,
-        },
-        "dependency_blocked": decision.dependency_blocked,
-    }
