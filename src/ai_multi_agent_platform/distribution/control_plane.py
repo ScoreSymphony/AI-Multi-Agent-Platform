@@ -127,6 +127,7 @@ class RegistryResourceService:
             update_available=_is_update(item, installation),
             platform_compatible=platform_compatible,
             compatibility_decision=compatibility,
+            route=self.distribution.route_for(item),
             route_available=self.distribution.route_available(item),
             owner_extension=await self._owner_extension(item, installation),
         )
@@ -207,6 +208,7 @@ class RegistryResourceService:
                 compatibility.platform_compatible if compatibility is not None else is_compatible
             ),
             compatibility_decision=compatibility,
+            route=self.distribution.route_for(item),
             route_available=self.distribution.route_available(item),
         )
 
@@ -250,7 +252,8 @@ class RegistryResourceService:
         item: RegistryItem,
         installation: RegistryInstallation | None,
     ) -> dict[str, JsonValue] | None:
-        if item.route not in {
+        route = self.distribution.route_for(item)
+        if route not in {
             DistributionRoute.KIND_HANDLER,
             DistributionRoute.PLUGIN,
         }:
@@ -568,7 +571,7 @@ class RegistryCommandHandlers:
             "type": "marketplace-mutation",
             "action": "uninstall",
             "status": "applied",
-            "route": preview.item.route.value,
+            "route": preview.route.value,
             "decision": _decision_resource(preview.decision),
             "installation": None,
         }
@@ -621,7 +624,7 @@ class RegistryCommandHandlers:
         self,
         preview: DistributionUninstallPreview,
     ) -> None:
-        if preview.item.route not in {
+        if preview.route not in {
             DistributionRoute.KIND_HANDLER,
             DistributionRoute.PLUGIN,
         }:
@@ -630,7 +633,7 @@ class RegistryCommandHandlers:
                 "marketplace uninstall is not available for this component route",
                 details={
                     "marketplace_reason": "uninstall_not_supported",
-                    "route": preview.item.route.value,
+                    "route": preview.route.value,
                 },
             )
         if not self.distribution.has_kind_handler(preview.item):
