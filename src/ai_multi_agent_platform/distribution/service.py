@@ -279,11 +279,6 @@ class DistributionService:
         *,
         operation: str,
     ) -> MarketplaceKindHandler:
-        if item.route is not DistributionRoute.KIND_HANDLER:
-            raise ContractError(
-                ErrorCode.UNSUPPORTED_CAPABILITY,
-                f"Marketplace kind {item.kind!r} does not use an owner handler",
-            )
         if operation != "status" and not _kind_supports(item, operation):
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
