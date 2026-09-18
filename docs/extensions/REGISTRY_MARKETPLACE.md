@@ -66,6 +66,20 @@ Documentation assets have no automatic activation path. A provider change or met
 
 Registry distribution state is not allowed to claim a plugin that the canonical #20 owner has forgotten after a process restart. During Registry-enabled single-node startup, `reconcile_registry_plugins()` restores only previously persisted plugin installations into the same canonical `PluginRegistry`. Reconciliation requires the configured provider to reproduce the persisted item/version/source/license/provenance and exact artifact digest; for v4 snapshots it also checks dependencies, publisher, requested-permission, signature/key, trust and review evidence, while declared signatures are reverified cryptographically. A mismatch fails closed. Restoration never enables a runtime and never restores permission grants.
 
+Lifecycle mutation and Marketplace evidence form an ordered recovery boundary rather than a second
+owner transaction. Owner mutation always happens first. If the owner rejects install/update/uninstall,
+Marketplace durable evidence is left unchanged. If the owner succeeds but writing Marketplace
+evidence fails, `JsonRegistryInstallationStore` restores its prior in-memory record before
+propagating the persistence error, so the process never reports an uncommitted Marketplace state.
+The canonical owner may then be one step ahead of Marketplace evidence; this is an explicit
+recoverable state, not a second source of truth. Registered owner handlers must therefore make an
+already-applied identical mutation idempotent. Retrying the same source-qualified lifecycle request
+(after a process restart if necessary) observes the canonical owner state and completes only the
+missing Marketplace evidence write. Built-in Skill, Plugin-backed Tool/Connector, Plugin and
+Application handlers implement this retry contract; Application version update remains unsupported.
+The acceptance suite exercises install, update and uninstall evidence-write failures across fresh
+`SkillService`, `JsonSkillRepository`, installation-store and `DistributionService` instances.
+
 Pins are explicit durable application policy. `registry.pin` can pin only the currently installed version; `registry.unpin` removes that constraint. A pin does **not** hide newer releases: discovery and `update_available` still report a newer candidate, while preview returns `version_pinned` and blocks application until the pin is removed. Updates are never applied automatically. License/provenance changes and pins are validated before activation.
 
 `preview_uninstall()` provides the same pre-mutation decision shape for uninstall. For v4 installations it evaluates reverse dependencies from the persisted installed declaration rather than mutable current catalog metadata, and blocks removal while another installed Marketplace component has a required dependency on the target. If an installed Marketplace dependent can no longer be resolved from its recorded source, dependency safety is unknown and uninstall fails closed instead of assuming independence.
@@ -84,17 +98,21 @@ Requested permissions are compared with grantable permissions resolved from auth
 
 ## Owner-domain handoff matrix
 
-Marketplace kind handlers are adapters, not lifecycle owners.  The shipped Registry composition
+Marketplace kind handlers are adapters, not lifecycle owners. The shipped Registry composition
 uses the following existing authorities:
 
-| Marketplace kind | Canonical owner used by the handoff | Install | Update | Uninstall | Status / describe |
-| --- | --- | --- | --- | --- | --- |
-| Tool / Capability | #20 Plugin package lifecycle, then the normal `CAPABILITY_PROVIDER` binder into `CapabilityRegistry` on plugin enable | yes | yes, through `PluginRegistry.apply_update()` | yes, through `PluginRegistry.remove()` | canonical Plugin snapshot/manifest |
-| Skill | `SkillService` / Skill repository | yes, canonical revision 1 through the third-party intake rules | yes, exactly one Skill revision at a time while canonical source identity remains unchanged | yes, using the repository's existing historical-reference checks | current canonical Skill revision |
-| Plugin | existing `PluginRegistryArtifactInstaller -> PluginRegistry` route | unchanged legacy Plugin route | unchanged legacy Plugin route | yes, through `PluginRegistry.remove()` | canonical Plugin snapshot/manifest |
-| Connector | #20 Plugin package lifecycle, then the normal `CONNECTOR_PROVIDER` binder into `ConnectorService` / `ConnectorRegistry` on plugin enable | yes | yes, through `PluginRegistry.apply_update()` | yes, through `PluginRegistry.remove()` | canonical Plugin snapshot/manifest |
-| Application | #1173 `ApplicationLifecycleService`, `ApplicationRepository` and `ApplicationRuntimeRegistry` | yes when the manifest needs no unresolved install-time bindings | **no**; #1173 exposes configuration/restart operations, not an artifact-version migration | yes, through `ApplicationLifecycleService.remove()` | #1173 canonical instance status and installed definition |
-| Template / Workflow / other portable assets | #79 portability workflow and the resource-specific import owners | unchanged | unchanged | unchanged | existing owner/import surfaces |
+| Kind | Canonical owner | Marketplace handler / route | Install | Update | Uninstall | Restart / recovery | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Tool / Capability (manifest-backed) | #20 Plugin package lifecycle; normal `CAPABILITY_PROVIDER` binder into `CapabilityRegistry` on enable | `PluginExtensionMarketplaceKindHandler` / `KIND_HANDLER` | yes | yes, canonical Plugin update | yes, `PluginRegistry.remove()` | persisted Marketplace evidence is replayed by `reconcile_registry_plugins()` into the canonical Plugin owner; no runtime is auto-enabled | canonical Plugin snapshot/manifest |
+| Tool / Capability (legacy manifestless) | #79 portability workflow and imported resource owner | `CanonicalDistributionRouter` / `PORTABLE_IMPORT` | delegated import | delegated import semantics | **no Marketplace uninstall port; fail closed** | imported owner state follows #79/resource-owner durability; Marketplace evidence reloads independently | **no Marketplace owner-handler status; fail closed** |
+| Skill | `SkillService` / Skill repository | `SkillMarketplaceKindHandler` / `KIND_HANDLER` | yes, canonical revision 1 through third-party intake | yes, exactly one canonical revision at a time | yes, `SkillService.delete_skill()` | owner repository and Marketplace evidence reload independently; idempotent retry closes an evidence-write split after restart | current canonical Skill revision |
+| Plugin | #20 `PluginRegistry` | existing Plugin install route plus `PluginMarketplaceKindHandler` for owner inspection/removal | yes, existing Plugin route | yes, existing Plugin route | yes, `PluginRegistry.remove()` | `reconcile_registry_plugins()` restores persisted packages into the same canonical `PluginRegistry` | canonical Plugin snapshot/manifest |
+| Connector (manifest-backed) | #20 Plugin package lifecycle; normal `CONNECTOR_PROVIDER` binder into `ConnectorService` / `ConnectorRegistry` on enable | `PluginExtensionMarketplaceKindHandler` / `KIND_HANDLER` | yes | yes, canonical Plugin update | yes, `PluginRegistry.remove()` | same plugin reconciliation as manifest-backed Tools; connector authorization is never synthesized | canonical Plugin snapshot/manifest |
+| Connector (legacy manifestless) | #79 portability workflow and imported resource owner | `CanonicalDistributionRouter` / `PORTABLE_IMPORT` | delegated import | delegated import semantics | **no Marketplace uninstall port; fail closed** | imported owner state follows #79/resource-owner durability; Marketplace evidence reloads independently | **no Marketplace owner-handler status; fail closed** |
+| Application (manifest-backed) | #1173 `ApplicationLifecycleService`, `ApplicationRepository`, `ApplicationRuntimeRegistry` | `ApplicationMarketplaceKindHandler` / `KIND_HANDLER` | yes when no unresolved install-time bindings remain | **no; fail closed** because #1173 exposes no artifact-version migration | yes, `ApplicationLifecycleService.remove()` | #1173 repository reconstructs definitions/instances; Marketplace evidence reloads separately; identical install/remove retries are idempotent | #1173 canonical instance status and installed definition |
+| Application (legacy manifestless) | no automatic Marketplace lifecycle; legacy catalog entry remains discovery-only | `MANUAL` | **no; fail closed** | **no; fail closed** | **no; fail closed** | catalog compatibility only; no Marketplace-owned Application state is created | no automatic owner status |
+| Template / Workflow / other portable assets | #79 portability workflow and resource-specific import owners | `CanonicalDistributionRouter` / `PORTABLE_IMPORT` | delegated import | delegated import semantics | **no generic Marketplace uninstall port; fail closed** | canonical imported resource owners retain their own recovery semantics; Marketplace evidence is distribution evidence only | existing resource-owner surfaces, not Marketplace handler state |
+| Registered future/custom kind | the subsystem supplied by the registrant | registered `MarketplaceKindHandler` / descriptor-selected route | only when descriptor + handler support it | only when descriptor + handler support it | only when descriptor + handler support it | canonical owner supplies durable recovery; handler mutation contract requires idempotent identical retries while Marketplace evidence reloads from its store | registered handler status (mandatory read operation) |
 
 Marketplace Skill artifacts must carry canonical `SkillSource` metadata. Installation therefore
 enters the existing third-party Skill intake/review lifecycle instead of allowing Marketplace
