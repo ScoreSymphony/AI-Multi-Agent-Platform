@@ -12,7 +12,9 @@ The canonical flow is:
 
 `BuildSpecification` is language/toolchain neutral. A target names its OS, architecture, package type, output path and capability requirements. The reference command path stores the build command as an argv tuple and never turns it into a shell string.
 
-`ApplicationDistributionService.request_build()` creates a canonical Task and Run for each target, binds the Run to the release's immutable Workspace snapshot and persists that Run-to-release association before dispatch. The shipped single-node profile routes these build Runs through a dedicated `ApplicationBuildLifecycleBackend` and `ApplicationCommandExecutor`; ordinary agent Runs keep their existing lifecycle unchanged.
+`ApplicationDistributionService.request_build()` creates a canonical Task and Run for each target, binds the Run to the release's immutable Workspace snapshot and persists that Run-to-release association before dispatch. The local/reference composition routes these build Runs through `ApplicationBuildLifecycleBackend` and `ApplicationCommandExecutor`; ordinary agent Runs keep their existing lifecycle unchanged.
+
+When distributed execution is enabled and a canonical `DistributedRuntime` is available, deployment composition instead binds the same application-build Runs to `DistributedApplicationBuildLifecycleBackend` and `DistributedBuildTargetMatcher`. The backend translates the already-created canonical Run into a `WorkerJobRequest` and delegates placement, dispatch, Workspace transfer, Worker lifecycle, reconciliation and artifact publication to the normal #14/#37 distributed boundaries. Application-release identity, Task/Run identity and Workspace/source provenance therefore remain canonical and do not become Worker/provider identities.
 
 The command executor runs explicit argv with `create_subprocess_exec()` inside an isolated materialized Workspace copy. It starts from a small host-environment allowlist and adds only the explicit build environment delivered through the execution contract; it never inherits the arbitrary parent process environment. It uses no shell, rejects paths escaping the materialization and requires the declared `output_path` to exist as a regular file after a successful process exit.
 
@@ -41,21 +43,37 @@ Resolved values exist only in the ephemeral `ExecutionRequest.environment` suppl
 
 The normal single-node/server composition gives secret resolution a dedicated service principal with only the `INVOKE_SENSITIVE_CAPABILITY`/`SECRET_REFERENCE` permission. This avoids expanding the ordinary application-build Run principal into a general credential-management identity.
 
+For the local/reference build path, #748 is therefore complete: declared `SecretReference` values are resolved late, delivered only ephemerally to the executor and never persisted as plaintext application-release state. The distributed backend deliberately has a narrower current boundary. If `secret_environment` is non-empty, `DistributedApplicationBuildLifecycleBackend` fails before Worker dispatch with `UNSUPPORTED_CAPABILITY` until scoped Worker secret delivery exists. It does not downgrade those references into plaintext Worker metadata and does not silently execute without the required secret-backed inputs. Non-secret remote builds remain supported.
+
 ## Target placement
 
-Targets have independent states. The shipped single-node command-build path uses `LocalBuildTargetMatcher`, which only claims support when the actual host OS/architecture and required local executable/capabilities match the target.
+Targets have independent states. The local/reference command-build path uses `LocalBuildTargetMatcher`, which only claims support when the actual host OS/architecture and required local executable/capabilities match the target.
 
-`DistributedBuildTargetMatcher` exists as a provider-neutral placement seam over canonical Worker/Node inventory, but the current reference command-build lifecycle does not yet dispatch the command to a remote Worker. Distributed inventory therefore must not be used to claim that a target is buildable until remote build execution is actually bound to that Worker path.
+With distributed execution enabled, `DistributedBuildTargetMatcher` asks the canonical scheduler about the same Worker/Node inventory used for dispatch. Target requirements include OS, architecture, the application-build capability plus declared target capabilities/resource hints. `DistributedApplicationBuildLifecycleBackend` then dispatches the canonical Run through `DistributedRuntime` to the selected compatible Worker. Multi-target releases may select different Workers for different targets while preserving one canonical `ApplicationRelease` identity.
 
-One successful target while another is pending/failed is represented as a partial release; it is not promoted to ready. Publication is fail-closed until every target succeeded, each target has exactly one accepted canonical artifact, and every configured pre-build/test/post-build gate exists with `passed` status.
+An unsupported target remains explicit and is not given fabricated Task/Run provenance. One successful target while another is pending/failed/unsupported is represented as a partial release; it is not promoted to ready. Publication is fail-closed until every required target succeeded, each target has exactly one accepted canonical artifact, and every configured release gate exists with passing current evidence.
 
 The package-type enum includes executable, archive, installer, Linux package, macOS bundle, OCI image reference, source archive and static-web bundle. Enum membership alone is not a compatibility claim; a target is supported only when its actual execution path proves the required host/tool capabilities.
+
+## Distributed Workspace, recovery and result admission
+
+Remote builds keep the immutable release Workspace/source snapshot as the execution source of truth. The distributed Workspace path materializes the requested snapshot on the selected Worker without replacing canonical Workspace identity with a Worker-local path. Successful Worker output is published back through canonical File/Artifact storage before application-release admission.
+
+Remote result admission is fail-closed. The distributed lifecycle checks the returned release/target/build-spec/source/Workspace identity, requires exactly the expected canonical changed File/Artifact for the declared output, verifies its checksum and only then exposes the Artifact through the canonical Run and release. Worker/Node/runtime provenance may be retained as bounded metadata, while provider-private filesystem paths do not become canonical identity.
+
+Dispatch is idempotent around the canonical Run: the Worker job identity is deterministic, repeated starts for the same Run reconcile the existing job instead of creating a second logical build, and uncertain dispatch/result replies surface as retryable availability failures rather than causing blind redispatch. Worker disconnect/reconnect and cancel-pending recovery use the distributed runtime's normal reconciliation path and preserve the same canonical job. This is recovery/reconciliation support; it is not a claim that every possible remote transport or Worker failure can be transparently hidden.
 
 ## Manifest and update seam
 
 `release_manifest()` generates deterministic machine-readable content. Artifacts include canonical Artifact/File IDs, target, package/media type, SHA-256, build Task/Run provenance, evidence references and, after publication, provider-returned download URLs. Deterministic JSON bytes and a manifest SHA-256 are available for publication or future update-discovery clients.
 
 The versioned schema lives in `docs/schemas/application-release-manifest.schema.json`. It contains enough version/channel/target/digest information for a later explicit updater without implementing automatic application updates in this issue. Build environment values and SecretReferences are intentionally not copied into the public release manifest; only the build specification identity/revision is exposed there.
+
+## Release gates and maintained conformance
+
+#750 binds publication readiness to current canonical gate evidence instead of trusting a historical build flag. `ApplicationReleaseGateCoordinator` supports deterministic checks and, when configured, canonical Verification and Evaluation evidence plus package-smoke evidence. Missing, stale, conflicting, inconclusive or failed mandatory evidence blocks publication; persisted Verification evidence can be reconstructed after restart.
+
+The maintained acceptance bundle from #751 is documented in [`APPLICATION_DISTRIBUTION_CONFORMANCE.md`](APPLICATION_DISTRIBUTION_CONFORMANCE.md). It consumes the productive #749 distributed-build fixtures rather than treating remote dispatch as future work, and also covers the #748 secret boundary, #750 gate behavior, GitHub Releases reference-provider failure/idempotency paths, Control Plane security and canonical/provider provenance separation.
 
 ## Publishing
 
@@ -86,6 +104,10 @@ Clients should present `visibility`, immutable `release_url`, per-artifact `down
 
 ## Reference limitations
 
-The current reference implementation intentionally does not claim a universal installer generator, automatic application updater, signing/notarization implementation or remote cross-OS build farm. Signing remains a separate capability seam.
+The current implementation intentionally does not claim a universal installer generator, automatic application updater or signing/notarization implementation. Signing remains a separate capability seam.
 
-The local command executor is a reference execution path for self-hosted builds; it is not a replacement for the broader Executor/Worker sandbox architecture. Remote Worker build dispatch can replace this path later without changing `ApplicationRelease`, `BuildSpecification`, manifest or publisher contracts. The secret-environment contract is also designed so remote execution can carry SecretReferences/scoped delivery metadata rather than persisting plaintext material in canonical Worker jobs. No recurring paid build/distribution service is required by the reference implementation.
+Remote/cross-platform application builds are supported only when distributed execution is enabled and the platform has a reachable Worker whose advertised OS, architecture, capabilities, resources and actual toolchain satisfy the target. The platform does not infer buildability from an enum value or fabricate support for an absent macOS/Windows/Linux/architecture-specific builder.
+
+Secret-backed builds remain an explicit asymmetry: the local/reference backend implements #748 late `SecretReference` resolution, while the distributed backend currently rejects non-empty `secret_environment` before dispatch until scoped Worker secret delivery is implemented. That remaining limitation must not be described as a lack of remote Worker build dispatch in general.
+
+The local command executor remains a valid self-hosted reference path when distributed execution is disabled or unnecessary. The distributed path uses the canonical Worker/Workspace/Artifact boundaries rather than replacing the application-release contracts. No recurring paid build or distribution service is required by the reference implementation.
