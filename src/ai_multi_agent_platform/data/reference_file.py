@@ -51,6 +51,7 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
         self._root.mkdir(parents=True, exist_ok=True)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
+        self._recover_incomplete_writes()
         self._async_io = AsyncDataOffload(max_concurrency=max_concurrency)
         capability = Capability(
             name="local-files",
@@ -99,6 +100,61 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
                 )
                 """
             )
+
+    def _recover_incomplete_writes(self) -> None:
+        """Tombstone only crash-interrupted writes proven by canonical PENDING metadata."""
+
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    "SELECT file_id FROM data_files WHERE state = ? ORDER BY file_id",
+                    (FileState.PENDING.value,),
+                ).fetchall()
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to inspect incomplete file writes",
+            ) from exc
+
+        pending_ids: list[str] = []
+        for row in rows:
+            file_id = str(row["file_id"])
+            try:
+                validate_id(file_id, "file")
+            except ValueError as exc:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "stored pending file identity is invalid",
+                ) from exc
+            pending_ids.append(file_id)
+            for path in (
+                self._root / f".{file_id}.pending",
+                self._root / file_id,
+            ):
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError as exc:
+                    raise ContractError(
+                        ErrorCode.BACKEND_ERROR,
+                        "failed to clean an incomplete file write",
+                    ) from exc
+
+        if not pending_ids:
+            return
+        try:
+            with self._connect() as connection:
+                connection.executemany(
+                    "UPDATE data_files SET state = ? WHERE file_id = ? AND state = ?",
+                    (
+                        (FileState.TOMBSTONED.value, file_id, FileState.PENDING.value)
+                        for file_id in pending_ids
+                    ),
+                )
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to tombstone incomplete file writes",
+            ) from exc
 
     async def _run_blocking[T](
         self,
@@ -163,6 +219,14 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
             content_type=content_type,
             metadata=metadata or {},
         )
+        final_path = self._root / canonical_id
+        temp_path = self._root / f".{canonical_id}.pending"
+        if temp_path.exists() or final_path.exists():
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"file storage path already exists: {canonical_id}",
+            )
+
         try:
             with self._connect() as connection:
                 connection.execute(
@@ -191,36 +255,77 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
         except sqlite3.Error as exc:
             raise ContractError(ErrorCode.BACKEND_ERROR, "failed to persist file metadata") from exc
 
-        final_path = self._root / canonical_id
-        temp_path = self._root / f".{canonical_id}.pending"
+        temp_owned = False
+        final_owned = False
         try:
-            temp_path.write_bytes(data)
+            with temp_path.open("xb") as handle:
+                temp_owned = True
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
             os.replace(temp_path, final_path)
+            temp_owned = False
+            final_owned = True
+            self._fsync_directory(self._root)
             with self._connect() as connection:
                 connection.execute(
                     "UPDATE data_files SET state = ? WHERE file_id = ?",
                     (FileState.READY.value, canonical_id),
                 )
         except OSError as exc:
-            temp_path.unlink(missing_ok=True)
-            final_path.unlink(missing_ok=True)
-            with self._connect() as connection:
-                connection.execute(
-                    "UPDATE data_files SET state = ? WHERE file_id = ?",
-                    (FileState.TOMBSTONED.value, canonical_id),
-                )
+            self._cleanup_owned_write_paths(
+                temp_path if temp_owned else None,
+                final_path if final_owned else None,
+            )
+            self._tombstone_incomplete_write(canonical_id)
             raise ContractError(ErrorCode.BACKEND_ERROR, "failed to persist file bytes") from exc
         except sqlite3.Error as exc:
-            final_path.unlink(missing_ok=True)
-            with self._connect() as connection:
-                connection.execute(
-                    "UPDATE data_files SET state = ? WHERE file_id = ?",
-                    (FileState.TOMBSTONED.value, canonical_id),
-                )
+            self._cleanup_owned_write_paths(
+                temp_path if temp_owned else None,
+                final_path if final_owned else None,
+            )
+            self._tombstone_incomplete_write(canonical_id)
             raise ContractError(
                 ErrorCode.BACKEND_ERROR, "failed to finalize file metadata"
             ) from exc
         return replace(pending, state=FileState.READY)
+
+    @staticmethod
+    def _fsync_directory(path: Path) -> None:
+        """Persist a completed rename before canonical metadata becomes READY on POSIX."""
+
+        if os.name != "posix":
+            return
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def _cleanup_owned_write_paths(self, *paths: Path | None) -> None:
+        for path in paths:
+            if path is None:
+                continue
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as exc:
+                raise ContractError(
+                    ErrorCode.BACKEND_ERROR,
+                    "failed to clean an incomplete file write",
+                ) from exc
+
+    def _tombstone_incomplete_write(self, file_id: str) -> None:
+        try:
+            with self._connect() as connection:
+                connection.execute(
+                    "UPDATE data_files SET state = ? WHERE file_id = ? AND state = ?",
+                    (FileState.TOMBSTONED.value, file_id, FileState.PENDING.value),
+                )
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to tombstone an incomplete file write",
+            ) from exc
 
     async def write(
         self,

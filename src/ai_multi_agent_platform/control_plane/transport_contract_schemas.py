@@ -103,6 +103,10 @@ _TRANSPORT_SCHEMAS: dict[str, Any] = {
             "type": {"type": "string"},
             "status": {"type": "string"},
             "available": {"type": "boolean"},
+            "diagnostics": {
+                "type": "array",
+                "items": {"type": "object", "additionalProperties": True},
+            },
         },
         "additionalProperties": False,
     },

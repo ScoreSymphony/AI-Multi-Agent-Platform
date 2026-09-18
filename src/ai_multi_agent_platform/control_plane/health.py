@@ -16,18 +16,20 @@ class ControlPlaneHealth:
         providers: list[JsonValue] = []
         ready = True
         for provider in self._providers:
-            descriptor = provider.descriptor
             status = await provider.health()
+            descriptor = provider.descriptor
             if not descriptor.available or status.value == "unavailable":
                 ready = False
-            providers.append(
-                {
-                    "id": descriptor.provider_id,
-                    "type": descriptor.provider_type,
-                    "status": status.value,
-                    "available": descriptor.available,
-                }
-            )
+            resource: dict[str, JsonValue] = {
+                "id": descriptor.provider_id,
+                "type": descriptor.provider_type,
+                "status": status.value,
+                "available": descriptor.available,
+            }
+            diagnostics = getattr(provider, "health_diagnostics", ())
+            if diagnostics:
+                resource["diagnostics"] = list(diagnostics)
+            providers.append(resource)
         return {
             "status": "healthy",
             "ready": ready,

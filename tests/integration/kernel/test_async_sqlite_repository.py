@@ -15,6 +15,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode, Platform
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, SqliteKernelRepository
 from ai_multi_agent_platform.kernel.repository import EventRepository
+from ai_multi_agent_platform.testing import SqliteWriteLock
 
 
 def _event(stream_id: str, *, event_id: str | None = None) -> PlatformEvent:
@@ -208,6 +209,31 @@ def test_sqlite_kernel_maps_busy_to_retryable_transient_failure(tmp_path: Path) 
     asyncio.run(scenario())
 
 
+def test_sqlite_kernel_real_write_contention_is_bounded_and_retryable(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        database = tmp_path / "kernel.sqlite3"
+        repository = SqliteKernelRepository(database, busy_timeout_seconds=0.05)
+        stream_id = new_id("task")
+        started = time.monotonic()
+
+        with SqliteWriteLock(database):
+            with pytest.raises(ContractError) as raised:
+                await repository.commit(
+                    stream_id=stream_id,
+                    expected_revision=0,
+                    events=(_event(stream_id),),
+                )
+
+        assert time.monotonic() - started < 0.5
+        assert raised.value.code is ErrorCode.TRANSIENT_FAILURE
+        assert raised.value.retryable is True
+        assert await repository.revision(stream_id) == 0
+
+    asyncio.run(scenario())
+
+
 def test_sqlite_kernel_connections_are_opened_in_worker_thread(tmp_path: Path) -> None:
     async def scenario() -> None:
         repository = _RecordingRepository(tmp_path / "kernel.sqlite3")
@@ -236,7 +262,8 @@ def test_sqlite_kernel_offload_concurrency_is_bounded(tmp_path: Path) -> None:
 
 def test_sqlite_kernel_failed_mutation_rolls_back(tmp_path: Path) -> None:
     async def scenario() -> None:
-        repository = SqliteKernelRepository(tmp_path / "kernel.sqlite3")
+        database = tmp_path / "kernel.sqlite3"
+        repository = SqliteKernelRepository(database)
         first_stream = new_id("task")
         second_stream = new_id("task")
         duplicate_id = new_id("event")
@@ -256,6 +283,10 @@ def test_sqlite_kernel_failed_mutation_rolls_back(tmp_path: Path) -> None:
         assert raised.value.code is ErrorCode.CONFLICT
         assert await repository.revision(first_stream) == 1
         assert await repository.revision(second_stream) == 0
+
+        restarted = SqliteKernelRepository(database)
+        assert await restarted.revision(first_stream) == 1
+        assert await restarted.revision(second_stream) == 0
 
     asyncio.run(scenario())
 

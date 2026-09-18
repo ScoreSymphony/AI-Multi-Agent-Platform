@@ -6,6 +6,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 from ai_multi_agent_platform.configuration import (
     ConfigLayer,
@@ -145,6 +146,7 @@ class SingleNodeConfig:
                 raise ConfigurationError(
                     f"single-node deployment persistence path is not a directory: {path}"
                 )
+            _verify_writable_persistence_path(path)
 
 
 def load_single_node_config(environ: Mapping[str, str] | None = None) -> SingleNodeConfig:
@@ -241,3 +243,23 @@ def _parse_bool(value: str, name: str) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     raise ConfigurationError(f"{name} must be true/false")
+
+
+def _verify_writable_persistence_path(path: Path) -> None:
+    """Fail early when a required local persistence directory cannot durably mutate."""
+
+    probe = path / f".ai-map-startup-write-probe-{uuid4().hex}.tmp"
+    try:
+        with probe.open("xb") as handle:
+            handle.write(b"startup-write-probe\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        probe.unlink()
+    except OSError as exc:
+        try:
+            probe.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise ConfigurationError(
+            f"single-node deployment persistence path is not writable: {path}"
+        ) from exc

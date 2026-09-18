@@ -195,11 +195,18 @@ platform --endpoint http://127.0.0.1:8000 doctor
 Control Plane manifest, health and readiness endpoints; deployment profiles must not add a
 second backend-probing diagnostic authority.
 
-Required persistence/configuration failures block composition/startup and are reported as
-configuration failures. Optional external adapters are not required by this profile and
-therefore cannot make the baseline unready merely by being absent. Advanced profiles that
-enable optional adapters may report their degradation through the progressive #16 health
-model.
+Required configuration failures block composition/startup. Required persistence is additionally
+a live readiness dependency: the single-node persistence probe verifies required roots, an
+atomic write/fsync/rename/delete round-trip, free-space reserve, required durable-store presence
+and local store readability/integrity. A blocking persistence result makes `/readiness` unready
+and appears in `platform doctor` without exposing absolute host paths.
+
+See `docs/operations/PERSISTENCE_FAILURE_RECOVERY.md` for diagnostic codes, automatic cleanup,
+manual-recovery boundaries and the reference free-space thresholds.
+
+Optional external adapters are not required by this profile and therefore cannot make the
+baseline unready merely by being absent. Advanced profiles that enable optional adapters may
+report their degradation through the progressive #16 health model.
 
 ## Persistent layout
 
@@ -234,6 +241,10 @@ A clean restart uses the same `AI_MAP_DATA_DIR` and runs the same command:
 ```bash
 platform-server serve
 ```
+
+Before serving after a restart, local File/Workspace providers also reconcile only storage state
+whose ownership can be proven: `PENDING` File writes are tombstoned and owned stale Workspace
+materializations are removed. Cleanup failure is fail-closed; unknown temp paths are preserved.
 
 The Stage-1 regression suite verifies restart persistence for:
 
