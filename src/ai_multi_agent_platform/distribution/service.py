@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .handlers import MarketplaceKindHandler, MarketplaceKindHandlerRegistry
 from .items import RegistryItem, RegistryQuery
@@ -228,16 +229,15 @@ class DistributionService:
         resolved_context = self._resolved_context(current, artifact, context)
         findings = validate_item(current, artifact, resolved_context)
         if has_errors(findings):
+            error_findings: list[JsonValue] = [
+                {"code": finding.code, "message": finding.message}
+                for finding in findings
+                if finding.severity is FindingSeverity.ERROR
+            ]
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
                 "registry item no longer passes activation validation",
-                details={
-                    "findings": [
-                        {"code": finding.code, "message": finding.message}
-                        for finding in findings
-                        if finding.severity is FindingSeverity.ERROR
-                    ]
-                },
+                details={"findings": error_findings},
             )
         if current.route is DistributionRoute.KIND_HANDLER:
             operation = self._activation_operation(current)
