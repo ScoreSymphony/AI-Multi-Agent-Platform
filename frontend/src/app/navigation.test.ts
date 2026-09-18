@@ -54,7 +54,7 @@ describe("#1234 V1 Web navigation coverage", () => {
       "/agents": "agents",
       "/agent-teams": "agent-teams",
       "/verification": "verifications",
-      "/files": "artifacts",
+      "/files": "files",
       "/memory": "memory",
       "/knowledge": "knowledge",
       "/search": "search",
