@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from typing import Protocol
 
-from ai_multi_agent_platform.contracts import (\n    ContractError,\n    ErrorCode,\n    HealthStatus,\n    ProviderContract,\n    ProviderDescriptor,\n)
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    HealthStatus,
+    ProviderContract,
+    ProviderDescriptor,
+)
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.messaging import TraceContext, TransportEnvelope
 
