@@ -37,8 +37,10 @@ function item({
   dependencies = [],
   operationState = null,
   manifest = null,
+  missingHandler = false,
+  partialMetadata = false,
 }) {
-  const handlerAvailable = route === "kind_handler";
+  const handlerAvailable = route === "kind_handler" && !missingHandler;
   return {
     id: `${id}@1.1.0`,
     type: "registry-item",
@@ -84,19 +86,19 @@ function item({
     categories: [],
     trust_status: "reviewed",
     trust: "reviewed",
-    review_reference: "https://example.invalid/review",
-    released_at: "2026-09-18T00:00:00Z",
-    release_date: "2026-09-18T00:00:00Z",
-    changelog: "Browser fixture release",
+    review_reference: partialMetadata ? null : "https://example.invalid/review",
+    released_at: partialMetadata ? null : "2026-09-18T00:00:00Z",
+    release_date: partialMetadata ? null : "2026-09-18T00:00:00Z",
+    changelog: partialMetadata ? null : "Browser fixture release",
     deprecated: false,
     yanked: false,
     route,
-    route_available: route !== "manual",
+    route_available: route !== "manual" && !missingHandler,
     manifest_reference: manifest,
     integrity: {
-      sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      signature_present: true,
-      signature_key_id: "browser-key",
+      sha256: partialMetadata ? null : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      signature_present: !partialMetadata,
+      signature_key_id: partialMetadata ? null : "browser-key",
     },
     installed,
     installed_version: installedVersion,
@@ -235,6 +237,21 @@ const catalog = [
     description: "Manual-only catalog item",
     route: "manual",
     operationState: "manual",
+  }),
+  item({
+    id: "missing-handler-skill",
+    kind: "skill",
+    name: "Missing Handler Skill",
+    description: "Valid catalog item without an owner handler",
+    route: "kind_handler",
+    missingHandler: true,
+  }),
+  item({
+    id: "sparse-metadata-tool",
+    kind: "tool",
+    name: "Sparse Metadata Tool",
+    description: "Catalog item with intentionally sparse optional metadata",
+    partialMetadata: true,
   }),
 ];
 
@@ -475,6 +492,9 @@ const fetchImpl = async (input, init = {}) => {
     parsed.pathname === "/api/v1/commands/marketplace.install" ||
     parsed.pathname === "/api/v1/commands/marketplace.update"
   ) {
+    if (mutationMode === "slow") {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
     if (mutationMode === "fail") {
       return errorResponse(500, "backend_error", "Marketplace owner mutation failed");
     }
