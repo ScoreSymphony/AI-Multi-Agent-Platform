@@ -1,4 +1,4 @@
-"""Notification search integration behavior migrated from issue #75 coverage."""
+"""Notification search integration behavior."""
 
 from __future__ import annotations
 
