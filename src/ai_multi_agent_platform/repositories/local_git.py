@@ -610,14 +610,15 @@ class LocalGitRepositoryProvider(RepositoryProvider):
             code = ErrorCode.UNAUTHORIZED
         else:
             code = ErrorCode.BACKEND_ERROR
+        operation = args[0] if args else "git"
         raise ContractError(
             code,
-            stderr or f"Git command failed: {' '.join(args)}",
+            f"Git command failed during {operation}",
             retryable=False,
             provider_id=self.provider_id,
             details={
                 "git_exit_code": completed.returncode,
-                "operation": args[0] if args else "git",
+                "operation": operation,
             },
         )
 
