@@ -43,6 +43,11 @@ from ai_multi_agent_platform.contracts import (
 )
 from ai_multi_agent_platform.contracts.types import AdapterMetadata
 from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.observability import (
+    InMemoryExporter,
+    ObservabilityExternalEffectRecoveryObserver,
+    Telemetry,
+)
 
 
 class _ExternalProvider(CapabilityToolProvider, ExternalEffectReconciler):
@@ -434,3 +439,56 @@ async def test_cancellation_after_external_dispatch_becomes_uncertain_and_non_re
         record.disposition
         is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
     )
+
+
+@pytest.mark.asyncio
+async def test_recovery_telemetry_reports_uncertainty_without_private_recovery_values() -> None:
+    provider = _ExternalProvider(
+        ExternalEffectRecoveryPolicy(
+            idempotency=ExternalEffectIdempotency.NONE,
+            reconciliation=ExternalEffectReconciliationSupport.UNSUPPORTED,
+        )
+    )
+    registry = CapabilityRegistry()
+    await registry.register_provider(provider)
+    exporter = InMemoryExporter()
+    telemetry = Telemetry(exporter)
+    recovery = ExternalEffectRecoveryCoordinator(
+        InMemoryExternalEffectRecoveryRepository(),
+        event_observer=ObservabilityExternalEffectRecoveryObserver(telemetry),
+    )
+    invoker = EgressCapabilityInvoker(
+        registry,
+        external_effect_recovery=recovery,
+    )
+    request = _request(
+        invocation_id="telemetry-effect",
+        key="private-telemetry-idempotency-key",
+    )
+
+    with pytest.raises(ContractError):
+        await invoker.invoke(request)
+
+    record = recovery.find_record_by_invocation(request.invocation_id)
+    assert record is not None
+    await recovery.authorize_retry(
+        record.effect_id,
+        actor="operator:telemetry-reviewer",
+        reason="provider evidence reviewed",
+    )
+
+    event_names = {entry.event_name for entry in exporter.logs}
+    assert "external_effect.uncertain_outcome_detected" in event_names
+    assert "external_effect.retry_unsafe" in event_names
+    assert "external_effect.manual_review_required" in event_names
+    assert "external_effect.operator_action_applied" in event_names
+    assert "external_effect.retry_safe" in event_names
+
+    public_telemetry = repr(
+        [
+            (entry.event_name, entry.context.fields(), entry.attributes)
+            for entry in exporter.logs
+        ]
+    )
+    assert "private-telemetry-idempotency-key" not in public_telemetry
+    assert "provider_tool_ref" not in public_telemetry
