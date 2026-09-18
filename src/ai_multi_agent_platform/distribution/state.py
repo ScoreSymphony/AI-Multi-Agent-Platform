@@ -243,9 +243,7 @@ def _snapshot_to_json(snapshot: RegistryInstallationSnapshot) -> dict[str, objec
         "license": snapshot.license,
         "provenance": snapshot.provenance,
         "item_type": (
-            registry_item_kind_value(snapshot.item_type)
-            if snapshot.item_type is not None
-            else None
+            registry_item_kind_value(snapshot.item_type) if snapshot.item_type is not None else None
         ),
         "artifact_sha256": snapshot.artifact_sha256,
         "publisher": snapshot.publisher,
@@ -328,9 +326,7 @@ def _string_tuple(value: dict[object, object], key: str) -> tuple[str, ...]:
     parsed: list[str] = []
     for entry in result:
         if not isinstance(entry, str) or not entry.strip():
-            raise ValueError(
-                f"registry installation field {key!r} must contain non-blank strings"
-            )
+            raise ValueError(f"registry installation field {key!r} must contain non-blank strings")
         parsed.append(entry)
     return tuple(parsed)
 
