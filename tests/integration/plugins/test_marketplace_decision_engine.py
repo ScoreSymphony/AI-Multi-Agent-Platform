@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -697,6 +698,129 @@ def test_capability_plugin_connector_and_model_requirements_are_typed() -> None:
         "missing_connector",
         "missing_model",
     } <= codes
+
+
+def test_update_dependency_diff_is_typed_and_deterministic(tmp_path: Path) -> None:
+    unchanged = RegistryDependency(
+        "example.dep-unchanged",
+        item_kind=RegistryItemType.TOOL,
+    )
+    removed = RegistryDependency(
+        "example.dep-removed",
+        VersionRange(maximum="1.0.0"),
+        item_kind=RegistryItemType.SKILL,
+    )
+    changed_old = RegistryDependency(
+        "example.dep-changed",
+        VersionRange(maximum="1.0.0"),
+        item_kind=RegistryItemType.PLUGIN,
+    )
+    changed_new = RegistryDependency(
+        changed_old.item_id,
+        VersionRange(minimum="2.0.0"),
+        optional=True,
+        item_kind=RegistryItemType.PLUGIN,
+    )
+    added = RegistryDependency(
+        "example.dep-added",
+        optional=True,
+        item_kind=RegistryItemType.CONNECTOR,
+    )
+    old, old_artifact = _item(
+        "example.dependency-diff",
+        version="1.0.0",
+        dependencies=(removed, unchanged, changed_old),
+    )
+    candidate, candidate_artifact = _item(
+        old.item_id,
+        version="2.0.0",
+        dependencies=(unchanged, added, changed_new),
+    )
+    store = JsonRegistryInstallationStore(tmp_path / "dependency-diff.json")
+    store.record(old, provider_id="local")
+    service = _service(
+        ((old, old_artifact), (candidate, candidate_artifact)),
+        store=store,
+    )
+
+    preview = service.preview(candidate.item_id, candidate.version, _context())
+
+    diff = preview.decision.dependency_diff
+    assert diff.installed is True
+    assert diff.previous_known is True
+    assert [dependency.item_id for dependency in diff.previous] == [
+        changed_old.item_id,
+        removed.item_id,
+        unchanged.item_id,
+    ]
+    assert [dependency.item_id for dependency in diff.requested] == [
+        added.item_id,
+        changed_new.item_id,
+        unchanged.item_id,
+    ]
+    assert [dependency.item_id for dependency in diff.added] == [added.item_id]
+    assert [dependency.item_id for dependency in diff.removed] == [removed.item_id]
+    assert [dependency.item_id for dependency in diff.unchanged] == [unchanged.item_id]
+    assert len(diff.changes) == 1
+    assert diff.changes[0].previous == changed_old
+    assert diff.changes[0].requested == changed_new
+    assert diff.changed is True
+    finding = next(finding for finding in preview.findings if finding.code == "dependency_changed")
+    assert finding.category is FindingCategory.DEPENDENCY
+    assert ("added", added.item_id) in finding.details
+    assert ("removed", removed.item_id) in finding.details
+    assert ("changed", changed_old.item_id) in finding.details
+
+
+def test_update_dependency_diff_preserves_unknown_legacy_previous_state(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "legacy-dependency-diff.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": "1",
+                "installations": [
+                    {
+                        "current": {
+                            "item_id": "example.legacy-dependency-diff",
+                            "version": "1.0.0",
+                            "source_registry": "local",
+                            "source_repository": "https://example.invalid/legacy-dependency-diff",
+                            "package_reference": "example.legacy-dependency-diff@1.0.0",
+                            "revision": "legacy-rev",
+                            "license": "MIT",
+                            "provenance": "legacy-source",
+                        },
+                        "pinned_version": None,
+                        "history": [],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    candidate, candidate_artifact = _item(
+        "example.legacy-dependency-diff",
+        version="2.0.0",
+        dependencies=(RegistryDependency("example.new-dependency", optional=True),),
+    )
+    store = JsonRegistryInstallationStore(path)
+    service = _service(((candidate, candidate_artifact),), store=store)
+
+    preview = service.preview(candidate.item_id, candidate.version, _context())
+
+    diff = preview.decision.dependency_diff
+    assert diff.installed is True
+    assert diff.previous_known is False
+    assert diff.previous == ()
+    assert diff.requested == candidate.dependencies
+    assert diff.added == ()
+    assert diff.removed == ()
+    assert diff.changes == ()
+    assert diff.unchanged == ()
+    assert diff.changed is False
+    assert not any(finding.code == "dependency_changed" for finding in preview.findings)
 
 
 def test_update_permission_escalation_requires_review(tmp_path: Path) -> None:
