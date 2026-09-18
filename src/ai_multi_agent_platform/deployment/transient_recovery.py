@@ -8,9 +8,7 @@ from datetime import UTC, datetime
 from time import monotonic
 from typing import Protocol
 
-from ai_multi_agent_platform.automation import (
-    AutomationStartupRecoveryReport,
-)
+from ai_multi_agent_platform.automation import AutomationStartupRecoveryReport
 from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.security.authentication_models import BrowserSession
 
@@ -107,9 +105,7 @@ class SingleNodeTransientStateRecoveryExtension:
         evidence.append(
             {
                 "state_class": "transient_state_reconciliation",
-                "disposition": (
-                    "blocked" if automation_report.blockers else "completed"
-                ),
+                "disposition": "blocked" if automation_report.blockers else "completed",
                 "automation_candidates": len(automation_report.records),
                 "authentication_sessions": len(self.authentication_sessions),
                 "duration_ms": max(0.0, (monotonic() - started) * 1000),
