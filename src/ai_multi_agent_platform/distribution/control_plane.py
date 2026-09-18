@@ -126,7 +126,7 @@ class RegistryResourceService:
             platform_compatible=platform_compatible,
             compatibility_decision=compatibility,
             route_available=self.distribution.route_available(item),
-            owner_extension=self._owner_extension(item, installation),
+            owner_extension=await self._owner_extension(item, installation),
         )
 
     async def _list_compatibility_context(
@@ -243,7 +243,7 @@ class RegistryResourceService:
                 details={"marketplace_reason": "provider_failure"},
             ) from exc
 
-    def _owner_extension(
+    async def _owner_extension(
         self,
         item: RegistryItem,
         installation: RegistryInstallation | None,
@@ -254,7 +254,9 @@ class RegistryResourceService:
             requirements = self.distribution.inspect_requirements(item)
             details = self.distribution.describe(item)
             status_item = self._installed_status_item(item, installation)
-            status = self.distribution.status(status_item) if status_item is not None else None
+            status = (
+                await self.distribution.status(status_item) if status_item is not None else None
+            )
         except ContractError:
             raise
         # error-boundary: allow-broad-catch=translation reviewed owner detail translation
