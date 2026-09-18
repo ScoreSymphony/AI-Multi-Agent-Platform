@@ -145,6 +145,7 @@ def _register_base_domains(
         runtime.agents,
         runtime.routing_profile_assignment_gate,
         runtime=runtime.agent_runtime,
+        orchestrator_mappers=runtime.orchestrator_mappers,
     )
     register_standard_agent_control_plane(control_plane, runtime.agents)
     register_onboarding_control_plane(
