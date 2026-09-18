@@ -356,6 +356,11 @@ class SkillService:
             allow_review_state_change=True,
         )
 
+    def delete_skill(self, skill_id: str) -> None:
+        """Delete a Skill through the canonical repository reference checks."""
+
+        self.repository.delete_skill(skill_id)
+
     @staticmethod
     def _validate_profile_for_registry(profile: SkillProfile, *, creating: bool) -> None:
         if profile.source is None:
