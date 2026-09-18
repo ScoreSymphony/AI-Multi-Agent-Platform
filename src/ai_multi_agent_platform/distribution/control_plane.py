@@ -30,6 +30,7 @@ from .control_plane_query import split_resource_id as _split_resource_id
 from .control_plane_query import validate_marketplace_sort as _validate_marketplace_sort
 from .dependency_graph import evaluate_compatibility
 from .items import RegistryItem, RegistryQuery
+from .kinds import MarketplaceKindDescriptor
 from .models import DistributionRoute, version_key
 from .provider import RegistrySourceConflictError, RegistryUnavailableError
 from .service import (
@@ -41,6 +42,7 @@ from .state import RegistryInstallation
 from .validation import ValidationContext
 
 REGISTRY_COLLECTION = "registry-items"
+MARKETPLACE_KIND_COLLECTION = "marketplace-kinds"
 REGISTRY_PREVIEW_COMMAND = "registry.preview"
 REGISTRY_ACTIVATE_COMMAND = "registry.activate"
 REGISTRY_PIN_COMMAND = "registry.pin"
@@ -125,6 +127,7 @@ class RegistryResourceService:
             update_available=_is_update(item, installation),
             platform_compatible=platform_compatible,
             compatibility_decision=compatibility,
+            route=self.distribution.route_for(item),
             route_available=self.distribution.route_available(item),
             owner_extension=await self._owner_extension(item, installation),
         )
@@ -205,6 +208,7 @@ class RegistryResourceService:
                 compatibility.platform_compatible if compatibility is not None else is_compatible
             ),
             compatibility_decision=compatibility,
+            route=self.distribution.route_for(item),
             route_available=self.distribution.route_available(item),
         )
 
@@ -248,15 +252,40 @@ class RegistryResourceService:
         item: RegistryItem,
         installation: RegistryInstallation | None,
     ) -> dict[str, JsonValue] | None:
-        if item.route not in {
+        route = self.distribution.route_for(item)
+        if route not in {
             DistributionRoute.KIND_HANDLER,
             DistributionRoute.PLUGIN,
         }:
             return None
+        descriptor = self.distribution.kind_descriptor(item)
+        supported_operations = (
+            [
+                operation
+                for operation, supported in (
+                    ("install", descriptor.supports_install),
+                    ("update", descriptor.supports_update),
+                    ("uninstall", descriptor.supports_uninstall),
+                )
+                if supported
+            ]
+            if descriptor is not None
+            else []
+        )
+        handler_available = self.distribution.has_kind_handler(item)
+        if not handler_available:
+            return {
+                "handler_available": False,
+                "supported_operations": _json_strings(supported_operations),
+                "requirements": None,
+                "details": None,
+                "status": None,
+                "status_version": None,
+            }
         try:
             requirements = self.distribution.inspect_requirements(item)
-            details = self.distribution.describe(item)
             status_item = self._installed_status_item(item, installation)
+            details = self.distribution.describe(status_item) if status_item is not None else None
             status = (
                 await self.distribution.status(status_item) if status_item is not None else None
             )
@@ -270,7 +299,8 @@ class RegistryResourceService:
                 details={"marketplace_reason": "owner_failure", "kind": item.kind},
             ) from exc
         return {
-            "handler_available": self.distribution.has_kind_handler(item),
+            "handler_available": True,
+            "supported_operations": _json_strings(supported_operations),
             "requirements": json_value(requirements) if requirements is not None else None,
             "details": json_value(details) if details is not None else None,
             "status": json_value(status) if status is not None else None,
@@ -323,6 +353,57 @@ class RegistryResourceService:
         if self.validation_context_resolver is None:
             return None
         return await self.validation_context_resolver.resolve(context)
+
+
+class MarketplaceKindResourceService:
+    """Read-only metadata for registered Marketplace component kinds."""
+
+    def __init__(self, distribution: DistributionService) -> None:
+        self.distribution = distribution
+
+    async def list_resources(
+        self,
+        context: RequestContext,
+        query: PageQuery,
+    ) -> tuple[dict[str, JsonValue], ...]:
+        del context, query
+        return tuple(
+            self._resource(descriptor) for descriptor in self.distribution.kind_descriptors()
+        )
+
+    async def get_resource(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> dict[str, JsonValue]:
+        del context
+        descriptor = next(
+            (
+                candidate
+                for candidate in self.distribution.kind_descriptors()
+                if candidate.kind_value == resource_id
+            ),
+            None,
+        )
+        if descriptor is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"Marketplace kind is not registered: {resource_id}",
+            )
+        return self._resource(descriptor)
+
+    @staticmethod
+    def _resource(descriptor: MarketplaceKindDescriptor) -> dict[str, JsonValue]:
+        return {
+            "id": descriptor.kind_value,
+            "type": "marketplace-kind",
+            "kind": descriptor.kind_value,
+            "display_name": descriptor.display_name,
+            "default_route": descriptor.default_route.value,
+            "supports_install": descriptor.supports_install,
+            "supports_update": descriptor.supports_update,
+            "supports_uninstall": descriptor.supports_uninstall,
+        }
 
 
 class RegistryCommandHandlers:
@@ -456,13 +537,25 @@ class RegistryCommandHandlers:
                 "marketplace item is not installed; use marketplace.install",
                 details={"marketplace_reason": "not_installed"},
             )
-        if version_key(preview.item.version) <= version_key(installation.current.version):
+        installed_key = version_key(installation.current.version)
+        candidate_key = version_key(preview.item.version)
+        same_version_source_change = (
+            candidate_key == installed_key
+            and preview.item.source_registry != installation.current.source_registry
+        )
+        if candidate_key < installed_key or (
+            candidate_key == installed_key and not same_version_source_change
+        ):
             raise ContractError(
                 ErrorCode.CONFLICT,
-                "marketplace update version must be newer than the installed version",
+                (
+                    "marketplace update must use a newer version or an explicitly selected "
+                    "different Marketplace source"
+                ),
                 details={
                     "marketplace_reason": "not_newer",
                     "installed_version": installation.current.version,
+                    "installed_source_registry": installation.current.source_registry,
                 },
             )
         _require_marketplace_activation(
@@ -490,7 +583,7 @@ class RegistryCommandHandlers:
             "type": "marketplace-mutation",
             "action": "uninstall",
             "status": "applied",
-            "route": preview.item.route.value,
+            "route": preview.route.value,
             "decision": _decision_resource(preview.decision),
             "installation": None,
         }
@@ -543,7 +636,7 @@ class RegistryCommandHandlers:
         self,
         preview: DistributionUninstallPreview,
     ) -> None:
-        if preview.item.route not in {
+        if preview.route not in {
             DistributionRoute.KIND_HANDLER,
             DistributionRoute.PLUGIN,
         }:
@@ -552,7 +645,7 @@ class RegistryCommandHandlers:
                 "marketplace uninstall is not available for this component route",
                 details={
                     "marketplace_reason": "uninstall_not_supported",
-                    "route": preview.item.route.value,
+                    "route": preview.route.value,
                 },
             )
         if not self.distribution.has_kind_handler(preview.item):
@@ -760,37 +853,15 @@ def register_distribution_control_plane(
     *,
     validation_context_resolver: RegistryValidationContextResolver | None = None,
 ) -> None:
-    """Register the Registry/Marketplace surface only when a provider is configured.
+    """Register the optional Registry/Marketplace Control Plane surface."""
 
-    Discovery remains read-only. Preview and lifecycle commands require authoritative
-    validation state; explicit Marketplace mutations also require durable installation
-    state and fail closed when their canonical owner route is unavailable. Legacy
-    registry.activate retains its existing owner-router availability contract. The
-    generic Control Plane performs authorization before commands execute.
-    """
+    from .control_plane_registration import register_distribution_control_plane_module
 
-    if not distribution.enabled:
-        return
-    control_plane.register_resource_service(
-        REGISTRY_COLLECTION,
-        RegistryResourceService(distribution, validation_context_resolver),
+    register_distribution_control_plane_module(
+        control_plane,
+        distribution,
+        validation_context_resolver=validation_context_resolver,
     )
-    if validation_context_resolver is not None:
-        handlers = RegistryCommandHandlers(distribution, validation_context_resolver)
-        control_plane.register_command(REGISTRY_PREVIEW_COMMAND, handlers.preview)
-        control_plane.register_command(MARKETPLACE_PREVIEW_COMMAND, handlers.marketplace_preview)
-        if distribution.activation_enabled:
-            control_plane.register_command(REGISTRY_ACTIVATE_COMMAND, handlers.activate)
-        if distribution.installation_state_enabled:
-            control_plane.register_command(
-                MARKETPLACE_INSTALL_COMMAND, handlers.marketplace_install
-            )
-            control_plane.register_command(MARKETPLACE_UPDATE_COMMAND, handlers.marketplace_update)
-            control_plane.register_command(
-                MARKETPLACE_UNINSTALL_COMMAND, handlers.marketplace_uninstall
-            )
-            control_plane.register_command(REGISTRY_PIN_COMMAND, handlers.pin)
-            control_plane.register_command(REGISTRY_UNPIN_COMMAND, handlers.unpin)
 
 
 def _require_marketplace_activation(
@@ -868,6 +939,6 @@ def _require_marketplace_uninstall(preview: DistributionUninstallPreview) -> Non
             "marketplace_reason": "dependency_block",
             "findings": _json_strings(sorted(finding.code for finding in errors)),
             "kind": preview.item.kind,
-            "route": preview.item.route.value,
+            "route": preview.route.value,
         },
     )

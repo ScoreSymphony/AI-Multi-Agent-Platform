@@ -10,6 +10,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, paginate
 from ai_multi_agent_platform.distribution import (
     MARKETPLACE_INSTALL_COMMAND,
+    MARKETPLACE_KIND_COLLECTION,
     MARKETPLACE_PREVIEW_COMMAND,
     MARKETPLACE_UNINSTALL_COMMAND,
     MARKETPLACE_UPDATE_COMMAND,
@@ -17,10 +18,14 @@ from ai_multi_agent_platform.distribution import (
     REGISTRY_COLLECTION,
     REGISTRY_PREVIEW_COMMAND,
     ArtifactIntegrity,
+    DistributionRoute,
     DistributionService,
     JsonRegistryInstallationStore,
     LocalRegistryProvider,
+    MarketplaceKindDescriptor,
     MarketplaceKindHandlerRegistry,
+    MarketplaceKindRegistry,
+    MarketplaceKindResourceService,
     MultiRegistryProvider,
     RegistryCommandHandlers,
     RegistryCompatibility,
@@ -28,6 +33,7 @@ from ai_multi_agent_platform.distribution import (
     RegistryItem,
     RegistryItemType,
     RegistryManifestReference,
+    RegistryMaturity,
     RegistryResourceService,
     RegistrySource,
     RegistryUnavailableError,
@@ -401,6 +407,38 @@ def test_marketplace_sort_validation_and_canonical_pagination_are_deterministic(
     assert invalid_sort.value.code is ErrorCode.INVALID_REQUEST
 
 
+def test_maturity_filter_and_sort_are_first_class_marketplace_metadata() -> None:
+    stable = replace(
+        _tool("example.stable", "Stable"),
+        maturity=RegistryMaturity.STABLE,
+    )
+    experimental = replace(
+        _tool("example.experimental", "Experimental"),
+        maturity=RegistryMaturity.EXPERIMENTAL,
+    )
+    service = RegistryResourceService(
+        DistributionService(LocalRegistryProvider((experimental, stable)))
+    )
+
+    filtered = asyncio.run(
+        service.list_resources(
+            _request(),
+            PageQuery(filters={"maturity": "stable"}),
+        )
+    )
+    ordered = asyncio.run(
+        service.list_resources(
+            _request(),
+            PageQuery(sort="maturity", direction="asc"),
+        )
+    )
+
+    assert [item["item_id"] for item in filtered] == ["example.stable"]
+    assert filtered[0]["maturity"] == "stable"
+    assert filtered[0]["stability"] == "stable"
+    assert [item["maturity"] for item in ordered] == ["experimental", "stable"]
+
+
 def test_version_sort_is_numeric_and_deterministic() -> None:
     items = (
         _application("example.sort", "2.0.0"),
@@ -468,6 +506,37 @@ def test_compatible_filter_uses_full_current_environment() -> None:
     assert [item["item_id"] for item in blocked] == ["example.runtime-missing"]
     assert installable[0]["compatibility"]["compatible"] is True  # type: ignore[index]
     assert blocked[0]["compatibility"]["missing_runtimes"] == ["docker"]  # type: ignore[index]
+
+
+def test_uninstalled_owner_item_exposes_requirements_without_runtime_reads() -> None:
+    class UninstalledHandler(RecordingHandler):
+        def describe(self, item: RegistryItem) -> dict[str, object]:
+            raise AssertionError(f"describe must not run before install: {item.item_id}")
+
+        async def status(self, item: RegistryItem) -> object:
+            raise AssertionError(f"status must not run before install: {item.item_id}")
+
+    item = _application("example.uninstalled-app", "1.0.0")
+    handler = UninstalledHandler()
+    service = RegistryResourceService(
+        DistributionService(
+            LocalRegistryProvider((item,)),
+            kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+        )
+    )
+
+    detail = asyncio.run(service.get_resource(_request(), item.item_id))
+
+    owner_extension = detail["owner_extension"]
+    assert isinstance(owner_extension, dict)
+    assert owner_extension["handler_available"] is True
+    assert owner_extension["requirements"] == {
+        "kind": "application",
+        "required_capabilities": [],
+    }
+    assert owner_extension["details"] is None
+    assert owner_extension["status"] is None
+    assert owner_extension["status_version"] is None
 
 
 def test_plugin_route_exposes_owner_extension_and_supports_marketplace_uninstall(
@@ -552,6 +621,8 @@ def test_detail_exposes_manifest_update_state_compatibility_and_owner_extension(
     assert detail["update_state"] == {
         "installed": True,
         "installed_version": "1.0.0",
+        "installed_source_registry": "local",
+        "installation_source_matches": True,
         "candidate_version": "2.0.0",
         "pinned_version": None,
         "update_available": True,
@@ -651,7 +722,7 @@ def test_control_plane_registers_marketplace_aliases_without_breaking_registry_c
         validation_context_resolver=StaticValidationContext(_context()),
     )
 
-    assert set(control_plane.resources) == {REGISTRY_COLLECTION}
+    assert set(control_plane.resources) == {REGISTRY_COLLECTION, MARKETPLACE_KIND_COLLECTION}
     assert {
         REGISTRY_PREVIEW_COMMAND,
         REGISTRY_ACTIVATE_COMMAND,
@@ -660,6 +731,51 @@ def test_control_plane_registers_marketplace_aliases_without_breaking_registry_c
         MARKETPLACE_UPDATE_COMMAND,
         MARKETPLACE_UNINSTALL_COMMAND,
     } <= set(control_plane.commands)
+
+
+def test_registered_future_kind_descriptor_controls_effective_route() -> None:
+    item = _future_kind()
+    artifact = b"future-kind-manual"
+    kinds = MarketplaceKindRegistry(
+        (
+            MarketplaceKindDescriptor(
+                "notebook_extension",
+                "Notebook Extension",
+                DistributionRoute.MANUAL,
+                supports_install=False,
+                supports_update=False,
+                supports_uninstall=False,
+            ),
+        )
+    )
+    distribution = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+            provider_id="local",
+        ),
+        kind_registry=kinds,
+    )
+    service = RegistryResourceService(
+        distribution,
+        StaticValidationContext(_context()),
+    )
+
+    detail = asyncio.run(
+        service.get_resource(
+            _request(),
+            f"{item.item_id}@{item.version}",
+        )
+    )
+    preview = distribution.preview(item.item_id, item.version, _context())
+
+    assert item.route is DistributionRoute.KIND_HANDLER
+    assert distribution.route_for(preview.item) is DistributionRoute.MANUAL
+    assert preview.route is DistributionRoute.MANUAL
+    assert preview.activation_allowed is False
+    assert detail["route"] == "manual"
+    assert detail["route_available"] is False
+    assert detail["owner_extension"] is None
 
 
 def test_marketplace_preview_reflects_actual_route_availability() -> None:
@@ -743,6 +859,16 @@ def test_handler_unavailable_fails_with_typed_marketplace_error(tmp_path: Path) 
         )
     )
     assert preview["activation_allowed"] is False
+
+    detail = asyncio.run(
+        RegistryResourceService(distribution, resolver).get_resource(_request(), skill.item_id)
+    )
+    owner_extension = detail["owner_extension"]
+    assert isinstance(owner_extension, dict)
+    assert owner_extension["handler_available"] is False
+    assert owner_extension["requirements"] is None
+    assert owner_extension["details"] is None
+    assert owner_extension["status"] is None
 
     with pytest.raises(ContractError) as error:
         asyncio.run(
@@ -1044,3 +1170,132 @@ def test_marketplace_preview_serializes_structured_decision_findings(
     assert decision["permission_diff"]["added"] == ["filesystem.write"]  # type: ignore[index]
     findings = preview["findings"]
     assert {finding["category"] for finding in findings} >= {"dependency", "permission"}  # type: ignore[index]
+
+
+def test_future_kind_registry_controls_operations_and_same_version_source_switch(
+    tmp_path: Path,
+) -> None:
+    class FutureHandler:
+        kind = "notebook_extension"
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str | None]] = []
+
+        def inspect_requirements(self, item: RegistryItem) -> dict[str, object]:
+            return {"kind": item.kind}
+
+        async def install(self, item: RegistryItem, artifact: bytes) -> object:
+            del artifact
+            self.calls.append(("install", item.source_registry))
+            return item.item_id
+
+        async def update(self, item: RegistryItem, artifact: bytes) -> object:
+            del artifact
+            self.calls.append(("update", item.source_registry))
+            return item.item_id
+
+        async def uninstall(self, item: RegistryItem) -> object:
+            self.calls.append(("uninstall", item.source_registry))
+            return item.item_id
+
+        async def status(self, item: RegistryItem) -> object:
+            return {"source_registry": item.source_registry}
+
+        def describe(self, item: RegistryItem) -> dict[str, object]:
+            return {"source_registry": item.source_registry}
+
+    base = _future_kind()
+    artifact = b"future-kind"
+    official = LocalRegistryProvider(
+        (base,),
+        {(base.item_id, base.version): artifact},
+        provider_id="official",
+    )
+    private = LocalRegistryProvider(
+        (base,),
+        {(base.item_id, base.version): artifact},
+        provider_id="private",
+    )
+    provider = MultiRegistryProvider((official, private))
+    installations = JsonRegistryInstallationStore(tmp_path / "future-source-switch.json")
+    installed = provider.get_from_source("official", base.item_id, base.version)
+    installations.record(
+        installed,
+        provider_id="official",
+        artifact_sha256="0" * 64,
+    )
+    handler = FutureHandler()
+    kind_registry = MarketplaceKindRegistry(
+        (
+            MarketplaceKindDescriptor(
+                "notebook_extension",
+                "Notebook Extension",
+                DistributionRoute.KIND_HANDLER,
+                supports_install=True,
+                supports_update=True,
+                supports_uninstall=True,
+            ),
+        )
+    )
+    distribution = DistributionService(
+        provider,
+        installations=installations,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+        kind_registry=kind_registry,
+    )
+    service = RegistryResourceService(
+        distribution,
+        StaticValidationContext(_context()),
+    )
+    detail = asyncio.run(
+        service.get_resource(
+            _request(),
+            f"private::{base.item_id}@{base.version}",
+        )
+    )
+    kinds = asyncio.run(
+        MarketplaceKindResourceService(distribution).list_resources(
+            _request(),
+            PageQuery(sort="kind"),
+        )
+    )
+
+    assert kinds == (
+        {
+            "id": "notebook_extension",
+            "type": "marketplace-kind",
+            "kind": "notebook_extension",
+            "display_name": "Notebook Extension",
+            "default_route": "kind_handler",
+            "supports_install": True,
+            "supports_update": True,
+            "supports_uninstall": True,
+        },
+    )
+    assert detail["installed"] is True
+    assert detail["installed_source_registry"] == "official"
+    assert detail["installation_source_matches"] is False
+    assert detail["owner_extension"]["supported_operations"] == [  # type: ignore[index]
+        "install",
+        "update",
+        "uninstall",
+    ]
+
+    commands = RegistryCommandHandlers(
+        distribution,
+        StaticValidationContext(_context()),
+    )
+    result = asyncio.run(
+        commands.marketplace_update(
+            _request(),
+            base.item_id,
+            {"version": base.version, "source_registry": "private"},
+        )
+    )
+
+    assert result["action"] == "update"
+    assert handler.calls[-1] == ("update", "private")
+    current = installations.get(base.item_id)
+    assert current is not None
+    assert current.current.version == base.version
+    assert current.current.source_registry == "private"

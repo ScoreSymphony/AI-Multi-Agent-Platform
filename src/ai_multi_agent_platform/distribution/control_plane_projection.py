@@ -17,6 +17,7 @@ from .decision_types import (
     UpdateState,
 )
 from .items import RegistryItem
+from .models import DistributionRoute
 from .service import DistributionPreview
 from .state import (
     RegistryInstallation,
@@ -113,6 +114,12 @@ def _update_state_resource(
     return {
         "installed": installation is not None,
         "installed_version": installation.current.version if installation else None,
+        "installed_source_registry": (
+            installation.current.source_registry if installation else None
+        ),
+        "installation_source_matches": (
+            installation.current.source_registry == item.source_registry if installation else None
+        ),
         "candidate_version": item.version,
         "pinned_version": installation.pinned_version if installation else None,
         "update_available": update_available,
@@ -126,9 +133,11 @@ def _item_resource(
     update_available: bool = False,
     platform_compatible: bool | None = None,
     compatibility_decision: CompatibilityDecision | None = None,
+    route: DistributionRoute | None = None,
     route_available: bool | None = None,
     owner_extension: dict[str, JsonValue] | None = None,
 ) -> dict[str, JsonValue]:
+    effective_route = route or item.route
     qualified_id = (
         f"{item.source_registry}::{item.item_id}@{item.version}"
         if item.source_registry is not None
@@ -166,18 +175,26 @@ def _item_resource(
         "categories": _json_strings(sorted(item.categories)),
         "trust_status": item.trust_status.value,
         "trust": item.trust_status.value,
+        "maturity": item.maturity.value if item.maturity is not None else None,
+        "stability": item.maturity.value if item.maturity is not None else None,
         "review_reference": item.review_reference,
         "released_at": item.released_at,
         "release_date": item.released_at,
         "changelog": item.changelog,
         "deprecated": item.deprecated,
         "yanked": item.yanked,
-        "route": item.route.value,
+        "route": effective_route.value,
         "route_available": route_available,
         "manifest_reference": _manifest_resource(item),
         "integrity": _integrity_resource(item),
         "installed": installation is not None,
         "installed_version": installation.current.version if installation else None,
+        "installed_source_registry": (
+            installation.current.source_registry if installation else None
+        ),
+        "installation_source_matches": (
+            installation.current.source_registry == item.source_registry if installation else None
+        ),
         "pinned_version": installation.pinned_version if installation else None,
         "update_available": update_available,
         "installation": _installation_resource(installation) if installation else None,
@@ -263,6 +280,18 @@ def _dependency_decision_resource(
         "path": _json_strings(dependency.path),
         "blocking": dependency.blocking,
     }
+
+
+def _install_order_resource(decision: MarketplaceDecision) -> list[JsonValue]:
+    return [
+        {
+            "item_id": step.item_id,
+            "item_kind": step.item_kind,
+            "version": step.version,
+            "source_registry": step.source_registry,
+        }
+        for step in decision.install_order
+    ]
 
 
 def _compatibility_decision_resource(
@@ -364,6 +393,7 @@ def _decision_resource(decision: MarketplaceDecision) -> dict[str, JsonValue]:
     return {
         "operation": decision.operation.value,
         "dependencies": dependencies,
+        "install_order": _install_order_resource(decision),
         "compatibility": _compatibility_decision_resource(decision.compatibility),
         "permission_diff": _permission_diff_resource(decision.permission_diff),
         "provenance_diff": _provenance_diff_resource(decision.provenance_diff),
@@ -406,6 +436,7 @@ def _preview_resource(
             preview.item,
             installation,
             update_available=_is_update(preview.item, installation),
+            route=preview.route,
             route_available=route_available,
         ),
         "route": preview.route.value,

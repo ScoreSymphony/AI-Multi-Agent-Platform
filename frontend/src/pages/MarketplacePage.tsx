@@ -4,6 +4,7 @@ import {
   type RegistryDependency,
   type RegistryItem,
   type RegistryKindDescriptor,
+  type RegistryMaturity,
   type RegistryPermissionChange,
   type RegistryPreview,
   type RegistryTrustStatus,
@@ -21,6 +22,7 @@ import {
 import { technicalMetadata } from "../marketplace/technical";
 
 const TRUST_STATES: RegistryTrustStatus[] = ["trusted", "reviewed", "local", "untrusted"];
+const MATURITY_STATES: RegistryMaturity[] = ["stable", "beta", "experimental"];
 const PAGE_SIZE = 24;
 
 const PRIMARY_KIND_GROUPS: Array<{ value: string; label: string; kinds: string[] }> = [
@@ -54,22 +56,25 @@ function descriptor(
     default_route,
     supports_install: default_route !== "manual",
     supports_update: default_route !== "manual",
-    supports_uninstall: default_route === "kind_handler",
+    supports_uninstall: default_route === "kind_handler" || default_route === "plugin",
     management_path,
   };
 }
 
 export function MarketplacePage({ client }: { client: RegistryClient }) {
   const [page, setPage] = useState<Page<RegistryItem> | null>(null);
+  const [kindDescriptors, setKindDescriptors] = useState<RegistryKindDescriptor[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [queryText, setQueryText] = useState("");
   const [kindFilter, setKindFilter] = useState("");
   const [trustStatus, setTrustStatus] = useState<RegistryTrustStatus | "">("");
+  const [maturity, setMaturity] = useState<RegistryMaturity | "">("");
   const [tag, setTag] = useState("");
   const [category, setCategory] = useState("");
   const [license, setLicense] = useState("");
   const [publisher, setPublisher] = useState("");
+  const [sourceRegistry, setSourceRegistry] = useState("");
   const [requiredCapability, setRequiredCapability] = useState("");
   const [platformVersion, setPlatformVersion] = useState("");
   const [installedFilter, setInstalledFilter] = useState<"" | "true" | "false">("");
@@ -90,10 +95,12 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     const filters: Record<string, string> = {};
     if (kindFilter) filters.item_type = kindFilter;
     if (trustStatus) filters.trust_status = trustStatus;
+    if (maturity) filters.maturity = maturity;
     if (tag.trim()) filters.tag = tag.trim();
     if (category.trim()) filters.category = category.trim();
     if (license.trim()) filters.license = license.trim();
     if (publisher.trim()) filters.publisher = publisher.trim();
+    if (sourceRegistry.trim()) filters.source = sourceRegistry.trim();
     if (requiredCapability.trim()) filters.required_capability = requiredCapability.trim();
     if (platformVersion.trim()) filters.platform_version = platformVersion.trim();
     if (installedFilter) filters.installed = installedFilter;
@@ -114,9 +121,11 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     installedFilter,
     kindFilter,
     license,
+    maturity,
     platformVersion,
     publisher,
     queryText,
+    sourceRegistry,
     requiredCapability,
     sort,
     tag,
@@ -128,8 +137,12 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   const load = useCallback(
     async (pageCursor?: string) => {
       try {
-        const next = await client.list({ ...listQuery, cursor: pageCursor });
+        const [next, registeredKinds] = await Promise.all([
+          client.list({ ...listQuery, cursor: pageCursor }),
+          client.listKinds({ limit: 200, sort: "kind", direction: "asc" }),
+        ]);
         setPage(next);
+        setKindDescriptors(registeredKinds.items);
         setError(null);
       } catch (nextError) {
         setError(nextError);
@@ -145,8 +158,11 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   }, [load]);
 
   const effectiveKindDescriptors = useMemo(
-    () => mergeKindDescriptors([], [...(page?.items ?? []), ...(selected ? [selected] : [])]),
-    [page, selected],
+    () => mergeKindDescriptors(
+      kindDescriptors,
+      [...(page?.items ?? []), ...(selected ? [selected] : [])],
+    ),
+    [kindDescriptors, page, selected],
   );
 
   const dynamicKinds = useMemo(() => {
@@ -168,7 +184,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     setSuccessMessage(null);
     setDetailLoading(true);
     try {
-      const detail = await client.get(item.item_id, item.version);
+      const detail = await client.get(item.item_id, item.version, item.source_registry);
       setSelected(detail);
     } catch (nextError) {
       setActionError(nextError);
@@ -182,7 +198,12 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     setActionError(null);
     setSuccessMessage(null);
     try {
-      const next = await client.preview(item.item_id, item.version);
+      const next = await client.preview(
+        item.item_id,
+        item.version,
+        undefined,
+        item.source_registry,
+      );
       setPreview(next);
       setSelected((current) => ({
         ...next.item,
@@ -206,9 +227,19 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     setSuccessMessage(null);
     try {
       if (operation === "update") {
-        await client.update(selected.item_id, selected.version);
+        await client.update(
+          selected.item_id,
+          selected.version,
+          undefined,
+          selected.source_registry,
+        );
       } else {
-        await client.install(selected.item_id, selected.version);
+        await client.install(
+          selected.item_id,
+          selected.version,
+          undefined,
+          selected.source_registry,
+        );
       }
       setSuccessMessage(operation === "update" ? "Update applied." : "Component installed.");
       await refreshSelected(selected);
@@ -268,7 +299,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   };
 
   const refreshSelected = async (item: RegistryItem) => {
-    const refreshed = await client.get(item.item_id, item.version);
+    const refreshed = await client.get(item.item_id, item.version, item.source_registry);
     setSelected(refreshed);
     setPreview(null);
     await load(cursor);
@@ -279,10 +310,12 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     setQueryText("");
     setKindFilter("");
     setTrustStatus("");
+    setMaturity("");
     setTag("");
     setCategory("");
     setLicense("");
     setPublisher("");
+    setSourceRegistry("");
     setRequiredCapability("");
     setPlatformVersion("");
     setInstalledFilter("");
@@ -310,8 +343,14 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   };
 
   const filtersActive =
-    Boolean(queryText.trim() || kindFilter || trustStatus || tag.trim() || category.trim()) ||
-    Boolean(license.trim() || publisher.trim() || requiredCapability.trim() || platformVersion.trim()) ||
+    Boolean(queryText.trim() || kindFilter || trustStatus || maturity || tag.trim() || category.trim()) ||
+    Boolean(
+      license.trim() ||
+      publisher.trim() ||
+      sourceRegistry.trim() ||
+      requiredCapability.trim() ||
+      platformVersion.trim()
+    ) ||
     Boolean(installedFilter || compatibilityFilter || technicalOnly || updatesOnly);
 
   const providerDisabled = error ? providerLooksDisabled(error) : false;
@@ -392,6 +431,18 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
             </select>
           </label>
           <label>
+            Maturity
+            <select
+              value={maturity}
+              onChange={(event) => setMaturity(event.target.value as RegistryMaturity | "")}
+            >
+              <option value="">All maturity levels</option>
+              {MATURITY_STATES.map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+          <label>
             Installed state
             <select
               value={installedFilter}
@@ -440,6 +491,14 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
             />
           </label>
           <label>
+            Marketplace source
+            <input
+              value={sourceRegistry}
+              placeholder="official or private"
+              onChange={(event) => setSourceRegistry(event.target.value)}
+            />
+          </label>
+          <label>
             Required capability
             <input
               value={requiredCapability}
@@ -461,8 +520,10 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
               <option value="name">Name</option>
               <option value="version">Version</option>
               <option value="publisher">Publisher</option>
+              <option value="source_registry">Marketplace source</option>
               <option value="released_at">Release date</option>
               <option value="item_type">Kind</option>
+              <option value="maturity">Maturity</option>
             </select>
           </label>
           <label>
@@ -527,7 +588,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
             <div className="card-grid">
               {page.items.map((item) => (
                 <MarketplaceItemCard
-                  key={item.id}
+                  key={item.qualified_id ?? item.id}
                   item={item}
                   descriptor={
                     effectiveKindDescriptors.find((entry) => entry.kind === item.item_type) ??
@@ -586,7 +647,7 @@ function MarketplaceItemCard({
         <StatusBadge value={kindLabel(descriptor)} />
         <StatusBadge value={item.trust_status} />
         {compatible === false ? <StatusBadge value="incompatible" /> : null}
-        {item.installed_version === item.version ? <StatusBadge value="installed" /> : null}
+        {candidateIsInstalled(item) ? <StatusBadge value="installed" /> : null}
         {item.update_available ? <StatusBadge value="update_available" /> : null}
         {item.pinned_version ? <StatusBadge value="pinned" /> : null}
         {item.operation_state && item.operation_state !== "ready" ? (
@@ -635,7 +696,7 @@ function MarketplaceDetail({
 }) {
   const operation = mutationOperation(item);
   const supportsOperation = operation ? operationSupported(item, operation) : false;
-  const selectedIsInstalledVersion = item.installed_version === item.version;
+  const selectedIsInstalledVersion = candidateIsInstalled(item);
   const partialMetadata =
     !item.publisher ||
     !item.license ||
@@ -690,6 +751,7 @@ function MarketplaceDetail({
         <dt>License</dt><dd>{item.license || "not recorded"}</dd>
         <dt>Provenance</dt><dd>{item.provenance || "not recorded"}</dd>
         <dt>Trust</dt><dd>{item.trust_status}</dd>
+        <dt>Maturity</dt><dd>{item.maturity ?? item.stability ?? "not recorded"}</dd>
         <dt>Review reference</dt><dd>{item.review_reference ?? "not recorded"}</dd>
         <dt>SHA-256</dt><dd>{item.integrity?.sha256 ?? "not declared"}</dd>
         <dt>Signature</dt>
@@ -703,6 +765,7 @@ function MarketplaceDetail({
         <dt>Compatibility</dt>
         <dd>{compatible === null ? "not evaluated" : compatible ? "compatible" : "incompatible"}</dd>
         <dt>Installed version</dt><dd>{item.installed_version ?? "not installed"}</dd>
+        <dt>Installed source</dt><dd>{item.installed_source_registry ?? "not installed"}</dd>
         <dt>Pinned version</dt><dd>{item.pinned_version ?? "not pinned"}</dd>
         <dt>Categories</dt><dd>{item.categories.join(", ") || "none"}</dd>
         <dt>Tags</dt><dd>{item.tags.join(", ") || "none"}</dd>
@@ -804,10 +867,10 @@ function MarketplaceDetail({
             {busy ? "Operation pending…" : operation === "update" ? "Preview update" : "Preview install"}
           </button>
         ) : null}
-        {item.installed && !item.pinned_version ? (
+        {installationSourceMatches(item) && !item.pinned_version ? (
           <button type="button" disabled={busy} onClick={onPin}>Pin installed version</button>
         ) : null}
-        {item.pinned_version ? (
+        {installationSourceMatches(item) && item.pinned_version ? (
           <button type="button" disabled={busy} onClick={onUnpin}>Unpin</button>
         ) : null}
         {uninstallSupported(item) ? (
@@ -934,6 +997,13 @@ function InstallPreview({
       ) : (
         <DependencyList dependencies={dependencies} />
       )}
+      <RequirementList
+        title="Deterministic install order"
+        values={(decision?.install_order ?? []).map(
+          (step, index) =>
+            `${index + 1}. ${step.item_id}@${step.version} · ${humanizeKind(step.item_kind)} · ${step.source_registry ?? "unknown source"}`,
+        )}
+      />
       <RequirementList
         title="Missing requirements"
         values={[...(preview.missing_requirements ?? []), ...structuredMissing]}
@@ -1227,15 +1297,18 @@ function operationSupported(item: RegistryItem, operation: "install" | "update")
   if (!routeAvailable(item) || item.pinned_version) return false;
   const advertised = item.owner_extension?.supported_operations;
   if (advertised && !advertised.includes(operation)) return false;
-  // #1173/#1204 intentionally expose no canonical Application artifact-version migration yet.
+  // The canonical Application owner intentionally exposes no artifact-version migration yet.
   // Fail closed until the owner explicitly advertises update support.
   if (operation === "update" && item.item_type === "application" && !advertised) return false;
   if (operation === "install") return !item.installed;
-  return item.installed && item.update_available && item.installed_version !== item.version;
+  return item.installed && (
+    (item.update_available && item.installed_version !== item.version) ||
+    sameVersionSourceSwitch(item)
+  );
 }
 
 function uninstallSupported(item: RegistryItem): boolean {
-  if (!item.installed || item.route !== "kind_handler") return false;
+  if (!installationSourceMatches(item) || !["kind_handler", "plugin"].includes(item.route)) return false;
   if (item.owner_extension?.handler_available !== true) return false;
   const advertised = item.owner_extension.supported_operations;
   if (advertised && !advertised.includes("uninstall")) return false;
@@ -1248,15 +1321,46 @@ function itemStateLabel(item: RegistryItem): string {
   if (missingHandler(item)) return "missing handler";
   if (item.pinned_version && item.update_available) return "update available · pinned";
   if (item.update_available) return "update available";
-  if (item.installed) return "installed";
+  if (sameVersionSourceSwitch(item)) return "source change available";
+  if (candidateIsInstalled(item)) return "installed";
+  if (item.installed) return "installed from another source";
   if (item.route_available === false) return "unsupported";
   return "available";
 }
 
 function mutationOperation(item: RegistryItem): "install" | "update" | null {
   if (!item.installed) return "install";
-  if (item.update_available && item.installed_version !== item.version) return "update";
+  if (
+    (item.update_available && item.installed_version !== item.version) ||
+    sameVersionSourceSwitch(item)
+  ) {
+    return "update";
+  }
   return null;
+}
+
+function installationSourceMatches(item: RegistryItem): boolean {
+  if (!item.installed) return false;
+  if (typeof item.installation_source_matches === "boolean") {
+    return item.installation_source_matches;
+  }
+  if (item.installed_source_registry && item.source_registry) {
+    return item.installed_source_registry === item.source_registry;
+  }
+  return true;
+}
+
+function candidateIsInstalled(item: RegistryItem): boolean {
+  return item.installed_version === item.version && installationSourceMatches(item);
+}
+
+function sameVersionSourceSwitch(item: RegistryItem): boolean {
+  return (
+    item.installed &&
+    item.installed_version === item.version &&
+    !candidateIsInstalled(item) &&
+    Boolean(item.source_registry)
+  );
 }
 
 function mergeKindDescriptors(

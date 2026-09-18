@@ -15,6 +15,7 @@ from .models import (
     RegistryItemKind,
     RegistryItemType,
     RegistryManifestReference,
+    RegistryMaturity,
     RegistrySource,
     TrustStatus,
     VersionRange,
@@ -46,6 +47,7 @@ class RegistryItem:
     required_models: tuple[str, ...] = ()
     tags: frozenset[str] = frozenset()
     categories: frozenset[str] = frozenset()
+    maturity: RegistryMaturity | None = None
     integrity: ArtifactIntegrity = field(default_factory=ArtifactIntegrity)
     trust_status: TrustStatus = TrustStatus.UNTRUSTED
     review_reference: str | None = None
@@ -80,6 +82,8 @@ class RegistryItem:
             (self.categories, "categories"),
         ):
             _require_nonblank_values(values, field_name)
+        if self.maturity is not None:
+            object.__setattr__(self, "maturity", RegistryMaturity(self.maturity))
         if (
             self.distribution_route is not None
             and self.distribution_route is not DistributionRoute.MANUAL
@@ -130,6 +134,7 @@ class RegistryQuery:
     publishers: frozenset[str] = frozenset()
     required_capabilities: frozenset[str] = frozenset()
     trust_statuses: frozenset[TrustStatus] = frozenset()
+    maturities: frozenset[RegistryMaturity] = frozenset()
     platform_version: str | None = None
     include_deprecated: bool = False
     include_yanked: bool = False
@@ -147,6 +152,11 @@ class RegistryQuery:
             self,
             "item_types",
             frozenset(parse_registry_item_kind(value) for value in self.item_types),
+        )
+        object.__setattr__(
+            self,
+            "maturities",
+            frozenset(RegistryMaturity(value) for value in self.maturities),
         )
         for values, field_name in (
             (self.tags, "query tags"),

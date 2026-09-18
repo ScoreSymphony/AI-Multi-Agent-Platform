@@ -10,7 +10,7 @@ from ai_multi_agent_platform.control_plane.models import PageQuery
 
 from .control_plane_projection import _json_strings
 from .items import RegistryQuery
-from .models import TrustStatus, version_key
+from .models import RegistryMaturity, TrustStatus, version_key
 
 MARKETPLACE_SORT_FIELDS = frozenset(
     {
@@ -30,6 +30,8 @@ MARKETPLACE_SORT_FIELDS = frozenset(
         "maximum_platform_version",
         "trust_status",
         "trust",
+        "maturity",
+        "stability",
         "review_reference",
         "released_at",
         "release_date",
@@ -77,6 +79,16 @@ def registry_query(query: PageQuery) -> RegistryQueryPlan:
             details={"field": "trust"},
         ) from exc
 
+    raw_maturity = _merge_filter_values(filters, "maturity", "stability")
+    try:
+        maturities = frozenset(RegistryMaturity(value) for value in raw_maturity)
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "invalid Marketplace maturity",
+            details={"field": "maturity"},
+        ) from exc
+
     platform_version = filters.pop("platform_version", None)
     update_for_item_id = filters.pop("update_for_item_id", None)
     installed = _optional_bool(filters.pop("installed", None), default=None)
@@ -109,6 +121,7 @@ def registry_query(query: PageQuery) -> RegistryQueryPlan:
             publishers=publishers,
             required_capabilities=capabilities,
             trust_statuses=trust_statuses,
+            maturities=maturities,
             platform_version=platform_version if compatible is not False else None,
             include_deprecated=include_deprecated,
             include_yanked=include_yanked,
@@ -150,6 +163,7 @@ def marketplace_resource_sort_key(
         "item_type": "kind",
         "release_date": "released_at",
         "source": "source_registry",
+        "stability": "maturity",
     }.get(sort, sort)
     raw = resource.get(canonical_sort)
     if canonical_sort == "version":

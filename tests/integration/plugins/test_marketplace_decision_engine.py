@@ -638,6 +638,52 @@ def test_future_component_kind_participates_in_cross_kind_dependencies(
     assert dependency.item_kind == "notebook_extension"
 
 
+def test_safe_transitive_dependencies_publish_leaf_first_install_order() -> None:
+    leaf, leaf_artifact = _item(
+        "example.install-leaf",
+        RegistryItemType.TOOL,
+    )
+    middle, middle_artifact = _item(
+        "example.install-middle",
+        RegistryItemType.SKILL,
+        dependencies=(
+            RegistryDependency(
+                leaf.item_id,
+                item_kind=RegistryItemType.TOOL,
+            ),
+        ),
+    )
+    root, root_artifact = _item(
+        "example.install-root",
+        RegistryItemType.WORKFLOW,
+        dependencies=(
+            RegistryDependency(
+                middle.item_id,
+                item_kind=RegistryItemType.SKILL,
+            ),
+        ),
+    )
+    service = _service(
+        (
+            (leaf, leaf_artifact),
+            (middle, middle_artifact),
+            (root, root_artifact),
+        )
+    )
+
+    preview = service.preview(root.item_id, root.version, _context())
+
+    assert preview.activation_allowed is False
+    assert [
+        (step.item_id, step.item_kind, step.version, step.source_registry)
+        for step in preview.decision.install_order
+    ] == [
+        ("example.install-leaf", "tool", "1.0.0", "local"),
+        ("example.install-middle", "skill", "1.0.0", "local"),
+        ("example.install-root", "workflow", "1.0.0", "local"),
+    ]
+
+
 def test_preview_findings_are_structured_and_explainable() -> None:
     item, artifact = _item(
         "example.explainable",
@@ -1042,6 +1088,7 @@ def test_persisted_installed_dependency_detects_cycle_after_catalog_drift(
     preview = service.preview(root.item_id, root.version, _context())
 
     assert preview.activation_allowed is False
+    assert preview.decision.install_order == ()
     assert any(
         dependency.status is DependencyStatus.CYCLE
         and dependency.path == (root.item_id, installed.item_id, root.item_id)

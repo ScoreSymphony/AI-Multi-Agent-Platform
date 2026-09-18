@@ -7,6 +7,11 @@ from ai_multi_agent_platform.adapters.single_node_app import (
 )
 from ai_multi_agent_platform.deployment import SingleNodeConfig
 from ai_multi_agent_platform.distribution import (
+    MARKETPLACE_INSTALL_COMMAND,
+    MARKETPLACE_KIND_COLLECTION,
+    MARKETPLACE_PREVIEW_COMMAND,
+    MARKETPLACE_UNINSTALL_COMMAND,
+    MARKETPLACE_UPDATE_COMMAND,
     REGISTRY_ACTIVATE_COMMAND,
     REGISTRY_COLLECTION,
     REGISTRY_PIN_COMMAND,
@@ -23,6 +28,7 @@ def test_default_single_node_keeps_registry_and_plugin_runtime_absent_when_uncon
     )
 
     assert REGISTRY_COLLECTION not in deployment.control_plane.registered_collections
+    assert MARKETPLACE_KIND_COLLECTION not in deployment.control_plane.registered_collections
     assert deployment.control_plane.plugin_registry is None
 
 
@@ -49,6 +55,7 @@ def test_configured_single_node_shares_registry_plugins_with_canonical_plugin_li
     )
 
     assert REGISTRY_COLLECTION in deployment.control_plane.registered_collections
+    assert MARKETPLACE_KIND_COLLECTION in deployment.control_plane.registered_collections
     assert "plugins" in deployment.control_plane.registered_collections
     assert deployment.control_plane.plugin_registry is not None
     assert {
@@ -56,6 +63,10 @@ def test_configured_single_node_shares_registry_plugins_with_canonical_plugin_li
         REGISTRY_ACTIVATE_COMMAND,
         REGISTRY_PIN_COMMAND,
         REGISTRY_UNPIN_COMMAND,
+        MARKETPLACE_PREVIEW_COMMAND,
+        MARKETPLACE_INSTALL_COMMAND,
+        MARKETPLACE_UPDATE_COMMAND,
+        MARKETPLACE_UNINSTALL_COMMAND,
         "plugin.configure",
         "plugin.disable",
         "plugin.remove",

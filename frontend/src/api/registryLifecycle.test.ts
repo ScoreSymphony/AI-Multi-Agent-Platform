@@ -89,6 +89,56 @@ describe("RegistryClient lifecycle", () => {
     ]);
   });
 
+  it("preserves explicit Marketplace source identity for detail and lifecycle calls", async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(input),
+        body: init?.body ? JSON.parse(String(init.body)) : null,
+      });
+      return jsonResponse({
+        id: "example.asset@1.2.3",
+        type: init?.method === "POST" ? "marketplace-mutation" : "registry-item",
+        item_id: "example.asset",
+        item_type: "skill",
+        version: "1.2.3",
+        source_registry: "private",
+        status: "applied",
+        action: "update",
+        route: "kind_handler",
+        installation: null,
+      });
+    });
+    const client = new RegistryClient({ fetchImpl });
+
+    await client.get("example.asset", "1.2.3", "private");
+    await client.preview("example.asset", "1.2.3", "preview-key", "private");
+    await client.update("example.asset", "1.2.3", "update-key", "private");
+
+    expect(calls).toEqual([
+      {
+        url: "/api/v1/registry-items/private%3A%3Aexample.asset%401.2.3",
+        body: null,
+      },
+      {
+        url: "/api/v1/commands/marketplace.preview",
+        body: {
+          resource_ref: "example.asset",
+          version: "1.2.3",
+          source_registry: "private",
+        },
+      },
+      {
+        url: "/api/v1/commands/marketplace.update",
+        body: {
+          resource_ref: "example.asset",
+          version: "1.2.3",
+          source_registry: "private",
+        },
+      },
+    ]);
+  });
+
   it("uninstalls only through an explicit server-side owner-dispatch command", async () => {
     const calls: Array<{ url: string; body: unknown; idempotency: string | null }> = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

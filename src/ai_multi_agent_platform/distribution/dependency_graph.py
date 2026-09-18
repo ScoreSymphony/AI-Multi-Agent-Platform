@@ -8,6 +8,7 @@ from .decision_types import (
     CompatibilityDecision,
     DependencyResolution,
     DependencyStatus,
+    InstallPlanStep,
 )
 from .items import InstalledRegistryItem, RegistryItem
 from .models import RegistryDependency, VersionRange, version_key
@@ -421,6 +422,61 @@ def _intersection_minimum(ranges: tuple[VersionRange, ...]) -> str | None:
 def _intersection_maximum(ranges: tuple[VersionRange, ...]) -> str | None:
     values = tuple(version_range.maximum for version_range in ranges if version_range.maximum)
     return min(values, key=version_key) if values else None
+
+
+def deterministic_install_order(
+    root: RegistryItem,
+    resolutions: tuple[DependencyResolution, ...],
+) -> tuple[InstallPlanStep, ...]:
+    """Return a leaf-first plan only when every hard dependency is safely resolvable."""
+
+    unsafe = {
+        DependencyStatus.MISSING,
+        DependencyStatus.VERSION_CONFLICT,
+        DependencyStatus.KIND_UNKNOWN,
+        DependencyStatus.KIND_CONFLICT,
+        DependencyStatus.SOURCE_AMBIGUOUS,
+        DependencyStatus.SELF_DEPENDENCY,
+        DependencyStatus.CYCLE,
+        DependencyStatus.REQUIRED_BY_INSTALLED,
+        DependencyStatus.UNKNOWN_INSTALLED_DEPENDENT,
+    }
+    if any(not resolution.optional and resolution.status in unsafe for resolution in resolutions):
+        return ()
+
+    ordered: list[InstallPlanStep] = []
+    seen: set[tuple[str, str, str | None]] = set()
+    for resolution in reversed(resolutions):
+        if resolution.optional or resolution.status is not DependencyStatus.AVAILABLE:
+            continue
+        if resolution.candidate_version is None or resolution.candidate_kind is None:
+            return ()
+        key = (
+            resolution.item_id,
+            resolution.candidate_version,
+            resolution.candidate_source_registry,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(
+            InstallPlanStep(
+                item_id=resolution.item_id,
+                item_kind=resolution.candidate_kind,
+                version=resolution.candidate_version,
+                source_registry=resolution.candidate_source_registry,
+            )
+        )
+
+    ordered.append(
+        InstallPlanStep(
+            item_id=root.item_id,
+            item_kind=root.kind,
+            version=root.version,
+            source_registry=root.source_registry,
+        )
+    )
+    return tuple(ordered)
 
 
 def dependency_findings(

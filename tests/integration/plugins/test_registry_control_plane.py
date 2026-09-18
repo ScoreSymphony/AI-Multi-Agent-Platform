@@ -5,6 +5,7 @@ import hashlib
 
 from ai_multi_agent_platform.control_plane.models import PageQuery
 from ai_multi_agent_platform.distribution import (
+    MARKETPLACE_KIND_COLLECTION,
     REGISTRY_ACTIVATE_COMMAND,
     REGISTRY_COLLECTION,
     REGISTRY_PREVIEW_COMMAND,
@@ -97,8 +98,12 @@ def test_enabled_registry_registers_discovery_but_not_commands_without_resolver(
     control_plane = RecordingControlPlane()
     register_distribution_control_plane(control_plane, distribution)  # type: ignore[arg-type]
 
-    assert set(control_plane.resources) == {REGISTRY_COLLECTION}
+    assert set(control_plane.resources) == {REGISTRY_COLLECTION, MARKETPLACE_KIND_COLLECTION}
     assert control_plane.commands == {}
+
+    kinds = control_plane.resources[MARKETPLACE_KIND_COLLECTION]
+    kind_resources = asyncio.run(kinds.list_resources(object(), PageQuery()))  # type: ignore[attr-defined]
+    assert any(resource["kind"] == "application" for resource in kind_resources)
 
     service = control_plane.resources[REGISTRY_COLLECTION]
     listed = asyncio.run(service.list_resources(object(), PageQuery()))  # type: ignore[attr-defined]

@@ -22,6 +22,7 @@ from .decision_types import (
 )
 from .dependency_graph import (
     dependency_findings,
+    deterministic_install_order,
     evaluate_compatibility,
     resolve_dependency_graph,
 )
@@ -45,6 +46,7 @@ def build_marketplace_decision(
         catalog=catalog,
         installed_items=context.installed_items,
     )
+    install_order = deterministic_install_order(item, dependencies)
     compatibility = evaluate_compatibility(item, context)
     permission_diff = build_permission_diff(item, installation)
     provenance_diff = build_provenance_diff(
@@ -75,6 +77,7 @@ def build_marketplace_decision(
         MarketplaceDecision(
             operation=operation,
             dependencies=dependencies,
+            install_order=install_order,
             compatibility=compatibility,
             permission_diff=permission_diff,
             provenance_diff=provenance_diff,
@@ -110,6 +113,7 @@ def uninstall_decision(
     return MarketplaceDecision(
         operation=DistributionOperation.UNINSTALL,
         dependencies=dependencies,
+        install_order=(),
         compatibility=CompatibilityDecision(True, True, True),
         permission_diff=permission_diff,
         provenance_diff=provenance_diff,
