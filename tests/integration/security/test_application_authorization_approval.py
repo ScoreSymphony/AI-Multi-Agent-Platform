@@ -217,9 +217,7 @@ def test_application_configuration_approval_is_payload_bound_and_audited() -> No
             if record.resource_type is ResourceType.APPLICATION
         ]
         install_record = next(
-            record
-            for record in application_records
-            if record.action is AuthorizationAction.CREATE
+            record for record in application_records if record.action is AuthorizationAction.CREATE
         )
         assert install_record.outcome is AuthorizationOutcome.ALLOW
         assert install_record.resource_id == manifest.application_id
@@ -228,8 +226,7 @@ def test_application_configuration_approval_is_payload_bound_and_audited() -> No
         configure_records = [
             record
             for record in application_records
-            if record.action is AuthorizationAction.MODIFY
-            and record.resource_id == instance_id
+            if record.action is AuthorizationAction.MODIFY and record.resource_id == instance_id
         ]
         pending_record = next(
             record
@@ -246,8 +243,7 @@ def test_application_configuration_approval_is_payload_bound_and_audited() -> No
         applied_record = next(
             record
             for record in configure_records
-            if record.outcome is AuthorizationOutcome.ALLOW
-            and record.approval_id == approval_id
+            if record.outcome is AuthorizationOutcome.ALLOW and record.approval_id == approval_id
         )
         assert pending_record.requested_action_digest is not None
         assert pending_record.requested_action_digest == applied_record.requested_action_digest
