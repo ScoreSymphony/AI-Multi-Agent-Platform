@@ -31,6 +31,10 @@ def add_marketplace_parser(
     list_command = commands.add_parser("list", help="list Marketplace components")
     _add_search_arguments(list_command)
 
+    updates = commands.add_parser("updates", help="list available Marketplace updates")
+    _add_search_arguments(updates, include_update_available=False)
+    updates.set_defaults(update_available="true")
+
     show = commands.add_parser("show", help="show one Marketplace component")
     _add_item_arguments(show, version_required=False)
 
@@ -74,7 +78,7 @@ def execute_marketplace(
     client: ControlPlaneClient,
     confirm: Confirmation,
 ) -> ClientResponse:
-    if args.command in {"search", "list"}:
+    if args.command in {"search", "list", "updates"}:
         query_text = getattr(args, "query", None)
         return client.get(
             "/registry-items",
@@ -134,7 +138,11 @@ def _add_item_arguments(
         parser.add_argument("version", nargs="?")
 
 
-def _add_search_arguments(parser: argparse.ArgumentParser) -> None:
+def _add_search_arguments(
+    parser: argparse.ArgumentParser,
+    *,
+    include_update_available: bool = True,
+) -> None:
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--cursor")
     parser.add_argument(
@@ -162,7 +170,8 @@ def _add_search_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--license", dest="licenses", action="append", default=[])
     parser.add_argument("--trust", action="append", default=[])
     parser.add_argument("--installed", choices=["true", "false"])
-    parser.add_argument("--update-available", choices=["true", "false"])
+    if include_update_available:
+        parser.add_argument("--update-available", choices=["true", "false"])
     parser.add_argument("--deprecated", choices=["true", "false"])
     parser.add_argument("--yanked", choices=["true", "false"])
     parser.add_argument("--compatible", choices=["true", "false"])
