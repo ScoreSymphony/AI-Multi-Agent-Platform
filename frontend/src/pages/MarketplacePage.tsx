@@ -26,18 +26,55 @@ const MATURITY_STATES: RegistryMaturity[] = ["stable", "beta", "experimental"];
 const PAGE_SIZE = 24;
 
 const PRIMARY_KIND_GROUPS: Array<{ value: string; label: string; kinds: string[] }> = [
-  { value: "tool", label: "Tools", kinds: ["tool"] },
-  { value: "skill", label: "Skills", kinds: ["skill"] },
-  { value: "plugin", label: "Plugins", kinds: ["plugin"] },
-  { value: "connector", label: "Connectors", kinds: ["connector"] },
+  {
+    value: "agent,agent_team,skill,orchestrator",
+    label: "AI & Agents",
+    kinds: ["agent", "agent_team", "skill", "orchestrator"],
+  },
+  {
+    value: "model_provider,model_configuration",
+    label: "Models",
+    kinds: ["model_provider", "model_configuration"],
+  },
+  {
+    value: "tool,connector,capability_provider",
+    label: "Tools & Integrations",
+    kinds: ["tool", "connector", "capability_provider"],
+  },
   { value: "application", label: "Applications", kinds: ["application"] },
-  { value: "template,workflow", label: "Templates / Workflows", kinds: ["template", "workflow"] },
+  {
+    value: "plugin,executor,memory_provider,file_provider,knowledge_provider,observability_exporter,automation_provider,evaluator",
+    label: "Platform Extensions",
+    kinds: [
+      "plugin",
+      "executor",
+      "memory_provider",
+      "file_provider",
+      "knowledge_provider",
+      "observability_exporter",
+      "automation_provider",
+      "evaluator",
+    ],
+  },
+  { value: "template,workflow", label: "Content", kinds: ["template", "workflow"] },
 ];
 
 const FALLBACK_KIND_DESCRIPTORS: RegistryKindDescriptor[] = [
+  descriptor("agent", "Agent", "kind_handler", "/agents"),
+  descriptor("agent_team", "Agent Team", "kind_handler", "/agent-teams"),
+  descriptor("orchestrator", "Orchestrator", "kind_handler", "/plugins"),
+  descriptor("executor", "Executor", "kind_handler", "/plugins"),
+  descriptor("model_provider", "Model Provider", "kind_handler", "/models"),
+  descriptor("capability_provider", "Capability Provider", "kind_handler", "/plugins"),
+  descriptor("memory_provider", "Memory Provider", "kind_handler", "/plugins"),
+  descriptor("file_provider", "File / Storage Provider", "kind_handler", "/plugins"),
+  descriptor("knowledge_provider", "Knowledge Provider", "kind_handler", "/plugins"),
+  descriptor("observability_exporter", "Observability Exporter", "kind_handler", "/plugins"),
+  descriptor("automation_provider", "Automation Provider", "kind_handler", "/plugins"),
+  descriptor("evaluator", "Evaluator", "kind_handler", "/plugins"),
   descriptor("tool", "Tool", "portable_import"),
   descriptor("skill", "Skill", "kind_handler"),
-  descriptor("plugin", "Plugin", "plugin"),
+  descriptor("plugin", "Plugin", "plugin", "/plugins"),
   descriptor("connector", "Connector", "portable_import"),
   descriptor("application", "Application", "kind_handler", "/applications"),
   descriptor("template", "Template", "portable_import"),
@@ -361,9 +398,10 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
         <p className="eyebrow">Unified component catalog</p>
         <h1>Marketplace</h1>
         <p>
-          Discover Tools, Skills, Plugins, Connectors, Applications, Templates, Workflows and
-          future component kinds in one catalog. Mutations remain delegated to the canonical
-          owner domain for each component.
+          Discover Agents, Agent Teams, Orchestrators, Model Providers, Executors, Tools,
+          Skills, integrations, Applications and reusable content in one catalog. Semantic
+          Marketplace kinds stay independent from their technical package format, while every
+          mutation remains delegated to the canonical owner domain.
         </p>
       </header>
 
@@ -1379,11 +1417,28 @@ function mergeKindDescriptors(
 }
 
 function fallbackDescriptor(kind: string, route: RegistryKindDescriptor["default_route"]): RegistryKindDescriptor {
+  const managementPaths: Record<string, string> = {
+    agent: "/agents",
+    agent_team: "/agent-teams",
+    orchestrator: "/plugins",
+    executor: "/plugins",
+    model_provider: "/models",
+    capability_provider: "/plugins",
+    memory_provider: "/plugins",
+    file_provider: "/plugins",
+    knowledge_provider: "/plugins",
+    observability_exporter: "/plugins",
+    automation_provider: "/plugins",
+    evaluator: "/plugins",
+    plugin: "/plugins",
+    application: "/applications",
+    model_configuration: "/models",
+  };
   return descriptor(
     kind,
     humanizeKind(kind),
     route,
-    kind === "application" ? "/applications" : null,
+    managementPaths[kind] ?? null,
   );
 }
 
