@@ -562,6 +562,66 @@ async def test_model_provider_marketplace_install_does_not_create_configured_mod
     assert models.list_models() == ()
 
 
+async def test_model_provider_marketplace_rejects_plaintext_package_credentials() -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.credential-safe-model-provider",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="model-provider.credential-safe",
+                extension_type=ExtensionType.MODEL_PROVIDER,
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={
+            "type": "object",
+            "properties": {
+                "api_key": {"type": "string"},
+                "credential_ref": {"type": "object"},
+            },
+            "additionalProperties": False,
+        },
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.MODEL_PROVIDER: frozenset({"1.0"})},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.MODEL_PROVIDER,
+        extension_type=ExtensionType.MODEL_PROVIDER,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.MODEL_PROVIDER,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    secret_manifest = replace(
+        manifest,
+        extensions=(
+            replace(
+                manifest.extensions[0],
+                metadata={"api_key": "plaintext-provider-token"},
+            ),
+        ),
+    )
+
+    with pytest.raises(ContractError) as embedded_secret:
+        await handler.install(item, _plugin_artifact(secret_manifest))
+
+    assert embedded_secret.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert plugin_registry.list_plugins() == ()
+
+    installed = await handler.install(item, _plugin_artifact(manifest))
+    assert installed.plugin_id == item.item_id
+
+
 async def test_executor_marketplace_install_activates_only_through_plugin_owner(tmp_path) -> None:
     base = reference_manifest()
     manifest = replace(
