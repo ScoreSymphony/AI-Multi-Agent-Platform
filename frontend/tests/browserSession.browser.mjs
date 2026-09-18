@@ -191,7 +191,7 @@ try {
   await page.getByLabel("Compatibility").selectOption("");
 
   before = await page.evaluate(() => window.__marketplaceCalls.length);
-  await page.getByLabel("Maturity").selectOption("beta");
+  await page.locator("label").filter({ hasText: /^Maturity/ }).locator("select").selectOption("beta");
   await page.waitForFunction(
     (count) =>
       window.__marketplaceCalls.slice(count).some((call) =>
@@ -200,7 +200,7 @@ try {
     before,
   );
   await page.getByRole("heading", { name: "Shared Source Tool", exact: true }).waitFor();
-  await page.getByLabel("Maturity").selectOption("");
+  await page.locator("label").filter({ hasText: /^Maturity/ }).locator("select").selectOption("");
   await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
 
   before = await page.evaluate(() => window.__marketplaceCalls.length);
@@ -228,7 +228,7 @@ try {
   await page.getByLabel("Category").fill("");
 
   before = await page.evaluate(() => window.__marketplaceCalls.length);
-  await page.getByLabel("Publisher").fill("ScoreSymphony");
+  await page.locator("label").filter({ hasText: /^Publisher/ }).locator("input").fill("ScoreSymphony");
   await page.waitForFunction(
     (count) =>
       window.__marketplaceCalls.slice(count).some((call) =>
@@ -237,10 +237,10 @@ try {
     before,
   );
   await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
-  await page.getByLabel("Publisher").fill("");
+  await page.locator("label").filter({ hasText: /^Publisher/ }).locator("input").fill("");
 
   before = await page.evaluate(() => window.__marketplaceCalls.length);
-  await page.getByLabel("Marketplace source").fill("official");
+  await page.locator("label").filter({ hasText: /^Marketplace source/ }).locator("input").fill("official");
   await page.waitForFunction(
     (count) =>
       window.__marketplaceCalls.slice(count).some((call) =>
@@ -249,7 +249,7 @@ try {
     before,
   );
   await page.getByRole("heading", { name: "Shared Source Tool", exact: true }).waitFor();
-  await page.getByLabel("Marketplace source").fill("");
+  await page.locator("label").filter({ hasText: /^Marketplace source/ }).locator("input").fill("");
 
   before = await page.evaluate(() => window.__marketplaceCalls.length);
   await page.getByLabel("Deprecated state").selectOption("false");
