@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -90,14 +92,18 @@ def _item() -> RegistryItem:
 def _control_plane(
     tmp_path,
     authorization,
+    *,
+    item: RegistryItem | None = None,
+    artifact: bytes = b"secured-skill",
+    store_name: str = "marketplace-security.json",
 ) -> tuple[ControlPlane, _RecordingSkillOwner, JsonRegistryInstallationStore, AuthorizationGate]:
-    item = _item()
+    resolved_item = item or _item()
     owner = _RecordingSkillOwner()
-    installations = JsonRegistryInstallationStore(tmp_path / "marketplace-security.json")
+    installations = JsonRegistryInstallationStore(tmp_path / store_name)
     distribution = DistributionService(
         LocalRegistryProvider(
-            (item,),
-            {(item.item_id, item.version): b"secured-skill"},
+            (resolved_item,),
+            {(resolved_item.item_id, resolved_item.version): artifact},
         ),
         installations=installations,
         kind_handlers=MarketplaceKindHandlerRegistry((owner,)),
@@ -178,3 +184,55 @@ async def test_marketplace_install_denial_stops_before_owner_mutation(tmp_path) 
     assert owner.calls == []
     assert installations.get(item.item_id) is None
     assert gate.audit_records[-1].outcome is AuthorizationOutcome.DENY
+
+async def test_marketplace_approval_digest_binds_resolved_permission_state(tmp_path) -> None:
+    policy = (
+        LocalPrincipalPolicy(
+            principal_ref="user:approval-digest",
+            actor_types=frozenset({ActorType.HUMAN}),
+            approval_actions=frozenset({AuthorizationAction.CREATE}),
+        ),
+    )
+    baseline = _item()
+    escalated = replace(
+        baseline,
+        requested_permissions=frozenset({"filesystem.write"}),
+    )
+    context = RequestContext(
+        "marketplace-digest-request",
+        "marketplace-digest-correlation",
+        actor=ActorContext(principal_ref="user:approval-digest", actor_type="human"),
+        idempotency_key="marketplace-digest-install",
+    )
+
+    baseline_control_plane, _, _, baseline_gate = _control_plane(
+        tmp_path,
+        LocalAuthorizationProvider(policy),
+        item=baseline,
+        store_name="baseline-marketplace-security.json",
+    )
+    escalated_control_plane, _, _, escalated_gate = _control_plane(
+        tmp_path,
+        LocalAuthorizationProvider(policy),
+        item=escalated,
+        store_name="escalated-marketplace-security.json",
+    )
+
+    for control_plane in (baseline_control_plane, escalated_control_plane):
+        with pytest.raises(ContractError) as blocked:
+            await control_plane.execute_command(
+                context,
+                MARKETPLACE_INSTALL_COMMAND,
+                baseline.item_id,
+                {"version": baseline.version},
+            )
+        assert blocked.value.code is ErrorCode.FORBIDDEN
+
+    baseline_record = baseline_gate.audit_records[-1]
+    escalated_record = escalated_gate.audit_records[-1]
+    assert baseline_record.outcome is AuthorizationOutcome.REQUIRE_APPROVAL
+    assert escalated_record.outcome is AuthorizationOutcome.REQUIRE_APPROVAL
+    assert baseline_record.requested_action_digest is not None
+    assert escalated_record.requested_action_digest is not None
+    assert baseline_record.requested_action_digest != escalated_record.requested_action_digest
+
