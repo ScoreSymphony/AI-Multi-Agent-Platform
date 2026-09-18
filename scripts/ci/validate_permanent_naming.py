@@ -22,6 +22,11 @@ WORKFLOW_ISSUE_NAME = re.compile(
     re.IGNORECASE,
 )
 PROVENANCE_PREFIXES = ("historical context:", "provenance:")
+ISSUE_LED_CONTEXT = re.compile(r"^(?:(?:issue\\s+)?#\\d+)\\b", re.IGNORECASE)
+HISTORY_ONLY_CONTEXT = re.compile(
+    r"^(?:migrated|migration|tracked|follow[- ]?up|introduced|added|implemented|created|moved|split|refactored|hardened)\\b",
+    re.IGNORECASE,
+)
 PERMANENT_ROOTS = frozenset({"src", "tests", "scripts"})
 EVIDENCE_ROOT = PurePosixPath("tests/evidence")
 WORKFLOW_PREFIX = PurePosixPath(".github/workflows")
@@ -152,6 +157,19 @@ def _provenance_line(line: str) -> bool:
     return normalized.startswith(PROVENANCE_PREFIXES)
 
 
+def _issue_context_requires_rewrite(line: str) -> bool:
+    """Return whether an issue reference is the meaning rather than secondary context."""
+
+    if ISSUE_REFERENCE.search(line) is None or _provenance_line(line):
+        return False
+    normalized = line.strip().strip("\\\"'").strip()
+    normalized = re.sub(r"^#+\\s+", "", normalized).strip()
+    return (
+        ISSUE_LED_CONTEXT.match(normalized) is not None
+        or HISTORY_ONLY_CONTEXT.match(normalized) is not None
+    )
+
+
 def _legacy_compatibility_string(value: str) -> bool:
     return value in LEGACY_COMPATIBILITY_STRINGS or value.startswith(LEGACY_COMPATIBILITY_PREFIXES)
 
@@ -217,10 +235,10 @@ def source_violations(path: str, source: str) -> tuple[str, ...]:
         value = str(node.value)
         start = getattr(node, "lineno", 1)
         for offset, line in enumerate(value.splitlines()):
-            if ISSUE_REFERENCE.search(line) and not _provenance_line(line):
+            if _issue_context_requires_rewrite(line):
                 violations.append(
-                    f"{path}:{start + offset}: issue provenance in docstrings must be secondary "
-                    "'Historical context:' or 'Provenance:' text"
+                    f"{path}:{start + offset}: docstring text must explain maintained behavior "
+                    "without using a GitHub issue number as its subject or migration-only meaning"
                 )
 
     violations.extend(_semantic_string_violations(repository_path, tree, docstrings))
@@ -230,10 +248,10 @@ def source_violations(path: str, source: str) -> tuple[str, ...]:
         for token in tokens:
             if token.type != tokenize.COMMENT:
                 continue
-            if ISSUE_REFERENCE.search(token.string) and not _provenance_line(token.string):
+            if _issue_context_requires_rewrite(token.string):
                 violations.append(
-                    f"{path}:{token.start[0]}: issue provenance in comments must be secondary "
-                    "'Historical context:' or 'Provenance:' text"
+                    f"{path}:{token.start[0]}: comment text must explain maintained behavior "
+                    "without using a GitHub issue number as its subject or migration-only meaning"
                 )
     except tokenize.TokenError as exc:
         violations.append(f"{path}: cannot tokenize source for naming validation: {exc}")
