@@ -128,7 +128,7 @@ def _assert_value_free_sensitive_schema(
         return
 
     if sensitive_context:
-        for field in ("default", "const", "examples", "enum"):
+        for field in ("default", "const", "example", "examples", "enum"):
             if field in schema and _contains_nonempty_schema_value(schema[field]):
                 raise ContractError(
                     ErrorCode.INVALID_CONFIGURATION,
