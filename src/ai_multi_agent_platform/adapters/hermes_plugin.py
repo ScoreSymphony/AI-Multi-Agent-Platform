@@ -124,9 +124,10 @@ class HermesOrchestratorPlugin:
         )
 
     async def health(self) -> PluginHealthReport:
-        return PluginHealthReport(
-            PluginHealth.HEALTHY if self._orchestrator is not None else PluginHealth.UNKNOWN
-        )
+        if self._orchestrator is None:
+            return PluginHealthReport(PluginHealth.UNKNOWN)
+        health = await self._orchestrator.health()
+        return PluginHealthReport(PluginHealth(health.value))
 
     async def shutdown(self) -> None:
         self._orchestrator = None
