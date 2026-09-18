@@ -155,6 +155,66 @@ try {
   );
   await page.getByRole("heading", { name: "GitHub Connector", exact: true }).waitFor();
 
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await searchInput.fill("Hermes");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("q=Hermes"),
+      ),
+    before,
+  );
+  const hermesCard = cardByHeading(page, "Hermes");
+  await hermesCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  const hermesDetailText = await page.locator("body").innerText();
+  requireText(hermesDetailText, "Orchestrator", "Semantic Orchestrator Marketplace detail");
+  const orchestratorLink = page.getByRole("link", {
+    name: "Open Orchestrator management",
+    exact: true,
+  });
+  if ((await orchestratorLink.getAttribute("href")) !== "/plugins") {
+    throw new Error("Semantic Orchestrator management did not resolve to canonical Plugin owner");
+  }
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await searchInput.fill("Research Agent");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("q=Research+Agent") ||
+        decodeURIComponent(call.url).includes("q=Research%20Agent") ||
+        decodeURIComponent(call.url).includes("q=Research Agent"),
+      ),
+    before,
+  );
+  const researchAgentCard = cardByHeading(page, "Research Agent");
+  await researchAgentCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  const agentLink = page.getByRole("link", { name: "Open Agent management", exact: true });
+  if ((await agentLink.getAttribute("href")) !== "/agents") {
+    throw new Error("Semantic Agent management did not resolve to canonical Agent owner");
+  }
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await searchInput.fill("Local Model Provider");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("q=Local+Model+Provider") ||
+        decodeURIComponent(call.url).includes("q=Local%20Model%20Provider") ||
+        decodeURIComponent(call.url).includes("q=Local Model Provider"),
+      ),
+    before,
+  );
+  const modelProviderCard = cardByHeading(page, "Local Model Provider");
+  await modelProviderCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  const modelProviderLink = page.getByRole("link", {
+    name: "Open Model Provider management",
+    exact: true,
+  });
+  if ((await modelProviderLink.getAttribute("href")) !== "/models") {
+    throw new Error("Semantic Model Provider management did not resolve to canonical Model owner");
+  }
+
   await searchInput.fill("");
   before = await page.evaluate(() => window.__marketplaceCalls.length);
   await page.getByLabel("Sort").selectOption("publisher");
