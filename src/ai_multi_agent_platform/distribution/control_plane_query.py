@@ -87,12 +87,8 @@ def registry_query(query: PageQuery) -> RegistryQueryPlan:
     include_deprecated = bool(
         _optional_bool(filters.pop("include_deprecated", None), default=False)
     )
-    include_yanked = bool(
-        _optional_bool(filters.pop("include_yanked", None), default=False)
-    )
-    technical_only = bool(
-        _optional_bool(filters.pop("technical_component", None), default=False)
-    )
+    include_yanked = bool(_optional_bool(filters.pop("include_yanked", None), default=False))
+    technical_only = bool(_optional_bool(filters.pop("technical_component", None), default=False))
     if deprecated is not None:
         include_deprecated = True
     if yanked is not None:
