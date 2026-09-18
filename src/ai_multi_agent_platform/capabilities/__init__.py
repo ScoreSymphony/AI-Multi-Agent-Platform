@@ -31,9 +31,9 @@ from .recovery import (
     ExternalEffectRecoveryRepository,
     ExternalEffectRecoveryStatus,
     InMemoryExternalEffectRecoveryRepository,
-    SQLiteExternalEffectRecoveryRepository,
     external_effect_recovery_resource,
 )
+from .recovery_persistence import SQLiteExternalEffectRecoveryRepository
 from .registry import CapabilityDiscoveryPolicyHook, CapabilityRegistry
 from .types import (
     ISOLATED_WORKSPACE_WRITE_FEATURE,
