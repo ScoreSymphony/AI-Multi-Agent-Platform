@@ -502,7 +502,8 @@ Future subsystem tests should extend this baseline rather than create separate, 
 
 Issue #1233 reconciles the maintained threat model against every claimed V1 mutation and
 side-effect surface. The executable inventory is
-[`security_boundaries.py`](../src/ai_multi_agent_platform/conformance/security_boundaries.py),
+[`production_boundary_matrix.toml`](../conformance/security/production_boundary_matrix.toml),
+validated by [`security_boundary_conformance.py`](../scripts/ci/security_boundary_conformance.py),
 with the release evidence documented in
 [`security/PRODUCTION_SECURITY_BOUNDARY_CONFORMANCE.md`](security/PRODUCTION_SECURITY_BOUNDARY_CONFORMANCE.md).
 
@@ -519,5 +520,5 @@ boundaries; they do not create new security authorities. A future side-effect su
 be represented by the maintained matrix and this threat model is a re-evaluation trigger and must
 update both artifacts before a release compatibility claim is made.
 
-The `SEC` release-conformance scenario is the maintained aggregate evidence gate. Focused security
+The `SEC-BND` release-conformance scenario is the maintained aggregate evidence gate. Focused security
 issues remain authoritative for provider-specific or live-host guarantees.
