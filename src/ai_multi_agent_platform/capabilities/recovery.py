@@ -445,7 +445,10 @@ class ExternalEffectRecoveryCoordinator:
                         existing,
                         status=status,
                         disposition=disposition,
-                        reason=f"provider_outcome_unacknowledged:{record.error_code or record.status.value}",
+                        reason=(
+                            "provider_outcome_unacknowledged:"
+                            f"{record.error_code or record.status.value}"
+                        ),
                         adapter_metadata=record.adapter_metadata,
                         updated_at=_utc_now(),
                     )
