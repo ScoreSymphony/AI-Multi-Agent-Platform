@@ -1342,6 +1342,58 @@ def test_marketplace_preview_serializes_structured_decision_findings(
     assert {finding["category"] for finding in findings} >= {"dependency", "permission"}  # type: ignore[index]
 
 
+def test_invalid_owner_candidate_remains_a_blocked_marketplace_preview(
+    tmp_path: Path,
+) -> None:
+    class InvalidCandidateHandler(RecordingHandler):
+        def validate_candidate(self, item: RegistryItem, artifact: bytes) -> None:
+            del item, artifact
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "candidate owner artifact is invalid",
+            )
+
+        def describe_candidate(
+            self,
+            item: RegistryItem,
+            artifact: bytes,
+        ) -> dict[str, object]:
+            self.validate_candidate(item, artifact)
+            raise AssertionError("unreachable")
+
+    item = _application("example.invalid-candidate", "1.0.0")
+    commands = RegistryCommandHandlers(
+        DistributionService(
+            LocalRegistryProvider(
+                (item,),
+                {(item.item_id, item.version): b"invalid-candidate"},
+            ),
+            installations=JsonRegistryInstallationStore(tmp_path / "invalid-candidate.json"),
+            kind_handlers=MarketplaceKindHandlerRegistry((InvalidCandidateHandler(),)),
+        ),
+        StaticValidationContext(_context()),
+    )
+
+    preview = asyncio.run(
+        commands.marketplace_preview(
+            _request(),
+            item.item_id,
+            {"version": item.version},
+        )
+    )
+
+    assert preview["activation_allowed"] is False
+    assert any(
+        finding["code"] == "owner_candidate_invalid"
+        and finding["message"] == "candidate owner artifact is invalid"
+        for finding in preview["findings"]  # type: ignore[union-attr]
+    )
+    owner_extension = preview["item"]["owner_extension"]  # type: ignore[index]
+    assert owner_extension["handler_available"] is True  # type: ignore[index]
+    assert owner_extension["details"] is None  # type: ignore[index]
+    assert owner_extension["status"] is None  # type: ignore[index]
+
+
 def test_marketplace_preview_projects_only_explicit_candidate_owner_details(
     tmp_path: Path,
 ) -> None:
