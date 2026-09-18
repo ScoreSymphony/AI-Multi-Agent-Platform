@@ -11,7 +11,7 @@ from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
 from .items import RegistryItem, RegistryQuery
-from .models import RegistryItemType, TrustStatus
+from .models import TrustStatus
 from .service import DistributionPreview, DistributionService
 from .state import RegistryInstallation
 from .validation import ValidationContext
@@ -197,9 +197,7 @@ def register_distribution_control_plane(
 
 def _registry_query(query: PageQuery) -> tuple[RegistryQuery, bool | None]:
     filters = dict(query.filters or {})
-    item_types = frozenset(
-        RegistryItemType(value) for value in _values(filters.pop("item_type", None))
-    )
+    item_types = frozenset(_values(filters.pop("item_type", None)))
     tags = frozenset(_values(filters.pop("tag", None)))
     categories = frozenset(_values(filters.pop("category", None)))
     licenses = frozenset(_values(filters.pop("license", None)))
@@ -307,7 +305,7 @@ def _item_resource(
         "id": f"{item.item_id}@{item.version}",
         "type": "registry-item",
         "item_id": item.item_id,
-        "item_type": item.item_type.value,
+        "item_type": item.kind,
         "name": item.name,
         "description": item.description,
         "version": item.version,
