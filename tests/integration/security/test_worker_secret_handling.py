@@ -1,5 +1,3 @@
-"""Migrated under #722; original coverage tracked issue #14."""
-
 from __future__ import annotations
 
 import asyncio
