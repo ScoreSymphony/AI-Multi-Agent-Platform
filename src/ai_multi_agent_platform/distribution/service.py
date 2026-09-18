@@ -15,7 +15,11 @@ from .decision_types import DependencyResolution, DependencyStatus, MarketplaceD
 from .dependency_graph import dependency_findings
 from .handlers import MarketplaceKindHandler, MarketplaceKindHandlerRegistry
 from .items import RegistryItem, RegistryQuery
-from .kinds import builtin_marketplace_kind
+from .kinds import (
+    MarketplaceKindDescriptor,
+    MarketplaceKindRegistry,
+    marketplace_kind_registry_with_builtins,
+)
 from .models import DistributionRoute
 from .provider import (
     RegistryItemNotFoundError,
@@ -77,12 +81,14 @@ class DistributionService:
         installations: RegistryInstallationStore | None = None,
         signature_verifier: RegistrySignatureVerifier | None = None,
         kind_handlers: MarketplaceKindHandlerRegistry | None = None,
+        kind_registry: MarketplaceKindRegistry | None = None,
     ) -> None:
         self._provider = provider
         self._router = router
         self._installations = installations
         self._signature_verifier = signature_verifier
         self._kind_handlers = kind_handlers or MarketplaceKindHandlerRegistry()
+        self._kind_registry = kind_registry or marketplace_kind_registry_with_builtins()
 
     @property
     def enabled(self) -> bool:
@@ -98,12 +104,32 @@ class DistributionService:
     def installation_state_enabled(self) -> bool:
         return self._installations is not None
 
+    def kind_descriptors(self) -> tuple[MarketplaceKindDescriptor, ...]:
+        return self._kind_registry.list()
+
+    def kind_descriptor(self, item: RegistryItem) -> MarketplaceKindDescriptor | None:
+        return self._kind_registry.get(item.item_type)
+
     def has_kind_handler(self, item: RegistryItem) -> bool:
         return self._kind_handlers.get(item.item_type) is not None
 
+    def supports_kind_operation(self, item: RegistryItem, operation: str) -> bool:
+        descriptor = self.kind_descriptor(item)
+        if descriptor is None:
+            return False
+        if operation == "install":
+            return descriptor.supports_install
+        if operation == "update":
+            return descriptor.supports_update
+        if operation == "uninstall":
+            return descriptor.supports_uninstall
+        if operation == "status":
+            return True
+        raise ValueError(f"unknown Marketplace operation: {operation}")
+
     def route_available(self, item: RegistryItem) -> bool:
         if item.route is DistributionRoute.KIND_HANDLER:
-            return self.has_kind_handler(item)
+            return self.kind_descriptor(item) is not None and self.has_kind_handler(item)
         if item.route in {DistributionRoute.PLUGIN, DistributionRoute.PORTABLE_IMPORT}:
             return self._router is not None
         return False
@@ -284,7 +310,7 @@ class DistributionService:
         operation_supported = (
             item.route is not DistributionRoute.KIND_HANDLER
             or operation == "status"
-            or _kind_supports(item, operation)
+            or self.supports_kind_operation(item, operation)
         )
         if not handler_available:
             findings = (
@@ -350,7 +376,7 @@ class DistributionService:
             DistributionRoute.PLUGIN,
         }
         handler_available = owner_route and self._kind_handlers.get(item.item_type) is not None
-        operation_supported = owner_route and _kind_supports(item, "uninstall")
+        operation_supported = owner_route and self.supports_kind_operation(item, "uninstall")
         if not owner_route:
             findings = (
                 *findings,
@@ -602,7 +628,7 @@ class DistributionService:
                     "does not use an owner-domain Marketplace handler"
                 ),
             )
-        if operation != "status" and not _kind_supports(item, operation):
+        if operation != "status" and not self.supports_kind_operation(item, operation):
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
                 f"{item.kind} owner does not support Marketplace {operation}",
@@ -698,17 +724,3 @@ def _validate_provider_metadata(item: RegistryItem) -> RegistryItem:
     derive_technical_metadata(item)
     return item
 
-
-def _kind_supports(item: RegistryItem, operation: str) -> bool:
-    descriptor = builtin_marketplace_kind(item.item_type)
-    if descriptor is None:
-        return True
-    if operation == "install":
-        return descriptor.supports_install
-    if operation == "update":
-        return descriptor.supports_update
-    if operation == "uninstall":
-        return descriptor.supports_uninstall
-    if operation == "status":
-        return True
-    raise ValueError(f"unknown Marketplace operation: {operation}")
