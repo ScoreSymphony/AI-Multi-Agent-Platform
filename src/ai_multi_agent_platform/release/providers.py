@@ -60,7 +60,7 @@ def git_head_revision(source_url: str) -> str:
     try:
         safe_source_url = validate_git_remote_url(source_url)
     except ValueError as exc:
-        raise UpdateDiscoveryError(f"git discovery rejected {source_url}: {exc}") from exc
+        raise UpdateDiscoveryError(f"git discovery rejected remote URL: {exc}") from exc
     try:
         completed = subprocess.run(
             [
@@ -78,16 +78,19 @@ def git_head_revision(source_url: str) -> str:
             timeout=30,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise UpdateDiscoveryError(f"git discovery failed for {source_url}: {exc}") from exc
+        raise UpdateDiscoveryError(
+            f"git discovery process failed: {type(exc).__name__}"
+        ) from exc
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or f"git exited with {completed.returncode}"
-        raise UpdateDiscoveryError(f"git discovery failed for {source_url}: {detail}")
+        raise UpdateDiscoveryError(
+            f"git discovery failed with exit status {completed.returncode}"
+        )
     line = completed.stdout.strip().splitlines()
     if len(line) != 1:
-        raise UpdateDiscoveryError(f"git discovery returned an unexpected HEAD for {source_url}")
+        raise UpdateDiscoveryError("git discovery returned an unexpected HEAD")
     revision = line[0].split(maxsplit=1)[0].lower()
     if _GIT_COMMIT.fullmatch(revision) is None:
-        raise UpdateDiscoveryError(f"git discovery returned a non-immutable HEAD for {source_url}")
+        raise UpdateDiscoveryError("git discovery returned a non-immutable HEAD")
     return revision
 
 
