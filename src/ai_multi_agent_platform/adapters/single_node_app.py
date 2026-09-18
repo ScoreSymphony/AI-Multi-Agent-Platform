@@ -53,7 +53,10 @@ from ai_multi_agent_platform.onboarding.setup_registry_planning import (
 from ai_multi_agent_platform.plugins import (
     CapabilityRegistryBinder,
     ConnectorRegistryBinder,
+    ExecutorRegistryBinder,
     ExtensionType,
+    ModelProviderRegistryBinder,
+    OrchestratorRegistryBinder,
     PluginRegistry,
 )
 from ai_multi_agent_platform.repositories import RepositoryCapabilityProvider
@@ -67,6 +70,8 @@ from ai_multi_agent_platform.repository_intelligence.wiring import (
 
 from .application_runtime import ApplicationRuntimeComposition, compose_application_runtime
 from .marketplace_owner_handlers import (
+    AgentMarketplaceKindHandler,
+    AgentTeamMarketplaceKindHandler,
     ApplicationMarketplaceKindHandler,
     PluginExtensionMarketplaceKindHandler,
     PluginMarketplaceKindHandler,
@@ -175,10 +180,16 @@ def _registry_plugin_runtime(deployment: SingleNodeDeployment) -> PluginRegistry
     plugin_registry = PluginRegistry(
         platform_version=__version__,
         supported_interfaces={
+            ExtensionType.ORCHESTRATOR: frozenset({"1.0"}),
+            ExtensionType.EXECUTOR: frozenset({"1.0"}),
+            ExtensionType.MODEL_PROVIDER: frozenset({"1.0"}),
             ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"}),
             ExtensionType.CONNECTOR_PROVIDER: frozenset({"1.0"}),
         },
         binders={
+            ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(deployment.orchestrators),
+            ExtensionType.EXECUTOR: ExecutorRegistryBinder(deployment.executors),
+            ExtensionType.MODEL_PROVIDER: ModelProviderRegistryBinder(deployment.models),
             ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(deployment.capabilities),
             ExtensionType.CONNECTOR_PROVIDER: ConnectorRegistryBinder(deployment.connectors),
         },
@@ -196,7 +207,33 @@ def _marketplace_kind_handlers(
 ) -> MarketplaceKindHandlerRegistry:
     return MarketplaceKindHandlerRegistry(
         (
+            AgentMarketplaceKindHandler(deployment.agents),
+            AgentTeamMarketplaceKindHandler(deployment.agents),
             PluginMarketplaceKindHandler(plugin_installer, plugin_registry),
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.ORCHESTRATOR,
+                extension_type=ExtensionType.ORCHESTRATOR,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.EXECUTOR,
+                extension_type=ExtensionType.EXECUTOR,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.MODEL_PROVIDER,
+                extension_type=ExtensionType.MODEL_PROVIDER,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.CAPABILITY_PROVIDER,
+                extension_type=ExtensionType.CAPABILITY_PROVIDER,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
             PluginExtensionMarketplaceKindHandler(
                 kind=RegistryItemType.TOOL,
                 extension_type=ExtensionType.CAPABILITY_PROVIDER,
