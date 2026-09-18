@@ -51,6 +51,7 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
         self._root.mkdir(parents=True, exist_ok=True)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
+        self._recover_incomplete_writes()
         self._async_io = AsyncDataOffload(max_concurrency=max_concurrency)
         capability = Capability(
             name="local-files",
@@ -99,6 +100,61 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
                 )
                 """
             )
+
+    def _recover_incomplete_writes(self) -> None:
+        """Tombstone only crash-interrupted writes proven by canonical PENDING metadata."""
+
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    "SELECT file_id FROM data_files WHERE state = ? ORDER BY file_id",
+                    (FileState.PENDING.value,),
+                ).fetchall()
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to inspect incomplete file writes",
+            ) from exc
+
+        pending_ids: list[str] = []
+        for row in rows:
+            file_id = str(row["file_id"])
+            try:
+                validate_id(file_id, "file")
+            except ValueError as exc:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "stored pending file identity is invalid",
+                ) from exc
+            pending_ids.append(file_id)
+            for path in (
+                self._root / f".{file_id}.pending",
+                self._root / file_id,
+            ):
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError as exc:
+                    raise ContractError(
+                        ErrorCode.BACKEND_ERROR,
+                        "failed to clean an incomplete file write",
+                    ) from exc
+
+        if not pending_ids:
+            return
+        try:
+            with self._connect() as connection:
+                connection.executemany(
+                    "UPDATE data_files SET state = ? WHERE file_id = ? AND state = ?",
+                    (
+                        (FileState.TOMBSTONED.value, file_id, FileState.PENDING.value)
+                        for file_id in pending_ids
+                    ),
+                )
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to tombstone incomplete file writes",
+            ) from exc
 
     async def _run_blocking[T](
         self,
