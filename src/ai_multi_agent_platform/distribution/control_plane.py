@@ -19,15 +19,15 @@ from .control_plane_projection import (
     _marketplace_mutation_resource,
     _preview_resource,
 )
+from .control_plane_query import RegistryQueryPlan as _RegistryQueryPlan
 from .control_plane_query import (
-    RegistryQueryPlan as _RegistryQueryPlan,
     marketplace_resource_sort_key as _marketplace_resource_sort_key,
-    optional_source_registry as _optional_source_registry,
-    registry_query as _registry_query,
-    required_version as _required_version,
-    split_resource_id as _split_resource_id,
-    validate_marketplace_sort as _validate_marketplace_sort,
 )
+from .control_plane_query import optional_source_registry as _optional_source_registry
+from .control_plane_query import registry_query as _registry_query
+from .control_plane_query import required_version as _required_version
+from .control_plane_query import split_resource_id as _split_resource_id
+from .control_plane_query import validate_marketplace_sort as _validate_marketplace_sort
 from .dependency_graph import evaluate_compatibility
 from .items import RegistryItem, RegistryQuery
 from .models import DistributionRoute, version_key
