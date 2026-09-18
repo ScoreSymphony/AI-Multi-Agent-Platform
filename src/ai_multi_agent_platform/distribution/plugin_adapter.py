@@ -1,4 +1,4 @@
-"""Canonical #20 owner adapter for verified Registry plugin manifests."""
+"""Canonical plugin-owner adapter for verified Registry plugin manifests."""
 
 from __future__ import annotations
 
@@ -22,13 +22,13 @@ from .items import RegistryItem
 
 
 class PluginRegistryArtifactInstaller:
-    """Install or explicitly update a verified manifest through the canonical #20 owner."""
+    """Install or explicitly update a verified manifest through the canonical plugin owner."""
 
     def __init__(self, registry: PluginRegistry) -> None:
         self._registry = registry
 
     def validated_manifest(self, item: RegistryItem, artifact: bytes) -> PluginManifest:
-        """Validate a Registry artifact against the canonical #20 manifest contract."""
+        """Validate a Registry artifact against the canonical plugin manifest contract."""
 
         try:
             document = json.loads(artifact.decode("utf-8"))
