@@ -269,8 +269,10 @@ class RegistryResourceService:
             return None
         try:
             requirements = self.distribution.inspect_requirements(item)
-            details = self.distribution.describe(item)
             status_item = self._installed_status_item(item, installation)
+            details = (
+                self.distribution.describe(status_item) if status_item is not None else None
+            )
             status = (
                 await self.distribution.status(status_item) if status_item is not None else None
             )
