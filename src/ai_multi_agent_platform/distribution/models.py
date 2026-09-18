@@ -20,6 +20,7 @@ class RegistryItemType(StrEnum):
     TEMPLATE = "template"
     MODEL_CONFIGURATION = "model_configuration"
     CONNECTOR = "connector"
+    APPLICATION = "application"
     EVALUATION = "evaluation"
     DOCUMENTATION = "documentation"
 
@@ -51,7 +52,7 @@ class VersionRange:
             raise ValueError("minimum platform version must not exceed maximum")
 
     def contains(self, version: str) -> bool:
-        candidate = version_key(version)
+        candidate = version_key(value)
         return not (
             (self.minimum is not None and candidate < version_key(self.minimum))
             or (self.maximum is not None and candidate > version_key(self.maximum))
@@ -76,7 +77,7 @@ class RegistrySource:
 
     def __post_init__(self) -> None:
         _require_text(self.repository, "source repository")
-        _require_text(self.package_reference, "package reference")
+        _require_text(self.package_reference, "package_reference")
 
 
 @dataclass(frozen=True, slots=True)
