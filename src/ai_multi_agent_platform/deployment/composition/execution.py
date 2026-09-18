@@ -33,7 +33,11 @@ from ai_multi_agent_platform.evaluation.single_node import (
     SingleNodeEvaluationComposition,
     build_single_node_evaluation,
 )
-from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, ExecutorRegistry, ReferenceExecutor
+from ai_multi_agent_platform.execution import (
+    ExecutorLifecycleBackend,
+    ExecutorRegistry,
+    ReferenceExecutor,
+)
 from ai_multi_agent_platform.kernel import EventSourcedTaskRepository, PlatformKernel
 from ai_multi_agent_platform.observability import (
     ObservabilityEventProvider,
@@ -150,9 +154,7 @@ def build_execution(
     reference_executor = ReferenceExecutor(storage.workspaces.materialization_root)
     orchestrator = ObservedOrchestrator(reference_orchestrator, observability.telemetry)
     executor = ObservedExecutor(reference_executor, observability.telemetry)
-    orchestrators = OrchestratorRegistry(
-        {orchestrator.descriptor.provider_id: orchestrator}
-    )
+    orchestrators = OrchestratorRegistry({orchestrator.descriptor.provider_id: orchestrator})
     executors = ExecutorRegistry()
     executors.register(executor.descriptor.executor_id, executor)
 
