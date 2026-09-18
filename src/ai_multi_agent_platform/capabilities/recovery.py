@@ -493,57 +493,27 @@ class ExternalEffectRecoveryCoordinator:
 
         try:
             observation = await reconciler.reconcile_external_effect(
-                ExternalEffectReconciliationRequest(
-                    effect_id=record.effect_id,
-                    invocation_id=record.invocation_id,
-                    capability_id=record.capability_id,
-                    capability_version=record.capability_version,
-                    provider_id=record.provider_id,
-                    provider_tool_ref=record.provider_tool_ref,
-                    idempotency_key=record.idempotency_key,
-                    adapter_metadata=record.adapter_metadata,
-                )
+                _reconciliation_request(record)
             )
         except ContractError as exc:
-            async with self._lock:
-                current = self.repository.get(effect_id)
-                disposition = (
-                    ExternalEffectRecoveryDisposition.BLOCKED_DEPENDENCY
-                    if exc.retryable
-                    or exc.code
-                    in {ErrorCode.UNAVAILABLE, ErrorCode.TIMEOUT, ErrorCode.TRANSIENT_FAILURE}
-                    else ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
-                )
-                failed = self.repository.save(
-                    replace(
-                        current,
-                        status=ExternalEffectRecoveryStatus.BLOCKED,
-                        disposition=disposition,
-                        reason=f"reconciliation_failed:{exc.code.value}",
-                        updated_at=_utc_now(),
-                    )
-                )
-                await self._emit("external_effect.reconciliation_failed", failed)
-                if (
-                    disposition
-                    is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
-                ):
-                    await self._emit("external_effect.manual_review_required", failed)
-                return failed
+            disposition = (
+                ExternalEffectRecoveryDisposition.BLOCKED_DEPENDENCY
+                if exc.retryable
+                or exc.code
+                in {ErrorCode.UNAVAILABLE, ErrorCode.TIMEOUT, ErrorCode.TRANSIENT_FAILURE}
+                else ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
+            )
+            return await self._record_reconciliation_failure(
+                effect_id,
+                disposition=disposition,
+                reason=f"reconciliation_failed:{exc.code.value}",
+            )
         except Exception as exc:  # error-boundary: provider reconciliation outer boundary
-            async with self._lock:
-                current = self.repository.get(effect_id)
-                failed = self.repository.save(
-                    replace(
-                        current,
-                        status=ExternalEffectRecoveryStatus.BLOCKED,
-                        disposition=ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW,
-                        reason="reconciliation_failed:backend_error",
-                        updated_at=_utc_now(),
-                    )
-                )
-                await self._emit("external_effect.reconciliation_failed", failed)
-                await self._emit("external_effect.manual_review_required", failed)
+            await self._record_reconciliation_failure(
+                effect_id,
+                disposition=ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW,
+                reason="reconciliation_failed:backend_error",
+            )
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
                 "external effect reconciler failed",
@@ -562,6 +532,32 @@ class ExternalEffectRecoveryCoordinator:
             elif settled.disposition is ExternalEffectRecoveryDisposition.SAFE_TO_RETRY:
                 await self._emit("external_effect.retry_safe", settled)
             return settled
+
+    async def _record_reconciliation_failure(
+        self,
+        effect_id: str,
+        *,
+        disposition: ExternalEffectRecoveryDisposition,
+        reason: str,
+    ) -> ExternalEffectRecoveryRecord:
+        async with self._lock:
+            current = self.repository.get(effect_id)
+            failed = self.repository.save(
+                replace(
+                    current,
+                    status=ExternalEffectRecoveryStatus.BLOCKED,
+                    disposition=disposition,
+                    reason=reason,
+                    updated_at=_utc_now(),
+                )
+            )
+            await self._emit("external_effect.reconciliation_failed", failed)
+            if (
+                disposition
+                is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
+            ):
+                await self._emit("external_effect.manual_review_required", failed)
+            return failed
 
     async def reconcile_all(self) -> tuple[ExternalEffectRecoveryRecord, ...]:
         results: list[ExternalEffectRecoveryRecord] = []
@@ -924,6 +920,21 @@ def _apply_observation(
         disposition=ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW,
         reason=observation.detail or "provider_reconciliation_outcome_unknown",
         **common,
+    )
+
+
+def _reconciliation_request(
+    record: ExternalEffectRecoveryRecord,
+) -> ExternalEffectReconciliationRequest:
+    return ExternalEffectReconciliationRequest(
+        effect_id=record.effect_id,
+        invocation_id=record.invocation_id,
+        capability_id=record.capability_id,
+        capability_version=record.capability_version,
+        provider_id=record.provider_id,
+        provider_tool_ref=record.provider_tool_ref,
+        idempotency_key=record.idempotency_key,
+        adapter_metadata=record.adapter_metadata,
     )
 
 
