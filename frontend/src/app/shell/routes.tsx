@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PORTABILITY_PACKAGE_COLLECTION, PORTABILITY_PREVIEW_COLLECTION, PORTABILITY_REPORT_COLLECTION, PORTABILITY_RESOURCES } from "../../api/portability";
 import type { ReferenceCollection } from "../../api/references";
 import type { APImanifest } from "../../api/types";
 import { AgentDetailPage, AgentsPage, AgentTeamDetailPage, AgentTeamsPage } from "../../pages/AgentsPage";
@@ -11,6 +12,7 @@ import { ChatPage } from "../../pages/ChatPage";
 import { ComputeNodeDetailPage, ComputePage, ComputeWorkerDetailPage, ComputeWorkerJobDetailPage } from "../../pages/ComputePage";
 import { EvaluationRunDetailPage, EvaluationSuiteDetailPage, EvaluationsPage } from "../../pages/EvaluationsPage";
 import { GoalDetailPage, GoalsPage } from "../../pages/GoalsPage";
+import { ImportExportPage, PortabilityDetailPage } from "../../pages/ImportExportPage";
 import { ConnectionDetailPage, ConnectorDefinitionDetailPage, IntegrationsPage } from "../../pages/IntegrationsPage";
 import { GovernancePage, ProposalGovernanceDetailPage, SpecificationGovernanceDetailPage } from "../../pages/GovernancePage";
 import { LEARNING_REQUIRED_RESOURCES, LearningDetailPage, LearningPage } from "../../pages/LearningPage";
@@ -81,6 +83,7 @@ export function renderShellRoute({
     notificationClient,
     organizationClient,
     pluginsClient,
+    portabilityClient,
     registryClient,
     templateClient,
     verificationClient,
@@ -121,6 +124,9 @@ export function renderShellRoute({
   const modelRoutingProfileMatch = matchPath("/model-routing-profiles/:profileId", path);
   const approvalMatch = matchPath("/approvals/:approvalId", path);
   const verificationMatch = matchPath("/verification/:verificationId", path);
+  const portabilityPackageMatch = matchPath("/import-export/packages/:packageId", path);
+  const portabilityPreviewMatch = matchPath("/import-export/previews/:previewId", path);
+  const portabilityReportMatch = matchPath("/import-export/reports/:reportId", path);
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
   const pluginCandidatesAvailable = manifest?.resources.includes("plugin-candidates") ?? false;
@@ -162,6 +168,10 @@ export function renderShellRoute({
   if (path === "/knowledge") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Knowledge" resources={KNOWLEDGE_RESOURCES}><KnowledgePage client={memoryKnowledgeClient} /></ManifestResourcesPage>;
   if (knowledgeMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Knowledge" resources={KNOWLEDGE_RESOURCES}><KnowledgeDetailPage client={memoryKnowledgeClient} sourceId={knowledgeMatch.sourceId} /></ManifestResourcesPage>;
   if (path === "/search") return <SearchPage client={client} />;
+  if (path === "/import-export") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Import / Export" resources={PORTABILITY_RESOURCES}><ImportExportPage client={portabilityClient} /></ManifestResourcesPage>;
+  if (portabilityPackageMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Portable package" resource={PORTABILITY_PACKAGE_COLLECTION}><PortabilityDetailPage client={portabilityClient} kind="package" resourceId={portabilityPackageMatch.packageId} /></ManifestResourcePage>;
+  if (portabilityPreviewMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Import preview" resource={PORTABILITY_PREVIEW_COLLECTION}><PortabilityDetailPage client={portabilityClient} kind="preview" resourceId={portabilityPreviewMatch.previewId} /></ManifestResourcePage>;
+  if (portabilityReportMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Import report" resource={PORTABILITY_REPORT_COLLECTION}><PortabilityDetailPage client={portabilityClient} kind="report" resourceId={portabilityReportMatch.reportId} /></ManifestResourcePage>;
   if (path === "/tools") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Tools" resource="capabilities"><CapabilitiesPage client={client} /></ManifestResourcePage>;
   if (capabilityProviderMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Tools" resource="capability-providers"><CapabilityProviderDetailPage client={client} providerId={capabilityProviderMatch.providerId} /></ManifestResourcePage>;
   if (capabilityMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Tools" resource="capabilities"><CapabilityDetailPage client={client} capabilityId={capabilityMatch.capabilityId} /></ManifestResourcePage>;
