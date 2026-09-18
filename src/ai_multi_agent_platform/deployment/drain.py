@@ -327,7 +327,23 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
         receive: ASGIReceive,
         send: ASGISend,
     ) -> None:
-        if scope.get("type") != "lifespan":
+        scope_type = scope.get("type")
+        if scope_type == "websocket":
+            if not await self._drain.try_admit_mutation():
+                await send(
+                    {
+                        "type": "websocket.close",
+                        "code": 1013,
+                        "reason": "single-node Control Plane is draining",
+                    }
+                )
+                return
+            try:
+                await super().__call__(scope, receive, send)
+            finally:
+                await self._drain.release_mutation()
+            return
+        if scope_type != "lifespan":
             await super().__call__(scope, receive, send)
             return
 
