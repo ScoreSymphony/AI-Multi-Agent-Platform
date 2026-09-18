@@ -561,7 +561,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
             <div className="card-grid">
               {page.items.map((item) => (
                 <MarketplaceItemCard
-                  key={item.id}
+                  key={item.qualified_id ?? item.id}
                   item={item}
                   descriptor={
                     effectiveKindDescriptors.find((entry) => entry.kind === item.item_type) ??
@@ -1263,7 +1263,7 @@ function operationSupported(item: RegistryItem, operation: "install" | "update")
   if (!routeAvailable(item) || item.pinned_version) return false;
   const advertised = item.owner_extension?.supported_operations;
   if (advertised && !advertised.includes(operation)) return false;
-  // #1173/#1204 intentionally expose no canonical Application artifact-version migration yet.
+  // The canonical Application owner intentionally exposes no artifact-version migration yet.
   // Fail closed until the owner explicitly advertises update support.
   if (operation === "update" && item.item_type === "application" && !advertised) return false;
   if (operation === "install") return !item.installed;
