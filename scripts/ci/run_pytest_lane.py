@@ -60,12 +60,23 @@ def build_report(
 ) -> dict[str, Any]:
     cases = _testcases(junit_path)
     modules: dict[str, float] = defaultdict(float)
+    directories: dict[str, float] = defaultdict(float)
     for case in cases:
-        modules[str(case["module"])] += float(case["seconds"])
+        module = str(case["module"])
+        seconds = float(case["seconds"])
+        modules[module] += seconds
+        parts = module.split(".")
+        directory = "/".join(parts[:2]) if len(parts) >= 2 and parts[0] == "tests" else parts[0]
+        directories[directory] += seconds
 
     slow_tests = sorted(cases, key=lambda item: float(item["seconds"]), reverse=True)[:25]
     slow_modules = sorted(
         ({"module": name, "seconds": seconds} for name, seconds in modules.items()),
+        key=lambda item: float(item["seconds"]),
+        reverse=True,
+    )[:25]
+    slow_directories = sorted(
+        ({"directory": name, "seconds": seconds} for name, seconds in directories.items()),
         key=lambda item: float(item["seconds"]),
         reverse=True,
     )[:25]
@@ -81,6 +92,7 @@ def build_report(
         "testcase_seconds_sum": round(sum(float(case["seconds"]) for case in cases), 3),
         "slowest_tests": slow_tests,
         "slowest_modules": slow_modules,
+        "slowest_directories": slow_directories,
         "budget": budget,
     }
 
@@ -145,6 +157,18 @@ def render_markdown(report: dict[str, Any], violations: list[str]) -> str:
     )
     for item in report["slowest_modules"][:15]:
         lines.append(f"| {item['seconds']:.3f} | `{item['module']}` |")
+
+    lines.extend(
+        [
+            "",
+            "### Slowest test directories",
+            "",
+            "| seconds | directory |",
+            "| ---: | --- |",
+        ]
+    )
+    for item in report["slowest_directories"][:15]:
+        lines.append(f"| {item['seconds']:.3f} | `{item['directory']}` |")
 
     lines.extend(["", "### Budget status", ""])
     if violations:
