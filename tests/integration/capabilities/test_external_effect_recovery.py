@@ -28,6 +28,7 @@ from ai_multi_agent_platform.capabilities import (
     PolicyDecision,
     SideEffectClassification,
     SQLiteExternalEffectRecoveryRepository,
+    bind_canonical_capability_invocation,
     external_effect_recovery_resource,
 )
 from ai_multi_agent_platform.capabilities.egress import EgressCapabilityInvoker
@@ -394,6 +395,73 @@ async def test_policy_denial_prevents_dispatch_and_never_creates_uncertain_effec
     assert caught.value.code is ErrorCode.FORBIDDEN
     assert provider.effects == 0
     assert recovery.list_records() == ()
+
+
+@pytest.mark.asyncio
+async def test_operator_authorized_retry_still_requires_normal_invocation_approval() -> None:
+    provider = _ExternalProvider(
+        ExternalEffectRecoveryPolicy(
+            idempotency=ExternalEffectIdempotency.NONE,
+            reconciliation=ExternalEffectReconciliationSupport.UNSUPPORTED,
+        )
+    )
+    registry = CapabilityRegistry()
+    await registry.register_provider(provider)
+    recovery = ExternalEffectRecoveryCoordinator(InMemoryExternalEffectRecoveryRepository())
+    recovery.register_reconciler(provider.descriptor.provider_id, provider)
+    approval_calls = 0
+
+    async def deny_retry_approval(
+        request: CapabilityInvocation,
+        capability: CapabilitySpec,
+        canonical_invocation: object,
+    ) -> bool:
+        nonlocal approval_calls
+        del request, capability, canonical_invocation
+        approval_calls += 1
+        return False
+
+    invoker = EgressCapabilityInvoker(
+        registry,
+        canonical_binding_hook=bind_canonical_capability_invocation,
+        approval_hook=deny_retry_approval,
+        external_effect_recovery=recovery,
+    )
+    project_id = new_id("project")
+    request = _request(invocation_id="operator-approved-retry", key="operator-retry-key")
+    request = replace(
+        request,
+        context=replace(
+            request.context,
+            owner_type="user",
+            owner_id="operator-reviewer",
+            project_id=project_id,
+        ),
+        trace=replace(request.trace, project_id=project_id),
+    )
+
+    with pytest.raises(ContractError):
+        await invoker.invoke(request)
+
+    record = recovery.find_record_by_invocation(request.invocation_id)
+    assert record is not None
+    assert record.disposition is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
+    await recovery.authorize_retry(
+        record.effect_id,
+        actor="operator:reviewer",
+        reason="reviewed provider evidence",
+    )
+
+    provider.mode = "success"
+    with pytest.raises(ContractError) as retry:
+        await invoker.invoke(replace(request, require_approval=True))
+
+    assert retry.value.code is ErrorCode.FORBIDDEN
+    assert approval_calls == 1
+    assert provider.effects == 1
+    record = recovery.find_record_by_invocation(request.invocation_id)
+    assert record is not None
+    assert record.disposition is ExternalEffectRecoveryDisposition.SAFE_TO_RETRY
 
 
 @pytest.mark.asyncio
