@@ -968,3 +968,37 @@ def test_single_registry_provider_cannot_spoof_source_identity() -> None:
     with pytest.raises(ValueError, match="conflicting source_registry"):
         service.get(spoofed.item_id, spoofed.version)
 
+def test_persisted_installed_dependency_detects_cycle_after_catalog_drift(
+    tmp_path: Path,
+) -> None:
+    root_id = "example.persisted-cycle-root"
+    installed, _installed_artifact = _item(
+        "example.persisted-cycle-tool",
+        RegistryItemType.TOOL,
+        dependencies=(RegistryDependency(root_id),),
+    )
+    root, root_artifact = _item(
+        root_id,
+        dependencies=(
+            RegistryDependency(
+                installed.item_id,
+                item_kind=RegistryItemType.TOOL,
+            ),
+        ),
+    )
+    state_path = tmp_path / "installations.json"
+    store = JsonRegistryInstallationStore(state_path)
+    store.record(installed, provider_id="local")
+    store = JsonRegistryInstallationStore(state_path)
+    service = _service(((root, root_artifact),), store=store)
+
+    preview = service.preview(root.item_id, root.version, _context())
+
+    assert preview.activation_allowed is False
+    assert any(
+        dependency.status is DependencyStatus.CYCLE
+        and dependency.path == (root.item_id, installed.item_id, root.item_id)
+        for dependency in preview.decision.dependencies
+    )
+    assert any(finding.code == "dependency_cycle" for finding in preview.findings)
+
