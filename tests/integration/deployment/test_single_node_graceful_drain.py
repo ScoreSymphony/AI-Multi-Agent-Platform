@@ -484,7 +484,7 @@ def test_open_websocket_session_cannot_hold_shutdown_past_drain_deadline(
                 return next(messages)
             except StopIteration:
                 await asyncio.Future()
-                raise AssertionError("unreachable")
+                raise AssertionError("unreachable") from None
 
         async def send(message: dict[str, Any]) -> None:
             sent.append(message)
@@ -554,7 +554,7 @@ def test_lifespan_teardown_timeout_cannot_hang_process_exit(
                 return next(messages)
             except StopIteration:
                 await asyncio.Future()
-                raise AssertionError("unreachable")
+                raise AssertionError("unreachable") from None
 
         async def send(message: dict[str, Any]) -> None:
             sent.append(message)
