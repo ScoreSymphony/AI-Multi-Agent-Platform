@@ -186,7 +186,7 @@ def test_restart_clears_stale_active_refs_and_cleanup_finds_crash_orphan(tmp_pat
         assert active.active_task_ids == (task_id,)
         assert active.active_run_ids == (run_id,)
         assert provider.local_path(materialization.id).exists()
-        unowned = provider.materialization_root / "materialization_unowned"
+        unowned = provider.materialization_root / "foreign_unowned"
         unowned.mkdir()
 
         restarted = SqliteWorkspaceProvider(
