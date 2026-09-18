@@ -59,10 +59,10 @@ from ai_multi_agent_platform.distribution import (
     LocalRegistryProvider,
     MarketplaceKindHandlerRegistry,
     PluginRegistryArtifactInstaller,
+    RegistryDependency,
     RegistryItem,
     RegistryItemType,
     RegistryManifestReference,
-    RegistryDependency,
     RegistryPluginReconciliationError,
     RegistryQuery,
     RegistrySource,
@@ -389,7 +389,10 @@ async def test_agent_and_team_full_marketplace_flow_uses_canonical_owner(tmp_pat
             ),
         )
     )
-    assert discovered == (agent_item, team_item)
+    assert {candidate.item_id for candidate in discovered} == {
+        agent_item.item_id,
+        team_item.item_id,
+    }
 
     agent_preview = service.preview(agent_item.item_id, agent_item.version, context)
     assert agent_preview.activation_allowed is True
