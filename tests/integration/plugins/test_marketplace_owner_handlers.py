@@ -613,7 +613,9 @@ class _SingleExtensionRuntime:
         return None
 
 
-async def test_hermes_marketplace_install_activates_through_canonical_control_plane() -> None:
+async def test_hermes_marketplace_install_activates_through_canonical_control_plane(
+    tmp_path,
+) -> None:
     manifest = hermes_plugin_manifest()
     reference = ReferenceOrchestrator()
     orchestrators = OrchestratorRegistry({reference.descriptor.provider_id: reference})
@@ -635,8 +637,24 @@ async def test_hermes_marketplace_install_activates_through_canonical_control_pl
         license_name=manifest.provenance.license,
         manifest=True,
     )
-    installed = await handler.install(item, _plugin_artifact(manifest))
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): _plugin_artifact(manifest)},
+        ),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / "hermes-control-plane-marketplace-installations.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    validation = ValidationContext("0.0.1")
+    installed = await service.activate(
+        service.preview(item.item_id, item.version, validation),
+        validation,
+        authorized=True,
+    )
     assert installed.state.value == "installed"
+    assert service.installed(item.item_id) is not None
     assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
 
     catalog = PluginCatalog(
@@ -683,8 +701,8 @@ async def test_hermes_marketplace_install_activates_through_canonical_control_pl
     assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
     assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
 
-    removed = await binding.remove(context, manifest.plugin_id, {})
-    assert removed["removed"] is True
+    await service.uninstall(item.item_id, authorized=True)
+    assert service.installed(item.item_id) is None
     with pytest.raises(ContractError) as missing:
         plugin_registry.get(manifest.plugin_id)
     assert missing.value.code is ErrorCode.NOT_FOUND
