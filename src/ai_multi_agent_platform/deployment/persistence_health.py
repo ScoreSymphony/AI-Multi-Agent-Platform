@@ -158,8 +158,60 @@ class SingleNodePersistenceHealthProvider(ProviderContract):
             if diagnostic is not None:
                 diagnostics.append(diagnostic)
 
+        diagnostics.extend(self._probe_unowned_file_temp_state())
+
         status = self._status_for(diagnostics)
         return status, tuple(diagnostics), checked_store_count, free_space_state
+
+
+    def _probe_unowned_file_temp_state(self) -> tuple[PersistenceDiagnostic, ...]:
+        """Report temp state that the File owner cannot prove belongs to a pending write."""
+
+        root = self._config.files_dir
+        database = self._config.database_dir / "files.sqlite3"
+        if not root.is_dir() or not database.is_file():
+            return ()
+        try:
+            candidates = tuple(root.glob(".file_*.pending"))
+        except OSError:
+            return (
+                PersistenceDiagnostic(
+                    code="file_temp_state_unavailable",
+                    component="file-root",
+                    severity="degraded",
+                    retryable=True,
+                    action="restore filesystem access and inspect temporary File state",
+                ),
+            )
+        if not candidates:
+            return ()
+
+        diagnostics: list[PersistenceDiagnostic] = []
+        try:
+            with sqlite3.connect(database, timeout=self._sqlite_timeout_seconds) as connection:
+                for path in candidates:
+                    file_id = path.name[1 : -len(".pending")]
+                    row = connection.execute(
+                        "SELECT state FROM data_files WHERE file_id = ?",
+                        (file_id,),
+                    ).fetchone()
+                    if row is not None and str(row[0]) == "pending":
+                        continue
+                    diagnostics.append(
+                        PersistenceDiagnostic(
+                            code="file_temp_state_unowned",
+                            component="file-root",
+                            severity="degraded",
+                            retryable=False,
+                            action=(
+                                "inspect the unowned File temp state; do not promote it "
+                                "to canonical data"
+                            ),
+                        )
+                    )
+        except sqlite3.Error:
+            return ()
+        return tuple(diagnostics)
 
     def _probe_directory(
         self,
