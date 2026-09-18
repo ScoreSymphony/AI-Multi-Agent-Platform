@@ -123,7 +123,6 @@ def build_single_node_deployment(
         enable_distributed_execution=enable_distributed_execution,
         repository_discovery_resolver=connector_foundation.repository_discovery_resolver,
         model_runtime_factory=egress.model_runtime,
-        require_full_persistence_inventory=True,
     )
     automatic_review = build_automatic_review(base)
     egress_connectors = build_connector_services(base, connector_foundation, egress)
@@ -141,6 +140,7 @@ def build_single_node_deployment(
         egress=egress,
         planning=planning,
     )
+    base.persistence_health.require_full_store_inventory()
     register_durable_template_environment(base, connector_foundation.registry)
     return _extend_base_deployment(
         base,
