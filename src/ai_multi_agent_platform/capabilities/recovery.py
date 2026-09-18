@@ -497,12 +497,16 @@ class ExternalEffectRecoveryCoordinator:
                     InvocationStatus.CANCELLED,
                     InvocationStatus.TIMED_OUT,
                 }:
-                    self.repository.save(
+                    duplicate = self.repository.save(
                         replace(
                             existing,
                             duplicate_callbacks_ignored=existing.duplicate_callbacks_ignored + 1,
                             updated_at=_utc_now(),
                         )
+                    )
+                    await self._emit(
+                        "external_effect.duplicate_callback_prevented",
+                        duplicate,
                     )
                 return
             if record.status is InvocationStatus.SUCCEEDED:
@@ -533,7 +537,7 @@ class ExternalEffectRecoveryCoordinator:
                     }
                     else ExternalEffectRecoveryStatus.BLOCKED
                 )
-                self.repository.save(
+                uncertain = self.repository.save(
                     replace(
                         existing,
                         status=status,
@@ -543,6 +547,20 @@ class ExternalEffectRecoveryCoordinator:
                         updated_at=_utc_now(),
                     )
                 )
+                await self._emit("external_effect.uncertain_outcome_detected", uncertain)
+                await self._emit(
+                    (
+                        "external_effect.retry_safe"
+                        if disposition is ExternalEffectRecoveryDisposition.SAFE_TO_RETRY
+                        else "external_effect.retry_unsafe"
+                    ),
+                    uncertain,
+                )
+                if (
+                    disposition
+                    is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
+                ):
+                    await self._emit("external_effect.manual_review_required", uncertain)
 
     async def reconcile_effect(self, effect_id: str) -> ExternalEffectRecoveryRecord:
         async with self._lock:
@@ -561,7 +579,7 @@ class ExternalEffectRecoveryCoordinator:
                 )
             reconciler = self._reconcilers.get(record.provider_id)
             if reconciler is None:
-                return self.repository.save(
+                blocked = self.repository.save(
                     replace(
                         record,
                         status=ExternalEffectRecoveryStatus.BLOCKED,
@@ -570,6 +588,8 @@ class ExternalEffectRecoveryCoordinator:
                         updated_at=_utc_now(),
                     )
                 )
+                await self._emit("external_effect.reconciliation_failed", blocked)
+                return blocked
             record = self.repository.save(
                 replace(
                     record,
@@ -579,6 +599,7 @@ class ExternalEffectRecoveryCoordinator:
                     updated_at=_utc_now(),
                 )
             )
+            await self._emit("external_effect.reconciliation_started", record)
 
         try:
             observation = await reconciler.reconcile_external_effect(
@@ -603,7 +624,7 @@ class ExternalEffectRecoveryCoordinator:
                     in {ErrorCode.UNAVAILABLE, ErrorCode.TIMEOUT, ErrorCode.TRANSIENT_FAILURE}
                     else ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
                 )
-                return self.repository.save(
+                failed = self.repository.save(
                     replace(
                         current,
                         status=ExternalEffectRecoveryStatus.BLOCKED,
@@ -612,10 +633,17 @@ class ExternalEffectRecoveryCoordinator:
                         updated_at=_utc_now(),
                     )
                 )
+                await self._emit("external_effect.reconciliation_failed", failed)
+                if (
+                    disposition
+                    is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
+                ):
+                    await self._emit("external_effect.manual_review_required", failed)
+                return failed
         except Exception as exc:  # error-boundary: provider reconciliation outer boundary
             async with self._lock:
                 current = self.repository.get(effect_id)
-                self.repository.save(
+                failed = self.repository.save(
                     replace(
                         current,
                         status=ExternalEffectRecoveryStatus.BLOCKED,
@@ -624,6 +652,8 @@ class ExternalEffectRecoveryCoordinator:
                         updated_at=_utc_now(),
                     )
                 )
+                await self._emit("external_effect.reconciliation_failed", failed)
+                await self._emit("external_effect.manual_review_required", failed)
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
                 "external effect reconciler failed",
@@ -632,7 +662,16 @@ class ExternalEffectRecoveryCoordinator:
 
         async with self._lock:
             current = self.repository.get(effect_id)
-            return self.repository.save(_apply_observation(current, observation))
+            settled = self.repository.save(_apply_observation(current, observation))
+            await self._emit("external_effect.reconciliation_completed", settled)
+            if (
+                settled.disposition
+                is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
+            ):
+                await self._emit("external_effect.manual_review_required", settled)
+            elif settled.disposition is ExternalEffectRecoveryDisposition.SAFE_TO_RETRY:
+                await self._emit("external_effect.retry_safe", settled)
+            return settled
 
     async def reconcile_all(self) -> tuple[ExternalEffectRecoveryRecord, ...]:
         results: list[ExternalEffectRecoveryRecord] = []
