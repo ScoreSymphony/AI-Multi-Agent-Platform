@@ -151,6 +151,19 @@ def _validate_snapshot(
         mismatches.append("provenance")
     if snapshot.item_type is not None and snapshot.item_type is not item.item_type:
         mismatches.append("item type")
+    if snapshot.publisher is not None:
+        if snapshot.publisher != item.publisher:
+            mismatches.append("publisher")
+        if snapshot.requested_permissions != tuple(sorted(item.requested_permissions)):
+            mismatches.append("requested permissions")
+        if snapshot.signature != item.integrity.signature:
+            mismatches.append("artifact signature")
+        if snapshot.signature_key_id != item.integrity.signature_key_id:
+            mismatches.append("signature key")
+        if snapshot.trust_status is not item.trust_status:
+            mismatches.append("trust status")
+        if snapshot.review_reference != item.review_reference:
+            mismatches.append("review reference")
     if mismatches:
         raise RegistryPluginReconciliationError(
             f"persisted Registry plugin {snapshot.item_id!r} changed " + ", ".join(mismatches)
