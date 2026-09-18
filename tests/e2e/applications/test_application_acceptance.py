@@ -266,11 +266,22 @@ def _marker_service(
     lifetime_seconds: float,
     depends_on: tuple[str, ...] = (),
     health_check: ApplicationHealthCheck | None = None,
+    requires_marker: Path | None = None,
 ) -> ApplicationService:
+    prerequisite = (
+        ""
+        if requires_marker is None
+        else (
+            f"required = Path({str(requires_marker)!r}); "
+            "raise_if_missing = not required.exists(); "
+            "raise_if_missing and (_ for _ in ()).throw(SystemExit(17)); "
+        )
+    )
     script = (
         "from pathlib import Path; import time; "
-        f"Path({str(marker)!r}).write_text('ready', encoding='utf-8'); "
-        f"time.sleep({lifetime_seconds!r})"
+        + prerequisite
+        + f"Path({str(marker)!r}).write_text('ready', encoding='utf-8'); "
+        + f"time.sleep({lifetime_seconds!r})"
     )
     return ApplicationService(
         service_id=service_id,
@@ -331,6 +342,7 @@ def test_multi_service_dependency_partial_failure_and_aggregate_health(tmp_path:
                     marker=worker_marker,
                     lifetime_seconds=0.5,
                     depends_on=("base",),
+                    requires_marker=base_marker,
                 ),
             ),
             runtime_requirements=("local", "process"),
@@ -409,6 +421,7 @@ def test_multi_service_dependency_partial_failure_and_aggregate_health(tmp_path:
                     marker=failing_worker_marker,
                     lifetime_seconds=30.0,
                     depends_on=("base",),
+                    requires_marker=failing_base_marker,
                     health_check=ApplicationHealthCheck(
                         kind=ApplicationHealthCheckKind.COMMAND,
                         command=(sys.executable, "-c", "raise SystemExit(1)"),
@@ -448,7 +461,7 @@ def test_multi_service_dependency_partial_failure_and_aggregate_health(tmp_path:
             )
             assert failed_start.status == 502, failed_start.body
             assert isinstance(failed_start.body, dict)
-            assert failed_start.body["error"]["code"] == "backend_error"
+            assert failed_start.body["code"] == "backend_error"
             assert failing_base_marker.exists()
             assert failing_worker_marker.exists()
 
