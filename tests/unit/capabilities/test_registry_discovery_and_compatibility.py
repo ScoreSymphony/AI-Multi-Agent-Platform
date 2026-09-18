@@ -103,7 +103,7 @@ def _invocation(
     )
 
 
-def test_policy_aware_discovery_filters_denied_without_issue15_backend() -> None:
+def test_policy_aware_discovery_filters_denied_without_authorization_backend() -> None:
     async def scenario() -> None:
         registry = CapabilityRegistry()
         await registry.register_provider(
