@@ -10,7 +10,7 @@ from ai_multi_agent_platform.plugins import PluginRegistry
 from .items import RegistryItem
 from .models import RegistryItemType
 from .plugin_adapter import PluginRegistryArtifactInstaller
-from .provider import RegistryProvider
+from .provider import RegistryProvider, SourcedRegistryProvider
 from .signatures import RegistrySignatureVerifier
 from .state import RegistryInstallationSnapshot, RegistryInstallationStore
 
@@ -42,7 +42,7 @@ async def reconcile_registry_plugins(
             continue
 
         try:
-            item = provider.get(snapshot.item_id, snapshot.version)
+            item = _get_snapshot_item(provider, snapshot)
         except LookupError as exc:
             if snapshot.item_type is RegistryItemType.PLUGIN:
                 raise RegistryPluginReconciliationError(
@@ -60,8 +60,8 @@ async def reconcile_registry_plugins(
                 )
             continue
 
-        _validate_snapshot(provider.provider_id, snapshot, item)
-        artifact = provider.fetch_artifact(item.item_id, item.version)
+        _validate_snapshot(item.source_registry or provider.provider_id, snapshot, item)
+        artifact = _fetch_snapshot_artifact(provider, snapshot)
         digest = hashlib.sha256(artifact).hexdigest()
         trusted_digest = snapshot.artifact_sha256 or item.integrity.sha256
         if trusted_digest is None:
@@ -105,6 +105,32 @@ async def reconcile_registry_plugins(
     return tuple(restored)
 
 
+def _get_snapshot_item(
+    provider: RegistryProvider,
+    snapshot: RegistryInstallationSnapshot,
+) -> RegistryItem:
+    if isinstance(provider, SourcedRegistryProvider):
+        return provider.get_from_source(
+            snapshot.source_registry,
+            snapshot.item_id,
+            snapshot.version,
+        )
+    return provider.get(snapshot.item_id, snapshot.version)
+
+
+def _fetch_snapshot_artifact(
+    provider: RegistryProvider,
+    snapshot: RegistryInstallationSnapshot,
+) -> bytes:
+    if isinstance(provider, SourcedRegistryProvider):
+        return provider.fetch_artifact_from_source(
+            snapshot.source_registry,
+            snapshot.item_id,
+            snapshot.version,
+        )
+    return provider.fetch_artifact(snapshot.item_id, snapshot.version)
+
+
 def _validate_snapshot(
     provider_id: str,
     snapshot: RegistryInstallationSnapshot,
@@ -125,6 +151,21 @@ def _validate_snapshot(
         mismatches.append("provenance")
     if snapshot.item_type is not None and snapshot.item_type is not item.item_type:
         mismatches.append("item type")
+    if snapshot.publisher is not None:
+        if snapshot.publisher != item.publisher:
+            mismatches.append("publisher")
+        if snapshot.dependencies is not None and snapshot.dependencies != item.dependencies:
+            mismatches.append("dependencies")
+        if snapshot.requested_permissions != tuple(sorted(item.requested_permissions)):
+            mismatches.append("requested permissions")
+        if snapshot.signature != item.integrity.signature:
+            mismatches.append("artifact signature")
+        if snapshot.signature_key_id != item.integrity.signature_key_id:
+            mismatches.append("signature key")
+        if snapshot.trust_status is not item.trust_status:
+            mismatches.append("trust status")
+        if snapshot.review_reference != item.review_reference:
+            mismatches.append("review reference")
     if mismatches:
         raise RegistryPluginReconciliationError(
             f"persisted Registry plugin {snapshot.item_id!r} changed " + ", ".join(mismatches)
