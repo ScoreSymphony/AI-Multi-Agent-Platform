@@ -37,7 +37,6 @@ from ai_multi_agent_platform.workspaces import SqliteRunWorkspaceBindingReposito
 from ai_multi_agent_platform.workspaces.compensation import CompensatingSqliteWorkspaceProvider
 
 from ..config import SingleNodeConfig
-from ..persistence_health import SingleNodePersistenceHealthProvider
 
 _EVALUATION_PROJECT_KEY = "evaluation-system-project-v1"
 _EVALUATION_OWNER_ID = "evaluation-single-node"
@@ -58,7 +57,6 @@ class StorageBundle:
     repository_catalog: SqliteRepositoryBindingCatalog
     repository_provenance: SqliteRepositoryProvenanceStore
     evaluation_project_id: str
-    persistence_health: SingleNodePersistenceHealthProvider
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +112,6 @@ def build_storage(config: SingleNodeConfig) -> StorageBundle:
     repository_provenance = SqliteRepositoryProvenanceStore(
         database_dir / "repository-provenance.sqlite3"
     )
-    persistence_health = SingleNodePersistenceHealthProvider(config)
     evaluation_project = scopes.create_project(
         key=_EVALUATION_PROJECT_KEY,
         name="Platform Evaluation",
@@ -131,7 +128,6 @@ def build_storage(config: SingleNodeConfig) -> StorageBundle:
         repository_catalog=repository_catalog,
         repository_provenance=repository_provenance,
         evaluation_project_id=evaluation_project.id,
-        persistence_health=persistence_health,
     )
 
 
@@ -233,7 +229,6 @@ def build_single_node_foundation(
 
     storage = build_storage(config)
     observability = build_observability(observability_exporter)
-    storage.persistence_health._telemetry = observability.telemetry
     security = build_security(
         config,
         observability,
