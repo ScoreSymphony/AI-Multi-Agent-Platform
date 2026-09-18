@@ -89,7 +89,10 @@ class RegistryItem:
             return self.distribution_route
         if self.item_type is RegistryItemType.PLUGIN:
             return DistributionRoute.PLUGIN
-        if self.item_type is RegistryItemType.DOCUMENTATION:
+        if self.item_type in {
+            RegistryItemType.APPLICATION,
+            RegistryItemType.DOCUMENTATION,
+        }:
             return DistributionRoute.MANUAL
         return DistributionRoute.PORTABLE_IMPORT
 
