@@ -8,6 +8,7 @@ normal subsystem and is reconciled after restart by the existing startup-recover
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from enum import StrEnum
@@ -80,6 +81,7 @@ class SingleNodeDrainController:
         self._force_reason: str | None = None
         self._forced = False
         self._completed = False
+        self._quiesce_callbacks: list[Callable[[], None]] = []
 
     @property
     def draining(self) -> bool:
@@ -100,6 +102,11 @@ class SingleNodeDrainController:
             force_reason=self._force_reason,
         )
 
+    def register_quiesce_callback(self, callback: Callable[[], None]) -> None:
+        """Register process-local autonomous admission to stop when drain begins."""
+        if callback not in self._quiesce_callbacks:
+            self._quiesce_callbacks.append(callback)
+
     async def begin(self, *, reason: str = "process_shutdown") -> bool:
         """Enter drain exactly once and establish the shared shutdown deadline."""
 
@@ -112,6 +119,20 @@ class SingleNodeDrainController:
                 entered = True
                 self._condition.notify_all()
         if entered:
+            for callback in tuple(self._quiesce_callbacks):
+                try:
+                    callback()
+                # error-boundary: allow-broad-catch=boundary drain admission stays closed
+                except Exception as exc:
+                    self._event(
+                        "platform.single_node.drain.teardown_failed",
+                        severity=TelemetrySeverity.ERROR,
+                        outcome=TelemetryOutcome.FAILED,
+                        attributes={
+                            "stage": "autonomous_quiesce",
+                            "detail": type(exc).__name__,
+                        },
+                    )
             self._event(
                 "platform.single_node.drain.requested",
                 attributes={
@@ -126,6 +147,10 @@ class SingleNodeDrainController:
                     "mutable_admission": "disabled",
                     "active_mutations": self._active_mutations,
                 },
+            )
+            self._event(
+                "platform.single_node.drain.mutable_admission_disabled",
+                attributes={"active_mutations": self._active_mutations},
             )
             self._metric_active_mutations(disposition="in_flight_at_drain_entry")
         return entered
@@ -164,7 +189,7 @@ class SingleNodeDrainController:
             self._metric_active_mutations(disposition="completed_during_drain")
             return True
 
-        await self.mark_forced("in_flight_mutation_timeout")
+        await self.mark_forced("in_flight_mutation_timeout", timed_out=True)
         self._metric_active_mutations(disposition="deferred_to_startup_reconciliation")
         return False
 
@@ -173,7 +198,7 @@ class SingleNodeDrainController:
             return self.timeout_seconds
         return max(0.0, self._remaining_seconds())
 
-    async def mark_forced(self, reason: str) -> None:
+    async def mark_forced(self, reason: str, *, timed_out: bool = False) -> None:
         newly_forced = False
         async with self._condition:
             if not self._forced:
@@ -182,15 +207,26 @@ class SingleNodeDrainController:
                 newly_forced = True
                 self._condition.notify_all()
         if newly_forced:
+            outcome = TelemetryOutcome.TIMED_OUT if timed_out else TelemetryOutcome.FAILED
             self._event(
-                "platform.single_node.drain.timeout",
+                "platform.single_node.drain.forced",
                 severity=TelemetrySeverity.WARNING,
-                outcome=TelemetryOutcome.TIMED_OUT,
+                outcome=outcome,
                 attributes={
                     "reason": reason,
                     "active_mutations": self._active_mutations,
                 },
             )
+            if timed_out:
+                self._event(
+                    "platform.single_node.drain.timeout",
+                    severity=TelemetrySeverity.WARNING,
+                    outcome=TelemetryOutcome.TIMED_OUT,
+                    attributes={
+                        "reason": reason,
+                        "active_mutations": self._active_mutations,
+                    },
+                )
 
     async def mark_teardown_failure(self, detail: str) -> None:
         self._event(
@@ -411,7 +447,7 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
         try:
             await asyncio.wait_for(asyncio.shield(inner_task), timeout=remaining)
         except TimeoutError:
-            await self._drain.mark_forced("resource_teardown_timeout")
+            await self._drain.mark_forced("resource_teardown_timeout", timed_out=True)
             inner_task.cancel()
             try:
                 await inner_task
