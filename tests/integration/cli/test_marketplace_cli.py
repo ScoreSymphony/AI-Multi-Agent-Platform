@@ -602,7 +602,7 @@ def test_marketplace_future_kind_matches_core_control_plane_and_cli(
             HTTPRequest(
                 method="POST",
                 path="/api/v1/commands/marketplace.preview",
-                headers={**headers, "idempotency-key": "api-preview"},
+                headers={**headers, "content-type": "application/json", "idempotency-key": "api-preview"},
                 query={},
                 body=preview_body,
             )
