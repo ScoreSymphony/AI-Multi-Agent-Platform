@@ -121,7 +121,10 @@ def test_shipped_application_commands_are_durably_audited_and_observable(tmp_pat
         listed = await deployment.control_plane.list_extension_resources(
             _context(account.user_id, "application-audit-list"),
             APPLICATION_AUDIT_COLLECTION,
-            PageQuery(filters={"application_id": manifest.application_id}),
+            PageQuery(
+                sort="occurred_at",
+                filters={"application_id": manifest.application_id},
+            ),
         )
         resources = listed["items"]
         assert isinstance(resources, list)
