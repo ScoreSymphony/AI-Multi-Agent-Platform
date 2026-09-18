@@ -171,6 +171,7 @@ __all__ = [
     "application_control_plane_module",
     "application_log_control_plane_module",
     "application_manifest_from_document",
+    "detect_local_application_host_profile",
     "application_resource_handler_module",
     "register_application_audit_control_plane",
     "register_application_control_plane",
