@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from pathlib import Path
 
 import pytest
 
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.distribution import (
     DistributionRoute,
     DistributionService,
@@ -13,11 +15,13 @@ from ai_multi_agent_platform.distribution import (
     MarketplaceKindDescriptor,
     MarketplaceKindHandlerRegistry,
     MarketplaceKindRegistry,
+    MultiRegistryProvider,
     RegistryItem,
     RegistryItemType,
     RegistryManifestReference,
     RegistryQuery,
     RegistrySource,
+    RegistrySourceConflictError,
     TrustStatus,
     ValidationContext,
     marketplace_kind_registry_with_builtins,
@@ -85,6 +89,35 @@ def test_builtin_marketplace_kinds_include_new_first_class_families() -> None:
     assert (
         registry.require(RegistryItemType.TOOL).default_route is DistributionRoute.PORTABLE_IMPORT
     )
+    assert (
+        registry.require(RegistryItemType.CONNECTOR).default_route
+        is DistributionRoute.PORTABLE_IMPORT
+    )
+    assert registry.require(RegistryItemType.APPLICATION).supports_update is False
+
+
+def test_manifest_backed_tool_and_connector_use_owner_handlers_and_preserve_legacy_routes() -> None:
+    tool = _item(
+        RegistryItemType.TOOL,
+        manifest=RegistryManifestReference(kind="tool", reference="tools/example.json"),
+    )
+    connector = _item(
+        RegistryItemType.CONNECTOR,
+        manifest=RegistryManifestReference(
+            kind="connector",
+            reference="connectors/example.json",
+        ),
+    )
+    legacy_tool = _item(RegistryItemType.TOOL, item_id="example.legacy-tool")
+    legacy_connector = _item(
+        RegistryItemType.CONNECTOR,
+        item_id="example.legacy-connector",
+    )
+
+    assert tool.route is DistributionRoute.KIND_HANDLER
+    assert connector.route is DistributionRoute.KIND_HANDLER
+    assert legacy_tool.route is DistributionRoute.PORTABLE_IMPORT
+    assert legacy_connector.route is DistributionRoute.PORTABLE_IMPORT
 
 
 def test_new_marketplace_kind_can_be_registered_without_enum_change() -> None:
@@ -213,7 +246,7 @@ class RecordingApplicationHandler:
         self.calls.append(("uninstall", item.item_id))
         return None
 
-    def status(self, item: RegistryItem) -> object:
+    async def status(self, item: RegistryItem) -> object:
         return {"item_id": item.item_id}
 
     def describe(self, item: RegistryItem) -> dict[str, object]:
@@ -244,6 +277,97 @@ def test_distribution_service_dispatches_application_to_registered_owner_handler
     assert handler.calls == [("install", item.item_id)]
 
 
+def test_owner_inspection_uses_persisted_source_for_ambiguous_catalog_identity(
+    tmp_path: Path,
+) -> None:
+    item = _item(
+        RegistryItemType.APPLICATION,
+        manifest=RegistryManifestReference(
+            kind="application",
+            reference="applications/example.json",
+        ),
+    )
+    official = LocalRegistryProvider((item,), provider_id="official")
+    private = LocalRegistryProvider((item,), provider_id="private")
+    provider = MultiRegistryProvider((official, private))
+    with pytest.raises(RegistrySourceConflictError):
+        provider.get(item.item_id, item.version)
+
+    sourced = provider.get_from_source("official", item.item_id, item.version)
+    installations = JsonRegistryInstallationStore(tmp_path / "source-qualified.json")
+    installations.record(
+        sourced,
+        provider_id="official",
+        artifact_sha256="0" * 64,
+    )
+
+    class SourceRecordingHandler(RecordingApplicationHandler):
+        def inspect_requirements(self, item: RegistryItem) -> dict[str, object]:
+            return {"source_registry": item.source_registry}
+
+        async def status(self, item: RegistryItem) -> object:
+            return {"source_registry": item.source_registry}
+
+        def describe(self, item: RegistryItem) -> dict[str, object]:
+            return {"source_registry": item.source_registry}
+
+    service = DistributionService(
+        provider,
+        installations=installations,
+        kind_handlers=MarketplaceKindHandlerRegistry((SourceRecordingHandler(),)),
+    )
+
+    assert service.inspect_requirements(item.item_id)["source_registry"] == "official"
+    assert service.describe(item.item_id)["source_registry"] == "official"
+    assert asyncio.run(service.status(item.item_id))["source_registry"] == "official"
+
+
+def test_same_version_source_change_is_treated_as_owner_update(
+    tmp_path: Path,
+) -> None:
+    item = _item(
+        RegistryItemType.APPLICATION,
+        manifest=RegistryManifestReference(
+            kind="application",
+            reference="applications/example.json",
+        ),
+    )
+    artifact = b"application-manifest"
+    official = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+        provider_id="official",
+    )
+    private = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+        provider_id="private",
+    )
+    provider = MultiRegistryProvider((official, private))
+    sourced = provider.get_from_source("official", item.item_id, item.version)
+    installations = JsonRegistryInstallationStore(tmp_path / "source-switch.json")
+    installations.record(
+        sourced,
+        provider_id="official",
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+    service = DistributionService(
+        provider,
+        installations=installations,
+        kind_handlers=MarketplaceKindHandlerRegistry((RecordingApplicationHandler(),)),
+    )
+
+    preview = service.preview(
+        item.item_id,
+        item.version,
+        ValidationContext("0.0.1"),
+        source_registry="private",
+    )
+
+    assert preview.activation_allowed is False
+    assert any(finding.code == "unsupported_operation" for finding in preview.findings)
+
+
 def test_kind_handler_route_is_not_installable_without_owner_handler() -> None:
     item = _item(RegistryItemType.SKILL)
     provider = LocalRegistryProvider((item,), {(item.item_id, item.version): b"skill"})
@@ -253,3 +377,28 @@ def test_kind_handler_route_is_not_installable_without_owner_handler() -> None:
 
     assert preview.route is DistributionRoute.KIND_HANDLER
     assert preview.activation_allowed is False
+
+
+def test_portable_template_route_remains_unchanged() -> None:
+    registry = marketplace_kind_registry_with_builtins()
+    assert (
+        registry.require(RegistryItemType.TEMPLATE).default_route
+        is DistributionRoute.PORTABLE_IMPORT
+    )
+    assert (
+        registry.require(RegistryItemType.WORKFLOW).default_route
+        is DistributionRoute.PORTABLE_IMPORT
+    )
+
+
+def test_missing_kind_handler_fails_with_typed_owner_capability_error() -> None:
+    item = _item(RegistryItemType.SKILL)
+    provider = LocalRegistryProvider((item,), {(item.item_id, item.version): b"skill"})
+    service = DistributionService(provider)
+    context = ValidationContext("0.0.1")
+    preview = service.preview(item.item_id, item.version, context)
+
+    with pytest.raises(ContractError) as missing:
+        asyncio.run(service.activate(preview, context, authorized=True))
+
+    assert missing.value.code is ErrorCode.UNSUPPORTED_CAPABILITY

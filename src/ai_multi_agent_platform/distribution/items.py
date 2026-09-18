@@ -109,6 +109,11 @@ class RegistryItem:
             return self.distribution_route
         if self.item_type is RegistryItemType.APPLICATION and self.manifest is None:
             return DistributionRoute.MANUAL
+        if self.manifest is not None and self.item_type in {
+            RegistryItemType.TOOL,
+            RegistryItemType.CONNECTOR,
+        }:
+            return DistributionRoute.KIND_HANDLER
         descriptor = builtin_marketplace_kind(self.item_type)
         if descriptor is not None:
             return descriptor.default_route

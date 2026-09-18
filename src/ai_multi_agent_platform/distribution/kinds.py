@@ -83,7 +83,10 @@ BUILTIN_MARKETPLACE_KINDS: tuple[MarketplaceKindDescriptor, ...] = (
         RegistryItemType.CONNECTOR, "Connector", DistributionRoute.PORTABLE_IMPORT
     ),
     MarketplaceKindDescriptor(
-        RegistryItemType.APPLICATION, "Application", DistributionRoute.KIND_HANDLER
+        RegistryItemType.APPLICATION,
+        "Application",
+        DistributionRoute.KIND_HANDLER,
+        supports_update=False,
     ),
     MarketplaceKindDescriptor(
         RegistryItemType.EVALUATION, "Evaluation", DistributionRoute.PORTABLE_IMPORT

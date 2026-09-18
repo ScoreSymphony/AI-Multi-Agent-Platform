@@ -52,6 +52,38 @@ class ApplicationRuntimeRegistry:
     def list_runtime_ids(self) -> tuple[str, ...]:
         return tuple(sorted(self._runtimes))
 
+    def select_runtime_id(self, manifest: ApplicationManifest) -> str:
+        """Select an unambiguous runtime capable of preparing the manifest.
+
+        Placement/runtime compatibility remains owned by the Application domain. Callers such as
+        Marketplace adapters may request a selection but must not reproduce runtime capability
+        matching themselves.
+        """
+
+        service_runtimes = {service.runtime for service in manifest.services}
+        candidates = tuple(
+            sorted(
+                runtime_id
+                for runtime_id, runtime in self._runtimes.items()
+                if service_runtimes.issubset(runtime.descriptor.supported_service_runtimes)
+                and set(manifest.runtime_requirements).issubset(runtime.descriptor.capabilities)
+            )
+        )
+        if not candidates:
+            raise ContractError(
+                ErrorCode.UNSUPPORTED_CAPABILITY,
+                "no registered application runtime can satisfy the manifest",
+                details={"application_id": manifest.application_id, "version": manifest.version},
+            )
+        if len(candidates) > 1:
+            candidate_values: list[JsonValue] = [runtime_id for runtime_id in candidates]
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "application runtime selection is ambiguous",
+                details={"runtime_ids": candidate_values},
+            )
+        return candidates[0]
+
 
 @dataclass(frozen=True, slots=True)
 class ApplicationRecoveryFailure:

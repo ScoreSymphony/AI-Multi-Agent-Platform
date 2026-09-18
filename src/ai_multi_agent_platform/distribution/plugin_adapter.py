@@ -1,4 +1,4 @@
-"""Canonical #20 owner adapter for verified Registry plugin manifests."""
+"""Canonical plugin-owner adapter for verified Registry plugin manifests."""
 
 from __future__ import annotations
 
@@ -22,18 +22,20 @@ from .items import RegistryItem
 
 
 class PluginRegistryArtifactInstaller:
-    """Install or explicitly update a verified manifest through the canonical #20 owner."""
+    """Install or explicitly update a verified manifest through the canonical plugin owner."""
 
     def __init__(self, registry: PluginRegistry) -> None:
         self._registry = registry
 
-    async def install_verified_plugin(self, item: RegistryItem, artifact: bytes) -> object:
+    def validated_manifest(self, item: RegistryItem, artifact: bytes) -> PluginManifest:
+        """Validate a Registry artifact against the canonical plugin manifest contract."""
+
         try:
             document = json.loads(artifact.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                "registry plugin artifact must be a UTF-8 JSON #20 manifest",
+                "registry plugin artifact must be a UTF-8 JSON canonical plugin manifest",
             ) from exc
         validate_manifest_document(document)
         if not isinstance(document, dict):
@@ -56,6 +58,10 @@ class PluginRegistryArtifactInstaller:
                 ErrorCode.CONFLICT,
                 "registry license does not match plugin manifest provenance license",
             )
+        return manifest
+
+    async def install_verified_plugin(self, item: RegistryItem, artifact: bytes) -> object:
+        manifest = self.validated_manifest(item, artifact)
         install_source = f"registry:{item.source.repository}@{item.version}"
         try:
             current = self._registry.get(manifest.plugin_id)
@@ -64,6 +70,11 @@ class PluginRegistryArtifactInstaller:
                 raise
         else:
             if current.plugin_version == manifest.plugin_version:
+                if self._registry.manifest(manifest.plugin_id) != manifest:
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        "installed plugin manifest differs from Registry artifact at same version",
+                    )
                 return current
             return self._registry.apply_update(
                 manifest.plugin_id,

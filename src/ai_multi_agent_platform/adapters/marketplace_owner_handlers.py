@@ -1,0 +1,455 @@
+"""Outer adapters from Marketplace component kinds to canonical owner domains.
+
+The Marketplace owns metadata and distribution handoff only.  These adapters deliberately keep
+runtime/lifecycle authority in Skills, Plugins/Capabilities/Connectors and Applications.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+
+from jsonschema.exceptions import ValidationError  # type: ignore[import-untyped]
+
+from ai_multi_agent_platform.applications import (
+    Application,
+    ApplicationInstallRequest,
+    ApplicationInstance,
+    ApplicationLifecycleService,
+    ApplicationManifest,
+    ApplicationObservedState,
+    ApplicationRepository,
+    ApplicationRuntimeRegistry,
+    application_manifest_from_document,
+)
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.distribution import PluginRegistryArtifactInstaller
+from ai_multi_agent_platform.distribution.items import RegistryItem
+from ai_multi_agent_platform.distribution.models import RegistryItemType
+from ai_multi_agent_platform.domain import Provenance
+from ai_multi_agent_platform.plugins import ExtensionType, PluginManifest, PluginRegistry
+from ai_multi_agent_platform.skills.codec import skill_revision_from_json
+from ai_multi_agent_platform.skills.models import SkillRevision
+from ai_multi_agent_platform.skills.service import SkillService
+
+
+def _requirements(item: RegistryItem, *, owner_domain: str) -> dict[str, object]:
+    return {
+        "owner_domain": owner_domain,
+        "requested_permissions": tuple(sorted(item.requested_permissions)),
+        "required_capabilities": tuple(sorted(item.required_capabilities)),
+        "required_plugins": tuple(item.required_plugins),
+        "required_connectors": tuple(item.required_connectors),
+        "required_models": tuple(item.required_models),
+    }
+
+
+def _json_object(artifact: bytes, *, label: str) -> dict[str, object]:
+    try:
+        value = json.loads(artifact.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            f"{label} artifact must be a UTF-8 JSON object",
+        ) from exc
+    if not isinstance(value, dict):
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            f"{label} artifact must be a JSON object",
+        )
+    return value
+
+
+class PluginMarketplaceKindHandler:
+    """Expose existing Plugin owner operations without replacing the legacy install route."""
+
+    kind = RegistryItemType.PLUGIN
+
+    def __init__(
+        self,
+        installer: PluginRegistryArtifactInstaller,
+        registry: PluginRegistry,
+    ) -> None:
+        self._installer = installer
+        self._registry = registry
+
+    def inspect_requirements(self, item: RegistryItem) -> Mapping[str, object]:
+        return _requirements(item, owner_domain="plugins")
+
+    async def install(self, item: RegistryItem, artifact: bytes) -> object:
+        return await self._installer.install_verified_plugin(item, artifact)
+
+    async def update(self, item: RegistryItem, artifact: bytes) -> object:
+        return await self._installer.install_verified_plugin(item, artifact)
+
+    async def uninstall(self, item: RegistryItem) -> object:
+        self._registry.remove(item.item_id)
+        return None
+
+    async def status(self, item: RegistryItem) -> object:
+        return self._registry.get(item.item_id)
+
+    def describe(self, item: RegistryItem) -> Mapping[str, object]:
+        manifest = self._registry.manifest(item.item_id)
+        return {
+            "owner_domain": "plugins",
+            "plugin_id": manifest.plugin_id,
+            "plugin_version": manifest.plugin_version,
+            "extension_types": tuple(
+                sorted({extension.extension_type.value for extension in manifest.extensions})
+            ),
+        }
+
+
+class PluginExtensionMarketplaceKindHandler:
+    """Install Tool/Connector provider packages through the existing Plugin owner.
+
+    Installation/update/removal remain canonical Plugin lifecycle operations.  On enable, the normal
+    Plugin binders hand provider instances to CapabilityRegistry or ConnectorService; this adapter
+    never owns provider runtime state itself.
+    """
+
+    def __init__(
+        self,
+        *,
+        kind: RegistryItemType,
+        extension_type: ExtensionType,
+        installer: PluginRegistryArtifactInstaller,
+        registry: PluginRegistry,
+    ) -> None:
+        if kind not in {RegistryItemType.TOOL, RegistryItemType.CONNECTOR}:
+            raise ValueError("plugin-backed Marketplace handler supports only tool/connector kinds")
+        self._kind = kind
+        self._extension_type = extension_type
+        self._installer = installer
+        self._registry = registry
+
+    @property
+    def kind(self) -> RegistryItemType:
+        return self._kind
+
+    def inspect_requirements(self, item: RegistryItem) -> Mapping[str, object]:
+        return {
+            **_requirements(item, owner_domain="plugins"),
+            "required_extension_type": self._extension_type.value,
+        }
+
+    def _validated_manifest(self, item: RegistryItem, artifact: bytes) -> PluginManifest:
+        manifest = self._installer.validated_manifest(item, artifact)
+        if not any(
+            extension.extension_type is self._extension_type for extension in manifest.extensions
+        ):
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                (
+                    f"{item.kind} Marketplace artifact must declare at least one "
+                    f"{self._extension_type.value} extension"
+                ),
+            )
+        return manifest
+
+    async def install(self, item: RegistryItem, artifact: bytes) -> object:
+        self._validated_manifest(item, artifact)
+        return await self._installer.install_verified_plugin(item, artifact)
+
+    async def update(self, item: RegistryItem, artifact: bytes) -> object:
+        self._validated_manifest(item, artifact)
+        return await self._installer.install_verified_plugin(item, artifact)
+
+    async def uninstall(self, item: RegistryItem) -> object:
+        self._registry.remove(item.item_id)
+        return None
+
+    async def status(self, item: RegistryItem) -> object:
+        return self._registry.get(item.item_id)
+
+    def describe(self, item: RegistryItem) -> Mapping[str, object]:
+        manifest = self._registry.manifest(item.item_id)
+        return {
+            "owner_domain": "plugins",
+            "plugin_id": manifest.plugin_id,
+            "plugin_version": manifest.plugin_version,
+            "extension_type": self._extension_type.value,
+            "extensions": tuple(
+                extension.extension_id
+                for extension in manifest.extensions
+                if extension.extension_type is self._extension_type
+            ),
+        }
+
+
+class SkillMarketplaceKindHandler:
+    """Delegate Skill releases to the canonical SkillService revision lifecycle."""
+
+    kind = RegistryItemType.SKILL
+
+    def __init__(self, service: SkillService) -> None:
+        self._service = service
+
+    def inspect_requirements(self, item: RegistryItem) -> Mapping[str, object]:
+        return _requirements(item, owner_domain="skills")
+
+    @staticmethod
+    def _decode(item: RegistryItem, artifact: bytes) -> SkillRevision:
+        revision = skill_revision_from_json(_json_object(artifact, label="skill"))
+        source = revision.profile.source
+        if source is None:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "Marketplace Skill artifact must declare canonical third-party source metadata",
+            )
+        if source.license != item.license:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "registry license does not match Skill source license",
+            )
+        return revision
+
+    @staticmethod
+    def _source_identity(item: RegistryItem) -> str:
+        return item.source_registry or item.source.repository
+
+    @classmethod
+    def _provenance(cls, item: RegistryItem) -> Provenance:
+        return Provenance(
+            source="marketplace",
+            details={
+                "registry_item_id": item.item_id,
+                "registry_version": item.version,
+                "source_registry": cls._source_identity(item),
+                "source_repository": item.source.repository,
+                "package_reference": item.source.package_reference,
+            },
+        )
+
+    @classmethod
+    def _belongs_to_item(cls, revision: SkillRevision, item: RegistryItem) -> bool:
+        provenance = revision.provenance
+        return (
+            provenance is not None
+            and provenance.source == "marketplace"
+            and provenance.details.get("registry_item_id") == item.item_id
+            and provenance.details.get("source_registry") == cls._source_identity(item)
+        )
+
+    def _find_current(self, item: RegistryItem) -> SkillRevision:
+        matches = tuple(
+            revision
+            for revision in self._service.list_skills()
+            if self._belongs_to_item(revision, item)
+        )
+        if not matches:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"Marketplace Skill is not installed: {item.item_id}",
+            )
+        if len(matches) > 1:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"Marketplace Skill maps to multiple canonical Skills: {item.item_id}",
+            )
+        return matches[0]
+
+    async def install(self, item: RegistryItem, artifact: bytes) -> object:
+        revision = self._decode(item, artifact)
+        if revision.revision != 1:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "a new Marketplace Skill must provide canonical revision 1",
+            )
+        return self._service.create_skill(
+            revision.profile,
+            owner_ref=revision.owner_ref,
+            project_id=revision.project_id,
+            workspace_id=revision.workspace_id,
+            provenance=self._provenance(item),
+            skill_id=revision.skill_id,
+        )
+
+    async def update(self, item: RegistryItem, artifact: bytes) -> object:
+        candidate = self._decode(item, artifact)
+        current = self._service.get_skill_revision(candidate.skill_id)
+        if not self._belongs_to_item(current, item):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Marketplace Skill update does not target the installed Registry item",
+            )
+        if candidate.revision != current.revision + 1:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Marketplace Skill update must advance the canonical revision by exactly one",
+                details={
+                    "current_revision": current.revision,
+                    "candidate_revision": candidate.revision,
+                },
+            )
+        if (
+            candidate.owner_ref != current.owner_ref
+            or candidate.project_id != current.project_id
+            or candidate.workspace_id != current.workspace_id
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Marketplace Skill update cannot change canonical ownership scope",
+            )
+        return self._service.update_skill(
+            candidate.skill_id,
+            candidate.profile,
+            expected_revision=current.revision,
+            owner_ref=current.owner_ref,
+            project_id=current.project_id,
+            workspace_id=current.workspace_id,
+            provenance=self._provenance(item),
+        )
+
+    async def uninstall(self, item: RegistryItem) -> object:
+        current = self._find_current(item)
+        self._service.delete_skill(current.skill_id)
+        return None
+
+    async def status(self, item: RegistryItem) -> object:
+        return self._find_current(item)
+
+    def describe(self, item: RegistryItem) -> Mapping[str, object]:
+        current = self._find_current(item)
+        return {
+            "owner_domain": "skills",
+            "skill_id": current.skill_id,
+            "revision": current.revision,
+            "name": current.profile.name,
+            "enabled": current.profile.enabled,
+            "deprecated": current.profile.deprecated,
+            "trust_status": current.profile.trust_status.value,
+            "evaluation_status": current.profile.evaluation_status.value,
+        }
+
+
+class ApplicationMarketplaceKindHandler:
+    """Thin Marketplace adapter over the canonical Application lifecycle owner."""
+
+    kind = RegistryItemType.APPLICATION
+
+    def __init__(
+        self,
+        lifecycle: ApplicationLifecycleService,
+        repository: ApplicationRepository,
+        runtimes: ApplicationRuntimeRegistry,
+    ) -> None:
+        self._lifecycle = lifecycle
+        self._repository = repository
+        self._runtimes = runtimes
+
+    def inspect_requirements(self, item: RegistryItem) -> Mapping[str, object]:
+        return _requirements(item, owner_domain="applications")
+
+    @staticmethod
+    def _source_ref(item: RegistryItem) -> str:
+        source_identity = item.source_registry or item.source.repository
+        return f"marketplace:{source_identity}:{item.item_id}@{item.version}"
+
+    @staticmethod
+    def _decode(item: RegistryItem, artifact: bytes) -> ApplicationManifest:
+        document = _json_object(artifact, label="application")
+        try:
+            manifest = application_manifest_from_document(document)
+        except (ValidationError, ValueError) as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "invalid canonical Application manifest",
+            ) from exc
+        if manifest.version != item.version:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "registry item version does not match Application manifest version",
+            )
+        return manifest
+
+    def _find_instance(self, item: RegistryItem) -> tuple[Application, ApplicationInstance]:
+        applications = tuple(
+            application
+            for application in self._repository.list_applications()
+            if application.source_ref == self._source_ref(item)
+        )
+        if not applications:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"Marketplace Application is not installed: {item.item_id}",
+            )
+        if len(applications) > 1:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"Marketplace Application maps to multiple canonical definitions: {item.item_id}",
+            )
+        application = applications[0]
+        instances = tuple(
+            instance
+            for instance in self._repository.list_instances(
+                application_id=application.application_id
+            )
+            if instance.application_version == application.version
+            and instance.observed_state is not ApplicationObservedState.REMOVED
+        )
+        if not instances:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"Marketplace Application has no canonical instance: {item.item_id}",
+            )
+        if len(instances) > 1:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"Marketplace Application maps to multiple canonical instances: {item.item_id}",
+            )
+        return application, instances[0]
+
+    async def install(self, item: RegistryItem, artifact: bytes) -> object:
+        manifest = self._decode(item, artifact)
+        runtime_id = self._runtimes.select_runtime_id(manifest)
+        try:
+            request = ApplicationInstallRequest(manifest=manifest)
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                (
+                    "Marketplace Application install requires explicit configuration, secret or "
+                    "volume bindings that are not present in the catalog handoff"
+                ),
+            ) from exc
+        return await self._lifecycle.install(
+            request,
+            runtime_id=runtime_id,
+            source_ref=self._source_ref(item),
+        )
+
+    async def update(self, item: RegistryItem, artifact: bytes) -> object:
+        del item, artifact
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "Application owner does not expose a Marketplace version-update operation",
+        )
+
+    async def uninstall(self, item: RegistryItem) -> object:
+        _, instance = self._find_instance(item)
+        return await self._lifecycle.remove(instance.instance_id)
+
+    async def status(self, item: RegistryItem) -> object:
+        _, instance = self._find_instance(item)
+        return await self._lifecycle.status(instance.instance_id)
+
+    def describe(self, item: RegistryItem) -> Mapping[str, object]:
+        application, instance = self._find_instance(item)
+        return {
+            "owner_domain": "applications",
+            "application_id": application.application_id,
+            "application_version": application.version,
+            "runtime_id": application.runtime_id,
+            "instance_id": instance.instance_id,
+            "name": application.name,
+        }
+
+
+__all__ = [
+    "ApplicationMarketplaceKindHandler",
+    "PluginExtensionMarketplaceKindHandler",
+    "PluginMarketplaceKindHandler",
+    "SkillMarketplaceKindHandler",
+]

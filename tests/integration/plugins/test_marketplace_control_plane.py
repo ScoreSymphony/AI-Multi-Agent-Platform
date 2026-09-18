@@ -74,7 +74,7 @@ class RecordingHandler:
         self.calls.append(("uninstall", item.item_id, item.version))
         return item.item_id
 
-    def status(self, item: RegistryItem) -> object:
+    async def status(self, item: RegistryItem) -> object:
         return {"owner_state": "installed", "item_id": item.item_id}
 
     def describe(self, item: RegistryItem) -> dict[str, object]:
@@ -221,6 +221,24 @@ def _application(
             if with_manifest
             else None
         ),
+    )
+
+
+def _skill(item_id: str, version: str) -> RegistryItem:
+    return RegistryItem(
+        item_id=item_id,
+        item_type=RegistryItemType.SKILL,
+        name=f"Skill {item_id}",
+        description="Skill fixture",
+        version=version,
+        publisher="example",
+        source=_source(item_id, version),
+        license="MIT",
+        provenance="source-release",
+        trust_status=TrustStatus.REVIEWED,
+        tags=frozenset({"developer"}),
+        categories=frozenset({"skills"}),
+        released_at="2026-09-18",
     )
 
 
@@ -452,6 +470,55 @@ def test_compatible_filter_uses_full_current_environment() -> None:
     assert blocked[0]["compatibility"]["missing_runtimes"] == ["docker"]  # type: ignore[index]
 
 
+def test_plugin_route_exposes_owner_extension_and_supports_marketplace_uninstall(
+    tmp_path: Path,
+) -> None:
+    class RecordingPluginHandler(RecordingHandler):
+        kind = RegistryItemType.PLUGIN
+
+    item = RegistryItem(
+        item_id="example.plugin",
+        item_type=RegistryItemType.PLUGIN,
+        name="Plugin",
+        description="Plugin fixture",
+        version="1.0.0",
+        publisher="example",
+        source=_source("example.plugin", "1.0.0"),
+        license="MIT",
+        provenance="source-release",
+        trust_status=TrustStatus.REVIEWED,
+    )
+    provider = LocalRegistryProvider((item,))
+    store = JsonRegistryInstallationStore(tmp_path / "plugin-owner.json")
+    store.record(item, provider_id=provider.provider_id)
+    handler = RecordingPluginHandler()
+    distribution = DistributionService(
+        provider,
+        installations=store,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+
+    detail = asyncio.run(
+        RegistryResourceService(distribution).get_resource(_request(), item.item_id)
+    )
+    owner_extension = detail["owner_extension"]
+    assert isinstance(owner_extension, dict)
+    assert owner_extension["handler_available"] is True
+    assert owner_extension["status"] == {
+        "owner_state": "installed",
+        "item_id": item.item_id,
+    }
+
+    commands = RegistryCommandHandlers(
+        distribution,
+        StaticValidationContext(_context()),
+    )
+    asyncio.run(commands.marketplace_uninstall(_request(), item.item_id, {}))
+
+    assert handler.calls[-1] == ("uninstall", item.item_id, item.version)
+    assert store.get(item.item_id) is None
+
+
 def test_detail_exposes_manifest_update_state_compatibility_and_owner_extension(
     tmp_path: Path,
 ) -> None:
@@ -511,8 +578,11 @@ def test_manifestless_application_remains_manual_for_catalog_compatibility() -> 
 def test_marketplace_commands_install_update_uninstall_through_handler_and_state(
     tmp_path: Path,
 ) -> None:
-    v1 = _application("example.app", "1.0.0")
-    v2 = _application("example.app", "2.0.0")
+    class RecordingSkillHandler(RecordingHandler):
+        kind = RegistryItemType.SKILL
+
+    v1 = _skill("example.skill", "1.0.0")
+    v2 = _skill("example.skill", "2.0.0")
     provider = LocalRegistryProvider(
         (v1, v2),
         {
@@ -521,7 +591,7 @@ def test_marketplace_commands_install_update_uninstall_through_handler_and_state
         },
     )
     store = JsonRegistryInstallationStore(tmp_path / "installations.json")
-    handler = RecordingHandler()
+    handler = RecordingSkillHandler()
     distribution = DistributionService(
         provider,
         installations=store,

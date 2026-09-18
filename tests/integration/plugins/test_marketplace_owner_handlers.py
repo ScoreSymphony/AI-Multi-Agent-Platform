@@ -1,0 +1,812 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import replace
+
+import pytest
+
+from ai_multi_agent_platform.adapters.marketplace_owner_handlers import (
+    ApplicationMarketplaceKindHandler,
+    PluginExtensionMarketplaceKindHandler,
+    PluginMarketplaceKindHandler,
+    SkillMarketplaceKindHandler,
+)
+from ai_multi_agent_platform.applications import (
+    ApplicationDesiredState,
+    ApplicationHealthStatus,
+    ApplicationInstallRequest,
+    ApplicationInstance,
+    ApplicationLifecycleService,
+    ApplicationManifest,
+    ApplicationObservedState,
+    ApplicationRuntimeDescriptor,
+    ApplicationRuntimeRegistry,
+    ApplicationService,
+    ApplicationServiceRuntime,
+    InMemoryApplicationRepository,
+)
+from ai_multi_agent_platform.applications.serialization import application_manifest_to_document
+from ai_multi_agent_platform.connectors import (
+    ConnectorDefinition,
+    ConnectorRegistry,
+    ConnectorService,
+    InMemoryConnectorRepository,
+    ReferenceConnectorProvider,
+)
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.control_plane.plugin_api import _manifest_document
+from ai_multi_agent_platform.distribution import (
+    DistributionService,
+    JsonRegistryInstallationStore,
+    LocalRegistryProvider,
+    MarketplaceKindHandlerRegistry,
+    PluginRegistryArtifactInstaller,
+    RegistryItem,
+    RegistryItemType,
+    RegistryManifestReference,
+    RegistryPluginReconciliationError,
+    RegistrySource,
+    TrustStatus,
+    ValidationContext,
+    reconcile_registry_plugins,
+)
+from ai_multi_agent_platform.domain import OwnerRef, new_id
+from ai_multi_agent_platform.plugins import (
+    ConnectorRegistryBinder,
+    ExtensionRegistration,
+    ExtensionType,
+    PluginExtensionSpec,
+    PluginRegistry,
+    reference_manifest,
+)
+from ai_multi_agent_platform.skills.codec import skill_revision_to_json
+from ai_multi_agent_platform.skills.models import (
+    SkillContent,
+    SkillProfile,
+    SkillRevision,
+    SkillSource,
+    SkillTrustStatus,
+)
+from ai_multi_agent_platform.skills.repository import InMemorySkillRepository
+from ai_multi_agent_platform.skills.service import SkillService
+
+pytestmark = pytest.mark.asyncio
+
+
+def _item(
+    item_type: RegistryItemType,
+    *,
+    item_id: str,
+    version: str,
+    license_name: str = "MIT",
+    manifest: bool = False,
+) -> RegistryItem:
+    return RegistryItem(
+        item_id=item_id,
+        item_type=item_type,
+        name=f"Marketplace {item_type.value}",
+        description=f"Marketplace {item_type.value} fixture",
+        version=version,
+        publisher="example",
+        source=RegistrySource(
+            "https://example.invalid/marketplace",
+            f"{item_id}@{version}",
+        ),
+        license=license_name,
+        provenance="test-release",
+        trust_status=TrustStatus.REVIEWED,
+        manifest=(
+            RegistryManifestReference(
+                kind=item_type,
+                reference=f"manifests/{item_type.value}.json",
+                schema_version="1",
+            )
+            if manifest
+            else None
+        ),
+    )
+
+
+def _plugin_artifact(manifest) -> bytes:
+    return json.dumps(_manifest_document(manifest), sort_keys=True).encode("utf-8")
+
+
+class _PluginRouter:
+    def __init__(self, installer: PluginRegistryArtifactInstaller) -> None:
+        self._installer = installer
+        self.plugin_install_calls = 0
+
+    async def install_plugin(self, item: RegistryItem, artifact: bytes) -> object:
+        self.plugin_install_calls += 1
+        return await self._installer.install_verified_plugin(item, artifact)
+
+    async def import_portable(self, item: RegistryItem, artifact: bytes) -> object:
+        del item, artifact
+        raise AssertionError("Plugin compatibility test must not use portable import")
+
+
+async def test_plugin_activation_keeps_legacy_route_and_owner_handler_adds_status_remove(
+    tmp_path,
+) -> None:
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+    )
+    installer = PluginRegistryArtifactInstaller(plugin_registry)
+    router = _PluginRouter(installer)
+    handler = PluginMarketplaceKindHandler(installer, plugin_registry)
+    manifest = reference_manifest()
+    item = _item(
+        RegistryItemType.PLUGIN,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+    )
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): _plugin_artifact(manifest)},
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "plugin-installations.json")
+    service = DistributionService(
+        provider,
+        router,
+        installations=installations,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    context = ValidationContext("0.0.1")
+
+    preview = service.preview(item.item_id, item.version, context)
+    assert preview.route.value == "plugin"
+
+    installed = await service.activate(preview, context, authorized=True)
+    assert router.plugin_install_calls == 1
+    assert installed.plugin_id == item.item_id
+    assert (await service.status(item.item_id)).plugin_id == item.item_id
+    assert service.describe(item.item_id)["owner_domain"] == "plugins"
+
+    await service.uninstall(item.item_id, authorized=True)
+    assert installations.get(item.item_id) is None
+    with pytest.raises(ContractError) as missing:
+        plugin_registry.get(item.item_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
+
+
+async def test_plugin_installer_rejects_same_version_manifest_drift() -> None:
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+    )
+    installer = PluginRegistryArtifactInstaller(plugin_registry)
+    manifest = reference_manifest()
+    item = _item(
+        RegistryItemType.PLUGIN,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+    )
+
+    await installer.install_verified_plugin(item, _plugin_artifact(manifest))
+
+    with pytest.raises(ContractError) as drift:
+        await installer.install_verified_plugin(
+            item,
+            _plugin_artifact(
+                replace(
+                    manifest,
+                    description="Conflicting manifest for the same published version",
+                )
+            ),
+        )
+
+    assert drift.value.code is ErrorCode.CONFLICT
+
+
+async def test_tool_handler_uses_plugin_owner_for_full_package_lifecycle(tmp_path) -> None:
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+    )
+    installer = PluginRegistryArtifactInstaller(plugin_registry)
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.TOOL,
+        extension_type=ExtensionType.CAPABILITY_PROVIDER,
+        installer=installer,
+        registry=plugin_registry,
+    )
+
+    first_manifest = reference_manifest()
+    second_manifest = replace(first_manifest, plugin_version="1.1.0")
+    first = _item(
+        RegistryItemType.TOOL,
+        item_id=first_manifest.plugin_id,
+        version=first_manifest.plugin_version,
+        license_name=first_manifest.provenance.license,
+        manifest=True,
+    )
+    second = _item(
+        RegistryItemType.TOOL,
+        item_id=second_manifest.plugin_id,
+        version=second_manifest.plugin_version,
+        license_name=second_manifest.provenance.license,
+        manifest=True,
+    )
+    provider = LocalRegistryProvider(
+        (first, second),
+        {
+            (first.item_id, first.version): _plugin_artifact(first_manifest),
+            (second.item_id, second.version): _plugin_artifact(second_manifest),
+        },
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "installations.json")
+    service = DistributionService(
+        provider,
+        installations=installations,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    context = ValidationContext("0.0.1")
+
+    first_preview = service.preview(first.item_id, first.version, context)
+    assert first_preview.activation_allowed is True
+    installed = await service.activate(first_preview, context, authorized=True)
+    assert installed.plugin_version == "1.0.0"
+
+    status = await service.status(first.item_id)
+    assert status.plugin_version == "1.0.0"
+    assert service.describe(first.item_id)["owner_domain"] == "plugins"
+
+    second_preview = service.preview(second.item_id, second.version, context)
+    assert second_preview.activation_allowed is True
+    updated = await service.activate(second_preview, context, authorized=True)
+    assert updated.plugin_version == "1.1.0"
+
+    await service.uninstall(second.item_id, authorized=True)
+    assert installations.get(second.item_id) is None
+    with pytest.raises(ContractError) as missing:
+        plugin_registry.get(second.item_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
+
+
+async def test_manifest_backed_tool_reconciles_into_plugin_owner_after_restart(
+    tmp_path,
+) -> None:
+    manifest = reference_manifest()
+    item = _item(
+        RegistryItemType.TOOL,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    artifact = _plugin_artifact(manifest)
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "restart-installations.json")
+    installations.record(
+        item,
+        provider_id=provider.provider_id,
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+    )
+
+    restored = await reconcile_registry_plugins(provider, installations, plugin_registry)
+
+    assert restored == (item.item_id,)
+    assert plugin_registry.get(item.item_id).plugin_version == item.version
+
+
+async def test_reconciliation_rejects_same_version_with_different_owner_manifest(
+    tmp_path,
+) -> None:
+    manifest = reference_manifest()
+    item = _item(
+        RegistryItemType.TOOL,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    artifact = _plugin_artifact(manifest)
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "owner-drift-installations.json")
+    installations.record(
+        item,
+        provider_id=provider.provider_id,
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+    )
+    plugin_registry.install(
+        replace(manifest, description="Conflicting pre-existing owner manifest"),
+        install_source="manual:test",
+    )
+
+    with pytest.raises(
+        RegistryPluginReconciliationError,
+        match="expected version with a different manifest",
+    ):
+        await reconcile_registry_plugins(provider, installations, plugin_registry)
+
+
+async def test_portable_tool_installation_is_not_reconciled_as_plugin_package(tmp_path) -> None:
+    item = _item(
+        RegistryItemType.TOOL,
+        item_id="example.portable-tool",
+        version="1.0.0",
+    )
+    artifact = b"portable-tool"
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "portable-installations.json")
+    installations.record(
+        item,
+        provider_id=provider.provider_id,
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+    )
+
+    restored = await reconcile_registry_plugins(provider, installations, plugin_registry)
+
+    assert restored == ()
+    with pytest.raises(ContractError) as missing:
+        plugin_registry.get(item.item_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
+
+
+class _FailingConnectorDefinitionRepository(InMemoryConnectorRepository):
+    async def save_definition(self, definition: ConnectorDefinition) -> ConnectorDefinition:
+        del definition
+        raise RuntimeError("definition persistence failed")
+
+
+async def test_connector_binder_rolls_back_partial_runtime_registration() -> None:
+    registry = ConnectorRegistry()
+    service = ConnectorService(_FailingConnectorDefinitionRepository(), registry)
+    binder = ConnectorRegistryBinder(service)
+    provider = ReferenceConnectorProvider()
+    registration = ExtensionRegistration(
+        spec=PluginExtensionSpec(
+            extension_id="reference.connector_provider",
+            extension_type=ExtensionType.CONNECTOR_PROVIDER,
+            interface_version="1.0",
+            entrypoint="tests:connector",
+        ),
+        instance=provider,
+    )
+
+    with pytest.raises(RuntimeError, match="definition persistence failed"):
+        await binder.register(registration)
+
+    assert registry.definitions() == ()
+
+
+async def test_connector_handler_requires_connector_provider_extension() -> None:
+    base = reference_manifest()
+    connector_manifest = replace(
+        base,
+        plugin_id="reference.connector-plugin",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="reference.connector",
+                extension_type=ExtensionType.CONNECTOR_PROVIDER,
+            ),
+        ),
+        capabilities=(),
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CONNECTOR_PROVIDER: frozenset({"1.0"})},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.CONNECTOR,
+        extension_type=ExtensionType.CONNECTOR_PROVIDER,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.CONNECTOR,
+        item_id=connector_manifest.plugin_id,
+        version=connector_manifest.plugin_version,
+        license_name=connector_manifest.provenance.license,
+        manifest=True,
+    )
+
+    snapshot = await handler.install(item, _plugin_artifact(connector_manifest))
+
+    assert snapshot.plugin_id == connector_manifest.plugin_id
+    assert (await handler.status(item)).plugin_id == connector_manifest.plugin_id
+    assert handler.describe(item)["extension_type"] == "connector_provider"
+
+    wrong = replace(
+        connector_manifest,
+        plugin_id="reference.not-a-connector",
+        extensions=(base.extensions[0],),
+    )
+    wrong_item = _item(
+        RegistryItemType.CONNECTOR,
+        item_id=wrong.plugin_id,
+        version=wrong.plugin_version,
+        license_name=wrong.provenance.license,
+        manifest=True,
+    )
+    with pytest.raises(ContractError) as unsupported:
+        await handler.install(wrong_item, _plugin_artifact(wrong))
+    assert unsupported.value.code is ErrorCode.INVALID_CONFIGURATION
+
+
+async def test_skill_handler_delegates_revisions_and_removal_to_skill_service(tmp_path) -> None:
+    skills = SkillService(InMemorySkillRepository())
+    handler = SkillMarketplaceKindHandler(skills)
+    first = _item(
+        RegistryItemType.SKILL,
+        item_id="catalog.review-skill",
+        version="1.0.0",
+    )
+    second = replace(
+        first,
+        version="1.1.0",
+        source=RegistrySource(
+            first.source.repository,
+            "catalog.review-skill@1.1.0",
+        ),
+    )
+    owner = OwnerRef(type="user", id="marketplace-skill-owner")
+    first_revision = SkillRevision(
+        skill_id=new_id("skill"),
+        revision=1,
+        profile=SkillProfile(
+            name="Marketplace review",
+            purpose_categories=("review",),
+            content=SkillContent(content="review v1"),
+            source=SkillSource(
+                source_url="https://example.invalid/upstream-skill",
+                source_revision="source-rev-1",
+                license="MIT",
+            ),
+            trust_status=SkillTrustStatus.DISCOVERED,
+            enabled=False,
+        ),
+        owner_ref=owner,
+    )
+    second_revision = SkillRevision(
+        skill_id=first_revision.skill_id,
+        revision=2,
+        profile=replace(first_revision.profile, content=SkillContent(content="review v2")),
+        owner_ref=owner,
+    )
+    first_artifact = json.dumps(skill_revision_to_json(first_revision), sort_keys=True).encode()
+    second_artifact = json.dumps(skill_revision_to_json(second_revision), sort_keys=True).encode()
+    provider = LocalRegistryProvider(
+        (first, second),
+        {
+            (first.item_id, first.version): first_artifact,
+            (second.item_id, second.version): second_artifact,
+        },
+    )
+    service = DistributionService(
+        provider,
+        installations=JsonRegistryInstallationStore(tmp_path / "skills-installations.json"),
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    context = ValidationContext("0.0.1")
+
+    installed = await service.activate(
+        service.preview(first.item_id, first.version, context),
+        context,
+        authorized=True,
+    )
+    assert installed.revision == 1
+    assert (await service.status(first.item_id)).revision == 1
+    assert service.describe(first.item_id)["skill_id"] == first_revision.skill_id
+
+    updated = await service.activate(
+        service.preview(second.item_id, second.version, context),
+        context,
+        authorized=True,
+    )
+    assert updated.revision == 2
+
+    await service.uninstall(second.item_id, authorized=True)
+    with pytest.raises(ContractError) as missing:
+        skills.get_skill_revision(first_revision.skill_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
+
+
+class _ApplicationRuntime:
+    descriptor = ApplicationRuntimeDescriptor(
+        runtime_id="test.process",
+        supported_service_runtimes=frozenset({ApplicationServiceRuntime.PROCESS}),
+    )
+
+    async def prepare(self, request: ApplicationInstallRequest) -> ApplicationInstance:
+        return ApplicationInstance(
+            application_id=request.manifest.application_id,
+            application_version=request.manifest.version,
+            runtime_id=self.descriptor.runtime_id,
+            desired_state=ApplicationDesiredState.STOPPED,
+            observed_state=ApplicationObservedState.STOPPED,
+            health=ApplicationHealthStatus.UNKNOWN,
+            configuration=request.resolved_configuration(),
+            secret_bindings=request.secret_bindings,
+            volume_bindings=request.volume_bindings,
+        )
+
+    async def status(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> ApplicationInstance:
+        del manifest
+        return instance
+
+    async def remove(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> ApplicationInstance:
+        del manifest
+        return replace(
+            instance,
+            desired_state=ApplicationDesiredState.REMOVED,
+            observed_state=ApplicationObservedState.REMOVED,
+        )
+
+
+async def test_skill_handler_keeps_marketplace_sources_distinct() -> None:
+    skills = SkillService(InMemorySkillRepository())
+    handler = SkillMarketplaceKindHandler(skills)
+    official = replace(
+        _item(
+            RegistryItemType.SKILL,
+            item_id="catalog.shared-skill",
+            version="1.0.0",
+        ),
+        source_registry="official",
+    )
+    private = replace(official, source_registry="private")
+    revision = SkillRevision(
+        skill_id=new_id("skill"),
+        revision=1,
+        profile=SkillProfile(
+            name="Shared Marketplace skill",
+            purpose_categories=("review",),
+            content=SkillContent(content="shared skill"),
+            source=SkillSource(
+                source_url="https://example.invalid/shared-skill",
+                source_revision="source-rev-1",
+                license="MIT",
+            ),
+            trust_status=SkillTrustStatus.DISCOVERED,
+            enabled=False,
+        ),
+        owner_ref=OwnerRef(type="user", id="marketplace-skill-owner"),
+    )
+    artifact = json.dumps(skill_revision_to_json(revision), sort_keys=True).encode()
+
+    await handler.install(official, artifact)
+
+    assert (await handler.status(official)).skill_id == revision.skill_id
+    with pytest.raises(ContractError) as missing:
+        await handler.status(private)
+    assert missing.value.code is ErrorCode.NOT_FOUND
+
+
+async def test_application_handler_delegates_to_canonical_owner_and_rejects_fake_update(
+    tmp_path,
+) -> None:
+    repository = InMemoryApplicationRepository()
+    runtimes = ApplicationRuntimeRegistry((_ApplicationRuntime(),))
+    lifecycle = ApplicationLifecycleService(repository, runtimes)
+    handler = ApplicationMarketplaceKindHandler(lifecycle, repository, runtimes)
+
+    first_manifest = ApplicationManifest(
+        application_id=new_id("application"),
+        name="Marketplace demo",
+        version="1.0.0",
+        description="Application owner delegation fixture",
+        services=(
+            ApplicationService(
+                service_id="app",
+                runtime=ApplicationServiceRuntime.PROCESS,
+                process=("python", "-m", "example"),
+            ),
+        ),
+    )
+    second_manifest = replace(first_manifest, version="1.1.0")
+    first = _item(
+        RegistryItemType.APPLICATION,
+        item_id="catalog.application-demo",
+        version=first_manifest.version,
+        manifest=True,
+    )
+    second = replace(
+        first,
+        version=second_manifest.version,
+        source=RegistrySource(
+            first.source.repository,
+            "catalog.application-demo@1.1.0",
+        ),
+    )
+    provider = LocalRegistryProvider(
+        (first, second),
+        {
+            (first.item_id, first.version): json.dumps(
+                application_manifest_to_document(first_manifest),
+                sort_keys=True,
+            ).encode(),
+            (second.item_id, second.version): json.dumps(
+                application_manifest_to_document(second_manifest),
+                sort_keys=True,
+            ).encode(),
+        },
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "application-installations.json")
+    service = DistributionService(
+        provider,
+        installations=installations,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    context = ValidationContext("0.0.1")
+
+    installed = await service.activate(
+        service.preview(first.item_id, first.version, context),
+        context,
+        authorized=True,
+    )
+    assert installed.application_id == first_manifest.application_id
+    assert (await service.status(first.item_id)).instance_id == installed.instance_id
+    assert service.describe(first.item_id)["runtime_id"] == "test.process"
+
+    update_preview = service.preview(second.item_id, second.version, context)
+    assert update_preview.activation_allowed is False
+    assert any(finding.code == "unsupported_operation" for finding in update_preview.findings)
+    with pytest.raises(ContractError) as unsupported:
+        await service.activate(update_preview, context, authorized=True)
+    assert unsupported.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
+
+    removed = await service.uninstall(first.item_id, authorized=True)
+    assert removed.observed_state is ApplicationObservedState.REMOVED
+    assert installations.get(first.item_id) is None
+
+    reinstalled = await service.activate(
+        service.preview(first.item_id, first.version, context),
+        context,
+        authorized=True,
+    )
+    assert reinstalled.instance_id != removed.instance_id
+    assert (await service.status(first.item_id)).instance_id == reinstalled.instance_id
+
+
+async def test_portable_tool_lifecycle_does_not_dispatch_to_plugin_owner(tmp_path) -> None:
+    item = _item(
+        RegistryItemType.TOOL,
+        item_id="example.portable-owner-boundary",
+        version="1.0.0",
+    )
+    artifact = b"portable-tool"
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "portable-owner-boundary.json")
+    installations.record(
+        item,
+        provider_id=provider.provider_id,
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.TOOL,
+        extension_type=ExtensionType.CAPABILITY_PROVIDER,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    service = DistributionService(
+        provider,
+        installations=installations,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+
+    assert item.route.value == "portable_import"
+    preview = service.preview_uninstall(item.item_id)
+    assert preview.activation_allowed is False
+    assert any(finding.code == "unsupported_operation" for finding in preview.findings)
+
+    with pytest.raises(ContractError) as status_error:
+        await service.status(item.item_id)
+    assert status_error.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
+
+    with pytest.raises(ContractError) as describe_error:
+        service.describe(item.item_id)
+    assert describe_error.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
+
+    with pytest.raises(ContractError) as uninstall_error:
+        await service.uninstall(item.item_id, authorized=True)
+    assert uninstall_error.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
+    assert installations.get(item.item_id) is not None
+
+
+async def test_application_handler_preserves_marketplace_source_identity() -> None:
+    repository = InMemoryApplicationRepository()
+    runtimes = ApplicationRuntimeRegistry((_ApplicationRuntime(),))
+    handler = ApplicationMarketplaceKindHandler(
+        ApplicationLifecycleService(repository, runtimes),
+        repository,
+        runtimes,
+    )
+    first_manifest = ApplicationManifest(
+        application_id=new_id("application"),
+        name="Official Marketplace application",
+        version="1.0.0",
+        description="Official catalog fixture",
+        services=(
+            ApplicationService(
+                service_id="app",
+                runtime=ApplicationServiceRuntime.PROCESS,
+                process=("python", "-m", "official"),
+            ),
+        ),
+    )
+    second_manifest = replace(
+        first_manifest,
+        application_id=new_id("application"),
+        name="Private Marketplace application",
+        description="Private catalog fixture",
+        services=(
+            ApplicationService(
+                service_id="app",
+                runtime=ApplicationServiceRuntime.PROCESS,
+                process=("python", "-m", "private"),
+            ),
+        ),
+    )
+    base_item = _item(
+        RegistryItemType.APPLICATION,
+        item_id="catalog.shared-application",
+        version="1.0.0",
+        manifest=True,
+    )
+    official_item = replace(base_item, source_registry="official")
+    private_item = replace(base_item, source_registry="private")
+
+    first = await handler.install(
+        official_item,
+        json.dumps(
+            application_manifest_to_document(first_manifest),
+            sort_keys=True,
+        ).encode(),
+    )
+    removed = await handler.uninstall(official_item)
+    assert removed.observed_state is ApplicationObservedState.REMOVED
+
+    second = await handler.install(
+        private_item,
+        json.dumps(
+            application_manifest_to_document(second_manifest),
+            sort_keys=True,
+        ).encode(),
+    )
+
+    assert second.application_id == second_manifest.application_id
+    assert second.instance_id != first.instance_id
+    assert (await handler.status(private_item)).instance_id == second.instance_id
+    assert handler.describe(private_item)["application_id"] == second_manifest.application_id
