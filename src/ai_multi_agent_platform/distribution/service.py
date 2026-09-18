@@ -265,10 +265,11 @@ class DistributionService:
         except ContractError as exc:
             if exc.code is not ErrorCode.NOT_FOUND:
                 raise
+            owner_error = exc
 
         describe_candidate = getattr(handler, "describe_candidate", None)
         if describe_candidate is None:
-            raise
+            raise owner_error
         provider = self._require_provider()
         artifact = self._fetch_artifact(provider, item)
         candidate_describer = cast(
