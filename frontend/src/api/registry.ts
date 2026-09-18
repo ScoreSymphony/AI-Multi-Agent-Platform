@@ -92,6 +92,7 @@ export interface RegistryOwnerExtension {
   requirements: JsonValue | null;
   details: JsonValue | null;
   status: JsonValue | null;
+  status_version?: string | null;
   supported_operations?: Array<"install" | "update" | "uninstall"> | null;
 }
 
@@ -118,6 +119,7 @@ export interface RegistryKindDescriptor {
 
 export interface RegistryItem {
   id: string;
+  qualified_id?: string;
   type: "registry-item";
   item_id: string;
   item_type: RegistryItemType;
@@ -126,6 +128,7 @@ export interface RegistryItem {
   description: string;
   version: string;
   publisher: string;
+  source_registry?: string | null;
   source: {
     repository: string;
     package_reference: string | null;
@@ -148,6 +151,7 @@ export interface RegistryItem {
   trust?: RegistryTrustStatus;
   review_reference: string | null;
   released_at: string | null;
+  release_date?: string | null;
   changelog: string | null;
   deprecated: boolean;
   yanked: boolean;
