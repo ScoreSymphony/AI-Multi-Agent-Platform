@@ -18,10 +18,10 @@ CURRENT_BEHAVIOR_MARKERS = (
     "DistributedBuildTargetMatcher",
     "DistributedRuntime",
     "scoped Worker secret delivery",
-    "#748",
-    "#749",
-    "#750",
-    "#751",
+    "declared `SecretReference` values are resolved late",
+    "dispatches the canonical Run through `DistributedRuntime`",
+    "ApplicationReleaseGateCoordinator",
+    "maintained acceptance bundle",
     "APPLICATION_DISTRIBUTION_CONFORMANCE.md",
 )
 
