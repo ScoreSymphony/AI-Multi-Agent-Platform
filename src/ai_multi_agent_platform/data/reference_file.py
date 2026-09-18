@@ -266,6 +266,7 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
             os.replace(temp_path, final_path)
             temp_owned = False
             final_owned = True
+            self._fsync_directory(self._root)
             with self._connect() as connection:
                 connection.execute(
                     "UPDATE data_files SET state = ? WHERE file_id = ?",
@@ -288,6 +289,18 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
                 ErrorCode.BACKEND_ERROR, "failed to finalize file metadata"
             ) from exc
         return replace(pending, state=FileState.READY)
+
+    @staticmethod
+    def _fsync_directory(path: Path) -> None:
+        """Persist a completed rename before canonical metadata becomes READY on POSIX."""
+
+        if os.name != "posix":
+            return
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
     def _cleanup_owned_write_paths(self, *paths: Path | None) -> None:
         for path in paths:
