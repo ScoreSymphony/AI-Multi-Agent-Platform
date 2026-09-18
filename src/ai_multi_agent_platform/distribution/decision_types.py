@@ -154,10 +154,7 @@ class ProvenanceDiff:
 
     @property
     def signature_key_changed(self) -> bool:
-        return (
-            self.installed
-            and self.previous_signature_key_id != self.candidate_signature_key_id
-        )
+        return self.installed and self.previous_signature_key_id != self.candidate_signature_key_id
 
     @property
     def trust_changed(self) -> bool:
