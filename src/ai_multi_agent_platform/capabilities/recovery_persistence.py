@@ -104,7 +104,8 @@ class SQLiteExternalEffectRecoveryRepository:
                 connection.execute(
                     """
                     INSERT INTO external_effect_recovery(
-                        effect_id, invocation_id, provider_id, capability_id, idempotency_key, payload
+                        effect_id, invocation_id, provider_id, capability_id,
+                        idempotency_key, payload
                     ) VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(effect_id) DO UPDATE SET
                         invocation_id = excluded.invocation_id,
