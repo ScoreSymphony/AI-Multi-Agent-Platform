@@ -31,12 +31,15 @@ serial non-unit number:
 | --- | ---: | ---: | ---: |
 | integration | 35384156371 | 120.435 s | 6.874 s |
 | integration | 35384102471 | 122.020 s | 8.290 s |
+| integration (runner-slow) | 35384227788 | 277.123 s | 9.680 s |
+| contract + architecture + release | 35384227788 | 23.081 s | 2.853 s |
 | E2E + performance + regression | 35384227788 | 95.651 s | 7.593 s |
 
-The measured pytest critical path is therefore currently the integration shard at about 120–122
-seconds. Against the pre-sharding 224-second median non-unit lane, this is about a 46% wall-clock
-reduction before counting any further optimization. The repeated integration measurements also
-show the same dominant category rather than a one-off outlier.
+The repeated integration runs have a 122.020-second median, so the typical measured critical path
+is about 46% shorter than the pre-sharding 224-second median non-unit lane. A third run completed
+all 2505 integration tests successfully but took 277.123 seconds on a slow runner. Its only failure
+was the then-too-tight runtime budget. This is evidence of hosted-runner timing variance, not test
+flakiness, and the hard regression thresholds must allow it.
 
 The slowest integration case is the shipped distributed operator entrypoint acceptance test. It
 starts the real broker, distributed server, worker and CLI and waits for readiness/registration.
@@ -63,7 +66,7 @@ python scripts/ci/run_pytest_lane.py --lane <lane> -- <pytest arguments>
 The wrapper preserves normal pytest exit semantics and additionally writes:
 
 - JUnit XML with individual testcase timings;
-- JSON with wall time, testcase totals, slowest tests and slowest modules/classes;
+- JSON with wall time, testcase totals, slowest tests, modules/classes and test directories;
 - Markdown with the same human-readable profile;
 - the Markdown report into the GitHub Actions job summary.
 
@@ -125,28 +128,30 @@ No contributor needs xdist or a special runner to execute the authoritative full
 Budgets are regression guards, not aspirational performance targets.
 
 The unit wall-clock budget is 30 seconds against an observed 11–17 second baseline. The
-non-unit shard wall budget is 210 seconds: below the old 224-second median serial non-unit lane,
-but still about 72% above the repeated 120–122 second integration measurements and more than twice
-the measured 95.651-second system/regression shard. Integration and system/regression use a
-15-second individual-test and 20-second module/class major-regression threshold; the currently
-observed maxima remain below 8.3 seconds.
+contract/architecture/release lane has a 120-second wall budget against a measured 23.081-second
+run, with 10-second individual-test and 15-second module thresholds.
 
-The complete `python-validation` matrix has a four-minute job timeout. Because its lanes are
-independent and run in parallel, that bounds the frontend-independent Python validation critical
-path without adding paid runners or unsafe in-process parallelism. The required `test` aggregator
-downloads all four pytest timing artifacts and fails if their measured critical path exceeds 210
-seconds or if any expected lane report is missing.
+Integration uses a 330-second wall budget. The three observed runs are 120.435, 122.020 and
+277.123 seconds; 330 seconds is about 19% above the healthy runner-slow maximum. Its 15-second
+individual-test and 20-second module thresholds remain above the measured maxima of 9.680 and
+17.397 seconds. System/regression uses a 240-second wall budget against a measured 95.651-second
+run and the same 15/20-second test/module thresholds.
+
+The complete `python-validation` matrix has a six-minute job timeout. This deliberately differs
+from the typical performance target: a hard CI guard must tolerate measured hosted-runner variance.
+The required `test` aggregator downloads all four pytest timing artifacts and fails if their
+measured pytest critical path exceeds 330 seconds or if any expected lane report is missing.
+Typical performance remains tracked separately from the hard guard; the current integration median
+is 122.020 seconds versus the old 224-second median serial non-unit lane.
 
 The serial full-suite fallback has a 480-second reference budget through the `full-local` lane.
 That threshold is approximately 21% above the worst 397-second serial pytest observation from the
 six pre-sharding reference runs. It is a regression threshold for comparable hardware, not a claim
 that every developer machine must have identical absolute timing.
 
-Contract/architecture/release keeps a deliberately wider 30-second test and 60-second module
-threshold until its own retained profile has enough representative evidence. The checked-in config
-is the canonical source for every threshold.
-
-A budget failure is a test failure; it does not silently skip tests.
+A budget failure is a test failure; it does not silently skip tests. Timing-budget failures are
+also distinguishable from pytest failures so healthy but unusually slow runs can be diagnosed
+without misclassifying them as behavioral flakes.
 
 ## Local commands
 
