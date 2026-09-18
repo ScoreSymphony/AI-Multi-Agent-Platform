@@ -1,6 +1,9 @@
 """Canonical automation domain for schedules, webhooks and platform-event triggers."""
 
 from .hardened_service import (
+    AutomationStartupRecoveryDisposition,
+    AutomationStartupRecoveryRecord,
+    AutomationStartupRecoveryReport,
     WebhookPayloadValidator,
     automation_change_actor,
     automation_creation_idempotency_key,
@@ -47,6 +50,9 @@ __all__ = [
     "AutomationRuntime",
     "AutomationRuntimeState",
     "AutomationRuntimeTick",
+    "AutomationStartupRecoveryReport",
+    "AutomationStartupRecoveryRecord",
+    "AutomationStartupRecoveryDisposition",
     "AutomationService",
     "AutomationState",
     "CanonicalWorkspaceEventScopeResolver",
