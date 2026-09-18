@@ -409,6 +409,7 @@ async def _run_startup_recovery(
         )
     except asyncio.CancelledError:
         raise
+    # error-boundary: allow-broad-catch=boundary preserve startup recovery failure diagnostics
     except Exception:
         deployment.health_provider.set_operational_state(
             ReadinessState.OPERATOR_INTERVENTION_REQUIRED,
