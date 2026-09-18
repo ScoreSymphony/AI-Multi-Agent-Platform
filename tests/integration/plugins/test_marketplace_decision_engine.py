@@ -955,6 +955,7 @@ def test_installed_dependency_does_not_inherit_newer_catalog_transitive_requirem
         for dependency in preview.decision.dependencies
     )
 
+
 def test_single_registry_provider_cannot_spoof_source_identity() -> None:
     item, artifact = _item("example.source-spoof")
     spoofed = replace(item, source_registry="other-registry")
@@ -967,6 +968,7 @@ def test_single_registry_provider_cannot_spoof_source_identity() -> None:
 
     with pytest.raises(ValueError, match="conflicting source_registry"):
         service.get(spoofed.item_id, spoofed.version)
+
 
 def test_persisted_installed_dependency_detects_cycle_after_catalog_drift(
     tmp_path: Path,
