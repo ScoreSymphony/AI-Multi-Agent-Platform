@@ -61,7 +61,11 @@ def test_major_single_node_builders_compose_without_optional_adapters(tmp_path: 
         execution,
         kernel,
     )
-    health = build_health(storage, execution)
+    drain = SingleNodeDrainController(
+        timeout_seconds=config.shutdown_timeout_seconds,
+        telemetry=observability.telemetry,
+    )
+    health = build_health(storage, execution, draining=lambda: drain.draining)
     control_plane = build_control_plane(
         config,
         storage,
@@ -75,10 +79,6 @@ def test_major_single_node_builders_compose_without_optional_adapters(tmp_path: 
         kernel,
         evaluation,
         health,
-    )
-    drain = SingleNodeDrainController(
-        timeout_seconds=config.shutdown_timeout_seconds,
-        telemetry=observability.telemetry,
     )
     http = build_http(config, security, control_plane, drain)
 
