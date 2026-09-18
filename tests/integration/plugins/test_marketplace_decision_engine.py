@@ -16,6 +16,7 @@ from ai_multi_agent_platform.distribution import (
     InstalledRegistryItem,
     JsonRegistryInstallationStore,
     LocalRegistryProvider,
+    MarketplaceKindHandlerRegistry,
     MultiRegistryProvider,
     RegistryCompatibility,
     RegistryDependency,
@@ -217,6 +218,112 @@ def test_cross_kind_dependency_is_satisfied_by_installed_tool(tmp_path: Path) ->
     assert preview.activation_allowed is True
     assert preview.decision.dependencies[0].status is DependencyStatus.SATISFIED
     assert preview.decision.dependencies[0].item_kind == "tool"
+
+
+class _SemanticAgentOwner:
+    kind = RegistryItemType.AGENT
+
+    def inspect_requirements(self, item: RegistryItem) -> dict[str, object]:
+        return {"owner_domain": "agents", "item_id": item.item_id}
+
+    async def install(self, item: RegistryItem, artifact: bytes) -> object:
+        del artifact
+        return item.item_id
+
+    async def update(self, item: RegistryItem, artifact: bytes) -> object:
+        del artifact
+        return item.item_id
+
+    async def uninstall(self, item: RegistryItem) -> object:
+        return item.item_id
+
+    async def status(self, item: RegistryItem) -> object:
+        return item.item_id
+
+    def describe(self, item: RegistryItem) -> dict[str, object]:
+        return {"owner_domain": "agents", "item_id": item.item_id}
+
+
+def test_agent_dependency_plan_reuses_cross_kind_decision_engine(tmp_path: Path) -> None:
+    skill, skill_artifact = _item("semantic.skill", RegistryItemType.SKILL)
+    capability, capability_artifact = _item(
+        "semantic.capability",
+        RegistryItemType.CAPABILITY_PROVIDER,
+    )
+    orchestrator, orchestrator_artifact = _item(
+        "semantic.orchestrator",
+        RegistryItemType.ORCHESTRATOR,
+    )
+    model_provider, model_provider_artifact = _item(
+        "semantic.model-provider",
+        RegistryItemType.MODEL_PROVIDER,
+    )
+    agent, agent_artifact = _item(
+        "semantic.agent",
+        RegistryItemType.AGENT,
+        dependencies=(
+            RegistryDependency(skill.item_id, item_kind=RegistryItemType.SKILL),
+            RegistryDependency(
+                capability.item_id,
+                item_kind=RegistryItemType.CAPABILITY_PROVIDER,
+            ),
+            RegistryDependency(
+                orchestrator.item_id,
+                item_kind=RegistryItemType.ORCHESTRATOR,
+            ),
+            RegistryDependency(
+                model_provider.item_id,
+                item_kind=RegistryItemType.MODEL_PROVIDER,
+                optional=True,
+            ),
+        ),
+    )
+    items = (
+        (skill, skill_artifact),
+        (capability, capability_artifact),
+        (orchestrator, orchestrator_artifact),
+        (model_provider, model_provider_artifact),
+        (agent, agent_artifact),
+    )
+    store = JsonRegistryInstallationStore(tmp_path / "semantic-dependencies.json")
+    for dependency in (skill, capability, orchestrator, model_provider):
+        store.record(dependency, provider_id="local")
+
+    provider = LocalRegistryProvider(
+        tuple(item for item, _artifact in items),
+        {(item.item_id, item.version): artifact for item, artifact in items},
+        provider_id="local",
+    )
+    service = DistributionService(
+        provider,
+        installations=store,
+        kind_handlers=MarketplaceKindHandlerRegistry((_SemanticAgentOwner(),)),
+    )
+
+    preview = service.preview(agent.item_id, agent.version, _context())
+
+    assert preview.activation_allowed is True
+    assert {
+        (dependency.item_id, dependency.item_kind, dependency.status)
+        for dependency in preview.decision.dependencies
+    } == {
+        (skill.item_id, "skill", DependencyStatus.SATISFIED),
+        (
+            capability.item_id,
+            "capability_provider",
+            DependencyStatus.SATISFIED,
+        ),
+        (
+            orchestrator.item_id,
+            "orchestrator",
+            DependencyStatus.SATISFIED,
+        ),
+        (
+            model_provider.item_id,
+            "model_provider",
+            DependencyStatus.SATISFIED,
+        ),
+    }
 
 
 def test_marketplace_store_preserves_non_marketplace_installed_dependency(
