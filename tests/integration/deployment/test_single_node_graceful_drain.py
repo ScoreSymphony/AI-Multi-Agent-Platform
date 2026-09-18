@@ -4,6 +4,8 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from ai_multi_agent_platform.control_plane import ControlPlaneASGI, HTTPRequest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.deployment.config import load_single_node_config
@@ -342,11 +344,14 @@ def test_process_local_drain_state_is_not_revived_after_restart(tmp_path: Path) 
     asyncio.run(scenario())
 
 
-def test_forced_drain_preserves_running_run_for_canonical_restart_recovery(
+@pytest.mark.parametrize("forced", [False, True], ids=["graceful", "forced"])
+def test_drain_preserves_running_run_for_canonical_restart_recovery(
     tmp_path: Path,
+    *,
+    forced: bool,
 ) -> None:
     async def scenario() -> None:
-        root = tmp_path / "forced-running-run"
+        root = tmp_path / ("forced-running-run" if forced else "graceful-running-run")
         (root / "db").mkdir(parents=True)
         (root / "files").mkdir()
         (root / "workspaces").mkdir()
@@ -359,7 +364,7 @@ def test_forced_drain_preserves_running_run_for_canonical_restart_recovery(
         task = await original.create_task(
             idempotency_key="drain:create",
             title="Interrupted work",
-            objective="Remain canonical across forced process teardown",
+            objective="Remain canonical across process teardown",
             owner_type="service",
             owner_id="graceful-drain-test",
         )
@@ -373,9 +378,12 @@ def test_forced_drain_preserves_running_run_for_canonical_restart_recovery(
         stopping = build_single_node_deployment(
             SingleNodeConfig(data_dir=root, secure_cookie=False)
         )
-        await stopping.drain.begin(reason="test_forced_shutdown")
-        await stopping.drain.mark_forced("test_forced_shutdown", timed_out=True)
+        reason = "test_forced_shutdown" if forced else "test_graceful_shutdown"
+        await stopping.drain.begin(reason=reason)
+        if forced:
+            await stopping.drain.mark_forced(reason, timed_out=True)
         await stopping.drain.mark_completed()
+        assert stopping.drain.snapshot().forced is forced
 
         restarted = build_single_node_deployment(
             SingleNodeConfig(data_dir=root, secure_cookie=False)
