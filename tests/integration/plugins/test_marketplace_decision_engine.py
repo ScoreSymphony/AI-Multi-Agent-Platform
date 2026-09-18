@@ -881,3 +881,44 @@ def test_dependency_from_multiple_sources_requires_explicit_source_choice() -> N
     assert dependency.status is DependencyStatus.SOURCE_AMBIGUOUS
     assert preview.activation_allowed is False
     assert any(finding.code == "dependency_source_ambiguous" for finding in preview.findings)
+
+def test_installed_dependency_does_not_inherit_newer_catalog_transitive_requirements(
+    tmp_path: Path,
+) -> None:
+    installed, _installed_artifact = _item(
+        "example.installed-dependency",
+        RegistryItemType.TOOL,
+        version="1.0.0",
+    )
+    newer, newer_artifact = _item(
+        installed.item_id,
+        RegistryItemType.TOOL,
+        version="2.0.0",
+        dependencies=(RegistryDependency("example.new-transitive-dependency"),),
+    )
+    root, root_artifact = _item(
+        "example.installed-dependent-root",
+        dependencies=(
+            RegistryDependency(
+                installed.item_id,
+                VersionRange("1.0.0", "2.0.0"),
+                item_kind=RegistryItemType.TOOL,
+            ),
+        ),
+    )
+    store = JsonRegistryInstallationStore(tmp_path / "installations.json")
+    store.record(installed, provider_id="local")
+    service = _service(
+        ((newer, newer_artifact), (root, root_artifact)),
+        store=store,
+    )
+
+    preview = service.preview(root.item_id, root.version, _context())
+
+    assert preview.activation_allowed is True
+    assert preview.decision.dependencies[0].status is DependencyStatus.SATISFIED
+    assert all(
+        dependency.item_id != "example.new-transitive-dependency"
+        for dependency in preview.decision.dependencies
+    )
+
