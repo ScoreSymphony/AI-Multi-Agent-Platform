@@ -10,6 +10,7 @@ from ai_multi_agent_platform.adapters.single_node_app import main as server_main
 from ai_multi_agent_platform.applications import (
     ApplicationInstallRequest,
     ApplicationManifest,
+    ApplicationResourceAssociation,
     ApplicationService,
     ApplicationServiceRuntime,
 )
@@ -38,6 +39,7 @@ def _manifest() -> ApplicationManifest:
                 process=(sys.executable, "-c", "print('ready')"),
             ),
         ),
+        resource_associations=(ApplicationResourceAssociation(media_types=("text/plain",)),),
         runtime_requirements=("local", "process"),
     )
 
@@ -67,8 +69,15 @@ def test_shipped_single_node_composes_application_runtime_and_control_plane(tmp_
     assert "workspace_cwd" in descriptor.capabilities
     assert "applications" in deployment.control_plane.registered_collections
     assert "application-instances" in deployment.control_plane.registered_collections
+    assert "application-logs" in deployment.control_plane.registered_collections
+    assert "application-resource-handlers" in deployment.control_plane.registered_collections
     assert "application.install" in deployment.control_plane.registered_commands
     assert deployment.control_plane.resource_owner("applications") == "applications"
+    assert deployment.control_plane.resource_owner("application-logs") == "applications.logs"
+    assert (
+        deployment.control_plane.resource_owner("application-resource-handlers")
+        == "applications.resource-associations"
+    )
     assert deployment.control_plane.command_owner("application.start") == "applications"
 
 

@@ -57,6 +57,17 @@ from .models import (
     ApplicationVolumeMount,
 )
 from .repository import ApplicationRepository, InMemoryApplicationRepository
+from .resource_association_control_plane import (
+    APPLICATION_RESOURCE_HANDLER_COLLECTION,
+    APPLICATION_RESOURCE_HANDLER_MODULE,
+    ApplicationResourceHandlerService,
+    application_resource_handler_module,
+    register_application_resource_handlers,
+)
+from .resource_associations import (
+    ApplicationResourceAssociationResolver,
+    ApplicationResourceResolution,
+)
 from .runtime import (
     ApplicationInstanceNotFoundError,
     ApplicationPreparationError,
@@ -84,6 +95,8 @@ __all__ = [
     "APPLICATION_MANIFEST_SCHEMA",
     "APPLICATION_MANIFEST_SCHEMA_VERSION",
     "APPLICATION_MODULE",
+    "APPLICATION_RESOURCE_HANDLER_COLLECTION",
+    "APPLICATION_RESOURCE_HANDLER_MODULE",
     "Application",
     "ApplicationConfigValueType",
     "ApplicationConfigurationField",
@@ -110,7 +123,10 @@ __all__ = [
     "ApplicationRecoveryReport",
     "ApplicationRepository",
     "ApplicationResourceAssociation",
+    "ApplicationResourceAssociationResolver",
+    "ApplicationResourceHandlerService",
     "ApplicationResourceRequirements",
+    "ApplicationResourceResolution",
     "ApplicationResourceService",
     "ApplicationRuntime",
     "ApplicationRuntimeDescriptor",
@@ -134,7 +150,9 @@ __all__ = [
     "application_control_plane_module",
     "application_log_control_plane_module",
     "application_manifest_from_document",
+    "application_resource_handler_module",
     "register_application_control_plane",
     "register_application_log_control_plane",
+    "register_application_resource_handlers",
     "validate_application_manifest_document",
 ]
