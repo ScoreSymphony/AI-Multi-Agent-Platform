@@ -39,20 +39,29 @@ function item({
   manifest = null,
   missingHandler = false,
   partialMetadata = false,
+  sourceRegistry = "local",
+  installedSourceRegistry = installed ? sourceRegistry : null,
+  maturity = "stable",
+  deprecated = false,
+  yanked = false,
+  version = "1.1.0",
 }) {
   const handlerAvailable = route === "kind_handler" && !missingHandler;
   return {
-    id: `${id}@1.1.0`,
+    id: `${id}@${version}`,
+    qualified_id: `${sourceRegistry}::${id}@${version}`,
     type: "registry-item",
     item_id: id,
     item_type: kind,
     kind,
     name,
     description,
-    version: "1.1.0",
+    version,
     publisher: "example",
+    source_registry: sourceRegistry,
     source: {
-      repository: `https://example.invalid/${id}`,
+      registry: sourceRegistry,
+      repository: `https://example.invalid/${sourceRegistry}/${id}`,
       package_reference: `github:example/${id}`,
       revision: "abc123",
     },
@@ -86,12 +95,14 @@ function item({
     categories: [],
     trust_status: "reviewed",
     trust: "reviewed",
+    maturity,
+    stability: maturity,
     review_reference: partialMetadata ? null : "https://example.invalid/review",
     released_at: partialMetadata ? null : "2026-09-18T00:00:00Z",
     release_date: partialMetadata ? null : "2026-09-18T00:00:00Z",
     changelog: partialMetadata ? null : "Browser fixture release",
-    deprecated: false,
-    yanked: false,
+    deprecated,
+    yanked,
     route,
     route_available: route !== "manual" && !missingHandler,
     manifest_reference: manifest,
@@ -102,6 +113,8 @@ function item({
     },
     installed,
     installed_version: installedVersion,
+    installed_source_registry: installedSourceRegistry,
+    installation_source_matches: installed ? installedSourceRegistry === sourceRegistry : null,
     pinned_version: pinnedVersion,
     update_available: updateAvailable,
     installation: installed
@@ -109,10 +122,10 @@ function item({
           id,
           type: "registry-installation",
           item_id: id,
-          version: installedVersion ?? "1.1.0",
+          version: installedVersion ?? version,
           pinned_version: pinnedVersion,
-          source_registry: "local",
-          source_repository: `https://example.invalid/${id}`,
+          source_registry: installedSourceRegistry ?? sourceRegistry,
+          source_repository: `https://example.invalid/${installedSourceRegistry ?? sourceRegistry}/${id}`,
           package_reference: `github:example/${id}`,
           revision: "old123",
           license: "MIT",
@@ -123,7 +136,7 @@ function item({
     update_state: {
       installed,
       installed_version: installedVersion,
-      candidate_version: "1.1.0",
+      candidate_version: version,
       pinned_version: pinnedVersion,
       update_available: updateAvailable,
     },
@@ -253,6 +266,28 @@ const catalog = [
     description: "Catalog item with intentionally sparse optional metadata",
     partialMetadata: true,
   }),
+  item({
+    id: "shared-source-tool",
+    kind: "tool",
+    name: "Shared Source Tool",
+    description: "Same item/version from the installed official source",
+    sourceRegistry: "official",
+    installed: true,
+    installedVersion: "1.1.0",
+    installedSourceRegistry: "official",
+    maturity: "stable",
+  }),
+  item({
+    id: "shared-source-tool",
+    kind: "tool",
+    name: "Shared Source Tool",
+    description: "Same item/version offered by a private source",
+    sourceRegistry: "private",
+    installed: true,
+    installedVersion: "1.1.0",
+    installedSourceRegistry: "official",
+    maturity: "beta",
+  }),
 ];
 
 function listProjection(entry) {
@@ -299,8 +334,26 @@ function pageFor(items, cursor) {
   };
 }
 
-function findItem(resourceRef) {
-  return catalog.find((entry) => entry.item_id === resourceRef);
+function findItem(resourceRef, sourceRegistry = null, version = null) {
+  return catalog.find(
+    (entry) =>
+      entry.item_id === resourceRef &&
+      (sourceRegistry === null || entry.source_registry === sourceRegistry) &&
+      (version === null || entry.version === version),
+  );
+}
+
+function parseQualifiedResourceId(resourceId) {
+  const separator = resourceId.indexOf("::");
+  const sourceRegistry = separator >= 0 ? resourceId.slice(0, separator) : null;
+  const unqualified = separator >= 0 ? resourceId.slice(separator + 2) : resourceId;
+  const versionSeparator = unqualified.lastIndexOf("@");
+  if (versionSeparator < 0) return { itemId: unqualified, version: null, sourceRegistry };
+  return {
+    itemId: unqualified.slice(0, versionSeparator),
+    version: unqualified.slice(versionSeparator + 1),
+    sourceRegistry,
+  };
 }
 
 function syncInstallation(found) {
@@ -311,7 +364,7 @@ function syncInstallation(found) {
         item_id: found.item_id,
         version: found.installed_version ?? found.version,
         pinned_version: found.pinned_version,
-        source_registry: "local",
+        source_registry: found.installed_source_registry ?? found.source_registry ?? "local",
         source_repository: found.source.repository,
         package_reference: found.source.package_reference,
         revision: found.source.revision,
@@ -337,6 +390,13 @@ function syncInstallation(found) {
 
 function marketplaceDecision(found, blocked) {
   const isPluginUpdate = found.item_id === "example-plugin";
+  const sourceChanged = Boolean(
+    found.installed &&
+      found.installed_source_registry &&
+      found.source_registry &&
+      found.installed_source_registry !== found.source_registry,
+  );
+  const candidateSource = found.source_registry ?? "local";
   return {
     operation: found.installed ? "update" : "install",
     dependencies: found.dependencies.map((dependency) => ({
@@ -350,7 +410,7 @@ function marketplaceDecision(found, blocked) {
       installed_version: dependency.installed_version ?? null,
       candidate_version: dependency.installed_version ?? dependency.minimum_version ?? null,
       candidate_kind: dependency.kind ?? null,
-      candidate_source_registry: "local",
+      candidate_source_registry: candidateSource,
       path: [found.item_id, dependency.item_id],
       blocking: dependency.status !== "satisfied" && !dependency.optional,
     })),
@@ -361,13 +421,13 @@ function marketplaceDecision(found, blocked) {
           item_id: dependency.item_id,
           item_kind: dependency.kind ?? "unknown",
           version: dependency.installed_version ?? dependency.minimum_version ?? "1.0.0",
-          source_registry: "local",
+          source_registry: candidateSource,
         })),
       {
         item_id: found.item_id,
         item_kind: found.item_type,
         version: found.version,
-        source_registry: "local",
+        source_registry: candidateSource,
       },
     ],
     compatibility: {
@@ -392,8 +452,10 @@ function marketplaceDecision(found, blocked) {
     },
     provenance_diff: {
       installed: found.installed,
-      previous_source_registry: isPluginUpdate ? "legacy-registry" : null,
-      candidate_source_registry: "local",
+      previous_source_registry: isPluginUpdate
+        ? "legacy-registry"
+        : found.installed_source_registry ?? null,
+      candidate_source_registry: candidateSource,
       previous_publisher: isPluginUpdate ? "legacy-publisher" : null,
       candidate_publisher: found.publisher,
       previous_repository: found.installed ? "https://example.invalid/legacy-repo" : null,
@@ -410,7 +472,7 @@ function marketplaceDecision(found, blocked) {
       candidate_trust_status: found.trust_status,
       previous_review_reference: found.installed ? "https://example.invalid/old-review" : null,
       candidate_review_reference: found.review_reference,
-      source_changed: isPluginUpdate,
+      source_changed: isPluginUpdate || sourceChanged,
       publisher_changed: isPluginUpdate,
       repository_changed: found.installed,
       package_reference_changed: found.installed,
@@ -439,7 +501,7 @@ function marketplaceDecision(found, blocked) {
       current_yanked: false,
       candidate_yanked: found.yanked,
       candidate_deprecated: found.deprecated,
-      source_change: isPluginUpdate,
+      source_change: isPluginUpdate || sourceChanged,
       permission_change: isPluginUpdate,
       trust_integrity_issue: isPluginUpdate,
     },
@@ -479,6 +541,10 @@ const fetchImpl = async (input, init = {}) => {
     const updatesOnly = parsed.searchParams.get("filter[update_available]") === "true";
     const installed = parsed.searchParams.get("filter[installed]");
     const compatible = parsed.searchParams.get("filter[compatible]");
+    const sourceRegistry = parsed.searchParams.get("filter[source]");
+    const maturity = parsed.searchParams.get("filter[maturity]");
+    const deprecated = parsed.searchParams.get("filter[deprecated]");
+    const yanked = parsed.searchParams.get("filter[yanked]");
     if (q) {
       items = items.filter((entry) =>
         [entry.name, entry.description, entry.publisher, entry.item_id]
@@ -498,6 +564,12 @@ const fetchImpl = async (input, init = {}) => {
     if (compatible === "false") {
       items = items.filter((entry) => entry.compatibility.platform_compatible === false);
     }
+    if (sourceRegistry) items = items.filter((entry) => entry.source_registry === sourceRegistry);
+    if (maturity) items = items.filter((entry) => entry.maturity === maturity);
+    if (deprecated === "true") items = items.filter((entry) => entry.deprecated);
+    if (deprecated === "false") items = items.filter((entry) => !entry.deprecated);
+    if (yanked === "true") items = items.filter((entry) => entry.yanked);
+    if (yanked === "false") items = items.filter((entry) => !entry.yanked);
     return new Response(
       JSON.stringify(pageFor(items, parsed.searchParams.get("cursor"))),
       { status: 200, headers: { "Content-Type": "application/json" } },
@@ -506,8 +578,8 @@ const fetchImpl = async (input, init = {}) => {
 
   if (parsed.pathname.startsWith("/api/v1/registry-items/")) {
     const resourceId = decodeURIComponent(parsed.pathname.split("/").pop() ?? "");
-    const itemId = resourceId.split("@")[0];
-    const found = findItem(itemId);
+    const { itemId, version, sourceRegistry } = parseQualifiedResourceId(resourceId);
+    const found = findItem(itemId, sourceRegistry, version);
     return found
       ? new Response(JSON.stringify(found), {
           status: 200,
@@ -517,7 +589,7 @@ const fetchImpl = async (input, init = {}) => {
   }
 
   if (parsed.pathname === "/api/v1/commands/marketplace.preview") {
-    const found = findItem(body?.resource_ref);
+    const found = findItem(body?.resource_ref, body?.source_registry ?? null, body?.version ?? null);
     if (!found) return new Response("not found", { status: 404 });
     const blocked = found.operation_state === "blocked";
     return new Response(
@@ -550,11 +622,26 @@ const fetchImpl = async (input, init = {}) => {
     if (mutationMode === "fail") {
       return errorResponse(500, "backend_error", "Marketplace owner mutation failed");
     }
-    const found = findItem(body?.resource_ref);
+    if (mutationMode === "denied") {
+      return errorResponse(403, "forbidden", "Marketplace mutation is not authorized");
+    }
+    if (mutationMode === "approval") {
+      return errorResponse(409, "approval_required", "Approval required before Marketplace mutation");
+    }
+    if (mutationMode === "stale") {
+      return errorResponse(
+        409,
+        "conflict",
+        "Marketplace candidate changed during pre-mutation revalidation",
+      );
+    }
+    const found = findItem(body?.resource_ref, body?.source_registry ?? null, body?.version ?? null);
     if (!found) return new Response("not found", { status: 404 });
     const action = parsed.pathname.endsWith("marketplace.update") ? "update" : "install";
     found.installed = true;
     found.installed_version = found.version;
+    found.installed_source_registry = found.source_registry;
+    found.installation_source_matches = true;
     found.update_available = false;
     syncInstallation(found);
     return new Response(
