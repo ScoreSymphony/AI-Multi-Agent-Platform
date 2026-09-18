@@ -11,6 +11,7 @@ from scripts.ci.validate_permanent_naming import (  # noqa: E402
     ChangedPath,
     changed_targets,
     path_violations,
+    repository_targets,
     source_violations,
     workflow_violations,
 )
@@ -35,6 +36,25 @@ def test_changed_targets_include_added_modified_copied_and_renamed_destinations(
         ChangedPath("R100", "scripts/ci/new.py"),
         ChangedPath("C100", "tests/integration/test_copy.py"),
     )
+
+def test_repository_targets_inventory_all_guarded_paths(tmp_path: Path) -> None:
+    guarded = (
+        "src/package/runtime.py",
+        "tests/unit/test_runtime.py",
+        "scripts/ci/release_gate.py",
+        ".github/workflows/release.yml",
+    )
+    for relative in guarded:
+        file_path = tmp_path / relative
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text("content", encoding="utf-8")
+    docs = tmp_path / "docs" / "history.md"
+    docs.parent.mkdir(parents=True, exist_ok=True)
+    docs.write_text("history", encoding="utf-8")
+
+    targets = repository_targets(tmp_path)
+
+    assert {target.path for target in targets} == set(guarded)
 
 
 def test_issue_numbered_permanent_path_is_rejected() -> None:
@@ -131,6 +151,17 @@ def test_issue_reference_must_be_secondary_provenance_in_docstring() -> None:
     assert len(source_violations("src/package/reference.py", bad)) == 1
     assert source_violations("src/package/reference.py", good) == ()
 
+def test_bare_hash_issue_reference_must_be_secondary_provenance() -> None:
+    bad = '"""Canonical contract for #33 runtime behavior."""\n'
+    good = (
+        '"""Canonical runtime behavior contract.\n\n'
+        "Historical context: issue #33.\n"
+        '"""\n'
+    )
+
+    assert len(source_violations("src/package/runtime.py", bad)) == 1
+    assert source_violations("src/package/runtime.py", good) == ()
+
 
 def test_compact_issue_numbered_semantic_strings_are_rejected() -> None:
     source = """
@@ -217,3 +248,20 @@ jobs:
 """
 
     assert workflow_violations(".github/workflows/issues.yml", source) == ()
+
+
+def test_workflow_action_input_name_may_retain_evidence_provenance() -> None:
+    source = """
+name: Evidence upload
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload retained evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue123-evidence
+          path: evidence.json
+"""
+
+    assert workflow_violations(".github/workflows/evidence.yml", source) == ()
