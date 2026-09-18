@@ -42,7 +42,6 @@ class CapabilityRegistryBinder:
         self._registry.unregister_provider(registration.instance.descriptor.provider_id)
 
 
-
 class OrchestratorRegistryBinder:
     """Bind Orchestrator extensions to the canonical provider-neutral registry."""
 
