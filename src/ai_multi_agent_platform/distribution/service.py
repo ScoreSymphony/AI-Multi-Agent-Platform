@@ -4,16 +4,26 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, replace
+from collections.abc import Mapping
 from typing import Protocol
 
-from .handlers import MarketplaceKindHandlerRegistry
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+
+from .handlers import MarketplaceKindHandler, MarketplaceKindHandlerRegistry
 from .items import RegistryItem, RegistryQuery
+from .kinds import builtin_marketplace_kind
 from .models import DistributionRoute
 from .provider import RegistryProvider
 from .signatures import RegistrySignatureVerifier
 from .state import RegistryInstallation, RegistryInstallationStore
 from .technical_catalog import derive_technical_metadata
-from .validation import ValidationContext, ValidationFinding, has_errors, validate_item
+from .validation import (
+    FindingSeverity,
+    ValidationContext,
+    ValidationFinding,
+    has_errors,
+    validate_item,
+)
 
 
 class DistributionRouter(Protocol):
@@ -99,6 +109,57 @@ class DistributionService:
     def unpin(self, item_id: str) -> RegistryInstallation:
         return self._require_installations().unpin(item_id)
 
+    def inspect_requirements(
+        self,
+        item_id: str,
+        version: str | None = None,
+    ) -> Mapping[str, object]:
+        item = self.get(item_id, version)
+        handler = self._require_kind_handler(item, operation="status")
+        return handler.inspect_requirements(item)
+
+    def describe(
+        self,
+        item_id: str,
+        version: str | None = None,
+    ) -> Mapping[str, object]:
+        installation = self.installed(item_id)
+        resolved_version = (
+            installation.current.version
+            if version is None and installation is not None
+            else version
+        )
+        item = self.get(item_id, resolved_version)
+        handler = self._require_kind_handler(item, operation="status")
+        return handler.describe(item)
+
+    async def status(self, item_id: str) -> object:
+        installation = self.installed(item_id)
+        if installation is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"Marketplace item is not installed: {item_id}",
+            )
+        item = self.get(item_id, installation.current.version)
+        handler = self._require_kind_handler(item, operation="status")
+        return await handler.status(item)
+
+    async def uninstall(self, item_id: str, *, authorized: bool) -> object:
+        if not authorized:
+            raise PermissionError("registry uninstall requires explicit authorization")
+        installations = self._require_installations()
+        installation = installations.get(item_id)
+        if installation is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"Marketplace item is not installed: {item_id}",
+            )
+        item = self.get(item_id, installation.current.version)
+        handler = self._require_kind_handler(item, operation="uninstall")
+        result = await handler.uninstall(item)
+        installations.remove(item_id)
+        return result
+
     def preview(
         self,
         item_id: str,
@@ -114,6 +175,21 @@ class DistributionService:
             item.route is not DistributionRoute.KIND_HANDLER
             or self._kind_handlers.get(item.item_type) is not None
         )
+        operation = self._activation_operation(item)
+        operation_supported = (
+            item.route is not DistributionRoute.KIND_HANDLER
+            or operation == "status"
+            or _kind_supports(item, operation)
+        )
+        if item.route is DistributionRoute.KIND_HANDLER and handler_available and not operation_supported:
+            findings = (
+                *findings,
+                ValidationFinding(
+                    "unsupported_operation",
+                    FindingSeverity.ERROR,
+                    f"{item.kind} owner does not support Marketplace {operation}",
+                ),
+            )
         return DistributionPreview(
             provider_id=provider.provider_id,
             item=item,
@@ -122,6 +198,7 @@ class DistributionService:
             activation_allowed=(
                 item.route is not DistributionRoute.MANUAL
                 and handler_available
+                and operation_supported
                 and not has_errors(findings)
             ),
         )
@@ -147,19 +224,35 @@ class DistributionService:
         resolved_context = self._resolved_context(current, artifact, context)
         findings = validate_item(current, artifact, resolved_context)
         if has_errors(findings):
-            raise ValueError("registry item no longer passes activation validation")
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "registry item no longer passes activation validation",
+                details={
+                    "findings": [
+                        {"code": finding.code, "message": finding.message}
+                        for finding in findings
+                        if finding.severity is FindingSeverity.ERROR
+                    ]
+                },
+            )
         if current.route is DistributionRoute.KIND_HANDLER:
-            handler = self._kind_handlers.require(current.item_type)
-            if self.installed(current.item_id) is None:
+            operation = self._activation_operation(current)
+            handler = self._require_kind_handler(current, operation=operation)
+            if operation == "install":
                 result = await handler.install(current, artifact)
-            else:
+            elif operation == "update":
                 result = await handler.update(current, artifact)
+            else:
+                result = await handler.status(current)
         elif current.route is DistributionRoute.PLUGIN:
             result = await self._require_router().install_plugin(current, artifact)
         elif current.route is DistributionRoute.PORTABLE_IMPORT:
             result = await self._require_router().import_portable(current, artifact)
         else:
-            raise RuntimeError("manual registry assets cannot be activated automatically")
+            raise ContractError(
+                ErrorCode.UNSUPPORTED_CAPABILITY,
+                "manual registry assets cannot be activated automatically",
+            )
         if self._installations is not None:
             self._installations.record(
                 current,
@@ -167,6 +260,32 @@ class DistributionService:
                 artifact_sha256=hashlib.sha256(artifact).hexdigest(),
             )
         return result
+
+    def _activation_operation(self, item: RegistryItem) -> str:
+        installation = self.installed(item.item_id)
+        if installation is None:
+            return "install"
+        if installation.current.version == item.version:
+            return "status"
+        return "update"
+
+    def _require_kind_handler(
+        self,
+        item: RegistryItem,
+        *,
+        operation: str,
+    ) -> MarketplaceKindHandler:
+        if item.route is not DistributionRoute.KIND_HANDLER:
+            raise ContractError(
+                ErrorCode.UNSUPPORTED_CAPABILITY,
+                f"Marketplace kind {item.kind!r} does not use an owner handler",
+            )
+        if operation != "status" and not _kind_supports(item, operation):
+            raise ContractError(
+                ErrorCode.UNSUPPORTED_CAPABILITY,
+                f"{item.kind} owner does not support Marketplace {operation}",
+            )
+        return self._kind_handlers.require(item.item_type)
 
     def _resolved_context(
         self,
@@ -212,3 +331,18 @@ def _validate_provider_metadata(item: RegistryItem) -> RegistryItem:
 
     derive_technical_metadata(item)
     return item
+
+
+def _kind_supports(item: RegistryItem, operation: str) -> bool:
+    descriptor = builtin_marketplace_kind(item.item_type)
+    if descriptor is None:
+        return True
+    if operation == "install":
+        return descriptor.supports_install
+    if operation == "update":
+        return descriptor.supports_update
+    if operation == "uninstall":
+        return descriptor.supports_uninstall
+    if operation == "status":
+        return True
+    raise ValueError(f"unknown Marketplace operation: {operation}")
