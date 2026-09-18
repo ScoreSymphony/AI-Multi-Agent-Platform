@@ -579,6 +579,12 @@ class LocalGitRepositoryProvider(RepositoryProvider):
             "commit.gpgSign=false",
             "-c",
             "tag.gpgSign=false",
+            "-c",
+            "submodule.recurse=false",
+            "-c",
+            "fetch.recurseSubmodules=false",
+            "-c",
+            "push.recurseSubmodules=off",
             *args,
         ]
         try:
@@ -632,7 +638,6 @@ class LocalGitRepositoryProvider(RepositoryProvider):
                 [
                     binary,
                     "config",
-                    "--local",
                     "--no-includes",
                     "--name-only",
                     "--null",
@@ -655,7 +660,7 @@ class LocalGitRepositoryProvider(RepositoryProvider):
         if completed.returncode != 0:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                "local Git configuration could not be inspected safely",
+                "repository Git configuration could not be inspected safely",
                 retryable=False,
                 provider_id=self.provider_id,
                 details={"git_exit_code": completed.returncode},
@@ -669,7 +674,7 @@ class LocalGitRepositoryProvider(RepositoryProvider):
         if unsafe:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                "local Git configuration contains unsupported execution-capable settings",
+                "repository Git configuration contains unsupported execution-capable settings",
                 retryable=False,
                 provider_id=self.provider_id,
                 details={"unsafe_config_keys": list(unsafe)},
@@ -684,7 +689,6 @@ class LocalGitRepositoryProvider(RepositoryProvider):
             [
                 binary,
                 "config",
-                "--local",
                 "--no-includes",
                 "--get-regexp",
                 r"^remote\..*\.(url|pushurl)$",
