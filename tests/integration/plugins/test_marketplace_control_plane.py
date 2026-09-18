@@ -1168,6 +1168,14 @@ def test_marketplace_preview_serializes_structured_decision_findings(
     assert decision["dependency_blocked"] is True  # type: ignore[index]
     assert decision["dependencies"][0]["status"] == "missing"  # type: ignore[index]
     assert decision["permission_diff"]["added"] == ["filesystem.write"]  # type: ignore[index]
+    owner_extension = preview["item"]["owner_extension"]  # type: ignore[index]
+    assert owner_extension["handler_available"] is True  # type: ignore[index]
+    assert owner_extension["requirements"] == {  # type: ignore[index]
+        "kind": "application",
+        "required_capabilities": [],
+    }
+    assert owner_extension["details"] is None  # type: ignore[index]
+    assert owner_extension["status"] is None  # type: ignore[index]
     findings = preview["findings"]
     assert {finding["category"] for finding in findings} >= {"dependency", "permission"}  # type: ignore[index]
 
