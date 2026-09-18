@@ -47,6 +47,19 @@ export interface RepositoryDiffView {
   changed_paths: string[];
 }
 
+export interface RepositoryRevisionView {
+  repository_id: string;
+  requested_ref: string;
+  commit_sha: string;
+}
+
+export interface RepositoryDiscoveryView {
+  connection_id: string;
+  provider_id: string;
+  attached: boolean;
+  repositories: CanonicalRepository[];
+}
+
 export interface RepositoryClientOptions extends ApiTransportOptions {
   transport?: ApiTransport;
 }
@@ -128,6 +141,135 @@ export class RepositoryCollectionClient {
       repositoryId,
       approvalPayload(approvalId),
       idempotencyKey,
+    );
+  }
+
+  createBranch(
+    repositoryId: string,
+    name: string,
+    options: {
+      startRevision?: string;
+      checkout?: boolean;
+      approvalId?: string;
+      idempotencyKey?: string;
+    } = {},
+  ): Promise<RepositoryRevisionView> {
+    return this.command<RepositoryRevisionView>(
+      "repository.branch.create",
+      repositoryId,
+      {
+        name: requireRef(name, "branch name"),
+        start_revision: requireRef(options.startRevision ?? "HEAD", "start revision"),
+        checkout: options.checkout ?? false,
+        ...approvalPayload(options.approvalId),
+      },
+      options.idempotencyKey ?? crypto.randomUUID(),
+    );
+  }
+
+  checkout(
+    repositoryId: string,
+    revision: string,
+    approvalId?: string,
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<RepositoryRevisionView> {
+    return this.command<RepositoryRevisionView>(
+      "repository.checkout",
+      repositoryId,
+      {
+        revision: requireRef(revision, "repository revision"),
+        ...approvalPayload(approvalId),
+      },
+      idempotencyKey,
+    );
+  }
+
+  commit(
+    repositoryId: string,
+    input: {
+      message: string;
+      authorName: string;
+      authorEmail: string;
+      approvalId?: string;
+    },
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<RepositoryCommitView> {
+    return this.command<RepositoryCommitView>(
+      "repository.commit",
+      repositoryId,
+      {
+        message: requireRef(input.message, "commit message"),
+        author_name: requireRef(input.authorName, "commit author name"),
+        author_email: requireRef(input.authorEmail, "commit author email"),
+        ...approvalPayload(input.approvalId),
+      },
+      idempotencyKey,
+    );
+  }
+
+  push(
+    repositoryId: string,
+    options: {
+      remote?: string;
+      refspec?: string;
+      approvalId?: string;
+      idempotencyKey?: string;
+    } = {},
+  ): Promise<RepositoryRevisionView> {
+    const payload: Record<string, JsonValue> = {
+      remote: requireRef(options.remote ?? "origin", "repository remote"),
+      ...approvalPayload(options.approvalId),
+    };
+    if (options.refspec?.trim()) payload.refspec = options.refspec.trim();
+    return this.command<RepositoryRevisionView>(
+      "repository.push",
+      repositoryId,
+      payload,
+      options.idempotencyKey ?? crypto.randomUUID(),
+    );
+  }
+
+  attachLocal(
+    projectId: string,
+    input: {
+      name: string;
+      initialize?: boolean;
+      defaultBranch?: string;
+      approvalId?: string;
+    },
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<CanonicalRepository> {
+    return this.command<CanonicalRepository>(
+      "repository.local.attach",
+      requireRef(projectId, "project"),
+      {
+        name: requireRef(input.name, "managed repository name"),
+        initialize: input.initialize ?? false,
+        default_branch: requireRef(input.defaultBranch ?? "main", "default branch"),
+        ...approvalPayload(input.approvalId),
+      },
+      idempotencyKey,
+    );
+  }
+
+  discover(
+    connectionId: string,
+    providerId: string,
+    options: {
+      attach?: boolean;
+      approvalId?: string;
+      idempotencyKey?: string;
+    } = {},
+  ): Promise<RepositoryDiscoveryView> {
+    return this.command<RepositoryDiscoveryView>(
+      "repository.discover",
+      requireRef(connectionId, "connection"),
+      {
+        provider_id: requireRef(providerId, "repository provider"),
+        attach: options.attach ?? false,
+        ...approvalPayload(options.approvalId),
+      },
+      options.idempotencyKey,
     );
   }
 
