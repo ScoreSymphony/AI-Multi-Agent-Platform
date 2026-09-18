@@ -27,7 +27,7 @@ export const navigation: NavigationItem[] = [
   { label: "Memory", path: "/memory", group: "Data", apiResource: "memory" },
   { label: "Knowledge", path: "/knowledge", group: "Data", apiResource: "knowledge" },
   { label: "Search", path: "/search", group: "Data", apiResource: "search" },
-  { label: "Import / Export", path: "/import-export", group: "Data" },
+  { label: "Import / Export", path: "/import-export", group: "Data", apiResource: "portability-packages" },
   { label: "Tools", path: "/tools", group: "Intelligence", apiResource: "capabilities" },
   { label: "Integrations", path: "/integrations", group: "Intelligence", apiResource: "connector-definitions" },
   { label: "Models", path: "/models", group: "Intelligence", apiResource: "models" },
@@ -49,3 +49,27 @@ export const navigation: NavigationItem[] = [
   { label: "Onboarding", path: "/onboarding", group: "Operations", apiResource: "onboarding" },
   { label: "Settings", path: "/settings", group: "Operations" },
 ];
+
+
+const DETAIL_ROUTE_PARENTS: ReadonlyArray<readonly [string, string]> = [
+  ["/workspaces/", "/projects"],
+  ["/plans/", "/files"],
+  ["/steps/", "/files"],
+  ["/artifacts/", "/files"],
+  ["/results/", "/files"],
+  ["/workflows/", "/templates"],
+  ["/capability-assignments/", "/templates"],
+  ["/model-routing-profiles/", "/templates"],
+];
+
+export function navigationItemForPath(path: string): NavigationItem | undefined {
+  const exact = navigation.find((item) => item.path === path);
+  if (exact) return exact;
+
+  const alias = DETAIL_ROUTE_PARENTS.find(([prefix]) => path.startsWith(prefix));
+  if (alias) return navigation.find((item) => item.path === alias[1]);
+
+  return navigation
+    .filter((item) => item.path !== "/" && path.startsWith(`${item.path}/`))
+    .sort((left, right) => right.path.length - left.path.length)[0];
+}
