@@ -36,7 +36,7 @@ describe("RegistryClient", () => {
         body: JSON.parse(String(init?.body)),
         idempotency: headers.get("Idempotency-Key"),
       });
-      if (String(input).endsWith("registry.preview")) {
+      if (String(input).endsWith("marketplace.preview")) {
         return jsonResponse({
           id: "example.asset@1.2.3",
           type: "registry-preview",
@@ -60,7 +60,7 @@ describe("RegistryClient", () => {
 
     expect(calls).toEqual([
       {
-        url: "/api/v1/commands/registry.preview",
+        url: "/api/v1/commands/marketplace.preview",
         body: { resource_ref: "example.asset", version: "1.2.3" },
         idempotency: "registry-preview-key",
       },
