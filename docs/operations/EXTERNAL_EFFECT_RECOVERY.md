@@ -72,6 +72,19 @@ The existing distributed Worker runtime remains the owner of Worker dispatch rec
 persists Worker-job ownership before dispatch and reconciles the same `worker_job_id` after lost
 acknowledgement. #1154 does not introduce a competing Worker lifecycle.
 
+Other owner-specific external-effect paths keep the same rule:
+
+- connector/tool actions routed through the capability bridge use this recovery journal when their
+  capability is declared `EXTERNAL` or `DESTRUCTIVE`;
+- browser/remote actions are journaled only when they cross that same mutating capability boundary;
+  actions whose replay safety is not declared fail closed to reconciliation/manual review;
+- application release publication remains owned by `ApplicationReleasePublisher` and its
+  Connector owner. That contract already requires idempotent replay or explicit conflict, and the
+  GitHub release provider has conformance coverage for an uncertain create response followed by a
+  retry that resolves the existing release without a second create request.
+
+Those paths are reused rather than wrapped in a second publication, Connector or Worker lifecycle.
+
 ## Startup behavior
 
 The single-node runtime stores recovery evidence in:
