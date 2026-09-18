@@ -416,6 +416,10 @@ class RegistryCommandHandlers:
     ) -> None:
         self.distribution = distribution
         self.validation_context_resolver = validation_context_resolver
+        self._resource_service = RegistryResourceService(
+            distribution,
+            validation_context_resolver,
+        )
 
     async def preview(
         self,
@@ -479,12 +483,18 @@ class RegistryCommandHandlers:
             source_registry=source_registry,
         )
         route_available = self.distribution.route_available(preview.item)
+        installation = self.distribution.installed(resource_ref)
+        owner_extension = await self._resource_service._owner_extension(
+            preview.item,
+            installation,
+        )
         return _preview_resource(
             preview,
-            self.distribution.installed(resource_ref),
+            installation,
             route_available=route_available,
             activation_allowed=preview.activation_allowed and route_available,
             include_decision=True,
+            owner_extension=owner_extension,
         )
 
     async def marketplace_install(
@@ -678,7 +688,14 @@ class RegistryCommandHandlers:
         except LookupError as exc:
             raise ContractError(ErrorCode.NOT_FOUND, str(exc)) from exc
         except PermissionError as exc:
-            raise ContractError(ErrorCode.FORBIDDEN, str(exc)) from exc
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                str(exc),
+                details={
+                    "marketplace_reason": "owner_denied",
+                    "kind": preview.item.kind,
+                },
+            ) from exc
         except ValueError as exc:
             raise ContractError(
                 ErrorCode.CONFLICT,
@@ -810,7 +827,14 @@ class RegistryCommandHandlers:
         except ContractError:
             raise
         except PermissionError as exc:
-            raise ContractError(ErrorCode.FORBIDDEN, str(exc)) from exc
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                str(exc),
+                details={
+                    "marketplace_reason": "owner_denied",
+                    "kind": preview.item.kind,
+                },
+            ) from exc
         except KeyError as exc:
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,

@@ -1021,6 +1021,73 @@ def test_provider_and_owner_failures_use_canonical_error_boundaries(tmp_path: Pa
     assert owner_error.value.details["marketplace_reason"] == "owner_failure"
 
 
+def test_owner_permission_denials_keep_structured_marketplace_reason(
+    tmp_path: Path,
+) -> None:
+    class DenyingInstallHandler(RecordingHandler):
+        async def install(self, item: RegistryItem, artifact: bytes) -> object:
+            del artifact
+            raise PermissionError(f"owner denied install: {item.item_id}")
+
+    class DenyingUninstallHandler(RecordingHandler):
+        async def uninstall(self, item: RegistryItem) -> object:
+            raise PermissionError(f"owner denied uninstall: {item.item_id}")
+
+    item = _application("example.owner-denied", "1.0.0")
+    artifact = b"component"
+    install_commands = RegistryCommandHandlers(
+        DistributionService(
+            LocalRegistryProvider(
+                (item,),
+                {(item.item_id, item.version): artifact},
+            ),
+            installations=JsonRegistryInstallationStore(tmp_path / "owner-denied-install.json"),
+            kind_handlers=MarketplaceKindHandlerRegistry((DenyingInstallHandler(),)),
+        ),
+        StaticValidationContext(_context()),
+    )
+
+    with pytest.raises(ContractError) as install_error:
+        asyncio.run(
+            install_commands.marketplace_install(
+                _request(),
+                item.item_id,
+                {"version": item.version},
+            )
+        )
+    assert install_error.value.code is ErrorCode.FORBIDDEN
+    assert install_error.value.details == {
+        "marketplace_reason": "owner_denied",
+        "kind": "application",
+    }
+
+    uninstall_store = JsonRegistryInstallationStore(tmp_path / "owner-denied-uninstall.json")
+    uninstall_store.record(item, provider_id="local")
+    uninstall_commands = RegistryCommandHandlers(
+        DistributionService(
+            LocalRegistryProvider((item,)),
+            installations=uninstall_store,
+            kind_handlers=MarketplaceKindHandlerRegistry((DenyingUninstallHandler(),)),
+        ),
+        StaticValidationContext(_context()),
+    )
+
+    with pytest.raises(ContractError) as uninstall_error:
+        asyncio.run(
+            uninstall_commands.marketplace_uninstall(
+                _request(),
+                item.item_id,
+                {},
+            )
+        )
+    assert uninstall_error.value.code is ErrorCode.FORBIDDEN
+    assert uninstall_error.value.details == {
+        "marketplace_reason": "owner_denied",
+        "kind": "application",
+    }
+    assert uninstall_store.get(item.item_id) is not None
+
+
 def test_marketplace_item_not_found_is_canonical_not_found() -> None:
     service = RegistryResourceService(DistributionService(LocalRegistryProvider()))
 
@@ -1168,6 +1235,14 @@ def test_marketplace_preview_serializes_structured_decision_findings(
     assert decision["dependency_blocked"] is True  # type: ignore[index]
     assert decision["dependencies"][0]["status"] == "missing"  # type: ignore[index]
     assert decision["permission_diff"]["added"] == ["filesystem.write"]  # type: ignore[index]
+    owner_extension = preview["item"]["owner_extension"]  # type: ignore[index]
+    assert owner_extension["handler_available"] is True  # type: ignore[index]
+    assert owner_extension["requirements"] == {  # type: ignore[index]
+        "kind": "application",
+        "required_capabilities": [],
+    }
+    assert owner_extension["details"] is None  # type: ignore[index]
+    assert owner_extension["status"] is None  # type: ignore[index]
     findings = preview["findings"]
     assert {finding["category"] for finding in findings} >= {"dependency", "permission"}  # type: ignore[index]
 
