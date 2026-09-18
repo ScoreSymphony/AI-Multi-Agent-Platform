@@ -19,6 +19,8 @@ from ai_multi_agent_platform.distribution import (
     RegistryItem,
     RegistryItemType,
     RegistryManifestReference,
+    RegistryQuery,
+    RegistrySignatureVerifier,
     RegistrySource,
     RegistrySourceConflictError,
     TrustStatus,
@@ -107,7 +109,7 @@ def _service(
     *,
     store: JsonRegistryInstallationStore | None = None,
     provider_id: str = "local",
-    signature_verifier: object | None = None,
+    signature_verifier: RegistrySignatureVerifier | None = None,
 ) -> DistributionService:
     provider = LocalRegistryProvider(
         tuple(item for item, _artifact in items),
@@ -121,7 +123,7 @@ def _service(
         provider,
         _Router(),
         installations=store,
-        signature_verifier=signature_verifier,  # type: ignore[arg-type]
+        signature_verifier=signature_verifier,
     )
 
 
@@ -547,13 +549,7 @@ def test_multiple_sources_do_not_silently_collapse_identity() -> None:
     )
     provider = MultiRegistryProvider((official, private))
 
-    discovered = provider.search(
-        # no filter: both source-qualified definitions remain visible
-        __import__(
-            "ai_multi_agent_platform.distribution",
-            fromlist=["RegistryQuery"],
-        ).RegistryQuery()
-    )
+    discovered = provider.search(RegistryQuery())
 
     assert [(item.item_id, item.source_registry) for item in discovered] == [
         ("example.duplicate", "official"),
