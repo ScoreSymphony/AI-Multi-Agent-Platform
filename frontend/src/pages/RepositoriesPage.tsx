@@ -19,7 +19,19 @@ import {
   StatusBadge,
 } from "../components/States";
 
-export function RepositoriesPage({ client }: { client: RepositoryCollectionClient }) {
+export interface RepositoryManagementAvailability {
+  attachLocal: boolean;
+  discover: boolean;
+  detach: boolean;
+}
+
+export function RepositoriesPage({
+  client,
+  management,
+}: {
+  client: RepositoryCollectionClient;
+  management: RepositoryManagementAvailability;
+}) {
   const [page, setPage] = useState<Page<CanonicalRepository> | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<unknown>(null);
@@ -119,38 +131,52 @@ export function RepositoriesPage({ client }: { client: RepositoryCollectionClien
       </Card>
 
       <div className="grid-two">
-        <Card title="Attach managed local repository">
-          <form className="form-grid" onSubmit={attachLocal}>
-            <label>Project ID<input required name="project_id" placeholder="project_…" /></label>
-            <label>Managed name<input required name="name" placeholder="scoresymphony" /></label>
-            <label>Default branch<input required name="default_branch" defaultValue="main" /></label>
-            <label><input type="checkbox" name="initialize" /> Initialize if absent</label>
-            <label>Approval ID<input name="approval_id" placeholder="optional approval_…" /></label>
-            <button className="primary" type="submit" disabled={busy !== null}>
-              {busy === "attach-local" ? "Attaching…" : "Attach local repository"}
-            </button>
-          </form>
-          <p className="muted">
-            Only a managed repository name is accepted. The browser never submits an arbitrary host
-            filesystem path.
-          </p>
-        </Card>
+        {management.attachLocal ? (
+          <Card title="Attach managed local repository">
+            <form className="form-grid" onSubmit={attachLocal}>
+              <label>Project ID<input required name="project_id" placeholder="project_…" /></label>
+              <label>Managed name<input required name="name" placeholder="scoresymphony" /></label>
+              <label>Default branch<input required name="default_branch" defaultValue="main" /></label>
+              <label><input type="checkbox" name="initialize" /> Initialize if absent</label>
+              <label>Approval ID<input name="approval_id" placeholder="optional approval_…" /></label>
+              <button className="primary" type="submit" disabled={busy !== null}>
+                {busy === "attach-local" ? "Attaching…" : "Attach local repository"}
+              </button>
+            </form>
+            <p className="muted">
+              Only a managed repository name is accepted. The browser never submits an arbitrary host
+              filesystem path.
+            </p>
+          </Card>
+        ) : (
+          <DegradedState
+            title="Local repository management unavailable"
+            detail="The Control Plane does not advertise repository.local.attach. Existing repository inspection remains usable without a private filesystem fallback."
+          />
+        )}
 
-        <Card title="Discover provider repositories">
-          <form className="form-grid" onSubmit={discoverRepositories}>
-            <label>Connection ID<input required name="connection_id" placeholder="connection_…" /></label>
-            <label>Provider ID<input required name="provider_id" placeholder="github" /></label>
-            <label><input type="checkbox" name="attach" /> Attach discovered repositories</label>
-            <label>Approval ID<input name="approval_id" placeholder="optional approval_…" /></label>
-            <button className="primary" type="submit" disabled={busy !== null}>
-              {busy === "discover" ? "Discovering…" : "Discover repositories"}
-            </button>
-          </form>
-          <p className="muted">
-            Discovery uses the canonical Connection/provider binding; provider credentials and SDKs
-            remain behind the Control Plane.
-          </p>
-        </Card>
+        {management.discover ? (
+          <Card title="Discover provider repositories">
+            <form className="form-grid" onSubmit={discoverRepositories}>
+              <label>Connection ID<input required name="connection_id" placeholder="connection_…" /></label>
+              <label>Provider ID<input required name="provider_id" placeholder="github" /></label>
+              <label><input type="checkbox" name="attach" /> Attach discovered repositories</label>
+              <label>Approval ID<input name="approval_id" placeholder="optional approval_…" /></label>
+              <button className="primary" type="submit" disabled={busy !== null}>
+                {busy === "discover" ? "Discovering…" : "Discover repositories"}
+              </button>
+            </form>
+            <p className="muted">
+              Discovery uses the canonical Connection/provider binding; provider credentials and SDKs
+              remain behind the Control Plane.
+            </p>
+          </Card>
+        ) : (
+          <DegradedState
+            title="Repository provider discovery unavailable"
+            detail="The Control Plane does not advertise repository.discover. Attached repositories remain inspectable without a provider-private fallback."
+          />
+        )}
       </div>
 
       {actionError ? <ErrorState error={actionError} onRetry={() => setActionError(null)} /> : null}
@@ -208,9 +234,11 @@ export function RepositoriesPage({ client }: { client: RepositoryCollectionClien
 export function RepositoryDetailPage({
   client,
   repositoryId,
+  management,
 }: {
   client: RepositoryCollectionClient;
   repositoryId: string;
+  management: RepositoryManagementAvailability;
 }) {
   const [repository, setRepository] = useState<CanonicalRepository | null>(null);
   const [status, setStatus] = useState<RepositoryStatusView | null>(null);
@@ -402,14 +430,21 @@ export function RepositoryDetailPage({
               {busy === "fetch" ? "Fetching…" : "Fetch revisions"}
             </button>
           ) : null}
-          <button className="danger" onClick={() => void detach()} disabled={busy !== null}>
-            {busy === "detach" ? "Detaching…" : "Detach repository"}
-          </button>
+          {management.detach ? (
+            <button className="danger" onClick={() => void detach()} disabled={busy !== null}>
+              {busy === "detach" ? "Detaching…" : "Detach repository"}
+            </button>
+          ) : null}
         </div>
         <p>
           Actions are routed through canonical Control Plane commands; repository policy and
           approval checks remain authoritative on the server.
         </p>
+        {!management.detach ? (
+          <p className="muted">
+            Detach is unavailable because the Control Plane does not advertise repository.detach.
+          </p>
+        ) : null}
       </Card>
 
       <div className="grid-two">
