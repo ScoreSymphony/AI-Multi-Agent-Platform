@@ -103,6 +103,7 @@ from .composition.services import (
     RuntimeServicesBundle,
 )
 from .config import SingleNodeConfig
+from .persistence_health import SingleNodePersistenceHealthProvider
 
 _SMOKE_PROJECT_KEY = "deployment-smoke-project-v1"
 _SMOKE_TASK_KEY = "deployment-smoke-task-v1"
@@ -162,6 +163,7 @@ class SingleNodeDeployment:
     observability_exporter: InMemoryExporter
     telemetry: Telemetry
     health_provider: AggregatedHealthProvider
+    persistence_health: SingleNodePersistenceHealthProvider
     distributed_runtime: DistributedRuntime | None
     pre_authorization_lifecycle: LifecycleBackend
     lifecycle_binding: StartupLifecycleBinding
@@ -445,6 +447,7 @@ def _assemble_deployment(
         observability_exporter=observability.exporter,
         telemetry=observability.telemetry,
         health_provider=health.provider,
+        persistence_health=health.persistence,
         distributed_runtime=execution.distributed_runtime,
         pre_authorization_lifecycle=execution.pre_authorization_lifecycle,
         lifecycle_binding=execution.lifecycle,
