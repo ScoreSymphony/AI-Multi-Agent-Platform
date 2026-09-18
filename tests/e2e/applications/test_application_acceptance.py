@@ -271,11 +271,7 @@ def _marker_service(
     prerequisite = (
         ""
         if requires_marker is None
-        else (
-            f"required = Path({str(requires_marker)!r}); "
-            "raise_if_missing = not required.exists(); "
-            "raise_if_missing and (_ for _ in ()).throw(SystemExit(17)); "
-        )
+        else f"assert Path({str(requires_marker)!r}).exists(), 'dependency not ready'; "
     )
     script = (
         "from pathlib import Path; import time; "
