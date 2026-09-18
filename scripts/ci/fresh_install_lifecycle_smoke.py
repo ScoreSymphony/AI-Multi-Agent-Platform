@@ -98,11 +98,23 @@ def _start_and_stop_once(
             # after its graceful shutdown path completes. On POSIX, a clean SIGTERM-driven
             # shutdown is therefore observable as -SIGTERM rather than only as exit code 0.
             expected_returncodes = {0, -signal.SIGTERM}
+            shutdown_log = log_path.read_text(encoding="utf-8")
             if process.returncode not in expected_returncodes:
                 raise RuntimeError(
                     f"platform-server did not shut down cleanly: {process.returncode}\n"
-                    f"{log_path.read_text(encoding='utf-8')}"
+                    f"{shutdown_log}"
                 )
+            graceful_markers = (
+                "Shutting down",
+                "Application shutdown complete.",
+                "Finished server process",
+            )
+            for marker in graceful_markers:
+                if marker not in shutdown_log:
+                    raise RuntimeError(
+                        "platform-server missed graceful shutdown marker "
+                        f"{marker!r}:\n{shutdown_log}"
+                    )
         finally:
             if process.poll() is None:
                 process.kill()
@@ -126,7 +138,7 @@ def main() -> int:
                 "AI_MAP_HOST": "127.0.0.1",
                 "AI_MAP_PORT": str(port),
                 "AI_MAP_SECURE_COOKIE": "false",
-                "AI_MAP_LOG_LEVEL": "warning",
+                "AI_MAP_LOG_LEVEL": "info",
                 "AI_MAP_SHUTDOWN_TIMEOUT_SECONDS": "5",
             }
         )
