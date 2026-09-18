@@ -30,7 +30,7 @@ class RepositoryIntelligenceOperation(StrEnum):
 
 
 def repository_intelligence_capability_specs() -> tuple[CapabilitySpec, ...]:
-    """Return canonical #12-compatible capability definitions.
+    """Return canonical Capability Registry-compatible definitions.
 
     Multiple providers must publish equivalent stable contract fields for the same
     capability/version so ``CapabilityRegistry`` can safely resolve by health and priority.

@@ -211,7 +211,7 @@ class KernelFileReviewerSubjectInputProvider(ReviewerSubjectInputProvider):
 
 
 def _result_snapshot(*, task_id: str, result_id: str, run: RunState) -> dict[str, JsonValue]:
-    """Mirror the canonical #86 Result subject snapshot used by the evidence resolver."""
+    """Mirror the canonical Verification Result subject snapshot used by the evidence resolver."""
 
     return {
         "type": "result",

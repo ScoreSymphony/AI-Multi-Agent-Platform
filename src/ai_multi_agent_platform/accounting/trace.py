@@ -1,4 +1,4 @@
-"""Read-only #76 accounting adapter for the #901 trace explorer."""
+"""Read-only accounting adapter for the trace explorer."""
 
 from __future__ import annotations
 

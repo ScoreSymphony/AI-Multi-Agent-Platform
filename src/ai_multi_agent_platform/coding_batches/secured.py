@@ -23,10 +23,11 @@ from .service import CodingBatchStore
 
 
 class CodingBatchCoordinator:
-    """Supported #872 coordinator surface over the internal deterministic state machine.
+    """Supported coding-batch coordinator surface over the internal deterministic state machine.
 
-    Productive merge readiness must cross canonical #15, and a clean combined revision must first
-    be bound to canonical #384/#33/#37 execution provenance. Callers therefore cannot advance a
+    Productive merge readiness must cross canonical authorization, and a clean combined revision
+    must first be bound to canonical Step/AgentRun/Workspace execution provenance. Callers cannot
+    advance a
     ready integration candidate by merely presenting a Git SHA.
     """
 
@@ -68,7 +69,7 @@ class CodingBatchCoordinator:
         *,
         plan_revision: int,
     ) -> CodingWorkstream:
-        """Bind the exact canonical #439/#384 Plan revision before materialization."""
+        """Bind the exact planning/Step-orchestration Plan revision before materialization."""
 
         return self._state.bind_plan_revision(
             batch_id,
@@ -187,7 +188,7 @@ class CodingBatchCoordinator:
         *,
         integrated_revision: str,
     ) -> IntegrationCandidate:
-        """Record #82 output only after canonical integration execution has been bound."""
+        """Record repository output only after canonical integration execution has been bound."""
 
         batch = self.get(batch_id)
         candidate = batch.integration_candidate(integration_id)
@@ -223,16 +224,14 @@ class CodingBatchCoordinator:
         integration_id: str,
     ) -> IntegrationCandidate:
         del batch_id, integration_id
-        raise PermissionError(
-            "merge readiness requires canonical #15 AuthorizedCodingBatchIntegration"
-        )
+        raise PermissionError("merge readiness requires canonical AuthorizedCodingBatchIntegration")
 
     def _mark_merge_ready_after_authorization(
         self,
         batch_id: str,
         integration_id: str,
     ) -> IntegrationCandidate:
-        """Internal state transition used only after the #15 adapter has enforced its action."""
+        """Internal transition used only after authorization enforces its action."""
 
         return self._state._mark_merge_ready_after_authorization(batch_id, integration_id)
 

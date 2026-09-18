@@ -89,7 +89,7 @@ class DataProviderResourceService:
 
 
 class FileResourceService:
-    """Safe northbound metadata projection over the canonical #13 FileProvider.
+    """Safe northbound metadata projection over the canonical FileProvider.
 
     File bytes never enter this read model. Project-aware providers are enumerated once
     for the unscoped namespace and once for every canonical Project supplied by the

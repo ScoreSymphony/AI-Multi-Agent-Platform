@@ -143,9 +143,9 @@ async def _handler_owned_authorization(
     resource_ref: str,
     payload: dict[str, JsonValue],
 ) -> None:
-    """Preserve #72's resource-aware authorization inside canonical handlers.
+    """Preserve resource-aware Conversation authorization inside canonical handlers.
 
-    The pre-#982 Conversation composition deliberately bypassed the generic
+    The legacy Conversation composition deliberately bypassed the generic
     ``_authorize(command, resource_ref)`` preflight because each handler authorizes
     against the canonical Conversation/Message/Task relationship.  Declaring that
     boundary explicitly preserves the existing security semantics without an

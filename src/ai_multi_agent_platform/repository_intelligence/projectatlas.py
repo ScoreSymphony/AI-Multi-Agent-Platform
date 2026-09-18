@@ -3,7 +3,7 @@
 This module deliberately exposes only provider health and index-status capabilities. The pinned
 ProjectAtlas runtime passed the contained functional pilot, but repository/source/graph operations
 remain disabled until network-egress containment and the real read-only adapter boundary are
-verified. The plugin therefore proves #20 install/enable/disable semantics without granting the
+verified. The plugin therefore proves plugin install/enable/disable semantics without granting the
 candidate repository, Workspace, secret, or network authority.
 """
 
@@ -144,7 +144,7 @@ class LocalProjectAtlasRuntimeProbe:
 
 
 def projectatlas_candidate_manifest() -> PluginManifest:
-    """Return the experimental #20 manifest for the pinned ProjectAtlas candidate."""
+    """Return the experimental manifest for the pinned ProjectAtlas candidate."""
 
     return PluginManifest(
         plugin_id=PROJECTATLAS_PLUGIN_ID,
@@ -161,7 +161,7 @@ def projectatlas_candidate_manifest() -> PluginManifest:
             source_repository="https://github.com/styler-ai/ProjectAtlas",
             revision=f"v{PROJECTATLAS_RUNTIME_VERSION}",
             checksum=f"sha256:{PROJECTATLAS_ARCHIVE_SHA256}",
-            trust_source="issue-502-contained-functional-pilot",
+            trust_source="projectatlas-contained-functional-pilot",
             local_modifications=(
                 "ScoreSymphony adapter only; the upstream ProjectAtlas executable is not bundled"
             ),
@@ -206,7 +206,7 @@ def projectatlas_candidate_manifest() -> PluginManifest:
 
 
 class ProjectAtlasCandidatePlugin:
-    """#20 runtime shell that fails closed before registering any source capability."""
+    """Runtime shell that fails closed before registering any source capability."""
 
     def __init__(self, probe: ProjectAtlasRuntimeProbe | None = None) -> None:
         self._probe = probe or LocalProjectAtlasRuntimeProbe()

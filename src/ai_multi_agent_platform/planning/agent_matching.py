@@ -1,4 +1,4 @@
-"""#439 adapter from planning inventory/Step requirements to canonical #903 matching."""
+"""Planning adapter from inventory/Step requirements to canonical Agent matching."""
 
 from __future__ import annotations
 
@@ -40,8 +40,9 @@ def match_planning_step(
 ) -> AgentMatchResult | None:
     """Resolve one planner assignment against the already authorized planning inventory.
 
-    The inventory is the #439/#15 server-resolved view. This adapter does not re-authorize or
-    schedule workers; it only translates that trusted snapshot to the shared matcher contract.
+    The inventory is the server-resolved planning/authorization view. This adapter does not
+    re-authorize or schedule workers; it only translates that snapshot to the shared matcher
+    contract.
     """
 
     assignment = step.assignment
@@ -87,7 +88,7 @@ def resolve_planning_steps(
     steps: tuple[PlanningStepDraft, ...],
     request: PlanningRequest,
 ) -> tuple[PlanningStepDraft, ...]:
-    """Resolve role-only #439 assignments to exact Agent revisions when unambiguous.
+    """Resolve role-only planning assignments to exact Agent revisions when unambiguous.
 
     The current reference execution boundary executes one Agent per canonical Step, so this
     adapter intentionally asks the shared matcher for Agents only. Team matching remains
@@ -109,7 +110,7 @@ def resolve_planning_steps(
         rationale = assignment.rationale
         selected_outcome = result.selected_outcome
         matching_rationale = (
-            "canonical #903 Agent matcher selected exact eligible revision"
+            "canonical Agent matcher selected exact eligible revision"
             if selected_outcome is None
             else "; ".join(selected_outcome.rationale)
         )

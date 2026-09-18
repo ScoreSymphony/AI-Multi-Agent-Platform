@@ -1,8 +1,8 @@
-"""Advanced distributed Control-Plane entrypoint for issue #240.
+"""Advanced distributed Control-Plane entrypoint.
 
-The normal #39 single-node composition remains the fallback. This adapter opts the same canonical
-Task/Run kernel into #14 distributed execution, validates one executable #240 deployment profile,
-then exposes the authenticated Worker protocol and #35 network transport at the outer boundary.
+The normal single-node composition remains the fallback. This adapter opts the same canonical
+Task/Run kernel into distributed execution, validates one executable deployment profile,
+then exposes the authenticated Worker protocol and network transport at the outer boundary.
 """
 
 from __future__ import annotations
@@ -83,16 +83,18 @@ def build_distributed_control_plane_deployment(
     if runtime is None:
         raise RuntimeError("distributed deployment was built without a distributed runtime")
 
-    # The advanced process has the durable data root needed to recover #14 ownership. The generic
-    # Stage-1 builder intentionally does not assume distributed persistence, so bind the reference
+    # The advanced process has the durable data root needed to recover distributed ownership.
+    # The generic Stage-1 builder does not assume distributed persistence, so bind the
+    # reference
     # store here before any runtime registration or dispatch can occur. Restore marks old liveness
     # offline; fresh presence evidence below is required before an existing Worker can be queried.
     runtime.configure_state_store(
         JsonDistributedStateStore(config.database_dir / _DISTRIBUTED_STATE_FILE)
     )
 
-    # The shipped distributed server exposes the already-existing canonical #14 compute resources
-    # and admin commands. Runtime inspection/drain/maintenance therefore use the same northbound
+    # The shipped distributed server exposes the already-existing canonical distributed
+    # compute resources and admin commands. Runtime inspection/drain/maintenance use the
+    # same northbound
     # Control Plane as the rest of the platform rather than a deployment-private shortcut.
     register_distributed_control_plane(deployment.control_plane, runtime)
     pressure_config = HostPressureDeploymentConfig.from_environment(os.environ)

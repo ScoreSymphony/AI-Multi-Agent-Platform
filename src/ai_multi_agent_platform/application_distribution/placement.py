@@ -51,7 +51,7 @@ class LocalBuildTargetMatcher:
 
 
 class DistributedBuildTargetMatcher:
-    """Use the canonical #14 scheduler for pre-dispatch target admission.
+    """Use the canonical distributed scheduler for pre-dispatch target admission.
 
     This matcher is intentionally not a scheduler. It asks the same scheduler that owns remote
     placement whether at least one Worker currently satisfies the translated target requirements;
@@ -88,7 +88,7 @@ def job_requirements_for_target(
     specification: BuildSpecification,
     target: BuildTarget,
 ) -> JobRequirements:
-    """Translate one application target into canonical #14 placement requirements.
+    """Translate one application target into canonical distributed placement requirements.
 
     ``resource_hints`` remains optional/advisory metadata on ``BuildSpecification``. Only
     canonical scheduler dimensions are accepted here; unknown hints stay application metadata

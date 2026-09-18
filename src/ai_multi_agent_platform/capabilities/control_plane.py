@@ -85,7 +85,7 @@ class CapabilityProviderResourceService:
 def capability_resource_services(
     registry: CapabilityRegistry,
 ) -> dict[str, CapabilityResourceService | CapabilityProviderResourceService]:
-    """Register #12 inventory through the generic versioned Control Plane seam."""
+    """Register Capability inventory through the generic versioned Control Plane seam."""
 
     return {
         "capabilities": CapabilityResourceService(registry),

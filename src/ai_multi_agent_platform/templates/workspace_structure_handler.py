@@ -1,4 +1,4 @@
-"""Concrete Template integration for canonical #37 Workspace structures."""
+"""Concrete Template integration for canonical Workspace structures."""
 
 from __future__ import annotations
 

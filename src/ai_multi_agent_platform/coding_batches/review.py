@@ -1,4 +1,4 @@
-"""Canonical #33/#82/#86 evidence binding for issue #872 workstream review."""
+"""Canonical AgentRun/repository/Verification evidence binding for coding-workstream review."""
 
 from __future__ import annotations
 
@@ -28,23 +28,23 @@ from .telemetry import CodingBatchTelemetry
 
 
 class AgentRunEvidenceReader(Protocol):
-    """Minimal #33 read boundary needed to prove one coding workstream producer."""
+    """Minimal AgentRun read boundary needed to prove one coding workstream producer."""
 
     def get_agent_run(self, agent_run_id: str) -> AgentRunRecord: ...
 
 
 class RepositoryRunEvidenceReader(Protocol):
-    """Minimal #82 provenance read boundary needed to bind artifacts to an exact output SHA."""
+    """Read repository provenance needed to bind artifacts to an exact output SHA."""
 
     def get(self, run_id: str, repository_id: str) -> RepositoryRunProvenance | None: ...
 
 
 class CanonicalCodingVerificationCoordinator:
-    """Project canonical #86 review back into #872 only with complete output provenance.
+    """Project Verification review back only with complete output provenance.
 
-    Verification remains owned by #86. This adapter requests/reuses a canonical Artifact review
-    and accepts the resulting evidence only when the Artifact set is the exact #82 diff-artifact
-    set for the #33 producer Run and repository output revision recorded by the workstream.
+    Verification remains owned by its domain. This adapter requests or reuses an Artifact
+    review and accepts evidence only when the Artifact set exactly matches repository diff
+    artifacts for the AgentRun producer Run and recorded output revision.
     """
 
     def __init__(
@@ -86,7 +86,7 @@ class CanonicalCodingVerificationCoordinator:
         correlation_id: str,
         causation_id: str | None = None,
     ) -> VerificationRequest:
-        """Create or reuse one exact canonical #86 request for the produced workstream output."""
+        """Create or reuse Verification for the produced workstream output."""
 
         batch, workstream, agent_run, _repository = await self._runtime_output_evidence(
             batch_id,
@@ -159,7 +159,7 @@ class CanonicalCodingVerificationCoordinator:
         *,
         verification_id: str,
     ) -> CodingWorkstream:
-        """Record a completed #86 result only when it covers the exact #82 diff evidence."""
+        """Record Verification only when it covers the exact repository diff evidence."""
 
         batch, workstream, agent_run, repository = self._output_evidence(
             batch_id,
@@ -243,7 +243,7 @@ class CanonicalCodingVerificationCoordinator:
             raise ValueError("canonical Developer AgentRun must succeed before Verification")
         expected_agent_revision = f"{agent_run.agent.agent_id}@{agent_run.agent.revision}"
         if workstream.provenance.agent_revision != expected_agent_revision:
-            raise ValueError("workstream Agent revision differs from canonical #33 provenance")
+            raise ValueError("workstream Agent revision differs from canonical AgentRun provenance")
         return batch, workstream, agent_run
 
     @staticmethod
@@ -254,7 +254,7 @@ class CanonicalCodingVerificationCoordinator:
         repository: RepositoryRunProvenance | None,
     ) -> tuple[CodingBatch, CodingWorkstream, AgentRunRecord, RepositoryRunProvenance]:
         if repository is None:
-            raise ValueError("canonical #82 Run repository provenance is missing")
+            raise ValueError("canonical repository Run provenance is missing")
         if repository.task_id != workstream.work_item.task_id:
             raise ValueError("repository output provenance belongs to another Task")
         if repository.input_revision != workstream.provenance.base_revision:
@@ -269,7 +269,8 @@ class CanonicalCodingVerificationCoordinator:
         recorded_artifacts = set(workstream.result.artifact_ids)
         if not expected_artifacts or recorded_artifacts != expected_artifacts:
             raise ValueError(
-                "workstream artifacts must equal the complete canonical #82 diff-artifact set"
+                "workstream artifacts must equal the complete canonical "
+                "repository diff-artifact set"
             )
         if not recorded_artifacts.issubset(set(agent_run.artifact_ids)):
             raise ValueError("workstream diff artifacts are not owned by the canonical AgentRun")
@@ -298,7 +299,7 @@ class CanonicalCodingVerificationCoordinator:
             provider_id=agent_run.selected_provider_id,
         )
         if producer != expected:
-            raise ValueError("canonical Verification producer differs from the #33 AgentRun")
+            raise ValueError("canonical Verification producer differs from the AgentRun")
         if workstream.provenance.repository_id != batch.repository_id:
             raise ValueError("workstream repository provenance differs from coding batch")
 
@@ -319,4 +320,6 @@ class CanonicalCodingVerificationCoordinator:
                 "canonical Verification must cover the complete workstream diff-artifact set"
             )
         if expected_artifacts != set(repository.diff_artifact_ids):
-            raise ValueError("Verification artifact coverage differs from canonical #82 provenance")
+            raise ValueError(
+                "Verification artifact coverage differs from canonical repository provenance"
+            )

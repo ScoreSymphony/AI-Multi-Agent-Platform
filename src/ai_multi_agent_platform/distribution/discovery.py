@@ -62,7 +62,7 @@ def curate_discovered_candidate(
     """Promote reviewed metadata into a discovery/evaluation-only Registry item.
 
     The result is always untrusted, manual-only and evaluation-required. A discovery
-    source can therefore never bypass #81 activation, #15 authorization or the normal
+    source can therefore never bypass activation policy, authorization, or the normal
     external-component adoption decision.
     """
 

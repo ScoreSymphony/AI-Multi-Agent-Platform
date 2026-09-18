@@ -3,7 +3,7 @@
 The runtime Control Plane already owns authenticated administration. This adapter binds
 credential issuance to the selected deployment profile so an administrator can provision or
 rotate the reporter identity required by ``platform-worker`` without test-only Python calls.
-Canonical Worker authentication remains #36 and authorization remains #15.
+Canonical Worker authentication and authorization remain owned by their security services.
 """
 
 from __future__ import annotations

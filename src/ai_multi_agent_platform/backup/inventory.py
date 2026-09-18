@@ -7,7 +7,7 @@ from typing import Literal
 
 StoreKind = Literal["sqlite", "json"]
 
-# Version 1 is the pre-learning backup contract emitted before #595 added platform-owned
+# Version 1 predates platform-owned learning stores.
 # learning stores. Version 2 is the current single-node durable-store contract.
 SINGLE_NODE_STORE_CONTRACT_VERSION = 2
 
@@ -112,7 +112,7 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
         False,
         "distributed-runtime",
     ),
-    # #41 state is lazy on the 0.0.1 transition because existing deployments adopt the baseline
+    # Upgrade state is lazy on the 0.0.1 transition because existing deployments adopt the baseline
     # explicitly. Once present, these files are canonical recovery evidence and must move with the
     # rest of the durable data root. `upgrade-maintenance.json` is intentionally excluded: backups
     # are source-release recovery artifacts created before entering migration maintenance, and a

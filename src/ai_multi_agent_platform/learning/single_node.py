@@ -1,4 +1,4 @@
-"""Additive single-node composition seam for governed Learning (#595/#694)."""
+"""Additive single-node composition seam for governed Learning."""
 
 from __future__ import annotations
 

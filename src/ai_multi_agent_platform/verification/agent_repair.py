@@ -1,4 +1,4 @@
-"""Productive Agent repair adapters for automatic Verification review (#711, #759)."""
+"""Productive Agent repair adapters for automatic Verification review."""
 
 from __future__ import annotations
 

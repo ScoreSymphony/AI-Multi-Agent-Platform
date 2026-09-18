@@ -131,8 +131,9 @@ def register_repository_control_plane(
         RepositoryResourceService(repositories),
     )
     if management is not None:
-        # #44 discovers this hook dynamically at Connection-removal time, so registration order
-        # does not matter and repository bindings cannot outlive their canonical Connection.
+        # The Connector domain discovers this hook dynamically at Connection-removal time,
+        # so registration order does not matter and repository bindings cannot outlive
+        # their canonical Connection.
         setattr(  # noqa: B010
             control_plane,
             "connector_connection_removal_hook",

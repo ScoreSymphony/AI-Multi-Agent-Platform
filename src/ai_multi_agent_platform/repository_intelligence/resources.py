@@ -1,8 +1,9 @@
 """Resource/admission metadata for repository-intelligence workloads.
 
 Repository intelligence has both cheap bounded reads and potentially heavy index refresh/rebuild
-work. This module bridges declared provider requirements into the existing #14 placement contract
-without inventing a second scheduler. Unknown heavy-work requirements fail closed: tiny-fixture
+work. This module bridges declared provider requirements into the distributed placement
+contract without inventing a second scheduler. Unknown heavy-work requirements fail closed:
+tiny-fixture
 measurements are evidence, not permission to extrapolate production capacity.
 """
 
@@ -80,7 +81,7 @@ class RepositoryIntelligenceResourceEnvelope:
         capability_refs: tuple[str, ...] = (),
         require_complete: bool | None = None,
     ) -> JobRequirements:
-        """Project into #14 placement requirements; heavy jobs default to fail-closed."""
+        """Project into distributed placement requirements; heavy jobs default to fail-closed."""
 
         if require_complete is None:
             require_complete = self.workload is not RepositoryIntelligenceWorkload.BOUNDED_QUERY

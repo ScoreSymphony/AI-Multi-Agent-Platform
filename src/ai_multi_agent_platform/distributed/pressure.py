@@ -1,7 +1,7 @@
-"""Portable host-pressure contracts and deterministic admission policy for issue #500.
+"""Portable host-pressure contracts and deterministic admission policy.
 
 The module deliberately owns no scheduling, reservation, transport or lifecycle state.  It
-supplies read-only pressure evidence and an admission decision that the canonical #14 scheduler
+supplies read-only pressure evidence and an admission decision that the distributed scheduler
 may consult after ordinary eligibility checks and before reservation.
 """
 

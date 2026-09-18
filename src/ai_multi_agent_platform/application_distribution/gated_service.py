@@ -1,4 +1,4 @@
-"""Gate-aware application-distribution service composition for issue #750."""
+"""Gate-aware application-distribution service composition."""
 
 from __future__ import annotations
 
@@ -35,8 +35,8 @@ class ApplicationDistributionService(_BaseApplicationDistributionService):
     """Application distribution with canonical release-gate reconciliation.
 
     The base service remains the owner of build/publication state. This subclass adds the
-    narrow evidence bridge required by #750 and deliberately delegates Verification and
-    Evaluation truth to their canonical services through ``ApplicationReleaseGateCoordinator``.
+    narrow evidence bridge required by release-gate composition and deliberately delegates
+    Verification and Evaluation truth through ``ApplicationReleaseGateCoordinator``.
     """
 
     def __init__(

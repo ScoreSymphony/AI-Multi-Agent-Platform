@@ -104,7 +104,7 @@ def test_single_node_composes_same_accounting_service_into_control_plane(tmp_pat
     assert {"usage-records", "usage-aggregates", "usage-budgets"}.issubset(
         deployment.control_plane.registered_collections
     )
-    # #75 installs its threshold observer on this exact #76 authority.
+    # Notifications install their threshold observer on this exact accounting authority.
     assert accounting.threshold_event_sink is not None
 
 
@@ -336,7 +336,7 @@ def test_real_authorization_gate_remains_stricter_than_organization_accounting_m
         assert len(organization_items) == 1
         assert organization_items[0]["total"] == 5.0
 
-        # Mallory has the same #87 membership/accounting grant as Alice, but #15 lacks VIEW.
+        # Mallory has the same membership/accounting grant as Alice, but authorization lacks VIEW.
         # Membership can narrow visible accounting; it must never widen an authorization denial.
         with pytest.raises(ContractError) as denied:
             await control_plane.list_extension_resources(

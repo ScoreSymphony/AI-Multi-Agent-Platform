@@ -1,4 +1,4 @@
-"""Completion hardening for canonical application release gates (#750)."""
+"""Completion hardening for canonical application release gates."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ _RUNTIME_METADATA_KEYS = frozenset(
 
 
 class ApplicationReleaseGateCoordinator(_BaseApplicationReleaseGateCoordinator):
-    """Release-gate coordinator with restart-safe #86 recovery and manifest validation.
+    """Release-gate coordinator with restart-safe Verification recovery and manifest validation.
 
     The canonical Verification and Evaluation services remain authoritative. This subclass only
     improves projection/reconciliation and deterministic manifest evidence; it does not introduce

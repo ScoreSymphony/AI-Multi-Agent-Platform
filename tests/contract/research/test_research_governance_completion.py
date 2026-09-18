@@ -222,7 +222,7 @@ def test_research_bundle_import_preserves_exact_source_provenance() -> None:
     ).research_item_digest == (original_item.digest)
 
 
-def test_portable_verification_bindings_fail_closed_without_local_issue86_authority() -> None:
+def test_portable_verification_bindings_fail_closed_without_local_verification_authority() -> None:
     verification = VerificationService(
         require_canonical_subjects=True,
         require_canonical_results=True,

@@ -216,7 +216,7 @@ def _accounting_evidence(records: tuple[UsageRecord, ...]) -> EvaluationEvidence
 
 
 class AccountingEvaluationEvidenceProvider:
-    """Project canonical #76 UsageRecord evidence without fabricating missing metrics."""
+    """Project canonical UsageRecord evidence without fabricating missing metrics."""
 
     def __init__(self, accounting: AccountingService) -> None:
         self._accounting = accounting
@@ -252,7 +252,7 @@ def _context_matches(
 
 
 class InMemoryObservabilityEvaluationEvidenceProvider:
-    """Reference #16 evidence projection from the local in-memory exporter.
+    """Reference observability evidence projection from the local in-memory exporter.
 
     Structured logs do not currently own canonical IDs. A log reference is emitted
     only when the configured resolver returns a source-owned reference.

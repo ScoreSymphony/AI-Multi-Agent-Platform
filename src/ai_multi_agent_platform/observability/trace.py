@@ -384,7 +384,7 @@ def _assign_usage(
         candidates = [span for score, span in ranked if score == best_score]
         candidates = _disambiguate_usage(record, candidates)
         if len(candidates) != 1:
-            # #76 remains authoritative. If its attribution dimensions do not identify one
+            # Canonical accounting remains authoritative. If attribution does not identify one
             # span unambiguously, keep the record at Task scope rather than inventing a call.
             task_usage.append(record)
             continue

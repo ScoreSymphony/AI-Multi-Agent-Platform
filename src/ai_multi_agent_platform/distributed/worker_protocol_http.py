@@ -1,7 +1,7 @@
 """Private HTTP transport for the existing authenticated Worker protocol.
 
 This module does not create a second Worker API or authentication model. It only
-serializes the #14 ``WorkerProtocolService`` boundary so Worker processes can
+serializes the authenticated ``WorkerProtocolService`` boundary so Worker processes can
 register and heartbeat across a host boundary. Worker credentials remain HTTP
 transport metadata and are never embedded in canonical Node/Worker payloads.
 """

@@ -1,4 +1,4 @@
-"""Control Plane extension for canonical Agent resources and commands (issue #33)."""
+"""Control Plane extension for canonical Agent resources and commands."""
 
 from __future__ import annotations
 
@@ -487,7 +487,7 @@ def register_agent_control_plane(
     orchestrator_mappers: Mapping[str, AgentOrchestratorMapper] | None = None,
     execution_environment_resolver: AgentExecutionEnvironmentResolver | None = None,
 ) -> None:
-    """Register #33 resources without making Agents part of the #32 foundation."""
+    """Register Agent resources without making Agents part of the Task/Run foundation."""
 
     control_plane.register_resource_service(AGENT_COLLECTION, AgentResourceService(service))
     control_plane.register_resource_service(

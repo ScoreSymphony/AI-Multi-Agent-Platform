@@ -19,7 +19,7 @@ MODEL_ROUTING_POLICY_TEMPLATE_EXPORT_COMMAND = "template.create-from-model-routi
 
 @dataclass(slots=True)
 class ModelRoutingPolicyTemplateExportCommand:
-    """Authorize the canonical #309 source revision before creating a Template draft."""
+    """Authorize the canonical model-routing source revision before creating a Template draft."""
 
     control_plane: ControlPlane
     exporter: ModelRoutingPolicyTemplateExporter

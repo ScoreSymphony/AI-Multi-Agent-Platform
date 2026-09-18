@@ -522,7 +522,7 @@ def _automation_from_json(encoded: str) -> Automation:
         state_before_invalid = (
             None if state_before_invalid_raw is None else AutomationState(state_before_invalid_raw)
         )
-        # #18 could persist the canonical INVALID enum before #241 gave it lifecycle metadata.
+        # Legacy persistence could store canonical INVALID before lifecycle metadata existed.
         # Preserve readability for such rows and fail closed by restoring them to DISABLED only
         # after an explicit revalidation.
         if state is AutomationState.INVALID and invalidation_reason_code is None:

@@ -151,7 +151,7 @@ def test_team_aggregate_requires_both_authorization_and_membership() -> None:
             for item in allowed_items
         )
 
-        # #15 allows the request, but absent #87 Team membership still yields no Team data.
+        # Authorization allows the request, but absent Team membership still yields no Team data.
         outsider = await control_plane.list_extension_resources(
             _context("outsider"), "usage-aggregates", PageQuery()
         )
@@ -164,7 +164,8 @@ def test_team_aggregate_requires_both_authorization_and_membership() -> None:
             for item in outsider_items
         )
 
-        # #87 grants Mallory the same Team aggregate policy as Alice, but #15 lacks VIEW.
+        # Team membership grants Mallory the same aggregate policy as Alice, but
+        # authorization lacks VIEW.
         # Membership must never widen a denied Control Plane accounting request.
         with pytest.raises(ContractError) as denied:
             await control_plane.list_extension_resources(

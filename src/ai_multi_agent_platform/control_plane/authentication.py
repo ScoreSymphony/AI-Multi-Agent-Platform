@@ -1,4 +1,4 @@
-"""Authenticated Control Plane transport boundary for issue #36."""
+"""Authenticated Control Plane transport boundary."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from .search_contract import ControlPlaneHTTP as _ControlPlaneHTTP
 
 
 class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
-    """Authenticate northbound requests before projecting identity into #15 context.
+    """Authenticate northbound requests before projecting identity into authorization context.
 
     Caller-supplied principal/owner headers are never trusted. After authentication the
     boundary injects only the canonical actor identity established by the authentication
@@ -391,7 +391,7 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
         correlation_id: str,
         bind_payload: bool = False,
     ) -> None:
-        """Apply the canonical #15 gate before credential-management side effects."""
+        """Apply the canonical authorization gate before credential-management side effects."""
 
         authorize = getattr(self._control_plane, "_authorize", None)
         if authorize is None:
@@ -743,11 +743,11 @@ def _augment_authentication_openapi(
         f"/api/{API_VERSION}/auth/credentials": {
             "get": _auth_operation(
                 "listPersonalCredentials",
-                "List safe personal credential metadata after #15 authorization.",
+                "List safe personal credential metadata after authorization.",
             ),
             "post": _auth_operation(
                 "createPersonalCredential",
-                "Issue a personal credential once after #15 manage_credentials authorization.",
+                "Issue a personal credential once after manage-credentials authorization.",
                 request_fields=("purpose",),
                 status="201",
                 parameters=(csrf_parameter,),
@@ -756,7 +756,7 @@ def _augment_authentication_openapi(
         f"/api/{API_VERSION}/auth/credentials/{{credential_id}}:revoke": {
             "post": _auth_operation(
                 "revokePersonalCredential",
-                "Revoke a personal credential after #15 manage_credentials authorization.",
+                "Revoke a personal credential after manage-credentials authorization.",
                 parameters=(
                     {
                         "name": "credential_id",

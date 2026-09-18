@@ -2,8 +2,8 @@
 
 The harness prepares and validates evidence for the real two-VPS private-tunnel
 acceptance path. It does not provision infrastructure, mutate canonical platform state,
-or replace the #14/#35/#36 runtime contracts. Addresses and credential material are
-runtime-only inputs and are never written to evidence reports.
+or replace the Worker transport and authentication runtime contracts. Addresses and credential
+material are runtime-only inputs and are never written to evidence reports.
 
 Provenance: issue #562 introduced the retained evidence/schema lineage used by this harness.
 """

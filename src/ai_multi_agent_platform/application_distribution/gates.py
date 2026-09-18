@@ -1,6 +1,6 @@
 """Canonical release-gate projection for application distribution.
 
-This module coordinates existing Verification (#86) and Evaluation (#19) authorities
+This module coordinates the existing Verification and Evaluation authorities
 instead of creating a second verification/evaluation lifecycle. Application distribution
 owns only the named release requirement, its projection, and the publication decision.
 """

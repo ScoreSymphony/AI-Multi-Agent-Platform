@@ -104,7 +104,7 @@ def test_portable_artifact_rejects_non_json_before_owner_mutation() -> None:
 
 def test_plugin_artifact_requires_explicit_owner_installer() -> None:
     item = _item(RegistryItemType.PLUGIN)
-    with pytest.raises(ContractError, match="#20 artifact installer"):
+    with pytest.raises(ContractError, match="canonical plugin artifact installer"):
         asyncio.run(CanonicalDistributionRouter().install_plugin(item, b"plugin-package"))
 
     installer = RecordingPluginInstaller()

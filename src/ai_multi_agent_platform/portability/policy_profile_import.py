@@ -154,7 +154,7 @@ async def load_authorization_policy_profile_snapshot(
     repository: AuthorizationPolicyProfileRepository,
     policy_profile_id: str,
 ) -> object:
-    """Export-source adapter for the existing #79 ``ExportSourceRegistry``."""
+    """Export-source adapter for the existing ``ExportSourceRegistry``."""
 
     return snapshot_authorization_policy_profile(repository, policy_profile_id)
 

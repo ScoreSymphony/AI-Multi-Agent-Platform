@@ -1,4 +1,4 @@
-"""Current Control Plane composition with #36 authentication context propagated to #15."""
+"""Current Control Plane composition with authentication context propagated to authorization."""
 
 from __future__ import annotations
 
@@ -19,13 +19,13 @@ from .models import RequestContext
 
 
 class ControlPlane(_CurrentControlPlane):
-    """Propagate authenticated actor metadata into the canonical #15 request.
+    """Propagate authenticated actor metadata into the canonical authorization request.
 
     Authentication establishes identity and credential-local constraints. This class
     transports that trusted context; the configured authorization provider remains the
     authority that decides whether an operation is allowed. Legacy internal contexts that
     predate explicit actor types retain the canonical prefix-based inference previously
-    performed by the #15 bridge.
+    performed by the authorization bridge.
     """
 
     def _authorization_provider(self) -> AuthorizationProvider | None:

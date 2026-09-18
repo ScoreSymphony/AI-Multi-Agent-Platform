@@ -197,7 +197,7 @@ def register_model_routing_profile_control_plane(
     control_plane: ControlPlane,
     service: ModelRoutingProfileService,
 ) -> None:
-    """Register the canonical #309 management API on the generic Control Plane seam."""
+    """Register the canonical routing-profile management API on the generic Control Plane seam."""
 
     resources = ModelRoutingProfileResourceService(service)
     handlers = ModelRoutingProfileCommandHandlers(service)

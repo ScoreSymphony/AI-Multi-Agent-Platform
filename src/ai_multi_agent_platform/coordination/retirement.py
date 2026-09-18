@@ -1,4 +1,4 @@
-"""Durable superseded-Plan retirement for #439 on the #384 coordination boundary.
+"""Durable superseded-Plan retirement on the canonical coordination boundary.
 
 Planning decides which immutable Plan becomes canonical. The coordinator remains the only owner of
 Step progression and therefore owns the matching rule that an older Plan must stop producing new
@@ -121,7 +121,7 @@ class InMemoryCoordinatorRepository(_BaseInMemoryCoordinatorRepository):
 
 
 class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
-    """#384 coordinator that retires a Plan once canonical ``Task.plan_ref`` moves on.
+    """Durable coordinator that retires a Plan once canonical ``Task.plan_ref`` moves on.
 
     Completed historical Steps are preserved. Work that never began is cancelled locally in the
     coordination projection, scheduled retries/waits are closed, and the retired Plan is excluded

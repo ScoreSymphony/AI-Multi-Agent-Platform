@@ -1,4 +1,4 @@
-"""#37 remote workspace composition for the transport-neutral Worker dispatcher."""
+"""Remote workspace composition for the transport-neutral Worker dispatcher."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from .worker import WorkerDispatcher
 
 
 class WorkerWorkspaceResolver(Protocol):
-    """Resolve persisted canonical workspace/snapshot refs into the existing #37 request."""
+    """Resolve persisted workspace/snapshot refs into the canonical materialization request."""
 
     async def resolve(self, job: WorkerJobRequest) -> RemoteMaterializationRequest | None: ...
 

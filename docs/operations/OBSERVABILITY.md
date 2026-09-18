@@ -174,4 +174,4 @@ The observability foundation and progressive contracts are implemented, includin
 - #86 verification telemetry;
 - #76 real accounting consumer integration.
 
-See `docs/ISSUE_16_COMPLETION.md` for the current acceptance mapping and remaining closure checklist.
+See `docs/history/issues/ISSUE_16_COMPLETION.md` for the current acceptance mapping and remaining closure checklist.

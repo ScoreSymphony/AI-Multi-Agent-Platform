@@ -59,7 +59,7 @@ def build_single_node_deployment(
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
     application_release_gate_policy: ReleaseGatePolicy | None = None,
 ) -> SingleNodeDeployment:
-    """Build the durable profile and attach one canonical #902 Task-budget authority."""
+    """Build the durable profile and attach one canonical Task-budget authority."""
 
     config.prepare_directories()
     effective_accounting = accounting_service or AccountingService(

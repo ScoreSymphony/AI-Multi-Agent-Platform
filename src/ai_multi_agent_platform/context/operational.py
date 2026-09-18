@@ -1,6 +1,6 @@
 """Production-shaped execution helpers for canonical Context Bundles.
 
-This module operationalizes the existing #590 boundary without changing Context Bundle
+This module operationalizes the existing Context boundary without changing Context Bundle
 ownership. It composes context-derived model routing, egress enforcement, context-aware
 AgentRun binding, and the exact rendered model input used by execution.
 """
@@ -64,7 +64,7 @@ from .resolver import ContextBundleRepository, context_window_requirement
 
 @dataclass(frozen=True, slots=True)
 class ContextRoutingPolicy:
-    """Explicit provider-neutral reserve applied before #10 model selection."""
+    """Explicit provider-neutral reserve applied before model selection."""
 
     output_reserve_tokens: int = 0
 
@@ -110,7 +110,7 @@ class OperationalContextExecution:
 
 
 class ContextEgressTargetResolver(Protocol):
-    """Resolve the trust boundary for the model selected by canonical #10 routing."""
+    """Resolve the trust boundary for the model selected by canonical model routing."""
 
     def resolve(
         self,
@@ -209,7 +209,7 @@ def merge_context_routing_requirements(
 
 
 def rendered_context_model_input(rendered: RenderedContext) -> ContextModelInput:
-    """Preserve #590 role authority while converting provider-neutral parts to model text."""
+    """Preserve Context role authority while converting provider-neutral parts to model text."""
 
     instruction_parts: list[str] = []
     context_parts: list[str] = []
@@ -368,7 +368,7 @@ class _OperationalContextMapper(AgentOrchestratorMapper):
 
 
 class OperationalContextBoundAgentRuntime:
-    """Production-shaped composition of #590 context with #33/#10 execution."""
+    """Production-shaped composition of Context with Agent/model execution."""
 
     def __init__(
         self,
@@ -455,7 +455,7 @@ class OperationalContextBoundAgentRuntime:
                 requirements=_routing_request_requirements(requirements, bundle),
             )
 
-        # Focused/local embeddings without a Context target resolver retain the ordinary #591
+        # Focused/local embeddings without a Context target resolver retain the ordinary egress
         # model-provider candidate policy. Public production composition supplies a resolver and
         # therefore evaluates the separate Context-export policy before pinning a model.
         if self.target_resolver is None:

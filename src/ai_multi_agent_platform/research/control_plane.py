@@ -61,7 +61,7 @@ RESEARCH_COMMANDS = (
 
 
 def default_actor_resolver(context: RequestContext) -> ActorIdentity:
-    """Translate the authenticated northbound actor into canonical #15 identity."""
+    """Translate the authenticated northbound actor into canonical authorization identity."""
 
     if context.actor.actor_type is None:
         return infer_actor_identity(context.actor.principal_ref)

@@ -193,7 +193,7 @@ class ControlPlane(_ApprovalControlPlane):
 
 
 def _default_governance_state_path(gate: AuthorizationGate) -> Path | None:
-    """Co-locate governance with durable #15 Approval state when such state exists."""
+    """Co-locate governance with durable Approval state when such state exists."""
 
     database_path = getattr(gate.approvals, "database_path", None)
     if database_path is None:
@@ -202,7 +202,7 @@ def _default_governance_state_path(gate: AuthorizationGate) -> Path | None:
 
 
 def _default_decision_state_path(gate: AuthorizationGate) -> Path | None:
-    """Co-locate canonical Decision Records with durable #15 Approval state."""
+    """Co-locate canonical Decision Records with durable Approval state."""
 
     database_path = getattr(gate.approvals, "database_path", None)
     if database_path is None:

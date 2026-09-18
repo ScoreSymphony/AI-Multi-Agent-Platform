@@ -1,4 +1,4 @@
-"""#87 membership-aware visibility for canonical #76 accounting resources."""
+"""Membership-aware visibility for canonical accounting resources."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ AccountingRuntime = AccountingService | AsyncAccountingService
 
 
 class OrganizationAccountingVisibility:
-    """Resolve live #87 membership scope without making the final #15 decision.
+    """Resolve live organization membership scope without making the final authorization decision.
 
     The Control Plane authorization provider still gates the request itself. This helper
     only prevents the accounting read model from widening that decision to stale or
@@ -325,7 +325,7 @@ def organization_accounting_resource_services(
     *,
     aggregate_policy_ref: str = DEFAULT_ACCOUNTING_AGGREGATE_POLICY_REF,
 ) -> dict[str, ResourceService]:
-    """Compose #76 read models with live #87 visibility; #15 remains the request gate."""
+    """Compose accounting reads with membership visibility and authorization gating."""
 
     visibility = OrganizationAccountingVisibility(
         organizations,

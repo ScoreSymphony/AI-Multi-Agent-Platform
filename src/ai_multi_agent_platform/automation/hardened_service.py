@@ -1,4 +1,4 @@
-"""Hardening layer for canonical Automation service semantics required by issue #18."""
+"""Hardening layer for canonical Automation service semantics."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def automation_creation_idempotency_key(idempotency_key: str) -> Iterator[None]:
 
 
 class AutomationService(_BaseAutomationService):
-    """Issue #18 service with audit, recovery and bounded webhook admission."""
+    """Automation service with audit, recovery and bounded webhook admission."""
 
     def __init__(
         self,

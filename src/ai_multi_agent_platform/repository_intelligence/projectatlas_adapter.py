@@ -1,7 +1,7 @@
 """Prepared ProjectAtlas source-adapter contracts behind explicit containment gates.
 
 Nothing in this module grants ProjectAtlas repository/Workspace lifecycle ownership. Production
-composition must resolve an already-authorized source binding from #82/#37/#15, execute the pinned
+composition must resolve an authorized Repository/Workspace source binding, execute the pinned
 runtime through a deployment-owned process boundary, and normalize only version-pinned provider
 output. Until those prerequisites are supplied, source capabilities remain unavailable.
 """
@@ -142,7 +142,7 @@ class ProjectAtlasSourceBinding:
 
 
 class ProjectAtlasSourceBindingResolver(Protocol):
-    """Resolve #82/#37/#15-authorized source without giving the plugin lifecycle authority."""
+    """Resolve an authorized source without granting plugin lifecycle authority."""
 
     async def resolve(self, invocation: ToolInvocation) -> ProjectAtlasSourceBinding: ...
 
@@ -191,7 +191,7 @@ class ProjectAtlasCommandRunner(Protocol):
 
 
 class ProjectAtlasV045Normalizer(Protocol):
-    """Strict version-pinned output mapping into canonical #502 schemas.
+    """Strict version-pinned output mapping into canonical repository-intelligence schemas.
 
     This remains a protocol until golden v0.4.5 command payloads are captured in the aggregate
     integration campaign. Guessing fields from marketing/docs would make the adapter unsound.

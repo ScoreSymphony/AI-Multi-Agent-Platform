@@ -74,9 +74,9 @@ class MultiSpecProvider(CapabilityToolProvider):
 
 def _context() -> OperationContext:
     return OperationContext(
-        correlation_id="corr-issue-12",
+        correlation_id="corr-capability-discovery",
         owner_type="user",
-        owner_id="user-issue-12",
+        owner_id="user-capability-discovery",
         project_id=new_id("project"),
     )
 
@@ -88,7 +88,7 @@ def _invocation(
     compatibility: CapabilityCompatibilityRequest | None = None,
 ) -> CapabilityInvocation:
     return CapabilityInvocation(
-        invocation_id="invoke-issue-12",
+        invocation_id="invoke-capability-discovery",
         capability_id=capability_id,
         compatibility=compatibility,
         arguments={},
@@ -103,7 +103,7 @@ def _invocation(
     )
 
 
-def test_policy_aware_discovery_filters_denied_without_issue15_backend() -> None:
+def test_policy_aware_discovery_filters_denied_without_authorization_backend() -> None:
     async def scenario() -> None:
         registry = CapabilityRegistry()
         await registry.register_provider(
@@ -148,7 +148,7 @@ def test_policy_aware_discovery_filters_denied_without_issue15_backend() -> None
             "tool.allowed",
             "tool.approval",
         }
-        assert ("user-issue-12", "tool.denied") in seen
+        assert ("user-capability-discovery", "tool.denied") in seen
 
     asyncio.run(scenario())
 

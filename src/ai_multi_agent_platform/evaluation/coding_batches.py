@@ -1,4 +1,4 @@
-"""Deterministic #19 Evaluation adapter for parallel coding batches (#872)."""
+"""Deterministic Evaluation adapter for parallel coding batches."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ CODING_BATCH_QUALITY_SUITE_VERSION = "1"
 
 
 class CodingBatchEvaluationCaseExecutor:
-    """Project canonical #872 state into the existing deterministic #19 framework.
+    """Project canonical coding-batch state into the existing deterministic Evaluation framework.
 
     The executor is read-only. It does not schedule Steps, dispatch Agents, mutate Workspaces,
     perform Git operations, create Verification evidence or authorize integration. Those facts
@@ -135,7 +135,7 @@ def canonical_coding_batch_quality_suite(
     *,
     expect_repair: bool = False,
 ) -> EvaluationSuite:
-    """Return the strict local/no-paid-service #872 quality suite for one integration."""
+    """Return the strict local/no-paid-service quality suite for one integration."""
 
     if not batch_id.strip():
         raise ValueError("batch_id must not be blank")
@@ -146,10 +146,10 @@ def canonical_coding_batch_quality_suite(
         name="Parallel coding batch integration quality",
         version=CODING_BATCH_QUALITY_SUITE_VERSION,
         description=(
-            "Deterministic #19 regression evidence for isolated coding workstreams, exact "
+            "Deterministic Evaluation regression evidence for isolated coding workstreams, exact "
             "Verification provenance, conflict/repair closure and fresh combined validation."
         ),
-        tags=("coding-batch", "issue-872", "deterministic", "no-paid-service"),
+        tags=("coding-batch", "coding-batch-integration", "deterministic", "no-paid-service"),
         cases=(
             EvaluationCase(
                 case_id="case.parallel-coding-batch-integration",

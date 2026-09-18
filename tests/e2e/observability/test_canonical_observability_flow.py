@@ -73,7 +73,7 @@ class _TransportingWorkerProvider(FakeWorkerProvider):
         return await super().dispatch(worker_id, request)
 
 
-def test_final_end_to_end_trace_crosses_every_issue_16_layer() -> None:
+def test_final_end_to_end_trace_crosses_every_observability_layer() -> None:
     task_id = new_id("task")
     run_id = new_id("run")
     agent_id = new_id("agent")
@@ -81,7 +81,7 @@ def test_final_end_to_end_trace_crosses_every_issue_16_layer() -> None:
     node_id = new_id("node")
     worker_id = new_id("worker")
     worker_job_id = new_id("worker_job")
-    topic = "issue-16-final-worker-jobs"
+    topic = "observability-final-worker-jobs"
 
     local_exporter = InMemoryExporter()
     measurement_sink = _MeasurementSink()
@@ -144,7 +144,7 @@ def test_final_end_to_end_trace_crosses_every_issue_16_layer() -> None:
         )
 
         subscription = transport.subscribe(
-            Subscription(topic=topic, consumer_id="issue-16-final-worker")
+            Subscription(topic=topic, consumer_id="observability-final-worker")
         )
         delivery = await anext(subscription)
         carrier = extract_trace_carrier(delivery.envelope)

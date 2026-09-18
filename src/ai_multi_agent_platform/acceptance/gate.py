@@ -80,7 +80,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
         return (
             AcceptanceCheck(
                 "reference-smoke",
-                "#39 single-node deployment",
+                "single-node deployment",
                 "authenticated canonical Task/Run/Result path and observable capability execution",
                 _pytest(
                     "tests/integration/deployment/test_single_node_deployment_runtime.py::"
@@ -89,7 +89,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             ),
             AcceptanceCheck(
                 "approval-boundary",
-                "#15 authorization/approval",
+                "authorization/approval",
                 "high-risk approval is exact-action bound and cannot authorize a modified action",
                 _pytest(
                     "tests/integration/security/test_authorization_final_boundaries.py",
@@ -99,13 +99,13 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             ),
             AcceptanceCheck(
                 "verification-boundary",
-                "#86 task verification",
+                "task verification",
                 "verification remains canonical and independently gates concrete completion",
                 _pytest("tests/integration/kernel/test_kernel_gate.py"),
             ),
             AcceptanceCheck(
                 "memory-knowledge-lifecycle",
-                "#251 data lifecycle",
+                "data lifecycle",
                 "Memory/Knowledge create, provenance/update and delete lifecycle remains canonical",
                 _pytest(
                     "tests/integration/memory/test_memory_lifecycle_commands.py",
@@ -114,7 +114,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             ),
             AcceptanceCheck(
                 "memory-delete-not-found",
-                "#251/#252 data acceptance",
+                "data acceptance",
                 "Memory is retrieved with provenance, deleted, then unavailable as NOT_FOUND",
                 _pytest(
                     "tests/integration/files/test_acceptance_gate.py::"
@@ -123,7 +123,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             ),
             AcceptanceCheck(
                 "cli-canonical-state",
-                "#17/#252 CLI client",
+                "CLI client",
                 (
                     "CLI reads the shared canonical Task fixture through the versioned "
                     "Control Plane path"
@@ -135,7 +135,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             ),
             AcceptanceCheck(
                 "web-canonical-state",
-                "#17/#395 Web client",
+                "Web client",
                 (
                     "Web reads the same canonical Task fixture through the same versioned "
                     "resource path"
@@ -155,7 +155,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
         return (
             AcceptanceCheck(
                 "loopback-openai-compatible",
-                "#10/#250 model provider",
+                "model provider",
                 (
                     "replaceable local/self-hosted HTTP model is discovered and generates "
                     "without paid service"
@@ -167,7 +167,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             ),
             AcceptanceCheck(
                 "first-run-local-model",
-                "#250 first-run onboarding",
+                "first-run onboarding",
                 (
                     "first-run local/self-hosted model configuration remains provider-neutral "
                     "and secret-safe"
@@ -179,7 +179,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
         return (
             AcceptanceCheck(
                 "provider-inventory-revalidation",
-                "#250 first-run onboarding",
+                "first-run onboarding",
                 (
                     "missing configured provider-native model fails closed and can recover by "
                     "canonical health refresh"
@@ -188,7 +188,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             ),
             AcceptanceCheck(
                 "readiness-hardening",
-                "#250/#397 first-run readiness",
+                "first-run readiness",
                 "unavailable or non-executable optional paths never produce false readiness",
                 _pytest("tests/integration/onboarding/test_readiness.py"),
             ),
@@ -196,7 +196,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
     return (
         AcceptanceCheck(
             "canonical-restart-smoke",
-            "#39 single-node deployment",
+            "single-node deployment",
             "single-node canonical execution remains retry-safe across process reconstruction",
             _pytest(
                 "tests/integration/deployment/test_single_node_deployment_runtime.py::"
@@ -205,7 +205,7 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
         ),
         AcceptanceCheck(
             "memory-provider-restart",
-            "#13/#251 data lifecycle",
+            "data lifecycle",
             "user-owned Memory persists through provider reconstruction",
             _pytest(
                 "tests/integration/data/test_reference_providers.py::"
@@ -214,13 +214,13 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
         ),
         AcceptanceCheck(
             "verification-restart",
-            "#86 task verification",
+            "task verification",
             "canonical verification history persists through service reconstruction",
             _pytest("tests/integration/verification/test_verification_sqlite_persistence.py"),
         ),
         AcceptanceCheck(
             "first-task-restart",
-            "#250 first-run onboarding",
+            "first-run onboarding",
             "first-run Task/Run/Result state and explicit selection survive restart",
             _pytest("tests/e2e/onboarding/test_first_task_restart.py"),
         ),

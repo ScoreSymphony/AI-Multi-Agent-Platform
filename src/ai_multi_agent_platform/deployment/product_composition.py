@@ -32,7 +32,7 @@ def build_product_single_node_deployment(
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
     application_release_gate_policy: ReleaseGatePolicy | None = None,
 ) -> TaskBudgetSingleNodeDeployment:
-    """Build the supported product profile with canonical #902 Task-budget enforcement."""
+    """Build the supported product profile with canonical Task-budget enforcement."""
 
     config.prepare_directories()
     effective_accounting = accounting_service or AccountingService(

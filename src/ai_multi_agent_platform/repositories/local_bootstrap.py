@@ -21,7 +21,7 @@ def managed_local_connection_metadata(
     """Return the non-secret Connection fields needed to restore platform-managed local Git.
 
     SecretReferences, endpoint metadata and adapter credentials are intentionally excluded. Hosted
-    connectors continue to restore through the canonical #44 Connection resolver instead.
+    connectors continue to restore through the canonical Connection resolver instead.
     """
 
     canonical = connection.connection

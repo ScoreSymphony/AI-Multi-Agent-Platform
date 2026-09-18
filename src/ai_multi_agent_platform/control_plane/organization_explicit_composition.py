@@ -1,4 +1,4 @@
-"""Explicit canonical Organization/Accounting Control Plane composition (#87, #982).
+"""Explicit canonical Organization/Accounting Control Plane composition.
 
 Organization collaboration resources and commands, plus optional Accounting projections,
 are published through named ``ControlPlaneModule`` owners. Cross-domain ownership
@@ -89,7 +89,7 @@ class ControlPlane(_CurrentControlPlane):
         accounting_service: AccountingService | None = None,
         **kwargs: Any,
     ) -> None:
-        # #75 consumes the same AccountingService for threshold attention. Preserve
+        # Notifications consume the same AccountingService for threshold attention. Preserve
         # that single runtime instance throughout the composition chain.
         super().__init__(*args, accounting_service=accounting_service, **kwargs)
         self._organization_service = organization_service

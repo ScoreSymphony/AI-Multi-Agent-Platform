@@ -1,4 +1,4 @@
-"""Productive output-to-review coordination for automatic Agent Verification (#711, #759).
+"""Productive output-to-review coordination for automatic Agent Verification.
 
 The kernel remains lifecycle authority and canonical Verification remains review authority.
 This integration composes those existing seams so a configured kernel output attachment can

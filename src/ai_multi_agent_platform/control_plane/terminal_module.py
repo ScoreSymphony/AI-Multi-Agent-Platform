@@ -1,4 +1,4 @@
-"""Explicit Control Plane ownership for canonical Terminal sessions (#73, #982)."""
+"""Explicit Control Plane ownership for canonical Terminal sessions."""
 
 from __future__ import annotations
 

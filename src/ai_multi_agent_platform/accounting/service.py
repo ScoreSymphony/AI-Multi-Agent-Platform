@@ -46,7 +46,7 @@ _RUNTIME_GAUGE_METRICS = frozenset(
 
 
 class AccountingService:
-    """Durable #76 owner and structural implementation of observability.MeasurementSink."""
+    """Durable accounting owner and structural implementation of observability.MeasurementSink."""
 
     def __init__(
         self,
@@ -410,7 +410,7 @@ def _budget_quantity(records: tuple[UsageRecord, ...]) -> float:
 
 
 def usage_from_metric(metric: MetricRecord) -> UsageRecord | None:
-    """Translate only known reliable #16 measurements; unknown metrics are ignored."""
+    """Translate only known reliable observability measurements; unknown metrics are ignored."""
 
     mapping = _metric_mapping(metric)
     if mapping is None:

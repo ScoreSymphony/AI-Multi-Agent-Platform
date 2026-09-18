@@ -34,7 +34,7 @@ def task_management_change_candidates(
     after: TaskManagementView,
     task: TaskState,
 ) -> tuple[NotificationCandidate, ...]:
-    """Project explicit planning changes after the canonical #88 command succeeds."""
+    """Project explicit planning changes after the canonical task-management command succeeds."""
 
     recipient = _task_attention_recipient(after, task.task.owner_ref)
     if recipient is None:
@@ -286,7 +286,7 @@ def _recipient(kind: str, identifier: str) -> RecipientRef | None:
         recipient_type = RecipientType(kind)
         return RecipientRef(recipient_type, identifier)
     except ValueError:
-        # #88 responsibility is planning metadata, not an identity mapping authority. A
+        # Task-management responsibility is planning metadata, not an identity mapping authority. A
         # non-canonical reference must therefore never be reinterpreted as a notification
         # recipient; callers fall back to the canonical Task owner when possible.
         return None

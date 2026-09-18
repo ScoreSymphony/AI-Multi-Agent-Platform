@@ -1,7 +1,7 @@
-"""Provenance-preserving Research bundle export/import for issue #589.
+"""Provenance-preserving Research bundle export/import.
 
 The bundle is historical evidence state, not an executable workflow. Import preserves exact
-Research identities and source-observation bindings. #86 Verification authority is never inferred
+Research identities and source-observation bindings. Verification authority is never inferred
 from serialized Research metadata: verification bindings are restored only through an explicit
 local validator supplied by the importing deployment.
 """
@@ -70,8 +70,9 @@ def import_research_bundle(
     """Import exact historical Research records through the owning repository.
 
     All records are decoded and cross-validated before the destination is touched. Existing exact
-    records are treated as idempotent. A conflicting ID fails closed. Serialized #86 bindings
-    require an explicit deployment-owned validator and are never trusted merely because they were
+    records are treated as idempotent. A conflicting ID fails closed. Serialized Verification
+    bindings require an explicit deployment-owned validator and are never trusted merely because
+    they were
     present in the bundle.
     """
 
@@ -101,7 +102,7 @@ def import_research_bundle(
         raise ContractError(
             ErrorCode.CONFLICT,
             (
-                "Research bundle contains #86 bindings but no local "
+                "Research bundle contains Verification bindings but no local "
                 "Verification validator was supplied"
             ),
         )

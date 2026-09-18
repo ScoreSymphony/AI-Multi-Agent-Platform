@@ -1,4 +1,4 @@
-"""#309-aware portability wrappers for Agent and Template routing-profile references."""
+"""Portability wrappers for Agent and Template routing-profile references."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ class RoutingProfileAwareAgentPortableCodec(AgentPortableCodec):
 
 
 class RoutingProfileAwareTemplatePortableCodec(TemplatePortableCodec):
-    """Map exact Template model-policy refs onto the canonical #309 resource type."""
+    """Map exact Template model-policy refs onto the canonical RoutingProfile resource type."""
 
     def serialize(self, value: object) -> ResourceExport:
         exported = super().serialize(value)

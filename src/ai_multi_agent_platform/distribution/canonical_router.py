@@ -11,7 +11,7 @@ from .items import RegistryItem
 
 
 class PluginArtifactInstaller(Protocol):
-    """Deployment-owned #20 bridge for a verified plugin artifact.
+    """Deployment-owned bridge for a verified plugin artifact.
 
     The distribution package deliberately does not deserialize plugin manifests or load
     runtimes. A deployment must compose that work through the canonical plugin owner.
@@ -34,7 +34,7 @@ class PortableImportPreview(Protocol):
 
 
 class PortabilityImportOwner(Protocol):
-    """Structural subset of #79's PortabilityWorkflowService used by the handoff."""
+    """Structural subset of PortabilityWorkflowService used by the handoff."""
 
     def validate_package_document(self, document: object) -> PortablePackageInspection: ...
 
@@ -59,7 +59,7 @@ class CanonicalDistributionRouter:
         if self._plugin_installer is None:
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
-                "registry plugin activation requires a canonical #20 artifact installer",
+                "registry plugin activation requires a canonical plugin artifact installer",
             )
         return await self._plugin_installer.install_verified_plugin(item, artifact)
 
@@ -68,7 +68,7 @@ class CanonicalDistributionRouter:
         if self._portability is None:
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
-                "registry portable activation requires the canonical #79 import workflow",
+                "registry portable activation requires the canonical portability import workflow",
             )
         try:
             document = json.loads(artifact.decode("utf-8"))

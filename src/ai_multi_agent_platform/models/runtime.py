@@ -106,7 +106,7 @@ class ModelRuntime:
         self,
         request: CanonicalModelRequest,
     ) -> CanonicalModelResponse:
-        """Execute the rich issue-#10 request shape through the stable provider seam."""
+        """Execute the rich canonical request shape through the stable provider seam."""
 
         response = await self.generate(request.to_contract_request())
         return CanonicalModelResponse.from_contract_response(response)

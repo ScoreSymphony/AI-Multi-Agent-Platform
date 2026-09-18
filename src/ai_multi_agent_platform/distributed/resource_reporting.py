@@ -1,4 +1,4 @@
-"""Canonical #14 resource-measurement availability metadata for issue #171.
+"""Canonical distributed resource-measurement availability metadata.
 
 ``ResourceSnapshot`` keeps its scheduler-friendly numeric shape for compatibility.  The
 reporting state below supplies the missing distinction between a reliable numeric zero,

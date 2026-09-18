@@ -56,7 +56,7 @@ from ai_multi_agent_platform.verification import VerificationEvidenceResolver
 
 
 class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):
-    """Bridge #651 consumption into the production #650/#591 Context runtime."""
+    """Bridge durable Handoff consumption into the production Context runtime."""
 
     def __init__(
         self,

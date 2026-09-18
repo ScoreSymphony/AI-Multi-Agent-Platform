@@ -1,4 +1,4 @@
-"""Control Plane resource and command surface for issue #872 coding batches."""
+"""Control Plane resource and command surface for coding batches."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class CodingBatchCatalog(Protocol):
 
 
 class CodingBatchResourceService(ResourceService):
-    """Expose persisted #872 orchestration state without treating Git refs as lifecycle truth."""
+    """Expose coding-batch state without treating Git refs as lifecycle truth."""
 
     def __init__(self, catalog: CodingBatchCatalog) -> None:
         self._catalog = catalog

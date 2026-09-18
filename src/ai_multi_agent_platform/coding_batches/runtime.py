@@ -1,8 +1,8 @@
-"""Productive #384 -> #33 -> #37/#82 composition for coding workstreams.
+"""Productive Step/AgentRun/Workspace-repository composition for coding workstreams.
 
-The coding-batch layer never creates Step attempts or AgentRun identity itself. #384 remains the
-source of truth for the active canonical Step/Run attempt, #33 creates or reuses the exact AgentRun,
-and #37/#82 materialize the isolated Workspace and repository branch from that evidence.
+The coding-batch layer never creates Step attempts or AgentRun identity itself. Step orchestration
+remains the source of truth for the active Step/Run attempt. AgentRuntime creates or reuses the
+exact AgentRun, and Workspace/repository services materialize the isolated Workspace and branch.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from .telemetry import CodingBatchTelemetry
 
 
 class PlanCoordinationReader(Protocol):
-    """Narrow #384 read boundary used by coding dispatch."""
+    """Narrow Step-orchestration read boundary used by coding dispatch."""
 
     def projection(self, plan_id: str) -> PlanCoordinationProjection: ...
 
@@ -32,7 +32,7 @@ class PlanCoordinationReader(Protocol):
 
 
 class CodingAgentRuntime(Protocol):
-    """Narrow #33 AgentRuntime start boundary used by coding dispatch."""
+    """Narrow AgentRuntime start boundary used by coding dispatch."""
 
     async def start_agent(
         self,
@@ -52,13 +52,13 @@ class CodingAgentRuntime(Protocol):
 
 
 class AgentRunReader(Protocol):
-    """Source-owned #33 AgentRun read boundary for restart reconciliation."""
+    """Source-owned AgentRun read boundary for restart reconciliation."""
 
     def list_agent_runs(self, run_id: str | None = None) -> tuple[AgentRunRecord, ...]: ...
 
 
 class WorkstreamMaterializer(Protocol):
-    """Narrow #37/#82 materialization boundary used after AgentRun identity is pinned."""
+    """Workspace/repository materialization after AgentRun identity is pinned."""
 
     async def ensure_materialized(
         self,
@@ -76,7 +76,7 @@ class WorkstreamMaterializer(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class CodingDispatchSlot:
-    """One #384-authorized active Step attempt eligible for coding execution."""
+    """One active Step attempt eligible for coding execution."""
 
     batch_id: str
     workstream_id: str
@@ -98,7 +98,7 @@ class CodingWorkstreamDispatch:
 
 
 def agent_revision_ref(record: AgentRunRecord) -> str:
-    """Stable display/provenance reference derived from canonical #33 Agent revision identity."""
+    """Stable display/provenance reference derived from canonical Agent revision identity."""
 
     return f"{record.agent.agent_id}@{record.agent.revision}"
 
@@ -106,9 +106,9 @@ def agent_revision_ref(record: AgentRunRecord) -> str:
 class CanonicalCodingWorkstreamDispatcher:
     """Dispatch coding work only when canonical coordination and local safety both permit it.
 
-    #384 creates/starts the canonical Step Run. The batch layer may further withhold Agent
-    execution for conservative overlap or batch-concurrency reasons, but it never creates another
-    Run, attempt counter or retry schedule. A restart reuses the #33 AgentRun already bound to that
+    Step orchestration creates or starts the canonical Step Run. The batch layer may withhold
+    Agent execution for overlap or batch-concurrency reasons, but it never creates another
+    Run, attempt counter or retry schedule. A restart reuses the AgentRun already bound to that
     canonical Run rather than allocating a duplicate.
     """
 
@@ -163,14 +163,14 @@ class CanonicalCodingWorkstreamDispatcher:
         task_context: Mapping[str, JsonValue] | None = None,
         project_context: Mapping[str, JsonValue] | None = None,
     ) -> CodingWorkstreamDispatch:
-        """Bind one eligible workstream to #384 Run, #33 AgentRun and #37/#82 isolation."""
+        """Bind a workstream to its Step Run, AgentRun and isolated repository state."""
 
         batch = self._coordinator.get(batch_id)
         workstream = batch.workstream(workstream_id)
         was_running = workstream.state is WorkstreamState.RUNNING
         slot = await self._active_slot_async(batch, workstream)
         if slot is None:
-            raise ValueError("coding workstream has no active canonical #384 Step attempt")
+            raise ValueError("coding workstream has no active canonical Step attempt")
 
         if workstream.state is WorkstreamState.READY:
             ready_ids = {item.id for item in self._coordinator.ready_workstreams(batch_id)}
@@ -186,7 +186,8 @@ class CanonicalCodingWorkstreamDispatcher:
         elif workstream.state in {WorkstreamState.MATERIALIZED, WorkstreamState.RUNNING}:
             if workstream.provenance.plan_revision != slot.plan_revision:
                 raise ValueError(
-                    "materialized coding workstream Plan revision differs from canonical #384"
+                    "materialized coding workstream Plan revision differs from canonical "
+                    "Step-orchestration revision"
                 )
         else:
             raise ValueError("coding workstream is not eligible for dispatch/reconciliation")
@@ -211,7 +212,8 @@ class CanonicalCodingWorkstreamDispatcher:
             recorded_revision = workstream.provenance.agent_revision
             if recorded_revision != agent_revision_ref(run):
                 raise ValueError(
-                    "workstream Agent revision provenance conflicts with canonical #33"
+                    "workstream Agent revision provenance conflicts with the canonical "
+                    "Agent revision"
                 )
 
         await self._materializer.ensure_materialized(
@@ -259,14 +261,20 @@ class CanonicalCodingWorkstreamDispatcher:
         projection: PlanCoordinationProjection,
     ) -> CodingDispatchSlot | None:
         if projection.plan_id != workstream.work_item.plan_id:
-            raise ValueError("#384 projection plan identity does not match coding workstream")
+            raise ValueError(
+                "Step-orchestration projection plan identity does not match coding workstream"
+            )
         if projection.task_id != workstream.work_item.task_id:
-            raise ValueError("#384 projection task identity does not match coding workstream")
+            raise ValueError(
+                "Step-orchestration projection task identity does not match coding workstream"
+            )
         if (
             workstream.provenance.plan_revision is not None
             and workstream.provenance.plan_revision != projection.plan_revision
         ):
-            raise ValueError("coding workstream is stale for the canonical #384 Plan revision")
+            raise ValueError(
+                "coding workstream is stale for the canonical Step-orchestration Plan revision"
+            )
 
         selected_by_step = {item.work_item.step_id: item.id for item in batch.workstreams}
         expected_dependencies = set(workstream.work_item.dependencies)
@@ -275,7 +283,9 @@ class CanonicalCodingWorkstreamDispatcher:
             None,
         )
         if step is None:
-            raise ValueError("coding workstream Step is absent from canonical #384 projection")
+            raise ValueError(
+                "coding workstream Step is absent from canonical Step-orchestration projection"
+            )
         canonical_selected_dependencies = {
             selected_by_step[dependency_id]
             for dependency_id in step.dependency_ids
@@ -283,8 +293,7 @@ class CanonicalCodingWorkstreamDispatcher:
         }
         if canonical_selected_dependencies != expected_dependencies:
             raise ValueError(
-                "coding work-item dependencies diverge from selected canonical "
-                "#384 Step dependencies"
+                "coding work-item dependencies diverge from selected canonical Step dependencies"
             )
         if (
             step.phase is not CoordinationPhase.ATTEMPT_ACTIVE

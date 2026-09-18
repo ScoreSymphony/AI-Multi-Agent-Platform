@@ -1,4 +1,4 @@
-"""Read-only Control Plane projection for canonical #15 approvals."""
+"""Read-only Control Plane projection for canonical approvals."""
 
 from __future__ import annotations
 

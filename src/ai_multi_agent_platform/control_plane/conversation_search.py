@@ -1,7 +1,7 @@
-"""Privacy-safe global Search integration for canonical Conversations (#289).
+"""Privacy-safe global Search integration for canonical Conversations.
 
 Search remains derived discovery state. Conversation/Message lifecycle, retention and
-access decisions stay owned by the canonical #72 domain and are re-checked before a
+access decisions stay owned by the canonical Conversation domain and are re-checked before a
 Search result can become caller-visible.
 """
 
@@ -126,7 +126,7 @@ def install_conversation_search_services(
     control_plane: _ConversationSearchControlPlane,
     service: ConversationService,
 ) -> None:
-    """Decorate the already-registered #72 resources with Search rebuild enumeration."""
+    """Decorate the already-registered Conversation resources with Search rebuild enumeration."""
 
     conversation_delegate = control_plane._resource_services.get(CONVERSATION_COLLECTION)
     message_delegate = control_plane._resource_services.get(CONVERSATION_MESSAGE_COLLECTION)
@@ -146,7 +146,7 @@ async def conversation_search_result_allowed(
     context: RequestContext,
     result: SearchResult,
 ) -> bool | None:
-    """Re-authorize Conversation Search hits against canonical #72 state.
+    """Re-authorize Conversation Search hits against canonical Conversation state.
 
     ``None`` means this result belongs to another domain. Conversation results never
     authorize from SearchDocument scope metadata alone: the canonical Conversation is
@@ -199,7 +199,7 @@ async def _canonical_conversation_allowed(
     action: str,
     conversation: Conversation,
 ) -> bool:
-    """Mirror #72's private-owner rule before consulting platform authorization."""
+    """Mirror the Conversation private-owner rule before consulting platform authorization."""
 
     if conversation.project_id is None and conversation.owner_ref != context.actor.principal_ref:
         return False

@@ -1,7 +1,7 @@
-"""Provider-neutral advanced deployment profiles for issue #240.
+"""Provider-neutral advanced deployment profiles.
 
 The profile layer deliberately contains deployment metadata separately from the
-canonical #14 Node/Worker records it materializes. It does not introduce a
+canonical distributed Node/Worker records it materializes. It does not introduce a
 second scheduler, Worker identity model, transport contract or secret format.
 """
 
@@ -45,7 +45,7 @@ _FORBIDDEN_SECRET_KEYS = frozenset(
 
 
 class AdvancedDeploymentProfileError(ValueError):
-    """Raised when an advanced deployment profile violates #240 boundaries."""
+    """Raised when an advanced deployment profile violates advanced-deployment boundaries."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,7 +153,7 @@ class DeploymentNode:
             )
 
     def registration_request(self) -> RegistrationRequest:
-        """Create the canonical #14 registration payload without deployment metadata."""
+        """Create the canonical distributed registration payload without deployment metadata."""
 
         return RegistrationRequest(
             node=self.node,
@@ -166,7 +166,7 @@ class DeploymentNode:
 
 @dataclass(frozen=True, slots=True)
 class AdvancedDeploymentProfile:
-    """Validated #240 composition over canonical distributed runtime contracts."""
+    """Validated advanced-deployment composition over canonical distributed runtime contracts."""
 
     profile_id: str
     description: str
@@ -205,7 +205,7 @@ class AdvancedDeploymentProfile:
 
 
 def load_advanced_deployment_profile(path: str | Path) -> AdvancedDeploymentProfile:
-    """Load a credential-free #240 profile from JSON."""
+    """Load a credential-free advanced deployment profile from JSON."""
 
     profile_path = Path(path)
     try:
@@ -218,7 +218,7 @@ def load_advanced_deployment_profile(path: str | Path) -> AdvancedDeploymentProf
 
 
 def parse_advanced_deployment_profile(value: object) -> AdvancedDeploymentProfile:
-    """Validate and materialize deployment metadata plus canonical #14 declarations."""
+    """Validate and materialize deployment metadata plus canonical distributed declarations."""
 
     _reject_embedded_secrets(value)
     data = _mapping(value, "advanced deployment profile")

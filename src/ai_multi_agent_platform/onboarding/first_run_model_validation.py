@@ -37,7 +37,7 @@ def reject_plaintext_credentials(value: JsonValue, *, path: str = "payload") -> 
                 raise ContractError(
                     ErrorCode.INVALID_REQUEST,
                     "plaintext credentials are forbidden in onboarding configuration; use a "
-                    "canonical #34 SecretReference",
+                    "canonical SecretReference",
                     details={"field": field_path},
                 )
             reject_plaintext_credentials(item, path=field_path)

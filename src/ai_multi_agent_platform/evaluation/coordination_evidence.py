@@ -83,7 +83,7 @@ def _coordination_evidence(
 
 
 class CoordinationEvaluationEvidenceProvider:
-    """Project backend-neutral coordinator state into the existing #19 evidence model."""
+    """Project backend-neutral coordinator state into the existing Evaluation evidence model."""
 
     def __init__(self, repository: CoordinatorRepository) -> None:
         self._repository = repository

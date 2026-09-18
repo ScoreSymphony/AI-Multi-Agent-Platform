@@ -1,4 +1,4 @@
-"""Deny-only live membership guard composed in front of canonical #15 authorization."""
+"""Deny-only live membership guard composed in front of canonical authorization."""
 
 from __future__ import annotations
 

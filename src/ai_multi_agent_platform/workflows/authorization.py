@@ -1,4 +1,4 @@
-"""#15 authorization boundary for canonical reusable workflows."""
+"""Authorization boundary for canonical reusable workflows."""
 
 from __future__ import annotations
 

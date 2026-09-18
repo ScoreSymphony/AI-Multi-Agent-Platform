@@ -120,7 +120,7 @@ class StepBindingKernel(Protocol):
 
 
 class PlanCoordinator(Protocol):
-    """Existing #384 registration seam; planning does not own progression."""
+    """Existing coordination registration seam; planning does not own progression."""
 
     async def register_plan(self, plan: Plan, steps: tuple[Step, ...]) -> object: ...
 

@@ -1,4 +1,4 @@
-"""#15 authorization boundary for assigning durable model-routing profiles."""
+"""Authorization boundary for assigning durable model-routing profiles."""
 
 from __future__ import annotations
 

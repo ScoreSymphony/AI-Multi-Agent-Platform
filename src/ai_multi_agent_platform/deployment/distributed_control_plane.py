@@ -1,7 +1,7 @@
-"""Control-Plane composition for deployable #240 remote Workers.
+"""Control-Plane composition for deployable remote Workers.
 
-The deployment layer binds authenticated #14 registration to the already-existing #35 Worker
-transport and #37 Workspace materializer. The canonical distributed runtime remains the sole
+The deployment layer binds authenticated distributed registration to the existing Worker
+transport and remote Workspace materializer. The canonical distributed runtime remains the sole
 scheduler/ownership authority.
 """
 
@@ -56,7 +56,7 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
 
     Registration remains owned by ``WorkerProtocolService``. This subclass adds deployment
     consequences only: each canonical Worker receives the standard transport dispatcher. Shipped
-    multi-process composition additionally enables #35 presence enforcement so a live Node
+    multi-process composition additionally enables transport presence enforcement so a live Node
     reporter cannot keep a dead sibling schedulable by repeating a static profile snapshot.
 
     Capability discovery is deliberately not mirrored per Worker here. The shipped distributed
@@ -170,7 +170,7 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         ``JsonDistributedStateStore`` deliberately restores persisted Node/Worker liveness as
         offline because old heartbeats are not current evidence. During a Control-Plane restart,
         however, a still-running Worker can prove its process identity over the authenticated
-        #35 transport before the HTTP Worker-protocol surface opens. We use only that positive
+        the transport before the HTTP Worker-protocol surface opens. We use only that positive
         presence proof to attach the transport dispatcher needed to inspect existing Worker Jobs.
 
         Reachable Workers are temporarily degraded: this permits reconciliation of already-owned

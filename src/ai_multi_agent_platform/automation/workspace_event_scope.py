@@ -1,8 +1,9 @@
 """Authoritative workspace resolution for canonical Automation platform events.
 
 Canonical Event intentionally remains free of an Automation-only workspace field.  Workspace
-scope is instead proven from #37 workspace state and immutable Run workspace bindings.  Any event
-whose workspace cannot be proven resolves to ``None`` so workspace-scoped Automations fail closed.
+scope is instead proven from canonical Workspace state and immutable Run workspace bindings.
+Any event whose workspace cannot be proven resolves to ``None`` so workspace-scoped
+Automations fail closed.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ class WorkspaceEventScopeResolver(Protocol):
 
 
 class CanonicalWorkspaceEventScopeResolver:
-    """Resolve Event workspace scope only from canonical #37 workspace relationships.
+    """Resolve Event workspace scope only from canonical Workspace relationships.
 
     Durable Run bindings are authoritative for Run subjects, including after a local
     materialization has been released.  Active Workspace task/run references provide the

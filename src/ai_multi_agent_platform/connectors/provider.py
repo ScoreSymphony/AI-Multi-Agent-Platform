@@ -119,7 +119,7 @@ class ConnectorProvider(ProviderContract):
         resource: ExternalResourceReference,
         context: OperationContext,
     ) -> bytes:
-        """Read external file bytes for handoff to the canonical #13 FileProvider."""
+        """Read external file bytes for handoff to the canonical FileProvider."""
 
         self._unsupported("file.import")
 
@@ -132,7 +132,7 @@ class ConnectorProvider(ProviderContract):
         metadata: Mapping[str, JsonValue],
         context: OperationContext,
     ) -> ExternalResourceReference:
-        """Export bytes supplied by #13 storage and return an external reference."""
+        """Export bytes supplied by canonical storage and return an external reference."""
 
         self._unsupported("file.export")
 
@@ -142,7 +142,7 @@ class ConnectorProvider(ProviderContract):
         resource: ExternalResourceReference,
         context: OperationContext,
     ) -> str:
-        """Read source text for handoff to the canonical #13 KnowledgeProvider."""
+        """Read source text for handoff to the canonical KnowledgeProvider."""
 
         self._unsupported("knowledge.ingest")
 

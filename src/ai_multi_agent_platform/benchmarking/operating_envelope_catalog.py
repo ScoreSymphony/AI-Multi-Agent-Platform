@@ -1,4 +1,4 @@
-"""Cross-host cataloging for issue #440 tested operating-envelope evidence."""
+"""Cross-host cataloging for tested operating-envelope evidence."""
 
 from __future__ import annotations
 

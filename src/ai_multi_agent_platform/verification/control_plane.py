@@ -528,7 +528,7 @@ def register_verification_control_plane(
     evidence: VerificationEvidenceResolver | None = None,
     runtime: CanonicalVerificationRuntime | None = None,
 ) -> None:
-    """Register #86 read/review surfaces on the generic #32 extension seam."""
+    """Register Verification read/review surfaces on the generic Control Plane extension seam."""
 
     runtime_verification = runtime_verification_service(verification)
     runtime_completion = runtime_verification_completion(completion)

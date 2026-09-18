@@ -178,7 +178,7 @@ def register_task_budget_control_plane(
     budgets: TaskBudgetEnforcementService,
     mutations: TaskBudgetPolicyMutationService,
 ) -> None:
-    """Register the canonical #902 read and mutation surface on #32."""
+    """Register the canonical task-budget read and mutation surface on the Control Plane."""
 
     handlers = TaskBudgetCommandHandlers(control_plane, budgets, mutations)
     extensions = _control_plane_extensions()

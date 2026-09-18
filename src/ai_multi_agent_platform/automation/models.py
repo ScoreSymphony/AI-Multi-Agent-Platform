@@ -1,4 +1,4 @@
-"""Canonical Automation, Trigger and TriggerDelivery value types for issues #18 and #241."""
+"""Canonical Automation, Trigger and TriggerDelivery value types."""
 
 from __future__ import annotations
 

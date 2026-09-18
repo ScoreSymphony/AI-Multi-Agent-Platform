@@ -1,4 +1,4 @@
-"""#79 portable codec for canonical #589 Research Evidence bundles."""
+"""Portable codec for canonical Research Evidence bundles."""
 
 from __future__ import annotations
 

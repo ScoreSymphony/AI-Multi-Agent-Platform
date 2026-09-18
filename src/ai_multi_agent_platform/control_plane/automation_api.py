@@ -1,4 +1,4 @@
-"""Control Plane composition for issue #18 Automation management and trigger delivery."""
+"""Control Plane composition for Automation management and trigger delivery."""
 
 from __future__ import annotations
 

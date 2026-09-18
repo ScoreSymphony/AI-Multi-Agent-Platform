@@ -1,7 +1,7 @@
 """Operational source adapters for canonical Context Bundle assembly.
 
 Source domains remain authoritative. These adapters only project exact canonical state into
-#590 Context candidates and never own Task, Agent, Skill, Research, Repository or data lifecycles.
+Context candidates and never own Task, Agent, Skill, Research, Repository or data lifecycles.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ _UNAVAILABLE_CODES = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class OperationalContextSourceRequest:
-    """Strict superset of #590 source request used only at operational composition."""
+    """Strict superset of the Context source request used only at operational composition."""
 
     task_id: str
     run_id: str
@@ -100,7 +100,7 @@ class ContextSourceAdapterBinding:
 
 
 class OperationalContextAssemblyService:
-    """Normalize source availability, then delegate truth to canonical #590 assembly."""
+    """Normalize source availability, then delegate truth to canonical Context assembly."""
 
     def __init__(self, canonical: ContextAssemblyService) -> None:
         self.canonical = canonical

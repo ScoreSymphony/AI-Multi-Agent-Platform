@@ -1,7 +1,7 @@
-"""Issue #597 integration between #18 trigger deliveries and durable Goal reviews.
+"""Integration between trigger deliveries and durable Goal reviews.
 
 The Goal layer deliberately does not own a scheduler. This module consumes the canonical
-Automation/TriggerDelivery primitives after #18 has admitted and deduplicated a delivery,
+Automation/TriggerDelivery primitives after Automation has admitted and deduplicated a delivery,
 then asks GoalService to review the exact Goal revision named by the Automation template.
 """
 

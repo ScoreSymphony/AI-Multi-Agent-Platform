@@ -236,7 +236,7 @@ class ObservedToolProvider(ToolProvider):
 
 
 class ObservedNodeProvider(NodeProvider):
-    """Instrument node inventory/health data that #14 providers actually report."""
+    """Instrument node inventory/health data that distributed providers actually report."""
 
     def __init__(
         self,

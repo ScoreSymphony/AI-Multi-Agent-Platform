@@ -1,4 +1,4 @@
-"""Ordinary single-node startup reconciliation for issues #707 and #758.
+"""Ordinary single-node startup reconciliation.
 
 This module is intentionally separate from disaster-restore recovery. The normal
 single-Control-Plane profile must reconcile durable canonical Runs and automatic
@@ -33,13 +33,13 @@ STARTUP_RECOVERY_REPORT = "startup-report.json"
 
 
 class StartupCoordinator(Protocol):
-    """Narrow #384 startup seam used by the deployment recovery gate."""
+    """Narrow coordination startup seam used by the deployment recovery gate."""
 
     async def reconcile_all(self) -> tuple[object, ...]: ...
 
 
 class StartupDistributedRuntime(Protocol):
-    """Narrow #14 startup seam used when distributed execution is enabled."""
+    """Narrow distributed-runtime startup seam used when distributed execution is enabled."""
 
     async def reconcile(self) -> tuple[object, ...]: ...
 
@@ -61,7 +61,7 @@ class StartupRecoveryExtension(Protocol):
 
 
 class StartupReviewerReconciler(Protocol):
-    """Narrow #758 seam for durable automatic-reviewer reconciliation."""
+    """Narrow automatic-reviewer seam for durable reconciliation."""
 
     async def reconcile_startup(self) -> tuple[ReviewerRecoveryRecord, ...]: ...
 
@@ -113,7 +113,7 @@ async def reconcile_single_node_startup(
     be written. Once those blockers are resolved, the durable Plan/Step coordinator
     resumes due waits/retries and the kernel scans every Task stream. Product-owned
     recovery extensions then reconcile independently through a narrow provider-neutral
-    seam. Only after canonical Run ownership is stable may #758 reconcile automatic
+    seam. Only after canonical Run ownership is stable may reconcile automatic
     reviewer AgentRuns. The complete pass is safe to repeat.
 
     A running canonical Run whose execution backend can no longer be found is never

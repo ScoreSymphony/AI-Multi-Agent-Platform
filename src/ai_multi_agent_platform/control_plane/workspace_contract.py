@@ -43,7 +43,7 @@ from .service import ScopeStore, _optional_string, _require_key, _required_strin
 
 
 class ControlPlane(_ObservabilityControlPlane):
-    """Composed Control Plane with an optional canonical #37 WorkspaceProvider."""
+    """Composed Control Plane with an optional canonical WorkspaceProvider."""
 
     def __init__(
         self,

@@ -23,7 +23,7 @@ from .service import AgentService
 
 
 class DurableRoutingProfileAgentRuntime(AgentRuntime):
-    """Resolve exact #309 policy revisions before canonical Agent model routing."""
+    """Resolve exact routing-policy revisions before canonical Agent model routing."""
 
     def __init__(
         self,

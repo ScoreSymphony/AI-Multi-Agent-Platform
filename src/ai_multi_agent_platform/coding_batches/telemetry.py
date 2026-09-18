@@ -1,4 +1,4 @@
-"""#16 observability projection for parallel coding-batch composition."""
+"""Observability projection for parallel coding-batch composition."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from .models import CodingBatch, CodingWorkstream, IntegrationCandidate
 
 
 class CodingBatchTelemetry:
-    """Emit safe coding-batch orchestration facts through canonical #16 telemetry.
+    """Emit safe coding-batch orchestration facts through canonical telemetry.
 
     The adapter owns no event store or lifecycle truth. It projects only canonical IDs, exact
     repository revisions and bounded provider-neutral state; host-local paths and content are never

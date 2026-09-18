@@ -1,4 +1,4 @@
-"""CLI surface for canonical Node/Worker resources from issue #14."""
+"""CLI surface for canonical Node/Worker resources."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def add_compute_parsers(
 
     provision = worker_commands.add_parser(
         "provision",
-        help="provision the profile reporter Worker credential and minimal #15 policy",
+        help="provision the profile reporter Worker credential and minimal authorization policy",
     )
     provision.add_argument("worker_id")
     provision.add_argument("--purpose")
@@ -181,7 +181,7 @@ def doctor_compute(client: ControlPlaneClient) -> tuple[str, list[JsonValue]]:
 
 
 def _doctor_host_pressure(client: ControlPlaneClient) -> tuple[str, list[JsonValue]]:
-    """Inspect every page of the optional #500 pressure projection when enabled."""
+    """Inspect every page of the optional pressure projection when enabled."""
 
     overall = "healthy"
     checks: list[JsonValue] = []
@@ -208,7 +208,7 @@ def _doctor_host_pressure(client: ControlPlaneClient) -> tuple[str, list[JsonVal
                 }
             ]
 
-        # #500 is opt-in. Only a missing first page means the feature is disabled.
+        # Host-pressure projection is opt-in. A missing first page means it is disabled.
         if response.status == 404 and first_page:
             return "healthy", []
         if response.status >= 400:

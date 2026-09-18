@@ -1,4 +1,4 @@
-"""Hardened public authentication boundary for the issue #36 Control Plane."""
+"""Hardened public authentication boundary for the Control Plane."""
 
 from __future__ import annotations
 
@@ -45,10 +45,11 @@ _TOKEN_METHODS = {
 
 
 class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
-    """Public #36 boundary over the current composed Control Plane HTTP surface.
+    """Public authentication boundary over the current composed Control Plane HTTP surface.
 
     Authentication establishes the canonical actor and transports credential-local scope
-    as trusted context. Scope authorization itself is deliberately evaluated by #15.
+    as trusted context. Scope authorization is deliberately evaluated by the authorization
+    layer.
     """
 
     def __init__(
@@ -360,12 +361,12 @@ def _augment_scoped_credentials_openapi(
         "actions": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Canonical #15 AuthorizationAction values.",
+            "description": "Canonical AuthorizationAction values.",
         },
         "resource_types": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Canonical #15 ResourceType values.",
+            "description": "Canonical ResourceType values.",
         },
         "resource_ids": {
             "type": "array",
@@ -379,7 +380,7 @@ def _augment_scoped_credentials_openapi(
         "scope": {
             "type": "object",
             "description": (
-                "Credential-local restrictive ceiling evaluated by #15; it never grants rights."
+                "Credential-local restrictive ceiling; authorization never grants from it."
             ),
             "properties": scope_properties,
             "additionalProperties": False,

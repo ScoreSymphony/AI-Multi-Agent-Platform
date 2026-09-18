@@ -1,4 +1,4 @@
-"""Operator entrypoint for the replaceable #35 TCP MessageTransport reference broker."""
+"""Operator entrypoint for the replaceable TCP MessageTransport reference broker."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from ai_multi_agent_platform.messaging import TcpMessageBroker
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="platform-message-broker",
-        description="Run the self-hosted #35 TCP message broker for distributed Workers.",
+        description="Run the self-hosted TCP message broker for distributed Workers.",
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)

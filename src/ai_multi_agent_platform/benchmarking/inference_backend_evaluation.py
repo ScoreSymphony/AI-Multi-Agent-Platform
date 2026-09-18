@@ -81,7 +81,7 @@ def assess_inference_backend_evaluation(
     campaign: Mapping[str, Any],
     reports: Sequence[Mapping[str, Any]],
 ) -> InferenceBackendEvaluationReadiness:
-    """Assess whether live evidence is sufficient to make the #860 policy decision."""
+    """Assess whether live evidence is sufficient to make the inference-backend policy decision."""
 
     campaign_id = _require_str(campaign, "campaign_id")
     candidate = _require_mapping(campaign.get("candidate"), "candidate")

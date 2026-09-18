@@ -188,9 +188,10 @@ class RepositoryContextFunnel:
             freshness = provenance.get("freshness")
             candidates.append(
                 ContextCandidate(
-                    # Repository paths are not canonical #30 File identities. Keep this as generic
-                    # result evidence so #590 authorization does not mistake a provider path for a
-                    # platform File lifecycle ID. Exact source identity remains in provenance below.
+                    # Repository paths are not canonical File identities. Keep this as generic
+                    # result evidence so Context authorization does not mistake a provider path
+                    # for a platform File lifecycle ID. Exact source identity remains in
+                    # provenance below.
                     source=ContextSourceRef(
                         source_type=ContextSourceType.RESULT,
                         source_id=f"repository-source:{request.repository_id}:{path}",

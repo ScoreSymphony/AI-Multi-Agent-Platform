@@ -33,8 +33,8 @@ class EgressApprovalExceptionPolicy:
     The default policy approves nothing. Deployments must enumerate exception reason codes
     explicitly. Secret values/references remain non-overridable by default even when a reason is
     otherwise approvable. Approved records are reusable only for the exact action digest until the
-    existing #15 Approval expires; changed content, target, profile revision, project or action
-    creates a different digest and therefore invalidates the old approval.
+    existing canonical Approval expires; changed content, target, profile revision, project, or
+    action creates a different digest and therefore invalidates the old approval.
     """
 
     approvable_reason_codes: frozenset[EgressReasonCode] = frozenset()

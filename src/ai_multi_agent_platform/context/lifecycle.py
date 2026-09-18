@@ -102,8 +102,9 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
 
     Unmarked executions continue through the supplied delegate. Marked Agent executions no longer
     pass legacy ``task_context``/``project_context`` dictionaries to orchestrator adapters: source
-    domains contribute through #590 adapters, #15 resolves visibility, the immutable Bundle derives
-    #10 routing constraints, and the exact egress-approved rendering becomes the model input.
+    domains contribute through Context adapters, authorization resolves visibility, the immutable
+    Bundle derives model-routing constraints, and its egress-approved rendering becomes model
+    input.
 
     Once a bound Run enters this lifecycle it stays owned here through cancellation. That keeps the
     exact AgentRun and Context binding aligned with the canonical Run and prevents a late provider
@@ -155,7 +156,7 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
         )
 
     def register_source_binding_factory(self, factory: ContextBindingFactory) -> None:
-        """Extend #590 source composition without replacing Context lifecycle authority.
+        """Extend source composition without replacing Context lifecycle authority.
 
         Deployment integrations may contribute additional canonical source bindings at the normal
         assembly boundary. Existing bindings stay intact and the lifecycle remains the sole owner

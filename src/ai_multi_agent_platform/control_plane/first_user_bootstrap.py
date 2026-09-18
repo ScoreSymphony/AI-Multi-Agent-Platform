@@ -1,4 +1,4 @@
-"""Browser-first account bootstrap over the canonical Authentication and #15 stores."""
+"""Browser-first account bootstrap over the canonical Authentication and authorization stores."""
 
 from __future__ import annotations
 

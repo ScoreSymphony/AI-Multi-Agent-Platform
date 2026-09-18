@@ -1,4 +1,4 @@
-"""Canonical #86 Verification binding for Research Items, Claims and Evidence."""
+"""Canonical Verification binding for Research Items, Claims and Evidence."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from .service import ResearchService
 
 @dataclass(frozen=True, slots=True)
 class ResearchVerificationSubject(VerificationSubject):
-    """Exact Research revision/digest reviewed by the existing #86 authority."""
+    """Exact Research revision/digest reviewed by the canonical Verification authority."""
 
     def __post_init__(self) -> None:
         try:
@@ -37,10 +37,11 @@ class ResearchVerificationSubject(VerificationSubject):
 
 
 class ResearchVerificationBridge:
-    """Use #86 without implicitly making Research review a Task-completion gate.
+    """Use canonical Verification without making Research review a Task-completion gate.
 
-    #86 remains the authority for policy, reviewer independence and result acceptance. This bridge
-    resolves exact Research subjects and records PASS bindings for downstream provenance. Task
+    Verification remains authoritative for policy, reviewer independence and result acceptance.
+    This bridge resolves exact Research subjects and records PASS bindings for downstream
+    provenance. Task
     completion remains owned by VerificationCompletionAuthority separately.
     """
 
@@ -97,7 +98,7 @@ class ResearchVerificationBridge:
         if resolved_task_id is None:
             raise ContractError(
                 ErrorCode.CONFLICT,
-                "#86 Research verification requires a canonical Task context",
+                "Research verification requires a canonical Task context",
             )
         if item.task_id is not None and item.task_id != resolved_task_id:
             raise ContractError(
@@ -132,7 +133,7 @@ class ResearchVerificationBridge:
         return stored
 
     def bind_completed_pass(self, verification_id: str) -> ResearchVerificationBinding:
-        """Persist a PASS produced through another existing #86 review entrypoint."""
+        """Persist a PASS produced through another canonical Verification review entrypoint."""
 
         request = self.verification.get_request(verification_id)
         result = self.verification.result_for(verification_id)

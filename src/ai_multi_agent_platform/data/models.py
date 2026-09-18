@@ -77,7 +77,7 @@ class KnowledgeSearchMode(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class MemoryAccessPolicy:
-    """Provider-neutral access semantics that #15/#33 resolve to authorization decisions.
+    """Provider-neutral access semantics resolved by authorization and Agent policy.
 
     Values in ``readers`` and ``writers`` are policy subjects, not backend ACL IDs. This
     keeps memory scope semantics explicit without coupling the data contract to one IAM
@@ -253,7 +253,7 @@ class MemoryEntry:
 
     @property
     def access_policy(self) -> MemoryAccessPolicy:
-        """Canonical scope policy; #15/#33 decide whether a concrete actor matches it."""
+        """Scope policy resolved by authorization and Agent identity."""
 
         return memory_access_policy_for_scope(self.scope, self.owner_ref)
 

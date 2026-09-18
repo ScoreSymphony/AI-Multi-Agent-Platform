@@ -68,7 +68,7 @@ class PlanningEnvironmentResolver(Protocol):
 
 
 class PolicyAwarePlanningEnvironmentResolver:
-    """Resolve planning candidates through canonical #15 authorization.
+    """Resolve planning candidates through canonical authorization.
 
     Discovery calls the configured authorization *provider* directly instead of
     ``AuthorizationGate.decide`` so merely considering a candidate cannot create an

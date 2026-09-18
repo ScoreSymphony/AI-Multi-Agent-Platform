@@ -1,4 +1,4 @@
-"""Canonical #384/#33/#37/#82 execution path for clean #872 integrations."""
+"""Canonical execution path for clean coding-batch integrations."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ from .telemetry import CodingBatchTelemetry
 
 
 class IntegrationPlanCoordinationReader(Protocol):
-    """Narrow #384 projection boundary for the canonical integration Step."""
+    """Narrow Step-orchestration projection boundary for the canonical integration Step."""
 
     def projection(self, plan_id: str) -> PlanCoordinationProjection: ...
 
@@ -46,13 +46,13 @@ class IntegrationPlanCoordinationReader(Protocol):
 
 
 class IntegrationRepositoryEvidenceReader(Protocol):
-    """Read exact #82 Run provenance after integration execution completes."""
+    """Read exact repository Run provenance after integration execution completes."""
 
     def get(self, run_id: str, repository_id: str) -> RepositoryRunProvenance | None: ...
 
 
 class IntegrationMaterializer(Protocol):
-    """Narrow #37/#82 isolation boundary used by clean integration execution."""
+    """Narrow Workspace/repository isolation boundary used by clean integration execution."""
 
     async def ensure_materialized(
         self,
@@ -68,7 +68,7 @@ class IntegrationMaterializer(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class IntegrationDispatchSlot:
-    """One active canonical #384 Step attempt assigned to a clean integration candidate."""
+    """One active canonical Step attempt assigned to a clean integration candidate."""
 
     task_id: str
     plan_id: str
@@ -104,7 +104,7 @@ def deterministic_integration_branch_ref(batch_id: str, integration_id: str) -> 
 
 
 class CanonicalIntegrationMaterializer:
-    """Materialize a clean integration attempt through canonical #37/#82 authorities."""
+    """Materialize a clean integration through Workspace/repository authorities."""
 
     def __init__(
         self,
@@ -182,7 +182,9 @@ class CanonicalIntegrationMaterializer:
                 checkout=False,
             )
             if created.commit_sha != candidate.target_base_revision:
-                raise ValueError("#82 created integration branch from another target revision")
+                raise ValueError(
+                    "Repository service created integration branch from another target revision"
+                )
         else:
             commits = await self._repositories.commits(
                 batch.repository_id,
@@ -198,9 +200,10 @@ class CanonicalIntegrationMaterializer:
 class CanonicalCodingIntegrationDispatcher:
     """Run clean integration as ordinary canonical Agent work, never as a naked SHA mutation.
 
-    The accepted workstream revisions are passed as immutable integration inputs. #384 owns the
-    active Step attempt, #33 owns the AgentRun, #37/#82 materialize the isolated integration view,
-    and #82 owns the eventual output revision/provenance. #872 stores only the returned links.
+    The accepted workstream revisions are immutable integration inputs. Step orchestration owns
+    the active Step attempt, AgentRuntime owns the AgentRun, and Workspace/repository services
+    materialize the isolated integration view. The repository service owns the output revision
+    and provenance. Coding-batch state stores only the returned links.
     """
 
     def __init__(
@@ -310,7 +313,7 @@ class CanonicalCodingIntegrationDispatcher:
         batch_id: str,
         integration_id: str,
     ) -> IntegrationCandidate:
-        """Advance to validation only from exact completed #33/#82 integration evidence."""
+        """Advance only from completed AgentRun/repository integration evidence."""
 
         batch = self._coordinator.get(batch_id)
         candidate = batch.integration_candidate(integration_id)
@@ -336,15 +339,15 @@ class CanonicalCodingIntegrationDispatcher:
 
         repository = self._repository_provenance.get(execution.run_id, batch.repository_id)
         if repository is None:
-            raise ValueError("canonical #82 integration Run provenance is missing")
+            raise ValueError("canonical repository integration Run provenance is missing")
         if repository.task_id != execution.task_id:
             raise ValueError("integration repository provenance belongs to another Task")
         if repository.input_revision != candidate.target_base_revision:
             raise ValueError("integration repository input differs from candidate target base")
         if repository.output_revision is None:
-            raise ValueError("canonical #82 integration Run has no output revision")
+            raise ValueError("canonical repository integration Run has no output revision")
         if not repository.diff_artifact_ids:
-            raise ValueError("canonical #82 integration Run has no diff-artifact evidence")
+            raise ValueError("canonical repository integration Run has no diff-artifact evidence")
         if repository.agent_id is not None and repository.agent_id != agent_run.agent.agent_id:
             raise ValueError("integration repository provenance names another Agent")
 
@@ -381,13 +384,15 @@ class CanonicalCodingIntegrationDispatcher:
     ) -> IntegrationDispatchSlot:
         step = next((item for item in projection.steps if item.step_id == step_id), None)
         if step is None:
-            raise ValueError("integration Step is absent from canonical #384 projection")
+            raise ValueError(
+                "integration Step is absent from canonical Step-orchestration projection"
+            )
         if (
             step.phase is not CoordinationPhase.ATTEMPT_ACTIVE
             or step.status is not StepStatus.RUNNING
             or step.latest_run_id is None
         ):
-            raise ValueError("integration Step has no active canonical #384 attempt")
+            raise ValueError("integration Step has no active canonical attempt")
         return IntegrationDispatchSlot(
             task_id=projection.task_id,
             plan_id=projection.plan_id,
