@@ -163,9 +163,7 @@ def test_unwired_semantic_provider_kind_fails_closed_without_private_owner(tmp_p
             (item,),
             {(item.item_id, item.version): artifact},
         ),
-        installations=JsonRegistryInstallationStore(
-            tmp_path / "unsupported-semantic-kind.json"
-        ),
+        installations=JsonRegistryInstallationStore(tmp_path / "unsupported-semantic-kind.json"),
     )
 
     preview = service.preview(
