@@ -289,6 +289,47 @@ def test_registry_plugin_restart_reconciliation_rejects_changed_artifact(tmp_pat
         )
 
 
+def test_registry_plugin_restart_reconciliation_rejects_publisher_drift(
+    tmp_path: Path,
+) -> None:
+    manifest = reference_manifest()
+    artifact = json.dumps(_manifest_document(manifest), sort_keys=True).encode("utf-8")
+    metadata = _registry_metadata(
+        item_id=manifest.plugin_id,
+        item_type="plugin",
+        name=manifest.name,
+        description=manifest.description,
+        version=manifest.plugin_version,
+        publisher=manifest.author,
+        repository=manifest.provenance.source_repository or "https://example.invalid/plugin",
+        package_reference=f"{manifest.plugin_id}@{manifest.plugin_version}",
+        license_name=manifest.provenance.license,
+        provenance="registry-release",
+        artifact=artifact,
+    )
+    catalog, _artifact_path = _write_catalog(tmp_path, metadata, artifact)
+    item = registry_item_from_document(metadata)
+    data_dir = tmp_path / "data"
+    JsonRegistryInstallationStore(data_dir / "db" / "registry-installations.json").record(
+        item,
+        provider_id="local-test",
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+
+    changed_metadata = dict(metadata)
+    changed_metadata["publisher"] = "different-publisher"
+    _write_catalog(tmp_path, changed_metadata, artifact)
+
+    with pytest.raises(RegistryPluginReconciliationError, match="publisher"):
+        build_default_single_node_deployment(
+            SingleNodeConfig(
+                data_dir=data_dir,
+                secure_cookie=False,
+                registry_catalog=catalog,
+            )
+        )
+
+
 def test_production_registry_validation_uses_live_connector_inventory(tmp_path: Path) -> None:
     connector = ReferenceConnectorProvider()
     artifact = b"{}"
