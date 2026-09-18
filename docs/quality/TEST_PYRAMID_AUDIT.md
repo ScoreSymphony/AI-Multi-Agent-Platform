@@ -68,16 +68,23 @@ or async promotion orchestration.
 
 ## CI signal
 
-The primary Python CI job runs `pytest tests/unit` after format/lint/type checking and before the
-full `pytest` invocation. The full suite remains unchanged and therefore still includes contract,
-integration, E2E, performance, regression, release and architecture coverage. A deterministic
-policy regression can fail the job before heavier test layers start, while no required tier becomes
-optional.
+Python CI preserves the same required coverage while executing stable suite responsibilities as
+isolated matrix lanes: unit; contract/architecture/release; integration; and
+E2E/performance/regression. Static/package validation runs as a sibling matrix lane. The required
+`test` check is an aggregate gate over the complete matrix, so no tier becomes optional.
+
+The serial local fallback remains `pytest`. CI additionally runs
+`scripts/ci/verify_pytest_shards.py`, which proves that the union of the non-unit lanes is exactly
+the collection selected by `pytest -m "not unit" tests` and rejects missing, unexpected or
+duplicated tests. Runtime evidence and budgets are documented in
+[`PYTHON_TEST_RUNTIME.md`](PYTHON_TEST_RUNTIME.md).
 
 ### Controlled regression evidence
 
-CI also runs `scripts/ci/verify_fast_unit_regression_detection.py` immediately after the fast unit
-suite and before the full suite. The probe:
+The unit lane runs `scripts/ci/verify_fast_unit_regression_detection.py` immediately after its
+focused pytest selection. Other lanes may execute concurrently, but the probe remains an independent
+fast signal that does not require an integration fixture to discover the deterministic regression.
+The probe:
 
 1. copies the production `src/` tree into a temporary directory;
 2. changes only the temporary distributed-placement preferred-worker score from `1000` to `999`;
