@@ -87,14 +87,17 @@ Task mutation.
 - Result/Artifact references;
 - lightweight Task submission;
 - Approval approve/deny with exact `requested_action_digest` binding;
+- explicit human takeover for a waiting Task through the canonical
+  `conversation-messages/{message_id}:resume-task` route and an already persisted user message;
 - Verification accept/reject/request-changes;
 - canonical Notifications and mark-read;
 - Search/history;
 - Agent and Worker status inspection.
 
-There is currently no separate public human-takeover command in the audited `main` Control
-Plane contract. The mobile client does not invent one; any future takeover workflow must first
-land as a canonical northbound contract.
+Human takeover does not create mobile-owned Task state. The client requires both the canonical
+Conversation message ID and waiting Task ID and forwards them to the existing Conversation input
+resume route. The server re-authorizes the message/conversation and `task:resume`, records only
+canonical input provenance and performs the lifecycle transition through the kernel.
 
 ## Development
 
