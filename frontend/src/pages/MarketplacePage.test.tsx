@@ -89,7 +89,9 @@ describe("MarketplacePage", () => {
     ]);
 
     expect(merged.find((entry) => entry.kind === "orchestrator")?.management_path).toBe("/plugins");
+    expect(merged.find((entry) => entry.kind === "orchestrator")?.group).toBe("ai_agents");
     expect(merged.find((entry) => entry.kind === "model_provider")?.management_path).toBe("/models");
+    expect(merged.find((entry) => entry.kind === "model_provider")?.group).toBe("models");
     expect(merged.find((entry) => entry.kind === "agent")?.management_path).toBe("/agents");
   });
 
@@ -101,6 +103,7 @@ describe("MarketplacePage", () => {
       supports_install: true,
       supports_update: true,
       supports_uninstall: true,
+      group: "content",
     };
 
     const application: RegistryKindDescriptor = {
@@ -119,6 +122,7 @@ describe("MarketplacePage", () => {
     expect(merged.find((entry) => entry.kind === "notebook_extension")?.display_name).toBe(
       "Notebook Extension",
     );
+    expect(merged.find((entry) => entry.kind === "notebook_extension")?.group).toBe("content");
     expect(merged.find((entry) => entry.kind === "research_surface")?.display_name).toBe(
       "Research Surface",
     );
