@@ -17,6 +17,6 @@ describe("mobile deep links", () => {
     expect(parseMobileDeepLink("https://evil.example/task/1")).toBeNull();
     expect(parseMobileDeepLink("aiagentplatform://task/a/b")).toBeNull();
     expect(parseMobileDeepLink("aiagentplatform://task/task-1?action=approve")).toBeNull();
-    expect(parseMobileDeepLink("aiagentplatform://unknown/id")).toBeNull();
+    expect(parseMobileDeepLink("aiagentplatform://unknown/id")).toBeNull();\n    expect(parseMobileDeepLink("aiagentplatform://task/%E0%A4%A")).toBeNull();
   });
 });
