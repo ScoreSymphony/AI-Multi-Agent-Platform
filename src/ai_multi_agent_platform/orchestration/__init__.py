@@ -48,15 +48,6 @@ class OrchestratorRegistry:
                 f"orchestrator is not registered: {orchestrator_id}",
             ) from exc
 
-    def unregister(self, orchestrator_id: str) -> Orchestrator:
-        try:
-            return self._orchestrators.pop(orchestrator_id)
-        except KeyError as exc:
-            raise ContractError(
-                ErrorCode.NOT_FOUND,
-                f"orchestrator is not registered: {orchestrator_id}",
-            ) from exc
-
     def select(self, selection: OrchestratorSelection) -> Orchestrator:
         try:
             orchestrator = self._orchestrators[selection.orchestrator_id]
