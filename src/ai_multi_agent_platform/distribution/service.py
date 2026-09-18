@@ -6,6 +6,7 @@ import hashlib
 from dataclasses import dataclass, replace
 from typing import Protocol
 
+from .handlers import MarketplaceKindHandlerRegistry
 from .items import RegistryItem, RegistryQuery
 from .models import DistributionRoute
 from .provider import RegistryProvider
@@ -16,7 +17,7 @@ from .validation import ValidationContext, ValidationFinding, has_errors, valida
 
 
 class DistributionRouter(Protocol):
-    """Hands validated content to the existing owner domains (#20/#78/#79)."""
+    """Hands validated legacy distribution routes to existing owner domains (#20/#78/#79)."""
 
     async def install_plugin(self, item: RegistryItem, artifact: bytes) -> object: ...
 
@@ -40,11 +41,13 @@ class DistributionService:
         *,
         installations: RegistryInstallationStore | None = None,
         signature_verifier: RegistrySignatureVerifier | None = None,
+        kind_handlers: MarketplaceKindHandlerRegistry | None = None,
     ) -> None:
         self._provider = provider
         self._router = router
         self._installations = installations
         self._signature_verifier = signature_verifier
+        self._kind_handlers = kind_handlers or MarketplaceKindHandlerRegistry()
 
     @property
     def enabled(self) -> bool:
@@ -52,7 +55,9 @@ class DistributionService:
 
     @property
     def activation_enabled(self) -> bool:
-        return self._provider is not None and self._router is not None
+        return self._provider is not None and (
+            self._router is not None or bool(self._kind_handlers.kinds())
+        )
 
     @property
     def installation_state_enabled(self) -> bool:
@@ -105,13 +110,19 @@ class DistributionService:
         artifact = provider.fetch_artifact(item_id, version)
         resolved_context = self._resolved_context(item, artifact, context)
         findings = validate_item(item, artifact, resolved_context)
+        handler_available = (
+            item.route is not DistributionRoute.KIND_HANDLER
+            or self._kind_handlers.get(item.item_type) is not None
+        )
         return DistributionPreview(
             provider_id=provider.provider_id,
             item=item,
             route=item.route,
             findings=findings,
             activation_allowed=(
-                item.route is not DistributionRoute.MANUAL and not has_errors(findings)
+                item.route is not DistributionRoute.MANUAL
+                and handler_available
+                and not has_errors(findings)
             ),
         )
 
@@ -137,12 +148,16 @@ class DistributionService:
         findings = validate_item(current, artifact, resolved_context)
         if has_errors(findings):
             raise ValueError("registry item no longer passes activation validation")
-        if self._router is None:
-            raise RuntimeError("distribution activation router is not configured")
-        if current.route is DistributionRoute.PLUGIN:
-            result = await self._router.install_plugin(current, artifact)
+        if current.route is DistributionRoute.KIND_HANDLER:
+            handler = self._kind_handlers.require(current.item_type)
+            if self.installed(current.item_id) is None:
+                result = await handler.install(current, artifact)
+            else:
+                result = await handler.update(current, artifact)
+        elif current.route is DistributionRoute.PLUGIN:
+            result = await self._require_router().install_plugin(current, artifact)
         elif current.route is DistributionRoute.PORTABLE_IMPORT:
-            result = await self._router.import_portable(current, artifact)
+            result = await self._require_router().import_portable(current, artifact)
         else:
             raise RuntimeError("manual registry assets cannot be activated automatically")
         if self._installations is not None:
@@ -180,6 +195,11 @@ class DistributionService:
         if self._provider is None:
             raise RuntimeError("registry is disabled")
         return self._provider
+
+    def _require_router(self) -> DistributionRouter:
+        if self._router is None:
+            raise RuntimeError("distribution activation router is not configured")
+        return self._router
 
     def _require_installations(self) -> RegistryInstallationStore:
         if self._installations is None:
