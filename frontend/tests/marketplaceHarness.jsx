@@ -150,7 +150,11 @@ function item({
           details: kind === "application"
             ? { runtime: "container", definition: "application manifest" }
             : { owner: `${kind}-handler` },
-          status: installed ? { state: "installed" } : { state: "available" },
+          status: installed
+            ? kind === "orchestrator"
+              ? { state: "enabled", health: "healthy" }
+              : { state: "installed" }
+            : { state: "available" },
           supported_operations:
             kind === "application"
               ? ["install", "uninstall"]
