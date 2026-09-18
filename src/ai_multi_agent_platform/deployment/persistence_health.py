@@ -81,6 +81,11 @@ class SingleNodePersistenceHealthProvider(ProviderContract):
         self._checked_store_count = 0
         self._free_space_state = "unknown"
 
+    def require_full_store_inventory(self) -> None:
+        """Require every current mandatory store after durable extensions are composed."""
+
+        self._required_store_owners = None
+
     @property
     def descriptor(self) -> ProviderDescriptor:
         resources: dict[str, JsonValue] = {
@@ -133,8 +138,7 @@ class SingleNodePersistenceHealthProvider(ProviderContract):
         for spec in SINGLE_NODE_DURABLE_STORES:
             path = data_root / spec.path
             required_for_profile = spec.required and (
-                self._required_store_owners is None
-                or spec.owner in self._required_store_owners
+                self._required_store_owners is None or spec.owner in self._required_store_owners
             )
             if not path.exists():
                 if required_for_profile:
