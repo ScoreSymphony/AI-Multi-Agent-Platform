@@ -288,6 +288,128 @@ def test_builtin_semantic_kind_metadata_uses_generic_control_plane_collection() 
     assert by_kind["model_provider"]["management_path"] == "/models"
 
 
+@pytest.mark.parametrize(
+    "kind",
+    (
+        RegistryItemType.AGENT,
+        RegistryItemType.AGENT_TEAM,
+        RegistryItemType.ORCHESTRATOR,
+        RegistryItemType.EXECUTOR,
+        RegistryItemType.MODEL_PROVIDER,
+    ),
+)
+def test_semantic_kinds_reuse_generic_control_plane_lifecycle(
+    tmp_path: Path,
+    kind: RegistryItemType,
+) -> None:
+    class SemanticHandler(RecordingHandler):
+        def __init__(self, semantic_kind: RegistryItemType) -> None:
+            super().__init__()
+            self.kind = semantic_kind
+
+        def describe(self, item: RegistryItem) -> dict[str, object]:
+            return {"manifest_kind": item.kind, "owner": item.kind}
+
+    item_id = f"example.{kind.value.replace('_', '-')}"
+    first = RegistryItem(
+        item_id=item_id,
+        item_type=kind,
+        name=f"Semantic {kind.value}",
+        description=f"Generic Control Plane fixture for {kind.value}",
+        version="1.0.0",
+        publisher="example",
+        source=_source(item_id, "1.0.0"),
+        license="MIT",
+        provenance="source-release",
+        trust_status=TrustStatus.REVIEWED,
+        manifest=RegistryManifestReference(
+            kind=kind,
+            reference=f"manifests/{kind.value}.json",
+            schema_version="1",
+        ),
+    )
+    second = replace(
+        first,
+        version="1.1.0",
+        source=_source(item_id, "1.1.0"),
+    )
+    artifacts = {
+        (first.item_id, first.version): f"{kind.value}-1".encode(),
+        (second.item_id, second.version): f"{kind.value}-2".encode(),
+    }
+    handler = SemanticHandler(kind)
+    distribution = DistributionService(
+        LocalRegistryProvider((first, second), artifacts),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / f"{kind.value}-generic-control-plane.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    validation = StaticValidationContext(_context())
+    resources = RegistryResourceService(distribution, validation)
+    commands = RegistryCommandHandlers(distribution, validation)
+
+    listed = asyncio.run(
+        resources.list_resources(
+            _request(),
+            PageQuery(filters={"kind": kind.value}),
+        )
+    )
+    assert listed
+    assert all(resource["kind"] == kind.value for resource in listed)
+
+    detail = asyncio.run(
+        resources.get_resource(
+            _request(),
+            f"{first.item_id}@{first.version}",
+        )
+    )
+    assert detail["kind"] == kind.value
+    assert detail["owner_extension"]["handler_available"] is True  # type: ignore[index]
+
+    preview = asyncio.run(
+        commands.marketplace_preview(
+            _request(),
+            first.item_id,
+            {"version": first.version},
+        )
+    )
+    assert preview["item"]["kind"] == kind.value  # type: ignore[index]
+    assert preview["activation_allowed"] is True
+
+    installed = asyncio.run(
+        commands.marketplace_install(
+            _request(),
+            first.item_id,
+            {"version": first.version},
+        )
+    )
+    assert installed["action"] == "install"
+
+    updated = asyncio.run(
+        commands.marketplace_update(
+            _request(),
+            second.item_id,
+            {"version": second.version},
+        )
+    )
+    assert updated["action"] == "update"
+
+    removed = asyncio.run(
+        commands.marketplace_uninstall(
+            _request(),
+            first.item_id,
+            {},
+        )
+    )
+    assert removed["action"] == "uninstall"
+    assert handler.calls == [
+        ("install", first.item_id, first.version),
+        ("update", second.item_id, second.version),
+        ("uninstall", second.item_id, second.version),
+    ]
+
+
 def test_semantic_provider_without_owner_handler_fails_closed(
     tmp_path: Path,
 ) -> None:
