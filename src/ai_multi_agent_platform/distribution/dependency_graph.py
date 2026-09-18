@@ -188,11 +188,10 @@ def _installed_visit(
     status = _installed_dependency_status(dependency, record)
     next_dependencies = None
     if status is DependencyStatus.SATISFIED:
-        next_dependencies = (
-            record.dependencies
-            if record.dependencies is not None
-            else candidate.dependencies if candidate is not None else None
-        )
+        if record.dependencies is not None:
+            next_dependencies = record.dependencies
+        elif candidate is not None:
+            next_dependencies = candidate.dependencies
     return _DependencyVisit(
         _resolution(
             parent_id,
