@@ -313,6 +313,8 @@ class DistributionService:
 
         current = current_preview.item
         artifact = self._fetch_artifact(provider, current)
+        if hashlib.sha256(artifact).hexdigest() != current_preview.artifact_sha256:
+            raise RuntimeError("registry artifact changed immediately before activation")
         if current.route is DistributionRoute.KIND_HANDLER:
             handler = self._kind_handlers.require(current.item_type)
             if self.installed(current.item_id) is None:
