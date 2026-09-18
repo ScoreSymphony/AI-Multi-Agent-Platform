@@ -882,6 +882,7 @@ def test_dependency_from_multiple_sources_requires_explicit_source_choice() -> N
     assert preview.activation_allowed is False
     assert any(finding.code == "dependency_source_ambiguous" for finding in preview.findings)
 
+
 def test_installed_dependency_does_not_inherit_newer_catalog_transitive_requirements(
     tmp_path: Path,
 ) -> None:
@@ -921,4 +922,3 @@ def test_installed_dependency_does_not_inherit_newer_catalog_transitive_requirem
         dependency.item_id != "example.new-transitive-dependency"
         for dependency in preview.decision.dependencies
     )
-
