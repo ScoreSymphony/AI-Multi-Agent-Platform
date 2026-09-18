@@ -397,9 +397,7 @@ class DistributionService:
         if isinstance(provider, SourcedRegistryProvider):
             return item
         if item.source_registry != provider.provider_id:
-            raise ValueError(
-                "registry provider returned conflicting source_registry identity"
-            )
+            raise ValueError("registry provider returned conflicting source_registry identity")
         return item
 
     def _require_provider(self) -> RegistryProvider:
