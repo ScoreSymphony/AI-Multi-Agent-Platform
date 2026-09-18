@@ -516,13 +516,38 @@ class RegistryCommandHandlers:
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         del context
+        preview = self._resolve_uninstall_preview(resource_ref, payload)
+        self._require_uninstall_owner(preview)
+        _require_marketplace_uninstall(preview)
+        await self._uninstall_owner(preview)
+        return {
+            "id": resource_ref,
+            "type": "marketplace-mutation",
+            "action": "uninstall",
+            "status": "applied",
+            "route": preview.item.route.value,
+            "decision": _decision_resource(preview.decision),
+            "installation": None,
+        }
+
+    def _resolve_uninstall_preview(
+        self,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> DistributionUninstallPreview:
         if payload:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "marketplace.uninstall accepts no payload fields",
             )
+        if self.distribution.installed(resource_ref) is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"marketplace item {resource_ref!r} is not installed",
+                details={"marketplace_reason": "not_installed"},
+            )
         try:
-            preview = self.distribution.preview_uninstall(resource_ref)
+            return self.distribution.preview_uninstall(resource_ref)
         except RegistrySourceConflictError as exc:
             raise ContractError(
                 ErrorCode.CONFLICT,
@@ -531,9 +556,9 @@ class RegistryCommandHandlers:
             ) from exc
         except LookupError as exc:
             raise ContractError(
-                ErrorCode.NOT_FOUND,
-                str(exc),
-                details={"marketplace_reason": "not_installed"},
+                ErrorCode.CONFLICT,
+                "installed Marketplace metadata is unavailable from its recorded source",
+                details={"marketplace_reason": "installed_metadata_unavailable"},
             ) from exc
         except RegistryUnavailableError as exc:
             raise ContractError(
@@ -549,6 +574,10 @@ class RegistryCommandHandlers:
                 details={"marketplace_reason": "provider_failure"},
             ) from exc
 
+    def _require_uninstall_owner(
+        self,
+        preview: DistributionUninstallPreview,
+    ) -> None:
         if preview.item.route is not DistributionRoute.KIND_HANDLER:
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
@@ -567,7 +596,11 @@ class RegistryCommandHandlers:
                     "kind": preview.item.kind,
                 },
             )
-        _require_marketplace_uninstall(preview)
+
+    async def _uninstall_owner(
+        self,
+        preview: DistributionUninstallPreview,
+    ) -> None:
         try:
             await self.distribution.uninstall(preview, authorized=True)
         except ContractError:
@@ -592,25 +625,7 @@ class RegistryCommandHandlers:
                 details={"marketplace_reason": "dependency_block"},
             ) from exc
         except RuntimeError as exc:
-            if str(exc) in {
-                "registry provider changed after preview",
-                "registry metadata changed after preview",
-                "installed registry state changed after preview",
-                "registry decision state changed after preview",
-            }:
-                raise ContractError(
-                    ErrorCode.CONFLICT,
-                    "marketplace uninstall preview no longer matches current state",
-                    details={"marketplace_reason": "preview_drift"},
-                ) from exc
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "marketplace owner uninstall failed",
-                details={
-                    "marketplace_reason": "owner_failure",
-                    "kind": preview.item.kind,
-                },
-            ) from exc
+            self._raise_uninstall_runtime_error(preview, exc)
         # error-boundary: allow-broad-catch=translation reviewed owner uninstall translation
         except Exception as exc:
             raise ContractError(
@@ -621,15 +636,32 @@ class RegistryCommandHandlers:
                     "kind": preview.item.kind,
                 },
             ) from exc
-        return {
-            "id": resource_ref,
-            "type": "marketplace-mutation",
-            "action": "uninstall",
-            "status": "applied",
-            "route": preview.item.route.value,
-            "decision": _decision_resource(preview.decision),
-            "installation": None,
+
+    @staticmethod
+    def _raise_uninstall_runtime_error(
+        preview: DistributionUninstallPreview,
+        exc: RuntimeError,
+    ) -> None:
+        drift_errors = {
+            "registry provider changed after preview",
+            "registry metadata changed after preview",
+            "installed registry state changed after preview",
+            "registry decision state changed after preview",
         }
+        if str(exc) in drift_errors:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "marketplace uninstall preview no longer matches current state",
+                details={"marketplace_reason": "preview_drift"},
+            ) from exc
+        raise ContractError(
+            ErrorCode.BACKEND_ERROR,
+            "marketplace owner uninstall failed",
+            details={
+                "marketplace_reason": "owner_failure",
+                "kind": preview.item.kind,
+            },
+        ) from exc
 
     async def pin(
         self,
