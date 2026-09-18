@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.plugins import PluginManifest, PluginRegistry
 from ai_multi_agent_platform.plugins.manifest import validate_manifest_document
 from ai_multi_agent_platform.plugins.models import (
@@ -18,7 +19,10 @@ from ai_multi_agent_platform.plugins.models import (
     VersionRange,
 )
 
+from ai_multi_agent_platform.security.redaction import redact_sensitive
+
 from .items import RegistryItem
+from .models import RegistryItemType
 
 
 class PluginRegistryArtifactInstaller:
@@ -41,6 +45,11 @@ class PluginRegistryArtifactInstaller:
         if not isinstance(document, dict):
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION, "plugin manifest must be an object"
+            )
+        if item.item_type is RegistryItemType.MODEL_PROVIDER:
+            _assert_no_plaintext_credentials(
+                document,
+                label="Model Provider",
             )
         manifest = _manifest_from_document(document)
         if manifest.plugin_id != item.item_id:
@@ -82,6 +91,105 @@ class PluginRegistryArtifactInstaller:
                 install_source=install_source,
             )
         return self._registry.install(manifest, install_source=install_source)
+
+
+def _sensitive_mapping_key(key: str) -> bool:
+    probe = cast(JsonValue, {key: "marketplace-sensitive-probe"})
+    return redact_sensitive(probe) != probe
+
+
+def _contains_nonempty_schema_value(value: object) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip()) and value != "[REDACTED]"
+    if isinstance(value, list):
+        return any(_contains_nonempty_schema_value(item) for item in value)
+    if isinstance(value, dict):
+        return any(_contains_nonempty_schema_value(item) for item in value.values())
+    return False
+
+
+def _assert_value_free_sensitive_schema(
+    schema: object,
+    *,
+    label: str,
+    sensitive_context: bool = False,
+) -> None:
+    if isinstance(schema, list):
+        for item in schema:
+            _assert_value_free_sensitive_schema(
+                item,
+                label=label,
+                sensitive_context=sensitive_context,
+            )
+        return
+    if not isinstance(schema, dict):
+        return
+
+    if sensitive_context:
+        for field in ("default", "const", "examples", "enum"):
+            if field in schema and _contains_nonempty_schema_value(schema[field]):
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    (
+                        f"{label} Marketplace configuration schema must not embed "
+                        f"credential values in {field}"
+                    ),
+                )
+
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        for property_name, property_schema in properties.items():
+            child_sensitive = sensitive_context or (
+                isinstance(property_name, str) and _sensitive_mapping_key(property_name)
+            )
+            _assert_value_free_sensitive_schema(
+                property_schema,
+                label=label,
+                sensitive_context=child_sensitive,
+            )
+
+    for keyword in (
+        "$defs",
+        "definitions",
+        "items",
+        "allOf",
+        "anyOf",
+        "oneOf",
+        "not",
+        "if",
+        "then",
+        "else",
+        "additionalProperties",
+    ):
+        if keyword in schema:
+            _assert_value_free_sensitive_schema(
+                schema[keyword],
+                label=label,
+                sensitive_context=sensitive_context,
+            )
+
+
+def _assert_no_plaintext_credentials(
+    document: dict[str, Any],
+    *,
+    label: str,
+) -> None:
+    """Keep distributable provider packages separate from configured secret values."""
+
+    scan_document = dict(document)
+    configuration_schema = scan_document.pop("configuration_schema", None)
+    json_document = cast(JsonValue, scan_document)
+    if redact_sensitive(json_document) != json_document:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            (
+                f"{label} Marketplace package must not embed plaintext credentials; "
+                "configure canonical secret references after installation"
+            ),
+        )
+    _assert_value_free_sensitive_schema(configuration_schema, label=label)
 
 
 def _manifest_from_document(document: dict[str, Any]) -> PluginManifest:
