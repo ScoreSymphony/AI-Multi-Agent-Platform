@@ -20,7 +20,6 @@ from pathlib import Path
 from time import monotonic
 
 from ai_multi_agent_platform.conformance.evidence import parse_runtime_evidence
-from ai_multi_agent_platform.conformance.security_boundaries import security_boundary_pytest_nodes
 from ai_multi_agent_platform.security.git_execution import (
     controlled_git_environment,
     resolve_git_executable,
@@ -411,16 +410,6 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
                 "and provider-identity invariants"
             ),
             (sys.executable, "scripts/ci/security_boundary_conformance.py"),
-        ),
-        ConformanceScenario(
-            "SEC",
-            "production security boundaries",
-            (
-                "all claimed side-effecting surfaces preserve canonical authentication, "
-                "authorization, approval, scope, secret, audit, fail-closed, failure and "
-                "provider-neutral authority invariants"
-            ),
-            _pytest(*security_boundary_pytest_nodes()),
         ),
         ConformanceScenario(
             "G",
