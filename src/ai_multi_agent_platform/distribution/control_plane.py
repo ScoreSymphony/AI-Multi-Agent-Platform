@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -11,9 +11,10 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, json_value
 
+from .decision_types import CompatibilityDecision, MarketplaceDecision
+from .dependency_graph import evaluate_compatibility
 from .items import RegistryItem, RegistryQuery
 from .models import DistributionRoute, TrustStatus, version_key
-from .decision_types import MarketplaceDecision
 from .provider import RegistrySourceConflictError, RegistryUnavailableError
 from .service import (
     DistributionPreview,
@@ -108,8 +109,19 @@ class RegistryResourceService:
         _validate_marketplace_sort(query.sort)
         plan = _registry_query(query)
         compatibility_version = plan.compatibility_platform_version
-        if plan.compatible is not None and compatibility_version is None:
-            compatibility_version = await self._current_platform_version(context)
+        compatibility_context: ValidationContext | None = None
+        if plan.compatible is not None:
+            if self.validation_context_resolver is not None:
+                compatibility_context = await self.validation_context_resolver.resolve(context)
+                if compatibility_version is not None:
+                    compatibility_context = replace(
+                        compatibility_context,
+                        platform_version=compatibility_version,
+                    )
+                else:
+                    compatibility_version = compatibility_context.platform_version
+            elif compatibility_version is None:
+                compatibility_version = await self._current_platform_version(context)
         try:
             items = self.distribution.search(plan.query)
         except RegistryUnavailableError as exc:
@@ -133,10 +145,19 @@ class RegistryResourceService:
             installation = self.distribution.installed(item.item_id)
             has_update = _is_update(item, installation)
             is_installed = installation is not None
-            is_compatible = (
-                item.supported_platform.contains(compatibility_version)
-                if compatibility_version is not None
+            compatibility_decision = (
+                evaluate_compatibility(item, compatibility_context)
+                if compatibility_context is not None
                 else None
+            )
+            is_compatible = (
+                compatibility_decision.compatible
+                if compatibility_decision is not None
+                else (
+                    item.supported_platform.contains(compatibility_version)
+                    if compatibility_version is not None
+                    else None
+                )
             )
             if plan.installed is not None and is_installed is not plan.installed:
                 continue
@@ -153,7 +174,12 @@ class RegistryResourceService:
                     item,
                     installation,
                     update_available=has_update,
-                    platform_compatible=is_compatible,
+                    platform_compatible=(
+                        compatibility_decision.platform_compatible
+                        if compatibility_decision is not None
+                        else is_compatible
+                    ),
+                    compatibility_decision=compatibility_decision,
                     route_available=self.distribution.route_available(item),
                 )
             )
@@ -198,7 +224,15 @@ class RegistryResourceService:
             ) from exc
 
         installation = self.distribution.installed(item.item_id)
-        platform_version = await self._optional_current_platform_version(context)
+        validation_context = await self._optional_validation_context(context)
+        platform_version = (
+            validation_context.platform_version if validation_context is not None else None
+        )
+        compatibility_decision = (
+            evaluate_compatibility(item, validation_context)
+            if validation_context is not None
+            else None
+        )
         requirements: object | None = None
         owner_details: object | None = None
         owner_status: object | None = None
@@ -214,6 +248,7 @@ class RegistryResourceService:
                             status_item = self.distribution.get(
                                 item.item_id,
                                 installation.current.version,
+                                source_registry=installation.current.source_registry,
                             )
                         except LookupError:
                             status_item = None
@@ -235,10 +270,15 @@ class RegistryResourceService:
             installation,
             update_available=_is_update(item, installation),
             platform_compatible=(
-                item.supported_platform.contains(platform_version)
-                if platform_version is not None
-                else None
+                compatibility_decision.platform_compatible
+                if compatibility_decision is not None
+                else (
+                    item.supported_platform.contains(platform_version)
+                    if platform_version is not None
+                    else None
+                )
             ),
+            compatibility_decision=compatibility_decision,
             route_available=self.distribution.route_available(item),
             owner_extension={
                 "handler_available": self.distribution.has_kind_handler(item),
@@ -262,11 +302,13 @@ class RegistryResourceService:
         validation = await self.validation_context_resolver.resolve(context)
         return validation.platform_version
 
-    async def _optional_current_platform_version(self, context: RequestContext) -> str | None:
+    async def _optional_validation_context(
+        self,
+        context: RequestContext,
+    ) -> ValidationContext | None:
         if self.validation_context_resolver is None:
             return None
-        validation = await self.validation_context_resolver.resolve(context)
-        return validation.platform_version
+        return await self.validation_context_resolver.resolve(context)
 
 
 class RegistryCommandHandlers:
@@ -888,6 +930,7 @@ def _item_resource(
     *,
     update_available: bool = False,
     platform_compatible: bool | None = None,
+    compatibility_decision: CompatibilityDecision | None = None,
     route_available: bool | None = None,
     owner_extension: dict[str, JsonValue] | None = None,
 ) -> dict[str, JsonValue]:
@@ -931,10 +974,50 @@ def _item_resource(
         "compatibility": {
             "minimum_platform_version": item.supported_platform.minimum,
             "maximum_platform_version": item.supported_platform.maximum,
+            "compatible": (
+                compatibility_decision.compatible
+                if compatibility_decision is not None
+                else platform_compatible
+            ),
             "platform_compatible": platform_compatible,
+            "operating_system_compatible": (
+                compatibility_decision.operating_system_compatible
+                if compatibility_decision is not None
+                else None
+            ),
+            "architecture_compatible": (
+                compatibility_decision.architecture_compatible
+                if compatibility_decision is not None
+                else None
+            ),
             "operating_systems": _json_strings(sorted(item.compatibility.operating_systems)),
             "architectures": _json_strings(sorted(item.compatibility.architectures)),
             "required_runtimes": _json_strings(sorted(item.compatibility.required_runtimes)),
+            "missing_runtimes": (
+                _json_strings(compatibility_decision.missing_runtimes)
+                if compatibility_decision is not None
+                else []
+            ),
+            "missing_capabilities": (
+                _json_strings(compatibility_decision.missing_capabilities)
+                if compatibility_decision is not None
+                else []
+            ),
+            "missing_plugins": (
+                _json_strings(compatibility_decision.missing_plugins)
+                if compatibility_decision is not None
+                else []
+            ),
+            "missing_connectors": (
+                _json_strings(compatibility_decision.missing_connectors)
+                if compatibility_decision is not None
+                else []
+            ),
+            "missing_models": (
+                _json_strings(compatibility_decision.missing_models)
+                if compatibility_decision is not None
+                else []
+            ),
         },
         "dependencies": dependencies,
         "requested_permissions": _json_strings(sorted(item.requested_permissions)),
