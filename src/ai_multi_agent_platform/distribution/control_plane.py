@@ -953,6 +953,6 @@ def _require_marketplace_uninstall(preview: DistributionUninstallPreview) -> Non
             "marketplace_reason": "dependency_block",
             "findings": _json_strings(sorted(finding.code for finding in errors)),
             "kind": preview.item.kind,
-            "route": preview.item.route.value,
+            "route": preview.route.value,
         },
     )
