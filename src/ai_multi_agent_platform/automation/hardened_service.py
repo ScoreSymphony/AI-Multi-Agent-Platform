@@ -6,8 +6,9 @@ import asyncio
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from time import monotonic
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
@@ -53,6 +54,45 @@ _creation_idempotency_key: ContextVar[str | None] = ContextVar(
     "automation_creation_idempotency_key",
     default=None,
 )
+
+
+
+class AutomationStartupRecoveryDisposition(StrEnum):
+    """Bounded startup outcomes for durable nonterminal Automation deliveries."""
+
+    RESUMED = "resumed"
+    SETTLED_INACTIVE_PENDING = "settled_inactive_pending"
+    BLOCKED_ORPHANED_OWNER = "blocked_orphaned_owner"
+    BLOCKED_INACTIVE_PROCESSING = "blocked_inactive_processing"
+    BLOCKED_UNSETTLED = "blocked_unsettled"
+
+
+@dataclass(frozen=True, slots=True)
+class AutomationStartupRecoveryRecord:
+    """Machine-readable evidence for one startup reconciliation candidate."""
+
+    delivery_id: str
+    automation_id: str
+    before_status: DeliveryStatus
+    after_status: DeliveryStatus
+    disposition: AutomationStartupRecoveryDisposition
+    blocking: bool = False
+    generated_task_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AutomationStartupRecoveryReport:
+    """Result of one repeatable startup reconciliation pass."""
+
+    records: tuple[AutomationStartupRecoveryRecord, ...]
+
+    @property
+    def blockers(self) -> tuple[AutomationStartupRecoveryRecord, ...]:
+        return tuple(record for record in self.records if record.blocking)
+
+    @property
+    def ready_for_service(self) -> bool:
+        return not self.blockers
 
 
 @contextmanager
@@ -533,12 +573,126 @@ class AutomationService(_BaseAutomationService):
             payload=payload,
         )
 
+
+    async def reconcile_startup_deliveries(self) -> AutomationStartupRecoveryReport:
+        """Reconcile durable deliveries whose process-local processing owner disappeared.
+
+        PENDING proves that Task creation had not started, so an inactive owner can be
+        settled without executing new work. PROCESSING is an uncertain side-effect
+        window: an enabled owner is replayed through the existing stable TaskCreator
+        idempotency key, while an inactive or missing owner blocks readiness rather
+        than guessing whether work already escaped before the crash.
+        """
+
+        automations = {
+            automation.id: automation for automation in await self._repository.list_automations()
+        }
+        candidates = sorted(
+            (
+                delivery
+                for delivery in await self._repository.list_deliveries()
+                if delivery.status in {DeliveryStatus.PENDING, DeliveryStatus.PROCESSING}
+            ),
+            key=lambda delivery: (delivery.received_at, delivery.id),
+        )
+        records: list[AutomationStartupRecoveryRecord] = []
+
+        for delivery in candidates:
+            automation = automations.get(delivery.automation_id)
+            if automation is None:
+                records.append(
+                    AutomationStartupRecoveryRecord(
+                        delivery_id=delivery.id,
+                        automation_id=delivery.automation_id,
+                        before_status=delivery.status,
+                        after_status=delivery.status,
+                        disposition=AutomationStartupRecoveryDisposition.BLOCKED_ORPHANED_OWNER,
+                        blocking=True,
+                        generated_task_id=delivery.generated_task_id,
+                    )
+                )
+                continue
+
+            if (
+                delivery.status is DeliveryStatus.PENDING
+                and automation.state is not AutomationState.ENABLED
+            ):
+                settled = replace(
+                    delivery,
+                    status=DeliveryStatus.REJECTED,
+                    error_code="startup_recovery_owner_inactive",
+                    error_message="automation owner is not enabled during startup recovery",
+                    retryable=False,
+                    next_retry_at=None,
+                    retry_exhausted_at=None,
+                )
+                settled = await self._repository.save_delivery(settled)
+                await self._emit(automation, settled, "startup-recovery-settled")
+                records.append(
+                    AutomationStartupRecoveryRecord(
+                        delivery_id=delivery.id,
+                        automation_id=delivery.automation_id,
+                        before_status=delivery.status,
+                        after_status=settled.status,
+                        disposition=(
+                            AutomationStartupRecoveryDisposition.SETTLED_INACTIVE_PENDING
+                        ),
+                        generated_task_id=settled.generated_task_id,
+                    )
+                )
+                continue
+
+            if (
+                delivery.status is DeliveryStatus.PROCESSING
+                and automation.state is not AutomationState.ENABLED
+            ):
+                records.append(
+                    AutomationStartupRecoveryRecord(
+                        delivery_id=delivery.id,
+                        automation_id=delivery.automation_id,
+                        before_status=delivery.status,
+                        after_status=delivery.status,
+                        disposition=(
+                            AutomationStartupRecoveryDisposition.BLOCKED_INACTIVE_PROCESSING
+                        ),
+                        blocking=True,
+                        generated_task_id=delivery.generated_task_id,
+                    )
+                )
+                continue
+
+            recovered = await self.retry_delivery(delivery.id)
+            blocking = recovered.status in {
+                DeliveryStatus.PENDING,
+                DeliveryStatus.PROCESSING,
+            }
+            records.append(
+                AutomationStartupRecoveryRecord(
+                    delivery_id=delivery.id,
+                    automation_id=delivery.automation_id,
+                    before_status=delivery.status,
+                    after_status=recovered.status,
+                    disposition=(
+                        AutomationStartupRecoveryDisposition.BLOCKED_UNSETTLED
+                        if blocking
+                        else AutomationStartupRecoveryDisposition.RESUMED
+                    ),
+                    blocking=blocking,
+                    generated_task_id=recovered.generated_task_id,
+                )
+            )
+
+        return AutomationStartupRecoveryReport(records=tuple(records))
+
     async def retry_delivery(self, delivery_id: str) -> TriggerDelivery:
         delivery = await self._repository.get_delivery(delivery_id)
         automation = await self._repository.get_automation(delivery.automation_id)
         if delivery.id in self._active_processing:
             return delivery
         if delivery.status in {DeliveryStatus.PENDING, DeliveryStatus.PROCESSING}:
+            if automation.state is not AutomationState.ENABLED:
+                await self._emit(automation, delivery, "recovery-suppressed-inactive-owner")
+                return delivery
             resumed = delivery
             if delivery.status is DeliveryStatus.PROCESSING:
                 resumed = replace(
