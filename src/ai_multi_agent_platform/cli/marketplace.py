@@ -85,6 +85,9 @@ def execute_marketplace(
     version = getattr(args, "version", None)
     if args.command in {"show", "status"}:
         resource_id = item_id if version is None else f"{item_id}@{version}"
+        source = getattr(args, "source", None)
+        if source:
+            resource_id = f"{source}::{resource_id}"
         return client.get(f"/registry-items/{quote(resource_id, safe='')}")
 
     if args.command == "preview":
@@ -108,6 +111,9 @@ def execute_marketplace(
     body: dict[str, JsonValue] = {"resource_ref": item_id}
     if version is not None:
         body["version"] = version
+    source = getattr(args, "source", None)
+    if source is not None:
+        body["source_registry"] = str(source)
     return client.post(
         f"/commands/marketplace.{action}",
         body=body,
@@ -121,6 +127,7 @@ def _add_item_arguments(
     version_required: bool,
 ) -> None:
     parser.add_argument("item_id")
+    parser.add_argument("--source")
     if version_required:
         parser.add_argument("version")
     else:
@@ -137,6 +144,8 @@ def _add_search_arguments(parser: argparse.ArgumentParser) -> None:
             "id",
             "name",
             "publisher",
+            "source_registry",
+            "source",
             "version",
             "released_at",
             "release_date",
@@ -149,6 +158,7 @@ def _add_search_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--tag", action="append", default=[])
     parser.add_argument("--category", action="append", default=[])
     parser.add_argument("--publisher", action="append", default=[])
+    parser.add_argument("--source", action="append", default=[])
     parser.add_argument("--license", dest="licenses", action="append", default=[])
     parser.add_argument("--trust", action="append", default=[])
     parser.add_argument("--installed", choices=["true", "false"])
@@ -183,6 +193,7 @@ def _search_query(
     _add_csv_filter(query, "tag", args.tag)
     _add_csv_filter(query, "category", args.category)
     _add_csv_filter(query, "publisher", args.publisher)
+    _add_csv_filter(query, "source", args.source)
     _add_csv_filter(query, "license", args.licenses)
     _add_csv_filter(query, "trust", args.trust)
     _add_csv_filter(query, "required_capability", args.required_capability)
