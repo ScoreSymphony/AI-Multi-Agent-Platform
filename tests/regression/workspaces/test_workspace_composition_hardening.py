@@ -50,7 +50,7 @@ def _stack(tmp_path: Path) -> ControlPlaneHTTP:
     )
 
 
-def test_public_workspace_composition_preserves_issue88_upcoming_queue(tmp_path: Path) -> None:
+def test_public_workspace_composition_preserves_task_management_upcoming_queue(tmp_path: Path) -> None:
     async def scenario() -> None:
         http = _stack(tmp_path)
         now = datetime.now(UTC)
@@ -93,7 +93,7 @@ def test_public_workspace_composition_preserves_issue88_upcoming_queue(tmp_path:
     asyncio.run(scenario())
 
 
-def test_public_workspace_openapi_preserves_issue88_query_contract() -> None:
+def test_public_workspace_openapi_preserves_task_management_query_contract() -> None:
     specification = build_openapi()
     extension = specification["x-task-management"]
     assert extension["deadline_range_filters"] == {
