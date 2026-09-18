@@ -636,7 +636,14 @@ function MarketplaceDetail({
   const operation = mutationOperation(item);
   const supportsOperation = operation ? operationSupported(item, operation) : false;
   const selectedIsInstalledVersion = item.installed_version === item.version;
-  const partialMetadata = !item.publisher || !item.license || !item.provenance || !item.source?.repository;
+  const partialMetadata =
+    !item.publisher ||
+    !item.license ||
+    !item.provenance ||
+    !item.source?.repository ||
+    !item.released_at ||
+    !item.changelog ||
+    !item.integrity?.sha256;
   const managementPath =
     descriptor.management_path ?? (item.item_type === "application" ? "/applications" : null);
   const previewBlocked = preview !== null && !preview.activation_allowed;
