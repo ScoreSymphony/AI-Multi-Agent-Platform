@@ -65,7 +65,7 @@ BUILTIN_MARKETPLACE_KINDS: tuple[MarketplaceKindDescriptor, ...] = (
     MarketplaceKindDescriptor(
         RegistryItemType.AGENT_TEAM, "Agent Team", DistributionRoute.PORTABLE_IMPORT
     ),
-    MarketplaceKindDescriptor(RegistryItemType.TOOL, "Tool", DistributionRoute.KIND_HANDLER),
+    MarketplaceKindDescriptor(RegistryItemType.TOOL, "Tool", DistributionRoute.PORTABLE_IMPORT),
     MarketplaceKindDescriptor(RegistryItemType.SKILL, "Skill", DistributionRoute.KIND_HANDLER),
     MarketplaceKindDescriptor(RegistryItemType.PLUGIN, "Plugin", DistributionRoute.PLUGIN),
     MarketplaceKindDescriptor(
@@ -80,7 +80,7 @@ BUILTIN_MARKETPLACE_KINDS: tuple[MarketplaceKindDescriptor, ...] = (
         DistributionRoute.PORTABLE_IMPORT,
     ),
     MarketplaceKindDescriptor(
-        RegistryItemType.CONNECTOR, "Connector", DistributionRoute.KIND_HANDLER
+        RegistryItemType.CONNECTOR, "Connector", DistributionRoute.PORTABLE_IMPORT
     ),
     MarketplaceKindDescriptor(
         RegistryItemType.APPLICATION,
