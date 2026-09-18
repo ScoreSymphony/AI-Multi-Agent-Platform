@@ -17,19 +17,18 @@ from .control_plane import (
     RegistryValidationContextResolver,
     register_distribution_control_plane,
 )
-from .decision import (
+from .decision_types import (
     ApprovalRequirement,
     CompatibilityDecision,
     DependencyResolution,
+    DependencyStatus,
     DistributionOperation,
     MarketplaceDecision,
     PermissionDiff,
     ProvenanceDiff,
     UpdateState,
-    evaluate_compatibility,
-    resolve_dependency_graph,
 )
-from .decision_types import DependencyStatus
+from .dependency_graph import evaluate_compatibility, resolve_dependency_graph
 from .discovery import (
     CuratedCandidateReview,
     DiscoveryCandidate,
