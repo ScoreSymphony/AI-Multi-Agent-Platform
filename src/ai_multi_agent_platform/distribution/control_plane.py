@@ -1116,9 +1116,7 @@ def _require_marketplace_activation(
             details={"marketplace_reason": "manual_route"},
         )
 
-    errors = tuple(
-        finding for finding in preview.findings if finding.severity.value == "error"
-    )
+    errors = tuple(finding for finding in preview.findings if finding.severity.value == "error")
     error_codes = {finding.code for finding in errors}
     categories = {finding.category.value for finding in errors}
     if "integrity" in categories:
@@ -1161,9 +1159,7 @@ def _require_marketplace_activation(
 
 
 def _require_marketplace_uninstall(preview: DistributionUninstallPreview) -> None:
-    errors = tuple(
-        finding for finding in preview.findings if finding.severity.value == "error"
-    )
+    errors = tuple(finding for finding in preview.findings if finding.severity.value == "error")
     if preview.activation_allowed and not errors:
         return
     raise ContractError(
