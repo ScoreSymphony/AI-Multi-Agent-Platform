@@ -75,6 +75,21 @@ These counters are diagnostics, not canonical lifecycle state. A dependency retu
 or retries canonical work by itself, so repeated health flap/recovery cycles cannot duplicate
 Task/Run effects or widen routing/authorization policy.
 
+## Observability events
+
+The single-node health aggregator is wired to the existing #16 `Telemetry` facade. It emits
+provider-neutral timeline/metric evidence for:
+
+- each bounded retry decision, including canonical error code and attempt bound;
+- health-probe terminal disposition and probe duration;
+- dependency degradation start and recovery, including recovery duration and flap counters;
+- authoritative readiness-state transitions;
+- startup/runtime operational-state changes such as reconciling and operator intervention required.
+
+Only safe identifiers and state/counter metadata are emitted; provider exception messages are not
+exported. The default Telemetry boundary is fail-open, so exporter failure remains derived-state
+failure and cannot make canonical Task/Run work fail.
+
 ## Operator diagnostics
 
 `platform doctor` consumes the same canonical health/readiness payload. It reports:

@@ -15,8 +15,10 @@ from ai_multi_agent_platform.contracts import (
 from ai_multi_agent_platform.observability import (
     AggregatedHealthProvider,
     DependencyHealth,
+    InMemoryExporter,
     ProviderHealthDependency,
     ReadinessState,
+    Telemetry,
     aggregate_health,
 )
 
@@ -252,5 +254,63 @@ def test_operational_reconciliation_and_operator_blockers_are_projected_as_requi
         health.set_operational_state(None)
         assert await health.health() is HealthStatus.HEALTHY
         assert health.service_health.readiness is ReadinessState.READY
+
+    asyncio.run(scenario())
+
+
+def test_dependency_retry_recovery_and_readiness_transitions_emit_telemetry() -> None:
+    async def scenario() -> None:
+        exporter = InMemoryExporter()
+        telemetry = Telemetry(exporter)
+        provider = _HealthProvider(
+            [
+                HealthStatus.UNAVAILABLE,
+                HealthStatus.UNAVAILABLE,
+                HealthStatus.HEALTHY,
+            ]
+        )
+        health = AggregatedHealthProvider(
+            (
+                ProviderHealthDependency(
+                    provider,
+                    required=True,
+                    max_retries=1,
+                    backoff_seconds=0,
+                ),
+            ),
+            telemetry=telemetry,
+        )
+
+        assert await health.health() is HealthStatus.UNAVAILABLE
+        assert await health.health() is HealthStatus.HEALTHY
+
+        names = [entry.event_name for entry in exporter.timeline]
+        assert "dependency.health.retry" in names
+        assert "dependency.degradation.started" in names
+        assert "dependency.degradation.recovered" in names
+        assert names.count("platform.readiness.transition") == 2
+
+        retry = next(
+            entry for entry in exporter.timeline if entry.event_name == "dependency.health.retry"
+        )
+        assert retry.failure is not None
+        assert retry.failure.code == ErrorCode.UNAVAILABLE.value
+        assert retry.failure.retryable is True
+        assert retry.attributes["attempt"] == 1
+        assert retry.attributes["maximum_attempts"] == 2
+
+        recovered = next(
+            entry
+            for entry in exporter.timeline
+            if entry.event_name == "dependency.degradation.recovered"
+        )
+        assert recovered.duration_seconds is not None
+        assert recovered.duration_seconds >= 0
+        assert recovered.attributes["failure_count"] == 1
+        assert recovered.attributes["recovery_count"] == 1
+
+        metric_names = [metric.name for metric in exporter.metrics]
+        assert "platform.dependency.health.retry" in metric_names
+        assert "platform.dependency.degradation.duration" in metric_names
 
     asyncio.run(scenario())
