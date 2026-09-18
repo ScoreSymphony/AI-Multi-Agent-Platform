@@ -483,7 +483,7 @@ def test_authorization_audit_preserves_correlation_and_scope() -> None:
     assert record.outcome is AuthorizationOutcome.ALLOW
 
 
-def test_capability_bridge_routes_agent_policy_and_approval_to_issue_15_gate() -> None:
+def test_capability_bridge_routes_agent_policy_and_approval_to_authorization_gate() -> None:
     project_id = new_id("project")
     task_id = new_id("task")
     run_id = new_id("run")
