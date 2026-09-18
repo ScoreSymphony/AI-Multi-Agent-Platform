@@ -28,6 +28,7 @@ from .service import (
     DistributionService,
     DistributionUninstallPreview,
 )
+from .state import RegistryInstallation
 from .validation import ValidationContext
 
 REGISTRY_COLLECTION = "registry-items"
@@ -114,22 +115,81 @@ class RegistryResourceService:
     ) -> tuple[dict[str, JsonValue], ...]:
         _validate_marketplace_sort(query.sort)
         plan = _registry_query(query)
-        compatibility_version = plan.compatibility_platform_version
-        compatibility_context: ValidationContext | None = None
-        if plan.compatible is not None:
-            if self.validation_context_resolver is not None:
-                compatibility_context = await self.validation_context_resolver.resolve(context)
-                if compatibility_version is not None:
-                    compatibility_context = replace(
-                        compatibility_context,
-                        platform_version=compatibility_version,
-                    )
-                else:
-                    compatibility_version = compatibility_context.platform_version
-            elif compatibility_version is None:
-                compatibility_version = await self._current_platform_version(context)
+        compatibility_context, compatibility_version = (
+            await self._list_compatibility_context(context, plan)
+        )
+        items = self._search_items(plan.query)
+        resources = [
+            resource
+            for item in items
+            if (
+                resource := self._list_item_resource(
+                    item,
+                    plan,
+                    compatibility_context,
+                    compatibility_version,
+                )
+            )
+            is not None
+        ]
+        resources.sort(
+            key=lambda resource: _marketplace_resource_sort_key(resource, query.sort),
+            reverse=query.direction == "desc",
+        )
+        return tuple(resources)
+
+    async def get_resource(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> dict[str, JsonValue]:
+        item_id, version, source_registry = _split_resource_id(resource_id)
+        item = self._get_item(item_id, version, source_registry=source_registry)
+        installation = self.distribution.installed(item.item_id)
+        validation_context = await self._optional_validation_context(context)
+        compatibility = (
+            evaluate_compatibility(item, validation_context)
+            if validation_context is not None
+            else None
+        )
+        platform_compatible = (
+            compatibility.platform_compatible
+            if compatibility is not None
+            else None
+        )
+        return _item_resource(
+            item,
+            installation,
+            update_available=_is_update(item, installation),
+            platform_compatible=platform_compatible,
+            compatibility_decision=compatibility,
+            route_available=self.distribution.route_available(item),
+            owner_extension=self._owner_extension(item, installation),
+        )
+
+    async def _list_compatibility_context(
+        self,
+        context: RequestContext,
+        plan: _RegistryQueryPlan,
+    ) -> tuple[ValidationContext | None, str | None]:
+        version = plan.compatibility_platform_version
+        if plan.compatible is None:
+            return None, version
+        if self.validation_context_resolver is None:
+            if version is None:
+                await self._current_platform_version(context)
+            return None, version
+
+        validation = await self.validation_context_resolver.resolve(context)
+        if version is not None:
+            validation = replace(validation, platform_version=version)
+        else:
+            version = validation.platform_version
+        return validation, version
+
+    def _search_items(self, query: RegistryQuery) -> tuple[RegistryItem, ...]:
         try:
-            items = self.distribution.search(plan.query)
+            return self.distribution.search(query)
         except RegistryUnavailableError as exc:
             raise ContractError(
                 ErrorCode.UNAVAILABLE,
@@ -144,65 +204,59 @@ class RegistryResourceService:
                 details={"marketplace_reason": "provider_failure"},
             ) from exc
 
-        resources: list[dict[str, JsonValue]] = []
-        for item in items:
-            if plan.sources and item.source_registry not in plan.sources:
-                continue
-            installation = self.distribution.installed(item.item_id)
-            has_update = _is_update(item, installation)
-            is_installed = installation is not None
-            compatibility_decision = (
-                evaluate_compatibility(item, compatibility_context)
-                if compatibility_context is not None
-                else None
-            )
-            is_compatible = (
-                compatibility_decision.compatible
-                if compatibility_decision is not None
-                else (
-                    item.supported_platform.contains(compatibility_version)
-                    if compatibility_version is not None
-                    else None
-                )
-            )
-            if plan.installed is not None and is_installed is not plan.installed:
-                continue
-            if plan.update_available is not None and has_update is not plan.update_available:
-                continue
-            if plan.deprecated is not None and item.deprecated is not plan.deprecated:
-                continue
-            if plan.yanked is not None and item.yanked is not plan.yanked:
-                continue
-            if plan.compatible is not None and is_compatible is not plan.compatible:
-                continue
-            resources.append(
-                _item_resource(
-                    item,
-                    installation,
-                    update_available=has_update,
-                    platform_compatible=(
-                        compatibility_decision.platform_compatible
-                        if compatibility_decision is not None
-                        else is_compatible
-                    ),
-                    compatibility_decision=compatibility_decision,
-                    route_available=self.distribution.route_available(item),
-                )
-            )
-        resources.sort(
-            key=lambda resource: _marketplace_resource_sort_key(resource, query.sort),
-            reverse=query.direction == "desc",
-        )
-        return tuple(resources)
-
-    async def get_resource(
+    def _list_item_resource(
         self,
-        context: RequestContext,
-        resource_id: str,
-    ) -> dict[str, JsonValue]:
-        item_id, version, source_registry = _split_resource_id(resource_id)
+        item: RegistryItem,
+        plan: _RegistryQueryPlan,
+        compatibility_context: ValidationContext | None,
+        compatibility_version: str | None,
+    ) -> dict[str, JsonValue] | None:
+        if plan.sources and item.source_registry not in plan.sources:
+            return None
+        installation = self.distribution.installed(item.item_id)
+        has_update = _is_update(item, installation)
+        compatibility = (
+            evaluate_compatibility(item, compatibility_context)
+            if compatibility_context is not None
+            else None
+        )
+        is_compatible = (
+            compatibility.compatible
+            if compatibility is not None
+            else self._platform_compatible(item, compatibility_version)
+        )
+        if plan.installed is not None and (installation is not None) is not plan.installed:
+            return None
+        if plan.update_available is not None and has_update is not plan.update_available:
+            return None
+        if plan.deprecated is not None and item.deprecated is not plan.deprecated:
+            return None
+        if plan.yanked is not None and item.yanked is not plan.yanked:
+            return None
+        if plan.compatible is not None and is_compatible is not plan.compatible:
+            return None
+        return _item_resource(
+            item,
+            installation,
+            update_available=has_update,
+            platform_compatible=(
+                compatibility.platform_compatible
+                if compatibility is not None
+                else is_compatible
+            ),
+            compatibility_decision=compatibility,
+            route_available=self.distribution.route_available(item),
+        )
+
+    def _get_item(
+        self,
+        item_id: str,
+        version: str | None,
+        *,
+        source_registry: str | None,
+    ) -> RegistryItem:
         try:
-            item = self.distribution.get(
+            return self.distribution.get(
                 item_id,
                 version,
                 source_registry=source_registry,
@@ -229,73 +283,62 @@ class RegistryResourceService:
                 details={"marketplace_reason": "provider_failure"},
             ) from exc
 
-        installation = self.distribution.installed(item.item_id)
-        validation_context = await self._optional_validation_context(context)
-        platform_version = (
-            validation_context.platform_version if validation_context is not None else None
-        )
-        compatibility_decision = (
-            evaluate_compatibility(item, validation_context)
-            if validation_context is not None
-            else None
-        )
-        requirements: object | None = None
-        owner_details: object | None = None
-        owner_status: object | None = None
-        owner_status_version: str | None = None
-        if item.route is DistributionRoute.KIND_HANDLER:
-            try:
-                requirements = self.distribution.inspect_requirements(item)
-                owner_details = self.distribution.describe(item)
-                if installation is not None:
-                    status_item: RegistryItem | None = item
-                    if installation.current.version != item.version:
-                        try:
-                            status_item = self.distribution.get(
-                                item.item_id,
-                                installation.current.version,
-                                source_registry=installation.current.source_registry,
-                            )
-                        except LookupError:
-                            status_item = None
-                    if status_item is not None:
-                        owner_status = self.distribution.status(status_item)
-                        owner_status_version = status_item.version
-            except ContractError:
-                raise
-            # error-boundary: allow-broad-catch=translation reviewed owner detail translation
-            except Exception as exc:
-                raise ContractError(
-                    ErrorCode.BACKEND_ERROR,
-                    "marketplace owner detail provider failed",
-                    details={"marketplace_reason": "owner_failure", "kind": item.kind},
-                ) from exc
-        serialized_status = json_value(owner_status) if owner_status is not None else None
-        return _item_resource(
-            item,
-            installation,
-            update_available=_is_update(item, installation),
-            platform_compatible=(
-                compatibility_decision.platform_compatible
-                if compatibility_decision is not None
-                else (
-                    item.supported_platform.contains(platform_version)
-                    if platform_version is not None
-                    else None
-                )
-            ),
-            compatibility_decision=compatibility_decision,
-            route_available=self.distribution.route_available(item),
-            owner_extension={
-                "handler_available": self.distribution.has_kind_handler(item),
-                "requirements": json_value(requirements) if requirements is not None else None,
-                "details": json_value(owner_details) if owner_details is not None else None,
-                "status": serialized_status,
-                "status_version": owner_status_version,
-            }
-            if item.route is DistributionRoute.KIND_HANDLER
-            else None,
-        )
+    def _owner_extension(
+        self,
+        item: RegistryItem,
+        installation: RegistryInstallation | None,
+    ) -> dict[str, JsonValue] | None:
+        if item.route is not DistributionRoute.KIND_HANDLER:
+            return None
+        try:
+            requirements = self.distribution.inspect_requirements(item)
+            details = self.distribution.describe(item)
+            status_item = self._installed_status_item(item, installation)
+            status = self.distribution.status(status_item) if status_item is not None else None
+        except ContractError:
+            raise
+        # error-boundary: allow-broad-catch=translation reviewed owner detail translation
+        except Exception as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "marketplace owner detail provider failed",
+                details={"marketplace_reason": "owner_failure", "kind": item.kind},
+            ) from exc
+        return {
+            "handler_available": self.distribution.has_kind_handler(item),
+            "requirements": json_value(requirements) if requirements is not None else None,
+            "details": json_value(details) if details is not None else None,
+            "status": json_value(status) if status is not None else None,
+            "status_version": status_item.version if status_item is not None else None,
+        }
+
+    def _installed_status_item(
+        self,
+        item: RegistryItem,
+        installation: RegistryInstallation | None,
+    ) -> RegistryItem | None:
+        if installation is None:
+            return None
+        current = installation.current
+        if current.version == item.version and current.source_registry == item.source_registry:
+            return item
+        try:
+            return self.distribution.get(
+                item.item_id,
+                current.version,
+                source_registry=current.source_registry,
+            )
+        except LookupError:
+            return None
+
+    @staticmethod
+    def _platform_compatible(
+        item: RegistryItem,
+        platform_version: str | None,
+    ) -> bool | None:
+        if platform_version is None:
+            return None
+        return item.supported_platform.contains(platform_version)
 
     async def _current_platform_version(self, context: RequestContext) -> str:
         if self.validation_context_resolver is None:
