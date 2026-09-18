@@ -60,7 +60,7 @@ def git_head_revision(source_url: str) -> str:
     try:
         safe_source_url = validate_git_remote_url(source_url)
     except ValueError as exc:
-        raise UpdateDiscoveryError(f"git discovery rejected remote URL: {exc}") from exc
+        raise UpdateDiscoveryError("git discovery rejected remote URL") from exc
     try:
         completed = subprocess.run(
             [
