@@ -1412,7 +1412,14 @@ function mergeKindDescriptors(
 ): RegistryKindDescriptor[] {
   const merged = new Map<string, RegistryKindDescriptor>();
   for (const entry of FALLBACK_KIND_DESCRIPTORS) merged.set(entry.kind, entry);
-  for (const entry of serverKinds) merged.set(entry.kind, entry);
+  for (const entry of serverKinds) {
+    const fallback = merged.get(entry.kind);
+    merged.set(entry.kind, {
+      ...fallback,
+      ...entry,
+      management_path: entry.management_path ?? fallback?.management_path ?? null,
+    });
+  }
   for (const item of items) {
     if (!merged.has(item.item_type)) {
       merged.set(item.item_type, fallbackDescriptor(item.item_type, item.route));
