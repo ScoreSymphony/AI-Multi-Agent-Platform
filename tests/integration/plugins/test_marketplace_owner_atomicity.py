@@ -988,14 +988,18 @@ async def test_real_agent_owner_recovers_marketplace_evidence_after_restart(
         context,
         authorized=True,
     )
-    assert after_update_store.get(first.item_id).current.version == "1.1.0"  # type: ignore[union-attr]
+    persisted = after_update_store.get(first.item_id)
+    assert persisted is not None
+    assert persisted.current.version == "1.1.0"
     assert JsonAgentRepository(agent_path).get_agent(first.item_id).current_revision == 2
 
     uninstall_preview = after_update.preview_uninstall(first.item_id)
     after_update_store.fail_next_save = True
     with pytest.raises(OSError, match="forced marketplace persistence failure"):
         await after_update.uninstall(uninstall_preview, authorized=True)
-    assert after_update_store.get(first.item_id).current.version == "1.1.0"  # type: ignore[union-attr]
+    persisted = after_update_store.get(first.item_id)
+    assert persisted is not None
+    assert persisted.current.version == "1.1.0"
     with pytest.raises(ContractError) as removed:
         AgentService(JsonAgentRepository(agent_path)).get_agent_revision(first.item_id)
     assert removed.value.code is ErrorCode.NOT_FOUND
