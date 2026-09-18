@@ -366,6 +366,20 @@ class ExternalEffectRecoveryCoordinator:
                 self._require_retry_allowed(existing, pending)
             self._pending[request.invocation_id] = pending
 
+    async def begin_dispatch(
+        self,
+        invocation_id: str,
+        *,
+        canonical_tool_invocation_id: str | None,
+    ) -> None:
+        """Persist dispatch intent immediately before the provider call can begin."""
+
+        async with self._lock:
+            self._begin_dispatch(
+                invocation_id,
+                canonical_tool_invocation_id=canonical_tool_invocation_id,
+            )
+
     async def discard_unstarted_attempt(self, invocation_id: str) -> None:
         async with self._lock:
             self._pending.pop(invocation_id, None)
@@ -373,7 +387,6 @@ class ExternalEffectRecoveryCoordinator:
     async def observe(self, record: InvocationRecord) -> None:
         async with self._lock:
             if record.status is InvocationStatus.RUNNING:
-                self._begin_dispatch(record)
                 return
             existing = self.repository.find_by_invocation(record.invocation_id)
             if existing is None:
@@ -718,18 +731,23 @@ class ExternalEffectRecoveryCoordinator:
                 await self._emit("external_effect.retry_safe", transitioned)
             return transitioned
 
-    def _begin_dispatch(self, record: InvocationRecord) -> None:
-        pending = self._pending.get(record.invocation_id)
+    def _begin_dispatch(
+        self,
+        invocation_id: str,
+        *,
+        canonical_tool_invocation_id: str | None,
+    ) -> None:
+        pending = self._pending.get(invocation_id)
         if pending is None:
             return
-        existing = self.repository.find_by_invocation(record.invocation_id)
+        existing = self.repository.find_by_invocation(invocation_id)
         now = _utc_now()
         if existing is not None:
             self.repository.save(
                 replace(
                     existing,
                     canonical_tool_invocation_id=(
-                        record.canonical_tool_invocation_id or existing.canonical_tool_invocation_id
+                        canonical_tool_invocation_id or existing.canonical_tool_invocation_id
                     ),
                     status=ExternalEffectRecoveryStatus.DISPATCHING,
                     reason="retry_dispatch_started",
@@ -742,7 +760,7 @@ class ExternalEffectRecoveryCoordinator:
             ExternalEffectRecoveryRecord(
                 effect_id=_effect_id(pending.provider_id, pending.invocation_id),
                 invocation_id=pending.invocation_id,
-                canonical_tool_invocation_id=record.canonical_tool_invocation_id,
+                canonical_tool_invocation_id=canonical_tool_invocation_id,
                 task_id=pending.task_id,
                 run_id=pending.run_id,
                 capability_id=pending.capability_id,
@@ -756,7 +774,6 @@ class ExternalEffectRecoveryCoordinator:
                 status=ExternalEffectRecoveryStatus.DISPATCHING,
                 disposition=ExternalEffectRecoveryDisposition.BLOCKED_OPERATOR_ACTION,
                 reason="provider_dispatch_started",
-                adapter_metadata=record.adapter_metadata,
                 created_at=now,
                 updated_at=now,
             )
