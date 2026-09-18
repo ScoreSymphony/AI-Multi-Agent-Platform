@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from typing import Protocol
@@ -132,6 +133,7 @@ class AggregatedHealthProvider(ProviderContract):
         self._last_states: dict[str, ReadinessState] = {}
         self._failure_counts: dict[str, int] = {}
         self._recovery_counts: dict[str, int] = {}
+        self._failure_started_at: dict[str, float] = {}
         self._probe_lock = asyncio.Lock()
         self._operational_state: ReadinessState | None = None
         self._operational_detail: str | None = None
@@ -208,10 +210,12 @@ class AggregatedHealthProvider(ProviderContract):
             return self._status
 
     async def _probe_dependency(self, item: ProviderHealthDependency) -> DependencyHealth:
+        probe_started = time.monotonic()
         attempts = 0
         state = ReadinessState.UNAVAILABLE
         detail: str | None = None
         error_code: str | None = None
+        last_retry_error_code: str | None = None
         retryable = False
         maximum_attempts = item.max_retries + 1
 
@@ -254,6 +258,7 @@ class AggregatedHealthProvider(ProviderContract):
                 break
             if attempts >= maximum_attempts or not retryable:
                 break
+            last_retry_error_code = error_code
             if item.backoff_seconds > 0:
                 await asyncio.sleep(item.backoff_seconds * attempts)
 
@@ -261,10 +266,20 @@ class AggregatedHealthProvider(ProviderContract):
         previous = self._last_states.get(name)
         previously_impaired = previous is not None and previous is not ReadinessState.READY
         currently_impaired = state is not ReadinessState.READY
+        transition_time = time.monotonic()
+        degraded_duration_seconds: float | None = None
         if currently_impaired and not previously_impaired:
             self._failure_counts[name] = self._failure_counts.get(name, 0) + 1
+            self._failure_started_at[name] = transition_time
         elif not currently_impaired and previously_impaired:
             self._recovery_counts[name] = self._recovery_counts.get(name, 0) + 1
+            failure_started = self._failure_started_at.pop(name, None)
+            if failure_started is not None:
+                degraded_duration_seconds = transition_time - failure_started
+        elif currently_impaired:
+            failure_started = self._failure_started_at.get(name)
+            if failure_started is not None:
+                degraded_duration_seconds = transition_time - failure_started
         self._last_states[name] = state
 
         operator_action = item.operator_action
@@ -284,6 +299,10 @@ class AggregatedHealthProvider(ProviderContract):
             detail=detail,
             error_code=error_code,
             attempts=attempts,
+            retry_count=max(0, attempts - 1),
+            last_retry_error_code=last_retry_error_code,
+            probe_duration_seconds=time.monotonic() - probe_started,
+            degraded_duration_seconds=degraded_duration_seconds,
             failure_count=self._failure_counts.get(name, 0),
             recovery_count=self._recovery_counts.get(name, 0),
             operator_action=operator_action,
