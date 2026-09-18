@@ -61,6 +61,10 @@ Process liveness remains separate. A required dependency failure therefore fails
 readiness closed, while an optional failure degrades only the affected capability when unrelated
 canonical operations remain safe.
 
+The single-node required File persistence dependency now performs a read-only health probe over its
+filesystem root and SQLite metadata store. Missing/unreadable local persistence therefore becomes
+`unavailable` instead of remaining permanently `healthy` from static descriptor metadata.
+
 The existing ordinary startup gate still completes reconciliation before `platform-server serve`
 opens HTTP. The richer readiness vocabulary also covers embedded/runtime compositions and prevents
 future serving modes from treating reconciliation or an operator-required state as ready.
