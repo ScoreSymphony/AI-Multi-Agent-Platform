@@ -26,7 +26,7 @@ describe("MobileSessionStore", () => {
       new Response(
         JSON.stringify({
           actor_id: "user-1",
-          actor_type: "user",
+          actor_type: "human",
           authentication_method: "credential",
           credential_id: "cred-1",
           authenticated_at: "2026-09-19T00:00:00Z",
