@@ -207,6 +207,58 @@ def test_schema_v5_adds_maturity_without_breaking_v3_compatibility() -> None:
     assert legacy.maturity is None
 
 
+def test_schema_v6_adds_canonical_links_without_breaking_v5() -> None:
+    current = _document(
+        item_type="notebook_extension",
+        manifest={
+            "kind": "notebook_extension",
+            "reference": "manifests/notebook-extension.json",
+            "schema_version": "1",
+        },
+    )
+    current["schema_version"] = "6"
+    current["homepage"] = "https://example.invalid/notebook"
+    current["documentation"] = "https://docs.example.invalid/notebook"
+
+    item = registry_item_from_document(current)
+
+    legacy = _document(
+        item_type="notebook_extension",
+        manifest={
+            "kind": "notebook_extension",
+            "reference": "manifests/notebook-extension.json",
+            "schema_version": "1",
+        },
+    )
+    legacy["schema_version"] = "5"
+    legacy["maturity"] = "stable"
+    legacy_item = registry_item_from_document(legacy)
+
+    assert item.homepage == "https://example.invalid/notebook"
+    assert item.documentation == "https://docs.example.invalid/notebook"
+    assert legacy_item.homepage is None
+    assert legacy_item.documentation is None
+
+
+def test_registry_item_rejects_blank_canonical_links() -> None:
+    with pytest.raises(ValueError, match="homepage"):
+        RegistryItem(
+            item_id="example.blank-homepage",
+            item_type=RegistryItemType.TEMPLATE,
+            name="Blank homepage",
+            description="Fixture",
+            version="1.0.0",
+            publisher="example",
+            source=RegistrySource(
+                "https://example.invalid/repo",
+                "example.blank-homepage@1.0.0",
+            ),
+            license="MIT",
+            provenance="source-release",
+            homepage=" ",
+        )
+
+
 def test_schema_v3_parses_known_application_kind_back_to_enum() -> None:
     item = registry_item_from_document(
         _document(
