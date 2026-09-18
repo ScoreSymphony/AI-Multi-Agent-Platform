@@ -1088,6 +1088,7 @@ def test_installed_dependency_evidence_wins_over_same_version_catalog_drift(
         for dependency in preview.decision.dependencies
     )
 
+
 def test_activation_rechecks_final_handoff_artifact_digest() -> None:
     item, artifact = _item("example.handoff-integrity")
     provider = _ChangingArtifactProvider(item, artifact)
