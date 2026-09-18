@@ -560,13 +560,28 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
         await self._drain.mark_forced(reason, timed_out=timed_out)
         if not inner_task.done():
             inner_task.cancel()
-        try:
-            await inner_task
-        except asyncio.CancelledError:
-            pass
-        # error-boundary: allow-broad-catch=cleanup forced teardown observes contained failure
-        except Exception as exc:
-            self._drain.mark_teardown_failure(type(exc).__name__)
+
+        # The shared deadline has already expired. Give cooperative cancellation one loop turn,
+        # but never await the teardown task without a bound after that point. A resource owner
+        # that suppresses cancellation must not regain authority over process exit.
+        await asyncio.sleep(0)
+
+        def observe_completion(task: asyncio.Task[None]) -> None:
+            if task.cancelled():
+                return
+            try:
+                failure = task.exception()
+            except asyncio.CancelledError:
+                return
+            if failure is not None:
+                self._drain.mark_teardown_failure(type(failure).__name__)
+
+        if inner_task.done():
+            observe_completion(inner_task)
+        else:
+            self._drain.mark_teardown_failure("lifespan_teardown_did_not_settle_after_cancel")
+            inner_task.add_done_callback(observe_completion)
+
         if not response_sent:
             await send({"type": "lifespan.shutdown.complete"})
         await self._drain.mark_completed()
