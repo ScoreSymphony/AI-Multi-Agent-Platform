@@ -26,6 +26,8 @@ from .control_plane import (
 from .decision_types import (
     ApprovalRequirement,
     CompatibilityDecision,
+    DependencyChange,
+    DependencyDiff,
     DependencyResolution,
     DependencyStatus,
     DistributionOperation,
@@ -137,6 +139,8 @@ __all__ = [
     "InstallPlanStep",
     "DependencyStatus",
     "DependencyResolution",
+    "DependencyDiff",
+    "DependencyChange",
     "CompatibilityDecision",
     "ApprovalRequirement",
     "ArtifactIntegrity",
