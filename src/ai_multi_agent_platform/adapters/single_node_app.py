@@ -30,8 +30,10 @@ from ai_multi_agent_platform.distribution import (
     FilesystemRegistryProvider,
     HmacSha256SignatureVerifier,
     JsonRegistryInstallationStore,
+    MarketplaceKindHandlerRegistry,
     PlatformRegistryValidationContextResolver,
     PluginRegistryArtifactInstaller,
+    RegistryItemType,
     load_hmac_signature_keys,
     reconcile_registry_plugins,
     register_distribution_control_plane,
@@ -50,6 +52,7 @@ from ai_multi_agent_platform.onboarding.setup_registry_planning import (
 )
 from ai_multi_agent_platform.plugins import (
     CapabilityRegistryBinder,
+    ConnectorRegistryBinder,
     ExtensionType,
     PluginRegistry,
 )
@@ -62,7 +65,12 @@ from ai_multi_agent_platform.repository_intelligence.wiring import (
     AuthorizedRunWorkspaceSnapshotLoader,
 )
 
-from .application_runtime import compose_application_runtime
+from .application_runtime import ApplicationRuntimeComposition, compose_application_runtime
+from .marketplace_owner_handlers import (
+    ApplicationMarketplaceKindHandler,
+    PluginExtensionMarketplaceKindHandler,
+    SkillMarketplaceKindHandler,
+)
 from .onboarding_openai_compatible import OpenAICompatibleOnboardingAdapter
 from .setup_registry import DistributionSetupRegistryPort
 
@@ -103,7 +111,7 @@ def build_default_single_node_deployment(
         enable_distributed_execution=enable_distributed_execution,
         application_release_gate_policy=release_gate_policy,
     )
-    compose_application_runtime(
+    applications = compose_application_runtime(
         config,
         deployment,
         secret_provider=secrets,
@@ -142,7 +150,7 @@ def build_default_single_node_deployment(
             )
         )
     )
-    distribution, registry_commands = _configure_registry(config, deployment)
+    distribution, registry_commands = _configure_registry(config, deployment, applications)
     setup_registry = (
         None
         if distribution is None
@@ -161,6 +169,7 @@ def build_default_single_node_deployment(
 def _configure_registry(
     config: SingleNodeConfig,
     deployment: SingleNodeDeployment,
+    applications: ApplicationRuntimeComposition,
 ) -> tuple[DistributionService | None, RegistryCommandHandlers | None]:
     """Attach #81 only when an operator explicitly configures a local Registry catalog."""
 
@@ -175,9 +184,13 @@ def _configure_registry(
     if plugin_registry is None:
         plugin_registry = PluginRegistry(
             platform_version=__version__,
-            supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+            supported_interfaces={
+                ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"}),
+                ExtensionType.CONNECTOR_PROVIDER: frozenset({"1.0"}),
+            },
             binders={
-                ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(deployment.capabilities)
+                ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(deployment.capabilities),
+                ExtensionType.CONNECTOR_PROVIDER: ConnectorRegistryBinder(deployment.connectors),
             },
         )
         deployment.control_plane.attach_plugin_runtime(plugin_registry)
@@ -197,6 +210,28 @@ def _configure_registry(
     )
 
     plugin_installer = PluginRegistryArtifactInstaller(plugin_registry)
+    kind_handlers = MarketplaceKindHandlerRegistry(
+        (
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.TOOL,
+                extension_type=ExtensionType.CAPABILITY_PROVIDER,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
+            SkillMarketplaceKindHandler(deployment.context.skills),
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.CONNECTOR,
+                extension_type=ExtensionType.CONNECTOR_PROVIDER,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
+            ApplicationMarketplaceKindHandler(
+                applications.lifecycle,
+                applications.repository,
+                applications.runtimes,
+            ),
+        )
+    )
     portability = deployment.control_plane.portability_workflow
     if portability is None:
         raise RuntimeError(
@@ -211,6 +246,7 @@ def _configure_registry(
         router,
         installations=installations,
         signature_verifier=signature_verifier,
+        kind_handlers=kind_handlers,
     )
     validation = PlatformRegistryValidationContextResolver(
         platform_version=__version__,
