@@ -57,11 +57,12 @@ def _registry_metadata(
     provenance: str,
     artifact: bytes,
     required_connectors: list[str] | None = None,
+    required_runtimes: list[str] | None = None,
     tags: list[str] | None = None,
     categories: list[str] | None = None,
 ) -> dict[str, object]:
     return {
-        "schema_version": "1",
+        "schema_version": "4" if required_runtimes is not None else "1",
         "item_id": item_id,
         "item_type": item_type,
         "name": name,
@@ -95,6 +96,17 @@ def _registry_metadata(
         "changelog": "Hardening fixture",
         "deprecated": False,
         "yanked": False,
+        **(
+            {
+                "compatibility": {
+                    "operating_systems": [],
+                    "architectures": [],
+                    "required_runtimes": required_runtimes,
+                }
+            }
+            if required_runtimes is not None
+            else {}
+        ),
     }
 
 
@@ -372,6 +384,44 @@ def test_production_registry_validation_uses_live_connector_inventory(tmp_path: 
     )
     assert "missing_connector" not in _finding_codes(after)
     assert after["activation_allowed"] is True
+
+
+def test_production_registry_validation_uses_live_application_runtime_inventory(
+    tmp_path: Path,
+) -> None:
+    artifact = b"{}"
+    metadata = _registry_metadata(
+        item_id="example.runtime-dependent",
+        item_type="template",
+        name="Runtime dependent template",
+        description="Requires the configured local application runtime",
+        version="1.0.0",
+        publisher="example",
+        repository="https://example.invalid/runtime-template",
+        package_reference="example.runtime-dependent@1.0.0",
+        license_name="MIT",
+        provenance="registry-release",
+        artifact=artifact,
+        required_runtimes=["local.process"],
+    )
+    catalog, _ = _write_catalog(tmp_path, metadata, artifact)
+    deployment = build_default_single_node_deployment(
+        SingleNodeConfig(
+            data_dir=tmp_path / "data",
+            secure_cookie=False,
+            registry_catalog=catalog,
+        )
+    )
+    handler = deployment.control_plane._command_handlers[REGISTRY_PREVIEW_COMMAND]
+    context = RequestContext("request-runtime", "correlation-runtime")
+
+    preview = cast(
+        dict[str, JsonValue],
+        asyncio.run(handler(context, "example.runtime-dependent", {"version": "1.0.0"})),
+    )
+
+    assert "missing_runtime" not in _finding_codes(preview)
+    assert preview["activation_allowed"] is True
 
 
 def test_pinned_registry_item_still_exposes_newer_update_but_blocks_apply(
