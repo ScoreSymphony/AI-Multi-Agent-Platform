@@ -107,6 +107,7 @@ class ControlPlaneHealth:
             ready = False
         return {
             "status": "healthy",
+            "alive": True,
             "ready": ready,
             "readiness_state": readiness_state.value,
             "api_version": "v1",
