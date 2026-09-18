@@ -133,6 +133,26 @@ def test_gitspawn_environment_scrubs_execution_indirection() -> None:
     assert environment["GIT_TERMINAL_PROMPT"] == "0"
 
 
+def test_gitspawn_controlled_path_drops_repository_relative_lookup(tmp_path: Path) -> None:
+    inherited = {
+        "PATH": os.pathsep.join(
+            (
+                ".",
+                "",
+                str(tmp_path / "trusted-bin"),
+                "../attacker-bin",
+            )
+        )
+    }
+
+    environment = controlled_git_environment(inherited)
+    entries = environment["PATH"].split(os.pathsep)
+
+    assert "." not in entries
+    assert "../attacker-bin" not in entries
+    assert str(tmp_path / "trusted-bin") in entries
+
+
 @pytest.mark.parametrize(
     "key",
     (
@@ -250,6 +270,37 @@ def test_gitspawn_inherited_global_hooks_path_is_ignored(
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Git hook executability semantics differ on Windows")
+def test_gitspawn_inherited_system_config_override_is_ignored(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        marker = tmp_path / "system-hook-executed"
+        hooks = tmp_path / "system-hooks"
+        _write_python_hook(hooks / "pre-commit", marker)
+        system_config = tmp_path / "system.gitconfig"
+        system_config.write_text(
+            f"[core]\n\thooksPath = {hooks.as_posix()}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("GIT_CONFIG_SYSTEM", str(system_config))
+
+        provider, repository, operation, root = await _initialized_provider(tmp_path)
+        (root / "payload.txt").write_text("safe\n", encoding="utf-8")
+        await provider.commit(
+            repository,
+            "system config must not execute",
+            operation,
+            author_name="GitSpawn Test",
+            author_email="gitspawn@example.invalid",
+        )
+
+        assert not marker.exists()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Git hook executability semantics differ on Windows")
 def test_gitspawn_environment_config_injection_is_ignored(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -272,6 +323,31 @@ def test_gitspawn_environment_config_injection_is_ignored(
             author_email="gitspawn@example.invalid",
         )
 
+        assert not marker.exists()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Git hook executability semantics differ on Windows")
+def test_gitspawn_local_hooks_path_is_rejected_before_commit(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        provider, repository, operation, root = await _initialized_provider(tmp_path)
+        marker = tmp_path / "local-hook-executed"
+        hooks = tmp_path / "local-hooks"
+        _write_python_hook(hooks / "pre-commit", marker)
+        _raw_git(root, "config", "--local", "core.hooksPath", str(hooks))
+        (root / "payload.txt").write_text("safe\n", encoding="utf-8")
+
+        with pytest.raises(ContractError) as error:
+            await provider.commit(
+                repository,
+                "must reject local hooksPath",
+                operation,
+                author_name="GitSpawn Test",
+                author_email="gitspawn@example.invalid",
+            )
+
+        assert error.value.code is ErrorCode.INVALID_CONFIGURATION
         assert not marker.exists()
 
     asyncio.run(scenario())
@@ -378,6 +454,23 @@ def test_gitspawn_external_diff_environment_is_ignored(
         diff = await provider.diff(repository, operation, base_revision=first.revision)
 
         assert "payload.txt" in diff.changed_paths
+        assert not marker.exists()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fixture command uses POSIX shell parsing")
+def test_gitspawn_executable_submodule_update_is_rejected(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        provider, repository, operation, root = await _initialized_provider(tmp_path)
+        marker = tmp_path / "submodule-update-executed"
+        command = f"!{_python_marker_command(marker)}"
+        _raw_git(root, "config", "--local", "submodule.attack.update", command)
+
+        with pytest.raises(ContractError) as error:
+            await provider.status(repository, operation)
+
+        assert error.value.code is ErrorCode.INVALID_CONFIGURATION
         assert not marker.exists()
 
     asyncio.run(scenario())
