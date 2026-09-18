@@ -5,6 +5,8 @@ from dataclasses import replace
 import pytest
 
 from ai_multi_agent_platform.applications.models import (
+    ApplicationConfigurationField,
+    ApplicationConfigValueType,
     ApplicationDesiredState,
     ApplicationEndpointResolution,
     ApplicationHealthStatus,
@@ -47,6 +49,7 @@ class RecordingRuntime:
         )
         self.start_intent: ApplicationDesiredState | None = None
         self.recover_intent: ApplicationDesiredState | None = None
+        self.restart_configuration: dict[str, object] | None = None
         self.fail_start = False
 
     @property
@@ -99,6 +102,7 @@ class RecordingRuntime:
         instance: ApplicationInstance,
     ) -> ApplicationInstance:
         del manifest
+        self.restart_configuration = dict(instance.configuration)
         return replace(
             instance,
             observed_state=ApplicationObservedState.RUNNING,
@@ -206,6 +210,20 @@ def _manifest(
         version="1.0.0",
         description="Application lifecycle fixture",
         services=(service,),
+        configuration=(
+            ApplicationConfigurationField(
+                name="label",
+                value_type=ApplicationConfigValueType.STRING,
+                default="initial",
+                mutable=True,
+            ),
+            ApplicationConfigurationField(
+                name="fixed",
+                value_type=ApplicationConfigValueType.STRING,
+                default="fixed",
+                mutable=False,
+            ),
+        ),
         runtime_requirements=("local",),
     )
 
@@ -289,3 +307,63 @@ async def test_install_rejects_unsupported_service_runtime() -> None:
         )
 
     assert exc_info.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
+
+
+async def test_configure_updates_stopped_instance_without_runtime_transition() -> None:
+    runtime = RecordingRuntime()
+    lifecycle, repository, instance_id = await _service(_manifest(), runtime)
+    before = repository.get_instance(instance_id)
+
+    updated = await lifecycle.configure(instance_id, {"label": "changed"})
+
+    assert updated.configuration["label"] == "changed"
+    assert updated.configuration["fixed"] == "fixed"
+    assert updated.revision == before.revision + 1
+    assert updated.observed_state is ApplicationObservedState.STOPPED
+    assert runtime.restart_configuration is None
+    assert repository.get_instance(instance_id) == updated
+
+
+async def test_configure_restarts_running_instance_with_persisted_configuration() -> None:
+    runtime = RecordingRuntime()
+    lifecycle, repository, instance_id = await _service(_manifest(), runtime)
+    await lifecycle.start(instance_id)
+
+    updated = await lifecycle.configure(instance_id, {"label": "runtime-value"})
+
+    assert runtime.restart_configuration is not None
+    assert runtime.restart_configuration["label"] == "runtime-value"
+    assert updated.configuration["label"] == "runtime-value"
+    assert updated.desired_state is ApplicationDesiredState.RUNNING
+    assert updated.observed_state is ApplicationObservedState.RUNNING
+    assert repository.get_instance(instance_id) == updated
+
+
+async def test_configure_rejects_immutable_unknown_and_mistyped_fields() -> None:
+    runtime = RecordingRuntime()
+    lifecycle, repository, instance_id = await _service(_manifest(), runtime)
+    before = repository.get_instance(instance_id)
+
+    for patch in (
+        {"fixed": "changed"},
+        {"unknown": "value"},
+        {"label": 42},
+    ):
+        with pytest.raises(ContractError) as raised:
+            await lifecycle.configure(instance_id, patch)
+        assert raised.value.code is ErrorCode.INVALID_CONFIGURATION
+        assert repository.get_instance(instance_id) == before
+
+
+async def test_configure_rejects_empty_patch_and_removed_instance() -> None:
+    runtime = RecordingRuntime()
+    lifecycle, _, instance_id = await _service(_manifest(), runtime)
+
+    with pytest.raises(ContractError) as empty:
+        await lifecycle.configure(instance_id, {})
+    assert empty.value.code is ErrorCode.INVALID_REQUEST
+
+    await lifecycle.remove(instance_id)
+    with pytest.raises(ContractError) as removed:
+        await lifecycle.configure(instance_id, {"label": "changed"})
+    assert removed.value.code is ErrorCode.CONFLICT

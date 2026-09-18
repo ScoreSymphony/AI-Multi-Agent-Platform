@@ -10,6 +10,8 @@ from ai_multi_agent_platform.applications.control_plane import (
     register_application_control_plane,
 )
 from ai_multi_agent_platform.applications.models import (
+    ApplicationConfigurationField,
+    ApplicationConfigValueType,
     ApplicationDesiredState,
     ApplicationEndpointResolution,
     ApplicationHealthStatus,
@@ -181,6 +183,19 @@ def _manifest() -> ApplicationManifest:
                 service_id="app",
                 runtime=ApplicationServiceRuntime.PROCESS,
                 process=("python", "-m", "example"),
+            ),
+        ),
+        configuration=(
+            ApplicationConfigurationField(
+                name="label",
+                value_type=ApplicationConfigValueType.STRING,
+                default="initial",
+            ),
+            ApplicationConfigurationField(
+                name="fixed",
+                value_type=ApplicationConfigValueType.STRING,
+                default="fixed",
+                mutable=False,
             ),
         ),
         runtime_requirements=("local",),
@@ -361,3 +376,52 @@ async def test_lifecycle_commands_reject_unexpected_payload() -> None:
         )
 
     assert raised.value.code is ErrorCode.INVALID_REQUEST
+
+
+async def test_configure_is_payload_bound_and_updates_canonical_instance() -> None:
+    control_plane, repository, _, authorization = _stack()
+    manifest = _manifest()
+    installed = await _install(control_plane, manifest)
+    instance_id = installed["id"]
+    assert isinstance(instance_id, str)
+
+    updated = await control_plane.execute_command(
+        _context(key="configure-key"),
+        "application.configure",
+        instance_id,
+        {"configuration": {"label": "changed"}},
+    )
+
+    assert updated["configuration"] == {"label": "changed", "fixed": "fixed"}
+    assert repository.get_instance(instance_id).configuration["label"] == "changed"
+    assert authorization.calls[-1].action == "application.configure"
+    assert authorization.calls[-1].request_payload_digest is not None
+
+
+async def test_configure_rejects_immutable_and_unexpected_payloads() -> None:
+    control_plane, repository, _, _ = _stack()
+    manifest = _manifest()
+    installed = await _install(control_plane, manifest)
+    instance_id = installed["id"]
+    assert isinstance(instance_id, str)
+    before = repository.get_instance(instance_id)
+
+    with pytest.raises(ContractError) as immutable:
+        await control_plane.execute_command(
+            _context(key="immutable-config"),
+            "application.configure",
+            instance_id,
+            {"configuration": {"fixed": "changed"}},
+        )
+    assert immutable.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert repository.get_instance(instance_id) == before
+
+    with pytest.raises(ContractError) as unexpected:
+        await control_plane.execute_command(
+            _context(key="bad-config-payload"),
+            "application.configure",
+            instance_id,
+            {"configuration": {"label": "changed"}, "unexpected": True},
+        )
+    assert unexpected.value.code is ErrorCode.INVALID_REQUEST
+    assert repository.get_instance(instance_id) == before

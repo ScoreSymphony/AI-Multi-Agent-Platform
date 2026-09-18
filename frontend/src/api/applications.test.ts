@@ -62,6 +62,29 @@ describe("ApplicationsClient", () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  it("sends mutable configuration through the canonical configure command", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("/api/v1/commands/application.configure");
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        resource_ref: "application_instance_test",
+        configuration: { label: "changed", workers: 4 },
+      });
+      return jsonResponse({
+        id: "application_instance_test",
+        type: "application-instance",
+      });
+    });
+    const client = new ApplicationsClient({ fetchImpl });
+
+    await client.configure("application_instance_test", {
+      label: "changed",
+      workers: 4,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
   it("rejects blank resource references before transport", () => {
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL) => jsonResponse({}));
     const client = new ApplicationsClient({ fetchImpl });
