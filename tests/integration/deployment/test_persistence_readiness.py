@@ -46,7 +46,6 @@ def test_required_persistence_outage_blocks_readiness_until_store_returns(
     asyncio.run(scenario())
 
 
-
 def test_base_profile_does_not_require_uncomposed_extension_stores(
     tmp_path: Path,
 ) -> None:
