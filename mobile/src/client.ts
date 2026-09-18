@@ -49,6 +49,13 @@ export class OfflineMutationError extends Error {
   }
 }
 
+export class MobileNetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MobileNetworkError";
+  }
+}
+
 interface CacheEntry {
   data: unknown;
   fetchedAt: string;
@@ -131,7 +138,7 @@ export class MobileControlPlaneClient {
     return this.mutate("/tasks", {
       title: requireText(title, "Task title"),
       objective: requireText(objective, "Task objective"),
-      owner_type: actor.actor_type,
+      owner_type: ownerTypeForActor(actor.actor_type),
       owner_id: actor.actor_id,
     });
   }
@@ -184,7 +191,7 @@ export class MobileControlPlaneClient {
       this.offline = false;
       return { data, stale: false, fetchedAt };
     } catch (error) {
-      if (error instanceof MobileControlPlaneError) throw error;
+      if (!(error instanceof MobileNetworkError)) throw error;
       this.offline = true;
       const cached = this.cache.get(path);
       if (!cached) throw error;
@@ -232,9 +239,12 @@ export class MobileControlPlaneClient {
       });
     } catch (error) {
       this.offline = true;
-      throw error instanceof Error ? error : new Error("Control Plane network request failed");
+      throw new MobileNetworkError(
+        error instanceof Error ? error.message : "Control Plane network request failed",
+      );
     }
 
+    this.offline = false;
     const text = await response.text();
     const payload = text ? safeJson(text) : null;
     if (!response.ok) {
@@ -268,6 +278,12 @@ function safeJson(text: string): unknown {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function ownerTypeForActor(actorType: string): "user" | "service" {
+  if (actorType === "human") return "user";
+  if (actorType === "service") return "service";
+  throw new Error(`Lightweight Task submission is unsupported for actor type ${actorType}`);
 }
 
 function requireText(value: string, label: string): string {
