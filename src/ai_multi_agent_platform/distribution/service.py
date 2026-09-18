@@ -181,7 +181,11 @@ class DistributionService:
             or operation == "status"
             or _kind_supports(item, operation)
         )
-        if item.route is DistributionRoute.KIND_HANDLER and handler_available and not operation_supported:
+        if (
+            item.route is DistributionRoute.KIND_HANDLER
+            and handler_available
+            and not operation_supported
+        ):
             findings = (
                 *findings,
                 ValidationFinding(
