@@ -560,6 +560,75 @@ def test_gitspawn_release_discovery_rejects_remote_helper_before_spawn(tmp_path:
     assert not marker.exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="symlink fixture requires POSIX semantics")
+def test_gitspawn_git_dir_symlink_escape_is_rejected(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        project_id = new_id("project")
+        operation = _operation(project_id)
+        root = tmp_path / "repo"
+        root.mkdir()
+        outside = tmp_path / "outside-git"
+        subprocess.run(
+            [_git_binary(), "init", "--bare", str(outside)],
+            env=controlled_git_environment(home=tmp_path / "outside-home"),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        (root / ".git").symlink_to(outside, target_is_directory=True)
+        provider = LocalGitRepositoryProvider(
+            root,
+            _connection(project_id),
+            git_binary=_git_binary(),
+        )
+
+        with pytest.raises(ContractError) as error:
+            await provider.open(operation)
+
+        assert error.value.code is ErrorCode.INVALID_CONFIGURATION
+
+    asyncio.run(scenario())
+
+
+def test_gitspawn_common_git_dir_escape_is_rejected(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        provider, repository, operation, root = await _initialized_provider(tmp_path)
+        del repository
+        (root / ".git" / "commondir").write_text(
+            str(tmp_path / "outside-common"),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ContractError) as error:
+            await provider.status(
+                provider._repository,  # type: ignore[arg-type,attr-defined]
+                operation,
+            )
+
+        assert error.value.code is ErrorCode.INVALID_CONFIGURATION
+
+    asyncio.run(scenario())
+
+
+def test_gitspawn_repository_object_alternates_are_rejected(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        provider, repository, operation, root = await _initialized_provider(tmp_path)
+        info = root / ".git" / "objects" / "info"
+        info.mkdir(parents=True, exist_ok=True)
+        (info / "alternates").write_text(
+            str(tmp_path / "outside-objects"),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ContractError) as error:
+            await provider.status(repository, operation)
+
+        assert error.value.code is ErrorCode.INVALID_CONFIGURATION
+
+    asyncio.run(scenario())
+
+
 def test_gitspawn_rejected_config_key_diagnostics_do_not_echo_credentials(
     tmp_path: Path,
 ) -> None:
