@@ -105,20 +105,26 @@ class ExternalEffectRecoveryCommands:
         ):
             raise ContractError(ErrorCode.INVALID_REQUEST, "result_ref must be a non-blank string")
         raw_evidence = payload.get("evidence_refs", [])
-        if not isinstance(raw_evidence, list) or any(
-            not isinstance(item, str) or not item.strip() for item in raw_evidence
-        ):
+        if not isinstance(raw_evidence, list):
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "evidence_refs must contain non-blank strings",
             )
+        evidence_refs: list[str] = []
+        for item in raw_evidence:
+            if not isinstance(item, str) or not item.strip():
+                raise ContractError(
+                    ErrorCode.INVALID_REQUEST,
+                    "evidence_refs must contain non-blank strings",
+                )
+            evidence_refs.append(item)
         return external_effect_recovery_resource(
             await self.recovery.confirm_succeeded(
                 resource_ref,
                 actor=context.actor.principal_ref,
                 reason=_required_reason(payload),
                 result_ref=result_ref,
-                evidence_refs=tuple(raw_evidence),
+                evidence_refs=tuple(evidence_refs),
             )
         )
 
