@@ -307,7 +307,7 @@ export function OrganizationsPage({ client }: { client: OrganizationClient }) {
           <OrganizationSummary
             organization={selectedOrganization}
             team={selectedTeam}
-            onArchive={() => void mutate("organization.archive", () => client.archiveOrganization(selectedOrganization.id))}
+            onArchive={() => { if (window.confirm(`Archive organization ${selectedOrganization.id}?`)) void mutate("organization.archive", () => client.archiveOrganization(selectedOrganization.id)); }}
             archiving={busy === "organization.archive"}
           />
 
