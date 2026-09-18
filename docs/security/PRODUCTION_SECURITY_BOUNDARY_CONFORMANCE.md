@@ -5,9 +5,11 @@ platform-wide claim that supported side-effecting surfaces preserve the same can
 ownership model.
 
 The executable inventory lives in
-`ai_multi_agent_platform.conformance.security_boundaries`. The release
-`platform-conformance` profile registers it as required scenario `SEC`. The matrix is an
-**aggregator**, not a second policy engine: failures must be fixed in the owning subsystem.
+[`conformance/security/production_boundary_matrix.toml`](../../conformance/security/production_boundary_matrix.toml)
+and is validated/executed by
+[`scripts/ci/security_boundary_conformance.py`](../../scripts/ci/security_boundary_conformance.py).
+The release `platform-conformance` profile registers that runner as required scenario `SEC-BND`.
+The matrix is an **aggregator**, not a second policy engine: failures must be fixed in the owning subsystem.
 
 ## Maintained surface matrix
 
@@ -35,13 +37,14 @@ authority.
 | Approval-gated operations | `AuthorizationGate` exact-action, exact-scope approval lifecycle |
 | Verification/review transitions | canonical Verification/Completion authority + task/project reviewer scope |
 
-The machine-readable matrix points only to maintained first-party tests. Contract tests reject a
-surface with a missing dimension, duplicate/stale evidence node or a release profile that no longer
-runs the complete matrix.
+The machine-readable matrix points only to maintained first-party tests. Its validator requires all
+17 claimed surfaces, all ten boundary fields, all required global regression classes, unique surface
+IDs and resolvable exact pytest node IDs. Contract coverage executes the validator so stale evidence
+cannot silently remain release evidence.
 
 ## Required attack/regression classes
 
-The `SEC` evidence set includes representative regressions for:
+The `SEC-BND` evidence set includes representative regressions for:
 
 - missing/expired authentication and revoked/scoped credentials;
 - cross-project/project-session scope substitution;
@@ -91,10 +94,10 @@ Run:
 platform-conformance \
   --profile release \
   --deployment-profile reference-single-node-release \
-  --scenario SEC \
+  --scenario SEC-BND \
   --json-report conformance-security.json
 ```
 
-A passing `SEC` result proves only the exact checked-out platform revision and maintained
+A passing `SEC-BND` result proves only the exact checked-out platform revision and maintained
 reference/release profile. Provider-specific live-host guarantees remain scoped to their focused
 evidence and support classification.
