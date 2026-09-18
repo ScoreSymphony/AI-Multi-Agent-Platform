@@ -111,6 +111,21 @@ pytest -m "contract or integration"
 
 The `Repository quality` workflow executes collection-only directory and marker selections so path/marker drift is detected in CI.
 
+## Runtime profiling and CI parallelism
+
+The canonical runtime/performance policy for the Python suite is documented in
+[`docs/quality/PYTHON_TEST_RUNTIME.md`](../docs/quality/PYTHON_TEST_RUNTIME.md).
+
+The authoritative local fallback remains `pytest`. CI may partition the suite across isolated jobs,
+but `scripts/ci/verify_pytest_shards.py` must prove that the non-unit shard union is exactly equal
+to the serial `pytest -m "not unit"` collection. Tests remain serial inside each current shard;
+intra-shard xdist parallelism requires explicit shared-state/process-safety evidence.
+
+Use `scripts/ci/run_pytest_lane.py` when collecting comparable lane timing evidence locally.
+The wrapper retains JUnit, JSON and Markdown timing reports and enforces the checked-in
+regression budgets from `config/python-test-runtime.json`.
+
+
 ## Completed #722 migration policy
 
 The historical flat/issue-numbered migration is complete. New work must preserve the final-state invariants rather than relying on migration debt:
