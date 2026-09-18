@@ -24,6 +24,7 @@ from .client import (
 )
 from .compute import add_compute_parsers, doctor_compute, execute_compute
 from .evaluation import add_evaluation_parser, execute_evaluation
+from .marketplace import add_marketplace_parser, execute_marketplace
 from .memory_knowledge import (
     add_memory_knowledge_parsers,
     execute_knowledge,
@@ -145,6 +146,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     add_search_parser(areas)
     add_plugin_parser(areas)
+    add_marketplace_parser(areas)
     add_evaluation_parser(areas)
     add_memory_knowledge_parsers(areas)
     add_onboarding_parser(areas)
@@ -430,6 +432,8 @@ def _execute(
         return CommandResult(execute_search(args, client))
     if args.area == "plugin":
         return CommandResult(execute_plugin(args, client, _require_confirmation))
+    if args.area == "marketplace":
+        return CommandResult(execute_marketplace(args, client, _require_confirmation))
     if args.area == "evaluation":
         return CommandResult(execute_evaluation(args, client))
     if args.area == "onboarding":
