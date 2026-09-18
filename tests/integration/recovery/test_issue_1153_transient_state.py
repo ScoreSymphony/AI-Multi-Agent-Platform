@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from ai_multi_agent_platform.automation import (
+    Automation,
     AutomationService,
     AutomationStartupRecoveryDisposition,
     AutomationState,
@@ -27,7 +28,8 @@ from ai_multi_agent_platform.deployment.transient_recovery import (
     SingleNodeTransientStateRecoveryExtension,
 )
 from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.security import BrowserSession
+from ai_multi_agent_platform.security import BrowserSession, LocalUserAccount
+from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 
 
 NOW = datetime(2026, 9, 19, 1, 30, tzinfo=UTC)
@@ -48,7 +50,7 @@ def _template() -> TaskTemplate:
     )
 
 
-async def _automation(service: AutomationService) -> Any:
+async def _automation(service: AutomationService) -> Automation:
     return await service.create_automation(
         name="issue-1153",
         description="startup reconciliation",
@@ -273,6 +275,52 @@ def test_transient_extension_reports_durable_auth_session_authority() -> None:
         assert auth["revoked"] == 1
 
     asyncio.run(scenario())
+
+
+
+def test_auth_session_expiry_and_revocation_survive_sqlite_restart(tmp_path: Path) -> None:
+    path = tmp_path / "authentication.sqlite3"
+    store = SqliteAuthenticationStore(path)
+    user = LocalUserAccount(
+        user_id="user-issue-1153",
+        username="issue-1153",
+        password_verifier="verifier",
+        enabled=True,
+        locked=False,
+        created_at=NOW - timedelta(days=1),
+        password_changed_at=NOW - timedelta(days=1),
+    )
+    store.users[user.user_id] = user
+    expired = BrowserSession(
+        session_id="session-expired-restart",
+        user_id=user.user_id,
+        token_verifier="expired-verifier",
+        csrf_verifier="expired-csrf",
+        created_at=NOW - timedelta(hours=2),
+        authenticated_at=NOW - timedelta(hours=2),
+        expires_at=NOW - timedelta(hours=1),
+    )
+    revoked = BrowserSession(
+        session_id="session-revoked-restart",
+        user_id=user.user_id,
+        token_verifier="revoked-verifier",
+        csrf_verifier="revoked-csrf",
+        created_at=NOW - timedelta(minutes=10),
+        authenticated_at=NOW - timedelta(minutes=10),
+        expires_at=NOW + timedelta(hours=1),
+        revoked_at=NOW - timedelta(minutes=1),
+    )
+    store.sessions[expired.session_id] = expired
+    store.sessions[revoked.session_id] = revoked
+
+    restarted = SqliteAuthenticationStore(path)
+
+    restored_expired = restarted.sessions[expired.session_id]
+    restored_revoked = restarted.sessions[revoked.session_id]
+    assert restored_expired.expires_at == expired.expires_at
+    assert restored_expired.active(now=NOW) is False
+    assert restored_revoked.revoked_at == revoked.revoked_at
+    assert restored_revoked.active(now=NOW) is False
 
 
 def test_startup_report_persists_extension_evidence(
