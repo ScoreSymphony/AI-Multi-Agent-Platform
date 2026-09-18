@@ -24,6 +24,7 @@ from ai_multi_agent_platform.distribution import (
     RegistrySource,
     RegistrySourceConflictError,
     TrustStatus,
+    registry_item_from_document,
     ValidationContext,
     VersionRange,
 )
@@ -41,6 +42,12 @@ class _RejectingSignatureVerifier:
     def verify(self, item: RegistryItem, artifact: bytes) -> bool | None:
         del item, artifact
         return False
+
+
+class _AcceptingSignatureVerifier:
+    def verify(self, item: RegistryItem, artifact: bytes) -> bool | None:
+        del item, artifact
+        return True
 
 
 def _item(
@@ -645,3 +652,135 @@ def test_uninstall_preview_blocks_required_installed_dependents(
     assert preview.decision.operation.value == "uninstall"
     assert preview.decision.dependencies[0].status is DependencyStatus.REQUIRED_BY_INSTALLED
     assert any(finding.code == "required_by_installed" for finding in preview.findings)
+
+
+def test_self_dependency_is_rejected_explicitly() -> None:
+    item, artifact = _item(
+        "example.self-dependent",
+        dependencies=(RegistryDependency("example.self-dependent"),),
+    )
+
+    preview = _service(((item, artifact),)).preview(
+        item.item_id,
+        item.version,
+        _context(),
+    )
+
+    assert preview.activation_allowed is False
+    assert preview.decision.dependencies[0].status is DependencyStatus.SELF_DEPENDENCY
+    assert any(finding.code == "self_dependency" for finding in preview.findings)
+
+
+def test_incompatible_update_state_keeps_latest_compatible_release(
+    tmp_path: Path,
+) -> None:
+    old, old_artifact = _item("example.incompatible-update")
+    candidate, candidate_artifact = _item(
+        old.item_id,
+        version="1.1.0",
+        supported_platform=VersionRange("2.0.0", "3.0.0"),
+    )
+    store = JsonRegistryInstallationStore(tmp_path / "installations.json")
+    store.record(old, provider_id="local")
+    service = _service(
+        ((old, old_artifact), (candidate, candidate_artifact)),
+        store=store,
+    )
+
+    preview = service.preview(candidate.item_id, candidate.version, _context())
+
+    state = preview.decision.update_state
+    assert state.update_available is True
+    assert state.incompatible_update is True
+    assert state.latest_compatible_version == old.version
+    assert preview.activation_allowed is False
+
+
+def test_signature_key_change_is_visible_and_requires_security_review(
+    tmp_path: Path,
+) -> None:
+    old, old_artifact = _item(
+        "example.signature-key",
+        signature="signature-v1",
+        signature_key_id="publisher-key-v1",
+    )
+    candidate, candidate_artifact = _item(
+        old.item_id,
+        version="1.1.0",
+        signature="signature-v2",
+        signature_key_id="publisher-key-v2",
+    )
+    store = JsonRegistryInstallationStore(tmp_path / "installations.json")
+    store.record(old, provider_id="local")
+    service = _service(
+        ((old, old_artifact), (candidate, candidate_artifact)),
+        store=store,
+        signature_verifier=_AcceptingSignatureVerifier(),
+    )
+
+    preview = service.preview(candidate.item_id, candidate.version, _context())
+
+    provenance = preview.decision.provenance_diff
+    assert provenance.signature_changed is True
+    assert provenance.signature_key_changed is True
+    assert "signature_key_change" in preview.decision.approval.reasons
+    assert "signature_change" not in preview.decision.approval.reasons
+    assert preview.decision.approval.authorization_required is True
+
+
+def test_schema_v4_round_trips_cross_kind_and_environment_constraints() -> None:
+    document = {
+        "schema_version": "4",
+        "item_id": "example.schema-v4",
+        "item_type": "workflow",
+        "name": "Schema v4",
+        "description": "Schema v4 compatibility fixture",
+        "version": "1.0.0",
+        "publisher": "example",
+        "source": {
+            "repository": "https://example.invalid/schema-v4",
+            "package_reference": "example.schema-v4@1.0.0",
+            "revision": "rev-1",
+        },
+        "license": "MIT",
+        "provenance": "test",
+        "supported_platform": {"minimum": "0.0.1", "maximum": "1.0.0"},
+        "dependencies": [
+            {
+                "item_id": "example.future-tool",
+                "item_kind": "future_tool",
+                "version_range": {"minimum": "1.0.0", "maximum": "2.0.0"},
+                "optional": False,
+            }
+        ],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "required_plugins": [],
+        "required_connectors": [],
+        "required_models": [],
+        "tags": [],
+        "categories": [],
+        "integrity": {
+            "sha256": None,
+            "signature": None,
+            "signature_key_id": None,
+        },
+        "trust_status": "reviewed",
+        "review_reference": None,
+        "released_at": None,
+        "changelog": None,
+        "deprecated": False,
+        "yanked": False,
+        "compatibility": {
+            "operating_systems": ["linux"],
+            "architectures": ["x86_64"],
+            "required_runtimes": ["python"],
+        },
+    }
+
+    item = registry_item_from_document(document)
+
+    assert item.dependencies[0].kind_value == "future_tool"
+    assert item.compatibility.operating_systems == frozenset({"linux"})
+    assert item.compatibility.architectures == frozenset({"x86_64"})
+    assert item.compatibility.required_runtimes == frozenset({"python"})
