@@ -291,6 +291,7 @@ def build_single_node_deployment_from_foundation(
     enable_distributed_execution: bool = False,
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
     model_runtime_factory: ModelRuntimeFactory | None = None,
+    require_full_persistence_inventory: bool = False,
 ) -> SingleNodeDeployment:
     """Continue composition from a pre-runtime foundation with explicit runtime factories."""
 
@@ -345,7 +346,13 @@ def build_single_node_deployment_from_foundation(
         kernel,
         accounting_service=accounting_service,
     )
-    health = build_health(config, storage, execution, observability)
+    health = build_health(
+        config,
+        storage,
+        execution,
+        observability,
+        require_full_persistence_inventory=require_full_persistence_inventory,
+    )
     control_plane = build_control_plane(
         config,
         storage,
