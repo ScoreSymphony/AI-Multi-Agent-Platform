@@ -12,14 +12,14 @@ from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
 from ai_multi_agent_platform.distributed.models import WorkerJobRequest
 from ai_multi_agent_platform.distributed.registry import DistributedRegistry
 from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.high_availability import (
+from ai_multi_agent_platform.distributed.high_availability import (
     AvailabilityMode,
     ControlPlaneFailoverService,
     InMemoryCoordinationProvider,
     NotLeaderError,
     StaleFencingToken,
 )
-from ai_multi_agent_platform.high_availability.integrations import (
+from ai_multi_agent_platform.distributed.high_availability.integrations import (
     AuthorityGatedAutomationLoop,
     AuthorityGatedDistributedRuntime,
 )

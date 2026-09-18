@@ -35,8 +35,9 @@ Psycopg is used only as the Python PostgreSQL transport. No Psycopg or PostgreSQ
 ## Architecture fit
 
 - [x] `CoordinationProvider` remains the only canonical coordination abstraction.
-- [x] The implementation lives under the canonical `distributed` owner; the historical
-  `high_availability` package remains a migration/contract compatibility boundary.
+- [x] The implementation lives under the canonical `distributed` owner, including
+  `distributed.high_availability`; the historical `high_availability` package is a
+  compatibility-only import boundary.
 - [x] PostgreSQL instance/database/table identifiers remain adapter/deployment metadata.
 - [x] Single-node composition remains unchanged and does not install/import Psycopg eagerly.
 - [x] Active/active is not introduced.

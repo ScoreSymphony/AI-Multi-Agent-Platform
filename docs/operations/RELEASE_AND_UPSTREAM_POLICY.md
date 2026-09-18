@@ -92,7 +92,9 @@ binds the complete canonical `VersionSnapshot` to the reviewed upstream combinat
 - worker and message protocols;
 - deployment-specific adapter versions where claimed;
 - deployment-specific plugin-interface versions where claimed;
-- exact reviewed Hermes, Forge, LiteLLM or other upstream revisions.
+- exact reviewed Hermes, LiteLLM or other currently claimed upstream revisions.
+
+Historical Forge provenance remains recorded separately after #991 and is not an active release-compatibility input.
 
 The packaged baseline may contain empty adapter/plugin-interface maps when it makes no
 installation-specific claim; a deployment-specific compatibility claim must populate those maps

@@ -246,8 +246,8 @@ responsibility = "Canonical work/agent handoff contracts and coordination semant
 name = "high_availability"
 kind = "migration"
 owner = "distributed"
-disposition = "consolidate"
-responsibility = "Control Plane HA, leadership, fencing and failover are a distributed-runtime subdomain; migrate toward distributed.high_availability with bounded compatibility."
+disposition = "compatibility"
+responsibility = "Compatibility-only root namespace for canonical distributed.high_availability Control Plane leadership, fencing, failover and reconciliation APIs."
 
 [[package]]
 name = "kernel"
@@ -351,8 +351,8 @@ responsibility = "Canonical repository/project source-control resources and repo
 name = "repository_intelligence"
 kind = "migration"
 owner = "repositories"
-disposition = "consolidate"
-responsibility = "Repository intelligence is a repositories subdomain; migrate under repositories while preserving supported import paths."
+disposition = "compatibility"
+responsibility = "Compatibility-only root namespace for canonical repositories.intelligence repository/code-intelligence providers, wiring and optional enhancements."
 
 [[package]]
 name = "research"

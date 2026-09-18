@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 
 from ai_multi_agent_platform.backup.inventory import optional_single_node_store_paths
-from ai_multi_agent_platform.capability_assignments import (
+from ai_multi_agent_platform.capabilities.assignments import (
     CapabilityAssignmentAccessContext,
     CapabilityAssignmentContent,
     CapabilityAssignmentTarget,

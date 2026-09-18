@@ -365,7 +365,7 @@ The #72 implementation covers:
   approval/input attention and live response UI;
 - standard single-node Conversation activation and restart persistence;
 - compatibility with current authentication, authorization, Notification, Plugin,
-  Automation, Terminal, Verification, Hermes and Forge composition boundaries.
+  Automation, Terminal, Verification and Hermes composition boundaries plus retained retired-Forge boundary protections.
 
 Durable work therefore remains represented by canonical Task/Run/Artifact/Result/Event
 contracts even when the user enters the platform through Chat.

@@ -11,7 +11,7 @@ import pytest
 from ai_multi_agent_platform.distributed.postgres_control_plane_coordination import (
     PostgresCoordinationProvider,
 )
-from ai_multi_agent_platform.high_availability import (
+from ai_multi_agent_platform.distributed.high_availability import (
     CoordinationUnavailable,
     FencingToken,
     LeadershipConflict,

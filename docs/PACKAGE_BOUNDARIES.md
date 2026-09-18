@@ -44,10 +44,11 @@ interchangeable:
   Instances, desired/observed lifecycle state, health, logical endpoints and reconciliation. Concrete
   Docker/Podman/process/Kubernetes/remote-worker implementations remain replaceable backends behind
   the Application Runtime contract.
-- `high_availability` currently owns Control Plane leadership, coordination leases, fencing and
-  failover reconciliation. Those are distributed-runtime concerns, so its target owner is
-  `distributed`. New HA behavior should be added under the distributed owner; the existing root
-  package is migrated incrementally rather than removed in this issue.
+- `distributed.high_availability` now owns Control Plane leadership, coordination leases, fencing,
+  failover reconciliation, HA telemetry and fencing-aware Worker transport. The historical root
+  `high_availability` package is compatibility-only and re-exports the canonical implementation.
+  New HA behavior belongs under `distributed.high_availability`; repository-internal callers must
+  not import the root compatibility namespace.
 
 `application_distribution` is also distinct: it owns application build/distribution state and
 release-gate integration. It does not own the managed Application runtime lifecycle, general component
@@ -68,8 +69,10 @@ low-risk consolidation directly:
   re-exports the same public objects;
 - architecture coverage asserts object identity across the canonical and compatibility imports;
 - new reassignment behavior must be implemented under `task_management`;
-- the compatibility namespace may be removed only under the repository's normal compatibility
-  policy after supported callers have migrated.
+- the compatibility namespace remains supported through the first formal release prepared by #1237;
+  that release must carry migration/deprecation guidance for the canonical path;
+- removal is permitted only in a later non-patch release after that published deprecation and only
+  while repository-internal callers remain at zero.
 
 The canonical implementation imports `TaskManagementService` from its sibling `service` module rather
 than from the package root. This keeps the new ownership direction explicit and avoids introducing a
@@ -84,18 +87,22 @@ Issue #895 moves the canonical implementation to `capabilities.assignments` and 
 - new assignment behavior belongs under `capabilities.assignments`;
 - package-level and historical submodule imports continue to resolve through thin re-exports;
 - canonical `capabilities` code must never import the compatibility namespace;
-- the compatibility package may be removed only after the normal public-import deprecation policy
-  permits removal and repository references have migrated to the canonical path.
+- the compatibility package remains supported through the first formal release prepared by #1237;
+  that release must carry migration/deprecation guidance for `capabilities.assignments`;
+- removal is permitted only in a later non-patch release after that published deprecation and only
+  while repository-internal callers remain at zero.
 
-### Other explicit consolidation candidates
+### Completed migration-package consolidations
 
-The inventory records two additional narrow packages as migrations rather than new durable domains:
+`high_availability` -> `distributed.high_availability` and
+`repository_intelligence` -> `repositories.intelligence` were completed as behavior-preserving
+ownership moves under #1241. Their historical root namespaces remain compatibility-only shims while
+repository-internal callers use the canonical owners.
 
-- `high_availability` -> `distributed`;
-- `repository_intelligence` -> `repositories`.
-
-These are dispositions, not instructions to move all files in #726. Each move should be a focused,
-behavior-preserving migration with supported-import compatibility where required.
+Both roots are subject to the same public-import deprecation rule as the other compatibility
+namespaces: publish migration guidance in the first formal release and remove a shim only in a later
+non-patch release while repository-internal callers remain at zero. Persisted resource/type values
+are not renamed merely because the Python implementation moved.
 
 ## Rule for new functionality
 

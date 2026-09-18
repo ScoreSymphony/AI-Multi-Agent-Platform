@@ -16,11 +16,11 @@ from ai_multi_agent_platform.repositories import (
     RepositoryTreeEntry,
     RepositoryWorkspaceExecutionCoordinator,
 )
-from ai_multi_agent_platform.repository_intelligence import (
+from ai_multi_agent_platform.repositories.intelligence import (
     RepositoryIntelligenceFreshness,
     WorkspaceAwareRepositoryIntelligenceProvider,
 )
-from ai_multi_agent_platform.repository_intelligence.wiring import (
+from ai_multi_agent_platform.repositories.intelligence.wiring import (
     AuthorizedRunWorkspaceSnapshotLoader,
 )
 from ai_multi_agent_platform.security import AuthorizationGate
