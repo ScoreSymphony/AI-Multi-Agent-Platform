@@ -6,14 +6,9 @@ import hashlib
 from dataclasses import dataclass, replace
 from typing import Protocol
 
-from .decision import (
-    DependencyResolution,
-    MarketplaceDecision,
-    build_marketplace_decision,
-    dependency_findings,
-    uninstall_decision,
-)
-from .decision_types import DependencyStatus
+from .decision import build_marketplace_decision, uninstall_decision
+from .decision_types import DependencyResolution, DependencyStatus, MarketplaceDecision
+from .dependency_graph import dependency_findings
 from .handlers import MarketplaceKindHandlerRegistry
 from .items import RegistryItem, RegistryQuery
 from .models import DistributionRoute
