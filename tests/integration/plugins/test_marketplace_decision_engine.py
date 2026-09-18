@@ -879,6 +879,7 @@ def test_dependency_from_multiple_sources_requires_explicit_source_choice() -> N
     tool_b, tool_b_artifact = _item(
         "example.ambiguous-tool",
         RegistryItemType.TOOL,
+        version="2.0.0",
     )
     root_provider = LocalRegistryProvider(
         (root,),
