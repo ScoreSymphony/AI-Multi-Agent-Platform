@@ -684,10 +684,16 @@ class LocalGitRepositoryProvider(RepositoryProvider):
 
         for alternates_name in ("alternates", "http-alternates"):
             alternates = git_dir / "objects" / "info" / alternates_name
-            if alternates.exists() and alternates.read_text(
-                encoding="utf-8",
-                errors="replace",
-            ).strip():
+            if not alternates.exists():
+                continue
+            if alternates.is_symlink() or not alternates.is_file():
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "repository Git object indirection is not supported",
+                    retryable=False,
+                    provider_id=self.provider_id,
+                )
+            if alternates.read_text(encoding="utf-8", errors="replace").strip():
                 raise ContractError(
                     ErrorCode.INVALID_CONFIGURATION,
                     "repository Git object indirection is not supported",
