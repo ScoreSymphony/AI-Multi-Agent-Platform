@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import getpass
+import socket
 import sys
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -19,6 +20,12 @@ from ai_multi_agent_platform.backup import (
 from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.kernel import RecoveryReport
+from ai_multi_agent_platform.observability import (
+    FailureComponent,
+    TelemetryContext,
+    TelemetryOutcome,
+    TelemetrySeverity,
+)
 from ai_multi_agent_platform.upgrade.service import MaintenanceStateStore, UpgradeError
 from ai_multi_agent_platform.upgrade.versioning import (
     BASELINE_ADOPTION_PLATFORM_RELEASE,
@@ -346,13 +353,22 @@ def main(
             raise SystemExit(
                 "The server extra is required. Install with: pip install '.[server]'"
             ) from exc
-        uvicorn.run(
+        class _DrainAwareServer(uvicorn.Server):
+            async def shutdown(self, sockets: list[socket.socket] | None = None) -> None:
+                # Enter drain before Uvicorn closes listeners/waits for connection tasks. This
+                # disables northbound mutation admission as soon as operator shutdown begins.
+                await deployment.drain.begin(reason="server_shutdown")
+                await super().shutdown(sockets=sockets)
+
+        server_config = uvicorn.Config(
             deployment.app,
             host=config.host,
             port=config.port,
             log_level=config.log_level,
             proxy_headers=False,
+            timeout_graceful_shutdown=config.shutdown_timeout_seconds,
         )
+        _DrainAwareServer(server_config).run()
         return 0
 
     raise AssertionError(f"unhandled deployment command: {args.command}")
@@ -389,7 +405,7 @@ async def _run_restore_recovery(
 async def _run_startup_recovery(
     deployment: SingleNodeDeployment,
 ) -> SingleNodeStartupRecoveryResult:
-    return await reconcile_single_node_startup(
+    recovery = await reconcile_single_node_startup(
         data_dir=deployment.config.data_dir,
         kernel=deployment.kernel,
         coordinator=deployment.coordination,
@@ -397,6 +413,41 @@ async def _run_startup_recovery(
         extensions=deployment.startup_recovery_extensions,
         reviewer_reconciler=deployment.reviewer_recovery,
     )
+    attributes = {
+        "ready_for_service": recovery.ready_for_service,
+        "unresolved_runs": len(recovery.unresolved_run_ids),
+        "blocked_verifications": len(recovery.blocked_verification_ids),
+        "plans_reconciled": recovery.plans_reconciled,
+        "distributed_jobs_reconciled": recovery.distributed_jobs_reconciled,
+        "disposition": (
+            "ready"
+            if recovery.ready_for_service
+            else "blocked_for_operator_or_backend_reconciliation"
+        ),
+    }
+    context = TelemetryContext()
+    severity = (
+        TelemetrySeverity.INFO if recovery.ready_for_service else TelemetrySeverity.WARNING
+    )
+    outcome = (
+        TelemetryOutcome.SUCCEEDED if recovery.ready_for_service else TelemetryOutcome.UNKNOWN
+    )
+    deployment.telemetry.log(
+        severity=severity,
+        component=FailureComponent.INFRASTRUCTURE_UNKNOWN,
+        event_name="platform.single_node.restart.reconciliation",
+        context=context,
+        outcome=outcome,
+        attributes=attributes,
+    )
+    deployment.telemetry.timeline(
+        event_name="platform.single_node.restart.reconciliation",
+        component=FailureComponent.INFRASTRUCTURE_UNKNOWN,
+        context=context,
+        outcome=outcome,
+        attributes=attributes,
+    )
+    return recovery
 
 
 def _print_restore_recovery(recovery: PostRestoreRecoveryResult | None) -> None:
