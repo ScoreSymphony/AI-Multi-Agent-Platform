@@ -229,9 +229,14 @@ def test_remote_worker_execution_is_not_cancelled_or_redispatched_by_drain(
         assert len(lifecycle.start_calls) == 1
         assert len(lifecycle.cancel_calls) == 0
 
+        # Successful dispatch commits ownership as DISPATCHED. RUNNING is learned from the
+        # Worker during reconciliation; drain itself must not poll/cancel/redispatch the job.
+        assert runtime.records()[0].state is DispatchState.DISPATCHED
+
         await first.drain.begin(reason="remote_worker_shutdown")
+        assert len(lifecycle.start_calls) == 1
         assert len(lifecycle.cancel_calls) == 0
-        assert runtime.records()[0].state is DispatchState.RUNNING
+        assert runtime.records()[0].state is DispatchState.DISPATCHED
 
         restarted = build_single_node_deployment(
             SingleNodeConfig(data_dir=root, secure_cookie=False),
@@ -248,6 +253,7 @@ def test_remote_worker_execution_is_not_cancelled_or_redispatched_by_drain(
         )
 
         assert len(runtime.records()) == 1
+        assert runtime.records()[0].state is DispatchState.RUNNING
         assert len(lifecycle.start_calls) == 1
         assert len(lifecycle.cancel_calls) == 0
         assert restarted.coordination_repository.get_step_record(step.id).latest_run_id == run_id
