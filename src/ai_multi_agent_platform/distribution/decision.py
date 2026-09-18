@@ -70,9 +70,7 @@ def build_marketplace_decision(
         findings=findings,
     )
     operation = (
-        DistributionOperation.INSTALL
-        if installation is None
-        else DistributionOperation.UPDATE
+        DistributionOperation.INSTALL if installation is None else DistributionOperation.UPDATE
     )
     return (
         MarketplaceDecision(
@@ -92,9 +90,7 @@ def _without_direct_dependency_findings(
     findings: tuple[ValidationFinding, ...],
 ) -> tuple[ValidationFinding, ...]:
     return tuple(
-        finding
-        for finding in findings
-        if finding.category is not FindingCategory.DEPENDENCY
+        finding for finding in findings if finding.category is not FindingCategory.DEPENDENCY
     )
 
 
