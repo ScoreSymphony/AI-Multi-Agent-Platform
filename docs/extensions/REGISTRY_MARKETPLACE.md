@@ -159,6 +159,16 @@ canonical `OrchestratorRegistry`; it does not hot-swap an already constructed ke
 selection remains the configuration-driven #8 owner concern, so canonical Agent/Team definitions
 stay orchestrator-independent and can be reused with any compatible registered implementation.
 
+Executable plugin code is also not discovered from a Marketplace manifest entrypoint. The shipped
+single-node composition supplies Hermes as an explicit trusted `PluginSource` candidate with a
+platform-owned runtime factory. A Marketplace-installed Hermes package can therefore be configured
+and enabled through the normal Plugin Control Plane only when its manifest exactly matches that
+composed candidate. Its declared `network_access` and `secret_consumption` permissions are granted
+by the server-side single-node policy only for that exact governed manifest. A different or
+third-party Marketplace plugin may still be installed as package evidence, but activation fails
+closed unless platform composition separately supplies a trusted runtime candidate and permission
+policy; Marketplace installation never turns manifest metadata into executable code.
+
 Application runtime selection also remains inside #1173.  `ApplicationRuntimeRegistry` selects only
 when exactly one registered runtime can satisfy the manifest; an unavailable or ambiguous runtime
 fails through canonical owner errors.  Marketplace does not implement placement or lifecycle state.
