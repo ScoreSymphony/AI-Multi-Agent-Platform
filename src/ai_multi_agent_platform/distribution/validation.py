@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -50,6 +51,50 @@ class ValidationContext:
     operating_system: str | None = None
     architecture: str | None = None
     available_runtimes: frozenset[str] = frozenset()
+
+
+def merge_installed_items(
+    marketplace_items: Iterable[InstalledRegistryItem],
+    owner_items: Iterable[InstalledRegistryItem],
+) -> tuple[InstalledRegistryItem, ...]:
+    """Merge Marketplace evidence with canonical owner-installed state.
+
+    Canonical owner state is authoritative for whether a component is installed and which
+    version is installed. Marketplace evidence may enrich the same installed version with
+    source/provenance details, but stale Marketplace evidence must never replace a differing
+    owner-reported version.
+    """
+
+    merged = {record.item_id: record for record in marketplace_items}
+    for owner_record in owner_items:
+        marketplace_record = merged.get(owner_record.item_id)
+        merged[owner_record.item_id] = _merge_owner_installed_record(
+            marketplace_record,
+            owner_record,
+        )
+    return tuple(merged[item_id] for item_id in sorted(merged))
+
+
+def _merge_owner_installed_record(
+    marketplace_record: InstalledRegistryItem | None,
+    owner_record: InstalledRegistryItem,
+) -> InstalledRegistryItem:
+    if marketplace_record is None or marketplace_record.version != owner_record.version:
+        return owner_record
+    return InstalledRegistryItem(
+        item_id=owner_record.item_id,
+        version=owner_record.version,
+        source_registry=owner_record.source_registry or marketplace_record.source_registry,
+        pinned_version=owner_record.pinned_version or marketplace_record.pinned_version,
+        license=owner_record.license or marketplace_record.license,
+        provenance=owner_record.provenance or marketplace_record.provenance,
+        item_type=owner_record.item_type or marketplace_record.item_type,
+        dependencies=(
+            owner_record.dependencies
+            if owner_record.dependencies is not None
+            else marketplace_record.dependencies
+        ),
+    )
 
 
 def validate_item(
