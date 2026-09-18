@@ -1,4 +1,4 @@
-"""Notification live-stream integration behavior migrated from issue #75 coverage."""
+"""Notification live-stream integration behavior."""
 
 from __future__ import annotations
 
