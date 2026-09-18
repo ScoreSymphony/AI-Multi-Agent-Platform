@@ -764,6 +764,10 @@ def _doctor_health(body: JsonValue) -> tuple[str, list[JsonValue]]:
                     "required": required,
                     "error_code": dependency.get("error_code"),
                     "attempts": dependency.get("attempts"),
+                    "retry_count": dependency.get("retry_count"),
+                    "last_retry_error_code": dependency.get("last_retry_error_code"),
+                    "probe_duration_seconds": dependency.get("probe_duration_seconds"),
+                    "degraded_duration_seconds": dependency.get("degraded_duration_seconds"),
                     "failure_count": dependency.get("failure_count"),
                     "recovery_count": dependency.get("recovery_count"),
                     "guidance": (
