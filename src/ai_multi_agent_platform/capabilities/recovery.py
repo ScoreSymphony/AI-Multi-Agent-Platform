@@ -739,10 +739,14 @@ class ExternalEffectRecoveryCoordinator:
     ) -> None:
         pending = self._pending.get(invocation_id)
         if pending is None:
-            return
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "external effect dispatch is missing its prepared recovery attempt",
+            )
         existing = self.repository.find_by_invocation(invocation_id)
         now = _utc_now()
         if existing is not None:
+            self._require_retry_allowed(existing, pending)
             self.repository.save(
                 replace(
                     existing,
