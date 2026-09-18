@@ -77,6 +77,9 @@ def test_drain_rejects_mutations_and_projects_health_readiness(tmp_path: Path) -
         assert readiness.body["status"] == "draining"
         assert readiness.body["ready"] is False
 
+        canonical_health = await deployment.control_plane.health()
+        assert canonical_health["ready"] is False
+
         assert openapi.status == 200
 
         assert blocked.status == 503
@@ -133,6 +136,63 @@ def test_drain_quiesces_autonomous_background_runtimes(tmp_path: Path) -> None:
 
         assert deployment.control_plane.automation_runtime.running is False
         assert deployment.control_plane.notification_runtime.running is False
+
+    asyncio.run(scenario())
+
+
+def test_drain_lifecycle_does_not_depend_on_telemetry_exporter() -> None:
+    class FailingExporter:
+        def emit_log(self, record: Any) -> None:
+            del record
+            raise RuntimeError("log exporter unavailable")
+
+        def emit_metric(self, record: Any) -> None:
+            del record
+            raise RuntimeError("metric exporter unavailable")
+
+        def emit_span(self, record: Any) -> None:
+            del record
+            raise RuntimeError("span exporter unavailable")
+
+        def emit_timeline(self, record: Any) -> None:
+            del record
+            raise RuntimeError("timeline exporter unavailable")
+
+    async def scenario() -> None:
+        drain = SingleNodeDrainController(
+            timeout_seconds=1,
+            telemetry=Telemetry(FailingExporter()),
+        )
+        assert await drain.begin(reason="telemetry_failure") is True
+        await drain.mark_forced("teardown_failure")
+        await drain.mark_completed()
+
+        snapshot = drain.snapshot()
+        assert snapshot.state is SingleNodeDrainState.DRAINING
+        assert snapshot.forced is True
+        assert snapshot.completed is True
+        assert snapshot.force_reason == "teardown_failure"
+
+    asyncio.run(scenario())
+
+
+def test_non_timeout_forced_drain_reports_failed_completion() -> None:
+    async def scenario() -> None:
+        exporter = InMemoryExporter()
+        drain = SingleNodeDrainController(
+            timeout_seconds=1,
+            telemetry=Telemetry(exporter),
+        )
+        await drain.begin(reason="test_failure")
+        await drain.mark_forced("resource_teardown_failure")
+        await drain.mark_completed()
+
+        completed = next(
+            entry
+            for entry in exporter.timeline
+            if entry.event_name == "platform.single_node.drain.completed"
+        )
+        assert completed.outcome.value == "failed"
 
     asyncio.run(scenario())
 
