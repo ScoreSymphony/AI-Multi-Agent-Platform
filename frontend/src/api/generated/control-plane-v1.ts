@@ -31,6 +31,7 @@ export type APIManifest = {
 
 export type HealthProviderStatus = {
   available: boolean;
+  diagnostics?: Record<string, JsonValue>[];
   id: string;
   status: string;
   type: string;
