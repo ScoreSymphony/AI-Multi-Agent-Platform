@@ -13,7 +13,7 @@ from ai_multi_agent_platform.agents import (
     AgentService,
     InstructionSource,
 )
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
 from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
 from ai_multi_agent_platform.domain import OwnerRef
@@ -78,8 +78,14 @@ def resolve_scope(
                 ErrorCode.INVALID_REQUEST,
                 "Select an owned Workspace for the official multi-agent first run.",
                 details={
-                    "candidate_workspace_ids": sorted(
-                        {candidate_workspace_id for _, candidate_workspace_id in workspace_bindings}
+                    "candidate_workspace_ids": cast(
+                        JsonValue,
+                        sorted(
+                            {
+                                candidate_workspace_id
+                                for _, candidate_workspace_id in workspace_bindings
+                            }
+                        ),
                     )
                 },
             )
@@ -120,7 +126,7 @@ def _select_project(project_ids: tuple[str, ...], requested: str | None) -> str:
     raise ContractError(
         ErrorCode.INVALID_REQUEST,
         "Select an owned Project for the official multi-agent first run.",
-        details={"candidate_project_ids": list(project_ids)},
+        details={"candidate_project_ids": cast(JsonValue, list(project_ids))},
     )
 
 
@@ -132,7 +138,7 @@ def _select_workspace(workspace_ids: tuple[str, ...], requested: str | None) -> 
     raise ContractError(
         ErrorCode.INVALID_REQUEST,
         "Select an owned Workspace for the official multi-agent first run.",
-        details={"candidate_workspace_ids": list(workspace_ids)},
+        details={"candidate_workspace_ids": cast(JsonValue, list(workspace_ids))},
     )
 
 
