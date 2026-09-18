@@ -1,4 +1,4 @@
-"""Canonical metadata for optional distribution registries (issue #81)."""
+"""Canonical metadata for optional distribution registries."""
 
 from __future__ import annotations
 
