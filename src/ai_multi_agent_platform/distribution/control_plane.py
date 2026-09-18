@@ -688,7 +688,14 @@ class RegistryCommandHandlers:
         except LookupError as exc:
             raise ContractError(ErrorCode.NOT_FOUND, str(exc)) from exc
         except PermissionError as exc:
-            raise ContractError(ErrorCode.FORBIDDEN, str(exc)) from exc
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                str(exc),
+                details={
+                    "marketplace_reason": "owner_denied",
+                    "kind": preview.item.kind,
+                },
+            ) from exc
         except ValueError as exc:
             raise ContractError(
                 ErrorCode.CONFLICT,
@@ -820,7 +827,14 @@ class RegistryCommandHandlers:
         except ContractError:
             raise
         except PermissionError as exc:
-            raise ContractError(ErrorCode.FORBIDDEN, str(exc)) from exc
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                str(exc),
+                details={
+                    "marketplace_reason": "owner_denied",
+                    "kind": preview.item.kind,
+                },
+            ) from exc
         except KeyError as exc:
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
