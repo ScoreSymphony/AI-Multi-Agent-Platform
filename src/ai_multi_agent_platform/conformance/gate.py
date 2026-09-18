@@ -249,20 +249,39 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             "J-cli",
             "CLI client",
             (
-                "CLI reads shared canonical Task/Run/Result state through the versioned "
-                "Control Plane resource paths"
+                "CLI preserves shared canonical Task/Run/Result state, pagination/filter/sort "
+                "queries, canonical error/status categories, authorization/approval and "
+                "mutation idempotency through versioned Control Plane paths"
             ),
             _pytest(
                 "tests/integration/cli/test_client_state_parity.py::"
-                "test_cli_reads_shared_canonical_task_run_result_state"
+                "test_cli_reads_shared_canonical_task_run_result_state",
+                "tests/integration/cli/test_client_state_parity.py::"
+                "test_cli_preserves_shared_task_query_pagination_and_error_semantics",
+                "tests/integration/cli/test_client_state_parity.py::"
+                "test_cli_core_lifecycle_mutations_use_the_shared_public_routes",
+                "tests/integration/cli/test_client_state_parity.py::"
+                "test_cli_mutation_uses_idempotency_key_and_does_not_retry_retryable_error",
+                "tests/integration/cli/test_client_state_parity.py::"
+                "test_cli_preserves_not_found_and_conflict_error_categories",
+                "tests/integration/cli/test_control_plane_flows.py::"
+                "test_cli_and_public_api_share_the_same_canonical_task_state",
+                "tests/integration/cli/test_control_plane_flows.py::"
+                "test_cli_and_public_api_share_pagination_filter_sort_semantics",
+                "tests/unit/cli/test_cli_authorization_outcomes.py::"
+                "test_cli_surfaces_canonical_authorization_denial",
+                "tests/unit/cli/test_cli_authorization_outcomes.py::"
+                "test_cli_surfaces_approval_required_and_observes_approved_action",
             ),
         ),
         ConformanceScenario(
             "J-web",
             "Web client",
             (
-                "Web reads the same canonical Task/Run/Result fixtures through the same "
-                "versioned API paths"
+                "Web preserves the same canonical Task/Run/Result state, pagination/filter/sort "
+                "queries, canonical error/status categories, authorization/approval, "
+                "mutation idempotency, deep-link resolution and reload behavior through the "
+                "same versioned API paths"
             ),
             (
                 "npm",
@@ -272,6 +291,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "--",
                 "--run",
                 "src/api/canonicalStateParity.test.ts",
+                "src/api/errorPresentation.test.ts",
             ),
         ),
         ConformanceScenario(
