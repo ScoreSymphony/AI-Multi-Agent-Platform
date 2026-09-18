@@ -207,7 +207,7 @@ def test_sqlite_restart_preserves_observations_evidence_and_staleness(tmp_path: 
     assert len(restored.repository.list_observations(source_id)) == 2
 
 
-def test_reviewer_independence_and_exact_revision_are_inherited_from_issue_86() -> None:
+def test_reviewer_independence_and_exact_revision_are_inherited_from_verification_contract() -> None:
     producer = new_id("agent")
     reviewer = new_id("agent")
     task_id = new_id("task")
