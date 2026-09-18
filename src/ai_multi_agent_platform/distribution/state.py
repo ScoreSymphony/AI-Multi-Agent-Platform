@@ -52,6 +52,7 @@ class RegistryInstallationSnapshot:
             license=self.license,
             provenance=self.provenance,
             item_type=self.item_type,
+            dependencies=self.dependencies,
         )
         if self.item_type is not None:
             object.__setattr__(self, "item_type", parse_registry_item_kind(self.item_type))
@@ -89,6 +90,7 @@ class RegistryInstallationSnapshot:
             license=self.license,
             provenance=self.provenance,
             item_type=self.item_type,
+            dependencies=self.dependencies,
         )
 
 
