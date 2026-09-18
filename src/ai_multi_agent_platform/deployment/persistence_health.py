@@ -163,7 +163,6 @@ class SingleNodePersistenceHealthProvider(ProviderContract):
         status = self._status_for(diagnostics)
         return status, tuple(diagnostics), checked_store_count, free_space_state
 
-
     def _probe_unowned_file_temp_state(self) -> tuple[PersistenceDiagnostic, ...]:
         """Report temp state that the File owner cannot prove belongs to a pending write."""
 
