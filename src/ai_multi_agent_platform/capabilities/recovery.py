@@ -93,7 +93,7 @@ class ExternalEffectReconciler(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ExternalEffectRecoveryEvent:
-    """Content-free recovery transition suitable for #16 telemetry/timeline export."""
+    """Content-free recovery transition suitable for telemetry and timeline export."""
 
     event_name: str
     effect_id: str
@@ -446,10 +446,7 @@ class ExternalEffectRecoveryCoordinator:
                     ),
                     uncertain,
                 )
-                if (
-                    disposition
-                    is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
-                ):
+                if disposition is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW:
                     await self._emit("external_effect.manual_review_required", uncertain)
 
     async def reconcile_effect(self, effect_id: str) -> ExternalEffectRecoveryRecord:
@@ -525,10 +522,7 @@ class ExternalEffectRecoveryCoordinator:
             current = self.repository.get(effect_id)
             settled = self.repository.save(_apply_observation(current, observation))
             await self._emit("external_effect.reconciliation_completed", settled)
-            if (
-                settled.disposition
-                is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
-            ):
+            if settled.disposition is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW:
                 await self._emit("external_effect.manual_review_required", settled)
             elif settled.disposition is ExternalEffectRecoveryDisposition.SAFE_TO_RETRY:
                 await self._emit("external_effect.retry_safe", settled)
@@ -553,10 +547,7 @@ class ExternalEffectRecoveryCoordinator:
                 )
             )
             await self._emit("external_effect.reconciliation_failed", failed)
-            if (
-                disposition
-                is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
-            ):
+            if disposition is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW:
                 await self._emit("external_effect.manual_review_required", failed)
             return failed
 
@@ -593,10 +584,7 @@ class ExternalEffectRecoveryCoordinator:
                     ),
                     record,
                 )
-                if (
-                    disposition
-                    is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
-                ):
+                if disposition is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW:
                     await self._emit("external_effect.manual_review_required", record)
             elif record.status is ExternalEffectRecoveryStatus.RECONCILING:
                 record = self.repository.save(
@@ -741,8 +729,7 @@ class ExternalEffectRecoveryCoordinator:
                 replace(
                     existing,
                     canonical_tool_invocation_id=(
-                        record.canonical_tool_invocation_id
-                        or existing.canonical_tool_invocation_id
+                        record.canonical_tool_invocation_id or existing.canonical_tool_invocation_id
                     ),
                     status=ExternalEffectRecoveryStatus.DISPATCHING,
                     reason="retry_dispatch_started",
@@ -784,10 +771,7 @@ class ExternalEffectRecoveryCoordinator:
             and record.idempotency_key is not None
         ):
             return ExternalEffectRecoveryDisposition.SAFE_TO_RETRY
-        if (
-            record.reconciliation_support
-            is ExternalEffectReconciliationSupport.SUPPORTED
-        ):
+        if record.reconciliation_support is ExternalEffectReconciliationSupport.SUPPORTED:
             return ExternalEffectRecoveryDisposition.RECONCILE_WITH_PROVIDER
         return ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
 
@@ -880,12 +864,8 @@ def _apply_observation(
 ) -> ExternalEffectRecoveryRecord:
     common = {
         "result_ref": observation.result_ref or record.result_ref,
-        "artifact_refs": tuple(
-            dict.fromkeys((*record.artifact_refs, *observation.artifact_refs))
-        ),
-        "evidence_refs": tuple(
-            dict.fromkeys((*record.evidence_refs, *observation.evidence_refs))
-        ),
+        "artifact_refs": tuple(dict.fromkeys((*record.artifact_refs, *observation.artifact_refs))),
+        "evidence_refs": tuple(dict.fromkeys((*record.evidence_refs, *observation.evidence_refs))),
         "adapter_metadata": observation.adapter_metadata or record.adapter_metadata,
         "updated_at": _utc_now(),
     }
