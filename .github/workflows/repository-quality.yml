@@ -201,6 +201,21 @@ jobs:
           python scripts/ci/validate_permanent_naming.py
           --base "${{ github.event.pull_request.base.sha }}"
           --head "${{ github.event.pull_request.head.sha }}"
+      - name: Audit repository-wide permanent naming
+        shell: bash
+        run: |
+          set +e
+          python scripts/ci/validate_permanent_naming.py --full-tree \
+            | tee .permanent-naming-full-tree.txt
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "## Permanent naming full-tree audit"
+            echo '~~~text'
+            cat .permanent-naming-full-tree.txt
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       - name: Audit migrated test inventory
         shell: bash
         run: |
