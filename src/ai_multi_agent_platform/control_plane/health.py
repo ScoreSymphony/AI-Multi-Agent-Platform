@@ -32,10 +32,16 @@ class ControlPlaneHealth:
             descriptor = provider.descriptor
             probe_error: str | None = None
             probe_succeeded = False
+            provider_timeout = getattr(provider, "health_timeout_seconds", None)
+            timeout_seconds = (
+                float(provider_timeout)
+                if isinstance(provider_timeout, (int, float)) and provider_timeout > 0
+                else self._probe_timeout_seconds
+            )
             try:
                 status = await asyncio.wait_for(
                     provider.health(),
-                    timeout=self._probe_timeout_seconds,
+                    timeout=timeout_seconds,
                 )
                 probe_succeeded = True
             except asyncio.CancelledError:
