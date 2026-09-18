@@ -141,10 +141,7 @@ def _load(value: str) -> dict[str, JsonValue]:
 
 
 def _metadata_to_json(metadata: tuple[AdapterMetadata, ...]) -> JsonValue:
-    return [
-        {"namespace": item.namespace, "values": dict(item.values)}
-        for item in metadata
-    ]
+    return [{"namespace": item.namespace, "values": dict(item.values)} for item in metadata]
 
 
 def _metadata_from_json(value: JsonValue) -> tuple[AdapterMetadata, ...]:
@@ -223,9 +220,7 @@ def _record_from_json(data: dict[str, JsonValue]) -> ExternalEffectRecoveryRecor
         reason=cast(str, data["reason"]),
         dispatch_attempts=int(cast(int, data.get("dispatch_attempts", 1))),
         reconciliation_attempts=int(cast(int, data.get("reconciliation_attempts", 0))),
-        duplicate_callbacks_ignored=int(
-            cast(int, data.get("duplicate_callbacks_ignored", 0))
-        ),
+        duplicate_callbacks_ignored=int(cast(int, data.get("duplicate_callbacks_ignored", 0))),
         result_ref=cast(str | None, data.get("result_ref")),
         artifact_refs=tuple(cast(list[str], data.get("artifact_refs", []))),
         evidence_refs=tuple(cast(list[str], data.get("evidence_refs", []))),
