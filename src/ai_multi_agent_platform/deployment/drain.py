@@ -39,9 +39,9 @@ from ai_multi_agent_platform.observability import (
 )
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
-_ASGI_MUTATION_ADMITTED: ContextVar[bool] = ContextVar(
+_ASGI_MUTATION_ADMITTED: ContextVar[object | None] = ContextVar(
     "single_node_drain_asgi_mutation_admitted",
-    default=False,
+    default=None,
 )
 
 
@@ -338,7 +338,7 @@ class DrainAwareAuthenticatedControlPlaneHTTP(AuthenticatedControlPlaneHTTP):
 
     async def handle(self, request: HTTPRequest) -> HTTPResponse:
         method = request.method.upper()
-        if method not in _SAFE_METHODS and not _ASGI_MUTATION_ADMITTED.get():
+        if method not in _SAFE_METHODS and _ASGI_MUTATION_ADMITTED.get() is not self._drain:
             if not await self._drain.try_admit_mutation():
                 return self._draining_response(request)
             try:
@@ -419,7 +419,7 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
             await _send_response(self._http._draining_response(request), send)
             return
 
-        token = _ASGI_MUTATION_ADMITTED.set(True)
+        token = _ASGI_MUTATION_ADMITTED.set(self._drain)
         try:
             await super().__call__(scope, receive, send)
         finally:
