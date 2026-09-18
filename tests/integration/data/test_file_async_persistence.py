@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
-from datetime import UTC, datetime
 import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -307,6 +307,38 @@ def test_file_restart_tombstones_only_owned_pending_crash_state(tmp_path: Path) 
         with pytest.raises(ContractError) as raised:
             await restarted.get_file(file_id, context)
         assert raised.value.code is ErrorCode.NOT_FOUND
+
+    asyncio.run(scenario())
+
+
+def test_file_fsync_failure_never_becomes_canonical(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    async def scenario() -> None:
+        context = _context()
+        root = tmp_path / "objects"
+        database = tmp_path / "files.sqlite3"
+        provider = LocalFileProvider(root, database)
+        file_id = new_id("file")
+        failure = FailOnceFilesystemOperation(
+            reference_file.os.fsync,
+            error=OSError("injected fsync failure"),
+        )
+        monkeypatch.setattr(reference_file.os, "fsync", failure)
+
+        with pytest.raises(ContractError) as raised:
+            await provider.create_file(b"payload", context, file_id=file_id)
+
+        assert raised.value.code is ErrorCode.BACKEND_ERROR
+        assert failure.calls == 1
+        assert not (root / file_id).exists()
+        assert not (root / f".{file_id}.pending").exists()
+
+        restarted = LocalFileProvider(root, database)
+        with pytest.raises(ContractError) as still_missing:
+            await restarted.get_file(file_id, context)
+        assert still_missing.value.code is ErrorCode.NOT_FOUND
 
     asyncio.run(scenario())
 
