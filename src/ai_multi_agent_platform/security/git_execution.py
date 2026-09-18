@@ -63,7 +63,9 @@ _DANGEROUS_CONFIG_EXACT = frozenset(
     }
 )
 _REMOTE_HELPER = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*::")
-_ALLOWED_URL_SCHEMES = frozenset({"file", "git", "http", "https", "ssh"})
+_SCP_REMOTE = re.compile(r"^(?:[^/@:\\\\]+@)?[^/:\\\\]+:.+$")
+_WINDOWS_ABSOLUTE_PATH = re.compile(r"^[A-Za-z]:[\\\\/]")
+_ALLOWED_URL_SCHEMES = frozenset({"git", "http", "https", "ssh"})
 
 
 def controlled_git_environment(
@@ -159,7 +161,7 @@ def unsafe_local_git_config_keys(keys: Iterable[str]) -> tuple[str, ...]:
 
 
 def validate_git_remote_url(url: str) -> str:
-    """Reject Git remote-helper execution while preserving built-in transports and local paths."""
+    """Reject executable-indirection and same-host filesystem remotes."""
 
     value = url.strip()
     if not value:
@@ -167,8 +169,17 @@ def validate_git_remote_url(url: str) -> str:
     lowered = value.lower()
     if lowered.startswith("ext::") or _REMOTE_HELPER.match(value):
         raise ValueError("Git external remote-helper syntax is not supported")
+    if lowered.startswith("file://"):
+        raise ValueError("Git local filesystem remotes are not supported")
     if "://" in value:
         scheme = value.split("://", 1)[0].lower()
         if scheme not in _ALLOWED_URL_SCHEMES:
             raise ValueError(f"Git remote URL scheme is not supported: {scheme}")
+        return value
+    if (
+        value.startswith(("/", "./", "../", "~/", "\\\\"))
+        or _WINDOWS_ABSOLUTE_PATH.match(value)
+        or _SCP_REMOTE.match(value) is None
+    ):
+        raise ValueError("Git local filesystem remotes are not supported")
     return value
