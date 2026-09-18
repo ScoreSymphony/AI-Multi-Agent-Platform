@@ -43,7 +43,6 @@ from ai_multi_agent_platform.portability import (
     PortableResource,
     seal_resource,
 )
-from ai_multi_agent_platform.security.redaction import redact_sensitive
 from ai_multi_agent_platform.skills.codec import skill_revision_from_json
 from ai_multi_agent_platform.skills.models import SkillRevision
 from ai_multi_agent_platform.skills.service import SkillService
@@ -74,105 +73,6 @@ def _json_object(artifact: bytes, *, label: str) -> dict[str, object]:
             f"{label} artifact must be a JSON object",
         )
     return value
-
-
-def _sensitive_mapping_key(key: str) -> bool:
-    probe = cast(JsonValue, {key: "marketplace-sensitive-probe"})
-    return redact_sensitive(probe) != probe
-
-
-def _contains_nonempty_schema_value(value: object) -> bool:
-    if value is None:
-        return False
-    if isinstance(value, str):
-        return bool(value.strip()) and value != "[REDACTED]"
-    if isinstance(value, list):
-        return any(_contains_nonempty_schema_value(item) for item in value)
-    if isinstance(value, dict):
-        return any(_contains_nonempty_schema_value(item) for item in value.values())
-    return False
-
-
-def _assert_value_free_sensitive_schema(
-    schema: object,
-    *,
-    label: str,
-    sensitive_context: bool = False,
-) -> None:
-    if isinstance(schema, list):
-        for item in schema:
-            _assert_value_free_sensitive_schema(
-                item,
-                label=label,
-                sensitive_context=sensitive_context,
-            )
-        return
-    if not isinstance(schema, dict):
-        return
-
-    if sensitive_context:
-        for field in ("default", "const", "examples", "enum"):
-            if field in schema and _contains_nonempty_schema_value(schema[field]):
-                raise ContractError(
-                    ErrorCode.INVALID_CONFIGURATION,
-                    (
-                        f"{label} Marketplace configuration schema must not embed "
-                        f"credential values in {field}"
-                    ),
-                )
-
-    properties = schema.get("properties")
-    if isinstance(properties, dict):
-        for property_name, property_schema in properties.items():
-            child_sensitive = sensitive_context or (
-                isinstance(property_name, str) and _sensitive_mapping_key(property_name)
-            )
-            _assert_value_free_sensitive_schema(
-                property_schema,
-                label=label,
-                sensitive_context=child_sensitive,
-            )
-
-    for keyword in (
-        "$defs",
-        "definitions",
-        "items",
-        "allOf",
-        "anyOf",
-        "oneOf",
-        "not",
-        "if",
-        "then",
-        "else",
-        "additionalProperties",
-    ):
-        if keyword in schema:
-            _assert_value_free_sensitive_schema(
-                schema[keyword],
-                label=label,
-                sensitive_context=sensitive_context,
-            )
-
-
-def _assert_no_plaintext_credentials(
-    document: dict[str, object],
-    *,
-    label: str,
-) -> None:
-    """Reject secret-bearing package metadata while allowing value-free configuration schemas."""
-
-    scan_document = dict(document)
-    configuration_schema = scan_document.pop("configuration_schema", None)
-    json_document = cast(JsonValue, scan_document)
-    if redact_sensitive(json_document) != json_document:
-        raise ContractError(
-            ErrorCode.INVALID_CONFIGURATION,
-            (
-                f"{label} Marketplace package must not embed plaintext credentials; "
-                "configure canonical secret references after installation"
-            ),
-        )
-    _assert_value_free_sensitive_schema(configuration_schema, label=label)
 
 
 class PluginMarketplaceKindHandler:
@@ -263,11 +163,6 @@ class PluginExtensionMarketplaceKindHandler:
                     f"{item.kind} Marketplace artifact must declare at least one "
                     f"{self._extension_type.value} extension"
                 ),
-            )
-        if self._kind is RegistryItemType.MODEL_PROVIDER:
-            _assert_no_plaintext_credentials(
-                _json_object(artifact, label="model provider"),
-                label="Model Provider",
             )
         return manifest
 
