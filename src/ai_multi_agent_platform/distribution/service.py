@@ -278,6 +278,23 @@ class DistributionService:
         )
         return candidate_describer(item, artifact)
 
+    def describe_candidate(
+        self,
+        item: RegistryItem,
+    ) -> Mapping[str, object] | None:
+        handler = self._kind_handlers.get(item.item_type)
+        if handler is None:
+            return None
+        describe_candidate = getattr(handler, "describe_candidate", None)
+        if describe_candidate is None:
+            return None
+        artifact = self._fetch_artifact(self._require_provider(), item)
+        candidate_describer = cast(
+            Callable[[RegistryItem, bytes], Mapping[str, object]],
+            describe_candidate,
+        )
+        return candidate_describer(item, artifact)
+
     async def status(self, item_or_id: RegistryItem | str) -> object | None:
         if isinstance(item_or_id, RegistryItem):
             handler = self._kind_handlers.get(item_or_id.item_type)
