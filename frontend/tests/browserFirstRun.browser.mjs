@@ -412,6 +412,9 @@ try {
   if ((await resultCard.getByRole("link", { name: "Run", exact: true }).count()) < 4) {
     throw new Error("Official browser result did not expose all canonical Step runs");
   }
+  if ((await resultCard.locator('a[href^="/artifacts/"]').count()) < 1) {
+    throw new Error("Official browser result did not expose a canonical Artifact link");
+  }
   if (chatCompletionCount < 5) {
     throw new Error(`Official browser first run did not execute the real local model path: ${chatCompletionCount} completion calls`);
   }
