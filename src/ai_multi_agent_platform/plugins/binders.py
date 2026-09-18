@@ -77,7 +77,8 @@ class ConnectorRegistryBinder:
                 except ContractError as lookup_error:
                     if lookup_error.code is not ErrorCode.UNAVAILABLE:
                         register_error.add_note(
-                            "connector provider registration rollback could not inspect runtime state"
+                            "connector provider registration rollback could not inspect "
+                            "runtime state"
                         )
                 else:
                     if current is provider:
