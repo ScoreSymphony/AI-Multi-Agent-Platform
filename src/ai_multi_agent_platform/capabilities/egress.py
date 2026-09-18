@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ai_multi_agent_platform.contracts import (
+    ContractError,
     DataClassification,
     EgressRequest,
     EgressTarget,
@@ -24,7 +25,11 @@ from .invocation import (
 from .invocation import (
     CapabilityInvoker as BaseCapabilityInvoker,
 )
-from .recovery import ExternalEffectInvocationObserver, ExternalEffectRecoveryCoordinator
+from .recovery import (
+    ExternalEffectInvocationObserver,
+    ExternalEffectRecoveryCoordinator,
+    ExternalEffectRecoveryDisposition,
+)
 from .registry import CapabilityRegistry
 from .types import (
     CapabilityInvocation,
@@ -116,7 +121,33 @@ class EgressCapabilityInvoker(BaseCapabilityInvoker):
                         },
                     )
                 )
-            return await super().invoke(request)
+            try:
+                return await super().invoke(request)
+            except ContractError as exc:
+                if recovery is None:
+                    raise
+                record = recovery.find_record_by_invocation(request.invocation_id)
+                if (
+                    record is None
+                    or record.disposition is ExternalEffectRecoveryDisposition.SAFE_TO_RETRY
+                ):
+                    raise
+                details = dict(exc.details)
+                details.update(
+                    {
+                        "external_effect_id": record.effect_id,
+                        "recovery_disposition": record.disposition.value,
+                        "permitted_actions": list(record.permitted_actions),
+                    }
+                )
+                raise ContractError(
+                    exc.code,
+                    exc.message,
+                    retryable=False,
+                    provider_id=exc.provider_id,
+                    details=details,
+                    adapter_metadata=exc.adapter_metadata,
+                ) from exc
         finally:
             if recovery is not None:
                 await recovery.discard_unstarted_attempt(request.invocation_id)
