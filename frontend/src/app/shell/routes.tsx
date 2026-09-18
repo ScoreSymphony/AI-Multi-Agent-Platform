@@ -132,6 +132,11 @@ export function renderShellRoute({
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
   const pluginCandidatesAvailable = manifest?.resources.includes("plugin-candidates") ?? false;
+  const repositoryManagement = {
+    attachLocal: manifest?.commands.includes("repository.local.attach") ?? false,
+    discover: manifest?.commands.includes("repository.discover") ?? false,
+    detach: manifest?.commands.includes("repository.detach") ?? false,
+  };
   const approvalDecisionState = approvalDecisionManifestState(manifestState, manifest);
   const learningCapabilities = learningManifestCapabilities(manifestState, manifest);
 
@@ -141,8 +146,8 @@ export function renderShellRoute({
   if (path === "/projects") return <ProjectsPage client={client} />;
   if (projectMatch) return <ProjectDetailPage client={client} projectId={projectMatch.projectId} />;
   if (workspaceMatch) return <WorkspaceDetailPage client={client} workspaceId={workspaceMatch.workspaceId} />;
-  if (path === "/repositories") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Repositories" resource="repositories"><RepositoriesPage client={repositoryClient} /></ManifestResourcePage>;
-  if (repositoryMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Repositories" resource="repositories"><RepositoryDetailPage client={repositoryClient} repositoryId={repositoryMatch.repositoryId} /></ManifestResourcePage>;
+  if (path === "/repositories") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Repositories" resource="repositories"><RepositoriesPage client={repositoryClient} management={repositoryManagement} /></ManifestResourcePage>;
+  if (repositoryMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Repositories" resource="repositories"><RepositoryDetailPage client={repositoryClient} repositoryId={repositoryMatch.repositoryId} management={repositoryManagement} /></ManifestResourcePage>;
   if (path === "/tasks") return <ManagedTasksPage client={client} />;
   if (taskManagementMatch) return <TaskManagementDetailPage client={client} taskId={taskManagementMatch.taskId} />;
   if (taskMatch) return <VerificationBoundTaskDetailPage client={client} verificationClient={verificationClient} taskId={taskMatch.taskId} />;
