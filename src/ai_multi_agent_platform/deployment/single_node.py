@@ -6,7 +6,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.accounting import AccountingService
-from ai_multi_agent_platform.agents import AgentRuntime, AgentService
+from ai_multi_agent_platform.agents import (
+    AgentOrchestratorMapperRegistry,
+    AgentRuntime,
+    AgentService,
+)
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.capabilities.assignments import CapabilityAssignmentService
 from ai_multi_agent_platform.configuration import SecretProvider
@@ -144,6 +148,7 @@ class SingleNodeDeployment:
     agents: AgentService
     conversations: ConversationService
     agent_runtime: AgentRuntime
+    agent_orchestrator_mappers: AgentOrchestratorMapperRegistry
     capabilities: CapabilityRegistry
     capability_assignments: CapabilityAssignmentService
     models: ModelRegistry
@@ -422,6 +427,7 @@ def _assemble_deployment(
         agents=runtime.agents,
         conversations=runtime.conversations,
         agent_runtime=runtime.agent_runtime,
+        agent_orchestrator_mappers=runtime.orchestrator_mappers,
         capabilities=runtime.capabilities,
         capability_assignments=platform_services.capability_assignments,
         models=runtime.models,
