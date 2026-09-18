@@ -666,6 +666,60 @@ async def test_manifest_backed_tool_reconciles_into_plugin_owner_after_restart(
     assert plugin_registry.get(item.item_id).plugin_version == item.version
 
 
+async def test_semantic_orchestrator_installation_reconciles_only_into_plugin_owner_after_restart(
+    tmp_path,
+) -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.orchestrator-plugin",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="orchestrator.reference",
+                extension_type=ExtensionType.ORCHESTRATOR,
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+    )
+    item = _item(
+        RegistryItemType.ORCHESTRATOR,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    artifact = _plugin_artifact(manifest)
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+    )
+    installations = JsonRegistryInstallationStore(
+        tmp_path / "semantic-orchestrator-restart.json"
+    )
+    installations.record(
+        item,
+        provider_id=provider.provider_id,
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+    orchestrators = OrchestratorRegistry(
+        {"reference": ReferenceOrchestrator()}
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.ORCHESTRATOR: frozenset({"1.0"})},
+        binders={ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(orchestrators)},
+    )
+
+    restored = await reconcile_registry_plugins(provider, installations, plugin_registry)
+
+    assert restored == (item.item_id,)
+    assert plugin_registry.get(item.item_id).state.value == "installed"
+    assert "orchestrator.reference" not in orchestrators.orchestrator_ids
+    assert "reference" in orchestrators.orchestrator_ids
+
+
 async def test_reconciliation_rejects_same_version_with_different_owner_manifest(
     tmp_path,
 ) -> None:
