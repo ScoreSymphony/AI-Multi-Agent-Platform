@@ -419,9 +419,7 @@ async def test_agent_and_team_full_marketplace_flow_uses_canonical_owner(tmp_pat
     discovered = service.search(
         RegistryQuery(
             text="Research",
-            item_types=frozenset(
-                {RegistryItemType.AGENT, RegistryItemType.AGENT_TEAM}
-            ),
+            item_types=frozenset({RegistryItemType.AGENT, RegistryItemType.AGENT_TEAM}),
         )
     )
     assert {candidate.item_id for candidate in discovered} == {
@@ -931,8 +929,7 @@ async def test_model_provider_secret_package_is_blocked_during_marketplace_previ
 
     assert preview.activation_allowed is False
     assert any(
-        finding.code == "owner_candidate_invalid"
-        and "credentials" in finding.message.lower()
+        finding.code == "owner_candidate_invalid" and "credentials" in finding.message.lower()
         for finding in preview.findings
     )
     assert plugin_registry.list_plugins() == ()
@@ -1247,9 +1244,7 @@ async def test_model_provider_reconciliation_rejects_secret_bearing_package(
         (item,),
         {(item.item_id, item.version): artifact},
     )
-    installations = JsonRegistryInstallationStore(
-        tmp_path / "secret-model-provider-restart.json"
-    )
+    installations = JsonRegistryInstallationStore(tmp_path / "secret-model-provider-restart.json")
     installations.record(
         item,
         provider_id=provider.provider_id,
