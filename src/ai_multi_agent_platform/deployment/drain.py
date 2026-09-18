@@ -23,7 +23,7 @@ from ai_multi_agent_platform.control_plane import (
     HTTPResponse,
 )
 from ai_multi_agent_platform.control_plane.http import ASGIReceive, ASGISend, _header
-from ai_multi_agent_platform.control_plane.models import APIException
+from ai_multi_agent_platform.control_plane.models import API_VERSION, APIException
 from ai_multi_agent_platform.observability import (
     FailureComponent,
     Telemetry,
@@ -330,6 +330,16 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
         scope_type = scope.get("type")
         if scope_type == "websocket":
             if not await self._drain.try_admit_mutation():
+                connect = await receive()
+                if connect.get("type") != "websocket.connect":
+                    await send(
+                        {
+                            "type": "websocket.close",
+                            "code": 1002,
+                            "reason": "websocket.connect required",
+                        }
+                    )
+                    return
                 await send(
                     {
                         "type": "websocket.close",
@@ -368,6 +378,8 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
                 shutdown_response_sent = True
                 detail = str(message.get("message", "ASGI lifespan shutdown failed"))
                 await self._drain.mark_teardown_failure(detail)
+                await self._drain.mark_forced("resource_teardown_failure")
+                await self._drain.mark_completed()
             await send(message)
 
         base_call = super().__call__
@@ -401,8 +413,20 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
         except TimeoutError:
             await self._drain.mark_forced("resource_teardown_timeout")
             inner_task.cancel()
-            with suppress(asyncio.CancelledError):
+            try:
                 await inner_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                await self._drain.mark_teardown_failure(type(exc).__name__)
+            if not shutdown_response_sent:
+                await send({"type": "lifespan.shutdown.complete"})
+            await self._drain.mark_completed()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            await self._drain.mark_teardown_failure(type(exc).__name__)
+            await self._drain.mark_forced("resource_teardown_failure")
             if not shutdown_response_sent:
                 await send({"type": "lifespan.shutdown.complete"})
             await self._drain.mark_completed()
@@ -410,11 +434,14 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
 
 def _is_health_path(path: str) -> bool:
     normalized = path.rstrip("/")
-    return normalized.endswith("/health") or normalized.endswith("/readiness")
+    return normalized in {
+        f"/api/{API_VERSION}/health",
+        f"/api/{API_VERSION}/readiness",
+    }
 
 
 def _is_readiness_path(path: str) -> bool:
-    return path.rstrip("/").endswith("/readiness")
+    return path.rstrip("/") == f"/api/{API_VERSION}/readiness"
 
 
 def _overlay_draining_health(
