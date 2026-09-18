@@ -17,14 +17,13 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from time import monotonic
 
+from ai_multi_agent_platform.conformance.evidence import parse_runtime_evidence
 from ai_multi_agent_platform.security.git_execution import (
     controlled_git_environment,
     resolve_git_executable,
 )
-from time import monotonic
-
-from ai_multi_agent_platform.conformance.evidence import parse_runtime_evidence
 
 REPORT_SCHEMA = "ai-multi-agent-platform/platform-conformance/v1"
 _PACKAGE_NAME = "ai-multi-agent-platform"
