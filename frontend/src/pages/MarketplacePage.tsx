@@ -79,6 +79,8 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   const [platformVersion, setPlatformVersion] = useState("");
   const [installedFilter, setInstalledFilter] = useState<"" | "true" | "false">("");
   const [compatibilityFilter, setCompatibilityFilter] = useState<"" | "true" | "false">("");
+  const [deprecatedFilter, setDeprecatedFilter] = useState<"" | "true" | "false">("");
+  const [yankedFilter, setYankedFilter] = useState<"" | "true" | "false">("");
   const [technicalOnly, setTechnicalOnly] = useState(false);
   const [updatesOnly, setUpdatesOnly] = useState(false);
   const [sort, setSort] = useState("name");
@@ -105,6 +107,8 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     if (platformVersion.trim()) filters.platform_version = platformVersion.trim();
     if (installedFilter) filters.installed = installedFilter;
     if (compatibilityFilter) filters.compatible = compatibilityFilter;
+    if (deprecatedFilter) filters.deprecated = deprecatedFilter;
+    if (yankedFilter) filters.yanked = yankedFilter;
     if (technicalOnly) filters.technical_component = "true";
     if (updatesOnly) filters.update_available = "true";
     return {
@@ -117,6 +121,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   }, [
     category,
     compatibilityFilter,
+    deprecatedFilter,
     direction,
     installedFilter,
     kindFilter,
@@ -132,6 +137,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     technicalOnly,
     trustStatus,
     updatesOnly,
+    yankedFilter,
   ]);
 
   const load = useCallback(
@@ -320,6 +326,8 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     setPlatformVersion("");
     setInstalledFilter("");
     setCompatibilityFilter("");
+    setDeprecatedFilter("");
+    setYankedFilter("");
     setTechnicalOnly(false);
     setUpdatesOnly(false);
     setSort("name");
@@ -351,7 +359,14 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
       requiredCapability.trim() ||
       platformVersion.trim()
     ) ||
-    Boolean(installedFilter || compatibilityFilter || technicalOnly || updatesOnly);
+    Boolean(
+      installedFilter ||
+      compatibilityFilter ||
+      deprecatedFilter ||
+      yankedFilter ||
+      technicalOnly ||
+      updatesOnly
+    );
 
   const providerDisabled = error ? providerLooksDisabled(error) : false;
 
@@ -464,6 +479,32 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
               <option value="">All compatibility states</option>
               <option value="true">Compatible</option>
               <option value="false">Incompatible</option>
+            </select>
+          </label>
+          <label>
+            Deprecated state
+            <select
+              value={deprecatedFilter}
+              onChange={(event) =>
+                setDeprecatedFilter(event.target.value as "" | "true" | "false")
+              }
+            >
+              <option value="">Active catalog default</option>
+              <option value="true">Deprecated</option>
+              <option value="false">Not deprecated</option>
+            </select>
+          </label>
+          <label>
+            Yanked state
+            <select
+              value={yankedFilter}
+              onChange={(event) =>
+                setYankedFilter(event.target.value as "" | "true" | "false")
+              }
+            >
+              <option value="">Active catalog default</option>
+              <option value="true">Yanked</option>
+              <option value="false">Not yanked</option>
             </select>
           </label>
           <label>
@@ -661,7 +702,11 @@ function MarketplaceItemCard({
       <dl className="detail-grid">
         <dt>Publisher</dt><dd>{item.publisher || "unknown"}</dd>
         <dt>Version</dt><dd>{item.version}</dd>
-        <dt>Source</dt><dd>{item.source?.repository || "not recorded"}</dd>
+        <dt>Marketplace source</dt><dd>{item.source_registry ?? item.source?.registry ?? "not recorded"}</dd>
+        <dt>Source repository</dt><dd>{item.source?.repository || "not recorded"}</dd>
+        <dt>Provenance</dt><dd>{item.provenance || "not recorded"}</dd>
+        <dt>Maturity</dt><dd>{item.maturity ?? item.stability ?? "not recorded"}</dd>
+        <dt>Compatibility</dt><dd>{compatible === null ? "not evaluated" : compatible ? "compatible" : "incompatible"}</dd>
         <dt>State</dt><dd>{itemStateLabel(item)}</dd>
       </dl>
       <button type="button" onClick={onInspect}>Inspect</button>
@@ -705,8 +750,7 @@ function MarketplaceDetail({
     !item.released_at ||
     !item.changelog ||
     !item.integrity?.sha256;
-  const managementPath =
-    descriptor.management_path ?? (item.item_type === "application" ? "/applications" : null);
+  const managementPath = descriptor.management_path ?? null;
   const previewBlocked = preview !== null && !preview.activation_allowed;
   const handlerMissing =
     missingHandler(item) ||
@@ -745,7 +789,8 @@ function MarketplaceDetail({
         <dt>Canonical ID</dt><dd><CanonicalId value={item.item_id} /></dd>
         <dt>Publisher</dt><dd>{item.publisher || "unknown"}</dd>
         <dt>Version</dt><dd>{item.version}</dd>
-        <dt>Source</dt><dd>{item.source?.repository || "not recorded"}</dd>
+        <dt>Marketplace source</dt><dd>{item.source_registry ?? item.source?.registry ?? "not recorded"}</dd>
+        <dt>Source repository</dt><dd>{item.source?.repository || "not recorded"}</dd>
         <dt>Package</dt><dd>{item.source?.package_reference ?? "—"}</dd>
         <dt>Revision</dt><dd>{item.source?.revision ?? "unknown"}</dd>
         <dt>License</dt><dd>{item.license || "not recorded"}</dd>
@@ -848,17 +893,15 @@ function MarketplaceDetail({
         />
       ) : null}
 
-      {item.item_type === "application" ? (
+      {managementPath ? (
         <div>
-          <h3>Application ownership</h3>
+          <h3>Canonical owner management</h3>
           <p>
-            Marketplace owns discovery, definition inspection and install/update delegation only.
-            Start, stop, restart, health and runtime lifecycle remain in Applications.
+            Marketplace owns discovery and distribution only. Runtime and operational lifecycle
+            remain in the canonical owner surface advertised for this component kind.
           </p>
-          <a href={managementPath ?? "/applications"}>Open Application management</a>
+          <a href={managementPath}>Open {kindLabel(descriptor)} management</a>
         </div>
-      ) : managementPath ? (
-        <p><a href={managementPath}>Open canonical management</a></p>
       ) : null}
 
       <div className="button-row">
@@ -1369,7 +1412,14 @@ function mergeKindDescriptors(
 ): RegistryKindDescriptor[] {
   const merged = new Map<string, RegistryKindDescriptor>();
   for (const entry of FALLBACK_KIND_DESCRIPTORS) merged.set(entry.kind, entry);
-  for (const entry of serverKinds) merged.set(entry.kind, entry);
+  for (const entry of serverKinds) {
+    const fallback = merged.get(entry.kind);
+    merged.set(entry.kind, {
+      ...fallback,
+      ...entry,
+      management_path: entry.management_path ?? fallback?.management_path ?? null,
+    });
+  }
   for (const item of items) {
     if (!merged.has(item.item_type)) {
       merged.set(item.item_type, fallbackDescriptor(item.item_type, item.route));
@@ -1383,7 +1433,6 @@ function fallbackDescriptor(kind: string, route: RegistryKindDescriptor["default
     kind,
     humanizeKind(kind),
     route,
-    kind === "application" ? "/applications" : null,
   );
 }
 
