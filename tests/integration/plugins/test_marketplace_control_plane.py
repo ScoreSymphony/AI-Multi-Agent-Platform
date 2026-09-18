@@ -268,6 +268,26 @@ def _future_kind() -> RegistryItem:
     )
 
 
+def test_builtin_semantic_kind_metadata_uses_generic_control_plane_collection() -> None:
+    service = MarketplaceKindResourceService(DistributionService(None))
+
+    resources = asyncio.run(
+        service.list_resources(
+            _request(),
+            PageQuery(sort="kind"),
+        )
+    )
+    by_kind = {resource["kind"]: resource for resource in resources}
+
+    assert by_kind["agent"]["group"] == "ai_agents"
+    assert by_kind["agent"]["management_path"] == "/agents"
+    assert by_kind["agent_team"]["management_path"] == "/agent-teams"
+    assert by_kind["orchestrator"]["default_route"] == "kind_handler"
+    assert by_kind["orchestrator"]["management_path"] == "/plugins"
+    assert by_kind["executor"]["group"] == "platform_extensions"
+    assert by_kind["model_provider"]["management_path"] == "/models"
+
+
 def test_cross_kind_search_kind_filters_and_future_kind() -> None:
     items = (
         _tool("example.tool", "Example Tool"),
@@ -1345,6 +1365,9 @@ def test_future_kind_registry_controls_operations_and_same_version_source_switch
             "supports_install": True,
             "supports_update": True,
             "supports_uninstall": True,
+            "group": "other",
+            "owner_resource": None,
+            "management_path": None,
         },
     )
     assert detail["installed"] is True
