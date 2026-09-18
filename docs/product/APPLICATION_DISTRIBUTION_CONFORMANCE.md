@@ -79,7 +79,26 @@ Additional remote-result fail-closed evidence remains in:
 
 It rejects mismatched remote provenance, missing canonical artifacts and failed canonical File checksum verification.
 
+Recovery/idempotency evidence remains in:
+
+- `tests/integration/application_distribution/test_remote_worker_recovery.py`, which proves disconnect/reconnect and cancel-pending reconciliation preserve one canonical Worker job;
+- `tests/integration/application_distribution/test_remote_worker_lost_replies.py`, which proves uncertain dispatch/result replies become retryable and are reconciled without blind redispatch.
+
 The #751 Control Plane fixture additionally proves that admitted Worker/Node runtime provenance survives publication instead of being replaced by provider metadata.
+
+## Consumed #748 secret-environment evidence
+
+#748 completed the local/reference SecretReference-backed build-environment path. The maintained fixtures include:
+
+- `tests/integration/application_distribution/test_build_secret_environment.py`;
+- `tests/integration/application_distribution/test_build_secret_environment_fail_closed.py`;
+- `tests/integration/application_distribution/test_build_secret_rotation.py`;
+- `tests/integration/application_distribution/test_build_secret_hardening.py`;
+- `tests/integration/application_distribution/test_build_secret_canonical_failure.py`.
+
+They prove late scoped resolution, non-persistence/non-disclosure, fail-closed missing/revoked references and rotation/canonical failure behavior.
+
+The remote boundary is intentionally narrower today. `tests/integration/application_distribution/test_remote_build_security.py` proves a release with non-empty `secret_environment` fails before Worker dispatch until scoped Worker secret delivery exists. This is a real remaining limitation and must not be generalized into the obsolete claim that remote Worker application-build dispatch itself is unwired.
 
 ## Consumed #750 release-gate evidence
 
@@ -116,6 +135,11 @@ tests/integration/application_distribution/test_connector_authorization.py
 tests/integration/application_distribution/test_client_parity.py
 tests/integration/application_distribution/test_remote_worker_multitarget.py
 tests/integration/application_distribution/test_remote_worker_result_evidence.py
+tests/integration/application_distribution/test_remote_worker_recovery.py
+tests/integration/application_distribution/test_remote_worker_lost_replies.py
+tests/integration/application_distribution/test_remote_build_security.py
+tests/integration/application_distribution/test_build_secret_environment.py
+tests/integration/application_distribution/test_build_secret_environment_fail_closed.py
 tests/integration/application_distribution/test_release_gate_provenance.py
 tests/integration/application_distribution/test_release_gate_verification_restart.py
 tests/integration/application_distribution/test_release_gate_evaluation_orchestration.py
