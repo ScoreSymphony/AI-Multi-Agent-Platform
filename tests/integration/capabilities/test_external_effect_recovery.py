@@ -207,6 +207,38 @@ async def test_non_idempotent_timeout_blocks_blind_replay_and_is_not_retryable()
 
 
 @pytest.mark.asyncio
+async def test_concurrent_prepared_attempt_cannot_open_second_dispatch() -> None:
+    provider = _ExternalProvider(
+        ExternalEffectRecoveryPolicy(
+            idempotency=ExternalEffectIdempotency.NONE,
+            reconciliation=ExternalEffectReconciliationSupport.UNSUPPORTED,
+        )
+    )
+    registration = (await provider.capability_registrations())[0]
+    recovery = ExternalEffectRecoveryCoordinator(InMemoryExternalEffectRecoveryRepository())
+    request = _request(invocation_id="concurrent-dispatch", key="concurrent-key")
+
+    await recovery.prepare_attempt(request, registration.capability, registration)
+    await recovery.prepare_attempt(request, registration.capability, registration)
+    await recovery.begin_dispatch(
+        request.invocation_id,
+        canonical_tool_invocation_id=None,
+    )
+
+    with pytest.raises(ContractError) as duplicate:
+        await recovery.begin_dispatch(
+            request.invocation_id,
+            canonical_tool_invocation_id=None,
+        )
+
+    assert duplicate.value.code is ErrorCode.CONFLICT
+    record = recovery.find_record_by_invocation(request.invocation_id)
+    assert record is not None
+    assert record.status is ExternalEffectRecoveryStatus.DISPATCHING
+    assert record.dispatch_attempts == 1
+
+
+@pytest.mark.asyncio
 async def test_guaranteed_idempotency_allows_same_identity_retry_without_duplicate_effect() -> None:
     provider, recovery, invoker = await _runtime(
         ExternalEffectRecoveryPolicy(
