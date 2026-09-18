@@ -45,7 +45,11 @@ def test_persistence_health_accepts_complete_writable_single_node_state(
     async def scenario() -> None:
         config = SingleNodeConfig(data_dir=tmp_path / "data", secure_cookie=False)
         _seed_required_stores(config)
-        provider = SingleNodePersistenceHealthProvider(config, minimum_free_bytes=0)
+        provider = SingleNodePersistenceHealthProvider(
+            config,
+            minimum_free_bytes=0,
+            warning_free_bytes=0,
+        )
 
         assert await provider.health() is HealthStatus.HEALTHY
         assert provider.health_diagnostics == ()
@@ -75,7 +79,10 @@ def test_persistence_health_detects_atomic_write_or_rename_failure(
     async def scenario() -> None:
         config = SingleNodeConfig(data_dir=tmp_path / "data", secure_cookie=False)
         _seed_required_stores(config)
-        failure = FailOnceFilesystemOperation(persistence_health.os.replace)
+        failure = FailOnceFilesystemOperation(
+            persistence_health.os.replace,
+            error=PermissionError("injected permission denial"),
+        )
         monkeypatch.setattr(persistence_health.os, "replace", failure)
         provider = SingleNodePersistenceHealthProvider(config, minimum_free_bytes=0)
 
