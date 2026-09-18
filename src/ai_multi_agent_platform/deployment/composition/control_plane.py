@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from ai_multi_agent_platform import __version__
@@ -88,6 +89,8 @@ class HttpBundle:
 def build_health(
     storage: StorageBundle,
     execution: ExecutionBundle,
+    *,
+    draining: Callable[[], bool] | None = None,
 ) -> HealthBundle:
     """Build required single-node health dependencies explicitly."""
 
@@ -105,7 +108,8 @@ def build_health(
                     name="lifecycle",
                 ),
                 ProviderHealthDependency(storage.files, required=True, name="files"),
-            )
+            ),
+            draining=draining,
         )
     )
 
