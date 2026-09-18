@@ -37,6 +37,7 @@ export interface RegistryDependency {
   minimum_version: string | null;
   maximum_version: string | null;
   optional: boolean;
+  item_kind?: string | null;
   kind?: string | null;
   status?: "satisfied" | "missing" | "incompatible" | "unknown";
   installed_version?: string | null;
@@ -70,8 +71,18 @@ export interface RegistryInstallation {
 export interface RegistryCompatibility {
   minimum_platform_version?: string | null;
   maximum_platform_version?: string | null;
+  compatible?: boolean | null;
   platform_compatible?: boolean | null;
-  compatible?: boolean;
+  operating_system_compatible?: boolean | null;
+  architecture_compatible?: boolean | null;
+  operating_systems?: string[];
+  architectures?: string[];
+  required_runtimes?: string[];
+  missing_runtimes?: string[];
+  missing_capabilities?: string[];
+  missing_plugins?: string[];
+  missing_connectors?: string[];
+  missing_models?: string[];
   reasons?: string[];
   requirements?: string[];
 }
@@ -191,6 +202,7 @@ export interface MarketplaceDependencyResolution {
 }
 
 export interface MarketplaceCompatibilityDecision {
+  compatible: boolean;
   platform_compatible: boolean;
   operating_system_compatible: boolean;
   architecture_compatible: boolean;
@@ -207,6 +219,8 @@ export interface MarketplacePermissionDiff {
   added: string[];
   removed: string[];
   unchanged: string[];
+  changed: boolean;
+  escalated: boolean;
 }
 
 export interface MarketplaceProvenanceDiff {
@@ -223,19 +237,32 @@ export interface MarketplaceProvenanceDiff {
   candidate_revision: string | null;
   previous_artifact_sha256: string | null;
   candidate_artifact_sha256: string;
-  previous_signature: string | null;
-  candidate_signature: string | null;
+  previous_signature?: string | null;
+  candidate_signature?: string | null;
   previous_signature_key_id: string | null;
   candidate_signature_key_id: string | null;
   previous_trust_status: RegistryTrustStatus | null;
   candidate_trust_status: RegistryTrustStatus;
   previous_review_reference: string | null;
   candidate_review_reference: string | null;
+  source_changed: boolean;
+  publisher_changed: boolean;
+  repository_changed: boolean;
+  package_reference_changed: boolean;
+  revision_changed: boolean;
+  artifact_changed: boolean;
+  signature_changed: boolean;
+  signature_key_changed: boolean;
+  trust_changed: boolean;
+  trust_downgraded: boolean;
+  review_changed: boolean;
+  changed: boolean;
 }
 
 export interface MarketplaceApprovalRequirement {
   required: boolean;
   reasons: string[];
+  authorization_required: boolean;
 }
 
 export interface MarketplaceDecisionUpdateState {
@@ -262,12 +289,14 @@ export interface MarketplaceDecision {
   provenance_diff: MarketplaceProvenanceDiff;
   approval: MarketplaceApprovalRequirement;
   update_state: MarketplaceDecisionUpdateState;
+  dependency_blocked: boolean;
 }
 
 export interface RegistryPreview {
   id: string;
   type: "registry-preview";
   provider_id: string;
+  artifact_sha256: string;
   item: RegistryItem;
   route: RegistryRoute;
   activation_allowed: boolean;
@@ -293,6 +322,7 @@ export interface MarketplaceMutation {
   action: "install" | "update" | "uninstall";
   status: "applied";
   route: RegistryRoute;
+  decision: MarketplaceDecision;
   installation: RegistryInstallation | null;
 }
 
