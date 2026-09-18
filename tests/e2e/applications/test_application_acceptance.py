@@ -137,20 +137,21 @@ def _single_service_manifest(port: int) -> ApplicationManifest:
 
 
 def test_single_service_manifest_lifecycle_health_open_and_reconcile(tmp_path: Path) -> None:
+    deployment = build_default_single_node_deployment(
+        SingleNodeConfig(
+            data_dir=tmp_path / "single-service",
+            secure_cookie=False,
+        )
+    )
+    admin = deployment.bootstrap_admin("admin", _PASSWORD)
+    token = deployment.authentication.create_personal_access_token(
+        admin.user_id,
+        purpose="application-single-service-acceptance",
+    )
+    port = _unused_port()
+    manifest = _single_service_manifest(port)
+
     async def scenario() -> None:
-        deployment = build_default_single_node_deployment(
-            SingleNodeConfig(
-                data_dir=tmp_path / "single-service",
-                secure_cookie=False,
-            )
-        )
-        admin = deployment.bootstrap_admin("admin", _PASSWORD)
-        token = deployment.authentication.create_personal_access_token(
-            admin.user_id,
-            purpose="application-single-service-acceptance",
-        )
-        port = _unused_port()
-        manifest = _single_service_manifest(port)
         instance_id: str | None = None
 
         try:
@@ -304,42 +305,74 @@ def _marker_health(marker: Path) -> ApplicationHealthCheck:
 
 
 def test_multi_service_dependency_partial_failure_and_aggregate_health(tmp_path: Path) -> None:
-    async def scenario() -> None:
-        deployment = build_default_single_node_deployment(
-            SingleNodeConfig(
-                data_dir=tmp_path / "multi-service",
-                secure_cookie=False,
-            )
+    deployment = build_default_single_node_deployment(
+        SingleNodeConfig(
+            data_dir=tmp_path / "multi-service",
+            secure_cookie=False,
         )
-        admin = deployment.bootstrap_admin("admin", _PASSWORD)
-        token = deployment.authentication.create_personal_access_token(
-            admin.user_id,
-            purpose="application-multi-service-acceptance",
-        )
-        base_marker = tmp_path / "base-ready"
-        worker_marker = tmp_path / "worker-ready"
-        manifest = ApplicationManifest(
-            application_id=new_id("application"),
-            name="Multi-service acceptance fixture",
-            version="1.0.0",
-            description="Proves dependency ordering and aggregate health",
-            services=(
-                _marker_service(
-                    service_id="base",
-                    marker=base_marker,
-                    lifetime_seconds=30.0,
-                    health_check=_marker_health(base_marker),
-                ),
-                _marker_service(
-                    service_id="worker",
-                    marker=worker_marker,
-                    lifetime_seconds=0.5,
-                    depends_on=("base",),
-                    requires_marker=base_marker,
+    )
+    admin = deployment.bootstrap_admin("admin", _PASSWORD)
+    token = deployment.authentication.create_personal_access_token(
+        admin.user_id,
+        purpose="application-multi-service-acceptance",
+    )
+    base_marker = tmp_path / "base-ready"
+    worker_marker = tmp_path / "worker-ready"
+    manifest = ApplicationManifest(
+        application_id=new_id("application"),
+        name="Multi-service acceptance fixture",
+        version="1.0.0",
+        description="Proves dependency ordering and aggregate health",
+        services=(
+            _marker_service(
+                service_id="base",
+                marker=base_marker,
+                lifetime_seconds=30.0,
+                health_check=_marker_health(base_marker),
+            ),
+            _marker_service(
+                service_id="worker",
+                marker=worker_marker,
+                lifetime_seconds=0.5,
+                depends_on=("base",),
+                requires_marker=base_marker,
+            ),
+        ),
+        runtime_requirements=("local", "process"),
+    )
+    failing_base_marker = tmp_path / "partial-base-ready"
+    failing_worker_marker = tmp_path / "partial-worker-ready"
+    failing_manifest = ApplicationManifest(
+        application_id=new_id("application"),
+        name="Partial-start failure fixture",
+        version="1.0.0",
+        description="Proves cleanup when a dependent service cannot become healthy",
+        services=(
+            _marker_service(
+                service_id="base",
+                marker=failing_base_marker,
+                lifetime_seconds=30.0,
+                health_check=_marker_health(failing_base_marker),
+            ),
+            _marker_service(
+                service_id="worker",
+                marker=failing_worker_marker,
+                lifetime_seconds=30.0,
+                depends_on=("base",),
+                requires_marker=failing_base_marker,
+                health_check=ApplicationHealthCheck(
+                    kind=ApplicationHealthCheckKind.COMMAND,
+                    command=(sys.executable, "-c", "raise SystemExit(1)"),
+                    interval_seconds=0.02,
+                    timeout_seconds=0.2,
+                    retries=2,
                 ),
             ),
-            runtime_requirements=("local", "process"),
-        )
+        ),
+        runtime_requirements=("local", "process"),
+    )
+
+    async def scenario() -> None:
         instance_id: str | None = None
 
         try:
@@ -395,37 +428,6 @@ def test_multi_service_dependency_partial_failure_and_aggregate_health(tmp_path:
         finally:
             await _cleanup_instance(deployment, instance_id)
 
-        failing_base_marker = tmp_path / "partial-base-ready"
-        failing_worker_marker = tmp_path / "partial-worker-ready"
-        failing_manifest = ApplicationManifest(
-            application_id=new_id("application"),
-            name="Partial-start failure fixture",
-            version="1.0.0",
-            description="Proves cleanup when a dependent service cannot become healthy",
-            services=(
-                _marker_service(
-                    service_id="base",
-                    marker=failing_base_marker,
-                    lifetime_seconds=30.0,
-                    health_check=_marker_health(failing_base_marker),
-                ),
-                _marker_service(
-                    service_id="worker",
-                    marker=failing_worker_marker,
-                    lifetime_seconds=30.0,
-                    depends_on=("base",),
-                    requires_marker=failing_base_marker,
-                    health_check=ApplicationHealthCheck(
-                        kind=ApplicationHealthCheckKind.COMMAND,
-                        command=(sys.executable, "-c", "raise SystemExit(1)"),
-                        interval_seconds=0.02,
-                        timeout_seconds=0.2,
-                        retries=2,
-                    ),
-                ),
-            ),
-            runtime_requirements=("local", "process"),
-        )
         failed_instance_id: str | None = None
 
         try:
