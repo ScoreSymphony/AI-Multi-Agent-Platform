@@ -126,6 +126,7 @@ class ResourceType(StrEnum):
     INTEGRATION = "integration"
     SECRET_REFERENCE = "secret_reference"
     PLUGIN = "plugin"
+    APPLICATION = "application"
     ADMINISTRATIVE_SETTINGS = "administrative_settings"
     DECISION_RECORD = "decision_record"
     GENERIC = "generic"
