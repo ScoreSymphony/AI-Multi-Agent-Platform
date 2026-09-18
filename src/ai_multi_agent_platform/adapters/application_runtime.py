@@ -39,6 +39,7 @@ class ApplicationRuntimeComposition:
     runtimes: ApplicationRuntimeRegistry
     lifecycle: ApplicationLifecycleService
     audit: ApplicationAuditLog
+    audit_store: SqliteApplicationAuditStore
 
     async def reconcile_startup(self) -> StartupRecoveryExtensionReport:
         """Reconcile durable desired state without leaking backend diagnostics."""
@@ -111,6 +112,7 @@ def compose_application_runtime(
         runtimes=runtimes,
         lifecycle=lifecycle,
         audit=audit,
+        audit_store=audit_store,
     )
     deployment.startup_recovery_extensions = (
         *deployment.startup_recovery_extensions,
