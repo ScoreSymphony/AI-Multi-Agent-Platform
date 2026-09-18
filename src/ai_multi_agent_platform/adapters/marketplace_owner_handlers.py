@@ -17,6 +17,7 @@ from ai_multi_agent_platform.applications import (
     ApplicationInstance,
     ApplicationLifecycleService,
     ApplicationManifest,
+    ApplicationObservedState,
     ApplicationRepository,
     ApplicationRuntimeRegistry,
     application_manifest_from_document,
@@ -379,6 +380,7 @@ class ApplicationMarketplaceKindHandler:
                 application_id=application.application_id
             )
             if instance.application_version == application.version
+            and instance.observed_state is not ApplicationObservedState.REMOVED
         )
         if not instances:
             raise ContractError(
