@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable, Mapping
 from contextlib import suppress
+from contextvars import ContextVar
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -22,7 +23,12 @@ from ai_multi_agent_platform.control_plane import ControlPlaneASGI, HTTPRequest,
 from ai_multi_agent_platform.control_plane.first_user_bootstrap import (
     AuthenticatedControlPlaneHTTP,
 )
-from ai_multi_agent_platform.control_plane.http import ASGIReceive, ASGISend
+from ai_multi_agent_platform.control_plane.http import (
+    ASGIReceive,
+    ASGISend,
+    _decode_asgi_headers,
+    _send_response,
+)
 from ai_multi_agent_platform.control_plane.models import API_VERSION, APIException
 from ai_multi_agent_platform.observability import (
     FailureComponent,
@@ -33,6 +39,10 @@ from ai_multi_agent_platform.observability import (
 )
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+_ASGI_MUTATION_ADMITTED: ContextVar[bool] = ContextVar(
+    "single_node_drain_asgi_mutation_admitted",
+    default=False,
+)
 
 
 class SingleNodeDrainState(StrEnum):
@@ -328,7 +338,7 @@ class DrainAwareAuthenticatedControlPlaneHTTP(AuthenticatedControlPlaneHTTP):
 
     async def handle(self, request: HTTPRequest) -> HTTPResponse:
         method = request.method.upper()
-        if method not in _SAFE_METHODS:
+        if method not in _SAFE_METHODS and not _ASGI_MUTATION_ADMITTED.get():
             if not await self._drain.try_admit_mutation():
                 return self._draining_response(request)
             try:
@@ -383,6 +393,9 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
         send: ASGISend,
     ) -> None:
         scope_type = scope.get("type")
+        if scope_type == "http" and str(scope.get("method", "GET")).upper() not in _SAFE_METHODS:
+            await self._handle_http_mutation(scope, receive, send)
+            return
         if scope_type == "websocket":
             await self._handle_websocket(scope, receive, send)
             return
@@ -390,6 +403,28 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
             await self._handle_lifespan(scope, receive, send)
             return
         await super().__call__(scope, receive, send)
+
+    async def _handle_http_mutation(
+        self,
+        scope: dict[str, Any],
+        receive: ASGIReceive,
+        send: ASGISend,
+    ) -> None:
+        if not await self._drain.try_admit_mutation():
+            request = HTTPRequest(
+                method=str(scope.get("method", "POST")).upper(),
+                path=str(scope.get("path", "/")),
+                headers=_decode_asgi_headers(scope.get("headers", [])),
+            )
+            await _send_response(self._http._draining_response(request), send)
+            return
+
+        token = _ASGI_MUTATION_ADMITTED.set(True)
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            _ASGI_MUTATION_ADMITTED.reset(token)
+            await self._drain.release_mutation()
 
     async def _handle_websocket(
         self,
