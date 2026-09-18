@@ -32,7 +32,7 @@ preview / validation
 
 ## Canonical metadata
 
-`RegistryItem` records stable ID and type, version, publisher, source repository/package reference, license/provenance, platform compatibility, dependencies, requested permissions, required capabilities/plugins/connectors/models, release/changelog metadata, integrity/signature metadata, trust/review state, optional maturity (`experimental`, `beta`, `stable`), and deprecation/yank state.
+`RegistryItem` records stable ID and type, version, publisher, source repository/package reference, license/provenance, optional canonical homepage/documentation links, platform compatibility, dependencies, requested permissions, required capabilities/plugins/connectors/models, release/changelog metadata, integrity/signature metadata, trust/review state, optional maturity (`experimental`, `beta`, `stable`), and deprecation/yank state.
 
 The portable JSON contract is versioned separately as `REGISTRY_ITEM_SCHEMA_VERSION`. Registry trust status is informational input to a decision; it is never itself authorization.
 
@@ -77,9 +77,9 @@ already-applied identical mutation idempotent. Retrying the same source-qualifie
 (after a process restart if necessary) observes the canonical owner state and completes only the
 missing Marketplace evidence write. Built-in Agent, Agent Team, Skill, Plugin-backed
 Tool/Connector, Plugin and Application handlers implement this retry contract; Application version
-update remains unsupported. The acceptance suite exercises durable evidence-write recovery with
-fresh owner repositories, installation stores and `DistributionService` instances, including
-`JsonAgentRepository` and `JsonSkillRepository`.
+update remains unsupported. The acceptance suite exercises durable evidence-write recovery with fresh owner repositories,
+installation stores and `DistributionService` instances across Agent, Skill, Application and
+Plugin-backed owners, including `JsonAgentRepository` and `JsonSkillRepository`.
 
 Pins are explicit durable application policy. `registry.pin` can pin only the currently installed version; `registry.unpin` removes that constraint. A pin does **not** hide newer releases: discovery and `update_available` still report a newer candidate, while preview returns `version_pinned` and blocks application until the pin is removed. Updates are never applied automatically. License/provenance changes and pins are validated before activation.
 
