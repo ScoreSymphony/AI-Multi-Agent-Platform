@@ -1,5 +1,3 @@
-"""Migrated under #722; original coverage tracked issue #14."""
-
 from ai_multi_agent_platform.security import (
     AuthorizationAction,
     ResourceType,
