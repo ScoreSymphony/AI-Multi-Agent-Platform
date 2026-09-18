@@ -16,6 +16,11 @@ class MarketplaceKindHandler(Protocol):
 
     Implementations delegate to the canonical Tool, Skill, Connector, Application or future
     owner. The Marketplace remains a distribution layer and never becomes the component runtime.
+
+    Mutation methods must be idempotent for an already-applied identical target. Marketplace
+    installation evidence is persisted only after owner mutation succeeds; if that evidence write
+    fails, retrying the same lifecycle request is the recovery path that completes the durable
+    distribution record without duplicating owner state.
     """
 
     @property

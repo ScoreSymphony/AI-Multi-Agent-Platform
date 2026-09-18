@@ -34,6 +34,7 @@ from ai_multi_agent_platform.distribution import (
     LocalRegistryProvider,
     MarketplaceKindDescriptor,
     MarketplaceKindHandlerRegistry,
+    RegistryDependency,
     RegistryItem,
     RegistryItemType,
     RegistryManifestReference,
@@ -257,13 +258,26 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(
     tmp_path: Path,
 ) -> None:
     skill_v1, skill_v2, skill_artifact_v1, skill_artifact_v2, skill_id = _skill_artifacts()
+    skill_v3 = replace(
+        skill_v2,
+        version="1.2.0",
+        source=_source(skill_v2.item_id, "1.2.0"),
+    )
     application, application_artifact = _application_artifact()
-    future = _item(
-        "notebook_extension",
-        "acceptance.notebook",
-        "1.0.0",
-        manifest=True,
-        maturity=RegistryMaturity.BETA,
+    future = replace(
+        _item(
+            "notebook_extension",
+            "acceptance.notebook",
+            "1.0.0",
+            manifest=True,
+            maturity=RegistryMaturity.BETA,
+        ),
+        dependencies=(
+            RegistryDependency(
+                item_id=skill_v2.item_id,
+                optional=True,
+            ),
+        ),
     )
     tool = _item(RegistryItemType.TOOL, "acceptance.tool", "1.0.0")
     plugin = _item(RegistryItemType.PLUGIN, "acceptance.plugin", "1.0.0")
@@ -285,6 +299,7 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(
         (
             skill_v1,
             skill_v2,
+            skill_v3,
             application,
             future,
             tool,
@@ -424,15 +439,32 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(
         await restarted_distribution.status(application.item_id)
     ).application_version == application.version
     assert (await restarted_distribution.status(future.item_id))["operation"] == "install"
-    assert restarted_distribution.installed(skill_v2.item_id).current.version == "1.1.0"  # type: ignore[union-attr]
-    assert (
-        restarted_distribution.installed(application.item_id).current.source_registry  # type: ignore[union-attr]
-        == "acceptance"
-    )
-    assert (
-        restarted_distribution.installed(future.item_id).current.item_type.value  # type: ignore[union-attr]
-        == "notebook_extension"
-    )
+
+    restarted_skill_installation = restarted_distribution.installed(skill_v2.item_id)
+    assert restarted_skill_installation is not None
+    assert restarted_skill_installation.current.version == "1.1.0"
+    assert restarted_skill_installation.current.source_registry == "acceptance"
+    assert restarted_skill_installation.current.provenance == skill_v2.provenance
+    assert restarted_skill_installation.current.dependencies == skill_v2.dependencies
+    assert tuple(
+        candidate.version
+        for candidate in restarted_distribution.available_updates(skill_v2.item_id)
+    ) == ("1.2.0",)
+
+    restarted_application_installation = restarted_distribution.installed(application.item_id)
+    assert restarted_application_installation is not None
+    assert restarted_application_installation.current.version == application.version
+    assert restarted_application_installation.current.source_registry == "acceptance"
+    assert restarted_application_installation.current.provenance == application.provenance
+    assert restarted_application_installation.current.dependencies == application.dependencies
+
+    restarted_future_installation = restarted_distribution.installed(future.item_id)
+    assert restarted_future_installation is not None
+    assert restarted_future_installation.current.version == future.version
+    assert restarted_future_installation.current.source_registry == "acceptance"
+    assert restarted_future_installation.current.provenance == future.provenance
+    assert restarted_future_installation.current.dependencies == future.dependencies
+    assert restarted_future_installation.current.item_type.value == "notebook_extension"
 
     await restarted_distribution.uninstall(skill_v2.item_id, authorized=True)
     await restarted_distribution.uninstall(application.item_id, authorized=True)
