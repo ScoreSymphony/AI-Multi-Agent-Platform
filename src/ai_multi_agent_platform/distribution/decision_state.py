@@ -55,27 +55,19 @@ def build_provenance_diff(
         candidate_publisher=item.publisher,
         previous_repository=current.source_repository if current is not None else None,
         candidate_repository=item.source.repository,
-        previous_package_reference=(
-            current.package_reference if current is not None else None
-        ),
+        previous_package_reference=(current.package_reference if current is not None else None),
         candidate_package_reference=item.source.package_reference,
         previous_revision=current.revision if current is not None else None,
         candidate_revision=item.source.revision,
-        previous_artifact_sha256=(
-            current.artifact_sha256 if current is not None else None
-        ),
+        previous_artifact_sha256=(current.artifact_sha256 if current is not None else None),
         candidate_artifact_sha256=artifact_sha256,
         previous_signature=current.signature if current is not None else None,
         candidate_signature=item.integrity.signature,
-        previous_signature_key_id=(
-            current.signature_key_id if current is not None else None
-        ),
+        previous_signature_key_id=(current.signature_key_id if current is not None else None),
         candidate_signature_key_id=item.integrity.signature_key_id,
         previous_trust_status=current.trust_status if current is not None else None,
         candidate_trust_status=item.trust_status,
-        previous_review_reference=(
-            current.review_reference if current is not None else None
-        ),
+        previous_review_reference=(current.review_reference if current is not None else None),
         candidate_review_reference=item.review_reference,
     )
 
@@ -225,9 +217,7 @@ def _compatibility_candidates(
         return same_item
     source_registry = item.source_registry or installation.current.source_registry
     same_source = tuple(
-        candidate
-        for candidate in same_item
-        if candidate.source_registry == source_registry
+        candidate for candidate in same_item if candidate.source_registry == source_registry
     )
     return same_source or same_item
 
@@ -272,8 +262,7 @@ def _has_newer_candidate(
     if installed_version is None:
         return False
     return any(
-        version_key(candidate.version) > version_key(installed_version)
-        for candidate in candidates
+        version_key(candidate.version) > version_key(installed_version) for candidate in candidates
     )
 
 
@@ -333,10 +322,10 @@ def _trust_integrity_issue(
 def _finding_is_trust_integrity_issue(finding: ValidationFinding) -> bool:
     if finding.category not in {FindingCategory.INTEGRITY, FindingCategory.TRUST}:
         return False
-    return (
-        finding.severity is FindingSeverity.ERROR
-        or finding.code in {"untrusted", "trust_downgrade"}
-    )
+    return finding.severity is FindingSeverity.ERROR or finding.code in {
+        "untrusted",
+        "trust_downgrade",
+    }
 
 
 def merge_findings(
