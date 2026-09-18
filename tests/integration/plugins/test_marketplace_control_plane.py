@@ -74,7 +74,7 @@ class RecordingHandler:
         self.calls.append(("uninstall", item.item_id, item.version))
         return item.item_id
 
-    def status(self, item: RegistryItem) -> object:
+    async def status(self, item: RegistryItem) -> object:
         return {"owner_state": "installed", "item_id": item.item_id}
 
     def describe(self, item: RegistryItem) -> dict[str, object]:
