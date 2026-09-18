@@ -433,6 +433,7 @@ def test_auth_session_expiry_and_revocation_survive_sqlite_restart(tmp_path: Pat
         restarted.authenticate_session(revoked.token, now=NOW)
     assert revoked_error.value.failure is AuthenticationFailure.SESSION_REVOKED
 
+
 def test_cleanup_failure_is_machine_readable_and_blocks_readiness(tmp_path: Path) -> None:
     class FailingAutomation:
         async def reconcile_startup_deliveries(self) -> Any:
