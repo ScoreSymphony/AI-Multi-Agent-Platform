@@ -1,0 +1,11 @@
+{
+  "code": "permission_denied",
+  "category": "authorization",
+  "message": "Task access denied",
+  "request_id": "request_client_parity",
+  "correlation_id": "corr_client_parity_error",
+  "retryable": false,
+  "details": {
+    "resource_type": "task"
+  }
+}
