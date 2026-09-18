@@ -60,7 +60,7 @@ def test_major_single_node_builders_compose_without_optional_adapters(tmp_path: 
         execution,
         kernel,
     )
-    health = build_health(storage, execution)
+    health = build_health(config, storage, execution, observability)
     control_plane = build_control_plane(
         config,
         storage,
