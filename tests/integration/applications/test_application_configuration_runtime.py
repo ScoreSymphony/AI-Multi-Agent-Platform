@@ -6,8 +6,8 @@ import sys
 import pytest
 
 from ai_multi_agent_platform.applications import (
-    ApplicationConfigValueType,
     ApplicationConfigurationField,
+    ApplicationConfigValueType,
     ApplicationDesiredState,
     ApplicationInstallRequest,
     ApplicationLifecycleService,
