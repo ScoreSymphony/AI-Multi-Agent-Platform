@@ -403,6 +403,9 @@ class MarketplaceKindResourceService:
             "supports_install": descriptor.supports_install,
             "supports_update": descriptor.supports_update,
             "supports_uninstall": descriptor.supports_uninstall,
+            "group": descriptor.group,
+            "owner_resource": descriptor.owner_resource,
+            "management_path": descriptor.management_path,
         }
 
 
