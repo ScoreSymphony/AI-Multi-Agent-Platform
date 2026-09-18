@@ -817,7 +817,13 @@ async def test_hermes_marketplace_install_activates_through_canonical_control_pl
     configured = await binding.configure(
         context,
         manifest.plugin_id,
-        {"configuration": {"enabled": True}},
+        {
+            "configuration": {
+                "enabled": True,
+                "base_url": "http://127.0.0.1:1",
+                "request_timeout_seconds": 0.05,
+            }
+        },
     )
     assert configured["state"] == "configured"
 
