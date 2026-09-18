@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.ci.run_pytest_lane import build_report, budget_violations  # noqa: E402
+from scripts.ci.verify_pytest_shards import compare_collections  # noqa: E402
+
+
+def test_runtime_report_aggregates_test_and_module_durations(tmp_path: Path) -> None:
+    junit = tmp_path / "lane.xml"
+    junit.write_text(
+        """<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="pytest" tests="3" failures="0" errors="0" skipped="1" time="3.5">
+    <testcase classname="tests.integration.alpha" name="test_fast" time="0.5" />
+    <testcase classname="tests.integration.alpha" name="test_slow" time="2.0" />
+    <testcase classname="tests.integration.beta" name="test_skip" time="1.0">
+      <skipped />
+    </testcase>
+  </testsuite>
+</testsuites>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_report(
+        lane="integration",
+        wall_seconds=4.0,
+        junit_path=junit,
+        budget={
+            "wall_seconds": 10,
+            "slow_test_seconds": 5,
+            "slow_module_seconds": 5,
+        },
+        exit_code=0,
+    )
+
+    assert report["testcase_count"] == 3
+    assert report["skipped_count"] == 1
+    assert report["testcase_seconds_sum"] == 3.5
+    assert report["slowest_tests"][0]["node"].endswith("::test_slow")
+    assert report["slowest_modules"][0] == {
+        "module": "tests.integration.alpha",
+        "seconds": 2.5,
+    }
+    assert budget_violations(report) == []
+
+
+def test_runtime_budget_detects_lane_test_and_module_regressions(tmp_path: Path) -> None:
+    junit = tmp_path / "lane.xml"
+    junit.write_text(
+        """<testsuite>
+  <testcase classname="tests.integration.alpha" name="test_slow" time="7.0" />
+</testsuite>""",
+        encoding="utf-8",
+    )
+    report = build_report(
+        lane="integration",
+        wall_seconds=12.0,
+        junit_path=junit,
+        budget={
+            "wall_seconds": 10,
+            "slow_test_seconds": 5,
+            "slow_module_seconds": 6,
+        },
+        exit_code=0,
+    )
+
+    violations = budget_violations(report)
+
+    assert len(violations) == 3
+    assert "wall time" in violations[0]
+    assert "slowest test" in violations[1]
+    assert "slowest module" in violations[2]
+
+
+def test_shard_collection_comparison_detects_missing_unexpected_and_duplicates() -> None:
+    baseline = {"a::test_one", "b::test_two", "c::test_three"}
+    shards = {
+        "one": {"a::test_one", "b::test_two"},
+        "two": {"b::test_two", "extra::test_four"},
+    }
+
+    missing, unexpected, duplicates = compare_collections(baseline, shards)
+
+    assert missing == {"c::test_three"}
+    assert unexpected == {"extra::test_four"}
+    assert duplicates == {"b::test_two"}
+
+
+def test_shard_collection_comparison_accepts_exact_partition() -> None:
+    baseline = {"a::test_one", "b::test_two", "c::test_three"}
+    shards = {
+        "one": {"a::test_one"},
+        "two": {"b::test_two", "c::test_three"},
+    }
+
+    assert compare_collections(baseline, shards) == (set(), set(), set())

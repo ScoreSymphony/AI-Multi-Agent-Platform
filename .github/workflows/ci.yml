@@ -6,8 +6,33 @@ on:
   pull_request:
 
 jobs:
-  test:
+  python-validation:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: quality
+            kind: quality
+            marker: ""
+            paths: ""
+          - lane: unit
+            kind: test
+            marker: unit
+            paths: tests/unit
+          - lane: contract-architecture-release
+            kind: test
+            marker: not unit
+            paths: tests/architecture tests/contract tests/release
+          - lane: integration
+            kind: test
+            marker: not unit
+            paths: tests/integration
+          - lane: system-regression
+            kind: test
+            marker: not unit
+            paths: tests/e2e tests/performance tests/regression
+    name: python-validation (${{ matrix.lane }})
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -23,40 +48,73 @@ jobs:
           python -m pip install -e ".[dev]"
           echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+
+      - name: Run pytest lane with retained timing evidence
+        if: matrix.kind == 'test'
+        shell: bash
+        run: |
+          python scripts/ci/run_pytest_lane.py             --lane "${{ matrix.lane }}"             -- -m "${{ matrix.marker }}" ${{ matrix.paths }}
+      - name: Verify fast-layer regression detection
+        if: matrix.lane == 'unit'
+        run: python scripts/ci/verify_fast_unit_regression_detection.py
+      - name: Verify non-unit shard coverage
+        if: matrix.lane == 'unit'
+        run: python scripts/ci/verify_pytest_shards.py
+      - name: Upload pytest runtime evidence
+        if: always() && matrix.kind == 'test'
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-test-runtime-${{ matrix.lane }}
+          path: .artifacts/test-runtime/${{ matrix.lane }}.*
+          if-no-files-found: warn
+
       - name: Verify canonical runtime assets
+        if: matrix.kind == 'quality'
         run: python scripts/ci/materialize_runtime_assets.py --check
       - name: Ruff format
+        if: matrix.kind == 'quality'
         run: ruff format --check .
       - name: Ruff lint
+        if: matrix.kind == 'quality'
         run: ruff check .
       - name: Mypy
+        if: matrix.kind == 'quality'
         run: mypy
-      - name: Fast unit tests
-        run: pytest -m unit tests/unit
-      - name: Verify fast-layer regression detection
-        run: python scripts/ci/verify_fast_unit_regression_detection.py
-      - name: Non-unit pytest suite
-        run: pytest -m "not unit"
       - name: Deterministic evaluation gate
+        if: matrix.kind == 'quality'
         run: python scripts/ci/deterministic_evaluation_regression_gate.py --platform-commit "$GITHUB_SHA"
       - name: Materialize runtime assets
+        if: matrix.kind == 'quality'
         run: python scripts/ci/materialize_runtime_assets.py
       - name: Build package
+        if: matrix.kind == 'quality'
         run: python -m build
       - name: Verify built runtime assets
+        if: matrix.kind == 'quality'
         run: python scripts/ci/verify_distribution_runtime_assets.py dist
       - name: Run MCP environment conformance
+        if: matrix.kind == 'quality'
         run: |
-          python scripts/ci/optional_environment_conformance_profile.py \
-            mcp \
-            --json-report conformance-mcp.json
+          python scripts/ci/optional_environment_conformance_profile.py             mcp             --json-report conformance-mcp.json
       - name: Upload MCP conformance evidence
-        if: always()
+        if: always() && matrix.kind == 'quality'
         uses: actions/upload-artifact@v7
         with:
           name: platform-conformance-mcp
           path: conformance-mcp.json
           if-no-files-found: warn
+
+  test:
+    if: always()
+    needs: python-validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all Python validation lanes
+        env:
+          VALIDATION_RESULT: ${{ needs.python-validation.result }}
+        run: |
+          echo "python-validation=$VALIDATION_RESULT"
+          test "$VALIDATION_RESULT" = "success"
 
   single-node-install-smoke:
     runs-on: ubuntu-latest
