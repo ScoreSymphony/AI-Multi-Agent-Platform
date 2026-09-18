@@ -1,5 +1,3 @@
-"""Migrated from root-level security baseline coverage under #722."""
-
 # ruff: noqa: F401
 
 from __future__ import annotations
