@@ -130,6 +130,10 @@ class ProvenanceDiff:
     candidate_source_registry: str | None
     previous_publisher: str | None
     candidate_publisher: str
+    previous_license: str | None
+    candidate_license: str
+    previous_provenance: str | None
+    candidate_provenance: str
     previous_repository: str | None
     candidate_repository: str
     previous_package_reference: str | None
@@ -157,6 +161,14 @@ class ProvenanceDiff:
     @property
     def publisher_changed(self) -> bool:
         return self._known_changed(self.previous_publisher, self.candidate_publisher)
+
+    @property
+    def license_changed(self) -> bool:
+        return self._known_changed(self.previous_license, self.candidate_license)
+
+    @property
+    def provenance_changed(self) -> bool:
+        return self._known_changed(self.previous_provenance, self.candidate_provenance)
 
     @property
     def repository_changed(self) -> bool:
@@ -220,6 +232,8 @@ class ProvenanceDiff:
             (
                 self.source_changed,
                 self.publisher_changed,
+                self.license_changed,
+                self.provenance_changed,
                 self.repository_changed,
                 self.package_reference_changed,
                 self.revision_changed,
