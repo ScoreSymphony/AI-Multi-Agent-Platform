@@ -1,4 +1,4 @@
-"""Safe #16 telemetry projection for uncertain external-effect recovery."""
+"""Safe telemetry projection for uncertain external-effect recovery."""
 
 from __future__ import annotations
 
