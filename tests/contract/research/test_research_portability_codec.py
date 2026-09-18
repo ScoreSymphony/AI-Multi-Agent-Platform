@@ -35,7 +35,7 @@ def run(coro: object) -> object:
     return asyncio.run(coro)  # type: ignore[arg-type]
 
 
-def test_issue79_research_codec_preserves_history_and_declares_verification_dependency() -> None:
+def test_research_codec_preserves_history_and_declares_verification_dependency() -> None:
     research = ResearchService(InMemoryResearchRepository())
     verification = VerificationService(
         require_canonical_subjects=True,
