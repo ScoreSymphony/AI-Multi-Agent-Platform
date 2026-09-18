@@ -111,6 +111,30 @@ def test_already_admitted_mutation_may_settle_within_deadline() -> None:
     asyncio.run(scenario())
 
 
+def test_drain_quiesces_autonomous_background_runtimes(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        deployment = build_single_node_deployment(
+            SingleNodeConfig(
+                data_dir=tmp_path / "autonomous-quiesce",
+                secure_cookie=False,
+                shutdown_timeout_seconds=1,
+            )
+        )
+        await deployment.control_plane.start_automation_runtime()
+        await deployment.control_plane.start_notification_runtime()
+        assert deployment.control_plane.automation_runtime.running is True
+        assert deployment.control_plane.notification_runtime.running is True
+
+        await deployment.drain.begin(reason="test_autonomous_quiesce")
+        await deployment.control_plane.stop_notification_runtime()
+        await deployment.control_plane.stop_automation_runtime()
+
+        assert deployment.control_plane.automation_runtime.running is False
+        assert deployment.control_plane.notification_runtime.running is False
+
+    asyncio.run(scenario())
+
+
 def test_drain_timeout_is_forced_and_observable() -> None:
     async def scenario() -> None:
         exporter = InMemoryExporter()
