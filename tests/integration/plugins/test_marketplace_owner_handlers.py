@@ -216,7 +216,7 @@ async def test_malformed_skill_candidate_fails_preview_without_owner_mutation(
         and "invalid canonical Skill artifact" in finding.message
         for finding in preview.findings
     )
-    assert skills.repository.list_definitions() == ()
+    assert skills.repository.list_skills() == ()
     assert service.installed(item.item_id) is None
 
 
