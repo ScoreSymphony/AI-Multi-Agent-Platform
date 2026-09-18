@@ -56,7 +56,7 @@ function descriptor(
     default_route,
     supports_install: default_route !== "manual",
     supports_update: default_route !== "manual",
-    supports_uninstall: default_route === "kind_handler",
+    supports_uninstall: default_route === "kind_handler" || default_route === "plugin",
     management_path,
   };
 }
@@ -1289,7 +1289,7 @@ function operationSupported(item: RegistryItem, operation: "install" | "update")
 }
 
 function uninstallSupported(item: RegistryItem): boolean {
-  if (!item.installed || item.route !== "kind_handler") return false;
+  if (!item.installed || !["kind_handler", "plugin"].includes(item.route)) return false;
   if (item.owner_extension?.handler_available !== true) return false;
   const advertised = item.owner_extension.supported_operations;
   if (advertised && !advertised.includes("uninstall")) return false;
