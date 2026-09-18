@@ -220,7 +220,6 @@ def test_orphaned_automation_delivery_blocks_readiness_without_mutation() -> Non
     asyncio.run(scenario())
 
 
-
 def test_single_node_restart_reconciles_crash_after_canonical_task_admission_without_duplicate(
     tmp_path: Path,
 ) -> None:
