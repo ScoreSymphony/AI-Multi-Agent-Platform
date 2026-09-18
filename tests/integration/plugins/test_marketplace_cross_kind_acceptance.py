@@ -26,7 +26,7 @@ from ai_multi_agent_platform.applications import (
 )
 from ai_multi_agent_platform.applications.serialization import application_manifest_to_document
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
+from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, paginate
 from ai_multi_agent_platform.distribution import (
     DistributionRoute,
     DistributionService,
@@ -263,16 +263,34 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(tmp
         manifest=True,
         maturity=RegistryMaturity.BETA,
     )
+    tool = _item(RegistryItemType.TOOL, "acceptance.tool", "1.0.0")
+    plugin = _item(RegistryItemType.PLUGIN, "acceptance.plugin", "1.0.0")
+    connector = _item(RegistryItemType.CONNECTOR, "acceptance.connector", "1.0.0")
     template = _item(RegistryItemType.TEMPLATE, "acceptance.template", "1.0.0")
+    workflow = _item(RegistryItemType.WORKFLOW, "acceptance.workflow", "1.0.0")
     artifacts = {
         (skill_v1.item_id, skill_v1.version): skill_artifact_v1,
         (skill_v2.item_id, skill_v2.version): skill_artifact_v2,
         (application.item_id, application.version): application_artifact,
         (future.item_id, future.version): b"future-owner-artifact",
+        (tool.item_id, tool.version): b"tool-artifact",
+        (plugin.item_id, plugin.version): b"plugin-artifact",
+        (connector.item_id, connector.version): b"connector-artifact",
         (template.item_id, template.version): b"portable-template",
+        (workflow.item_id, workflow.version): b"portable-workflow",
     }
     provider = LocalRegistryProvider(
-        (skill_v1, skill_v2, application, future, template),
+        (
+            skill_v1,
+            skill_v2,
+            application,
+            future,
+            tool,
+            plugin,
+            connector,
+            template,
+            workflow,
+        ),
         artifacts,
         provider_id="acceptance",
     )
@@ -316,19 +334,35 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(tmp
     )
     context = ValidationContext("0.0.1")
 
-    resources = await RegistryResourceService(distribution).list_resources(
-        RequestContext("acceptance-request", "acceptance-correlation"),
-        PageQuery(sort="kind"),
+    resource_service = RegistryResourceService(distribution)
+    request = RequestContext("acceptance-request", "acceptance-correlation")
+    resources = await resource_service.list_resources(
+        request,
+        PageQuery(search="acceptance", sort="kind"),
     )
     assert {resource["kind"] for resource in resources} == {
         "application",
+        "connector",
         "notebook_extension",
+        "plugin",
         "skill",
         "template",
+        "tool",
+        "workflow",
     }
     assert next(
         resource for resource in resources if resource["kind"] == "notebook_extension"
     )["maturity"] == "beta"
+
+    filtered = await resource_service.list_resources(
+        request,
+        PageQuery(filters={"kind": "skill,connector"}, sort="kind"),
+    )
+    assert {resource["kind"] for resource in filtered} == {"skill", "connector"}
+
+    first_page = paginate(resources, PageQuery(limit=4, sort="kind"))
+    assert len(first_page["items"]) == 4  # type: ignore[arg-type]
+    assert first_page["next_cursor"] is not None
 
     await distribution.activate(
         distribution.preview(skill_v1.item_id, skill_v1.version, context),
