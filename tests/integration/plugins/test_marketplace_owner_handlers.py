@@ -7,6 +7,8 @@ from dataclasses import replace
 import pytest
 
 from ai_multi_agent_platform.adapters.marketplace_owner_handlers import (
+    AgentMarketplaceKindHandler,
+    AgentTeamMarketplaceKindHandler,
     ApplicationMarketplaceKindHandler,
     PluginExtensionMarketplaceKindHandler,
     PluginMarketplaceKindHandler,
@@ -27,6 +29,16 @@ from ai_multi_agent_platform.applications import (
     InMemoryApplicationRepository,
 )
 from ai_multi_agent_platform.applications.serialization import application_manifest_to_document
+from ai_multi_agent_platform.agents.models import (
+    AgentInstructions,
+    AgentProfile,
+    AgentRevisionRef,
+    AgentTeamMember,
+    AgentTeamProfile,
+    InstructionSource,
+)
+from ai_multi_agent_platform.agents.repository import InMemoryAgentRepository
+from ai_multi_agent_platform.agents.service import AgentService
 from ai_multi_agent_platform.connectors import (
     ConnectorDefinition,
     ConnectorRegistry,
@@ -59,6 +71,12 @@ from ai_multi_agent_platform.plugins import (
     PluginExtensionSpec,
     PluginRegistry,
     reference_manifest,
+)
+from ai_multi_agent_platform.portability import (
+    AgentPortableCodec,
+    AgentTeamPortableCodec,
+    snapshot_agent,
+    snapshot_agent_team,
 )
 from ai_multi_agent_platform.skills.codec import skill_revision_to_json
 from ai_multi_agent_platform.skills.models import (
@@ -124,6 +142,127 @@ class _PluginRouter:
     async def import_portable(self, item: RegistryItem, artifact: bytes) -> object:
         del item, artifact
         raise AssertionError("Plugin compatibility test must not use portable import")
+
+
+def _agent_profile(name: str) -> AgentProfile:
+    return AgentProfile(
+        name=name,
+        role="researcher",
+        instructions=AgentInstructions(
+            role=InstructionSource(content="Research through canonical platform capabilities.")
+        ),
+    )
+
+
+def _portable_agent_artifact(repository: InMemoryAgentRepository, agent_id: str) -> bytes:
+    exported = AgentPortableCodec().serialize(snapshot_agent(repository, agent_id))
+    return json.dumps(exported.payload, sort_keys=True).encode("utf-8")
+
+
+def _portable_team_artifact(repository: InMemoryAgentRepository, team_id: str) -> bytes:
+    exported = AgentTeamPortableCodec().serialize(snapshot_agent_team(repository, team_id))
+    return json.dumps(exported.payload, sort_keys=True).encode("utf-8")
+
+
+async def test_agent_handler_installs_canonical_revisions_without_runtime_instance() -> None:
+    owner = OwnerRef(type="user", id="marketplace-agent-owner")
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    first = source.create_agent(_agent_profile("Research Agent v1"), owner_ref=owner)
+    second = source.update_agent(first.agent_id, _agent_profile("Research Agent v2"))
+
+    item = _item(
+        RegistryItemType.AGENT,
+        item_id=second.agent_id,
+        version="1.0.0",
+    )
+    target_repository = InMemoryAgentRepository()
+    target = AgentService(target_repository)
+    handler = AgentMarketplaceKindHandler(target)
+
+    installed = await handler.install(
+        item,
+        _portable_agent_artifact(source_repository, second.agent_id),
+    )
+
+    assert installed.agent_id == second.agent_id
+    assert installed.revision == 2
+    assert target.get_agent_revision(second.agent_id, 1).profile.name == "Research Agent v1"
+    assert target.get_agent_revision(second.agent_id).profile.name == "Research Agent v2"
+    assert target_repository.list_agent_runs() == ()
+    assert handler.describe(item)["owner_domain"] == "agents"
+
+    third = source.update_agent(second.agent_id, _agent_profile("Research Agent v3"))
+    updated_item = replace(
+        item,
+        version="1.1.0",
+        source=RegistrySource(item.source.repository, f"{item.item_id}@1.1.0"),
+    )
+    updated = await handler.update(
+        updated_item,
+        _portable_agent_artifact(source_repository, third.agent_id),
+    )
+    assert updated.revision == 3
+    assert updated.profile.name == "Research Agent v3"
+
+    await handler.uninstall(updated_item)
+    with pytest.raises(ContractError) as missing:
+        target.get_agent_revision(second.agent_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
+    assert target_repository.list_agent_runs() == ()
+
+
+async def test_agent_team_handler_uses_canonical_team_owner_and_member_validation() -> None:
+    owner = OwnerRef(type="user", id="marketplace-team-owner")
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    member = source.create_agent(_agent_profile("Team Researcher"), owner_ref=owner)
+    team = source.create_team(
+        AgentTeamProfile(
+            name="Research Team",
+            members=(
+                AgentTeamMember(
+                    agent=AgentRevisionRef(member.agent_id, member.revision),
+                    role="researcher",
+                ),
+            ),
+            leader_agent_id=member.agent_id,
+        ),
+        owner_ref=owner,
+    )
+
+    target_repository = InMemoryAgentRepository()
+    target = AgentService(target_repository)
+    agent_item = _item(
+        RegistryItemType.AGENT,
+        item_id=member.agent_id,
+        version="1.0.0",
+    )
+    await AgentMarketplaceKindHandler(target).install(
+        agent_item,
+        _portable_agent_artifact(source_repository, member.agent_id),
+    )
+
+    team_item = _item(
+        RegistryItemType.AGENT_TEAM,
+        item_id=team.team_id,
+        version="1.0.0",
+    )
+    handler = AgentTeamMarketplaceKindHandler(target)
+    installed = await handler.install(
+        team_item,
+        _portable_team_artifact(source_repository, team.team_id),
+    )
+
+    assert installed.team_id == team.team_id
+    assert installed.profile.members[0].agent.agent_id == member.agent_id
+    assert handler.describe(team_item)["member_count"] == 1
+    assert target_repository.list_agent_runs() == ()
+
+    await handler.uninstall(team_item)
+    with pytest.raises(ContractError) as missing:
+        target.get_team_revision(team.team_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
 
 
 async def test_plugin_activation_keeps_legacy_route_and_owner_handler_adds_status_remove(
