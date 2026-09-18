@@ -85,3 +85,47 @@ def test_doctor_health_reports_required_operator_intervention_with_guidance() ->
     dependency = next(check for check in checks if check["name"] == "dependency_health")
     assert dependency["status"] == "blocking"
     assert "supported operator command" in dependency["guidance"]
+
+
+def test_doctor_health_rejects_unhashable_readiness_values_without_crashing() -> None:
+    overall, checks = _doctor_health(
+        {
+            "status": "healthy",
+            "ready": False,
+            "readiness_state": ["invalid"],
+            "providers": [],
+        }
+    )
+
+    assert overall == "blocking"
+    assert checks[0]["name"] == "health_schema"
+    assert checks[0]["status"] == "blocking"
+
+    overall, checks = _doctor_health(
+        {
+            "status": "healthy",
+            "ready": False,
+            "readiness_state": "unavailable",
+            "providers": [
+                {
+                    "id": "platform-observability-health",
+                    "type": "observability-health",
+                    "status": "unavailable",
+                    "available": True,
+                    "dependencies": [
+                        {
+                            "name": "kernel-persistence",
+                            "state": {"invalid": True},
+                            "required": True,
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert overall == "blocking"
+    schema_check = next(
+        check for check in checks if check["name"] == "dependency_health_schema"
+    )
+    assert schema_check["status"] == "blocking"

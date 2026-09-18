@@ -602,7 +602,10 @@ def _doctor_health(body: JsonValue) -> tuple[str, list[JsonValue]]:
         or not isinstance(providers, list)
         or (
             readiness_state is not None
-            and readiness_state not in _DOCTOR_READINESS_STATES
+            and (
+                not isinstance(readiness_state, str)
+                or readiness_state not in _DOCTOR_READINESS_STATES
+            )
         )
     ):
         return "blocking", [
@@ -740,6 +743,7 @@ def _doctor_dependency_health(
     required = dependency.get("required")
     if (
         not isinstance(dependency_name, str)
+        or not isinstance(dependency_state, str)
         or dependency_state not in _DOCTOR_READINESS_STATES
         or not isinstance(required, bool)
     ):
