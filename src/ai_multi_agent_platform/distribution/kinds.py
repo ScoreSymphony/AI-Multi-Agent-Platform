@@ -16,6 +16,9 @@ class MarketplaceKindDescriptor:
     supports_install: bool = True
     supports_update: bool = True
     supports_uninstall: bool = True
+    group: str = "other"
+    owner_resource: str | None = None
+    management_path: str | None = None
 
     def __post_init__(self) -> None:
         normalized = registry_item_kind_value(self.kind)
@@ -61,35 +64,162 @@ class MarketplaceKindRegistry:
 
 
 BUILTIN_MARKETPLACE_KINDS: tuple[MarketplaceKindDescriptor, ...] = (
-    MarketplaceKindDescriptor(RegistryItemType.AGENT, "Agent", DistributionRoute.PORTABLE_IMPORT),
     MarketplaceKindDescriptor(
-        RegistryItemType.AGENT_TEAM, "Agent Team", DistributionRoute.PORTABLE_IMPORT
-    ),
-    MarketplaceKindDescriptor(RegistryItemType.TOOL, "Tool", DistributionRoute.PORTABLE_IMPORT),
-    MarketplaceKindDescriptor(RegistryItemType.SKILL, "Skill", DistributionRoute.KIND_HANDLER),
-    MarketplaceKindDescriptor(RegistryItemType.PLUGIN, "Plugin", DistributionRoute.PLUGIN),
-    MarketplaceKindDescriptor(
-        RegistryItemType.WORKFLOW, "Workflow", DistributionRoute.PORTABLE_IMPORT
+        RegistryItemType.AGENT,
+        "Agent",
+        DistributionRoute.KIND_HANDLER,
+        group="ai_agents",
+        owner_resource="agents",
+        management_path="/agents",
     ),
     MarketplaceKindDescriptor(
-        RegistryItemType.TEMPLATE, "Template", DistributionRoute.PORTABLE_IMPORT
+        RegistryItemType.AGENT_TEAM,
+        "Agent Team",
+        DistributionRoute.KIND_HANDLER,
+        group="ai_agents",
+        owner_resource="agent-teams",
+        management_path="/agent-teams",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.ORCHESTRATOR,
+        "Orchestrator",
+        DistributionRoute.KIND_HANDLER,
+        group="ai_agents",
+        owner_resource="plugins",
+        management_path="/plugins",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.EXECUTOR,
+        "Executor",
+        DistributionRoute.KIND_HANDLER,
+        group="platform_extensions",
+        owner_resource="plugins",
+        management_path="/plugins",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.MODEL_PROVIDER,
+        "Model Provider",
+        DistributionRoute.KIND_HANDLER,
+        group="models",
+        owner_resource="plugins",
+        management_path="/models",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.CAPABILITY_PROVIDER,
+        "Capability Provider",
+        DistributionRoute.KIND_HANDLER,
+        group="tools_integrations",
+        owner_resource="plugins",
+        management_path="/plugins",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.MEMORY_PROVIDER,
+        "Memory Provider",
+        DistributionRoute.KIND_HANDLER,
+        group="platform_extensions",
+        owner_resource="plugins",
+        management_path="/plugins",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.FILE_PROVIDER,
+        "File / Storage Provider",
+        DistributionRoute.KIND_HANDLER,
+        group="platform_extensions",
+        owner_resource="plugins",
+        management_path="/plugins",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.KNOWLEDGE_PROVIDER,
+        "Knowledge Provider",
+        DistributionRoute.KIND_HANDLER,
+        group="platform_extensions",
+        owner_resource="plugins",
+        management_path="/plugins",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.OBSERVABILITY_EXPORTER,
+        "Observability Exporter",
+        DistributionRoute.KIND_HANDLER,
+        group="platform_extensions",
+        owner_resource="plugins",
+        management_path="/plugins",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.AUTOMATION_PROVIDER,
+        "Automation Provider",
+        DistributionRoute.KIND_HANDLER,
+        group="platform_extensions",
+        owner_resource="plugins",
+        management_path="/plugins",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.EVALUATOR,
+        "Evaluator",
+        DistributionRoute.KIND_HANDLER,
+        group="platform_extensions",
+        owner_resource="plugins",
+        management_path="/plugins",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.TOOL,
+        "Tool",
+        DistributionRoute.PORTABLE_IMPORT,
+        group="tools_integrations",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.SKILL,
+        "Skill",
+        DistributionRoute.KIND_HANDLER,
+        group="ai_agents",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.PLUGIN,
+        "Plugin",
+        DistributionRoute.PLUGIN,
+        group="platform_extensions",
+        owner_resource="plugins",
+        management_path="/plugins",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.WORKFLOW,
+        "Workflow",
+        DistributionRoute.PORTABLE_IMPORT,
+        group="content",
+    ),
+    MarketplaceKindDescriptor(
+        RegistryItemType.TEMPLATE,
+        "Template",
+        DistributionRoute.PORTABLE_IMPORT,
+        group="content",
     ),
     MarketplaceKindDescriptor(
         RegistryItemType.MODEL_CONFIGURATION,
         "Model Configuration",
         DistributionRoute.PORTABLE_IMPORT,
+        group="models",
+        owner_resource="models",
+        management_path="/models",
     ),
     MarketplaceKindDescriptor(
-        RegistryItemType.CONNECTOR, "Connector", DistributionRoute.PORTABLE_IMPORT
+        RegistryItemType.CONNECTOR,
+        "Connector",
+        DistributionRoute.PORTABLE_IMPORT,
+        group="tools_integrations",
     ),
     MarketplaceKindDescriptor(
         RegistryItemType.APPLICATION,
         "Application",
         DistributionRoute.KIND_HANDLER,
         supports_update=False,
+        group="applications",
+        owner_resource="applications",
+        management_path="/applications",
     ),
     MarketplaceKindDescriptor(
-        RegistryItemType.EVALUATION, "Evaluation", DistributionRoute.PORTABLE_IMPORT
+        RegistryItemType.EVALUATION,
+        "Evaluation",
+        DistributionRoute.PORTABLE_IMPORT,
+        group="platform_extensions",
     ),
     MarketplaceKindDescriptor(
         RegistryItemType.DOCUMENTATION,
@@ -98,6 +228,7 @@ BUILTIN_MARKETPLACE_KINDS: tuple[MarketplaceKindDescriptor, ...] = (
         supports_install=False,
         supports_update=False,
         supports_uninstall=False,
+        group="content",
     ),
 )
 
