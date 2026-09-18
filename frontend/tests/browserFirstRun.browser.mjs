@@ -426,18 +426,11 @@ try {
       `Official browser first run created an unexpected number of canonical Tasks: before=${JSON.stringify(tasksBeforeFailure)} after=${JSON.stringify(tasksAfterSuccess)}`,
     );
   }
-  await producedResultLink.focus();
-  if (!(await producedResultLink.evaluate((element) => document.activeElement === element))) {
-    throw new Error("Produced Result navigation did not accept keyboard focus");
-  }
-  await producedResultLink.press("Enter");
-  await page.getByRole("heading", { name: "Result reference", exact: true }).waitFor();
-  if (!page.url().includes("/results/")) {
-    throw new Error(`Produced Result keyboard navigation opened an unexpected route: ${page.url()}`);
+  const producedResultHref = await producedResultLink.getAttribute("href");
+  if (!producedResultHref?.startsWith("/results/")) {
+    throw new Error(`Produced Result link did not expose a canonical Result route: ${producedResultHref}`);
   }
 
-  await page.goto(`${frontendUrl}/onboarding`);
-  await page.getByRole("heading", { name: "Guided onboarding", exact: true }).waitFor();
   await page.getByRole("heading", { name: "Optional General Assistant setup", exact: true }).waitFor();
   await (await waitForButton(page, "Bootstrap standard Agents")).click();
   await (await waitForButton(page, "Create editable General Assistant")).click();
@@ -445,6 +438,32 @@ try {
   await page.getByRole("heading", { name: "Optional single-Agent first task", exact: true }).waitFor();
   await (await waitForButton(page, "Refresh setup state")).click();
   await (await waitForButton(page, "Validate readiness")).click();
+  await page.getByRole("link", { name: "Open dashboard", exact: true }).waitFor();
+
+  // Incomplete installations intentionally redirect non-onboarding routes back here.
+  // Exercise terminal Result keyboard navigation only after the canonical setup gate is ready.
+  const readyResultCard = page.getByRole("heading", {
+    name: "Official multi-agent first-run result",
+    exact: true,
+  }).locator("..");
+  const readyProducedResultLink = readyResultCard.getByRole("link", {
+    name: "Open produced Result",
+    exact: true,
+  });
+  if ((await readyProducedResultLink.getAttribute("href")) !== producedResultHref) {
+    throw new Error("Produced Result route changed while completing setup readiness");
+  }
+  await readyProducedResultLink.focus();
+  if (!(await readyProducedResultLink.evaluate((element) => document.activeElement === element))) {
+    throw new Error("Produced Result navigation did not accept keyboard focus");
+  }
+  const resultNavigation = page.waitForURL(`${frontendUrl}${producedResultHref}`);
+  await page.keyboard.press("Enter");
+  await resultNavigation;
+  await page.getByRole("heading", { name: "Result reference", exact: true }).waitFor();
+
+  await page.goto(`${frontendUrl}/onboarding`);
+  await page.getByRole("heading", { name: "Guided onboarding", exact: true }).waitFor();
   await page.getByRole("link", { name: "Open dashboard", exact: true }).waitFor();
   await page.getByRole("link", { name: "Open dashboard", exact: true }).click();
 
