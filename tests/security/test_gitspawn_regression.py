@@ -174,11 +174,27 @@ def test_gitspawn_execution_capable_local_config_inventory(key: str) -> None:
         "ext::touch /tmp/issue-1220-marker",
         "evil::touch /tmp/issue-1220-marker",
         "evil://repository.example.invalid/project",
+        "file:///tmp/issue-1220-remote.git",
+        "/tmp/issue-1220-remote.git",
+        "../issue-1220-remote.git",
+        "issue-1220-remote.git",
     ),
 )
-def test_gitspawn_external_remote_helpers_are_rejected(url: str) -> None:
+def test_gitspawn_unsafe_remote_forms_are_rejected(url: str) -> None:
     with pytest.raises(ValueError):
         validate_git_remote_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://repository.example.invalid/project.git",
+        "ssh://git@repository.example.invalid/project.git",
+        "git@repository.example.invalid:project.git",
+    ),
+)
+def test_gitspawn_builtin_network_remote_forms_remain_supported(url: str) -> None:
+    assert validate_git_remote_url(url) == url
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Git hook executability semantics differ on Windows")
@@ -376,6 +392,41 @@ def test_gitspawn_external_remote_helper_is_rejected_before_fetch(tmp_path: Path
 
         with pytest.raises(ContractError) as error:
             await provider.fetch(repository, operation)
+
+        assert error.value.code is ErrorCode.INVALID_CONFIGURATION
+        assert not marker.exists()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Git hook executability semantics differ on Windows")
+def test_gitspawn_local_push_remote_cannot_execute_target_hook(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        provider, repository, operation, root = await _initialized_provider(tmp_path)
+        (root / "payload.txt").write_text("safe\n", encoding="utf-8")
+        await provider.commit(
+            repository,
+            "baseline",
+            operation,
+            author_name="GitSpawn Test",
+            author_email="gitspawn@example.invalid",
+        )
+
+        remote = tmp_path / "attacker-remote.git"
+        subprocess.run(
+            [_git_binary(), "init", "--bare", str(remote)],
+            env=controlled_git_environment(home=tmp_path / "bare-home"),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        marker = tmp_path / "pre-receive-executed"
+        _write_python_hook(remote / "hooks" / "pre-receive", marker)
+        _raw_git(root, "remote", "add", "origin", str(remote))
+
+        with pytest.raises(ContractError) as error:
+            await provider.push(repository, operation)
 
         assert error.value.code is ErrorCode.INVALID_CONFIGURATION
         assert not marker.exists()
