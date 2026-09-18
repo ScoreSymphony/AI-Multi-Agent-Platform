@@ -180,7 +180,7 @@ class RegistryQuery:
 class InstalledRegistryItem:
     item_id: str
     version: str
-    source_registry: str
+    source_registry: str | None = None
     pinned_version: str | None = None
     license: str | None = None
     provenance: str | None = None
@@ -190,7 +190,8 @@ class InstalledRegistryItem:
     def __post_init__(self) -> None:
         _require_id(self.item_id, "installed item_id")
         version_key(self.version)
-        _require_text(self.source_registry, "source_registry")
+        if self.source_registry is not None:
+            _require_text(self.source_registry, "source_registry")
         if self.pinned_version is not None:
             version_key(self.pinned_version)
         if self.license is not None:
