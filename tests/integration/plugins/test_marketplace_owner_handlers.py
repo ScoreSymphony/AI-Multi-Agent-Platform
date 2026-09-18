@@ -462,7 +462,7 @@ class _ApplicationRuntime:
         )
 
 
-async def test_application_handler_delegates_to_1173_and_rejects_fake_update(tmp_path) -> None:
+async def test_application_handler_delegates_to_canonical_owner_and_rejects_fake_update(tmp_path) -> None:
     repository = InMemoryApplicationRepository()
     runtimes = ApplicationRuntimeRegistry((_ApplicationRuntime(),))
     lifecycle = ApplicationLifecycleService(repository, runtimes)
