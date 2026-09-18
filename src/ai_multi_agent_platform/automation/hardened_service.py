@@ -56,7 +56,6 @@ _creation_idempotency_key: ContextVar[str | None] = ContextVar(
 )
 
 
-
 class AutomationStartupRecoveryDisposition(StrEnum):
     """Bounded startup outcomes for durable nonterminal Automation deliveries."""
 
