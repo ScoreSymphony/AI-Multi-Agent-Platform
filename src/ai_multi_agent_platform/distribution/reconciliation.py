@@ -15,6 +15,16 @@ from .signatures import RegistrySignatureVerifier
 from .state import RegistryInstallationSnapshot, RegistryInstallationStore
 
 _PLUGIN_BACKED_KINDS: dict[str, str] = {
+    RegistryItemType.ORCHESTRATOR: "orchestrator",
+    RegistryItemType.EXECUTOR: "executor",
+    RegistryItemType.MODEL_PROVIDER: "model_provider",
+    RegistryItemType.CAPABILITY_PROVIDER: "capability_provider",
+    RegistryItemType.MEMORY_PROVIDER: "memory_provider",
+    RegistryItemType.FILE_PROVIDER: "file_provider",
+    RegistryItemType.KNOWLEDGE_PROVIDER: "knowledge_provider",
+    RegistryItemType.OBSERVABILITY_EXPORTER: "observability_exporter",
+    RegistryItemType.AUTOMATION_PROVIDER: "automation_provider",
+    RegistryItemType.EVALUATOR: "evaluator",
     RegistryItemType.TOOL: "capability_provider",
     RegistryItemType.CONNECTOR: "connector_provider",
 }
@@ -34,8 +44,9 @@ async def reconcile_registry_plugins(
     """Restore Registry installations whose package lifecycle is owned by the plugin domain.
 
     Reconciliation restores only previously persisted plugin-backed installations. It never
-    enables runtimes or restores permission grants. Skills, Applications and portable imports keep
-    their own durable owner state.
+    enables runtimes or restores permission grants. Semantic extension kinds are restored only
+    as Plugin-owner installations; runtime activation remains an explicit Plugin lifecycle step.
+    Skills, Applications and portable imports keep their own durable owner state.
     """
 
     installer = PluginRegistryArtifactInstaller(plugin_registry)
