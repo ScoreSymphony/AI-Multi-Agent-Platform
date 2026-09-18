@@ -88,9 +88,15 @@ def test_pending_verification_exact_subject_binding_survives_drain_restart(
         first = build_single_node_deployment(SingleNodeConfig(data_dir=root, secure_cookie=False))
         first.bootstrap_admin("drain-verification", "correct horse battery staple")
         smoke = await first.run_reference_smoke()
+        result_id = new_id("result")
+        await first.kernel.attach_result(
+            idempotency_key="drain-verification:attach-result",
+            task_id=smoke.task_id,
+            run_id=smoke.run_id,
+            result_id=result_id,
+        )
         run = await first.kernel.get_run(smoke.task_id, smoke.run_id)
-        assert len(run.result_ids) == 1
-        result_id = run.result_ids[0]
+        assert run.result_ids == (result_id,)
 
         stage_id = "drain-human-review"
         policy = first.verification.register_policy(
