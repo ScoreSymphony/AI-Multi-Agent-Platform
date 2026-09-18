@@ -78,7 +78,6 @@ def hermes_plugin_manifest() -> PluginManifest:
                     "replanning": True,
                     "cancellation": True,
                     "reconciliation": True,
-                    "provider_private_id": False,
                 },
             ),
         ),
