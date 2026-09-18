@@ -7,8 +7,14 @@ from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.control_plane.extensions import ControlPlane
+from ai_multi_agent_platform.control_plane.extensions import (
+    CommandAuthorizer,
+    ControlPlane,
+    ControlPlaneModule,
+)
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, json_value
+from ai_multi_agent_platform.control_plane.module_registry import install_control_plane_modules
+from ai_multi_agent_platform.control_plane.service import _payload_digest
 
 from .control_plane_projection import (
     _decision_resource,
@@ -51,6 +57,7 @@ MARKETPLACE_PREVIEW_COMMAND = "marketplace.preview"
 MARKETPLACE_INSTALL_COMMAND = "marketplace.install"
 MARKETPLACE_UPDATE_COMMAND = "marketplace.update"
 MARKETPLACE_UNINSTALL_COMMAND = "marketplace.uninstall"
+MARKETPLACE_MODULE = "marketplace"
 
 
 class RegistryValidationContextResolver(Protocol):
@@ -845,37 +852,170 @@ def register_distribution_control_plane(
 
     Discovery remains read-only. Preview and lifecycle commands require authoritative
     validation state; explicit Marketplace mutations also require durable installation
-    state and fail closed when their canonical owner route is unavailable. Legacy
-    registry.activate retains its existing owner-router availability contract. The
-    generic Control Plane performs authorization before commands execute.
+    state and fail closed when their canonical owner route is unavailable. Production
+    Control Plane composition uses one explicit module with payload/candidate-bound
+    authorization; the manual registration fallback exists only for lightweight test
+    doubles that predate the module registry.
     """
 
     if not distribution.enabled:
         return
-    control_plane.register_resource_service(
-        REGISTRY_COLLECTION,
-        RegistryResourceService(distribution, validation_context_resolver),
-    )
-    control_plane.register_resource_service(
-        MARKETPLACE_KIND_COLLECTION,
-        MarketplaceKindResourceService(distribution),
-    )
+
+    resources = {
+        REGISTRY_COLLECTION: RegistryResourceService(
+            distribution,
+            validation_context_resolver,
+        ),
+        MARKETPLACE_KIND_COLLECTION: MarketplaceKindResourceService(distribution),
+    }
+    handlers: RegistryCommandHandlers | None = None
+    commands: dict[str, object] = {}
     if validation_context_resolver is not None:
         handlers = RegistryCommandHandlers(distribution, validation_context_resolver)
-        control_plane.register_command(REGISTRY_PREVIEW_COMMAND, handlers.preview)
-        control_plane.register_command(MARKETPLACE_PREVIEW_COMMAND, handlers.marketplace_preview)
-        if distribution.activation_enabled:
-            control_plane.register_command(REGISTRY_ACTIVATE_COMMAND, handlers.activate)
-        if distribution.installation_state_enabled:
-            control_plane.register_command(
-                MARKETPLACE_INSTALL_COMMAND, handlers.marketplace_install
+        commands = _distribution_commands(distribution, handlers)
+
+    if isinstance(control_plane, ControlPlane):
+        authorizers: dict[str, CommandAuthorizer] = {}
+        if handlers is not None:
+            authorizers = {
+                command: _marketplace_command_authorizer(
+                    control_plane,
+                    handlers,
+                    command,
+                )
+                for command in commands
+            }
+        install_control_plane_modules(
+            control_plane,
+            (
+                ControlPlaneModule(
+                    name=MARKETPLACE_MODULE,
+                    resource_services=resources,
+                    command_handlers=commands,  # type: ignore[arg-type]
+                    command_authorizers=authorizers,
+                ),
+            ),
+        )
+        return
+
+    for collection, service in resources.items():
+        control_plane.register_resource_service(collection, service)
+    for command, handler in commands.items():
+        control_plane.register_command(command, handler)
+
+
+def _distribution_commands(
+    distribution: DistributionService,
+    handlers: RegistryCommandHandlers,
+) -> dict[str, object]:
+    commands: dict[str, object] = {
+        REGISTRY_PREVIEW_COMMAND: handlers.preview,
+        MARKETPLACE_PREVIEW_COMMAND: handlers.marketplace_preview,
+    }
+    if distribution.activation_enabled:
+        commands[REGISTRY_ACTIVATE_COMMAND] = handlers.activate
+    if distribution.installation_state_enabled:
+        commands.update(
+            {
+                MARKETPLACE_INSTALL_COMMAND: handlers.marketplace_install,
+                MARKETPLACE_UPDATE_COMMAND: handlers.marketplace_update,
+                MARKETPLACE_UNINSTALL_COMMAND: handlers.marketplace_uninstall,
+                REGISTRY_PIN_COMMAND: handlers.pin,
+                REGISTRY_UNPIN_COMMAND: handlers.unpin,
+            }
+        )
+    return commands
+
+
+def _marketplace_command_authorizer(
+    control_plane: ControlPlane,
+    handlers: RegistryCommandHandlers,
+    command: str,
+) -> CommandAuthorizer:
+    async def authorize(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> None:
+        if command in {
+            MARKETPLACE_INSTALL_COMMAND,
+            MARKETPLACE_UPDATE_COMMAND,
+        }:
+            await control_plane._authorize(
+                context,
+                MARKETPLACE_PREVIEW_COMMAND,
+                resource_ref,
+                request_payload_digest=_payload_digest(payload),
             )
-            control_plane.register_command(MARKETPLACE_UPDATE_COMMAND, handlers.marketplace_update)
-            control_plane.register_command(
-                MARKETPLACE_UNINSTALL_COMMAND, handlers.marketplace_uninstall
+            version = _required_version(payload, command)
+            source_registry = _optional_source_registry(payload)
+            _, preview = await handlers._resolve_preview(
+                context,
+                resource_ref,
+                version,
+                source_registry=source_registry,
             )
-            control_plane.register_command(REGISTRY_PIN_COMMAND, handlers.pin)
-            control_plane.register_command(REGISTRY_UNPIN_COMMAND, handlers.unpin)
+            await control_plane._authorize(
+                context,
+                command,
+                resource_ref,
+                request_payload_digest=_payload_digest(
+                    _marketplace_candidate_authorization_payload(preview)
+                ),
+            )
+            return
+
+        if command == MARKETPLACE_UNINSTALL_COMMAND:
+            await control_plane._authorize(
+                context,
+                MARKETPLACE_PREVIEW_COMMAND,
+                resource_ref,
+                request_payload_digest=_payload_digest(payload),
+            )
+            preview = handlers._resolve_uninstall_preview(resource_ref, payload)
+            await control_plane._authorize(
+                context,
+                command,
+                resource_ref,
+                request_payload_digest=_payload_digest(
+                    _marketplace_uninstall_authorization_payload(preview)
+                ),
+            )
+            return
+
+        await control_plane._authorize(
+            context,
+            command,
+            resource_ref,
+            request_payload_digest=_payload_digest(payload),
+        )
+
+    return authorize
+
+
+def _marketplace_candidate_authorization_payload(
+    preview: DistributionPreview,
+) -> dict[str, JsonValue]:
+    return {
+        "item_id": preview.item.item_id,
+        "version": preview.item.version,
+        "source_registry": preview.item.source_registry,
+        "artifact_sha256": preview.artifact_sha256,
+        "route": preview.route.value,
+        "decision": _decision_resource(preview.decision),
+    }
+
+
+def _marketplace_uninstall_authorization_payload(
+    preview: DistributionUninstallPreview,
+) -> dict[str, JsonValue]:
+    return {
+        "item_id": preview.item.item_id,
+        "version": preview.item.version,
+        "source_registry": preview.item.source_registry,
+        "route": preview.route.value,
+        "decision": _decision_resource(preview.decision),
+    }
 
 
 def _require_marketplace_activation(
