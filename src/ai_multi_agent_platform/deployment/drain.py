@@ -23,7 +23,7 @@ from ai_multi_agent_platform.control_plane import (
     HTTPRequest,
     HTTPResponse,
 )
-from ai_multi_agent_platform.control_plane.http import ASGIReceive, ASGISend, _header
+from ai_multi_agent_platform.control_plane.http import ASGIReceive, ASGISend
 from ai_multi_agent_platform.control_plane.models import API_VERSION, APIException
 from ai_multi_agent_platform.observability import (
     FailureComponent,
@@ -228,7 +228,7 @@ class SingleNodeDrainController:
                     },
                 )
 
-    async def mark_teardown_failure(self, detail: str) -> None:
+    def mark_teardown_failure(self, detail: str) -> None:
         self._event(
             "platform.single_node.drain.teardown_failed",
             severity=TelemetrySeverity.ERROR,
@@ -328,8 +328,8 @@ class DrainAwareAuthenticatedControlPlaneHTTP(AuthenticatedControlPlaneHTTP):
         return response
 
     def _draining_response(self, request: HTTPRequest) -> HTTPResponse:
-        request_id = _header(request.headers, "x-request-id") or f"request_{uuid4()}"
-        correlation_id = _header(request.headers, "x-correlation-id") or request_id
+        request_id = _request_header(request.headers, "x-request-id") or f"request_{uuid4()}"
+        correlation_id = _request_header(request.headers, "x-correlation-id") or request_id
         return self._error_response(
             APIException(
                 status=503,
@@ -365,34 +365,50 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
     ) -> None:
         scope_type = scope.get("type")
         if scope_type == "websocket":
-            if not await self._drain.try_admit_mutation():
-                connect = await receive()
-                if connect.get("type") != "websocket.connect":
-                    await send(
-                        {
-                            "type": "websocket.close",
-                            "code": 1002,
-                            "reason": "websocket.connect required",
-                        }
-                    )
-                    return
+            await self._handle_websocket(scope, receive, send)
+            return
+        if scope_type == "lifespan":
+            await self._handle_lifespan(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+    async def _handle_websocket(
+        self,
+        scope: dict[str, Any],
+        receive: ASGIReceive,
+        send: ASGISend,
+    ) -> None:
+        if not await self._drain.try_admit_mutation():
+            connect = await receive()
+            if connect.get("type") != "websocket.connect":
                 await send(
                     {
                         "type": "websocket.close",
-                        "code": 1013,
-                        "reason": "single-node Control Plane is draining",
+                        "code": 1002,
+                        "reason": "websocket.connect required",
                     }
                 )
                 return
-            try:
-                await super().__call__(scope, receive, send)
-            finally:
-                await self._drain.release_mutation()
-            return
-        if scope_type != "lifespan":
-            await super().__call__(scope, receive, send)
+            await send(
+                {
+                    "type": "websocket.close",
+                    "code": 1013,
+                    "reason": "single-node Control Plane is draining",
+                }
+            )
             return
 
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await self._drain.release_mutation()
+
+    async def _handle_lifespan(
+        self,
+        scope: dict[str, Any],
+        receive: ASGIReceive,
+        send: ASGISend,
+    ) -> None:
         shutdown_seen = asyncio.Event()
         shutdown_response_sent = False
 
@@ -413,7 +429,7 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
             elif message_type == "lifespan.shutdown.failed":
                 shutdown_response_sent = True
                 detail = str(message.get("message", "ASGI lifespan shutdown failed"))
-                await self._drain.mark_teardown_failure(detail)
+                self._drain.mark_teardown_failure(detail)
                 await self._drain.mark_forced("resource_teardown_failure")
                 await self._drain.mark_completed()
             await send(message)
@@ -427,45 +443,92 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
             shutdown_seen.wait(),
             name="single-node-drain-shutdown-waiter",
         )
+        await self._await_lifespan_shutdown(
+            inner_task,
+            shutdown_waiter,
+            send=send,
+            shutdown_response_sent=lambda: shutdown_response_sent,
+        )
 
+    async def _await_lifespan_shutdown(
+        self,
+        inner_task: asyncio.Task[None],
+        shutdown_waiter: asyncio.Task[bool],
+        *,
+        send: ASGISend,
+        shutdown_response_sent: Callable[[], bool],
+    ) -> None:
         done, _ = await asyncio.wait(
             {inner_task, shutdown_waiter},
             return_when=asyncio.FIRST_COMPLETED,
         )
         if inner_task in done:
-            shutdown_waiter.cancel()
-            with suppress(asyncio.CancelledError):
-                await shutdown_waiter
+            await _cancel_and_settle(shutdown_waiter)
             await inner_task
             return
 
-        shutdown_waiter.cancel()
-        with suppress(asyncio.CancelledError):
-            await shutdown_waiter
-
-        remaining = self._drain.remaining_seconds()
+        await _cancel_and_settle(shutdown_waiter)
         try:
-            await asyncio.wait_for(asyncio.shield(inner_task), timeout=remaining)
+            await asyncio.wait_for(
+                asyncio.shield(inner_task),
+                timeout=self._drain.remaining_seconds(),
+            )
         except TimeoutError:
-            await self._drain.mark_forced("resource_teardown_timeout", timed_out=True)
-            inner_task.cancel()
-            try:
-                await inner_task
-            except asyncio.CancelledError:
-                pass
-            except Exception as exc:
-                await self._drain.mark_teardown_failure(type(exc).__name__)
-            if not shutdown_response_sent:
-                await send({"type": "lifespan.shutdown.complete"})
-            await self._drain.mark_completed()
+            await self._force_lifespan_completion(
+                inner_task,
+                send=send,
+                response_sent=shutdown_response_sent(),
+                reason="resource_teardown_timeout",
+                timed_out=True,
+            )
         except asyncio.CancelledError:
             raise
+        # error-boundary: allow-broad-catch=boundary lifespan owner must settle process teardown
         except Exception as exc:
-            await self._drain.mark_teardown_failure(type(exc).__name__)
-            await self._drain.mark_forced("resource_teardown_failure")
-            if not shutdown_response_sent:
-                await send({"type": "lifespan.shutdown.complete"})
-            await self._drain.mark_completed()
+            self._drain.mark_teardown_failure(type(exc).__name__)
+            await self._force_lifespan_completion(
+                inner_task,
+                send=send,
+                response_sent=shutdown_response_sent(),
+                reason="resource_teardown_failure",
+                timed_out=False,
+            )
+
+    async def _force_lifespan_completion(
+        self,
+        inner_task: asyncio.Task[None],
+        *,
+        send: ASGISend,
+        response_sent: bool,
+        reason: str,
+        timed_out: bool,
+    ) -> None:
+        await self._drain.mark_forced(reason, timed_out=timed_out)
+        if not inner_task.done():
+            inner_task.cancel()
+        try:
+            await inner_task
+        except asyncio.CancelledError:
+            pass
+        # error-boundary: allow-broad-catch=cleanup forced teardown observes contained failure
+        except Exception as exc:
+            self._drain.mark_teardown_failure(type(exc).__name__)
+        if not response_sent:
+            await send({"type": "lifespan.shutdown.complete"})
+        await self._drain.mark_completed()
+
+async def _cancel_and_settle(task: asyncio.Task[Any]) -> None:
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
+def _request_header(headers: dict[str, str], name: str) -> str | None:
+    target = name.lower()
+    for key, value in headers.items():
+        if key.lower() == target:
+            return value
+    return None
 
 
 def _is_health_path(path: str) -> bool:
