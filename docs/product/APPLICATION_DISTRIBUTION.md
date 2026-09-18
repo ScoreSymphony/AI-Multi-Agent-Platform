@@ -106,7 +106,7 @@ Clients should present `visibility`, immutable `release_url`, per-artifact `down
 
 The current implementation intentionally does not claim a universal installer generator, automatic application updater or signing/notarization implementation. Signing remains a separate capability seam.
 
-Remote/cross-platform application builds are supported only when distributed execution is enabled and the platform has a reachable Worker whose advertised OS, architecture, capabilities, resources and actual toolchain satisfy the target. The platform does not infer buildability from an enum value or fabricate support for an absent macOS/Windows/Linux/architecture-specific builder.
+Remote/cross-platform application builds are supported only when distributed execution is enabled and the platform has a reachable Worker whose advertised OS, architecture, capabilities and resources satisfy the target requirements. Scheduler admission is not proof that an arbitrary command/toolchain will succeed on that Worker; actual execution failure remains explicit and cannot be promoted to a successful artifact. The platform does not infer successful target support from an enum value or fabricate a builder that is absent from distributed inventory.
 
 Secret-backed builds remain an explicit asymmetry: the local/reference backend implements #748 late `SecretReference` resolution, while the distributed backend currently rejects non-empty `secret_environment` before dispatch until scoped Worker secret delivery is implemented. That remaining limitation must not be described as a lack of remote Worker build dispatch in general.
 
