@@ -45,6 +45,12 @@ class TrustStatus(StrEnum):
     LOCAL = "local"
 
 
+class RegistryMaturity(StrEnum):
+    EXPERIMENTAL = "experimental"
+    BETA = "beta"
+    STABLE = "stable"
+
+
 class DistributionRoute(StrEnum):
     PLUGIN = "plugin"
     PORTABLE_IMPORT = "portable_import"
