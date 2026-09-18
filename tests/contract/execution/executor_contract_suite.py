@@ -16,7 +16,7 @@ class ExecutorContractSuite:
     """Reusable backend-neutral contract tests for Executor implementations.
 
     Concrete test classes provide an executor and isolated workspace. Future
-    Forge or other executor adapters can reuse this suite by subclassing it.
+    Supported executor adapters can reuse this suite by subclassing it.
     Implementations used with this suite must expose the deterministic contract
     test actions: echo, fail, sleep, and write_artifact.
     """

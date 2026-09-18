@@ -15,40 +15,40 @@ from ai_multi_agent_platform.context import ContextEntryRole, ContextFreshness
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.repository_intelligence.context_funnel import (
+from ai_multi_agent_platform.repositories.intelligence.context_funnel import (
     RepositoryContextCaller,
     RepositoryContextFunnel,
     RepositoryContextRequest,
 )
-from ai_multi_agent_platform.repository_intelligence.evaluation_matrix import (
+from ai_multi_agent_platform.repositories.intelligence.evaluation_matrix import (
     RepositoryIntelligenceEvaluationObservation,
     RepositoryIntelligenceMetric,
     compare_repository_intelligence_observations,
 )
-from ai_multi_agent_platform.repository_intelligence.fallback import (
+from ai_multi_agent_platform.repositories.intelligence.fallback import (
     RepositoryIntelligenceFallbackInvoker,
 )
-from ai_multi_agent_platform.repository_intelligence.models import (
+from ai_multi_agent_platform.repositories.intelligence.models import (
     RepositoryIntelligenceFreshness,
 )
-from ai_multi_agent_platform.repository_intelligence.projectatlas import (
+from ai_multi_agent_platform.repositories.intelligence.projectatlas import (
     PROJECTATLAS_ARCHIVE_SHA256,
     PROJECTATLAS_RUNTIME_VERSION,
 )
-from ai_multi_agent_platform.repository_intelligence.projectatlas_adapter import (
+from ai_multi_agent_platform.repositories.intelligence.projectatlas_adapter import (
     ProjectAtlasContainmentEvidence,
     ProjectAtlasSourceBinding,
 )
-from ai_multi_agent_platform.repository_intelligence.projectatlas_resources import (
+from ai_multi_agent_platform.repositories.intelligence.projectatlas_resources import (
     PROJECTATLAS_PILOT_PEAK_RSS_BYTES,
     PROJECTATLAS_PILOT_STATE_BYTES,
     projectatlas_resource_profile,
     with_projectatlas_admission_bounds,
 )
-from ai_multi_agent_platform.repository_intelligence.resources import (
+from ai_multi_agent_platform.repositories.intelligence.resources import (
     RepositoryIntelligenceWorkload,
 )
-from ai_multi_agent_platform.repository_intelligence.search_bridge import (
+from ai_multi_agent_platform.repositories.intelligence.search_bridge import (
     RepositoryIntelligenceSearchFederator,
     RepositorySearchCaller,
     RepositorySearchScope,

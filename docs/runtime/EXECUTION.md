@@ -1,6 +1,6 @@
 # Platform execution contract
 
-Execution is a platform-owned abstraction. Forge, a local process runner, a container runtime, or a remote worker may implement it later, but none of those systems defines the canonical request/result model.
+Execution is a platform-owned abstraction. A local process runner, container runtime, remote worker or another supported executor adapter may implement it, but none of those systems defines the canonical request/result model. The retired Forge runtime remains historical evidence only.
 
 ## Canonical boundary
 
@@ -44,7 +44,7 @@ The contract already carries `policy_context`, `environment`, timeout and cancel
 
 ## Configuration-driven selection
 
-`ExecutorRegistry` maps configuration-owned names to `Executor` instances. Callers select an executor by configured name rather than importing a concrete implementation. Forge can therefore later be registered as another executor implementation.
+`ExecutorRegistry` maps configuration-owned names to `Executor` instances. Callers select an executor by configured name rather than importing a concrete implementation, so supported executor adapters remain replaceable without changing canonical callers.
 
 ## Kernel integration and artifact attachment
 
@@ -54,10 +54,10 @@ The contract already carries `policy_context`, `environment`, timeout and cancel
 
 The same integration test executes `write_artifact`, verifies the executor evidence, materializes a canonical `artifact_*` identity through the kernel and attaches that identity to both the canonical run and task. This proves executor-produced evidence can cross the execution boundary without making executor-specific artifact types part of the kernel contract.
 
-No Forge type or Forge runtime is involved.
+No retired Forge type or runtime is involved.
 
 ## Reusable contract-test coverage
 
-`tests/contract/execution/executor_contract_suite.py` defines `ExecutorContractSuite`, a reusable backend-neutral pytest contract suite. A concrete executor test class supplies only an executor instance and isolated workspace. `tests/contract/execution/test_reference_executor.py` applies the suite to `ReferenceExecutor`; a future Forge executor can subclass the same suite rather than copying the assertions.
+`tests/contract/execution/executor_contract_suite.py` defines `ExecutorContractSuite`, a reusable backend-neutral pytest contract suite. A concrete executor test class supplies only an executor instance and isolated workspace. `tests/contract/execution/test_reference_executor.py` applies the suite to `ReferenceExecutor`; future supported executor adapters can subclass the same suite rather than copying the assertions.
 
 The reusable suite covers success and canonical identity preservation, controlled non-zero failure and error mapping, timeout, cancellation, unsupported capability, missing workspace, traversal isolation and artifact/write-boundary evidence. Reference-specific tests additionally cover health/capability metadata and configuration-driven selection.

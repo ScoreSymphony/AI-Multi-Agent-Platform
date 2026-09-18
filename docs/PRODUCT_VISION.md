@@ -80,7 +80,7 @@ The architecture must define platform-owned boundaries that allow multiple imple
 13. Automation / trigger backend
 14. Optional durable workflow engine
 
-Hermes, Forge, LiteLLM, MCP implementations, storage products, schedulers, workflow engines and similar projects are candidates for adapters or reusable components, not permanent definitions of these subsystems.
+Hermes, LiteLLM, MCP implementations, storage products, schedulers, workflow engines, executor integrations and similar projects are candidates for adapters or reusable components, not permanent definitions of these subsystems. Retired integrations such as Forge remain historical evidence, not active product candidates.
 
 Replacing one adapter or implementation must not require unrelated core modules to be rewritten.
 

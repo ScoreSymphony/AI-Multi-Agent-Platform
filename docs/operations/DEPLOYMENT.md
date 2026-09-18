@@ -27,8 +27,8 @@ Authenticated Control Plane
         `-- ReferenceExecutor
 ```
 
-Hermes, Forge, LiteLLM, MCP, remote Workers, Kubernetes, cloud services and paid external
-AI/API services are not required for this profile. Advanced profiles add replaceable services
+Hermes, LiteLLM, MCP, remote Workers, Kubernetes, cloud services and paid external
+AI/API services are not required for this profile. The retired Forge runtime is not shipped by this profile. Advanced profiles add replaceable services
 without changing canonical Task/Run contracts.
 
 ## Prerequisites
@@ -56,8 +56,8 @@ pip install '.[server]'
 
 On Windows PowerShell, activate the environment with `.venv\Scripts\Activate.ps1`.
 
-The `server` extra installs the HTTP server needed by `platform-server serve`. Hermes, Forge,
-LiteLLM, MCP and model-provider extras remain optional and are not required by this baseline.
+The `server` extra installs the HTTP server needed by `platform-server serve`. Hermes,
+LiteLLM, MCP and model-provider extras remain optional and are not required by this baseline. There is no active Forge runtime extra.
 
 ## Generate and load configuration
 
@@ -163,7 +163,7 @@ platform-server smoke
 
 This creates a small Project and executes one canonical Task/Run through the in-process
 `ReferenceOrchestrator` and `ReferenceExecutor`. It requires no paid API, model endpoint,
-remote Worker, MCP server, LiteLLM, Hermes or Forge.
+remote Worker, MCP server, LiteLLM or Hermes. The retired Forge runtime is not part of the deployment profile.
 
 The smoke uses stable idempotency keys. Re-running it, including after a process restart,
 reuses the same canonical smoke Task/Run instead of duplicating work. Success prints the

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ai_multi_agent_platform.distributed.runtime import DispatchState
-from ai_multi_agent_platform.high_availability.reconciliation_policy import (
+from ai_multi_agent_platform.distributed.high_availability.reconciliation_policy import (
     derive_reconciliation_result,
 )
 

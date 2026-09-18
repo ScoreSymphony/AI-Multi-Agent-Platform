@@ -59,7 +59,7 @@ class _CollaborationConnector(ConnectorProvider):
         return ConnectorDefinition(
             id=connector_definition_id("fake.collaboration", "1.0"),
             connector_type_id="fake.collaboration",
-            name="Fake Collaboration Forge",
+            name="Fake Collaboration Provider",
             version="1.0",
             resource_types=("repository", "issue", "merge_request"),
             actions=(
@@ -196,7 +196,7 @@ class _CollaborationConnector(ConnectorProvider):
                 namespace="fake.collaboration",
                 native_id="owner/repository",
             ),
-            canonical_url="https://forge.invalid/owner/repository",
+            canonical_url="https://vcs.invalid/owner/repository",
             revision=_SHA,
         )
 
@@ -209,7 +209,7 @@ class _CollaborationConnector(ConnectorProvider):
                 namespace="fake.collaboration",
                 native_id="owner/repository#17",
             ),
-            canonical_url="https://forge.invalid/owner/repository/issues/17",
+            canonical_url="https://vcs.invalid/owner/repository/issues/17",
         )
 
     def _change_request(self) -> ExternalResourceReference:
@@ -221,7 +221,7 @@ class _CollaborationConnector(ConnectorProvider):
                 namespace="fake.collaboration",
                 native_id="owner/repository!9",
             ),
-            canonical_url="https://forge.invalid/owner/repository/changes/9",
+            canonical_url="https://vcs.invalid/owner/repository/changes/9",
         )
 
 

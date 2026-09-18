@@ -13,7 +13,7 @@ canonical `task_id` / `run_id` returned by that execution.
 
 This keeps evidence projection independent from a concrete executor. The same
 decorator can wrap the reference kernel executor, Hermes-backed orchestration,
-Forge-backed execution, or a future adapter without moving evidence ownership into
+or another supported executor/orchestrator adapter without moving evidence ownership into
 those implementations.
 
 `CompositeEvaluationEvidenceProvider` composes multiple providers and rejects

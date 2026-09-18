@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pytest
 
 from ai_multi_agent_platform.capabilities import CapabilityCompatibilityRequest, CapabilitySpec
-from ai_multi_agent_platform.capability_assignments import (
+from ai_multi_agent_platform.capabilities.assignments import (
     CapabilityAssignmentAccessContext,
     CapabilityAssignmentContent,
     CapabilityAssignmentProvenance,

@@ -13,7 +13,7 @@ from ai_multi_agent_platform.organizations import (
     OrganizationService,
 )
 from ai_multi_agent_platform.security.authorization import ActorType
-from ai_multi_agent_platform.task_reassignment import DefaultTaskProjectCompatibilityPolicy
+from ai_multi_agent_platform.task_management.reassignment import DefaultTaskProjectCompatibilityPolicy
 
 
 def test_membership_allows_personal_to_organization_but_not_reverse_ownership() -> None:

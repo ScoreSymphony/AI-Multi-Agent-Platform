@@ -29,7 +29,7 @@ from ai_multi_agent_platform.repositories import ConnectorRepositoryProvider, Re
 _SHA = "a" * 40
 
 
-class _FakeForgeConnector(ConnectorProvider):
+class _FakeRepositoryConnector(ConnectorProvider):
     def __init__(self, connection_id: str) -> None:
         self.connection_id = connection_id
         self.actions_seen: list[str] = []
@@ -39,9 +39,9 @@ class _FakeForgeConnector(ConnectorProvider):
     @property
     def definition(self) -> ConnectorDefinition:
         return ConnectorDefinition(
-            id=connector_definition_id("fake.forge", "1.0"),
-            connector_type_id="fake.forge",
-            name="Fake Forge",
+            id=connector_definition_id("fake.vcs", "1.0"),
+            connector_type_id="fake.vcs",
+            name="Fake Repository Connector",
             version="1.0",
             resource_types=("repository", "file"),
             actions=(
@@ -56,7 +56,7 @@ class _FakeForgeConnector(ConnectorProvider):
 
     @property
     def descriptor(self) -> ProviderDescriptor:
-        return ProviderDescriptor(provider_id="connector.fake-forge", provider_type="connector")
+        return ProviderDescriptor(provider_id="connector.fake-vcs", provider_type="connector")
 
     async def validate_connection(
         self,
@@ -141,7 +141,7 @@ class _FakeForgeConnector(ConnectorProvider):
         else:
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
-                f"unsupported fake forge action: {invocation.action}",
+                f"unsupported fake repository action: {invocation.action}",
             )
         return ConnectorActionResult(
             invocation_id=invocation.invocation_id,
@@ -170,10 +170,10 @@ class _FakeForgeConnector(ConnectorProvider):
             connection_id=self.connection_id,
             resource_type="repository",
             native_reference=ExternalNativeReference(
-                namespace="fake.forge",
+                namespace="fake.vcs",
                 native_id="owner/repository",
             ),
-            canonical_url="https://forge.invalid/owner/repository",
+            canonical_url="https://vcs.invalid/owner/repository",
             revision=_SHA,
             metadata={"default_branch": "main", "visibility": "private"},
         )
@@ -184,7 +184,7 @@ class _FakeForgeConnector(ConnectorProvider):
             connection_id=self.connection_id,
             resource_type="file",
             native_reference=ExternalNativeReference(
-                namespace="fake.forge",
+                namespace="fake.vcs",
                 native_id="owner/repository:README.md",
             ),
             revision=_SHA,
@@ -195,18 +195,18 @@ def test_connector_repository_provider_is_provider_neutral_and_fail_closed() -> 
     async def scenario() -> None:
         connection = Connection(
             id=new_id("connection"),
-            connector_type_id="fake.forge",
+            connector_type_id="fake.vcs",
             connector_version="1.0",
             owner_type="user",
             owner_id="repository-user",
-            display_name="Fake Forge",
+            display_name="Fake Repository Connector",
             project_id=new_id("project"),
         )
         repository_connection = RepositoryConnection(
             connection=connection,
-            provider_id="repository-connector.fake-forge",
+            provider_id="repository-connector.fake-vcs",
         )
-        connector = _FakeForgeConnector(connection.id)
+        connector = _FakeRepositoryConnector(connection.id)
         provider = ConnectorRepositoryProvider(connector, repository_connection)
         context = OperationContext(
             correlation_id="issue-82-connector-repository",

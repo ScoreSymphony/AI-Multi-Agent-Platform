@@ -2,7 +2,7 @@
 
 A general-purpose, self-hostable AI Multi-Agent Platform for turning goals into durable, observable work carried out by one or more specialized agents.
 
-The reference baseline is local-first and self-hosted. Models, orchestrators, executors and capabilities remain replaceable behind platform-owned contracts, so the platform is not defined by Hermes, Forge, LiteLLM, MCP or any single model vendor. A single-agent wrapper can submit one model-driven action; this platform additionally owns the Task/Plan/Step/Run lifecycle, multi-agent coordination, Artifacts, Results, Verification and traceable history around that work.
+The reference baseline is local-first and self-hosted. Models, orchestrators, executors and capabilities remain replaceable behind platform-owned contracts, so the platform is not defined by Hermes, LiteLLM, MCP or any single model vendor. The retired Forge integration remains historical architecture evidence rather than an active runtime. A single-agent wrapper can submit one model-driven action; this platform additionally owns the Task/Plan/Step/Run lifecycle, multi-agent coordination, Artifacts, Results, Verification and traceable history around that work.
 
 ## 30-second architecture
 
@@ -44,7 +44,7 @@ The platform owns the canonical state in that path. Orchestrators, executors, mo
 - local write access for the platform data directory
 - for the browser UI: Node.js 22.22.2+ and npm 11.6.x
 
-No GPU, paid AI/API service, Hermes, Forge, LiteLLM, MCP server or remote Worker is required for the reference single-node first run.
+No GPU, paid AI/API service, Hermes, LiteLLM, MCP server or remote Worker is required for the reference single-node first run. The retired Forge runtime is not part of this baseline.
 
 From a clean checkout on Linux/macOS, install and start the Control Plane:
 
@@ -126,7 +126,7 @@ Task -> Plan
 
 The two preparation branches are parallel-ready, the producing Step waits for both, and Verification is bound to the exact produced Result. The Web onboarding projection and the CLI/API response expose the Plan, Step dependencies, assigned Agent revisions, Runs, Artifact, Result, Verification records and trace identifiers so the same run can be inspected rather than inferred from chat output.
 
-Hermes, Forge, LiteLLM, MCP, the standard Agent catalog and paid providers are not baseline requirements for this workflow. The maintained walkthrough, model setup contract, recovery guidance and acceptance fixture are in [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md).
+Hermes, LiteLLM, MCP, the standard Agent catalog and paid providers are not baseline requirements for this workflow. The retired Forge runtime is not an optional prerequisite. The maintained walkthrough, model setup contract, recovery guidance and acceptance fixture are in [`docs/product/MULTI_AGENT_FIRST_RUN.md`](docs/product/MULTI_AGENT_FIRST_RUN.md).
 
 ## How it works
 

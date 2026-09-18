@@ -25,8 +25,8 @@ from ai_multi_agent_platform.repositories import (
     RepositoryRegistry,
     RepositoryService,
 )
-from ai_multi_agent_platform.repository_intelligence import BaselineRepositoryIntelligenceProvider
-from ai_multi_agent_platform.repository_intelligence.wiring import (
+from ai_multi_agent_platform.repositories.intelligence import BaselineRepositoryIntelligenceProvider
+from ai_multi_agent_platform.repositories.intelligence.wiring import (
     AuthorizedRepositorySnapshotLoader,
 )
 from ai_multi_agent_platform.security import (

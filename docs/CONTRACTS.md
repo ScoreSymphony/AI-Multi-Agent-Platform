@@ -20,7 +20,7 @@ This document defines the replaceable provider boundaries of the AI Multi-Agent 
 | `NodeProvider` | Register and discover nodes using canonical Node IDs |
 | `WorkerProvider` | Register/discover workers and dispatch canonical Runs |
 
-Hermes, Forge, LiteLLM, MCP implementations, databases, policy engines, workflow engines and model runtimes may later implement one or more of these interfaces through adapters.
+Hermes, LiteLLM, MCP implementations, databases, policy engines, workflow engines, model runtimes and supported executor integrations may implement one or more of these interfaces through adapters. The retired Forge integration remains architecture history rather than an active implementation candidate.
 
 ## Canonical domain alignment
 
@@ -183,7 +183,7 @@ Backend-private metadata is allowed only through `AdapterMetadata` and must use 
 
 ```text
 adapter_metadata:
-  - namespace: forge
+  - namespace: executor.example
     values:
       execution_id: ...
   - namespace: litellm

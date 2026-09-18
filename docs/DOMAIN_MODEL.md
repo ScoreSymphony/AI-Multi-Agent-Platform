@@ -314,4 +314,4 @@ Additional regression coverage includes malformed IDs, backend IDs in canonical 
 
 ## Deferred decisions
 
-Persistence, concrete Hermes/Forge mappings, final scheduler implementation, final authorization/policy evaluation semantics, UI and provider-specific runtime integration remain later work. `PolicyScope` is only a canonical targeting primitive for model assignment, and `ToolInvocation` is only the canonical governed-call identity; neither pre-empts those later implementation choices.
+Persistence, concrete Hermes and future provider-neutral orchestrator/executor mappings, final scheduler implementation, final authorization/policy evaluation semantics, UI and provider-specific runtime integration remain later work. `PolicyScope` is only a canonical targeting primitive for model assignment, and `ToolInvocation` is only the canonical governed-call identity; neither pre-empts those later implementation choices.

@@ -463,7 +463,7 @@ def test_restore_does_not_require_optional_adapter_runtime(tmp_path: Path) -> No
             platform_version=__version__,
             deployment_metadata={
                 "profile": "single-node",
-                "optional_adapters": ["forge-unavailable-on-replacement-host"],
+                "optional_adapters": ["optional-runtime-unavailable-on-replacement-host"],
             },
             quiesced=True,
         )

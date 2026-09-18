@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from ai_multi_agent_platform.capabilities import CapabilitySpec
-from ai_multi_agent_platform.capability_assignments import (
+from ai_multi_agent_platform.capabilities.assignments import (
     CapabilityAssignmentContent,
     CapabilityAssignmentPolicy,
     CapabilityAssignmentProvenance,
