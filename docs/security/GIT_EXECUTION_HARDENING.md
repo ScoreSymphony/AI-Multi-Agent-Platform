@@ -12,8 +12,12 @@ The reference policy is intentionally narrow:
 
 - system Git configuration is disabled;
 - global Git configuration is replaced with the null file;
-- execution-capable `GIT_*` variables are removed;
+- controlled repository/network operations use a provider-private HOME rather than ambient user
+  SSH/configuration state;
+- execution-capable `GIT_*`, SSH-agent and commit-identity override variables are removed;
+- Git trace variables that can redirect diagnostic output to attacker-selected paths are removed;
 - relative/empty child `PATH` entries are removed so repository-relative executable lookup is unavailable;
+- system attributes and replacement-object semantics are disabled for deterministic reads;
 - the Git executable is resolved before the child process is launched;
 - local/worktree Git configuration is inspected without following config includes;
 - `.git` metadata must stay inside the managed repository root; symlinked metadata,
@@ -209,6 +213,8 @@ The permanent regression corpus is
 | --- | --- | --- | --- | --- |
 | GS-ENV-01 | `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_*` injection | commit | sanitized/ignored | controlled Git environment |
 | GS-ENV-02 | `GIT_DIR`, `GIT_WORK_TREE`, `GIT_EXEC_PATH`, external diff/SSH env | helper contract | sanitized/ignored | controlled Git environment |
+| GS-ENV-03 | author/committer overrides and `GIT_TRACE*` output redirection | commit/helper contract | sanitized/ignored | controlled Git environment |
+| GS-CRED-02 | ambient HOME/SSH-agent credentials | repository/discovery network operations | unavailable to child | private HOME + SSH env scrub |
 | GS-GLOBAL-01 | inherited global `core.hooksPath` | commit | sanitized/ignored | null global config + private hooks path |
 | GS-SYSTEM-01 | inherited `GIT_CONFIG_SYSTEM` override | commit | sanitized/ignored | nosystem + env scrub |
 | GS-PATH-01 | relative/empty executable search path | controlled child environment | sanitized/ignored | absolute-only child PATH |
@@ -254,9 +260,11 @@ continue to prove that push is denied before provider side effects when the acto
 authority.
 
 Secret references are not materialized into Git command arguments by the local provider. In
-addition, execution-capable credential helpers/AskPass injection are rejected or removed and raw
-Git stderr is not retained in public contract errors. Release discovery likewise does not retain
-the raw remote URL or stderr on failure.
+addition, execution-capable credential helpers/AskPass injection are rejected or removed, ambient
+SSH agent sockets and user HOME configuration are not inherited by controlled repository/network
+operations, and raw Git stderr is not retained in public contract errors. Release discovery uses
+the same isolated credential environment and likewise does not retain the raw remote URL or stderr
+on failure.
 
 ## Regression-suite isolation
 
@@ -266,4 +274,5 @@ The #1220 tests:
 - never run `git config --global` or `git config --system`;
 - set controlled test HOME/config state for fixture setup;
 - use harmless marker files to detect unexpected execution;
+- prove parent-process author/committer identity cannot override the explicit provider identity;
 - keep a clean-repository negative control to catch accidental blanket breakage.
