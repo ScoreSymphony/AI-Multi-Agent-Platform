@@ -119,4 +119,6 @@ Command payloads are digest-bound before authorization, so approval of one confi
 
 Privileged operations may require approval. Endpoint exposure is explicit. Application-provided web UIs are not security boundaries for platform resources.
 
+Successful lifecycle/configuration mutations are projected after the canonical command completes into the Application-owned durable `application-audit-events` collection. The projection records actor/request/correlation identity, command, canonical Application/Instance identifiers and resulting lifecycle state, but deliberately excludes configuration values, secret bindings, volume binding details and runtime-private handles. The same post-success observer emits structured log, metric and timeline records through the existing Telemetry boundary with the `application_adapter` component classification. Authorization/approval audit therefore answers whether a mutation was permitted, while Application audit/telemetry answers whether the canonical mutation actually completed successfully.
+
 Lifecycle/configuration mutations must remain auditable, and runtime implementations must not silently widen filesystem, network or secret access beyond the canonical declaration and approved bindings.
