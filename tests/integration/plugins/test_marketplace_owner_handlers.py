@@ -347,9 +347,7 @@ async def test_hermes_marketplace_kind_uses_plugin_lifecycle_and_orchestrator_re
         configuration_schema={"type": "object", "additionalProperties": False},
     )
     reference = ReferenceOrchestrator()
-    orchestrators = OrchestratorRegistry(
-        {reference.descriptor.provider_id: reference}
-    )
+    orchestrators = OrchestratorRegistry({reference.descriptor.provider_id: reference})
     plugin_registry = PluginRegistry(
         platform_version="0.0.1",
         supported_interfaces={ExtensionType.ORCHESTRATOR: frozenset({"1.0"})},
@@ -428,9 +426,7 @@ async def test_hermes_full_marketplace_flow_preserves_replaceable_orchestrator_o
         configuration_schema={"type": "object", "additionalProperties": False},
     )
     reference = ReferenceOrchestrator()
-    orchestrators = OrchestratorRegistry(
-        {reference.descriptor.provider_id: reference}
-    )
+    orchestrators = OrchestratorRegistry({reference.descriptor.provider_id: reference})
     plugin_registry = PluginRegistry(
         platform_version="0.0.1",
         supported_interfaces={ExtensionType.ORCHESTRATOR: frozenset({"1.0"})},
@@ -479,9 +475,9 @@ async def test_hermes_full_marketplace_flow_preserves_replaceable_orchestrator_o
     assert installed.state.value == "installed"
     assert service.installed(item.item_id) is not None
     assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
-    assert orchestrators.select(
-        OrchestratorSelection(reference.descriptor.provider_id)
-    ) is reference
+    assert (
+        orchestrators.select(OrchestratorSelection(reference.descriptor.provider_id)) is reference
+    )
 
     plugin_registry.configure(HERMES_ADAPTER_ID, {})
     hermes = HermesOrchestrator(
@@ -492,15 +488,15 @@ async def test_hermes_full_marketplace_flow_preserves_replaceable_orchestrator_o
     await plugin_registry.enable(HERMES_ADAPTER_ID, runtime)
 
     assert orchestrators.select(OrchestratorSelection(HERMES_ADAPTER_ID)) is hermes
-    assert orchestrators.select(
-        OrchestratorSelection(reference.descriptor.provider_id)
-    ) is reference
+    assert (
+        orchestrators.select(OrchestratorSelection(reference.descriptor.provider_id)) is reference
+    )
 
     await plugin_registry.disable(HERMES_ADAPTER_ID)
     assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
-    assert orchestrators.select(
-        OrchestratorSelection(reference.descriptor.provider_id)
-    ) is reference
+    assert (
+        orchestrators.select(OrchestratorSelection(reference.descriptor.provider_id)) is reference
+    )
 
     await service.uninstall(item.item_id, authorized=True)
     assert service.installed(item.item_id) is None
@@ -824,17 +820,13 @@ async def test_semantic_orchestrator_installation_reconciles_only_into_plugin_ow
         (item,),
         {(item.item_id, item.version): artifact},
     )
-    installations = JsonRegistryInstallationStore(
-        tmp_path / "semantic-orchestrator-restart.json"
-    )
+    installations = JsonRegistryInstallationStore(tmp_path / "semantic-orchestrator-restart.json")
     installations.record(
         item,
         provider_id=provider.provider_id,
         artifact_sha256=hashlib.sha256(artifact).hexdigest(),
     )
-    orchestrators = OrchestratorRegistry(
-        {"reference": ReferenceOrchestrator()}
-    )
+    orchestrators = OrchestratorRegistry({"reference": ReferenceOrchestrator()})
     plugin_registry = PluginRegistry(
         platform_version="0.0.1",
         supported_interfaces={ExtensionType.ORCHESTRATOR: frozenset({"1.0"})},
