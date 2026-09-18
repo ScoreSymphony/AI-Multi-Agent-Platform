@@ -151,6 +151,16 @@ class AggregatedHealthProvider(ProviderContract):
     def service_health(self) -> ServiceHealth:
         return self._service_health
 
+    @property
+    def health_timeout_seconds(self) -> float:
+        """Upper bound used by the outer Control Plane health probe."""
+
+        return sum(
+            item.timeout_seconds * (item.max_retries + 1)
+            + item.backoff_seconds * sum(range(1, item.max_retries + 1))
+            for item in self._dependencies
+        ) + 0.1
+
     def set_operational_state(
         self,
         state: ReadinessState | None,
