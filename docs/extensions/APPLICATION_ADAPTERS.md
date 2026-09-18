@@ -113,6 +113,10 @@ Issue #1174 may generalize Marketplace treatment and cross-kind installation han
 
 ## Security
 
-Control Plane authorization remains authoritative for Application lifecycle and configuration changes. Privileged operations may require approval. Endpoint exposure is explicit. Application-provided web UIs are not security boundaries for platform resources.
+Control Plane authorization remains authoritative for Application lifecycle and configuration changes. Application commands use the canonical `application` resource type rather than the generic fallback: installation maps to `create`, configuration to `modify`, start/stop/restart to `execute`, removal to `delete`, and reconciliation to `administer`. Credential scopes, authorization policies and approval rules can therefore target managed Applications without widening authority over unrelated generic resources.
+
+Command payloads are digest-bound before authorization, so approval of one configuration mutation does not authorize a different configuration payload. Authorization and approval decisions emit the existing value-free security audit records; successful lifecycle/configuration completion is separately projected through Application observability so an authorization decision is not mistaken for proof that a runtime transition completed.
+
+Privileged operations may require approval. Endpoint exposure is explicit. Application-provided web UIs are not security boundaries for platform resources.
 
 Lifecycle/configuration mutations must remain auditable, and runtime implementations must not silently widen filesystem, network or secret access beyond the canonical declaration and approved bindings.
