@@ -32,7 +32,7 @@ preview / validation
 
 ## Canonical metadata
 
-`RegistryItem` records stable ID and type, version, publisher, source repository/package reference, license/provenance, platform compatibility, dependencies, requested permissions, required capabilities/plugins/connectors/models, release/changelog metadata, integrity/signature metadata, trust/review state, optional maturity (`experimental`, `beta`, `stable`), and deprecation/yank state.
+`RegistryItem` records stable ID and type, version, publisher, source repository/package reference, license/provenance, optional canonical homepage/documentation links, platform compatibility, dependencies, requested permissions, required capabilities/plugins/connectors/models, release/changelog metadata, integrity/signature metadata, trust/review state, optional maturity (`experimental`, `beta`, `stable`), and deprecation/yank state.
 
 The portable JSON contract is versioned separately as `REGISTRY_ITEM_SCHEMA_VERSION`. Registry trust status is informational input to a decision; it is never itself authorization.
 
