@@ -367,6 +367,8 @@ def build_single_node_deployment_from_foundation(
         health,
         accounting_service=accounting_service,
     )
+    drain.register_quiesce_callback(control_plane.control_plane.request_automation_runtime_stop)
+    drain.register_quiesce_callback(control_plane.control_plane.request_notification_runtime_stop)
     http = build_http(config, security, control_plane, drain)
     return _assemble_deployment(
         config=config,
