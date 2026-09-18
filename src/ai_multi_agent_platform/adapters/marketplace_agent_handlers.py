@@ -354,9 +354,9 @@ class AgentTeamMarketplaceKindHandler(_AgentMarketplaceBase):
                 raise ContractError(
                     ErrorCode.CONFLICT,
                     (
-                    "Marketplace Agent Team artifact diverges from immutable "
-                    "canonical revision history"
-                ),
+                        "Marketplace Agent Team artifact diverges from immutable "
+                        "canonical revision history"
+                    ),
                     details={"revision": candidate.revision},
                 )
             if provenance is not None and current.provenance != provenance:
