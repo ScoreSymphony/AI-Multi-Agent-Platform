@@ -86,6 +86,22 @@ describe("MobileControlPlaneClient", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("clears the active secure session hook when the server revokes a credential", async () => {
+    const onUnauthorized = vi.fn();
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: "unauthorized", message: "revoked" }), { status: 401 }),
+    );
+    const client = new MobileControlPlaneClient({
+      baseUrl: "https://platform.example",
+      credentialSource,
+      fetchImpl,
+      onUnauthorized,
+    });
+
+    await expect(client.me()).rejects.toMatchObject({ status: 401 });
+    expect(onUnauthorized).toHaveBeenCalledOnce();
+  });
+
   it("binds approval decisions to the exact canonical digest", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "approval-1", status: "approved" }), { status: 200 }),
@@ -119,5 +135,46 @@ describe("MobileControlPlaneClient", () => {
       comment: "reviewed",
     });
     expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
+  });
+
+  it("uses only canonical Verification review commands", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "verification-1", status: "completed" }), { status: 200 }),
+    );
+    const client = new MobileControlPlaneClient({
+      baseUrl: "https://platform.example",
+      credentialSource,
+      fetchImpl,
+    });
+
+    await client.verificationReview("verification-1", "verification.request-changes", "fix it");
+
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://platform.example/api/v1/commands/verification.request-changes",
+    );
+    expect(JSON.parse(String(init.body))).toEqual({
+      resource_ref: "verification-1",
+      comment: "fix it",
+    });
+  });
+
+  it("updates canonical Notification state without creating local authority", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "notification-1", state: "read" }), { status: 200 }),
+    );
+    const client = new MobileControlPlaneClient({
+      baseUrl: "https://platform.example",
+      credentialSource,
+      fetchImpl,
+    });
+
+    await client.markNotificationRead("notification-1");
+
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://platform.example/api/v1/commands/notification.mark-read",
+    );
+    expect(JSON.parse(String(init.body))).toEqual({ resource_ref: "notification-1" });
   });
 });
