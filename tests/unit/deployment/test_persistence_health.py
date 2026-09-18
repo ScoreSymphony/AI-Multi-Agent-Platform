@@ -161,6 +161,32 @@ def test_optional_corrupt_store_degrades_without_claiming_required_outage(
     asyncio.run(scenario())
 
 
+def test_persistence_health_reports_unowned_file_temp_state_without_deleting_it(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        config = SingleNodeConfig(data_dir=tmp_path / "data", secure_cookie=False)
+        _seed_required_stores(config)
+        with sqlite3.connect(config.database_dir / "files.sqlite3") as connection:
+            connection.execute(
+                "CREATE TABLE data_files (file_id TEXT PRIMARY KEY, state TEXT NOT NULL)"
+            )
+        unowned = config.files_dir / ".file_unowned.pending"
+        unowned.write_bytes(b"do-not-promote")
+
+        provider = SingleNodePersistenceHealthProvider(
+            config,
+            minimum_free_bytes=0,
+            warning_free_bytes=0,
+        )
+
+        assert await provider.health() is HealthStatus.DEGRADED
+        assert "file_temp_state_unowned" in _codes(provider)
+        assert unowned.read_bytes() == b"do-not-promote"
+
+    asyncio.run(scenario())
+
+
 def test_persistence_health_emits_unavailable_and_recovery_transitions(
     tmp_path: Path,
 ) -> None:
