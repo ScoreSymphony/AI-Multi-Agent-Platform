@@ -52,7 +52,7 @@ class VersionRange:
             raise ValueError("minimum platform version must not exceed maximum")
 
     def contains(self, version: str) -> bool:
-        candidate = version_key(value)
+        candidate = version_key(version)
         return not (
             (self.minimum is not None and candidate < version_key(self.minimum))
             or (self.maximum is not None and candidate > version_key(self.maximum))
