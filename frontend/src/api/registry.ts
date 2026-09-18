@@ -291,9 +291,17 @@ export interface MarketplaceDecisionUpdateState {
   trust_integrity_issue: boolean;
 }
 
+export interface MarketplaceInstallPlanStep {
+  item_id: string;
+  item_kind: string;
+  version: string;
+  source_registry: string | null;
+}
+
 export interface MarketplaceDecision {
   operation: "install" | "update" | "uninstall";
   dependencies: MarketplaceDependencyResolution[];
+  install_order: MarketplaceInstallPlanStep[];
   compatibility: MarketplaceCompatibilityDecision;
   permission_diff: MarketplacePermissionDiff;
   provenance_diff: MarketplaceProvenanceDiff;
