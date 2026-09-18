@@ -154,6 +154,32 @@ def test_marketplace_search_uses_unified_collection_and_first_class_filters(
     assert query["filter[platform_version]"] == ["1.0.0"]
 
 
+def test_marketplace_kinds_lists_registered_component_metadata(tmp_path: Path) -> None:
+    transport = MarketplaceTransport()
+
+    code = run_cli(
+        [
+            "--config",
+            str(_config(tmp_path)),
+            "marketplace",
+            "kinds",
+        ],
+        transport=transport,
+        stdout=StringIO(),
+    )
+
+    assert code == 0
+    method, path, query, _headers, body = transport.calls[0]
+    assert method == "GET"
+    assert path == "/api/v1/marketplace-kinds"
+    assert body is None
+    assert query == {
+        "limit": ["200"],
+        "sort": ["kind"],
+        "direction": ["asc"],
+    }
+
+
 def test_marketplace_updates_reuses_canonical_update_filter(tmp_path: Path) -> None:
     transport = MarketplaceTransport()
 
