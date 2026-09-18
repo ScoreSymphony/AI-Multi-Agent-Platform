@@ -97,7 +97,7 @@ def build_default_single_node_deployment(
     *,
     enable_distributed_execution: bool = False,
 ) -> SingleNodeDeployment:
-    """Build the shipped profile with installed bridges and optional #240 execution routing."""
+    """Build the shipped profile with installed bridges and optional distributed execution routing."""
 
     secrets = LocalSecretProvider()
     release_gate_policy = (
