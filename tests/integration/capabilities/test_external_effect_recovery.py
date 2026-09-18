@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -278,16 +279,9 @@ async def test_restart_reconciles_dispatch_with_missing_canonical_ack(tmp_path) 
         provider_tool_ref="publish",
     )
     await recovery.prepare_attempt(request, registration.capability, registration)
-    await recovery.observe(
-        InvocationRecord(
-            invocation_id=request.invocation_id,
-            capability_id=request.capability_id,
-            capability_version="1.0",
-            provider_id=provider.descriptor.provider_id,
-            provider_tool_ref="publish",
-            status=InvocationStatus.RUNNING,
-            trace=request.trace,
-        )
+    await recovery.begin_dispatch(
+        request.invocation_id,
+        canonical_tool_invocation_id=None,
     )
     provider.applied = True
 
@@ -364,6 +358,27 @@ async def test_operator_projection_redacts_private_idempotency_and_metadata_valu
     assert "private-retry-key" not in serialized
     assert "secret-42" not in serialized
     assert "provider_tool_ref" not in resource
+
+
+@pytest.mark.asyncio
+async def test_expired_invocation_never_creates_external_dispatch_evidence() -> None:
+    provider, recovery, invoker = await _runtime(
+        ExternalEffectRecoveryPolicy(
+            idempotency=ExternalEffectIdempotency.NONE,
+            reconciliation=ExternalEffectReconciliationSupport.UNSUPPORTED,
+        )
+    )
+    request = replace(
+        _request(invocation_id="expired-effect", key="expired-key"),
+        expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+
+    with pytest.raises(ContractError) as caught:
+        await invoker.invoke(request)
+
+    assert caught.value.code is ErrorCode.CONFLICT
+    assert provider.effects == 0
+    assert recovery.list_records() == ()
 
 
 @pytest.mark.asyncio
