@@ -1383,10 +1383,13 @@ def test_invalid_owner_candidate_remains_a_blocked_marketplace_preview(
     )
 
     assert preview["activation_allowed"] is False
+    findings = preview["findings"]
+    assert isinstance(findings, list)
     assert any(
-        finding["code"] == "owner_candidate_invalid"
-        and finding["message"] == "candidate owner artifact is invalid"
-        for finding in preview["findings"]  # type: ignore[union-attr]
+        isinstance(finding, dict)
+        and finding.get("code") == "owner_candidate_invalid"
+        and finding.get("message") == "candidate owner artifact is invalid"
+        for finding in findings
     )
     owner_extension = preview["item"]["owner_extension"]  # type: ignore[index]
     assert owner_extension["handler_available"] is True  # type: ignore[index]
