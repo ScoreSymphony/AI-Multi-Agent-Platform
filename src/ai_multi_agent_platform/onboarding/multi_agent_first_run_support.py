@@ -17,8 +17,6 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode, Operatio
 from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
 from ai_multi_agent_platform.domain import OwnerRef
-
-from .first_run_types import FirstRunPathProjection
 from ai_multi_agent_platform.security import (
     ActorType,
     AuthorizationAction,
@@ -32,6 +30,8 @@ from ai_multi_agent_platform.verification import (
     VerificationStage,
     VerifierKind,
 )
+
+from .first_run_types import FirstRunPathProjection
 
 FIRST_RUN_WORKFLOW = "reference-multi-agent"
 REFERENCE_MULTI_AGENT_CONSTRAINT = "runtime:reference-multi-agent"
@@ -102,7 +102,10 @@ def resolve_scope(
         selected_workspace_id = _select_workspace(candidate_workspaces, workspace_id)
 
     if selected_project_id not in owned_project_ids:
-        raise ContractError(ErrorCode.FORBIDDEN, "Selected Project is not owned by this actor.")
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "Selected Project is not owned by this actor.",
+        )
     if (selected_project_id, selected_workspace_id) not in workspace_bindings:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
