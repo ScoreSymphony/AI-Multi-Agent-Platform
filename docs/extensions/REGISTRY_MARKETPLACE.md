@@ -154,7 +154,10 @@ restart-safe replay/reconciliation contract.
 
 Marketplace installation never enables a plugin and never constructs a provider runtime.
 Enable/disable, configuration, permission grants and runtime binding remain the existing Plugin
-lifecycle.
+lifecycle. Enabling an Orchestrator extension makes that implementation available through the
+canonical `OrchestratorRegistry`; it does not hot-swap an already constructed kernel. Orchestrator
+selection remains the configuration-driven #8 owner concern, so canonical Agent/Team definitions
+stay orchestrator-independent and can be reused with any compatible registered implementation.
 
 Application runtime selection also remains inside #1173.  `ApplicationRuntimeRegistry` selects only
 when exactly one registered runtime can satisfy the manifest; an unavailable or ambiguous runtime
