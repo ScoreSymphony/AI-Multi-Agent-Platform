@@ -643,6 +643,36 @@ def test_uninstall_preview_blocks_required_installed_dependents(
     assert any(finding.code == "required_by_installed" for finding in preview.findings)
 
 
+def test_uninstall_preview_uses_persisted_dependency_evidence_after_catalog_drift(
+    tmp_path: Path,
+) -> None:
+    tool, tool_artifact = _item("example.persisted-uninstall-tool", RegistryItemType.TOOL)
+    installed_workflow, workflow_artifact = _item(
+        "example.persisted-uninstall-workflow",
+        RegistryItemType.WORKFLOW,
+        dependencies=(
+            RegistryDependency(
+                tool.item_id,
+                item_kind=RegistryItemType.TOOL,
+            ),
+        ),
+    )
+    drifted_workflow = replace(installed_workflow, dependencies=())
+    store = JsonRegistryInstallationStore(tmp_path / "installations.json")
+    store.record(tool, provider_id="local")
+    store.record(installed_workflow, provider_id="local")
+    service = _service(
+        ((tool, tool_artifact), (drifted_workflow, workflow_artifact)),
+        store=store,
+    )
+
+    preview = service.preview_uninstall(tool.item_id)
+
+    assert preview.activation_allowed is False
+    assert preview.decision.dependencies[0].required_by == installed_workflow.item_id
+    assert preview.decision.dependencies[0].status is DependencyStatus.REQUIRED_BY_INSTALLED
+
+
 def test_self_dependency_is_rejected_explicitly() -> None:
     item, artifact = _item(
         "example.self-dependent",
