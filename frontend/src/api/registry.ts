@@ -24,6 +24,7 @@ export type KnownRegistryItemType =
 export type RegistryItemType = string;
 
 export type RegistryTrustStatus = "untrusted" | "reviewed" | "trusted" | "local";
+export type RegistryMaturity = "experimental" | "beta" | "stable";
 export type RegistryRoute = "plugin" | "portable_import" | "kind_handler" | "manual";
 
 export interface RegistryManifestReference {
@@ -149,6 +150,8 @@ export interface RegistryItem {
   categories: string[];
   trust_status: RegistryTrustStatus;
   trust?: RegistryTrustStatus;
+  maturity?: RegistryMaturity | null;
+  stability?: RegistryMaturity | null;
   review_reference: string | null;
   released_at: string | null;
   release_date?: string | null;
@@ -169,6 +172,8 @@ export interface RegistryItem {
   operation_state?: "ready" | "blocked" | "manual" | "unsupported" | "missing_handler" | null;
   installed: boolean;
   installed_version: string | null;
+  installed_source_registry?: string | null;
+  installation_source_matches?: boolean | null;
   pinned_version: string | null;
   update_available: boolean;
   installation: RegistryInstallation | null;
@@ -369,22 +374,25 @@ export class RegistryClient {
     return this.collections.list<RegistryItem>(REGISTRY_ITEMS, query);
   }
 
-  get(itemId: string, version: string): Promise<RegistryItem> {
-    return this.collections.get<RegistryItem>(
-      REGISTRY_ITEMS,
-      `${requireText(itemId, "Registry item ID")}@${requireText(version, "Registry version")}`,
-    );
+  get(itemId: string, version: string, sourceRegistry?: string | null): Promise<RegistryItem> {
+    const unqualified =
+      `${requireText(itemId, "Registry item ID")}@${requireText(version, "Registry version")}`;
+    const resourceId = sourceRegistry
+      ? `${requireText(sourceRegistry, "Registry source")}::${unqualified}`
+      : unqualified;
+    return this.collections.get<RegistryItem>(REGISTRY_ITEMS, resourceId);
   }
 
   async preview(
     itemId: string,
     version: string,
     idempotencyKey: string = crypto.randomUUID(),
+    sourceRegistry?: string | null,
   ): Promise<RegistryPreview> {
     return this.command<RegistryPreview>(
       "marketplace.preview",
       itemId,
-      { version: requireText(version, "Registry version") },
+      lifecyclePayload(version, sourceRegistry),
       idempotencyKey,
     );
   }
@@ -393,11 +401,12 @@ export class RegistryClient {
     itemId: string,
     version: string,
     idempotencyKey: string = crypto.randomUUID(),
+    sourceRegistry?: string | null,
   ): Promise<MarketplaceMutation> {
     return this.command<MarketplaceMutation>(
       "marketplace.install",
       itemId,
-      { version: requireText(version, "Registry version") },
+      lifecyclePayload(version, sourceRegistry),
       idempotencyKey,
     );
   }
@@ -406,11 +415,12 @@ export class RegistryClient {
     itemId: string,
     version: string,
     idempotencyKey: string = crypto.randomUUID(),
+    sourceRegistry?: string | null,
   ): Promise<MarketplaceMutation> {
     return this.command<MarketplaceMutation>(
       "marketplace.update",
       itemId,
-      { version: requireText(version, "Registry version") },
+      lifecyclePayload(version, sourceRegistry),
       idempotencyKey,
     );
   }
@@ -419,11 +429,12 @@ export class RegistryClient {
     itemId: string,
     version: string,
     idempotencyKey: string = crypto.randomUUID(),
+    sourceRegistry?: string | null,
   ): Promise<RegistryActivation> {
     return this.command<RegistryActivation>(
       "registry.activate",
       itemId,
-      { version: requireText(version, "Registry version") },
+      lifecyclePayload(version, sourceRegistry),
       idempotencyKey,
     );
   }
@@ -484,6 +495,17 @@ export class RegistryClient {
       idempotencyKey,
     });
   }
+}
+
+function lifecyclePayload(
+  version: string,
+  sourceRegistry?: string | null,
+): Record<string, JsonValue> {
+  const payload: Record<string, JsonValue> = {
+    version: requireText(version, "Registry version"),
+  };
+  if (sourceRegistry) payload.source_registry = requireText(sourceRegistry, "Registry source");
+  return payload;
 }
 
 function requireText(value: string, label: string): string {
