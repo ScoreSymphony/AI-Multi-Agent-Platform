@@ -215,6 +215,36 @@ describe("MarketplacePage", () => {
     ).toBe(true);
   });
 
+  it("scopes installed owner actions to the exact Marketplace source", () => {
+    const installedFromOfficial = item({
+      item_type: "skill",
+      route: "kind_handler",
+      route_available: true,
+      source_registry: "official",
+      installed: true,
+      installed_version: "1.0.0",
+      installed_source_registry: "official",
+      installation_source_matches: true,
+      owner_extension: {
+        handler_available: true,
+        requirements: null,
+        details: null,
+        status: null,
+        supported_operations: ["install", "update", "uninstall"],
+      },
+    });
+    const privateCandidate = {
+      ...installedFromOfficial,
+      source_registry: "private",
+      installation_source_matches: false,
+    };
+
+    expect(marketplacePresentation.uninstallSupported(installedFromOfficial)).toBe(true);
+    expect(marketplacePresentation.uninstallSupported(privateCandidate)).toBe(false);
+    expect(marketplacePresentation.mutationOperation(privateCandidate)).toBe("update");
+    expect(marketplacePresentation.itemStateLabel(privateCandidate)).toBe("source change available");
+  });
+
   it("fails closed for owner operations that are intentionally unsupported", () => {
     const applicationUpdate = item({
       item_type: "application",
