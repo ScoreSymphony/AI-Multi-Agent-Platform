@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from .decision_types import (
     ApprovalRequirement,
+    DependencyChange,
+    DependencyDiff,
     DependencyResolution,
     PermissionDiff,
     ProvenanceDiff,
@@ -11,7 +13,7 @@ from .decision_types import (
 )
 from .dependency_graph import evaluate_compatibility, resolve_dependency_graph
 from .items import RegistryItem
-from .models import version_key
+from .models import RegistryDependency, version_key
 from .state import RegistryInstallation
 from .validation import (
     FindingCategory,
@@ -19,6 +21,126 @@ from .validation import (
     ValidationContext,
     ValidationFinding,
 )
+
+
+def build_dependency_diff(
+    item: RegistryItem,
+    installation: RegistryInstallation | None,
+) -> DependencyDiff:
+    requested = _sorted_dependencies(item.dependencies)
+    if installation is None:
+        return DependencyDiff(
+            installed=False,
+            previous_known=True,
+            previous=(),
+            requested=requested,
+            added=requested,
+            removed=(),
+            changes=(),
+            unchanged=(),
+        )
+
+    previous_raw = installation.current.dependencies
+    if previous_raw is None:
+        return DependencyDiff(
+            installed=True,
+            previous_known=False,
+            previous=(),
+            requested=requested,
+            added=(),
+            removed=(),
+            changes=(),
+            unchanged=(),
+        )
+
+    previous = _sorted_dependencies(previous_raw)
+    unchanged, previous_only, requested_only = _partition_exact_dependency_matches(
+        previous,
+        requested,
+    )
+    changes, removed, added = _pair_dependency_changes(previous_only, requested_only)
+    return DependencyDiff(
+        installed=True,
+        previous_known=True,
+        previous=previous,
+        requested=requested,
+        added=added,
+        removed=removed,
+        changes=changes,
+        unchanged=unchanged,
+    )
+
+
+def _partition_exact_dependency_matches(
+    previous: tuple[RegistryDependency, ...],
+    requested: tuple[RegistryDependency, ...],
+) -> tuple[
+    tuple[RegistryDependency, ...],
+    tuple[RegistryDependency, ...],
+    tuple[RegistryDependency, ...],
+]:
+    remaining_previous = list(previous)
+    unchanged: list[RegistryDependency] = []
+    requested_only: list[RegistryDependency] = []
+    for dependency in requested:
+        try:
+            index = remaining_previous.index(dependency)
+        except ValueError:
+            requested_only.append(dependency)
+        else:
+            unchanged.append(dependency)
+            remaining_previous.pop(index)
+    return tuple(unchanged), tuple(remaining_previous), tuple(requested_only)
+
+
+def _pair_dependency_changes(
+    previous: tuple[RegistryDependency, ...],
+    requested: tuple[RegistryDependency, ...],
+) -> tuple[
+    tuple[DependencyChange, ...],
+    tuple[RegistryDependency, ...],
+    tuple[RegistryDependency, ...],
+]:
+    previous_by_id = _dependencies_by_item_id(previous)
+    requested_by_id = _dependencies_by_item_id(requested)
+    changes: list[DependencyChange] = []
+    removed: list[RegistryDependency] = []
+    added: list[RegistryDependency] = []
+    for item_id in sorted(previous_by_id.keys() | requested_by_id.keys()):
+        old = previous_by_id.get(item_id, [])
+        new = requested_by_id.get(item_id, [])
+        paired = min(len(old), len(new))
+        changes.extend(DependencyChange(old[index], new[index]) for index in range(paired))
+        removed.extend(old[paired:])
+        added.extend(new[paired:])
+    return tuple(changes), _sorted_dependencies(removed), _sorted_dependencies(added)
+
+
+def _dependencies_by_item_id(
+    dependencies: tuple[RegistryDependency, ...],
+) -> dict[str, list[RegistryDependency]]:
+    grouped: dict[str, list[RegistryDependency]] = {}
+    for dependency in dependencies:
+        grouped.setdefault(dependency.item_id, []).append(dependency)
+    return grouped
+
+
+def _sorted_dependencies(
+    dependencies: tuple[RegistryDependency, ...] | list[RegistryDependency],
+) -> tuple[RegistryDependency, ...]:
+    return tuple(sorted(dependencies, key=_dependency_sort_key))
+
+
+def _dependency_sort_key(
+    dependency: RegistryDependency,
+) -> tuple[str, str, str, str, bool]:
+    return (
+        dependency.item_id,
+        dependency.kind_value or "",
+        dependency.version_range.minimum or "",
+        dependency.version_range.maximum or "",
+        dependency.optional,
+    )
 
 
 def build_permission_diff(
@@ -96,17 +218,36 @@ def _append_reason(reasons: list[str], condition: bool, reason: str) -> None:
 
 
 def build_change_findings(
+    dependency_diff: DependencyDiff,
     permission_diff: PermissionDiff,
     provenance_diff: ProvenanceDiff,
     approval: ApprovalRequirement,
 ) -> tuple[ValidationFinding, ...]:
     findings: list[ValidationFinding] = []
+    if dependency_diff.installed and dependency_diff.previous_known and dependency_diff.changed:
+        findings.append(_dependency_changed_finding(dependency_diff))
     if permission_diff.added:
         findings.append(_permission_added_finding(permission_diff))
     findings.extend(_provenance_change_findings(provenance_diff))
     if approval.required:
         findings.append(_approval_finding(approval))
     return tuple(findings)
+
+
+def _dependency_changed_finding(dependency_diff: DependencyDiff) -> ValidationFinding:
+    details = [
+        *(("added", dependency.item_id) for dependency in dependency_diff.added),
+        *(("removed", dependency.item_id) for dependency in dependency_diff.removed),
+        *(("changed", change.requested.item_id) for change in dependency_diff.changes),
+    ]
+    return ValidationFinding(
+        "dependency_changed",
+        FindingSeverity.WARNING,
+        "update changes declared Marketplace dependencies",
+        FindingCategory.DEPENDENCY,
+        "dependencies",
+        tuple(details),
+    )
 
 
 def _permission_added_finding(permission_diff: PermissionDiff) -> ValidationFinding:
