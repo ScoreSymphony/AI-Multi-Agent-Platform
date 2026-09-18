@@ -288,6 +288,81 @@ def test_builtin_semantic_kind_metadata_uses_generic_control_plane_collection() 
     assert by_kind["model_provider"]["management_path"] == "/models"
 
 
+def test_semantic_provider_without_owner_handler_fails_closed(
+    tmp_path: Path,
+) -> None:
+    item = RegistryItem(
+        item_id="example.memory-provider",
+        item_type=RegistryItemType.MEMORY_PROVIDER,
+        name="Memory Provider",
+        description="Semantic provider without a composed owner binder.",
+        version="1.0.0",
+        publisher="example",
+        source=_source("example.memory-provider", "1.0.0"),
+        license="MIT",
+        provenance="source-release",
+        trust_status=TrustStatus.REVIEWED,
+        manifest=RegistryManifestReference(
+            kind=RegistryItemType.MEMORY_PROVIDER,
+            reference="manifests/memory-provider.json",
+            schema_version="1",
+        ),
+    )
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): b"memory-provider-package"},
+        ),
+        installations=JsonRegistryInstallationStore(tmp_path / "provider-fail-closed.json"),
+    )
+
+    preview = service.preview(
+        item.item_id,
+        item.version,
+        ValidationContext("1.0.0"),
+    )
+
+    assert preview.route is DistributionRoute.KIND_HANDLER
+    assert preview.activation_allowed is False
+    assert any(finding.code == "handler_unavailable" for finding in preview.findings)
+    assert service.route_available(item) is False
+    assert service.installed(item.item_id) is None
+
+
+@pytest.mark.parametrize(
+    "runtime_kind",
+    (
+        "agent_run",
+        "agent_runtime",
+        "task",
+        "run",
+        "worker",
+        "node",
+        "orchestration_session",
+        "provider_runtime",
+    ),
+)
+def test_runtime_instances_are_not_valid_marketplace_content(runtime_kind: str) -> None:
+    with pytest.raises(ValueError, match="not distributable Marketplace content"):
+        RegistryItem(
+            item_id="example.runtime-instance",
+            item_type=runtime_kind,
+            name="Runtime instance",
+            description="Live runtime state must stay outside Marketplace.",
+            version="1.0.0",
+            publisher="example",
+            source=_source("example.runtime-instance", "1.0.0"),
+            license="MIT",
+            provenance="runtime-state",
+            trust_status=TrustStatus.REVIEWED,
+            manifest=RegistryManifestReference(
+                kind=runtime_kind,
+                reference="manifests/runtime-instance.json",
+                schema_version="1",
+            ),
+        )
+
+
 def test_cross_kind_search_kind_filters_and_future_kind() -> None:
     items = (
         _tool("example.tool", "Example Tool"),
