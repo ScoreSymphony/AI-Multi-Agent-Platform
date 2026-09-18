@@ -81,7 +81,7 @@ uses the following existing authorities:
 | --- | --- | --- | --- | --- | --- |
 | Tool / Capability | #20 Plugin package lifecycle, then the normal `CAPABILITY_PROVIDER` binder into `CapabilityRegistry` on plugin enable | yes | yes, through `PluginRegistry.apply_update()` | yes, through `PluginRegistry.remove()` | canonical Plugin snapshot/manifest |
 | Skill | `SkillService` / Skill repository | yes, canonical revision 1 through the third-party intake rules | yes, exactly one Skill revision at a time while canonical source identity remains unchanged | yes, using the repository's existing historical-reference checks | current canonical Skill revision |
-| Plugin | existing `PluginRegistryArtifactInstaller -> PluginRegistry` route | unchanged | unchanged | not added by this slice | existing Plugin surfaces |
+| Plugin | existing `PluginRegistryArtifactInstaller -> PluginRegistry` route | unchanged legacy Plugin route | unchanged legacy Plugin route | yes, through `PluginRegistry.remove()` | canonical Plugin snapshot/manifest |
 | Connector | #20 Plugin package lifecycle, then the normal `CONNECTOR_PROVIDER` binder into `ConnectorService` / `ConnectorRegistry` on plugin enable | yes | yes, through `PluginRegistry.apply_update()` | yes, through `PluginRegistry.remove()` | canonical Plugin snapshot/manifest |
 | Application | #1173 `ApplicationLifecycleService`, `ApplicationRepository` and `ApplicationRuntimeRegistry` | yes when the manifest needs no unresolved install-time bindings | **no**; #1173 exposes configuration/restart operations, not an artifact-version migration | yes, through `ApplicationLifecycleService.remove()` | #1173 canonical instance status and installed definition |
 | Template / Workflow / other portable assets | #79 portability workflow and the resource-specific import owners | unchanged | unchanged | unchanged | existing owner/import surfaces |
@@ -91,6 +91,10 @@ enters the existing third-party Skill intake/review lifecycle instead of allowin
 metadata to make a Skill first-party or trusted. A release update delegates to
 `SkillService.update_skill()`; the Skill owner may reject it when the artifact attempts to rewrite
 immutable source provenance, in which case Marketplace does not synthesize a replacement lifecycle.
+
+Plugin activation remains on the pre-existing `DistributionRoute.PLUGIN` handoff. The registered
+Plugin kind handler is used only to expose the same owner for requirements/status/describe/removal;
+it does not replace or fork the established install/update route.
 
 Manifest-backed v3 Tool and Connector Marketplace artifacts use canonical Plugin manifests that
 declare, respectively, at least one `capability_provider` or `connector_provider` extension.
