@@ -7,6 +7,7 @@ import asyncio
 import getpass
 import socket
 import sys
+from types import FrameType
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -354,11 +355,20 @@ def main(
                 "The server extra is required. Install with: pip install '.[server]'"
             ) from exc
         class _DrainAwareServer(uvicorn.Server):
+            def handle_exit(self, sig: int, frame: FrameType | None) -> None:
+                already_exiting = self.should_exit
+                super().handle_exit(sig, frame)
+                if already_exiting:
+                    self.force_exit = True
+
             async def shutdown(self, sockets: list[socket.socket] | None = None) -> None:
                 # Enter drain before Uvicorn closes listeners/waits for connection tasks. This
                 # disables northbound mutation admission as soon as operator shutdown begins.
                 await deployment.drain.begin(reason="server_shutdown")
                 await super().shutdown(sockets=sockets)
+                if self.force_exit:
+                    await deployment.drain.mark_forced("operator_force_signal")
+                    await deployment.drain.mark_completed()
 
         server_config = uvicorn.Config(
             deployment.app,
