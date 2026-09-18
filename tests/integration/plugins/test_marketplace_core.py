@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 
 import pytest
+from jsonschema import ValidationError
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.distribution import (
@@ -238,6 +239,23 @@ def test_schema_v6_adds_canonical_links_without_breaking_v5() -> None:
     assert item.documentation == "https://docs.example.invalid/notebook"
     assert legacy_item.homepage is None
     assert legacy_item.documentation is None
+
+
+def test_schema_v5_rejects_v6_canonical_link_fields() -> None:
+    legacy = _document(
+        item_type="notebook_extension",
+        manifest={
+            "kind": "notebook_extension",
+            "reference": "manifests/notebook-extension.json",
+            "schema_version": "1",
+        },
+    )
+    legacy["schema_version"] = "5"
+    legacy["maturity"] = "stable"
+    legacy["homepage"] = "https://example.invalid/notebook"
+
+    with pytest.raises(ValidationError):
+        registry_item_from_document(legacy)
 
 
 def test_registry_item_rejects_blank_canonical_links() -> None:
