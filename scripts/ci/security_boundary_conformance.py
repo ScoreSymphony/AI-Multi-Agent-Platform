@@ -139,7 +139,8 @@ def _test_functions(path: Path, cache: dict[Path, frozenset[str]]) -> frozenset[
     names = frozenset(
         node.name
         for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))\n        and node.name.startswith("test_")
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name.startswith("test_")
     )
     cache[path] = names
     return names
@@ -204,7 +205,12 @@ def validate_matrix(document: Mapping[str, object]) -> tuple[str, ...]:
     cache: dict[Path, frozenset[str]] = {}
 
     for key in sorted(REQUIRED_GLOBAL_REGRESSIONS):
-        nodes = _evidence_list(\n            global_regressions,\n            key,\n            owner=f"global_regressions.{key}",\n            required=True,\n        )
+        nodes = _evidence_list(
+            global_regressions,
+            key,
+            owner=f"global_regressions.{key}",
+            required=True,
+        )
         evidence.extend(nodes)
 
     for raw_surface in surfaces:
