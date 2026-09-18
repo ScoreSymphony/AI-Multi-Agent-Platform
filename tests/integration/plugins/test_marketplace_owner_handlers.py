@@ -46,6 +46,11 @@ from ai_multi_agent_platform.connectors import (
     InMemoryConnectorRepository,
     ReferenceConnectorProvider,
 )
+from ai_multi_agent_platform.adapters.hermes import (
+    HERMES_ADAPTER_ID,
+    HermesAdapterConfig,
+    HermesOrchestrator,
+)
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane.plugin_api import _manifest_document
 from ai_multi_agent_platform.distribution import (
@@ -68,6 +73,10 @@ from ai_multi_agent_platform.plugins import (
     ConnectorRegistryBinder,
     ExtensionRegistration,
     ExtensionType,
+    OrchestratorRegistryBinder,
+    PluginContext,
+    PluginHealth,
+    PluginHealthReport,
     PluginExtensionSpec,
     PluginRegistry,
     reference_manifest,
@@ -77,6 +86,11 @@ from ai_multi_agent_platform.portability import (
     AgentTeamPortableCodec,
     snapshot_agent,
     snapshot_agent_team,
+)
+from ai_multi_agent_platform.orchestration import (
+    OrchestratorRegistry,
+    OrchestratorSelection,
+    ReferenceOrchestrator,
 )
 from ai_multi_agent_platform.skills.codec import skill_revision_to_json
 from ai_multi_agent_platform.skills.models import (
@@ -263,6 +277,86 @@ async def test_agent_team_handler_uses_canonical_team_owner_and_member_validatio
     with pytest.raises(ContractError) as missing:
         target.get_team_revision(team.team_id)
     assert missing.value.code is ErrorCode.NOT_FOUND
+
+
+class _HermesPluginRuntime:
+    def __init__(self, manifest, hermes: HermesOrchestrator) -> None:
+        self.manifest = manifest
+        self.hermes = hermes
+        self.stopped = False
+
+    async def initialize(self, context: PluginContext) -> tuple[ExtensionRegistration, ...]:
+        assert context.configuration == {}
+        return (ExtensionRegistration(spec=self.manifest.extensions[0], instance=self.hermes),)
+
+    async def health(self) -> PluginHealthReport:
+        return PluginHealthReport(PluginHealth.HEALTHY)
+
+    async def shutdown(self) -> None:
+        self.stopped = True
+
+
+async def test_hermes_marketplace_kind_uses_plugin_lifecycle_and_orchestrator_registry() -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id=HERMES_ADAPTER_ID,
+        name="Hermes",
+        description="Replaceable Hermes orchestrator adapter.",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="orchestrator.hermes",
+                extension_type=ExtensionType.ORCHESTRATOR,
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={"type": "object", "additionalProperties": False},
+    )
+    reference = ReferenceOrchestrator()
+    orchestrators = OrchestratorRegistry(
+        {reference.descriptor.provider_id: reference}
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.ORCHESTRATOR: frozenset({"1.0"})},
+        binders={ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(orchestrators)},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.ORCHESTRATOR,
+        extension_type=ExtensionType.ORCHESTRATOR,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.ORCHESTRATOR,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+
+    installed = await handler.install(item, _plugin_artifact(manifest))
+    assert installed.state.value == "installed"
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+
+    plugin_registry.configure(HERMES_ADAPTER_ID, {})
+    hermes = HermesOrchestrator(
+        HermesAdapterConfig(enabled=True),
+        secret_resolver=lambda _: None,
+    )
+    runtime = _HermesPluginRuntime(manifest, hermes)
+    enabled = await plugin_registry.enable(HERMES_ADAPTER_ID, runtime)
+
+    assert enabled.state.value == "enabled"
+    assert orchestrators.select(OrchestratorSelection(HERMES_ADAPTER_ID)) is hermes
+    assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
+
+    await plugin_registry.disable(HERMES_ADAPTER_ID)
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+    assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
+    assert runtime.stopped is True
 
 
 async def test_plugin_activation_keeps_legacy_route_and_owner_handler_adds_status_remove(
