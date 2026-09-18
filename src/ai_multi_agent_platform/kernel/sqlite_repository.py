@@ -22,13 +22,21 @@ _T = TypeVar("_T")
 class SqliteKernelRepository(EventRepository):
     """Transactional event/idempotency store used for restart and recovery flows."""
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        busy_timeout_seconds: float = 5.0,
+    ) -> None:
+        if busy_timeout_seconds <= 0:
+            raise ValueError("busy_timeout_seconds must be > 0")
         self._path = str(path)
+        self._busy_timeout_seconds = busy_timeout_seconds
         self._initialize()
         self._offload = AsyncSqliteOffload(max_concurrency=4)
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self._path, timeout=30)
+        connection = sqlite3.connect(self._path, timeout=self._busy_timeout_seconds)
         connection.row_factory = sqlite3.Row
         return connection
 
