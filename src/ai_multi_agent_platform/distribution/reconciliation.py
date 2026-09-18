@@ -154,6 +154,8 @@ def _validate_snapshot(
     if snapshot.publisher is not None:
         if snapshot.publisher != item.publisher:
             mismatches.append("publisher")
+        if snapshot.dependencies is not None and snapshot.dependencies != item.dependencies:
+            mismatches.append("dependencies")
         if snapshot.requested_permissions != tuple(sorted(item.requested_permissions)):
             mismatches.append("requested permissions")
         if snapshot.signature != item.integrity.signature:
