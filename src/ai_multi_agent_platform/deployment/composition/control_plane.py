@@ -83,7 +83,7 @@ class HttpBundle:
 def build_health(
     storage: StorageBundle,
     execution: ExecutionBundle,
-    observability: ObservabilityBundle,
+    observability: ObservabilityBundle | None = None,
 ) -> HealthBundle:
     """Build required single-node health dependencies explicitly."""
 
@@ -102,7 +102,7 @@ def build_health(
                 ),
                 ProviderHealthDependency(storage.files, required=True, name="files"),
             ),
-            telemetry=observability.telemetry,
+            telemetry=None if observability is None else observability.telemetry,
         )
     )
 
