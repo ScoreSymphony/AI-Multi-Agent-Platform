@@ -736,4 +736,3 @@ def _validate_provider_metadata(item: RegistryItem) -> RegistryItem:
 
     derive_technical_metadata(item)
     return item
-
