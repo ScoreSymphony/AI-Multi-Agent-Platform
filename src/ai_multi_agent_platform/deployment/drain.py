@@ -246,15 +246,15 @@ class SingleNodeDrainController:
                 completed = True
                 self._condition.notify_all()
         if completed:
+            if self._forced and self._force_timed_out:
+                outcome = TelemetryOutcome.TIMED_OUT
+            elif self._forced:
+                outcome = TelemetryOutcome.FAILED
+            else:
+                outcome = TelemetryOutcome.SUCCEEDED
             self._event(
                 "platform.single_node.drain.completed",
-                outcome=(
-                    TelemetryOutcome.TIMED_OUT
-                    if self._forced and self._force_timed_out
-                    else TelemetryOutcome.FAILED
-                    if self._forced
-                    else TelemetryOutcome.SUCCEEDED
-                ),
+                outcome=outcome,
                 attributes={
                     "forced": self._forced,
                     "active_mutations": self._active_mutations,
