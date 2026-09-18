@@ -221,6 +221,13 @@ try {
   requireText(pluginPreviewText, "Provenance changes", "Marketplace provenance diff");
   requireText(pluginPreviewText, "Artifact digest", "Marketplace integrity diff");
   requireText(pluginPreviewText, "ProjectAtlas", "Marketplace dependency preview");
+  requireText(pluginPreviewText, "Operating systems", "Marketplace OS compatibility metadata");
+  requireText(pluginPreviewText, "linux", "Marketplace OS compatibility value");
+  requireText(pluginPreviewText, "Architectures", "Marketplace architecture metadata");
+  requireText(pluginPreviewText, "x86_64", "Marketplace architecture value");
+  requireText(pluginPreviewText, "Required runtimes", "Marketplace runtime requirements");
+  requireText(pluginPreviewText, "node", "Marketplace runtime requirement value");
+  requireText(pluginPreviewText, "Signature changed", "Marketplace signature diff");
 
   before = await page.evaluate(() => window.__marketplaceCalls.length);
   await page.getByRole("button", { name: "Apply update", exact: true }).click();
