@@ -701,6 +701,51 @@ def test_control_plane_registers_marketplace_aliases_without_breaking_registry_c
     } <= set(control_plane.commands)
 
 
+def test_registered_future_kind_descriptor_controls_effective_route() -> None:
+    item = _future_kind()
+    artifact = b"future-kind-manual"
+    kinds = MarketplaceKindRegistry(
+        (
+            MarketplaceKindDescriptor(
+                "notebook_extension",
+                "Notebook Extension",
+                DistributionRoute.MANUAL,
+                supports_install=False,
+                supports_update=False,
+                supports_uninstall=False,
+            ),
+        )
+    )
+    distribution = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+            provider_id="local",
+        ),
+        kind_registry=kinds,
+    )
+    service = RegistryResourceService(
+        distribution,
+        StaticValidationContext(_context()),
+    )
+
+    detail = asyncio.run(
+        service.get_resource(
+            _request(),
+            f"{item.item_id}@{item.version}",
+        )
+    )
+    preview = distribution.preview(item.item_id, item.version, _context())
+
+    assert item.route is DistributionRoute.KIND_HANDLER
+    assert distribution.route_for(preview.item) is DistributionRoute.MANUAL
+    assert preview.route is DistributionRoute.MANUAL
+    assert preview.activation_allowed is False
+    assert detail["route"] == "manual"
+    assert detail["route_available"] is False
+    assert detail["owner_extension"] is None
+
+
 def test_marketplace_preview_reflects_actual_route_availability() -> None:
     item = _tool("example.preview-tool", "Preview Tool")
     distribution = DistributionService(
