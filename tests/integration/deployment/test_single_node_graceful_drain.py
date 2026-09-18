@@ -47,7 +47,9 @@ def test_drain_rejects_mutations_and_projects_health_readiness(tmp_path: Path) -
 
         await deployment.drain.begin(reason="test_shutdown")
 
-        health = await deployment.http.handle(HTTPRequest(method="GET", path="/api/v1/health"))
+        health = await deployment.http.handle(
+            HTTPRequest(method="GET", path="/api/v1/health")
+        )
         readiness = await deployment.http.handle(
             HTTPRequest(method="GET", path="/api/v1/readiness")
         )
