@@ -95,13 +95,13 @@ from ai_multi_agent_platform.plugins import (
     ExtensionType,
     ModelProviderRegistryBinder,
     OrchestratorRegistryBinder,
+    PluginCatalog,
     PluginContext,
     PluginExtensionSpec,
     PluginHealth,
     PluginHealthReport,
     PluginRegistry,
     StaticPluginSource,
-    PluginCatalog,
     reference_manifest,
 )
 from ai_multi_agent_platform.portability import (
