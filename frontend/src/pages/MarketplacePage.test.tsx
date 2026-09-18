@@ -27,6 +27,7 @@ describe("MarketplacePage", () => {
     expect(html).toContain("All Registry assets");
     expect(html).toContain("Technical components only");
     expect(html).toContain("All types");
+    expect(html).toContain("Applications");
     expect(html).toContain("All trust states");
     expect(html).toContain("lifecycle:candidate");
     expect(html).toContain("code-intelligence");
