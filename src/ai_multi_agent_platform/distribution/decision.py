@@ -213,6 +213,7 @@ class ProvenanceDiff:
 class ApprovalRequirement:
     required: bool
     reasons: tuple[str, ...] = ()
+    authorization_required: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -780,8 +781,6 @@ def _approval_requirement(
         reasons.append("repository_change")
     if provenance_diff.signature_key_changed:
         reasons.append("signature_key_change")
-    if provenance_diff.signature_changed:
-        reasons.append("signature_change")
     if provenance_diff.trust_downgraded:
         reasons.append("trust_downgrade")
     return ApprovalRequirement(bool(reasons), tuple(reasons))
