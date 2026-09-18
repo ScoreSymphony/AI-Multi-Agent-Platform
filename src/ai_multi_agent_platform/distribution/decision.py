@@ -33,6 +33,8 @@ class DependencyStatus(StrEnum):
     SOURCE_AMBIGUOUS = "source_ambiguous"
     SELF_DEPENDENCY = "self_dependency"
     CYCLE = "cycle"
+    REQUIRED_BY_INSTALLED = "required_by_installed"
+    UNKNOWN_INSTALLED_DEPENDENT = "unknown_installed_dependent"
 
 
 @dataclass(frozen=True, slots=True)
@@ -567,6 +569,24 @@ def dependency_findings(
                     resolution,
                 )
             )
+        elif status is DependencyStatus.REQUIRED_BY_INSTALLED:
+            findings.append(
+                _finding(
+                    "required_by_installed",
+                    FindingSeverity.ERROR,
+                    f"installed component {resolution.required_by} requires {resolution.item_id}",
+                    resolution,
+                )
+            )
+        elif status is DependencyStatus.UNKNOWN_INSTALLED_DEPENDENT:
+            findings.append(
+                _finding(
+                    "installed_dependency_state_unknown",
+                    FindingSeverity.ERROR,
+                    f"cannot verify dependencies for installed component {resolution.required_by}",
+                    resolution,
+                )
+            )
     return tuple(findings)
 
 
@@ -635,6 +655,8 @@ def build_marketplace_decision(
 
 def uninstall_decision(
     installation: RegistryInstallation,
+    *,
+    dependencies: tuple[DependencyResolution, ...] = (),
 ) -> MarketplaceDecision:
     current = installation.current
     permission_diff = PermissionDiff(
@@ -669,7 +691,7 @@ def uninstall_decision(
     )
     return MarketplaceDecision(
         operation=DistributionOperation.UNINSTALL,
-        dependencies=(),
+        dependencies=dependencies,
         compatibility=CompatibilityDecision(True, True, True),
         permission_diff=permission_diff,
         provenance_diff=provenance_diff,
