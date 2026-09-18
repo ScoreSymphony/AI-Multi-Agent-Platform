@@ -140,7 +140,7 @@ def _handler_resource(
 
 def _handler_id(application_ref: str, association_kind: str, association_value: str) -> str:
     digest = sha256(
-        f"{application_ref}\0{association_kind}\0{association_value}".encode("utf-8")
+        f"{application_ref}\0{association_kind}\0{association_value}".encode()
     ).hexdigest()[:32]
     return f"application_resource_handler_{digest}"
 
