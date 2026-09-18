@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { APImanifest } from "../../api/types";
 import { OnboardingCallout } from "../../components/OnboardingCallout";
 import { PermissionHintsProvider } from "../../security/permissions";
-import { navigation, navigationMaturity } from "../navigation";
+import { navigation, navigationItemForPath, navigationMaturity } from "../navigation";
 import { AppLink } from "../router";
 import type { ShellClients } from "./clients";
 import { apiStatusLabel, type ManifestState } from "./manifest";
@@ -25,7 +25,7 @@ export function ShellLayout({
   content: ReactNode;
 }) {
   const groups = Array.from(new Set(navigation.map((item) => item.group)));
-  const currentItem = navigation.find((item) => item.path === path);
+  const currentItem = navigationItemForPath(path);
   const apiReady = manifestState === "ready" && manifest !== null;
   const onboardingAvailable = manifest?.resources.includes("onboarding") ?? false;
 
@@ -47,7 +47,7 @@ export function ShellLayout({
                 <span className="nav-group-label">{group}</span>
                 <div className="nav-group-links">
                   {navigation.filter((item) => item.group === group).map((item) => {
-                    const active = item.path === path;
+                    const active = item.path === currentItem?.path;
                     const maturity = navigationMaturity[item.path];
                     const maturityLabel = maturity === "experimental"
                       ? "Experimental"
