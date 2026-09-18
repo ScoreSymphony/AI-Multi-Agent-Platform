@@ -13,6 +13,8 @@ from ai_multi_agent_platform.contracts import (
     EgressTargetPosture,
     digest_egress_payload,
 )
+from ai_multi_agent_platform.contracts.types import ToolInvocation
+from ai_multi_agent_platform.domain import ToolInvocation as DomainToolInvocation
 from ai_multi_agent_platform.security.egress import EgressGate
 
 from .invocation import (
@@ -35,6 +37,7 @@ from .registry import CapabilityRegistry
 from .types import (
     CapabilityInvocation,
     CapabilityInvocationResult,
+    CapabilityRegistration,
     CapabilitySpec,
     SideEffectClassification,
 )
@@ -65,18 +68,41 @@ class EgressCapabilityInvoker(BaseCapabilityInvoker):
             if external_effect_recovery is not None
             else observer
         )
+        self._external_effect_recovery = external_effect_recovery
         super().__init__(
             registry,
             policy_hook=policy_hook,
             canonical_binding_hook=canonical_binding_hook,
             governance_binding_hook=governance_binding_hook,
             approval_hook=approval_hook,
+            provider_dispatch_hook=(
+                self._record_external_effect_dispatch
+                if external_effect_recovery is not None
+                else None
+            ),
             observer=effective_observer,
         )
         self._egress_registry = registry
-        self._external_effect_recovery = external_effect_recovery
         self.egress_gate = egress_gate or EgressGate()
         self._classification_resolver = classification_resolver
+
+    async def _record_external_effect_dispatch(
+        self,
+        request: CapabilityInvocation,
+        registration: CapabilityRegistration,
+        provider_invocation: ToolInvocation,
+        canonical_invocation: DomainToolInvocation | None,
+    ) -> None:
+        del registration, provider_invocation
+        recovery = self._external_effect_recovery
+        if recovery is None:
+            return
+        await recovery.begin_dispatch(
+            request.invocation_id,
+            canonical_tool_invocation_id=(
+                None if canonical_invocation is None else canonical_invocation.id
+            ),
+        )
 
     async def invoke(self, request: CapabilityInvocation) -> CapabilityInvocationResult:
         registration, provider = self._egress_registry.resolve(
