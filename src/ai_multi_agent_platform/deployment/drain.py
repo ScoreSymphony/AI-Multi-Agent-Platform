@@ -1,0 +1,422 @@
+"""Process-local graceful-drain policy for the supported single-node Control Plane.
+
+The drain gate is deliberately not durable lifecycle authority. It only stops new process-local
+admission while an operator shutdown is in progress. Canonical unfinished work remains owned by its
+normal subsystem and is reconciled after restart by the existing startup-recovery path (#707).
+"""
+
+from __future__ import annotations
+
+import asyncio
+from contextlib import suppress
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
+from uuid import uuid4
+
+from ai_multi_agent_platform.contracts import ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.control_plane import (
+    AuthenticatedControlPlaneHTTP,
+    ControlPlaneASGI,
+    HTTPRequest,
+    HTTPResponse,
+)
+from ai_multi_agent_platform.control_plane.http import ASGIReceive, ASGISend, _header
+from ai_multi_agent_platform.control_plane.models import APIException
+from ai_multi_agent_platform.observability import (
+    FailureComponent,
+    Telemetry,
+    TelemetryContext,
+    TelemetryOutcome,
+    TelemetrySeverity,
+)
+
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+class SingleNodeDrainState(StrEnum):
+    """Transient process admission state; never persisted as canonical lifecycle state."""
+
+    SERVING = "serving"
+    DRAINING = "draining"
+
+
+@dataclass(frozen=True, slots=True)
+class SingleNodeDrainSnapshot:
+    state: SingleNodeDrainState
+    active_mutations: int
+    timeout_seconds: float
+    forced: bool
+    completed: bool
+    reason: str | None = None
+    force_reason: str | None = None
+
+    def to_json(self) -> dict[str, JsonValue]:
+        return {
+            "state": self.state.value,
+            "active_mutations": self.active_mutations,
+            "timeout_seconds": self.timeout_seconds,
+            "forced": self.forced,
+            "completed": self.completed,
+            "reason": self.reason,
+            "force_reason": self.force_reason,
+        }
+
+
+class SingleNodeDrainController:
+    """Coordinate bounded process-local mutation admission during single-node shutdown."""
+
+    def __init__(self, *, timeout_seconds: float, telemetry: Telemetry) -> None:
+        if timeout_seconds <= 0:
+            raise ValueError("single-node drain timeout must be positive")
+        self.timeout_seconds = float(timeout_seconds)
+        self._telemetry = telemetry
+        self._condition = asyncio.Condition()
+        self._state = SingleNodeDrainState.SERVING
+        self._active_mutations = 0
+        self._deadline: float | None = None
+        self._reason: str | None = None
+        self._force_reason: str | None = None
+        self._forced = False
+        self._completed = False
+
+    @property
+    def draining(self) -> bool:
+        return self._state is SingleNodeDrainState.DRAINING
+
+    @property
+    def active_mutations(self) -> int:
+        return self._active_mutations
+
+    def snapshot(self) -> SingleNodeDrainSnapshot:
+        return SingleNodeDrainSnapshot(
+            state=self._state,
+            active_mutations=self._active_mutations,
+            timeout_seconds=self.timeout_seconds,
+            forced=self._forced,
+            completed=self._completed,
+            reason=self._reason,
+            force_reason=self._force_reason,
+        )
+
+    async def begin(self, *, reason: str = "process_shutdown") -> bool:
+        """Enter drain exactly once and establish the shared shutdown deadline."""
+
+        entered = False
+        async with self._condition:
+            if self._state is SingleNodeDrainState.SERVING:
+                self._state = SingleNodeDrainState.DRAINING
+                self._reason = reason
+                self._deadline = asyncio.get_running_loop().time() + self.timeout_seconds
+                entered = True
+                self._condition.notify_all()
+        if entered:
+            self._event(
+                "platform.single_node.drain.requested",
+                attributes={
+                    "reason": reason,
+                    "active_mutations": self._active_mutations,
+                    "timeout_seconds": self.timeout_seconds,
+                },
+            )
+            self._event(
+                "platform.single_node.drain.entered",
+                attributes={
+                    "mutable_admission": "disabled",
+                    "active_mutations": self._active_mutations,
+                },
+            )
+            self._metric_active_mutations(disposition="in_flight_at_drain_entry")
+        return entered
+
+    async def try_admit_mutation(self) -> bool:
+        """Atomically admit a mutation only while the process is authoritative for new work."""
+
+        async with self._condition:
+            if self._state is SingleNodeDrainState.DRAINING:
+                return False
+            self._active_mutations += 1
+            return True
+
+    async def release_mutation(self) -> None:
+        async with self._condition:
+            if self._active_mutations <= 0:
+                raise RuntimeError("single-node drain mutation accounting underflow")
+            self._active_mutations -= 1
+            self._condition.notify_all()
+
+    async def wait_for_inflight(self) -> bool:
+        """Allow already-admitted mutations to settle only within the shared drain deadline."""
+
+        async with self._condition:
+            while self._active_mutations:
+                remaining = self._remaining_seconds()
+                if remaining <= 0:
+                    break
+                try:
+                    await asyncio.wait_for(self._condition.wait(), timeout=remaining)
+                except TimeoutError:
+                    break
+            settled = self._active_mutations == 0
+
+        if settled:
+            self._metric_active_mutations(disposition="completed_during_drain")
+            return True
+
+        await self.mark_forced("in_flight_mutation_timeout")
+        self._metric_active_mutations(disposition="deferred_to_startup_reconciliation")
+        return False
+
+    def remaining_seconds(self) -> float:
+        if self._deadline is None:
+            return self.timeout_seconds
+        return max(0.0, self._remaining_seconds())
+
+    async def mark_forced(self, reason: str) -> None:
+        newly_forced = False
+        async with self._condition:
+            if not self._forced:
+                self._forced = True
+                self._force_reason = reason
+                newly_forced = True
+                self._condition.notify_all()
+        if newly_forced:
+            self._event(
+                "platform.single_node.drain.timeout",
+                severity=TelemetrySeverity.WARNING,
+                outcome=TelemetryOutcome.TIMED_OUT,
+                attributes={
+                    "reason": reason,
+                    "active_mutations": self._active_mutations,
+                },
+            )
+
+    async def mark_teardown_failure(self, detail: str) -> None:
+        self._event(
+            "platform.single_node.drain.teardown_failed",
+            severity=TelemetrySeverity.ERROR,
+            outcome=TelemetryOutcome.FAILED,
+            attributes={"detail": detail[:512]},
+        )
+
+    async def mark_completed(self) -> None:
+        completed = False
+        async with self._condition:
+            if not self._completed:
+                self._completed = True
+                completed = True
+                self._condition.notify_all()
+        if completed:
+            self._event(
+                "platform.single_node.drain.completed",
+                outcome=(
+                    TelemetryOutcome.TIMED_OUT if self._forced else TelemetryOutcome.SUCCEEDED
+                ),
+                attributes={
+                    "forced": self._forced,
+                    "active_mutations": self._active_mutations,
+                    "force_reason": self._force_reason,
+                },
+            )
+
+    def _remaining_seconds(self) -> float:
+        if self._deadline is None:
+            return self.timeout_seconds
+        return self._deadline - asyncio.get_running_loop().time()
+
+    def _metric_active_mutations(self, *, disposition: str) -> None:
+        self._telemetry.metric(
+            "platform.single_node.drain.in_flight",
+            float(self._active_mutations),
+            context=TelemetryContext(),
+            attributes={"disposition": disposition},
+        )
+
+    def _event(
+        self,
+        event_name: str,
+        *,
+        severity: TelemetrySeverity = TelemetrySeverity.INFO,
+        outcome: TelemetryOutcome = TelemetryOutcome.UNKNOWN,
+        attributes: dict[str, JsonValue] | None = None,
+    ) -> None:
+        context = TelemetryContext()
+        self._telemetry.log(
+            severity=severity,
+            component=FailureComponent.INFRASTRUCTURE_UNKNOWN,
+            event_name=event_name,
+            context=context,
+            outcome=outcome,
+            attributes=attributes,
+        )
+        self._telemetry.timeline(
+            event_name=event_name,
+            component=FailureComponent.INFRASTRUCTURE_UNKNOWN,
+            context=context,
+            outcome=outcome,
+            attributes=attributes,
+        )
+
+
+class DrainAwareAuthenticatedControlPlaneHTTP(AuthenticatedControlPlaneHTTP):
+    """Apply one northbound mutation-admission gate without owning canonical state."""
+
+    def __init__(
+        self,
+        *args: Any,
+        drain: SingleNodeDrainController,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._drain = drain
+
+    async def handle(self, request: HTTPRequest) -> HTTPResponse:
+        method = request.method.upper()
+        if method not in _SAFE_METHODS:
+            if not await self._drain.try_admit_mutation():
+                return self._draining_response(request)
+            try:
+                response = await super().handle(request)
+            finally:
+                await self._drain.release_mutation()
+        else:
+            response = await super().handle(request)
+
+        if method == "GET" and _is_health_path(request.path) and self._drain.draining:
+            return _overlay_draining_health(response, self._drain)
+        return response
+
+    def _draining_response(self, request: HTTPRequest) -> HTTPResponse:
+        request_id = _header(request.headers, "x-request-id") or f"request_{uuid4()}"
+        correlation_id = _header(request.headers, "x-correlation-id") or request_id
+        return self._error_response(
+            APIException(
+                status=503,
+                code=ErrorCode.UNAVAILABLE.value,
+                message="single-node Control Plane is draining; new mutations are not admitted",
+                retryable=True,
+                details={
+                    "draining": True,
+                    "active_mutations": self._drain.active_mutations,
+                },
+            ),
+            request_id,
+            correlation_id,
+        )
+
+
+class SingleNodeDrainASGI(ControlPlaneASGI):
+    """Bound the complete ASGI lifespan teardown with the shared single-node drain deadline."""
+
+    def __init__(
+        self,
+        http: DrainAwareAuthenticatedControlPlaneHTTP,
+        drain: SingleNodeDrainController,
+    ) -> None:
+        super().__init__(http)
+        self._drain = drain
+
+    async def __call__(
+        self,
+        scope: dict[str, Any],
+        receive: ASGIReceive,
+        send: ASGISend,
+    ) -> None:
+        if scope.get("type") != "lifespan":
+            await super().__call__(scope, receive, send)
+            return
+
+        shutdown_seen = asyncio.Event()
+        shutdown_response_sent = False
+
+        async def drain_receive() -> dict[str, Any]:
+            message = await receive()
+            if message.get("type") == "lifespan.shutdown":
+                await self._drain.begin(reason="asgi_lifespan_shutdown")
+                await self._drain.wait_for_inflight()
+                shutdown_seen.set()
+            return message
+
+        async def tracked_send(message: dict[str, Any]) -> None:
+            nonlocal shutdown_response_sent
+            message_type = message.get("type")
+            if message_type == "lifespan.shutdown.complete":
+                shutdown_response_sent = True
+                await self._drain.mark_completed()
+            elif message_type == "lifespan.shutdown.failed":
+                shutdown_response_sent = True
+                detail = str(message.get("message", "ASGI lifespan shutdown failed"))
+                await self._drain.mark_teardown_failure(detail)
+            await send(message)
+
+        base_call = super().__call__
+        inner_task = asyncio.create_task(
+            base_call(scope, drain_receive, tracked_send),
+            name="single-node-drain-lifespan",
+        )
+        shutdown_waiter = asyncio.create_task(
+            shutdown_seen.wait(),
+            name="single-node-drain-shutdown-waiter",
+        )
+
+        done, _ = await asyncio.wait(
+            {inner_task, shutdown_waiter},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if inner_task in done:
+            shutdown_waiter.cancel()
+            with suppress(asyncio.CancelledError):
+                await shutdown_waiter
+            await inner_task
+            return
+
+        shutdown_waiter.cancel()
+        with suppress(asyncio.CancelledError):
+            await shutdown_waiter
+
+        remaining = self._drain.remaining_seconds()
+        try:
+            await asyncio.wait_for(asyncio.shield(inner_task), timeout=remaining)
+        except TimeoutError:
+            await self._drain.mark_forced("resource_teardown_timeout")
+            inner_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await inner_task
+            if not shutdown_response_sent:
+                await send({"type": "lifespan.shutdown.complete"})
+            await self._drain.mark_completed()
+
+
+def _is_health_path(path: str) -> bool:
+    normalized = path.rstrip("/")
+    return normalized.endswith("/health") or normalized.endswith("/readiness")
+
+
+def _overlay_draining_health(
+    response: HTTPResponse,
+    drain: SingleNodeDrainController,
+) -> HTTPResponse:
+    if not isinstance(response.body, dict):
+        return response
+    body: dict[str, JsonValue] = dict(response.body)
+    body["status"] = "draining"
+    body["ready"] = False
+    body["draining"] = True
+    body["drain"] = drain.snapshot().to_json()
+    status = 503 if str(response.body.get("api_version", "")).strip() and response.status != 404 else response.status
+    # Health remains a liveness probe while readiness is fail-closed. The caller-facing path is
+    # available only on the request object, so preserve 200 health responses and convert an
+    # otherwise-ready response to 503 only when the underlying HTTP layer already used readiness.
+    if response.status == 200:
+        status = 200
+    return HTTPResponse(status=status, body=body, headers=dict(response.headers))
+
+
+__all__ = [
+    "DrainAwareAuthenticatedControlPlaneHTTP",
+    "SingleNodeDrainASGI",
+    "SingleNodeDrainController",
+    "SingleNodeDrainSnapshot",
+    "SingleNodeDrainState",
+]
