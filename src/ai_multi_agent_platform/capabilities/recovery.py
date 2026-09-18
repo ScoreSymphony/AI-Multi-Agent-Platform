@@ -356,7 +356,10 @@ class ExternalEffectRecoveryCoordinator:
     ) -> None:
         if not provider_id.strip():
             raise ValueError("provider_id must not be blank")
-        if provider_id in self._reconcilers:
+        existing = self._reconcilers.get(provider_id)
+        if existing is reconciler:
+            return
+        if existing is not None:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "external effect reconciler already registered",
