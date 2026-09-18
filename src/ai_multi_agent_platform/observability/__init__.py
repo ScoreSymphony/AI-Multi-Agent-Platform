@@ -3,7 +3,6 @@
 from .authorization import ObservedAuthorizationProvider
 from .egress import EgressTelemetryAuditSink
 from .event_provider import ObservabilityEventProvider
-from .external_effect_recovery import ObservabilityExternalEffectRecoveryObserver
 from .exporters import (
     InMemoryExporter,
     NoOpExporter,
@@ -11,6 +10,7 @@ from .exporters import (
     SpanHandle,
     Telemetry,
 )
+from .external_effect_recovery import ObservabilityExternalEffectRecoveryObserver
 from .health import (
     DependencyHealth,
     ReadinessState,
