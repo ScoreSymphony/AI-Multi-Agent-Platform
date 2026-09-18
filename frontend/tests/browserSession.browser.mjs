@@ -460,6 +460,12 @@ try {
   requireText(futureDetailText, "Notebook Extension", "Future Marketplace kind detail");
   requireText(futureDetailText, "Notebook Extension", "Future Marketplace kind fallback label");
   before = await page.evaluate(() => window.__marketplaceCalls.length);
+  page.once("dialog", async (dialog) => {
+    if (dialog.type() !== "confirm" || !dialog.message().includes("Uninstall")) {
+      throw new Error(`Unexpected Marketplace uninstall dialog: ${dialog.type()} ${dialog.message()}`);
+    }
+    await dialog.accept();
+  });
   await page.getByRole("button", { name: "Uninstall", exact: true }).click();
   await page.waitForFunction(
     (count) =>
