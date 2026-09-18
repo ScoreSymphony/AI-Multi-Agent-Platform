@@ -312,6 +312,7 @@ function marketplaceDecision(found, blocked) {
       candidate_kind: dependency.kind ?? null,
       candidate_source_registry: "local",
       path: [found.item_id, dependency.item_id],
+      blocking: dependency.status !== "satisfied" && !dependency.optional,
     })),
     compatibility: {
       compatible: !blocked,
