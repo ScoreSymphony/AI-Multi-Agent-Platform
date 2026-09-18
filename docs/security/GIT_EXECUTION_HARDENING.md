@@ -20,6 +20,8 @@ The reference policy is intentionally narrow:
 - external diff/textconv execution is disabled for canonical diff operations;
 - implicit submodule recursion is disabled;
 - external/custom Git remote-helper syntax is rejected;
+- same-host filesystem remotes (`file://`, absolute or relative paths) are rejected because a
+  local push can execute target-repository receive hooks on the platform host;
 - Git subprocess stderr and remote URLs are not copied into canonical error diagnostics.
 
 Canonical Authorization/Approval remains outside this adapter hardening. In particular,
@@ -77,15 +79,17 @@ Hardening:
 - `submodule.recurse=false`, `fetch.recurseSubmodules=false`,
   `push.recurseSubmodules=off`;
 - canonical diff uses `--no-ext-diff --no-textconv`;
-- fetch/push inspect configured URLs and reject external/custom remote-helper transports;
+- fetch/push inspect configured URLs and reject external/custom remote-helper transports and
+  same-host filesystem remotes;
 - raw Git stderr is used only to classify the error and is not retained in the public
   `ContractError`.
 
 Compatibility decision:
 repository-provided executable hooks, clean/smudge/process filters, external diff/textconv,
 custom merge drivers, config includes, AskPass/credential helpers, executable remote overrides,
-custom remote helpers, repository-controlled `core.worktree`, repository fsmonitor commands and
-similar execution indirection are intentionally unsupported by the controlled local provider.
+custom remote helpers, same-host filesystem remotes, repository-controlled `core.worktree`,
+repository fsmonitor commands and similar execution indirection are intentionally unsupported by
+the controlled local provider.
 They fail before the requested operation. Normal repositories without these settings continue to
 work.
 
@@ -188,8 +192,8 @@ than being promoted directly into production.
 | checkout | yes | hooks isolated, filters/merge drivers rejected, submodule recursion disabled |
 | add | yes | clean/process filters rejected before Git runs |
 | commit | yes | hooks isolated, filters rejected, GPG signing disabled |
-| fetch | yes | unsafe config rejected, submodule recursion disabled, remote helper URLs rejected |
-| push | yes | same remote restrictions; canonical authorization remains mandatory above provider |
+| fetch | yes | unsafe config rejected, submodule recursion disabled, remote-helper and local-filesystem URLs rejected |
+| push | yes | same remote restrictions; same-host receive hooks are unreachable; canonical authorization remains mandatory above provider |
 | clone | no productive local-provider path | repository lifecycle attaches/initializes managed repositories; no hidden clone subprocess |
 | submodule update | intentionally unsupported | implicit recursion disabled; executable update config rejected; gitlink tree entries are not canonical file materialization |
 
@@ -212,6 +216,7 @@ The permanent regression corpus is
 | GS-CRED-01 | credential helper / AskPass / credential-file indirection | repository operation | rejected/sanitized | config audit + controlled env |
 | GS-URL-01 | `url.*.insteadOf` / pushInsteadOf | repository operation | rejected | repository config audit |
 | GS-REMOTE-01 | `ext::` or custom remote helper | fetch | rejected before helper spawn | remote URL validation |
+| GS-REMOTE-02 | local/path remote with malicious `pre-receive` | push | rejected before target hook | remote URL validation |
 | GS-SUBMODULE-01 | executable submodule update / implicit recursion | checkout/fetch | rejected/disabled | config audit + recurse=false |
 | GS-DIAG-01 | secret-like remote userinfo in rejected URL | release discovery | rejected without secret echo | diagnostic minimization |
 | GS-CONTROL-01 | ordinary repository | status/diff/checkout/commit | succeeds | negative control |
