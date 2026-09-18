@@ -166,6 +166,7 @@ class InstalledRegistryItem:
     license: str | None = None
     provenance: str | None = None
     item_type: RegistryItemKind | None = None
+    dependencies: tuple[RegistryDependency, ...] | None = None
 
     def __post_init__(self) -> None:
         _require_id(self.item_id, "installed item_id")
