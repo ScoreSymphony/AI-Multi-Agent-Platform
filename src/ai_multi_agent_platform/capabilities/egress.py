@@ -27,6 +27,7 @@ from .invocation import (
 )
 from .recovery import (
     ExternalEffectInvocationObserver,
+    ExternalEffectReconciler,
     ExternalEffectRecoveryCoordinator,
     ExternalEffectRecoveryDisposition,
 )
@@ -78,7 +79,7 @@ class EgressCapabilityInvoker(BaseCapabilityInvoker):
         self._classification_resolver = classification_resolver
 
     async def invoke(self, request: CapabilityInvocation) -> CapabilityInvocationResult:
-        registration, _provider = self._egress_registry.resolve(
+        registration, provider = self._egress_registry.resolve(
             request.capability_id,
             version=request.version,
             compatibility=request.compatibility,
@@ -88,6 +89,8 @@ class EgressCapabilityInvoker(BaseCapabilityInvoker):
         capability = registration.capability
         recovery = self._external_effect_recovery
         if recovery is not None:
+            if isinstance(provider, ExternalEffectReconciler):
+                recovery.register_reconciler(registration.provider_id, provider)
             await recovery.prepare_attempt(request, capability, registration)
 
         try:
