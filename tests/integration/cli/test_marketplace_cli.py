@@ -381,7 +381,8 @@ def test_marketplace_future_kind_matches_core_control_plane_and_cli(
 
     from cli_test_helpers import ControlPlaneRecordingTransport, invoke_cli_json, page_items
 
-    from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
+    from ai_multi_agent_platform.control_plane import ControlPlaneHTTP, HTTPRequest
+    from ai_multi_agent_platform.control_plane.approval_portability_composition import ControlPlane
     from ai_multi_agent_platform.control_plane.models import RequestContext
     from ai_multi_agent_platform.distribution import (
         DistributionRoute,
@@ -656,9 +657,6 @@ def test_marketplace_future_kind_matches_core_control_plane_and_cli(
         "marketplace",
         "status",
         item.item_id,
-        item.version,
-        "--source",
-        "acceptance",
     )
     assert code == 0
     assert error == ""
