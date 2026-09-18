@@ -1,6 +1,6 @@
 name: "Expo / React Native mobile client runtime"
 purpose: "Optional Android/iOS northbound client for canonical Control Plane workflows"
-status: approved
+status: integrated
 integration_categories:
   - "library dependency"
 canonical_upstream: "https://github.com/expo/expo; https://github.com/facebook/react-native"
