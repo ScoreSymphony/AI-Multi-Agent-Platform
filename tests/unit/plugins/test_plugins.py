@@ -7,9 +7,16 @@ from dataclasses import replace
 import pytest
 
 from ai_multi_agent_platform.capabilities.registry import CapabilityRegistry
+from ai_multi_agent_platform.connectors import (
+    ConnectorRegistry,
+    ConnectorService,
+    InMemoryConnectorRepository,
+    ReferenceConnectorProvider,
+)
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.plugins import (
     CapabilityRegistryBinder,
+    ConnectorRegistryBinder,
     ExtensionRegistration,
     ExtensionType,
     PluginDependency,
@@ -126,6 +133,34 @@ def test_reference_plugin_registers_disables_and_removes_cleanly() -> None:
     assert capability_registry.list_capabilities() == ()
     registry.remove(reference_manifest().plugin_id)
     assert registry.list_plugins() == ()
+
+
+
+
+def test_connector_registry_binder_registers_and_unregisters_canonical_provider() -> None:
+    connector_registry = ConnectorRegistry()
+    service = ConnectorService(InMemoryConnectorRepository(), connector_registry)
+    provider = ReferenceConnectorProvider()
+    binder = ConnectorRegistryBinder(service)
+    registration = ExtensionRegistration(
+        spec=PluginExtensionSpec(
+            extension_id="connector.reference",
+            extension_type=ExtensionType.CONNECTOR_PROVIDER,
+            interface_version="1.0",
+            entrypoint="tests.test_plugins:ReferenceConnectorProvider",
+        ),
+        instance=provider,
+    )
+
+    asyncio.run(binder.register(registration))
+
+    definition = provider.definition
+    assert connector_registry.resolve(definition.connector_type_id, definition.version) is provider
+
+    asyncio.run(binder.unregister(registration))
+    with pytest.raises(ContractError) as missing:
+        connector_registry.resolve(definition.connector_type_id, definition.version)
+    assert missing.value.code is ErrorCode.UNAVAILABLE
 
 
 def test_invalid_manifest_document_is_rejected() -> None:
