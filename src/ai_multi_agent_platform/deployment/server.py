@@ -19,6 +19,7 @@ from ai_multi_agent_platform.backup import (
     validate_restored_single_node,
 )
 from ai_multi_agent_platform.contracts import ContractError
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.kernel import RecoveryReport
 from ai_multi_agent_platform.observability import (
@@ -424,7 +425,7 @@ async def _run_startup_recovery(
         extensions=deployment.startup_recovery_extensions,
         reviewer_reconciler=deployment.reviewer_recovery,
     )
-    attributes = {
+    attributes: dict[str, JsonValue] = {
         "ready_for_service": recovery.ready_for_service,
         "unresolved_runs": len(recovery.unresolved_run_ids),
         "blocked_verifications": len(recovery.blocked_verification_ids),
