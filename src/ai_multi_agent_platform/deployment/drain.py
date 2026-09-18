@@ -284,7 +284,11 @@ class DrainAwareAuthenticatedControlPlaneHTTP(AuthenticatedControlPlaneHTTP):
             response = await super().handle(request)
 
         if method == "GET" and _is_health_path(request.path) and self._drain.draining:
-            return _overlay_draining_health(response, self._drain)
+            return _overlay_draining_health(
+                response,
+                self._drain,
+                readiness=_is_readiness_path(request.path),
+            )
         return response
 
     def _draining_response(self, request: HTTPRequest) -> HTTPResponse:
@@ -393,9 +397,15 @@ def _is_health_path(path: str) -> bool:
     return normalized.endswith("/health") or normalized.endswith("/readiness")
 
 
+def _is_readiness_path(path: str) -> bool:
+    return path.rstrip("/").endswith("/readiness")
+
+
 def _overlay_draining_health(
     response: HTTPResponse,
     drain: SingleNodeDrainController,
+    *,
+    readiness: bool,
 ) -> HTTPResponse:
     if not isinstance(response.body, dict):
         return response
@@ -404,13 +414,11 @@ def _overlay_draining_health(
     body["ready"] = False
     body["draining"] = True
     body["drain"] = drain.snapshot().to_json()
-    status = 503 if str(response.body.get("api_version", "")).strip() and response.status != 404 else response.status
-    # Health remains a liveness probe while readiness is fail-closed. The caller-facing path is
-    # available only on the request object, so preserve 200 health responses and convert an
-    # otherwise-ready response to 503 only when the underlying HTTP layer already used readiness.
-    if response.status == 200:
-        status = 200
-    return HTTPResponse(status=status, body=body, headers=dict(response.headers))
+    return HTTPResponse(
+        status=503 if readiness else 200,
+        body=body,
+        headers=dict(response.headers),
+    )
 
 
 __all__ = [
