@@ -115,12 +115,19 @@ def test_server_startup_recovery_reconciles_durable_applications(
     assert report["extension_failures"] == 0
     assert report["extensions"] == [
         {
+            "name": "external-effect-recovery",
+            "items_checked": 0,
+            "failure_count": 0,
+            "ready_for_service": True,
+            "failures": [],
+        },
+        {
             "name": "applications",
             "items_checked": 1,
             "failure_count": 0,
             "ready_for_service": True,
             "failures": [],
-        }
+        },
     ]
 
     restarted = build_default_single_node_deployment(
