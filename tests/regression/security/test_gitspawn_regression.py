@@ -108,6 +108,11 @@ def test_gitspawn_environment_scrubs_execution_indirection() -> None:
         "GIT_EXEC_PATH": "/attacker/bin",
         "GIT_EXTERNAL_DIFF": "/attacker/diff",
         "GIT_SSH_COMMAND": "/attacker/ssh",
+        "GIT_AUTHOR_NAME": "Attacker Author",
+        "GIT_COMMITTER_EMAIL": "attacker@example.invalid",
+        "GIT_TRACE2_EVENT": "/attacker/trace.json",
+        "SSH_AUTH_SOCK": "/attacker/agent.sock",
+        "SSH_AGENT_PID": "999",
         "GIT_CONFIG_COUNT": "1",
         "GIT_CONFIG_KEY_0": "core.hooksPath",
         "GIT_CONFIG_VALUE_0": "/attacker/hooks",
@@ -122,15 +127,38 @@ def test_gitspawn_environment_scrubs_execution_indirection() -> None:
         "GIT_EXEC_PATH",
         "GIT_EXTERNAL_DIFF",
         "GIT_SSH_COMMAND",
+        "GIT_AUTHOR_NAME",
+        "GIT_COMMITTER_EMAIL",
+        "GIT_TRACE2_EVENT",
+        "SSH_AUTH_SOCK",
+        "SSH_AGENT_PID",
         "GIT_CONFIG_COUNT",
         "GIT_CONFIG_KEY_0",
         "GIT_CONFIG_VALUE_0",
         "GIT_CONFIG_PARAMETERS",
     ):
         assert key not in environment
+    assert environment["GIT_ATTR_NOSYSTEM"] == "1"
     assert environment["GIT_CONFIG_NOSYSTEM"] == "1"
     assert environment["GIT_CONFIG_GLOBAL"] == os.devnull
+    assert environment["GIT_NO_REPLACE_OBJECTS"] == "1"
     assert environment["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_gitspawn_controlled_home_replaces_ambient_user_configuration(tmp_path: Path) -> None:
+    home = tmp_path / "isolated-home"
+    inherited = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": "/attacker/home",
+        "XDG_CONFIG_HOME": "/attacker/xdg",
+        "SSH_AUTH_SOCK": "/attacker/agent.sock",
+    }
+
+    environment = controlled_git_environment(inherited, home=home)
+
+    assert environment["HOME"] == str(home.resolve())
+    assert environment["XDG_CONFIG_HOME"] == str((home / ".config").resolve())
+    assert "SSH_AUTH_SOCK" not in environment
 
 
 def test_gitspawn_controlled_path_drops_repository_relative_lookup(tmp_path: Path) -> None:
@@ -296,6 +324,43 @@ def test_gitspawn_inherited_system_config_override_is_ignored(
         )
 
         assert not marker.exists()
+
+    asyncio.run(scenario())
+
+
+def test_gitspawn_commit_identity_environment_cannot_override_explicit_author(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        monkeypatch.setenv("GIT_AUTHOR_NAME", "Attacker Author")
+        monkeypatch.setenv("GIT_AUTHOR_EMAIL", "attacker-author@example.invalid")
+        monkeypatch.setenv("GIT_COMMITTER_NAME", "Attacker Committer")
+        monkeypatch.setenv("GIT_COMMITTER_EMAIL", "attacker-committer@example.invalid")
+
+        provider, repository, operation, root = await _initialized_provider(tmp_path)
+        (root / "payload.txt").write_text("safe\n", encoding="utf-8")
+        await provider.commit(
+            repository,
+            "identity must be explicit",
+            operation,
+            author_name="GitSpawn Test",
+            author_email="gitspawn@example.invalid",
+        )
+
+        identity = _raw_git(
+            root,
+            "show",
+            "-s",
+            "--format=%an%x00%ae%x00%cn%x00%ce",
+            "HEAD",
+        ).stdout.strip().split("\x00")
+        assert identity == [
+            "GitSpawn Test",
+            "gitspawn@example.invalid",
+            "GitSpawn Test",
+            "gitspawn@example.invalid",
+        ]
 
     asyncio.run(scenario())
 
