@@ -116,10 +116,15 @@ def test_resolver_requires_every_supplied_selector_to_match_same_association() -
         )
     )
 
-    assert ApplicationResourceAssociationResolver(repository).resolve(
-        media_type="text/plain",
-        resource_type="ARTIFACT",
-    )[0].application == editor
+    assert (
+        ApplicationResourceAssociationResolver(repository)
+        .resolve(
+            media_type="text/plain",
+            resource_type="ARTIFACT",
+        )[0]
+        .application
+        == editor
+    )
     assert (
         ApplicationResourceAssociationResolver(repository).resolve(
             media_type="application/pdf",
