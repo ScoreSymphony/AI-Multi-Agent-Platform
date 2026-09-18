@@ -83,6 +83,8 @@ class LocalRegistryProvider:
             return False
         if query.trust_statuses and item.trust_status not in query.trust_statuses:
             return False
+        if query.maturities and item.maturity not in query.maturities:
+            return False
         if query.required_capabilities and not query.required_capabilities.issubset(
             item.required_capabilities
         ):
@@ -101,6 +103,7 @@ class LocalRegistryProvider:
                     item.description,
                     item.publisher,
                     item.license,
+                    item.maturity.value if item.maturity is not None else "",
                     *sorted(item.tags),
                     *sorted(item.categories),
                 )
