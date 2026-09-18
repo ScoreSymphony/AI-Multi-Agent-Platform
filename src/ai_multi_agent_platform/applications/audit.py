@@ -10,7 +10,11 @@ from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
-from ai_multi_agent_platform.control_plane.extensions import ControlPlane, ControlPlaneModule, ResourceService
+from ai_multi_agent_platform.control_plane.extensions import (
+    ControlPlane,
+    ControlPlaneModule,
+    ResourceService,
+)
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 from ai_multi_agent_platform.control_plane.module_registry import install_control_plane_modules
 from ai_multi_agent_platform.observability import (
@@ -174,7 +178,8 @@ class ApplicationAuditLog:
         instance_value = result.get("id")
         instance_id = (
             instance_value
-            if isinstance(instance_value, str) and instance_value.startswith("application_instance_")
+            if isinstance(instance_value, str)
+            and instance_value.startswith("application_instance_")
             else None
         )
         occurred_at = datetime.now(UTC)
