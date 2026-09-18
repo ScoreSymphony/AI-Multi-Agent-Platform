@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from io import StringIO
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from ai_multi_agent_platform.cli.client import HTTPTransport, RawResponse
 from ai_multi_agent_platform.cli.main import run_cli
@@ -39,7 +39,7 @@ class ControlPlaneRecordingTransport:
             self.http.handle(
                 HTTPRequest(
                     method=method,
-                    path=parsed.path,
+                    path=unquote(parsed.path),
                     headers=headers,
                     query=dict(parse_qsl(parsed.query)),
                     body=decoded,
