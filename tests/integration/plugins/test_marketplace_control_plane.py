@@ -24,6 +24,7 @@ from ai_multi_agent_platform.distribution import (
     MarketplaceKindDescriptor,
     MarketplaceKindHandlerRegistry,
     MarketplaceKindRegistry,
+    MarketplaceKindResourceService,
     MultiRegistryProvider,
     RegistryCommandHandlers,
     RegistryCompatibility,
@@ -1165,7 +1166,25 @@ def test_future_kind_registry_controls_operations_and_same_version_source_switch
             f"private::{base.item_id}@{base.version}",
         )
     )
+    kinds = asyncio.run(
+        MarketplaceKindResourceService(distribution).list_resources(
+            _request(),
+            PageQuery(sort="kind"),
+        )
+    )
 
+    assert kinds == (
+        {
+            "id": "notebook_extension",
+            "type": "marketplace-kind",
+            "kind": "notebook_extension",
+            "display_name": "Notebook Extension",
+            "default_route": "kind_handler",
+            "supports_install": True,
+            "supports_update": True,
+            "supports_uninstall": True,
+        },
+    )
     assert detail["installed"] is True
     assert detail["installed_source_registry"] == "official"
     assert detail["installation_source_matches"] is False
