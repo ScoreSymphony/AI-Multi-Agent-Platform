@@ -16,9 +16,11 @@ from ai_multi_agent_platform.observability import (
     AggregatedHealthProvider,
     DependencyHealth,
     InMemoryExporter,
+    MetricRecord,
     ProviderHealthDependency,
     ReadinessState,
     Telemetry,
+    TimelineEntry,
     aggregate_health,
 )
 
@@ -66,6 +68,16 @@ class _FailingHealthProvider(_HealthProvider):
             "dependency temporarily unavailable",
             retryable=True,
         )
+
+
+class _FailingTelemetryExporter(InMemoryExporter):
+    def emit_metric(self, record: MetricRecord) -> None:
+        del record
+        raise RuntimeError("telemetry unavailable")
+
+    def emit_timeline(self, record: TimelineEntry) -> None:
+        del record
+        raise RuntimeError("telemetry unavailable")
 
 
 def test_health_states_fail_closed_for_reconciliation_and_operator_intervention() -> None:
@@ -312,5 +324,29 @@ def test_dependency_retry_recovery_and_readiness_transitions_emit_telemetry() ->
         metric_names = [metric.name for metric in exporter.metrics]
         assert "platform.dependency.health.retry" in metric_names
         assert "platform.dependency.degradation.duration" in metric_names
+
+    asyncio.run(scenario())
+
+
+def test_telemetry_export_failure_does_not_block_optional_dependency_isolation() -> None:
+    async def scenario() -> None:
+        telemetry = Telemetry(_FailingTelemetryExporter())
+        provider = _HealthProvider([HealthStatus.UNAVAILABLE])
+        health = AggregatedHealthProvider(
+            (
+                ProviderHealthDependency(
+                    provider,
+                    required=False,
+                    max_retries=0,
+                    backoff_seconds=0,
+                ),
+            ),
+            telemetry=telemetry,
+        )
+
+        assert await health.health() is HealthStatus.DEGRADED
+        assert health.service_health.ready is True
+        assert health.service_health.readiness is ReadinessState.DEGRADED
+        assert telemetry.last_export_error == "RuntimeError"
 
     asyncio.run(scenario())

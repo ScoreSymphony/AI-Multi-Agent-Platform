@@ -23,6 +23,10 @@ def test_doctor_health_keeps_optional_unavailable_dependency_degraded() -> None:
                             "required": False,
                             "error_code": "timeout",
                             "attempts": 2,
+                            "retry_count": 1,
+                            "last_retry_error_code": "timeout",
+                            "probe_duration_seconds": 0.02,
+                            "degraded_duration_seconds": 1.25,
                             "failure_count": 1,
                             "recovery_count": 0,
                             "operator_action": "restore or disable the optional dependency",
@@ -38,6 +42,13 @@ def test_doctor_health_keeps_optional_unavailable_dependency_degraded() -> None:
     assert dependency["status"] == "degraded"
     assert dependency["required"] is False
     assert dependency["error_code"] == "timeout"
+    assert dependency["attempts"] == 2
+    assert dependency["retry_count"] == 1
+    assert dependency["last_retry_error_code"] == "timeout"
+    assert dependency["probe_duration_seconds"] == 0.02
+    assert dependency["degraded_duration_seconds"] == 1.25
+    assert dependency["failure_count"] == 1
+    assert dependency["recovery_count"] == 0
     assert "restore or disable" in dependency["guidance"]
 
 
