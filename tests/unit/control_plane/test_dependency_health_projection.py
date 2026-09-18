@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import asyncio
 
-from ai_multi_agent_platform.contracts import HealthStatus, ProviderContract, ProviderDescriptor
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    HealthStatus,
+    ProviderContract,
+    ProviderDescriptor,
+)
 from ai_multi_agent_platform.control_plane.health import ControlPlaneHealth
 from ai_multi_agent_platform.observability import AggregatedHealthProvider, ProviderHealthDependency
 
@@ -71,5 +77,52 @@ def test_control_plane_projects_required_dependency_failure_as_unready() -> None
         dependency = payload["providers"][0]["dependencies"][0]
         assert dependency["required"] is True
         assert dependency["state"] == "unavailable"
+
+    asyncio.run(scenario())
+
+
+class _HangingProvider(_Provider):
+    async def health(self) -> HealthStatus:
+        await asyncio.sleep(60)
+        return HealthStatus.HEALTHY
+
+
+class _FailingProvider(_Provider):
+    async def health(self) -> HealthStatus:
+        raise ContractError(
+            ErrorCode.TRANSIENT_FAILURE,
+            "temporary provider health failure",
+            retryable=True,
+        )
+
+
+def test_control_plane_bounds_hanging_direct_health_provider() -> None:
+    async def scenario() -> None:
+        payload = await ControlPlaneHealth(
+            (_HangingProvider("hanging", HealthStatus.UNKNOWN),),
+            probe_timeout_seconds=0.01,
+        ).health()
+
+        assert payload["alive"] is True
+        assert payload["ready"] is False
+        assert payload["readiness_state"] == "unavailable"
+        provider = payload["providers"][0]
+        assert provider["status"] == "unavailable"
+        assert provider["error_code"] == "timeout"
+
+    asyncio.run(scenario())
+
+
+def test_control_plane_normalizes_direct_health_contract_failure() -> None:
+    async def scenario() -> None:
+        payload = await ControlPlaneHealth(
+            (_FailingProvider("failing", HealthStatus.UNKNOWN),),
+            probe_timeout_seconds=0.1,
+        ).health()
+
+        assert payload["alive"] is True
+        assert payload["ready"] is False
+        provider = payload["providers"][0]
+        assert provider["error_code"] == "transient_failure"
 
     asyncio.run(scenario())
