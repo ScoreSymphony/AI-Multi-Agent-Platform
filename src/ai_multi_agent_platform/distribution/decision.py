@@ -14,7 +14,6 @@ from .decision_types import (
     ApprovalRequirement,
     CompatibilityDecision,
     DependencyResolution,
-    DependencyStatus as DependencyStatus,
     DistributionOperation,
     MarketplaceDecision,
     PermissionDiff,
