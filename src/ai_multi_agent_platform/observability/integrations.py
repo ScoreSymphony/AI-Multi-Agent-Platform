@@ -132,6 +132,7 @@ class AggregatedHealthProvider(ProviderContract):
         self._last_states: dict[str, ReadinessState] = {}
         self._failure_counts: dict[str, int] = {}
         self._recovery_counts: dict[str, int] = {}
+        self._probe_lock = asyncio.Lock()
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -148,15 +149,18 @@ class AggregatedHealthProvider(ProviderContract):
         return self._service_health
 
     async def health(self) -> HealthStatus:
-        dependencies = tuple([await self._probe_dependency(item) for item in self._dependencies])
-        self._service_health = aggregate_health(dependencies)
-        if not self._service_health.ready:
-            self._status = HealthStatus.UNAVAILABLE
-        elif self._service_health.readiness is ReadinessState.DEGRADED:
-            self._status = HealthStatus.DEGRADED
-        else:
-            self._status = HealthStatus.HEALTHY
-        return self._status
+        async with self._probe_lock:
+            dependencies: list[DependencyHealth] = []
+            for item in self._dependencies:
+                dependencies.append(await self._probe_dependency(item))
+            self._service_health = aggregate_health(tuple(dependencies))
+            if not self._service_health.ready:
+                self._status = HealthStatus.UNAVAILABLE
+            elif self._service_health.readiness is ReadinessState.DEGRADED:
+                self._status = HealthStatus.DEGRADED
+            else:
+                self._status = HealthStatus.HEALTHY
+            return self._status
 
     async def _probe_dependency(self, item: ProviderHealthDependency) -> DependencyHealth:
         attempts = 0
