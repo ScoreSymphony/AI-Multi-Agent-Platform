@@ -65,6 +65,12 @@ The single-node required File persistence dependency now performs a read-only he
 filesystem root and SQLite metadata store. Missing/unreadable local persistence therefore becomes
 `unavailable` instead of remaining permanently `healthy` from static descriptor metadata.
 
+The canonical Task/Run `SqliteKernelRepository` is also represented as a required
+`kernel-persistence` health dependency. Its readiness probe acquires and immediately rolls back a
+short `BEGIN IMMEDIATE` transaction, proving that authoritative writes can still obtain the SQLite
+write boundary without mutating canonical events or idempotency records. A missing, corrupt,
+read-only or persistently locked kernel database therefore fails readiness closed.
+
 The existing ordinary startup gate still completes reconciliation before `platform-server serve`
 opens HTTP. The richer readiness vocabulary also covers embedded/runtime compositions and prevents
 future serving modes from treating reconciliation or an operator-required state as ready.
