@@ -154,6 +154,17 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
             )
         return current
 
+    def validate_candidate(self, item: RegistryItem, artifact: bytes) -> None:
+        self._decode(item, artifact)
+
+    def describe_candidate(
+        self,
+        item: RegistryItem,
+        artifact: bytes,
+    ) -> Mapping[str, object]:
+        snapshot = self._decode(item, artifact)
+        return self._describe_revision(snapshot.revisions[-1])
+
     async def install(self, item: RegistryItem, artifact: bytes) -> object:
         snapshot = self._decode(item, artifact)
         provenance = self._provenance(item)
@@ -270,7 +281,10 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
         return self._current(item)
 
     def describe(self, item: RegistryItem) -> Mapping[str, object]:
-        current = self._current(item)
+        return self._describe_revision(self._current(item))
+
+    @staticmethod
+    def _describe_revision(current: AgentRevision) -> Mapping[str, object]:
         return {
             "owner_domain": "agents",
             "agent_id": current.agent_id,
@@ -374,6 +388,17 @@ class AgentTeamMarketplaceKindHandler(_AgentMarketplaceBase):
                 "canonical Agent Team is not owned by this Marketplace installation",
             )
         return current
+
+    def validate_candidate(self, item: RegistryItem, artifact: bytes) -> None:
+        self._decode(item, artifact)
+
+    def describe_candidate(
+        self,
+        item: RegistryItem,
+        artifact: bytes,
+    ) -> Mapping[str, object]:
+        snapshot = self._decode(item, artifact)
+        return self._describe_revision(snapshot.revisions[-1])
 
     async def install(self, item: RegistryItem, artifact: bytes) -> object:
         snapshot = self._decode(item, artifact)
@@ -491,7 +516,10 @@ class AgentTeamMarketplaceKindHandler(_AgentMarketplaceBase):
         return self._current(item)
 
     def describe(self, item: RegistryItem) -> Mapping[str, object]:
-        current = self._current(item)
+        return self._describe_revision(self._current(item))
+
+    @staticmethod
+    def _describe_revision(current: AgentTeamRevision) -> Mapping[str, object]:
         return {
             "owner_domain": "agents",
             "team_id": current.team_id,
