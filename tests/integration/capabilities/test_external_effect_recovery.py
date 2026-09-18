@@ -48,6 +48,10 @@ from ai_multi_agent_platform.observability import (
     ObservabilityExternalEffectRecoveryObserver,
     Telemetry,
 )
+from ai_multi_agent_platform.testing import (
+    ExternalEffectFault,
+    FailureInjectingExternalEffectProvider,
+)
 
 
 class _ExternalProvider(CapabilityToolProvider, ExternalEffectReconciler):
@@ -492,3 +496,51 @@ async def test_recovery_telemetry_reports_uncertainty_without_private_recovery_v
     )
     assert "private-telemetry-idempotency-key" not in public_telemetry
     assert "provider_tool_ref" not in public_telemetry
+
+
+@pytest.mark.asyncio
+async def test_reusable_failure_injector_models_effect_before_lost_acknowledgement() -> None:
+    provider = FailureInjectingExternalEffectProvider(
+        ExternalEffectRecoveryPolicy(
+            idempotency=ExternalEffectIdempotency.NONE,
+            reconciliation=ExternalEffectReconciliationSupport.UNSUPPORTED,
+        ),
+        fault=ExternalEffectFault.TIMEOUT_AFTER_EFFECT,
+    )
+    registry = CapabilityRegistry()
+    await registry.register_provider(provider)
+    recovery = ExternalEffectRecoveryCoordinator(
+        InMemoryExternalEffectRecoveryRepository()
+    )
+    invoker = EgressCapabilityInvoker(
+        registry,
+        external_effect_recovery=recovery,
+    )
+    correlation_id = new_id("correlation")
+    request = CapabilityInvocation(
+        invocation_id="failure-injector-lost-ack",
+        capability_id=provider.capability_id,
+        arguments={"payload": "value"},
+        context=OperationContext(
+            correlation_id=correlation_id,
+            control=OperationControl(idempotency_key="failure-injector-key"),
+        ),
+        trace=InvocationTrace(
+            correlation_id=correlation_id,
+            task_id=new_id("task"),
+            run_id=new_id("run"),
+            agent_id=new_id("agent"),
+        ),
+    )
+
+    with pytest.raises(ContractError) as caught:
+        await invoker.invoke(request)
+
+    assert caught.value.code is ErrorCode.TIMEOUT
+    assert provider.effects == 1
+    record = recovery.find_record_by_invocation(request.invocation_id)
+    assert record is not None
+    assert (
+        record.disposition
+        is ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW
+    )
