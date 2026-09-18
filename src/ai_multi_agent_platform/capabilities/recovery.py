@@ -813,7 +813,7 @@ class ExternalEffectRecoveryCoordinator:
                     ErrorCode.CONFLICT,
                     "external effect already has a terminal outcome",
                 )
-            return self.repository.save(
+            transitioned = self.repository.save(
                 replace(
                     current,
                     status=status,
@@ -824,6 +824,10 @@ class ExternalEffectRecoveryCoordinator:
                     updated_at=_utc_now(),
                 )
             )
+            await self._emit("external_effect.operator_action_applied", transitioned)
+            if disposition is ExternalEffectRecoveryDisposition.SAFE_TO_RETRY:
+                await self._emit("external_effect.retry_safe", transitioned)
+            return transitioned
 
     def _begin_dispatch(self, record: InvocationRecord) -> None:
         pending = self._pending.get(record.invocation_id)
