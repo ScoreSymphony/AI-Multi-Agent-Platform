@@ -292,10 +292,7 @@ def _marker_health(marker: Path) -> ApplicationHealthCheck:
     command = (
         sys.executable,
         "-c",
-        (
-            "from pathlib import Path; "
-            f"raise SystemExit(0 if Path({str(marker)!r}).exists() else 1)"
-        ),
+        (f"from pathlib import Path; raise SystemExit(0 if Path({str(marker)!r}).exists() else 1)"),
     )
     return ApplicationHealthCheck(
         kind=ApplicationHealthCheckKind.COMMAND,
@@ -468,9 +465,10 @@ def test_multi_service_dependency_partial_failure_and_aggregate_health(tmp_path:
             assert failed.body["observed_state"] == "failed"
             assert failed.body["health"] == "unhealthy"
             assert failed.body["endpoints"] == []
-            assert {
-                state["service_id"] for state in failed.body["service_states"]
-            } == {"base", "worker"}
+            assert {state["service_id"] for state in failed.body["service_states"]} == {
+                "base",
+                "worker",
+            }
         finally:
             await _cleanup_instance(deployment, failed_instance_id)
 
