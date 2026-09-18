@@ -62,6 +62,7 @@ from ai_multi_agent_platform.distribution import (
     RegistryItem,
     RegistryItemType,
     RegistryManifestReference,
+    RegistryDependency,
     RegistryPluginReconciliationError,
     RegistryQuery,
     RegistrySource,
@@ -309,6 +310,117 @@ async def test_agent_team_handler_uses_canonical_team_owner_and_member_validatio
     with pytest.raises(ContractError) as missing:
         target.get_team_revision(team.team_id)
     assert missing.value.code is ErrorCode.NOT_FOUND
+
+
+async def test_agent_and_team_full_marketplace_flow_uses_canonical_owner(tmp_path) -> None:
+    owner = OwnerRef(type="user", id="marketplace-agent-team-e2e-owner")
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    member = source.create_agent(_agent_profile("Research Agent"), owner_ref=owner)
+    team = source.create_team(
+        AgentTeamProfile(
+            name="Research Team",
+            members=(
+                AgentTeamMember(
+                    agent=AgentRevisionRef(member.agent_id, member.revision),
+                    role="researcher",
+                ),
+            ),
+            leader_agent_id=member.agent_id,
+        ),
+        owner_ref=owner,
+    )
+
+    agent_item = replace(
+        _item(
+            RegistryItemType.AGENT,
+            item_id=member.agent_id,
+            version="1.0.0",
+        ),
+        name="Research Agent",
+        description="Portable canonical Research Agent definition.",
+    )
+    team_item = replace(
+        _item(
+            RegistryItemType.AGENT_TEAM,
+            item_id=team.team_id,
+            version="1.0.0",
+        ),
+        name="Research Team",
+        description="Portable canonical Research Agent Team definition.",
+        dependencies=(
+            RegistryDependency(
+                agent_item.item_id,
+                item_kind=RegistryItemType.AGENT,
+            ),
+        ),
+    )
+    artifacts = {
+        (agent_item.item_id, agent_item.version): _portable_agent_artifact(
+            source_repository,
+            member.agent_id,
+        ),
+        (team_item.item_id, team_item.version): _portable_team_artifact(
+            source_repository,
+            team.team_id,
+        ),
+    }
+    target_repository = InMemoryAgentRepository()
+    target = AgentService(target_repository)
+    service = DistributionService(
+        LocalRegistryProvider((agent_item, team_item), artifacts),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / "agent-team-marketplace-installations.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (
+                AgentMarketplaceKindHandler(target),
+                AgentTeamMarketplaceKindHandler(target),
+            )
+        ),
+    )
+    context = ValidationContext("0.0.1")
+
+    discovered = service.search(
+        RegistryQuery(
+            text="Research",
+            item_types=frozenset(
+                {RegistryItemType.AGENT, RegistryItemType.AGENT_TEAM}
+            ),
+        )
+    )
+    assert discovered == (agent_item, team_item)
+
+    agent_preview = service.preview(agent_item.item_id, agent_item.version, context)
+    assert agent_preview.activation_allowed is True
+    installed_agent = await service.activate(agent_preview, context, authorized=True)
+    assert installed_agent.agent_id == member.agent_id
+    assert installed_agent.revision == member.revision
+    assert service.installed(agent_item.item_id) is not None
+    assert target.get_agent_revision(member.agent_id).profile.name == "Research Agent"
+    assert target_repository.list_agent_runs() == ()
+
+    team_preview = service.preview(team_item.item_id, team_item.version, context)
+    assert team_preview.activation_allowed is True
+    assert team_preview.decision.dependencies[0].item_kind == RegistryItemType.AGENT.value
+    installed_team = await service.activate(team_preview, context, authorized=True)
+    assert installed_team.team_id == team.team_id
+    assert installed_team.profile.members[0].agent.agent_id == member.agent_id
+    assert service.installed(team_item.item_id) is not None
+    assert target.get_team_revision(team.team_id).profile.name == "Research Team"
+    assert target_repository.list_agent_runs() == ()
+
+    await service.uninstall(team_item.item_id, authorized=True)
+    await service.uninstall(agent_item.item_id, authorized=True)
+    assert service.installed(team_item.item_id) is None
+    assert service.installed(agent_item.item_id) is None
+    with pytest.raises(ContractError) as missing_team:
+        target.get_team_revision(team.team_id)
+    assert missing_team.value.code is ErrorCode.NOT_FOUND
+    with pytest.raises(ContractError) as missing_agent:
+        target.get_agent_revision(member.agent_id)
+    assert missing_agent.value.code is ErrorCode.NOT_FOUND
+    assert target_repository.list_agent_runs() == ()
 
 
 async def test_agent_team_handler_fails_without_member_and_leaves_no_partial_team() -> None:
