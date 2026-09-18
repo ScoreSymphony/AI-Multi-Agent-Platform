@@ -98,6 +98,8 @@ class RegistryInstallationStore(Protocol):
 
     def unpin(self, item_id: str) -> RegistryInstallation: ...
 
+    def remove(self, item_id: str) -> RegistryInstallation: ...
+
 
 class JsonRegistryInstallationStore:
     """Small durable store whose state remains independent from any Registry provider."""
@@ -160,6 +162,12 @@ class JsonRegistryInstallationStore:
         self._records[item_id] = updated
         self._save()
         return updated
+
+    def remove(self, item_id: str) -> RegistryInstallation:
+        record = self._require(item_id)
+        del self._records[item_id]
+        self._save()
+        return record
 
     def _require(self, item_id: str) -> RegistryInstallation:
         try:
