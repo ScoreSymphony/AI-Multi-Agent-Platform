@@ -12,7 +12,7 @@ from .runtime import ExtensionRegistration
 
 
 class CapabilityRegistryBinder:
-    """Register plugin capability providers through the existing #12 registry."""
+    """Register plugin capability providers through the canonical capability registry."""
 
     def __init__(self, registry: CapabilityRegistry) -> None:
         self._registry = registry
