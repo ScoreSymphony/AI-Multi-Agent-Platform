@@ -38,9 +38,10 @@ export interface PortabilityPreviewResource {
 export interface PortabilityDependencyFinding {
   requested_by: string;
   kind: string;
-  reference: string;
-  optional?: boolean;
-  detail?: string;
+  identifier: string;
+  required: boolean;
+  version_constraint: string | null;
+  purpose: string | null;
 }
 
 export interface PortabilityConflict {
