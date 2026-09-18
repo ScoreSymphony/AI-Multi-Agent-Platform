@@ -148,6 +148,42 @@ def test_manifest_backed_tool_and_connector_use_owner_handlers_and_preserve_lega
     assert legacy_connector.route is DistributionRoute.PORTABLE_IMPORT
 
 
+def test_unwired_semantic_provider_kind_fails_closed_without_private_owner(tmp_path: Path) -> None:
+    item = _item(
+        RegistryItemType.MEMORY_PROVIDER,
+        manifest=RegistryManifestReference(
+            kind=RegistryItemType.MEMORY_PROVIDER,
+            reference="manifests/memory-provider.json",
+            schema_version="1",
+        ),
+    )
+    artifact = b"memory-provider-package"
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+        ),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / "unsupported-semantic-kind.json"
+        ),
+    )
+
+    preview = service.preview(
+        item.item_id,
+        item.version,
+        ValidationContext("1.0.0"),
+    )
+
+    assert preview.route is DistributionRoute.KIND_HANDLER
+    assert preview.activation_allowed is False
+    assert any(
+        finding.code == "handler_unavailable"
+        and finding.subject == RegistryItemType.MEMORY_PROVIDER.value
+        for finding in preview.findings
+    )
+    assert service.installed(item.item_id) is None
+
+
 def test_new_marketplace_kind_can_be_registered_without_enum_change() -> None:
     registry = MarketplaceKindRegistry()
     descriptor = MarketplaceKindDescriptor(
