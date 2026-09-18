@@ -17,6 +17,18 @@ from .control_plane import (
     RegistryValidationContextResolver,
     register_distribution_control_plane,
 )
+from .decision_types import (
+    ApprovalRequirement,
+    CompatibilityDecision,
+    DependencyResolution,
+    DependencyStatus,
+    DistributionOperation,
+    MarketplaceDecision,
+    PermissionDiff,
+    ProvenanceDiff,
+    UpdateState,
+)
+from .dependency_graph import evaluate_compatibility, resolve_dependency_graph
 from .discovery import (
     CuratedCandidateReview,
     DiscoveryCandidate,
@@ -37,6 +49,7 @@ from .local import LocalRegistryProvider
 from .models import (
     ArtifactIntegrity,
     DistributionRoute,
+    RegistryCompatibility,
     RegistryDependency,
     RegistryItemKind,
     RegistryItemType,
@@ -48,14 +61,26 @@ from .models import (
     registry_item_kind_value,
 )
 from .plugin_adapter import PluginRegistryArtifactInstaller
-from .provider import RegistryItemNotFoundError, RegistryProvider, RegistryUnavailableError
+from .provider import (
+    MultiRegistryProvider,
+    RegistryItemNotFoundError,
+    RegistryProvider,
+    RegistrySourceConflictError,
+    RegistryUnavailableError,
+    SourcedRegistryProvider,
+)
 from .reconciliation import RegistryPluginReconciliationError, reconcile_registry_plugins
 from .schema import (
     REGISTRY_ITEM_SCHEMA_VERSION,
     registry_item_from_document,
     validate_registry_item_document,
 )
-from .service import DistributionPreview, DistributionRouter, DistributionService
+from .service import (
+    DistributionPreview,
+    DistributionRouter,
+    DistributionService,
+    DistributionUninstallPreview,
+)
 from .signatures import (
     HmacSha256SignatureVerifier,
     RegistrySignatureVerifier,
@@ -79,6 +104,7 @@ from .technical_catalog import (
     is_technical_component,
 )
 from .validation import (
+    FindingCategory,
     FindingSeverity,
     ValidationContext,
     ValidationFinding,
@@ -87,6 +113,23 @@ from .validation import (
 )
 
 __all__ = [
+    "resolve_dependency_graph",
+    "evaluate_compatibility",
+    "UpdateState",
+    "SourcedRegistryProvider",
+    "RegistrySourceConflictError",
+    "RegistryCompatibility",
+    "ProvenanceDiff",
+    "PermissionDiff",
+    "MultiRegistryProvider",
+    "MarketplaceDecision",
+    "FindingCategory",
+    "DistributionUninstallPreview",
+    "DistributionOperation",
+    "DependencyStatus",
+    "DependencyResolution",
+    "CompatibilityDecision",
+    "ApprovalRequirement",
     "ArtifactIntegrity",
     "BUILTIN_MARKETPLACE_KINDS",
     "CanonicalDistributionRouter",

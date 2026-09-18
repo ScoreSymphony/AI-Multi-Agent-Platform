@@ -11,6 +11,7 @@ from .items import RegistryItem
 from .models import (
     ArtifactIntegrity,
     DistributionRoute,
+    RegistryCompatibility,
     RegistryDependency,
     RegistryManifestReference,
     RegistrySource,
@@ -19,7 +20,7 @@ from .models import (
     parse_registry_item_kind,
 )
 
-REGISTRY_ITEM_SCHEMA_VERSION = "3"
+REGISTRY_ITEM_SCHEMA_VERSION = "4"
 REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
@@ -144,7 +145,7 @@ REGISTRY_ITEM_SCHEMA_V2["properties"]["item_type"]["enum"].append("application")
 REGISTRY_ITEM_SCHEMA_V2["properties"]["distribution_route"] = {"const": "manual"}
 
 REGISTRY_ITEM_SCHEMA_V3: dict[str, Any] = deepcopy(REGISTRY_ITEM_SCHEMA_V2)
-REGISTRY_ITEM_SCHEMA_V3["properties"]["schema_version"] = {"const": REGISTRY_ITEM_SCHEMA_VERSION}
+REGISTRY_ITEM_SCHEMA_V3["properties"]["schema_version"] = {"const": "3"}
 REGISTRY_ITEM_SCHEMA_V3["properties"]["item_type"] = {
     "type": "string",
     "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
@@ -163,10 +164,39 @@ REGISTRY_ITEM_SCHEMA_V3["properties"]["manifest"] = {
     "additionalProperties": False,
 }
 
+REGISTRY_ITEM_SCHEMA_V4: dict[str, Any] = deepcopy(REGISTRY_ITEM_SCHEMA_V3)
+REGISTRY_ITEM_SCHEMA_V4["properties"]["schema_version"] = {"const": REGISTRY_ITEM_SCHEMA_VERSION}
+REGISTRY_ITEM_SCHEMA_V4["properties"]["dependencies"]["items"]["properties"]["item_kind"] = {
+    "type": ["string", "null"],
+    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+}
+REGISTRY_ITEM_SCHEMA_V4["properties"]["compatibility"] = {
+    "type": "object",
+    "properties": {
+        "operating_systems": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": True,
+        },
+        "architectures": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": True,
+        },
+        "required_runtimes": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": True,
+        },
+    },
+    "additionalProperties": False,
+}
+
 _REGISTRY_ITEM_SCHEMAS = {
     "1": REGISTRY_ITEM_SCHEMA_V1,
     "2": REGISTRY_ITEM_SCHEMA_V2,
-    REGISTRY_ITEM_SCHEMA_VERSION: REGISTRY_ITEM_SCHEMA_V3,
+    "3": REGISTRY_ITEM_SCHEMA_V3,
+    REGISTRY_ITEM_SCHEMA_VERSION: REGISTRY_ITEM_SCHEMA_V4,
 }
 
 
@@ -187,6 +217,7 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
     source = document["source"]
     supported_platform = document["supported_platform"]
     integrity = document["integrity"]
+    compatibility_document = document.get("compatibility", {})
     manifest_document = document.get("manifest")
     dependencies = tuple(
         RegistryDependency(
@@ -196,6 +227,7 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
                 dependency["version_range"].get("maximum"),
             ),
             optional=dependency["optional"],
+            item_kind=dependency.get("item_kind"),
         )
         for dependency in document["dependencies"]
     )
@@ -248,5 +280,10 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
             )
             if manifest_document is not None
             else None
+        ),
+        compatibility=RegistryCompatibility(
+            operating_systems=frozenset(compatibility_document.get("operating_systems", [])),
+            architectures=frozenset(compatibility_document.get("architectures", [])),
+            required_runtimes=frozenset(compatibility_document.get("required_runtimes", [])),
         ),
     )

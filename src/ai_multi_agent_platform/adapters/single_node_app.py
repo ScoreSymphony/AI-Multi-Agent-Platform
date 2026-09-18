@@ -62,7 +62,7 @@ from ai_multi_agent_platform.repository_intelligence.wiring import (
     AuthorizedRunWorkspaceSnapshotLoader,
 )
 
-from .application_runtime import compose_application_runtime
+from .application_runtime import ApplicationRuntimeComposition, compose_application_runtime
 from .onboarding_openai_compatible import OpenAICompatibleOnboardingAdapter
 from .setup_registry import DistributionSetupRegistryPort
 
@@ -103,7 +103,7 @@ def build_default_single_node_deployment(
         enable_distributed_execution=enable_distributed_execution,
         application_release_gate_policy=release_gate_policy,
     )
-    compose_application_runtime(
+    application_runtime = compose_application_runtime(
         config,
         deployment,
         secret_provider=secrets,
@@ -142,7 +142,11 @@ def build_default_single_node_deployment(
             )
         )
     )
-    distribution, registry_commands = _configure_registry(config, deployment)
+    distribution, registry_commands = _configure_registry(
+        config,
+        deployment,
+        application_runtime=application_runtime,
+    )
     setup_registry = (
         None
         if distribution is None
@@ -161,6 +165,8 @@ def build_default_single_node_deployment(
 def _configure_registry(
     config: SingleNodeConfig,
     deployment: SingleNodeDeployment,
+    *,
+    application_runtime: ApplicationRuntimeComposition,
 ) -> tuple[DistributionService | None, RegistryCommandHandlers | None]:
     """Attach #81 only when an operator explicitly configures a local Registry catalog."""
 
@@ -226,6 +232,7 @@ def _configure_registry(
             definition.id for definition in deployment.connector_registry.definitions()
         ),
         models=lambda: (model.config_id for model in deployment.models.list_models(enabled=True)),
+        runtimes=application_runtime.runtimes.list_runtime_ids,
         grantable_permissions=lambda context: (
             action.value
             for action in deployment.authorization.globally_grantable_actions(

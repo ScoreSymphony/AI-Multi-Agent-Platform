@@ -10,6 +10,7 @@ from .kinds import builtin_marketplace_kind
 from .models import (
     ArtifactIntegrity,
     DistributionRoute,
+    RegistryCompatibility,
     RegistryDependency,
     RegistryItemKind,
     RegistryItemType,
@@ -54,6 +55,8 @@ class RegistryItem:
     yanked: bool = False
     distribution_route: DistributionRoute | None = None
     manifest: RegistryManifestReference | None = None
+    compatibility: RegistryCompatibility = field(default_factory=RegistryCompatibility)
+    source_registry: str | None = None
 
     def __post_init__(self) -> None:
         _require_id(self.item_id, "item_id")
@@ -86,6 +89,8 @@ class RegistryItem:
             raise ValueError("manifest kind must match registry item kind")
         if not isinstance(self.item_type, RegistryItemType) and self.manifest is None:
             raise ValueError("future marketplace kinds require a kind-specific manifest reference")
+        if self.source_registry is not None:
+            _require_text(self.source_registry, "source_registry")
         for optional_value, optional_field_name in (
             (self.review_reference, "review_reference"),
             (self.released_at, "released_at"),
@@ -160,6 +165,8 @@ class InstalledRegistryItem:
     pinned_version: str | None = None
     license: str | None = None
     provenance: str | None = None
+    item_type: RegistryItemKind | None = None
+    dependencies: tuple[RegistryDependency, ...] | None = None
 
     def __post_init__(self) -> None:
         _require_id(self.item_id, "installed item_id")
@@ -171,6 +178,14 @@ class InstalledRegistryItem:
             _require_text(self.license, "installed license")
         if self.provenance is not None:
             _require_text(self.provenance, "installed provenance")
+        if self.item_type is not None:
+            object.__setattr__(self, "item_type", parse_registry_item_kind(self.item_type))
+
+    @property
+    def kind(self) -> str | None:
+        if self.item_type is None:
+            return None
+        return registry_item_kind_value(self.item_type)
 
     def has_update(self, candidate: RegistryItem) -> bool:
         """Return whether the candidate is a newer release, independent from update policy."""

@@ -6,14 +6,28 @@ import hashlib
 from dataclasses import dataclass, replace
 from typing import Protocol
 
+from .decision import build_marketplace_decision, uninstall_decision
+from .decision_types import DependencyResolution, DependencyStatus, MarketplaceDecision
+from .dependency_graph import dependency_findings
 from .handlers import MarketplaceKindHandlerRegistry
 from .items import RegistryItem, RegistryQuery
 from .models import DistributionRoute
-from .provider import RegistryProvider
+from .provider import (
+    RegistryItemNotFoundError,
+    RegistryProvider,
+    SourcedRegistryProvider,
+)
 from .signatures import RegistrySignatureVerifier
 from .state import RegistryInstallation, RegistryInstallationStore
 from .technical_catalog import derive_technical_metadata
-from .validation import ValidationContext, ValidationFinding, has_errors, validate_item
+from .validation import (
+    FindingCategory,
+    FindingSeverity,
+    ValidationContext,
+    ValidationFinding,
+    has_errors,
+    validate_item,
+)
 
 
 class DistributionRouter(Protocol):
@@ -31,6 +45,21 @@ class DistributionPreview:
     route: DistributionRoute
     findings: tuple[ValidationFinding, ...]
     activation_allowed: bool
+    artifact_sha256: str
+    decision: MarketplaceDecision
+
+    @property
+    def approval_required(self) -> bool:
+        return self.decision.approval.required
+
+
+@dataclass(frozen=True, slots=True)
+class DistributionUninstallPreview:
+    provider_id: str
+    installation: RegistryInstallation
+    findings: tuple[ValidationFinding, ...]
+    activation_allowed: bool
+    decision: MarketplaceDecision
 
 
 class DistributionService:
@@ -66,14 +95,30 @@ class DistributionService:
     def search(self, query: RegistryQuery | None = None) -> tuple[RegistryItem, ...]:
         """Discover validated registry metadata without exposing a concrete provider northbound."""
 
-        items = self._require_provider().search(query or RegistryQuery())
-        return tuple(_validate_provider_metadata(item) for item in items)
+        provider = self._require_provider()
+        items = provider.search(query or RegistryQuery())
+        return tuple(
+            _validate_provider_metadata(self._with_source_identity(item, provider))
+            for item in items
+        )
 
-    def get(self, item_id: str, version: str | None = None) -> RegistryItem:
-        """Read exact validated registry metadata through the provider-neutral domain boundary."""
+    def get(
+        self,
+        item_id: str,
+        version: str | None = None,
+        *,
+        source_registry: str | None = None,
+    ) -> RegistryItem:
+        """Read exact validated metadata, optionally qualified by Marketplace source."""
 
-        item = self._require_provider().get(item_id, version)
-        return _validate_provider_metadata(item)
+        provider = self._require_provider()
+        item = self._get_from_provider(
+            provider,
+            item_id,
+            version,
+            source_registry=source_registry,
+        )
+        return _validate_provider_metadata(self._with_source_identity(item, provider))
 
     def installed(self, item_id: str) -> RegistryInstallation | None:
         if self._installations is None:
@@ -90,7 +135,13 @@ class DistributionService:
         if installation is None:
             return ()
         installed = installation.as_installed()
-        candidates = self.search(RegistryQuery(update_for_item_id=item_id))
+        candidates = self.search(
+            RegistryQuery(
+                update_for_item_id=item_id,
+                include_deprecated=True,
+                include_yanked=True,
+            )
+        )
         return tuple(candidate for candidate in candidates if installed.has_update(candidate))
 
     def pin(self, item_id: str, version: str) -> RegistryInstallation:
@@ -104,16 +155,47 @@ class DistributionService:
         item_id: str,
         version: str,
         context: ValidationContext,
+        *,
+        source_registry: str | None = None,
     ) -> DistributionPreview:
         provider = self._require_provider()
-        item = _validate_provider_metadata(provider.get(item_id, version))
-        artifact = provider.fetch_artifact(item_id, version)
+        installation = self.installed(item_id)
+        preferred_source = source_registry
+        if preferred_source is None and installation is not None:
+            preferred_source = installation.current.source_registry
+        item = self.get(
+            item_id,
+            version,
+            source_registry=preferred_source,
+        )
+        artifact = self._fetch_artifact(provider, item)
+        artifact_sha256 = hashlib.sha256(artifact).hexdigest()
         resolved_context = self._resolved_context(item, artifact, context)
-        findings = validate_item(item, artifact, resolved_context)
+        base_findings = validate_item(item, artifact, resolved_context)
+        catalog = self.search(RegistryQuery(include_deprecated=True, include_yanked=True))
+        decision, findings = build_marketplace_decision(
+            item,
+            artifact_sha256=artifact_sha256,
+            context=resolved_context,
+            catalog=catalog,
+            installation=installation,
+            validation_findings=base_findings,
+        )
         handler_available = (
             item.route is not DistributionRoute.KIND_HANDLER
             or self._kind_handlers.get(item.item_type) is not None
         )
+        if not handler_available:
+            findings = (
+                *findings,
+                ValidationFinding(
+                    "handler_unavailable",
+                    FindingSeverity.ERROR,
+                    f"no owner-domain Marketplace handler is registered for kind {item.kind!r}",
+                    FindingCategory.COMPATIBILITY,
+                    item.kind,
+                ),
+            )
         return DistributionPreview(
             provider_id=provider.provider_id,
             item=item,
@@ -124,6 +206,76 @@ class DistributionService:
                 and handler_available
                 and not has_errors(findings)
             ),
+            artifact_sha256=artifact_sha256,
+            decision=decision,
+        )
+
+    def preview_uninstall(
+        self,
+        item_id: str,
+    ) -> DistributionUninstallPreview:
+        installation = self.installed(item_id)
+        if installation is None:
+            raise LookupError(f"registry item {item_id!r} is not installed")
+        provider = self._require_provider()
+        reverse_dependencies: list[DependencyResolution] = []
+        for dependent in self.installed_items():
+            if dependent.current.item_id == item_id:
+                continue
+            dependencies = dependent.current.dependencies
+            if dependencies is None:
+                try:
+                    dependent_item = self.get(
+                        dependent.current.item_id,
+                        dependent.current.version,
+                        source_registry=dependent.current.source_registry,
+                    )
+                except LookupError:
+                    reverse_dependencies.append(
+                        DependencyResolution(
+                            required_by=dependent.current.item_id,
+                            item_id=item_id,
+                            item_kind=installation.current.as_installed().kind,
+                            optional=False,
+                            minimum_version=None,
+                            maximum_version=None,
+                            status=DependencyStatus.UNKNOWN_INSTALLED_DEPENDENT,
+                            installed_version=installation.current.version,
+                            path=(dependent.current.item_id, item_id),
+                        )
+                    )
+                    continue
+                dependencies = dependent_item.dependencies
+            for dependency in dependencies:
+                if dependency.optional or dependency.item_id != item_id:
+                    continue
+                if not dependency.version_range.contains(installation.current.version):
+                    continue
+                reverse_dependencies.append(
+                    DependencyResolution(
+                        required_by=dependent.current.item_id,
+                        item_id=item_id,
+                        item_kind=dependency.kind_value,
+                        optional=False,
+                        minimum_version=dependency.version_range.minimum,
+                        maximum_version=dependency.version_range.maximum,
+                        status=DependencyStatus.REQUIRED_BY_INSTALLED,
+                        installed_version=installation.current.version,
+                        path=(dependent.current.item_id, item_id),
+                    )
+                )
+        resolved_dependencies = tuple(reverse_dependencies)
+        findings = dependency_findings(resolved_dependencies)
+        decision = uninstall_decision(
+            installation,
+            dependencies=resolved_dependencies,
+        )
+        return DistributionUninstallPreview(
+            provider_id=provider.provider_id,
+            installation=installation,
+            findings=findings,
+            activation_allowed=not has_errors(findings),
+            decision=decision,
         )
 
     async def activate(
@@ -138,16 +290,26 @@ class DistributionService:
         provider = self._require_provider()
         if provider.provider_id != preview.provider_id:
             raise RuntimeError("registry provider changed after preview")
-        current = _validate_provider_metadata(
-            provider.get(preview.item.item_id, preview.item.version)
+
+        current_preview = self.preview(
+            preview.item.item_id,
+            preview.item.version,
+            context,
+            source_registry=preview.item.source_registry,
         )
-        if current != preview.item:
+        if current_preview.item != preview.item:
             raise RuntimeError("registry metadata changed after preview")
-        artifact = provider.fetch_artifact(current.item_id, current.version)
-        resolved_context = self._resolved_context(current, artifact, context)
-        findings = validate_item(current, artifact, resolved_context)
-        if has_errors(findings):
+        if current_preview.artifact_sha256 != preview.artifact_sha256:
+            raise RuntimeError("registry artifact changed after preview")
+        if current_preview.decision != preview.decision:
+            raise RuntimeError("registry decision state changed after preview")
+        if not current_preview.activation_allowed:
             raise ValueError("registry item no longer passes activation validation")
+
+        current = current_preview.item
+        artifact = self._fetch_artifact(provider, current)
+        if hashlib.sha256(artifact).hexdigest() != current_preview.artifact_sha256:
+            raise RuntimeError("registry artifact changed immediately before activation")
         if current.route is DistributionRoute.KIND_HANDLER:
             handler = self._kind_handlers.require(current.item_type)
             if self.installed(current.item_id) is None:
@@ -163,8 +325,8 @@ class DistributionService:
         if self._installations is not None:
             self._installations.record(
                 current,
-                provider_id=provider.provider_id,
-                artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+                provider_id=current.source_registry or provider.provider_id,
+                artifact_sha256=current_preview.artifact_sha256,
             )
         return result
 
@@ -190,6 +352,50 @@ class DistributionService:
             )
             resolved = replace(resolved, signature_valid=signature_valid)
         return resolved
+
+    def _get_from_provider(
+        self,
+        provider: RegistryProvider,
+        item_id: str,
+        version: str | None,
+        *,
+        source_registry: str | None,
+    ) -> RegistryItem:
+        if source_registry is None:
+            return provider.get(item_id, version)
+        if isinstance(provider, SourcedRegistryProvider):
+            return provider.get_from_source(source_registry, item_id, version)
+        if source_registry != provider.provider_id:
+            raise RegistryItemNotFoundError(
+                f"registry source {source_registry!r} is not configured"
+            )
+        return provider.get(item_id, version)
+
+    def _fetch_artifact(
+        self,
+        provider: RegistryProvider,
+        item: RegistryItem,
+    ) -> bytes:
+        if item.source_registry is not None and isinstance(provider, SourcedRegistryProvider):
+            return provider.fetch_artifact_from_source(
+                item.source_registry,
+                item.item_id,
+                item.version,
+            )
+        return provider.fetch_artifact(item.item_id, item.version)
+
+    @staticmethod
+    def _with_source_identity(
+        item: RegistryItem,
+        provider: RegistryProvider,
+    ) -> RegistryItem:
+        if item.source_registry is None:
+            return replace(item, source_registry=provider.provider_id)
+        if isinstance(provider, SourcedRegistryProvider):
+            return item
+        if item.source_registry != provider.provider_id:
+            raise ValueError("registry provider returned conflicting source_registry identity")
+        return item
 
     def _require_provider(self) -> RegistryProvider:
         if self._provider is None:
