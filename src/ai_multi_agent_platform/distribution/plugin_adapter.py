@@ -18,7 +18,6 @@ from ai_multi_agent_platform.plugins.models import (
     PluginStateMigrationSpec,
     VersionRange,
 )
-
 from ai_multi_agent_platform.security.redaction import redact_sensitive
 
 from .items import RegistryItem
