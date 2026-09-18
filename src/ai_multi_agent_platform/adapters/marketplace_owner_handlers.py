@@ -200,7 +200,6 @@ class PluginExtensionMarketplaceKindHandler:
         }
 
 
-
 class _AgentMarketplaceBase:
     def __init__(self, service: AgentService) -> None:
         self._service = service
