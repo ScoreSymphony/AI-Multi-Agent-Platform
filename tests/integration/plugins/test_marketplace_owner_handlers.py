@@ -8,6 +8,7 @@ import pytest
 from ai_multi_agent_platform.adapters.marketplace_owner_handlers import (
     ApplicationMarketplaceKindHandler,
     PluginExtensionMarketplaceKindHandler,
+    PluginMarketplaceKindHandler,
     SkillMarketplaceKindHandler,
 )
 from ai_multi_agent_platform.applications import (
@@ -96,6 +97,66 @@ def _item(
 
 def _plugin_artifact(manifest) -> bytes:
     return json.dumps(_manifest_document(manifest), sort_keys=True).encode("utf-8")
+
+
+class _PluginRouter:
+    def __init__(self, installer: PluginRegistryArtifactInstaller) -> None:
+        self._installer = installer
+        self.plugin_install_calls = 0
+
+    async def install_plugin(self, item: RegistryItem, artifact: bytes) -> object:
+        self.plugin_install_calls += 1
+        return await self._installer.install_verified_plugin(item, artifact)
+
+    async def import_portable(self, item: RegistryItem, artifact: bytes) -> object:
+        del item, artifact
+        raise AssertionError("Plugin compatibility test must not use portable import")
+
+
+async def test_plugin_activation_keeps_legacy_route_and_owner_handler_adds_status_remove(
+    tmp_path,
+) -> None:
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+    )
+    installer = PluginRegistryArtifactInstaller(plugin_registry)
+    router = _PluginRouter(installer)
+    handler = PluginMarketplaceKindHandler(installer, plugin_registry)
+    manifest = reference_manifest()
+    item = _item(
+        RegistryItemType.PLUGIN,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+    )
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): _plugin_artifact(manifest)},
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "plugin-installations.json")
+    service = DistributionService(
+        provider,
+        router,
+        installations=installations,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    context = ValidationContext("0.0.1")
+
+    preview = service.preview(item.item_id, item.version, context)
+    assert preview.route.value == "plugin"
+
+    installed = await service.activate(preview, context, authorized=True)
+    assert router.plugin_install_calls == 1
+    assert installed.plugin_id == item.item_id
+    assert (await service.status(item.item_id)).plugin_id == item.item_id
+    assert service.describe(item.item_id)["owner_domain"] == "plugins"
+
+    await service.uninstall(item.item_id, authorized=True)
+    assert installations.get(item.item_id) is None
+    with pytest.raises(ContractError) as missing:
+        plugin_registry.get(item.item_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
 
 
 async def test_tool_handler_uses_plugin_owner_for_full_package_lifecycle(tmp_path) -> None:
