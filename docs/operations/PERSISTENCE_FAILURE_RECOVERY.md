@@ -88,6 +88,12 @@ unknown temp file is never deleted merely because its name looks temporary.
 If an owned path cannot be cleaned, or the tombstone cannot be persisted, provider construction
 fails closed. The incomplete object cannot become a canonical readable File by accident.
 
+Artifacts do not introduce a second filesystem byte store in the supported single-node profile.
+Artifact materialization is a canonical link from an already durable File record plus the owning
+kernel/domain reference. A failed Artifact-link SQLite mutation therefore rolls back independently;
+restart regression coverage proves that the Artifact ID does not later appear while the canonical
+File bytes remain intact.
+
 ## Workspace materialization recovery
 
 Workspace materializations are execution/cache state, not canonical Workspace/Snapshot identity.
