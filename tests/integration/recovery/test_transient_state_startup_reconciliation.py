@@ -39,9 +39,9 @@ NOW = datetime(2026, 9, 19, 1, 30, tzinfo=UTC)
 
 def _identity() -> IdentityContext:
     return IdentityContext(
-        principal_ref="user:issue-1153",
+        principal_ref="user:transient-recovery",
         owner_type="user",
-        owner_id="issue-1153",
+        owner_id="transient-recovery",
     )
 
 
@@ -227,7 +227,7 @@ def test_single_node_restart_reconciles_crash_after_canonical_task_admission_wit
         root = tmp_path / "single-node-crash-window"
         config = SingleNodeConfig(data_dir=root, secure_cookie=False)
         first = build_single_node_deployment(config)
-        account = first.bootstrap_admin("issue-1153-admin", "correct horse battery staple")
+        account = first.bootstrap_admin("transient-recovery-admin", "correct horse battery staple")
         automation = await first.control_plane.automation_service.create_automation(
             name="restart task admission",
             description="simulate process loss after canonical Task creation",
@@ -384,8 +384,8 @@ def test_auth_session_expiry_and_revocation_survive_sqlite_restart(tmp_path: Pat
     path = tmp_path / "authentication.sqlite3"
     store = SqliteAuthenticationStore(path)
     user = LocalUserAccount(
-        user_id="user-issue-1153",
-        username="issue-1153",
+        user_id="user-transient-recovery",
+        username="transient-recovery",
         password_verifier="verifier",
         enabled=True,
         locked=False,
@@ -500,7 +500,7 @@ def test_startup_report_persists_extension_evidence(
     class EvidenceExtension:
         async def reconcile_startup(self) -> StartupRecoveryExtensionReport:
             return StartupRecoveryExtensionReport(
-                name="issue-1153-test",
+                name="transient-recovery-evidence",
                 items_checked=1,
                 evidence=(
                     {
