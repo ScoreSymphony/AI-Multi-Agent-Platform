@@ -22,9 +22,9 @@ WORKFLOW_ISSUE_NAME = re.compile(
     re.IGNORECASE,
 )
 PROVENANCE_PREFIXES = ("historical context:", "provenance:")
-ISSUE_LED_CONTEXT = re.compile(r"^(?:(?:issue\\s+)?#\\d+)\\b", re.IGNORECASE)
+ISSUE_LED_CONTEXT = re.compile(r"^(?:(?:issue\s+)?#\d+)\b", re.IGNORECASE)
 HISTORY_ONLY_CONTEXT = re.compile(
-    r"^(?:migrated|migration|tracked|follow[- ]?up|introduced|added|implemented|created|moved|split|refactored|hardened)\\b",
+    r"^(?:migrated|migration|tracked|follow[- ]?up|introduced|added|implemented|created|moved|split|refactored|hardened)\b",
     re.IGNORECASE,
 )
 PERMANENT_ROOTS = frozenset({"src", "tests", "scripts"})
@@ -163,7 +163,7 @@ def _issue_context_requires_rewrite(line: str) -> bool:
     if ISSUE_REFERENCE.search(line) is None or _provenance_line(line):
         return False
     normalized = line.strip().strip('"\'').strip()
-    normalized = re.sub(r"^#+\\s+", "", normalized).strip()
+    normalized = re.sub(r"^#+\s+", "", normalized).strip()
     return (
         ISSUE_LED_CONTEXT.match(normalized) is not None
         or HISTORY_ONLY_CONTEXT.match(normalized) is not None
