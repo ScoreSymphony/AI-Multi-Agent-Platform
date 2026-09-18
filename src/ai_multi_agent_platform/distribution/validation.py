@@ -133,7 +133,10 @@ def validate_item(
                 findings.append(
                     _error(
                         "dependency_kind_unknown",
-                        f"installed dependency {dependency.item_id} has no recorded component kind",
+                        (
+                            f"installed dependency {dependency.item_id} "
+                            "has no recorded component kind"
+                        ),
                         FindingCategory.DEPENDENCY,
                         dependency.item_id,
                     )
@@ -145,7 +148,10 @@ def validate_item(
                         f"dependency {dependency.item_id} has incompatible component kind",
                         FindingCategory.DEPENDENCY,
                         dependency.item_id,
-                        (("required_kind", dependency.kind_value), ("installed_kind", record.kind)),
+                        (
+                            ("required_kind", dependency.kind_value),
+                            ("installed_kind", record.kind),
+                        ),
                     )
                 )
         if not dependency.version_range.contains(record.version):
@@ -248,7 +254,10 @@ def _validate_environment(
             findings.append(
                 _error(
                     "operating_system_unknown",
-                    "component declares operating-system constraints but the environment is unknown",
+                    (
+                        "component declares operating-system constraints "
+                        "but the environment is unknown"
+                    ),
                     FindingCategory.COMPATIBILITY,
                     "operating_system",
                 )
