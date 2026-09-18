@@ -41,9 +41,7 @@ def evaluate_compatibility(
         missing_capabilities=tuple(
             sorted(item.required_capabilities - context.available_capabilities)
         ),
-        missing_plugins=tuple(
-            sorted(set(item.required_plugins) - context.installed_plugins)
-        ),
+        missing_plugins=tuple(sorted(set(item.required_plugins) - context.installed_plugins)),
         missing_connectors=tuple(
             sorted(set(item.required_connectors) - context.installed_connectors)
         ),
@@ -238,11 +236,7 @@ def _matching_kind_candidates(
 ) -> tuple[RegistryItem, ...]:
     if dependency.kind_value is None:
         return candidates
-    return tuple(
-        candidate
-        for candidate in candidates
-        if candidate.kind == dependency.kind_value
-    )
+    return tuple(candidate for candidate in candidates if candidate.kind == dependency.kind_value)
 
 
 def _preferred_candidate(
@@ -254,9 +248,7 @@ def _preferred_candidate(
     if source_registry is None:
         return None
     same_source = tuple(
-        candidate
-        for candidate in candidates
-        if candidate.source_registry == source_registry
+        candidate for candidate in candidates if candidate.source_registry == source_registry
     )
     if version is not None:
         exact = next(
@@ -316,9 +308,7 @@ def _constraint_conflict(
     if len(requirements) < 2:
         return None
     kinds = {
-        requirement.item_kind
-        for requirement in requirements
-        if requirement.item_kind is not None
+        requirement.item_kind for requirement in requirements if requirement.item_kind is not None
     }
     if len(kinds) > 1:
         return _aggregate_conflict(root, item_id, DependencyStatus.KIND_CONFLICT)
@@ -541,9 +531,7 @@ def _resolution(
         installed_version=record.version if record is not None else None,
         candidate_version=candidate.version if candidate is not None else None,
         candidate_kind=candidate.kind if candidate is not None else None,
-        candidate_source_registry=(
-            candidate.source_registry if candidate is not None else None
-        ),
+        candidate_source_registry=(candidate.source_registry if candidate is not None else None),
         path=path,
     )
 
