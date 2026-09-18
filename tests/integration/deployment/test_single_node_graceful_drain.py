@@ -255,7 +255,8 @@ def test_forced_drain_preserves_running_run_for_canonical_restart_recovery(
             reviewer_reconciler=restarted.reviewer_recovery,
         )
         assert repeated.unresolved_run_ids == (running.run_id,)
-        assert (await restarted.kernel.get_run(task.task_id, running.run_id)).run_id == running.run_id
+        repeated_run = await restarted.kernel.get_run(task.task_id, running.run_id)
+        assert repeated_run.run_id == running.run_id
 
     asyncio.run(scenario())
 
