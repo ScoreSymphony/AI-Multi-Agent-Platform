@@ -80,6 +80,7 @@ from ai_multi_agent_platform.contracts import (
 from ai_multi_agent_platform.data import LocalKnowledgeProvider, LocalMemoryProvider
 from ai_multi_agent_platform.kernel import EventSourcedRunRepository, EventSourcedTaskRepository
 from ai_multi_agent_platform.observability import (
+    ObservabilityExternalEffectRecoveryObserver,
     ObservabilityInvocationObserver,
     TraceHierarchy,
 )
@@ -441,7 +442,8 @@ def install_single_node_context(
         external_effect_recovery = ExternalEffectRecoveryCoordinator(
             SQLiteExternalEffectRecoveryRepository(
                 database_dir / "external-effect-recovery.sqlite3"
-            )
+            ),
+            event_observer=ObservabilityExternalEffectRecoveryObserver(base.telemetry),
         )
         for descriptor in base.capabilities.inventory_providers():
             provider = base.capabilities.runtime_provider(descriptor.provider_id)
