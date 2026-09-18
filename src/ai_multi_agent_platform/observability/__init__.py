@@ -3,6 +3,7 @@
 from .authorization import ObservedAuthorizationProvider
 from .egress import EgressTelemetryAuditSink
 from .event_provider import ObservabilityEventProvider
+from .external_effect_recovery import ObservabilityExternalEffectRecoveryObserver
 from .exporters import (
     InMemoryExporter,
     NoOpExporter,
@@ -69,6 +70,7 @@ __all__ = [
     "MetricRecord",
     "NoOpExporter",
     "ObservabilityEventProvider",
+    "ObservabilityExternalEffectRecoveryObserver",
     "ObservabilityExporter",
     "ObservabilityInvocationObserver",
     "ObservedAuthorizationProvider",
