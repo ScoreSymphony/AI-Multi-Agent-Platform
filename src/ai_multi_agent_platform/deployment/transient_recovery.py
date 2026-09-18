@@ -123,8 +123,6 @@ class SingleNodeTransientStateRecoveryExtension:
             evidence=tuple(evidence),
         )
 
-
-
     @staticmethod
     def _blocked_reconciliation_report(
         *,
@@ -153,5 +151,6 @@ class SingleNodeTransientStateRecoveryExtension:
                 },
             ),
         )
+
 
 __all__ = ["SingleNodeTransientStateRecoveryExtension"]
