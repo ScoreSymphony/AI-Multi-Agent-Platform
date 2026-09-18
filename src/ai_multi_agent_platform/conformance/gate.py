@@ -422,6 +422,16 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             requires_runtime_evidence=True,
         ),
         ConformanceScenario(
+            "SEC-BND",
+            "production security boundaries",
+            (
+                "all supported side-effecting surfaces preserve canonical authentication, "
+                "authorization, exact approval, scope, secret, audit, fail-closed, safe-error "
+                "and provider-identity invariants"
+            ),
+            (sys.executable, "scripts/ci/security_boundary_conformance.py"),
+        ),
+        ConformanceScenario(
             "G",
             "failure/retry",
             "controlled failures preserve canonical retries and telemetry",

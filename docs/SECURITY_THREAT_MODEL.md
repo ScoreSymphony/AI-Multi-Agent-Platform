@@ -496,3 +496,29 @@ Use [`SECURITY_EXTENSION_CHECKLIST.md`](SECURITY_EXTENSION_CHECKLIST.md) for eve
 Issue #384 extends the same regression baseline with coordinator-specific coverage for foreign-scope Event/wait resolution, exact Approval subject/action binding, duplicate/replayed wakeups, stale fencing tokens, conservative reconciliation and safe coordinator persistence/telemetry descriptors.
 
 Future subsystem tests should extend this baseline rather than create separate, incompatible security rules.
+
+
+## 16. Production side-effect boundary conformance
+
+Issue #1233 reconciles the maintained threat model against every claimed V1 mutation and
+side-effect surface. The executable inventory is
+[`production_boundary_matrix.toml`](../conformance/security/production_boundary_matrix.toml),
+validated by [`security_boundary_conformance.py`](../scripts/ci/security_boundary_conformance.py),
+with the release evidence documented in
+[`security/PRODUCTION_SECURITY_BOUNDARY_CONFORMANCE.md`](security/PRODUCTION_SECURITY_BOUNDARY_CONFORMANCE.md).
+
+The reconciliation confirms that the existing top-level trust boundaries remain sufficient, while
+two composed transitions must stay explicit in conformance:
+
+- Marketplace validation/authorization -> canonical owner handler mutation. Registry or provider
+  metadata never authorizes the owner mutation.
+- Automation trigger admission/deduplication -> target Task/action admission. A valid trigger never
+  grants authority for the generated side effect.
+
+These transitions refine existing Control Plane, adapter/plugin, external-event and supply-chain
+boundaries; they do not create new security authorities. A future side-effect surface that cannot
+be represented by the maintained matrix and this threat model is a re-evaluation trigger and must
+update both artifacts before a release compatibility claim is made.
+
+The `SEC-BND` release-conformance scenario is the maintained aggregate evidence gate. Focused security
+issues remain authoritative for provider-specific or live-host guarantees.
