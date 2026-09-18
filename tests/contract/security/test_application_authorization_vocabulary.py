@@ -21,3 +21,20 @@ def test_application_commands_use_canonical_application_authorization_vocabulary
             action,
             ResourceType.APPLICATION,
         )
+
+
+def test_application_resources_use_canonical_application_read_vocabulary() -> None:
+    for action in (
+        "application:list",
+        "application-instance:read",
+        "application-log:read",
+        "application-resource-handler:list",
+        "application-audit-event:list",
+    ):
+        expected_action = (
+            AuthorizationAction.VIEW if action.endswith(":list") else AuthorizationAction.READ
+        )
+        assert canonical_control_plane_vocabulary(action) == (
+            expected_action,
+            ResourceType.APPLICATION,
+        )
