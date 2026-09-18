@@ -190,6 +190,26 @@ describe("MobileControlPlaneClient", () => {
     expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
   });
 
+  it("resumes a waiting Task only through the canonical Conversation input route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "task-1", status: "queued" }), { status: 200 }),
+    );
+    const client = new MobileControlPlaneClient({
+      baseUrl: "https://platform.example",
+      credentialSource,
+      fetchImpl,
+    });
+
+    await client.resumeWaitingTask("message-1", "task-1");
+
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://platform.example/api/v1/conversation-messages/message-1:resume-task",
+    );
+    expect(JSON.parse(String(init.body))).toEqual({ task_id: "task-1" });
+    expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
+  });
+
   it("uses only canonical Verification review commands", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "verification-1", status: "completed" }), { status: 200 }),
