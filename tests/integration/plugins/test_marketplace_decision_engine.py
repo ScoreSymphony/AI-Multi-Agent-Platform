@@ -411,6 +411,229 @@ def test_overlapping_transitive_constraints_choose_one_common_candidate() -> Non
     ]
 
 
+def test_dependency_environment_incompatibility_blocks_install_plan() -> None:
+    dependency, dependency_artifact = _item(
+        "example.environment-dependency",
+        RegistryItemType.TOOL,
+        supported_platform=VersionRange("2.0.0", "3.0.0"),
+        compatibility=RegistryCompatibility(
+            required_runtimes=frozenset({"docker"}),
+        ),
+    )
+    root, root_artifact = _item(
+        "example.environment-root",
+        dependencies=(
+            RegistryDependency(
+                dependency.item_id,
+                item_kind=RegistryItemType.TOOL,
+            ),
+        ),
+    )
+    service = _service(
+        ((dependency, dependency_artifact), (root, root_artifact)),
+    )
+
+    preview = service.preview(root.item_id, root.version, _context())
+
+    resolution = next(
+        item for item in preview.decision.dependencies if item.item_id == dependency.item_id
+    )
+    assert resolution.status is DependencyStatus.ENVIRONMENT_INCOMPATIBLE
+    assert resolution.candidate_version == dependency.version
+    assert resolution.candidate_compatibility is not None
+    assert resolution.candidate_compatibility.platform_compatible is False
+    assert resolution.candidate_compatibility.missing_runtimes == ("docker",)
+    assert preview.decision.install_order == ()
+    finding = next(
+        finding
+        for finding in preview.findings
+        if finding.code == "dependency_environment_incompatible"
+    )
+    assert finding.category is FindingCategory.DEPENDENCY
+    assert ("platform_compatible", "false") in finding.details
+    assert ("missing_runtimes", "docker") in finding.details
+
+
+def test_transitive_common_version_environment_conflict_is_explained() -> None:
+    compatible_low, compatible_low_artifact = _item(
+        "example.environment-intersection",
+        version="1.0.0",
+    )
+    incompatible_common, incompatible_common_artifact = _item(
+        compatible_low.item_id,
+        version="2.0.0",
+        supported_platform=VersionRange("2.0.0", "3.0.0"),
+    )
+    compatible_high, compatible_high_artifact = _item(
+        compatible_low.item_id,
+        version="3.0.0",
+    )
+    left, left_artifact = _item(
+        "example.environment-intersection-left",
+        dependencies=(
+            RegistryDependency(
+                compatible_low.item_id,
+                VersionRange(minimum="1.0.0", maximum="2.0.0"),
+            ),
+        ),
+    )
+    right, right_artifact = _item(
+        "example.environment-intersection-right",
+        dependencies=(
+            RegistryDependency(
+                compatible_low.item_id,
+                VersionRange(minimum="2.0.0", maximum="3.0.0"),
+            ),
+        ),
+    )
+    root, root_artifact = _item(
+        "example.environment-intersection-root",
+        dependencies=(
+            RegistryDependency(left.item_id),
+            RegistryDependency(right.item_id),
+        ),
+    )
+    service = _service(
+        (
+            (compatible_low, compatible_low_artifact),
+            (incompatible_common, incompatible_common_artifact),
+            (compatible_high, compatible_high_artifact),
+            (left, left_artifact),
+            (right, right_artifact),
+            (root, root_artifact),
+        )
+    )
+
+    preview = service.preview(root.item_id, root.version, _context())
+
+    aggregate = next(
+        resolution
+        for resolution in preview.decision.dependencies
+        if resolution.item_id == compatible_low.item_id and resolution.required_by == root.item_id
+    )
+    assert aggregate.status is DependencyStatus.ENVIRONMENT_INCOMPATIBLE
+    assert aggregate.candidate_version == incompatible_common.version
+    assert aggregate.candidate_compatibility is not None
+    assert aggregate.candidate_compatibility.platform_compatible is False
+    assert preview.decision.install_order == ()
+    assert any(
+        finding.code == "dependency_environment_incompatible"
+        and finding.subject == compatible_low.item_id
+        for finding in preview.findings
+    )
+
+
+def test_environment_selection_does_not_hide_cross_source_ambiguity() -> None:
+    source_a_dependency, source_a_artifact = _item(
+        "example.environment-source-shared",
+        RegistryItemType.TOOL,
+    )
+    source_b_dependency, source_b_artifact = _item(
+        source_a_dependency.item_id,
+        RegistryItemType.TOOL,
+        supported_platform=VersionRange("2.0.0", "3.0.0"),
+    )
+    left, left_artifact = _item(
+        "example.environment-source-left",
+        dependencies=(RegistryDependency(source_a_dependency.item_id),),
+    )
+    right, right_artifact = _item(
+        "example.environment-source-right",
+        dependencies=(RegistryDependency(source_a_dependency.item_id),),
+    )
+    root, root_artifact = _item(
+        "example.environment-source-root",
+        dependencies=(
+            RegistryDependency(left.item_id),
+            RegistryDependency(right.item_id),
+        ),
+    )
+    root_provider = LocalRegistryProvider(
+        (left, right, root),
+        {
+            (left.item_id, left.version): left_artifact,
+            (right.item_id, right.version): right_artifact,
+            (root.item_id, root.version): root_artifact,
+        },
+        provider_id="root-source",
+    )
+    source_a = LocalRegistryProvider(
+        (source_a_dependency,),
+        {(source_a_dependency.item_id, source_a_dependency.version): source_a_artifact},
+        provider_id="source-a",
+    )
+    source_b = LocalRegistryProvider(
+        (source_b_dependency,),
+        {(source_b_dependency.item_id, source_b_dependency.version): source_b_artifact},
+        provider_id="source-b",
+    )
+    service = DistributionService(
+        MultiRegistryProvider((root_provider, source_a, source_b)),
+        _Router(),
+    )
+
+    preview = service.preview(
+        root.item_id,
+        root.version,
+        _context(),
+        source_registry="root-source",
+    )
+
+    shared = [
+        resolution
+        for resolution in preview.decision.dependencies
+        if resolution.item_id == source_a_dependency.item_id
+    ]
+    assert shared
+    assert all(resolution.status is DependencyStatus.SOURCE_AMBIGUOUS for resolution in shared)
+    assert preview.decision.install_order == ()
+
+
+def test_dependency_resolution_prefers_latest_environment_compatible_candidate() -> None:
+    compatible, compatible_artifact = _item(
+        "example.environment-versioned",
+        RegistryItemType.TOOL,
+        version="1.0.0",
+    )
+    incompatible, incompatible_artifact = _item(
+        compatible.item_id,
+        RegistryItemType.TOOL,
+        version="2.0.0",
+        supported_platform=VersionRange("2.0.0", "3.0.0"),
+    )
+    root, root_artifact = _item(
+        "example.environment-version-root",
+        dependencies=(
+            RegistryDependency(
+                compatible.item_id,
+                VersionRange(maximum="2.0.0"),
+                item_kind=RegistryItemType.TOOL,
+            ),
+        ),
+    )
+    service = _service(
+        (
+            (compatible, compatible_artifact),
+            (incompatible, incompatible_artifact),
+            (root, root_artifact),
+        )
+    )
+
+    preview = service.preview(root.item_id, root.version, _context())
+
+    resolution = next(
+        item for item in preview.decision.dependencies if item.item_id == compatible.item_id
+    )
+    assert resolution.status is DependencyStatus.AVAILABLE
+    assert resolution.candidate_version == compatible.version
+    assert resolution.candidate_compatibility is not None
+    assert resolution.candidate_compatibility.compatible is True
+    assert [(step.item_id, step.version) for step in preview.decision.install_order] == [
+        (compatible.item_id, compatible.version),
+        (root.item_id, root.version),
+    ]
+
+
 def test_platform_os_architecture_and_runtime_incompatibility_is_typed() -> None:
     item, artifact = _item(
         "example.environment",
