@@ -22,11 +22,35 @@ It is therefore the dominant contributor and the first safe parallelization targ
 167–383 second range also demonstrates normal hosted-runner/load variance; wall-clock budgets must
 detect major regressions without treating that variance as test flakiness.
 
-The initial 420-second wall budget for each non-unit shard is intentionally conservative: it is
-approximately 10% above the worst observed *complete serial non-unit suite*. Because each shard is
-a strict subset of that former lane, exceeding this threshold is a strong major-regression signal
-without encoding one runner's best-case timing as policy. The threshold should be tightened after
-representative sharded timing evidence accumulates.
+## Post-sharding evidence
+
+The first retained sharded runs already isolate the dominant cost instead of hiding it in one
+serial non-unit number:
+
+| Shard | Run | Wall time | Slowest test |
+| --- | ---: | ---: | ---: |
+| integration | 35384156371 | 120.435 s | 6.874 s |
+| integration | 35384102471 | 122.020 s | 8.290 s |
+| E2E + performance + regression | 35384227788 | 95.651 s | 7.593 s |
+
+The measured pytest critical path is therefore currently the integration shard at about 120–122
+seconds. Against the pre-sharding 224-second median non-unit lane, this is about a 46% wall-clock
+reduction before counting any further optimization. The repeated integration measurements also
+show the same dominant category rather than a one-off outlier.
+
+The slowest integration case is the shipped distributed operator entrypoint acceptance test. It
+starts the real broker, distributed server, worker and CLI and waits for readiness/registration.
+The next contributors are the canonical replanning path, repository-wide AST boundary scan and
+real MCP SDK transports. In the system/regression shard, the largest costs are reference-host
+reproducibility setup, secure-entrypoint E2E and recovery/performance campaigns.
+
+Static inspection also found many intentionally delayed SQLite/offload tests (typically
+0.03–0.12 seconds), real process/Pipelock/MCP readiness loops, OpenSSL-backed security setup and
+long-lived child-process fixtures whose children are explicitly terminated. Those delays express
+concurrency, lifecycle or security semantics; they are not treated as accidental sleeps merely
+because they are visible. `asyncio.sleep(0)` scheduling yields are likewise not optimization
+targets. This is why #1235 first removes serial CI coupling rather than replacing behavioral tests
+with mocks.
 
 ## Retained timing evidence
 
@@ -100,9 +124,27 @@ No contributor needs xdist or a special runner to execute the authoritative full
 
 Budgets are regression guards, not aspirational performance targets.
 
-The unit wall-clock budget is 30 seconds against an observed 11–17 second baseline. Each non-unit shard initially has a 420-second wall budget, approximately 10% above the worst observed 383-second complete serial non-unit run. This is deliberately a major-regression guard until representative sharded measurements justify a tighter threshold.
+The unit wall-clock budget is 30 seconds against an observed 11–17 second baseline. The
+non-unit shard wall budget is 210 seconds: below the old 224-second median serial non-unit lane,
+but still about 72% above the repeated 120–122 second integration measurements and more than twice
+the measured 95.651-second system/regression shard. Integration and system/regression use a
+15-second individual-test and 20-second module/class major-regression threshold; the currently
+observed maxima remain below 8.3 seconds.
 
-The first per-test/per-module thresholds are intentionally coarse major-regression guards. They are derived from the measured non-unit envelope and must be tightened using retained CI timing artifacts once enough representative runs exist. The checked-in config is the canonical source.
+The complete `python-validation` matrix has a four-minute job timeout. Because its lanes are
+independent and run in parallel, that bounds the frontend-independent Python validation critical
+path without adding paid runners or unsafe in-process parallelism. The required `test` aggregator
+downloads all four pytest timing artifacts and fails if their measured critical path exceeds 210
+seconds or if any expected lane report is missing.
+
+The serial full-suite fallback has a 480-second reference budget through the `full-local` lane.
+That threshold is approximately 21% above the worst 397-second serial pytest observation from the
+six pre-sharding reference runs. It is a regression threshold for comparable hardware, not a claim
+that every developer machine must have identical absolute timing.
+
+Contract/architecture/release keeps a deliberately wider 30-second test and 60-second module
+threshold until its own retained profile has enough representative evidence. The checked-in config
+is the canonical source for every threshold.
 
 A budget failure is a test failure; it does not silently skip tests.
 
@@ -139,6 +181,17 @@ python scripts/ci/run_pytest_lane.py \
   --lane integration \
   -- -m "not unit" tests/integration
 ```
+
+Run the complete serial suite with the checked-in reference budget:
+
+```bash
+python scripts/ci/run_pytest_lane.py \
+  --lane full-local \
+  -- tests
+```
+
+The simpler `pytest` command remains authoritative for correctness and does not require the
+profiling wrapper.
 
 ## Follow-up profiling
 

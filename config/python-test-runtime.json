@@ -61,19 +61,52 @@
     ],
     "summary": {
       "unit_wall_seconds_median": 15,
-      "unit_wall_seconds_range": [11, 17],
+      "unit_wall_seconds_range": [
+        11,
+        17
+      ],
       "non_unit_wall_seconds_median": 224,
-      "non_unit_wall_seconds_range": [167, 383],
+      "non_unit_wall_seconds_range": [
+        167,
+        383
+      ],
       "pytest_aggregate_wall_seconds_median": 240,
-      "pytest_aggregate_wall_seconds_range": [178, 397],
+      "pytest_aggregate_wall_seconds_range": [
+        178,
+        397
+      ],
       "required_test_job_wall_seconds_median": 311,
-      "required_test_job_wall_seconds_range": [226, 466]
+      "required_test_job_wall_seconds_range": [
+        226,
+        466
+      ]
     },
     "notes": [
       "Step durations are measured from completed successful GitHub Actions runs immediately preceding the sharding change.",
       "The wide non-unit range demonstrates runner/load variance, so initial wall budgets guard major regressions rather than normal hosted-runner jitter.",
       "Per-test and per-module thresholds are initial major-regression guards and are tightened only from retained timing artifacts."
-    ]
+    ],
+    "post_sharding_evidence": {
+      "integration": [
+        {
+          "run_id": 35384156371,
+          "wall_seconds": 120.435,
+          "slowest_test_seconds": 6.874
+        },
+        {
+          "run_id": 35384102471,
+          "wall_seconds": 122.02,
+          "slowest_test_seconds": 8.29
+        }
+      ],
+      "system-regression": [
+        {
+          "run_id": 35384227788,
+          "wall_seconds": 95.651,
+          "slowest_test_seconds": 7.593
+        }
+      ]
+    }
   },
   "lane_budgets": {
     "unit": {
@@ -82,19 +115,35 @@
       "slow_module_seconds": 20
     },
     "contract-architecture-release": {
-      "wall_seconds": 420,
+      "wall_seconds": 210,
       "slow_test_seconds": 30,
       "slow_module_seconds": 60
     },
     "integration": {
-      "wall_seconds": 420,
-      "slow_test_seconds": 30,
-      "slow_module_seconds": 60
+      "wall_seconds": 210,
+      "slow_test_seconds": 15,
+      "slow_module_seconds": 20
     },
     "system-regression": {
-      "wall_seconds": 420,
+      "wall_seconds": 210,
+      "slow_test_seconds": 15,
+      "slow_module_seconds": 20
+    },
+    "full-local": {
+      "wall_seconds": 480,
       "slow_test_seconds": 30,
       "slow_module_seconds": 60
+    }
+  },
+  "aggregate_budgets": {
+    "frontend-independent-python-ci": {
+      "matrix_job_timeout_seconds": 240,
+      "pytest_critical_path_seconds": 210,
+      "rationale": "The 210-second pytest critical-path guard is below the pre-sharding 224-second median non-unit lane while leaving substantial headroom above the observed 95.651-122.020 second post-sharding heavy lanes. The 240-second matrix-job timeout includes environment bootstrap and quality work."
+    },
+    "full-local-python-suite": {
+      "wall_seconds": 480,
+      "rationale": "The serial reference-suite baseline ranged from 178 to 397 seconds across six successful pre-sharding GitHub-hosted runs; 480 seconds is approximately 21% above the observed worst case and is a major-regression guard rather than a hardware-portable performance promise."
     }
   }
 }

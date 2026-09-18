@@ -8,6 +8,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.ci.run_pytest_lane import build_report, budget_violations  # noqa: E402
+from scripts.ci.verify_pytest_runtime_aggregate import (  # noqa: E402
+    aggregate_violations,
+    build_aggregate,
+)
 from scripts.ci.verify_pytest_shards import compare_collections  # noqa: E402
 
 
@@ -101,3 +105,66 @@ def test_shard_collection_comparison_accepts_exact_partition() -> None:
     }
 
     assert compare_collections(baseline, shards) == (set(), set(), set())
+
+
+def test_runtime_aggregate_uses_slowest_lane_and_enforces_budget() -> None:
+    reports = {
+        "unit": {"wall_seconds": 15.0, "pytest_exit_code": 0, "budget_violations": []},
+        "contract-architecture-release": {
+            "wall_seconds": 40.0,
+            "pytest_exit_code": 0,
+            "budget_violations": [],
+        },
+        "integration": {
+            "wall_seconds": 122.0,
+            "pytest_exit_code": 0,
+            "budget_violations": [],
+        },
+        "system-regression": {
+            "wall_seconds": 96.0,
+            "pytest_exit_code": 0,
+            "budget_violations": [],
+        },
+    }
+
+    summary = build_aggregate(reports)
+
+    assert summary["critical_lane"] == "integration"
+    assert summary["pytest_critical_path_seconds"] == 122.0
+    assert summary["pytest_total_compute_seconds"] == 273.0
+    assert aggregate_violations(
+        summary,
+        {"pytest_critical_path_seconds": 210},
+    ) == []
+    assert aggregate_violations(
+        summary,
+        {"pytest_critical_path_seconds": 100},
+    ) == ["pytest critical path 122.000s exceeds 100.000s"]
+
+
+def test_runtime_aggregate_rejects_failed_or_over_budget_lane() -> None:
+    reports = {
+        "unit": {"wall_seconds": 15.0, "pytest_exit_code": 0, "budget_violations": []},
+        "contract-architecture-release": {
+            "wall_seconds": 40.0,
+            "pytest_exit_code": 0,
+            "budget_violations": [],
+        },
+        "integration": {
+            "wall_seconds": 122.0,
+            "pytest_exit_code": 0,
+            "budget_violations": ["slowest test exceeded budget"],
+        },
+        "system-regression": {
+            "wall_seconds": 96.0,
+            "pytest_exit_code": 0,
+            "budget_violations": [],
+        },
+    }
+
+    summary = build_aggregate(reports)
+
+    assert aggregate_violations(
+        summary,
+        {"pytest_critical_path_seconds": 210},
+    ) == ["failed or over-budget lanes: integration"]

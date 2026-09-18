@@ -8,6 +8,7 @@ on:
 jobs:
   python-validation:
     runs-on: ubuntu-latest
+    timeout-minutes: 4
     strategy:
       fail-fast: false
       matrix:
@@ -109,7 +110,28 @@ jobs:
     needs: python-validation
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+      - name: Download Python runtime evidence
+        if: needs.python-validation.result == 'success'
+        uses: actions/download-artifact@v5
+        with:
+          pattern: python-test-runtime-*
+          path: .artifacts/test-runtime-aggregate
+          merge-multiple: true
+      - name: Verify frontend-independent Python aggregate budget
+        if: needs.python-validation.result == 'success'
+        run: |
+          python scripts/ci/verify_pytest_runtime_aggregate.py \
+            --reports .artifacts/test-runtime-aggregate
+      - name: Upload Python aggregate runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-test-runtime-aggregate
+          path: .artifacts/test-runtime-aggregate/aggregate.json
+          if-no-files-found: warn
       - name: Require all Python validation lanes
+        if: always()
         env:
           VALIDATION_RESULT: ${{ needs.python-validation.result }}
         run: |
