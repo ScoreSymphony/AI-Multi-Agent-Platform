@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -156,6 +156,49 @@ class ApplicationLifecycleService:
         intent = self._persist_desired(instance, ApplicationDesiredState.STOPPED)
         return await self._invoke_transition(application, intent, runtime.stop)
 
+    async def configure(
+        self,
+        instance_id: str,
+        configuration: Mapping[str, JsonValue],
+    ) -> ApplicationInstance:
+        """Persist a validated mutable configuration patch and converge a running instance."""
+
+        if not configuration:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "application configuration update must not be empty",
+            )
+        application, instance, runtime = self._load(instance_id)
+        if (
+            instance.desired_state is ApplicationDesiredState.REMOVED
+            or instance.observed_state is ApplicationObservedState.REMOVED
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "removed application instances cannot be reconfigured",
+                details={"instance_id": instance_id},
+            )
+
+        updated_configuration = self._validated_configuration_update(
+            application,
+            instance,
+            configuration,
+        )
+        if updated_configuration == dict(instance.configuration):
+            return instance
+
+        updated = self._repository.save_instance(
+            replace(
+                instance,
+                configuration=updated_configuration,
+                revision=instance.revision + 1,
+                updated_at=utc_now(),
+            )
+        )
+        if updated.desired_state is ApplicationDesiredState.RUNNING:
+            return await self._invoke_transition(application, updated, runtime.restart)
+        return updated
+
     async def restart(self, instance_id: str) -> ApplicationInstance:
         application, instance, runtime = self._load(instance_id)
         if instance.desired_state is not ApplicationDesiredState.RUNNING:
@@ -269,6 +312,50 @@ class ApplicationLifecycleService:
                 details={"instance_id": instance.instance_id},
             )
         return application, instance, self._runtimes.get(instance.runtime_id)
+
+    @staticmethod
+    def _validated_configuration_update(
+        application: Application,
+        instance: ApplicationInstance,
+        patch: Mapping[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        fields = {field.name: field for field in application.manifest.configuration}
+        unknown = sorted(set(patch).difference(fields))
+        if unknown:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                f"unknown application configuration fields: {unknown!r}",
+            )
+
+        immutable_changes = sorted(
+            name
+            for name, value in patch.items()
+            if not fields[name].mutable
+            and (name not in instance.configuration or instance.configuration[name] != value)
+        )
+        if immutable_changes:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "immutable application configuration fields cannot be changed",
+                details={"fields": immutable_changes},
+            )
+
+        candidate = dict(instance.configuration)
+        candidate.update(patch)
+        try:
+            request = ApplicationInstallRequest(
+                manifest=application.manifest,
+                configuration=candidate,
+                secret_bindings=instance.secret_bindings,
+                volume_bindings=instance.volume_bindings,
+                node_id=instance.node_id,
+            )
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                f"invalid application configuration update: {exc}",
+            ) from exc
+        return dict(request.resolved_configuration())
 
     def _persist_desired(
         self,
