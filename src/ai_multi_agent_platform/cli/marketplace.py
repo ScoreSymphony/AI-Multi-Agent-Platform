@@ -159,6 +159,8 @@ def _add_search_arguments(
             "release_date",
             "kind",
             "item_type",
+            "maturity",
+            "stability",
         ],
     )
     parser.add_argument("--direction", choices=["asc", "desc"], default="asc")
@@ -169,6 +171,12 @@ def _add_search_arguments(
     parser.add_argument("--source", action="append", default=[])
     parser.add_argument("--license", dest="licenses", action="append", default=[])
     parser.add_argument("--trust", action="append", default=[])
+    parser.add_argument(
+        "--maturity",
+        action="append",
+        default=[],
+        choices=["experimental", "beta", "stable"],
+    )
     parser.add_argument("--installed", choices=["true", "false"])
     if include_update_available:
         parser.add_argument("--update-available", choices=["true", "false"])
@@ -205,6 +213,7 @@ def _search_query(
     _add_csv_filter(query, "source", args.source)
     _add_csv_filter(query, "license", args.licenses)
     _add_csv_filter(query, "trust", args.trust)
+    _add_csv_filter(query, "maturity", args.maturity)
     _add_csv_filter(query, "required_capability", args.required_capability)
     for field, attribute in (
         ("installed", "installed"),
