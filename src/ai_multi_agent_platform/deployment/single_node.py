@@ -23,6 +23,7 @@ from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 from ai_multi_agent_platform.evaluation import EvaluationService, SqliteEvaluationRepository
+from ai_multi_agent_platform.execution import ExecutorRegistry
 from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
 from ai_multi_agent_platform.models import (
     JsonModelRoutingProfileRepository,
@@ -30,6 +31,7 @@ from ai_multi_agent_platform.models import (
     ModelRoutingProfileService,
     ModelRuntime,
 )
+from ai_multi_agent_platform.orchestration import OrchestratorRegistry
 from ai_multi_agent_platform.observability import (
     AggregatedHealthProvider,
     InMemoryExporter,
@@ -145,6 +147,8 @@ class SingleNodeDeployment:
     capabilities: CapabilityRegistry
     capability_assignments: CapabilityAssignmentService
     models: ModelRegistry
+    orchestrators: OrchestratorRegistry
+    executors: ExecutorRegistry
     routing_profile_repository: JsonModelRoutingProfileRepository
     routing_profiles: ModelRoutingProfileService
     model_runtime: ModelRuntime
@@ -421,6 +425,8 @@ def _assemble_deployment(
         capabilities=runtime.capabilities,
         capability_assignments=platform_services.capability_assignments,
         models=runtime.models,
+        orchestrators=execution.orchestrators,
+        executors=execution.executors,
         routing_profile_repository=runtime.routing_profile_repository,
         routing_profiles=runtime.routing_profiles,
         model_runtime=runtime.model_runtime,
