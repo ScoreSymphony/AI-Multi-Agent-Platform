@@ -12,6 +12,11 @@ from ai_multi_agent_platform.conformance.gate import (
     profile_scenarios,
     run_conformance,
 )
+from ai_multi_agent_platform.conformance.security_boundaries import (
+    SecurityBoundaryClaim,
+    security_boundary_claims,
+    security_boundary_pytest_nodes,
+)
 from ai_multi_agent_platform.conformance.optional_profiles import (
     activate_optional_scenarios,
     optional_evidence_ids,
@@ -26,8 +31,11 @@ __all__ = [
     "ConformanceScenario",
     "ConformanceScenarioResult",
     "ConformanceStatus",
+    "SecurityBoundaryClaim",
     "activate_optional_scenarios",
     "optional_evidence_ids",
     "profile_scenarios",
     "run_conformance",
+    "security_boundary_claims",
+    "security_boundary_pytest_nodes",
 ]
