@@ -49,7 +49,7 @@ invent a raw-byte mutation/download API just to satisfy a generic CRUD checklist
 | Import / Export | `/import-export`, package/preview/report deep links | `portability-packages`, `portability-import-previews`, `portability-import-reports`; `portability.export|package.validate|preview|import` | **Gap found and closed by #1234.** Export, package validation, server-owned preview and exact-preview import are reachable. Browser code cannot submit an ID mapping or mutation order. |
 | Templates / generated configuration | `/templates`, `/templates/:id`; generated Workflow/Capability Assignment/Model Routing Profile detail routes | canonical Template resources/commands plus owner-domain read projections | Maintained create/version/clone/fork/preview/apply paths; generated owner-domain resources use canonical deep links when a real route exists. |
 | Organizations / collaboration | `/organizations` | Organizations/Teams/Memberships/invitations/ownership/shares | #87 is closed and the maintained surface is active. Membership removal, invitation revocation and share revocation now require explicit confirmation. |
-| Applications | `/applications`, `/applications/:id` | canonical Application resources | Maintained optional Application-adapter surface; availability remains manifest-gated. |
+| Applications | `/applications`, `/applications/:id` | canonical Application resources | **Gap found and closed by #1234.** Lifecycle and diagnostics already existed, but `application.configure` was API-only and removal had no confirmation. The detail surface now edits only manifest-declared mutable typed fields through the canonical configure command and requires confirmation before removal. |
 | Settings / user-manageable configuration / secret references | `/settings` plus Model/Tool/Integration/Onboarding configuration surfaces | browser auth plus canonical configuration/SecretReference contracts | User-manageable configuration is reachable in its owning domain. Resolved/plaintext secret values are intentionally not a browser-management resource. |
 | Usage / Observability / diagnostics | `/usage`, `/events`, `/observability`, dashboard health | canonical accounting/timeline/observability resources | Maintained operator-readable views. Backend-neutral telemetry is not promoted into canonical Task/Run lifecycle truth. |
 
@@ -108,7 +108,8 @@ Adding generic buttons for these boundaries would weaken, not improve, V1 archit
    browser confirmation. Added explicit confirmation; the Marketplace browser regression accepts
    and verifies the new confirmation.
 5. **Repository workflow reachability** — the typed client already exposed repository reads/fetch/detach and the backend/CLI exposed the wider canonical management/Git contract, but normal browser users could not attach/discover repositories or reach branch/checkout/commit/push/detach workflows. Added those primary actions with capability gating, explicit confirmation for high-impact operations, approval/idempotency propagation and provider/path isolation.
-6. **Documentation drift** — #87 was already closed, #79 was already browser-safe and frontend
+6. **Application edit/destructive-state closure** — `application.configure` was already a supported canonical command while the Web detail page rendered configuration read-only, and instance removal was a one-click destructive action. Added manifest-typed mutable configuration editing and explicit removal confirmation without exposing resolved secrets or runtime-private identities.
+7. **Documentation drift** — #87 was already closed, #79 was already browser-safe and frontend
    dependency pins had advanced beyond the documented values. `docs/FRONTEND.md` is reconciled in
    the same change.
 
