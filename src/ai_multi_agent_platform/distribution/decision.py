@@ -320,6 +320,7 @@ def resolve_dependency_graph(
                 dependency,
                 catalog,
                 preferred_source=record.source_registry if record is not None else None,
+                preferred_version=record.version if record is not None else None,
             )
 
             if record is not None:
@@ -374,6 +375,16 @@ def dependency_findings(
     for resolution in resolutions:
         status = resolution.status
         if status is DependencyStatus.SATISFIED:
+            continue
+        if resolution.optional:
+            findings.append(
+                _finding(
+                    f"optional_dependency_{status.value}",
+                    FindingSeverity.WARNING,
+                    f"optional dependency {resolution.item_id} is not satisfied ({status.value})",
+                    resolution,
+                )
+            )
             continue
         if status is DependencyStatus.OPTIONAL_MISSING:
             findings.append(
@@ -836,6 +847,7 @@ def _select_dependency_candidate(
     catalog: tuple[RegistryItem, ...],
     *,
     preferred_source: str | None,
+    preferred_version: str | None = None,
 ) -> tuple[RegistryItem | None, DependencyStatus]:
     by_id = tuple(candidate for candidate in catalog if candidate.item_id == dependency.item_id)
     if not by_id:
@@ -861,6 +873,12 @@ def _select_dependency_candidate(
             for candidate in by_version
             if candidate.source_registry == preferred_source
         )
+        if preferred_version is not None:
+            exact = tuple(
+                candidate for candidate in preferred if candidate.version == preferred_version
+            )
+            if exact:
+                return exact[0], DependencyStatus.AVAILABLE
         if preferred:
             return max(preferred, key=lambda item: version_key(item.version)), DependencyStatus.AVAILABLE
 
