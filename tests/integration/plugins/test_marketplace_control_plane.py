@@ -480,7 +480,9 @@ def test_plugin_route_exposes_owner_extension_and_supports_marketplace_uninstall
         kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
     )
 
-    detail = asyncio.run(RegistryResourceService(distribution).get_resource(_request(), item.item_id))
+    detail = asyncio.run(
+        RegistryResourceService(distribution).get_resource(_request(), item.item_id)
+    )
     owner_extension = detail["owner_extension"]
     assert isinstance(owner_extension, dict)
     assert owner_extension["handler_available"] is True
