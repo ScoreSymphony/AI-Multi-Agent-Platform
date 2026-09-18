@@ -24,6 +24,7 @@ from .invocation import (
 from .invocation import (
     CapabilityInvoker as BaseCapabilityInvoker,
 )
+from .recovery import ExternalEffectInvocationObserver, ExternalEffectRecoveryCoordinator
 from .registry import CapabilityRegistry
 from .types import (
     CapabilityInvocation,
@@ -49,18 +50,25 @@ class EgressCapabilityInvoker(BaseCapabilityInvoker):
         governance_binding_hook: GovernanceBindingHook | None = None,
         approval_hook: ApprovalHook | None = None,
         observer: InvocationObserver | None = None,
+        external_effect_recovery: ExternalEffectRecoveryCoordinator | None = None,
         egress_gate: EgressGate | None = None,
         classification_resolver: CapabilityClassificationResolver | None = None,
     ) -> None:
+        effective_observer = (
+            ExternalEffectInvocationObserver(external_effect_recovery, observer)
+            if external_effect_recovery is not None
+            else observer
+        )
         super().__init__(
             registry,
             policy_hook=policy_hook,
             canonical_binding_hook=canonical_binding_hook,
             governance_binding_hook=governance_binding_hook,
             approval_hook=approval_hook,
-            observer=observer,
+            observer=effective_observer,
         )
         self._egress_registry = registry
+        self._external_effect_recovery = external_effect_recovery
         self.egress_gate = egress_gate or EgressGate()
         self._classification_resolver = classification_resolver
 
@@ -73,37 +81,45 @@ class EgressCapabilityInvoker(BaseCapabilityInvoker):
             available_worker_capabilities=request.available_worker_capabilities,
         )
         capability = registration.capability
-        posture = _capability_posture(capability, registration.node_id, registration.worker_id)
-        if posture is not EgressTargetPosture.LOCAL:
-            classification = (
-                self._classification_resolver(request, capability)
-                if self._classification_resolver is not None
-                else DataClassification.INTERNAL
-            )
-            await self.egress_gate.enforce(
-                EgressRequest(
-                    request_id=f"capability:{request.invocation_id}:{capability.capability_id}",
-                    target=EgressTarget(
-                        kind=EgressTargetKind.CAPABILITY,
-                        target_id=capability.capability_id,
-                        posture=posture,
-                    ),
-                    context=request.context,
-                    classification=classification,
-                    resource_type="capability_invocation",
-                    payload_digest=digest_egress_payload(dict(request.arguments)),
-                    task_id=request.trace.task_id,
-                    run_id=request.trace.run_id,
-                    capability_id=capability.capability_id,
-                    policy_descriptors={
-                        "provider_id": registration.provider_id,
-                        "side_effects": capability.side_effects.value,
-                        "node_id": registration.node_id,
-                        "worker_id": registration.worker_id,
-                    },
+        recovery = self._external_effect_recovery
+        if recovery is not None:
+            await recovery.prepare_attempt(request, capability, registration)
+
+        try:
+            posture = _capability_posture(capability, registration.node_id, registration.worker_id)
+            if posture is not EgressTargetPosture.LOCAL:
+                classification = (
+                    self._classification_resolver(request, capability)
+                    if self._classification_resolver is not None
+                    else DataClassification.INTERNAL
                 )
-            )
-        return await super().invoke(request)
+                await self.egress_gate.enforce(
+                    EgressRequest(
+                        request_id=f"capability:{request.invocation_id}:{capability.capability_id}",
+                        target=EgressTarget(
+                            kind=EgressTargetKind.CAPABILITY,
+                            target_id=capability.capability_id,
+                            posture=posture,
+                        ),
+                        context=request.context,
+                        classification=classification,
+                        resource_type="capability_invocation",
+                        payload_digest=digest_egress_payload(dict(request.arguments)),
+                        task_id=request.trace.task_id,
+                        run_id=request.trace.run_id,
+                        capability_id=capability.capability_id,
+                        policy_descriptors={
+                            "provider_id": registration.provider_id,
+                            "side_effects": capability.side_effects.value,
+                            "node_id": registration.node_id,
+                            "worker_id": registration.worker_id,
+                        },
+                    )
+                )
+            return await super().invoke(request)
+        finally:
+            if recovery is not None:
+                await recovery.discard_unstarted_attempt(request.invocation_id)
 
 
 def _capability_posture(
