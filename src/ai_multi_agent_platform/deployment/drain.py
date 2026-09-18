@@ -80,6 +80,7 @@ class SingleNodeDrainController:
         self._reason: str | None = None
         self._force_reason: str | None = None
         self._forced = False
+        self._force_timed_out = False
         self._completed = False
         self._quiesce_callbacks: list[Callable[[], None]] = []
 
@@ -204,6 +205,7 @@ class SingleNodeDrainController:
             if not self._forced:
                 self._forced = True
                 self._force_reason = reason
+                self._force_timed_out = timed_out
                 newly_forced = True
                 self._condition.notify_all()
         if newly_forced:
@@ -247,7 +249,11 @@ class SingleNodeDrainController:
             self._event(
                 "platform.single_node.drain.completed",
                 outcome=(
-                    TelemetryOutcome.TIMED_OUT if self._forced else TelemetryOutcome.SUCCEEDED
+                    TelemetryOutcome.TIMED_OUT
+                    if self._forced and self._force_timed_out
+                    else TelemetryOutcome.FAILED
+                    if self._forced
+                    else TelemetryOutcome.SUCCEEDED
                 ),
                 attributes={
                     "forced": self._forced,
@@ -262,11 +268,13 @@ class SingleNodeDrainController:
         return self._deadline - asyncio.get_running_loop().time()
 
     def _metric_active_mutations(self, *, disposition: str) -> None:
-        self._telemetry.metric(
-            "platform.single_node.drain.in_flight",
-            float(self._active_mutations),
-            context=TelemetryContext(),
-            attributes={"disposition": disposition},
+        self._best_effort_telemetry(
+            lambda: self._telemetry.metric(
+                "platform.single_node.drain.in_flight",
+                float(self._active_mutations),
+                context=TelemetryContext(),
+                attributes={"disposition": disposition},
+            )
         )
 
     def _event(
@@ -278,21 +286,33 @@ class SingleNodeDrainController:
         attributes: dict[str, JsonValue] | None = None,
     ) -> None:
         context = TelemetryContext()
-        self._telemetry.log(
-            severity=severity,
-            component=FailureComponent.INFRASTRUCTURE_UNKNOWN,
-            event_name=event_name,
-            context=context,
-            outcome=outcome,
-            attributes=attributes,
+        self._best_effort_telemetry(
+            lambda: self._telemetry.log(
+                severity=severity,
+                component=FailureComponent.INFRASTRUCTURE_UNKNOWN,
+                event_name=event_name,
+                context=context,
+                outcome=outcome,
+                attributes=attributes,
+            )
         )
-        self._telemetry.timeline(
-            event_name=event_name,
-            component=FailureComponent.INFRASTRUCTURE_UNKNOWN,
-            context=context,
-            outcome=outcome,
-            attributes=attributes,
+        self._best_effort_telemetry(
+            lambda: self._telemetry.timeline(
+                event_name=event_name,
+                component=FailureComponent.INFRASTRUCTURE_UNKNOWN,
+                context=context,
+                outcome=outcome,
+                attributes=attributes,
+            )
         )
+
+    @staticmethod
+    def _best_effort_telemetry(emit: Callable[[], None]) -> None:
+        try:
+            emit()
+        # error-boundary: allow-broad-catch=boundary observability cannot own drain lifecycle
+        except Exception:
+            return
 
 
 class DrainAwareAuthenticatedControlPlaneHTTP(AuthenticatedControlPlaneHTTP):
@@ -516,6 +536,7 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
         if not response_sent:
             await send({"type": "lifespan.shutdown.complete"})
         await self._drain.mark_completed()
+
 
 async def _cancel_and_settle(task: asyncio.Task[Any]) -> None:
     task.cancel()
