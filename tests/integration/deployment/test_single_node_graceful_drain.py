@@ -141,7 +141,7 @@ def test_drain_quiesces_autonomous_background_runtimes(tmp_path: Path) -> None:
 
 
 def test_drain_lifecycle_does_not_depend_on_telemetry_exporter() -> None:
-    class FailingExporter:
+    class FailingExporter(InMemoryExporter):
         def emit_log(self, record: Any) -> None:
             del record
             raise RuntimeError("log exporter unavailable")
