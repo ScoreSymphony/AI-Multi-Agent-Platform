@@ -426,6 +426,7 @@ def _preview_resource(
     route_available: bool | None = None,
     activation_allowed: bool | None = None,
     include_decision: bool = False,
+    owner_extension: dict[str, JsonValue] | None = None,
 ) -> dict[str, JsonValue]:
     resource: dict[str, JsonValue] = {
         "id": f"{preview.item.item_id}@{preview.item.version}",
@@ -438,6 +439,7 @@ def _preview_resource(
             update_available=_is_update(preview.item, installation),
             route=preview.route,
             route_available=route_available,
+            owner_extension=owner_extension,
         ),
         "route": preview.route.value,
         "activation_allowed": (
