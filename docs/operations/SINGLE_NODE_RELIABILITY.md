@@ -87,7 +87,7 @@ This slice deliberately distinguishes the outcomes already supported by the cano
 
 A reconciliation exception itself is fail-closed: `platform-server serve` does not open the HTTP serving path when a required recovery owner cannot complete its pass.
 
-Broader #707 work will extend this policy to additional session/materialization transient state, persistence failures and uncertain external side effects. Those must remain explicit instead of being collapsed into a generic `retry everything` rule.
+The uncertain external-side-effect gap is now handled by #1154. See [External side-effect recovery](EXTERNAL_EFFECT_RECOVERY.md) for the durable dispatch journal, provider reconciliation contract, manual-review path and operator diagnostics. Other subsystem-specific recovery still remains explicit rather than being collapsed into a generic `retry everything` rule.
 
 ## Idempotency and fail-closed behavior
 
@@ -131,10 +131,10 @@ This startup slice does **not** close #707. Remaining reliability work includes,
 
 - graceful drain/shutdown hardening;
 - stale non-Worker session/materialization cleanup;
-- explicit uncertain-side-effect recovery states;
+- external-side-effect recovery is tracked separately by #1154 and documented in `EXTERNAL_EFFECT_RECOVERY.md`;
 - persistence/filesystem fault injection and recovery;
 - provider/dependency failure isolation and bounded retries;
 - health/readiness integration while reconciliation is in progress;
 - operator diagnostics beyond the startup report;
 - repeated hard-kill/restart endurance testing;
-- reusable failure-injection fixtures and platform-conformance reliability evidence.
+- broader platform-conformance reliability evidence beyond the #1154 external-effect failure injector.
