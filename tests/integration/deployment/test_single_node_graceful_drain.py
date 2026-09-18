@@ -131,6 +131,52 @@ def test_drain_rejects_direct_asgi_streaming_mutation(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
+def test_drain_rejects_new_websocket_session(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        deployment = build_single_node_deployment(
+            SingleNodeConfig(
+                data_dir=tmp_path / "drain-websocket",
+                secure_cookie=False,
+                shutdown_timeout_seconds=1,
+            )
+        )
+        await deployment.drain.begin(reason="test_websocket_admission")
+
+        received = False
+        sent: list[dict[str, Any]] = []
+
+        async def receive() -> dict[str, Any]:
+            nonlocal received
+            assert received is False
+            received = True
+            return {"type": "websocket.connect"}
+
+        async def send(message: dict[str, Any]) -> None:
+            sent.append(message)
+
+        await deployment.app(
+            {
+                "type": "websocket",
+                "path": "/api/v1/terminal/sessions/session_test/stream",
+                "headers": [],
+                "query_string": b"",
+            },
+            receive,
+            send,
+        )
+
+        assert sent == [
+            {
+                "type": "websocket.close",
+                "code": 1013,
+                "reason": "single-node Control Plane is draining",
+            }
+        ]
+        assert deployment.drain.active_mutations == 0
+
+    asyncio.run(scenario())
+
+
 def test_already_admitted_mutation_may_settle_within_deadline() -> None:
     async def scenario() -> None:
         exporter = InMemoryExporter()
