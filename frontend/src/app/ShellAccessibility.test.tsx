@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PORTABILITY_RESOURCES } from "../api/portability";
 import type { APImanifest } from "../api/types";
 import { LiveConnectionStatus } from "../pages/TaskDetailPage";
 import {
@@ -108,6 +109,10 @@ describe("#17 shell accessibility semantics", () => {
     const knowledge = renderShell("/knowledge");
     expect(knowledge).toContain("Checking Knowledge availability");
     expect(knowledge).not.toContain("Source-backed canonical retrieval");
+
+    const importExport = renderShell("/import-export");
+    expect(importExport).toContain("Checking Import / Export availability");
+    expect(importExport).not.toContain("Export canonical resource");
   });
 
   it("distinguishes advertised, absent and unavailable manifest resources", () => {
@@ -132,6 +137,7 @@ describe("#17 shell accessibility semantics", () => {
         "memory",
         "knowledge",
         "knowledge-results",
+        ...PORTABILITY_RESOURCES,
       ],
     } as APImanifest;
 
@@ -176,6 +182,25 @@ describe("#17 shell accessibility semantics", () => {
     expect(
       manifestResourcesState("ready", manifest, ["knowledge", "missing-knowledge-results"]),
     ).toBe("unavailable");
+
+    expect(manifestResourcesState("ready", manifest, PORTABILITY_RESOURCES)).toBe("available");
+    expect(
+      manifestResourcesState("ready", manifest, [
+        "portability-packages",
+        "portability-import-previews",
+        "missing-portability-import-reports",
+      ]),
+    ).toBe("unavailable");
+  });
+
+  it("keeps the parent navigation active for deep links", () => {
+    const portability = renderShell("/import-export/previews/preview_1");
+    expect(portability).toContain('href="/import-export"');
+    expect(portability).toMatch(/href="\/import-export"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/import-export"/);
+    expect(portability).toContain("Checking Import preview availability");
+
+    const result = renderShell("/results/result_1");
+    expect(result).toMatch(/href="\/files"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/files"/);
   });
 
   it("routes Settings to the real browser-session surface", () => {
