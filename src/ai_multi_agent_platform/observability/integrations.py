@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from hashlib import sha256
-from collections.abc import Callable
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts import HealthStatus, ProviderContract, ProviderDescriptor
