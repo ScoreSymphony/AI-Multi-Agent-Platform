@@ -353,6 +353,11 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         "connector": ResourceType.CONNECTOR,
         "plugin": ResourceType.PLUGIN,
         "plugin-candidate": ResourceType.PLUGIN,
+        "application": ResourceType.APPLICATION,
+        "application-instance": ResourceType.APPLICATION,
+        "application-log": ResourceType.APPLICATION,
+        "application-resource-handler": ResourceType.APPLICATION,
+        "application-audit-event": ResourceType.APPLICATION,
     }
     return (
         action_map.get(verb, AuthorizationAction.MODIFY),
