@@ -30,6 +30,7 @@ from .control_plane_query import split_resource_id as _split_resource_id
 from .control_plane_query import validate_marketplace_sort as _validate_marketplace_sort
 from .dependency_graph import evaluate_compatibility
 from .items import RegistryItem, RegistryQuery
+from .kinds import MarketplaceKindDescriptor
 from .models import DistributionRoute, version_key
 from .provider import RegistrySourceConflictError, RegistryUnavailableError
 from .service import (
@@ -377,11 +378,7 @@ class MarketplaceKindResourceService:
         return self._resource(descriptor)
 
     @staticmethod
-    def _resource(descriptor: object) -> dict[str, JsonValue]:
-        from .kinds import MarketplaceKindDescriptor
-
-        if not isinstance(descriptor, MarketplaceKindDescriptor):
-            raise TypeError("invalid Marketplace kind descriptor")
+    def _resource(descriptor: MarketplaceKindDescriptor) -> dict[str, JsonValue]:
         return {
             "id": descriptor.kind_value,
             "type": "marketplace-kind",
