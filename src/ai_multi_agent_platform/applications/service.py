@@ -334,10 +334,11 @@ class ApplicationLifecycleService:
             and (name not in instance.configuration or instance.configuration[name] != value)
         )
         if immutable_changes:
+            immutable_values: list[JsonValue] = [name for name in immutable_changes]
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
                 "immutable application configuration fields cannot be changed",
-                details={"fields": immutable_changes},
+                details={"fields": immutable_values},
             )
 
         candidate = dict(instance.configuration)
