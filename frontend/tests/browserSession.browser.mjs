@@ -58,42 +58,255 @@ try {
   }
 
   await page.goto(`${baseUrl}/tests/marketplaceHarness.html`);
-  await page.getByRole("heading", { name: "ProjectAtlas" }).waitFor();
+  await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
 
-  const marketplaceText = await page.locator("body").innerText();
-  requireText(marketplaceText, "candidate", "Marketplace lifecycle presentation");
-  requireText(marketplaceText, "evaluation:required", "Marketplace evaluation presentation");
-  requireText(marketplaceText, "local", "Marketplace deployment presentation");
-  requireText(marketplaceText, "compatible", "Marketplace cost presentation");
+  const initialMarketplaceText = await page.locator("body").innerText();
+  for (const expected of [
+    "ProjectAtlas",
+    "Code Review Skill",
+    "Example Plugin",
+    "GitHub Connector",
+    "Code Server",
+    "Skills",
+    "Applications",
+    "Templates / Workflows",
+  ]) {
+    requireText(initialMarketplaceText, expected, "Unified Marketplace");
+  }
 
   const initialCalls = await page.evaluate(() => [...window.__marketplaceCalls]);
-  const initialTechnicalCall = initialCalls.find((call) =>
-    decodeURIComponent(call).includes("filter[technical_component]=true"),
+  const initialListCall = initialCalls.find(
+    (call) => call.method === "GET" && call.url.includes("/api/v1/registry-items"),
   );
-  if (!initialTechnicalCall) {
-    throw new Error(`Marketplace did not default to technical components: ${initialCalls.join("\n")}`);
+  if (!initialListCall) {
+    throw new Error(`Marketplace did not query registry-items: ${JSON.stringify(initialCalls)}`);
   }
+  const decodedInitialUrl = decodeURIComponent(initialListCall.url);
+  if (decodedInitialUrl.includes("filter[technical_component]=true")) {
+    throw new Error(`Unified Marketplace unexpectedly defaults to technical-only: ${decodedInitialUrl}`);
+  }
+  requireText(decodedInitialUrl, "sort=name", "Marketplace server-side sorting");
+  requireText(decodedInitialUrl, "direction=asc", "Marketplace server-side sorting");
 
-  const previousCallCount = initialCalls.length;
-  await page.getByRole("button", { name: "Code intelligence" }).click();
+  let before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByRole("button", { name: "Skills", exact: true }).click();
   await page.waitForFunction(
-    (count) => window.__marketplaceCalls.length > count,
-    previousCallCount,
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[item_type]=skill"),
+      ),
+    before,
   );
+  const skillCard = cardByHeading(page, "Code Review Skill");
+  await skillCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByRole("button", { name: "Preview install", exact: true }).click();
+  await page.getByRole("heading", { name: "Install / update preview", exact: true }).waitFor();
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some(
+        (call) => call.method === "POST" && call.url.endsWith("/commands/marketplace.preview"),
+      ),
+    before,
+  );
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByRole("button", { name: "Install component", exact: true }).click();
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some(
+        (call) => call.method === "POST" && call.url.endsWith("/commands/marketplace.install"),
+      ),
+    before,
+  );
+  await page.getByRole("status").filter({ hasText: "Component installed." }).waitFor();
 
-  const callsAfterCategoryClick = await page.evaluate(() => [...window.__marketplaceCalls]);
-  const categoryCall = callsAfterCategoryClick.slice(previousCallCount).find((call) => {
-    const decoded = decodeURIComponent(call);
-    return (
-      decoded.includes("filter[technical_component]=true") &&
-      decoded.includes("filter[category]=code-intelligence")
-    );
-  });
-  if (!categoryCall) {
-    throw new Error(
-      `Marketplace category navigation did not produce the expected Registry query: ${callsAfterCategoryClick.join("\n")}`,
-    );
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  const searchInput = page.getByRole("searchbox", { name: "Search" });
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await searchInput.fill("GitHub Connector");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("q=GitHub+Connector") ||
+        decodeURIComponent(call.url).includes("q=GitHub%20Connector") ||
+        decodeURIComponent(call.url).includes("q=GitHub Connector"),
+      ),
+    before,
+  );
+  await page.getByRole("heading", { name: "GitHub Connector", exact: true }).waitFor();
+
+  await searchInput.fill("");
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByLabel("Sort").selectOption("publisher");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("sort=publisher"),
+      ),
+    before,
+  );
+  await page.getByLabel("Sort").selectOption("name");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByLabel("Installed state").selectOption("true");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[installed]=true"),
+      ),
+    before,
+  );
+  await page.getByLabel("Installed state").selectOption("");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByRole("button", { name: "Templates / Workflows", exact: true }).click();
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[item_type]=template,workflow"),
+      ),
+    before,
+  );
+  await page.getByRole("heading", { name: "Release Template", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Release Workflow", exact: true }).waitFor();
+
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  const kindInput = page.getByRole("textbox", { name: "Component kind", exact: true });
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await kindInput.fill("notebook_extension");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("filter[item_type]=notebook_extension"),
+      ),
+    before,
+  );
+  await page.getByRole("heading", { name: "Notebook Extension", exact: true }).waitFor();
+  await kindInput.fill("");
+  await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByRole("button", { name: "Next page", exact: true }).click();
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("cursor=page-2"),
+      ),
+    before,
+  );
+  await page.getByRole("heading", { name: "Notebook Extension", exact: true }).waitFor();
+  const secondPageText = await page.locator("body").innerText();
+  requireText(secondPageText, "Blocked Tool", "Marketplace incompatible state");
+  requireText(secondPageText, "Manual Reference", "Marketplace manual state");
+  requireText(secondPageText, "incompatible", "Marketplace incompatible badge");
+  requireText(secondPageText, "manual", "Marketplace manual badge");
+  requireText(secondPageText, "Notebook Extension", "Future Marketplace kind");
+
+  await page.getByRole("button", { name: "Previous page", exact: true }).click();
+  await page.getByRole("heading", { name: "Example Plugin", exact: true }).waitFor();
+
+  const pluginCard = cardByHeading(page, "Example Plugin");
+  await pluginCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await page.getByRole("button", { name: "Preview update", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Preview update", exact: true }).click();
+  await page.getByRole("heading", { name: "Permission changes", exact: true }).waitFor();
+  const pluginPreviewText = await page.locator("body").innerText();
+  requireText(pluginPreviewText, "filesystem.write", "Marketplace permission diff");
+  requireText(pluginPreviewText, "Approval required", "Marketplace approval state");
+  requireText(pluginPreviewText, "Permission escalation requires approval", "Marketplace approval reason");
+  requireText(pluginPreviewText, "Review filesystem write access", "Marketplace security notice");
+  requireText(pluginPreviewText, "Trust or integrity state changed", "Marketplace trust/integrity notice");
+  requireText(pluginPreviewText, "Source changed", "Marketplace source diff");
+  requireText(pluginPreviewText, "Publisher changed", "Marketplace publisher diff");
+  requireText(pluginPreviewText, "Provenance changes", "Marketplace provenance diff");
+  requireText(pluginPreviewText, "Artifact digest", "Marketplace integrity diff");
+  requireText(pluginPreviewText, "ProjectAtlas", "Marketplace dependency preview");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByRole("button", { name: "Apply update", exact: true }).click();
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some(
+        (call) => call.method === "POST" && call.url.endsWith("/commands/marketplace.update"),
+      ),
+    before,
+  );
+  await page.getByRole("status").filter({ hasText: "Update applied." }).waitFor();
+
+  await page.getByRole("button", { name: "Next page", exact: true }).click();
+  const blockedCard = cardByHeading(page, "Blocked Tool");
+  await blockedCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Preview install", exact: true }).click();
+  await page.getByRole("heading", { name: "Install / update preview", exact: true }).waitFor();
+  const blockedPreviewText = await page.locator("body").innerText();
+  requireText(blockedPreviewText, "Mutation is blocked", "Marketplace blocked preview");
+  requireText(blockedPreviewText, "Host requirement is not satisfied", "Marketplace compatibility blocker");
+  requireText(blockedPreviewText, "Compatibility policy blocked installation", "Marketplace policy blocker");
+  requireText(blockedPreviewText, "runtime: runtime.gpu", "Marketplace missing runtime");
+  requireText(blockedPreviewText, "operating system", "Marketplace incompatible host requirement");
+  requireText(blockedPreviewText, "Incompatible update", "Marketplace incompatible update state");
+  if (await page.getByRole("button", { name: "Install component", exact: true }).count()) {
+    throw new Error("Blocked Marketplace preview exposed an install action");
   }
+
+  const futureCard = cardByHeading(page, "Notebook Extension");
+  await futureCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  const futureDetailText = await page.locator("body").innerText();
+  requireText(futureDetailText, "Notebook Extension", "Future Marketplace kind detail");
+  requireText(futureDetailText, "Notebook Extension", "Future Marketplace kind fallback label");
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByRole("button", { name: "Uninstall", exact: true }).click();
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some(
+        (call) => call.method === "POST" && call.url.endsWith("/commands/marketplace.uninstall"),
+      ),
+    before,
+  );
+  await page.getByRole("status").filter({ hasText: "Component uninstalled." }).waitFor();
+
+  await page.getByRole("button", { name: "Previous page", exact: true }).click();
+  const applicationCard = cardByHeading(page, "Code Server");
+  await applicationCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  const applicationLink = page.getByRole("link", { name: "Open Application management", exact: true });
+  if ((await applicationLink.getAttribute("href")) !== "/applications") {
+    throw new Error("Application Marketplace detail does not link to canonical Application management");
+  }
+  const applicationDetailText = await page.locator("body").innerText();
+  requireText(applicationDetailText, "Application ownership", "Application owner-domain boundary");
+  requireText(applicationDetailText, "Definition / manifest", "Application Marketplace manifest");
+  requireText(applicationDetailText, "Update unsupported", "Application Marketplace owner capability");
+  if (await page.getByRole("button", { name: "Preview update", exact: true }).count()) {
+    throw new Error("Application Marketplace exposed an unsupported artifact-version update");
+  }
+  for (const forbidden of ["Start application", "Stop application", "Restart application"]) {
+    if (applicationDetailText.includes(forbidden)) {
+      throw new Error(`Marketplace leaked Application runtime lifecycle action: ${forbidden}`);
+    }
+  }
+
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  await searchInput.fill("does-not-exist-marketplace-item");
+  await page.getByText("No Marketplace items match", { exact: true }).waitFor();
+  await searchInput.fill("");
+
+  await page.goto(`${baseUrl}/tests/marketplaceHarness.html?provider=disabled`);
+  await page.getByRole("status").getByText("Marketplace provider disabled", { exact: true }).waitFor();
+
+  await page.goto(`${baseUrl}/tests/marketplaceHarness.html?provider=unavailable`);
+  await page.getByRole("status").getByText("Marketplace provider unavailable", { exact: true }).waitFor();
+
+  await page.goto(`${baseUrl}/tests/marketplaceHarness.html?mutation=fail`);
+  await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Skills", exact: true }).click();
+  const failingSkillCard = cardByHeading(page, "Code Review Skill");
+  await failingSkillCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Preview install", exact: true }).click();
+  await page.getByRole("button", { name: "Install component", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Install component", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "Marketplace owner mutation failed" }).waitFor();
 
   await page.goto(`${baseUrl}/tests/memoryTypesHarness.html`);
   await page.getByRole("heading", { name: "Memory", exact: true }).waitFor();
