@@ -10,7 +10,7 @@ from ai_multi_agent_platform.plugins import PluginRegistry
 from .items import RegistryItem
 from .models import RegistryItemType
 from .plugin_adapter import PluginRegistryArtifactInstaller
-from .provider import RegistryProvider
+from .provider import RegistryProvider, SourcedRegistryProvider
 from .signatures import RegistrySignatureVerifier
 from .state import RegistryInstallationSnapshot, RegistryInstallationStore
 
@@ -42,7 +42,7 @@ async def reconcile_registry_plugins(
             continue
 
         try:
-            item = provider.get(snapshot.item_id, snapshot.version)
+            item = _get_snapshot_item(provider, snapshot)
         except LookupError as exc:
             if snapshot.item_type is RegistryItemType.PLUGIN:
                 raise RegistryPluginReconciliationError(
@@ -60,8 +60,8 @@ async def reconcile_registry_plugins(
                 )
             continue
 
-        _validate_snapshot(provider.provider_id, snapshot, item)
-        artifact = provider.fetch_artifact(item.item_id, item.version)
+        _validate_snapshot(item.source_registry or provider.provider_id, snapshot, item)
+        artifact = _fetch_snapshot_artifact(provider, snapshot)
         digest = hashlib.sha256(artifact).hexdigest()
         trusted_digest = snapshot.artifact_sha256 or item.integrity.sha256
         if trusted_digest is None:
@@ -103,6 +103,32 @@ async def reconcile_registry_plugins(
         restored.append(item.item_id)
 
     return tuple(restored)
+
+
+def _get_snapshot_item(
+    provider: RegistryProvider,
+    snapshot: RegistryInstallationSnapshot,
+) -> RegistryItem:
+    if isinstance(provider, SourcedRegistryProvider):
+        return provider.get_from_source(
+            snapshot.source_registry,
+            snapshot.item_id,
+            snapshot.version,
+        )
+    return provider.get(snapshot.item_id, snapshot.version)
+
+
+def _fetch_snapshot_artifact(
+    provider: RegistryProvider,
+    snapshot: RegistryInstallationSnapshot,
+) -> bytes:
+    if isinstance(provider, SourcedRegistryProvider):
+        return provider.fetch_artifact_from_source(
+            snapshot.source_registry,
+            snapshot.item_id,
+            snapshot.version,
+        )
+    return provider.fetch_artifact(snapshot.item_id, snapshot.version)
 
 
 def _validate_snapshot(
