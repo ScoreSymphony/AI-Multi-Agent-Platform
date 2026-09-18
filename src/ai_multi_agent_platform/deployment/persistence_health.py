@@ -62,6 +62,7 @@ class SingleNodePersistenceHealthProvider(ProviderContract):
         warning_free_bytes: int = _DEFAULT_WARNING_FREE_BYTES,
         minimum_free_bytes: int = _DEFAULT_MINIMUM_FREE_BYTES,
         sqlite_timeout_seconds: float = 0.25,
+        required_store_owners: frozenset[str] | None = None,
     ) -> None:
         if minimum_free_bytes < 0:
             raise ValueError("minimum_free_bytes must be >= 0")
@@ -74,6 +75,7 @@ class SingleNodePersistenceHealthProvider(ProviderContract):
         self._warning_free_bytes = warning_free_bytes
         self._minimum_free_bytes = minimum_free_bytes
         self._sqlite_timeout_seconds = sqlite_timeout_seconds
+        self._required_store_owners = required_store_owners
         self._status = HealthStatus.UNKNOWN
         self._diagnostics: tuple[PersistenceDiagnostic, ...] = ()
         self._checked_store_count = 0
@@ -130,8 +132,12 @@ class SingleNodePersistenceHealthProvider(ProviderContract):
 
         for spec in SINGLE_NODE_DURABLE_STORES:
             path = data_root / spec.path
+            required_for_profile = spec.required and (
+                self._required_store_owners is None
+                or spec.owner in self._required_store_owners
+            )
             if not path.exists():
-                if spec.required:
+                if required_for_profile:
                     diagnostics.append(
                         PersistenceDiagnostic(
                             code="required_store_missing",
@@ -144,7 +150,7 @@ class SingleNodePersistenceHealthProvider(ProviderContract):
                 continue
 
             checked_store_count += 1
-            severity = "unavailable" if spec.required else "degraded"
+            severity = "unavailable" if required_for_profile else "degraded"
             if spec.kind == "sqlite":
                 diagnostic = self._probe_sqlite(path, spec.path, severity)
             else:
