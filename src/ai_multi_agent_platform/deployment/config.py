@@ -188,9 +188,7 @@ def load_single_node_config(environ: Mapping[str, str] | None = None) -> SingleN
         try:
             target["shutdown_timeout_seconds"] = int(source["AI_MAP_SHUTDOWN_TIMEOUT_SECONDS"])
         except ValueError as exc:
-            raise ConfigurationError(
-                "AI_MAP_SHUTDOWN_TIMEOUT_SECONDS must be an integer"
-            ) from exc
+            raise ConfigurationError("AI_MAP_SHUTDOWN_TIMEOUT_SECONDS must be an integer") from exc
     if "AI_MAP_REGISTRY_CATALOG" in source:
         target["registry_catalog"] = _optional_path_text(
             source["AI_MAP_REGISTRY_CATALOG"], "AI_MAP_REGISTRY_CATALOG"
