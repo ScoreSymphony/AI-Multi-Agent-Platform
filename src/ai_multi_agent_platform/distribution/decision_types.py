@@ -50,6 +50,14 @@ class DependencyResolution:
 
 
 @dataclass(frozen=True, slots=True)
+class InstallPlanStep:
+    item_id: str
+    item_kind: str
+    version: str
+    source_registry: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class CompatibilityDecision:
     platform_compatible: bool
     operating_system_compatible: bool
@@ -231,6 +239,7 @@ class UpdateState:
 class MarketplaceDecision:
     operation: DistributionOperation
     dependencies: tuple[DependencyResolution, ...]
+    install_order: tuple[InstallPlanStep, ...]
     compatibility: CompatibilityDecision
     permission_diff: PermissionDiff
     provenance_diff: ProvenanceDiff
