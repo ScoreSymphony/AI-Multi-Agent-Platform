@@ -85,8 +85,7 @@ def test_builtin_marketplace_kinds_include_new_first_class_families() -> None:
     assert registry.require("application").default_route is DistributionRoute.KIND_HANDLER
     assert registry.require(RegistryItemType.TOOL).default_route is DistributionRoute.KIND_HANDLER
     assert (
-        registry.require(RegistryItemType.CONNECTOR).default_route
-        is DistributionRoute.KIND_HANDLER
+        registry.require(RegistryItemType.CONNECTOR).default_route is DistributionRoute.KIND_HANDLER
     )
     assert registry.require(RegistryItemType.APPLICATION).supports_update is False
 
