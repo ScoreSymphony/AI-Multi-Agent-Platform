@@ -272,11 +272,9 @@ def _matching_kind_candidates(
 def _latest_unambiguous_candidate(
     candidates: tuple[RegistryItem, ...],
 ) -> tuple[RegistryItem | None, DependencyStatus]:
-    latest_version = max(candidates, key=lambda item: version_key(item.version)).version
-    latest = tuple(candidate for candidate in candidates if candidate.version == latest_version)
-    if len({candidate.source_registry for candidate in latest}) > 1:
+    if len({candidate.source_registry for candidate in candidates}) > 1:
         return None, DependencyStatus.SOURCE_AMBIGUOUS
-    return latest[0], DependencyStatus.AVAILABLE
+    return max(candidates, key=lambda item: version_key(item.version)), DependencyStatus.AVAILABLE
 
 
 def _append_constraint_conflicts(
