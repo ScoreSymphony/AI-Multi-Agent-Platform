@@ -2,7 +2,8 @@
 
 The drain gate is deliberately not durable lifecycle authority. It only stops new process-local
 admission while an operator shutdown is in progress. Canonical unfinished work remains owned by its
-normal subsystem and is reconciled after restart by the existing startup-recovery path (#707).
+normal subsystem and is reconciled after restart by the existing startup-recovery path.
+Provenance: #707 defines the startup-recovery authority reused here.
 """
 
 from __future__ import annotations
@@ -17,11 +18,9 @@ from uuid import uuid4
 
 from ai_multi_agent_platform.contracts import ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.control_plane import (
+from ai_multi_agent_platform.control_plane import ControlPlaneASGI, HTTPRequest, HTTPResponse
+from ai_multi_agent_platform.control_plane.first_user_bootstrap import (
     AuthenticatedControlPlaneHTTP,
-    ControlPlaneASGI,
-    HTTPRequest,
-    HTTPResponse,
 )
 from ai_multi_agent_platform.control_plane.http import ASGIReceive, ASGISend
 from ai_multi_agent_platform.control_plane.models import API_VERSION, APIException
