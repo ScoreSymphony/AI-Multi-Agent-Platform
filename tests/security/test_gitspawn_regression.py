@@ -136,12 +136,16 @@ def test_gitspawn_environment_scrubs_execution_indirection() -> None:
 @pytest.mark.parametrize(
     "key",
     (
+        "core.askPass",
         "core.hooksPath",
+        "core.worktree",
         "filter.attack.clean",
         "filter.attack.smudge",
         "filter.attack.process",
         "diff.attack.command",
         "diff.attack.textconv",
+        "diff.external",
+        "merge.attack.driver",
         "credential.helper",
         "credential.example.helper",
         "include.path",
@@ -151,10 +155,13 @@ def test_gitspawn_environment_scrubs_execution_indirection() -> None:
         "remote.origin.proxy",
         "remote.origin.receivepack",
         "remote.origin.uploadpack",
+        "remote.origin.vcs",
         "submodule.attack.update",
         "core.sshCommand",
         "core.gitProxy",
         "gpg.program",
+        "http.cookieFile",
+        "interactive.diffFilter",
     ),
 )
 def test_gitspawn_execution_capable_local_config_inventory(key: str) -> None:
