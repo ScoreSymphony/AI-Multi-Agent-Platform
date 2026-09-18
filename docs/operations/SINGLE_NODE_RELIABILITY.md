@@ -139,7 +139,6 @@ The startup-recovery slice remains intentionally narrower than all reliability w
 items outside the completed #1152 drain boundary include, among other items:
 
 - stale non-Worker session/materialization cleanup;
-- stale non-Worker session/materialization cleanup;
 - explicit uncertain-side-effect recovery states;
 - persistence/filesystem fault injection and recovery;
 - provider/dependency failure isolation and bounded retries;
