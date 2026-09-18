@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from typing import Protocol
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -243,7 +243,9 @@ class DistributionService:
     ) -> Mapping[str, object] | None:
         if isinstance(item_or_id, RegistryItem):
             handler = self._kind_handlers.get(item_or_id.item_type)
-            return None if handler is None else handler.describe(item_or_id)
+            if handler is None:
+                return None
+            return self._describe_owner_or_candidate(item_or_id, handler)
 
         item = self._owner_item(
             item_or_id,
@@ -251,7 +253,29 @@ class DistributionService:
             source_registry=source_registry,
         )
         handler = self._require_kind_handler(item, operation="status")
-        return handler.describe(item)
+        return self._describe_owner_or_candidate(item, handler)
+
+    def _describe_owner_or_candidate(
+        self,
+        item: RegistryItem,
+        handler: MarketplaceKindHandler,
+    ) -> Mapping[str, object]:
+        try:
+            return handler.describe(item)
+        except ContractError as exc:
+            if exc.code is not ErrorCode.NOT_FOUND:
+                raise
+
+        describe_candidate = getattr(handler, "describe_candidate", None)
+        if describe_candidate is None:
+            raise
+        provider = self._require_provider()
+        artifact = self._fetch_artifact(provider, item)
+        candidate_describer = cast(
+            Callable[[RegistryItem, bytes], Mapping[str, object]],
+            describe_candidate,
+        )
+        return candidate_describer(item, artifact)
 
     async def status(self, item_or_id: RegistryItem | str) -> object | None:
         if isinstance(item_or_id, RegistryItem):
@@ -326,10 +350,31 @@ class DistributionService:
             validation_findings=base_findings,
         )
         route = self.route_for(item)
+        owner_handler = self._kind_handlers.get(item.item_type)
         handler_available = (
             route is not DistributionRoute.KIND_HANDLER
-            or self._kind_handlers.get(item.item_type) is not None
+            or owner_handler is not None
         )
+        if owner_handler is not None:
+            validate_candidate = getattr(owner_handler, "validate_candidate", None)
+            if validate_candidate is not None:
+                candidate_validator = cast(
+                    Callable[[RegistryItem, bytes], None],
+                    validate_candidate,
+                )
+                try:
+                    candidate_validator(item, artifact)
+                except ContractError as exc:
+                    findings = (
+                        *findings,
+                        ValidationFinding(
+                            "owner_candidate_invalid",
+                            FindingSeverity.ERROR,
+                            exc.message,
+                            FindingCategory.COMPATIBILITY,
+                            item.kind,
+                        ),
+                    )
         operation = self._activation_operation(item)
         operation_supported = (
             route is not DistributionRoute.KIND_HANDLER
