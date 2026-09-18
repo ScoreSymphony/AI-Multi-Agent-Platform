@@ -6,7 +6,6 @@ import hashlib
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.plugins import PluginRegistry
-from ai_multi_agent_platform.plugins.models import ExtensionType
 
 from .items import RegistryItem
 from .models import DistributionRoute, RegistryItemType
@@ -17,8 +16,8 @@ from .state import RegistryInstallationSnapshot, RegistryInstallationStore
 
 
 _PLUGIN_BACKED_KINDS = {
-    RegistryItemType.TOOL: ExtensionType.CAPABILITY_PROVIDER,
-    RegistryItemType.CONNECTOR: ExtensionType.CONNECTOR_PROVIDER,
+    RegistryItemType.TOOL: "capability_provider",
+    RegistryItemType.CONNECTOR: "connector_provider",
 }
 
 
@@ -178,10 +177,12 @@ def _validate_expected_extension(
     if expected_extension is None:
         return
     manifest = installer.validated_manifest(item, artifact)
-    if not any(extension.extension_type is expected_extension for extension in manifest.extensions):
+    if not any(
+        extension.extension_type.value == expected_extension for extension in manifest.extensions
+    ):
         raise RegistryPluginReconciliationError(
             f"persisted Registry {item.kind} {item.item_id!r} no longer declares "
-            f"{expected_extension.value}"
+            f"{expected_extension}"
         )
 
 
