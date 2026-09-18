@@ -186,6 +186,12 @@ def _item_resource(
         "integrity": _integrity_resource(item),
         "installed": installation is not None,
         "installed_version": installation.current.version if installation else None,
+        "installed_source_registry": (
+            installation.current.source_registry if installation else None
+        ),
+        "installation_source_matches": (
+            installation.current.source_registry == item.source_registry if installation else None
+        ),
         "pinned_version": installation.pinned_version if installation else None,
         "update_available": update_available,
         "installation": _installation_resource(installation) if installation else None,
