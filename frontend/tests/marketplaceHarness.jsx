@@ -39,6 +39,9 @@ function item({
   manifest = null,
   missingHandler = false,
   partialMetadata = false,
+  publisher = "example",
+  tags = [],
+  categories = [],
   sourceRegistry = "local",
   installedSourceRegistry = installed ? sourceRegistry : null,
   maturity = "stable",
@@ -57,7 +60,7 @@ function item({
     name,
     description,
     version,
-    publisher: "example",
+    publisher,
     source_registry: sourceRegistry,
     source: {
       registry: sourceRegistry,
@@ -91,8 +94,8 @@ function item({
     required_plugins: [],
     required_connectors: [],
     required_models: [],
-    tags: [],
-    categories: [],
+    tags,
+    categories,
     trust_status: "reviewed",
     trust: "reviewed",
     maturity,
@@ -164,6 +167,9 @@ const catalog = [
     kind: "tool",
     name: "ProjectAtlas",
     description: "Repository intelligence tool",
+    publisher: "ScoreSymphony",
+    tags: ["repository", "analysis"],
+    categories: ["developer-tools"],
   }),
   item({
     id: "code-review-skill",
@@ -542,6 +548,9 @@ const fetchImpl = async (input, init = {}) => {
     const installed = parsed.searchParams.get("filter[installed]");
     const compatible = parsed.searchParams.get("filter[compatible]");
     const sourceRegistry = parsed.searchParams.get("filter[source]");
+    const tag = parsed.searchParams.get("filter[tag]");
+    const category = parsed.searchParams.get("filter[category]");
+    const publisher = parsed.searchParams.get("filter[publisher]");
     const maturity = parsed.searchParams.get("filter[maturity]");
     const deprecated = parsed.searchParams.get("filter[deprecated]");
     const yanked = parsed.searchParams.get("filter[yanked]");
@@ -565,6 +574,9 @@ const fetchImpl = async (input, init = {}) => {
       items = items.filter((entry) => entry.compatibility.platform_compatible === false);
     }
     if (sourceRegistry) items = items.filter((entry) => entry.source_registry === sourceRegistry);
+    if (tag) items = items.filter((entry) => entry.tags.includes(tag));
+    if (category) items = items.filter((entry) => entry.categories.includes(category));
+    if (publisher) items = items.filter((entry) => entry.publisher === publisher);
     if (maturity) items = items.filter((entry) => entry.maturity === maturity);
     if (deprecated === "true") items = items.filter((entry) => entry.deprecated);
     if (deprecated === "false") items = items.filter((entry) => !entry.deprecated);
