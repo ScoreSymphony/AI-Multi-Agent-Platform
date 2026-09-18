@@ -366,7 +366,9 @@ class MarketplaceKindResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(self._resource(descriptor) for descriptor in self.distribution.kind_descriptors())
+        return tuple(
+            self._resource(descriptor) for descriptor in self.distribution.kind_descriptors()
+        )
 
     async def get_resource(
         self,
