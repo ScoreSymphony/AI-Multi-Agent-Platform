@@ -206,7 +206,10 @@ def _registry_plugin_runtime(deployment: SingleNodeDeployment) -> PluginRegistry
             ExtensionType.CONNECTOR_PROVIDER: frozenset({"1.0"}),
         },
         binders={
-            ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(deployment.orchestrators),
+            ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(
+                deployment.orchestrators,
+                agent_mappers=deployment.agent_orchestrator_mappers,
+            ),
             ExtensionType.EXECUTOR: ExecutorRegistryBinder(deployment.executors),
             ExtensionType.MODEL_PROVIDER: ModelProviderRegistryBinder(deployment.models),
             ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(deployment.capabilities),
