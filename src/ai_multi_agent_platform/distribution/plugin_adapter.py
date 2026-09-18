@@ -27,7 +27,9 @@ class PluginRegistryArtifactInstaller:
     def __init__(self, registry: PluginRegistry) -> None:
         self._registry = registry
 
-    async def install_verified_plugin(self, item: RegistryItem, artifact: bytes) -> object:
+    def validated_manifest(self, item: RegistryItem, artifact: bytes) -> PluginManifest:
+        """Validate a Registry artifact against the canonical #20 manifest contract."""
+
         try:
             document = json.loads(artifact.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -56,6 +58,10 @@ class PluginRegistryArtifactInstaller:
                 ErrorCode.CONFLICT,
                 "registry license does not match plugin manifest provenance license",
             )
+        return manifest
+
+    async def install_verified_plugin(self, item: RegistryItem, artifact: bytes) -> object:
+        manifest = self.validated_manifest(item, artifact)
         install_source = f"registry:{item.source.repository}@{item.version}"
         try:
             current = self._registry.get(manifest.plugin_id)
