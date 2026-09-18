@@ -267,6 +267,30 @@ class RegistryResourceService:
             DistributionRoute.PLUGIN,
         }:
             return None
+        descriptor = self.distribution.kind_descriptor(item)
+        supported_operations = (
+            [
+                operation
+                for operation, supported in (
+                    ("install", descriptor.supports_install),
+                    ("update", descriptor.supports_update),
+                    ("uninstall", descriptor.supports_uninstall),
+                )
+                if supported
+            ]
+            if descriptor is not None
+            else []
+        )
+        handler_available = self.distribution.has_kind_handler(item)
+        if not handler_available:
+            return {
+                "handler_available": False,
+                "supported_operations": _json_strings(supported_operations),
+                "requirements": None,
+                "details": None,
+                "status": None,
+                "status_version": None,
+            }
         try:
             requirements = self.distribution.inspect_requirements(item)
             status_item = self._installed_status_item(item, installation)
@@ -285,22 +309,8 @@ class RegistryResourceService:
                 "marketplace owner detail provider failed",
                 details={"marketplace_reason": "owner_failure", "kind": item.kind},
             ) from exc
-        descriptor = self.distribution.kind_descriptor(item)
-        supported_operations = (
-            [
-                operation
-                for operation, supported in (
-                    ("install", descriptor.supports_install),
-                    ("update", descriptor.supports_update),
-                    ("uninstall", descriptor.supports_uninstall),
-                )
-                if supported
-            ]
-            if descriptor is not None
-            else []
-        )
         return {
-            "handler_available": self.distribution.has_kind_handler(item),
+            "handler_available": True,
             "supported_operations": _json_strings(supported_operations),
             "requirements": json_value(requirements) if requirements is not None else None,
             "details": json_value(details) if details is not None else None,
