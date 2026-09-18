@@ -20,7 +20,7 @@ from .kinds import (
     MarketplaceKindRegistry,
     marketplace_kind_registry_with_builtins,
 )
-from .models import DistributionRoute
+from .models import DistributionRoute, RegistryItemType
 from .provider import (
     RegistryItemNotFoundError,
     RegistryProvider,
@@ -66,6 +66,7 @@ class DistributionPreview:
 class DistributionUninstallPreview:
     provider_id: str
     item: RegistryItem
+    route: DistributionRoute
     installation: RegistryInstallation
     findings: tuple[ValidationFinding, ...]
     activation_allowed: bool
@@ -127,10 +128,17 @@ class DistributionService:
             return True
         raise ValueError(f"unknown Marketplace operation: {operation}")
 
+    def route_for(self, item: RegistryItem) -> DistributionRoute:
+        descriptor = self.kind_descriptor(item)
+        if descriptor is not None and not isinstance(item.item_type, RegistryItemType):
+            return descriptor.default_route
+        return item.route
+
     def route_available(self, item: RegistryItem) -> bool:
-        if item.route is DistributionRoute.KIND_HANDLER:
+        route = self.route_for(item)
+        if route is DistributionRoute.KIND_HANDLER:
             return self.kind_descriptor(item) is not None and self.has_kind_handler(item)
-        if item.route in {DistributionRoute.PLUGIN, DistributionRoute.PORTABLE_IMPORT}:
+        if route in {DistributionRoute.PLUGIN, DistributionRoute.PORTABLE_IMPORT}:
             return self._router is not None
         return False
 
@@ -302,13 +310,14 @@ class DistributionService:
             installation=installation,
             validation_findings=base_findings,
         )
+        route = self.route_for(item)
         handler_available = (
-            item.route is not DistributionRoute.KIND_HANDLER
+            route is not DistributionRoute.KIND_HANDLER
             or self._kind_handlers.get(item.item_type) is not None
         )
         operation = self._activation_operation(item)
         operation_supported = (
-            item.route is not DistributionRoute.KIND_HANDLER
+            route is not DistributionRoute.KIND_HANDLER
             or operation == "status"
             or self.supports_kind_operation(item, operation)
         )
@@ -324,7 +333,7 @@ class DistributionService:
                 ),
             )
         if (
-            item.route is DistributionRoute.KIND_HANDLER
+            route is DistributionRoute.KIND_HANDLER
             and handler_available
             and not operation_supported
         ):
@@ -341,10 +350,10 @@ class DistributionService:
         return DistributionPreview(
             provider_id=provider.provider_id,
             item=item,
-            route=item.route,
+            route=route,
             findings=findings,
             activation_allowed=(
-                item.route is not DistributionRoute.MANUAL
+                route is not DistributionRoute.MANUAL
                 and handler_available
                 and operation_supported
                 and not has_errors(findings)
@@ -371,7 +380,8 @@ class DistributionService:
             installation,
         )
         findings = dependency_findings(resolved_dependencies)
-        owner_route = item.route in {
+        route = self.route_for(item)
+        owner_route = route in {
             DistributionRoute.KIND_HANDLER,
             DistributionRoute.PLUGIN,
         }
@@ -384,7 +394,7 @@ class DistributionService:
                     "unsupported_operation",
                     FindingSeverity.ERROR,
                     (
-                        f"{item.kind} distribution route {item.route.value!r} "
+                        f"{item.kind} distribution route {route.value!r} "
                         "does not support Marketplace uninstall"
                     ),
                     FindingCategory.COMPATIBILITY,
@@ -420,6 +430,7 @@ class DistributionService:
         return DistributionUninstallPreview(
             provider_id=provider.provider_id,
             item=item,
+            route=route,
             installation=installation,
             findings=findings,
             activation_allowed=not has_errors(findings),
@@ -556,7 +567,8 @@ class DistributionService:
         current = current_preview.item
         handler: MarketplaceKindHandler | None = None
         operation: str | None = None
-        if current.route is DistributionRoute.KIND_HANDLER:
+        route = current_preview.route
+        if route is DistributionRoute.KIND_HANDLER:
             operation = self._activation_operation(current)
             handler = self._require_kind_handler(current, operation=operation)
         if not current_preview.activation_allowed:
@@ -574,7 +586,7 @@ class DistributionService:
         artifact = self._fetch_artifact(provider, current)
         if hashlib.sha256(artifact).hexdigest() != current_preview.artifact_sha256:
             raise RuntimeError("registry artifact changed immediately before activation")
-        if current.route is DistributionRoute.KIND_HANDLER:
+        if route is DistributionRoute.KIND_HANDLER:
             assert handler is not None
             assert operation is not None
             if operation == "install":
@@ -583,9 +595,9 @@ class DistributionService:
                 result = await handler.update(current, artifact)
             else:
                 result = await handler.status(current)
-        elif current.route is DistributionRoute.PLUGIN:
+        elif route is DistributionRoute.PLUGIN:
             result = await self._require_router().install_plugin(current, artifact)
-        elif current.route is DistributionRoute.PORTABLE_IMPORT:
+        elif route is DistributionRoute.PORTABLE_IMPORT:
             result = await self._require_router().import_portable(current, artifact)
         else:
             raise ContractError(
@@ -617,14 +629,15 @@ class DistributionService:
         *,
         operation: str,
     ) -> MarketplaceKindHandler:
-        if item.route not in {
+        route = self.route_for(item)
+        if route not in {
             DistributionRoute.KIND_HANDLER,
             DistributionRoute.PLUGIN,
         }:
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
                 (
-                    f"{item.kind} distribution route {item.route.value!r} "
+                    f"{item.kind} distribution route {route.value!r} "
                     "does not use an owner-domain Marketplace handler"
                 ),
             )
