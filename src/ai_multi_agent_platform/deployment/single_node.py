@@ -22,6 +22,8 @@ from ai_multi_agent_platform.coordination import (
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
+from ai_multi_agent_platform.execution import ExecutorRegistry
+from ai_multi_agent_platform.orchestration import OrchestratorRegistry
 from ai_multi_agent_platform.evaluation import EvaluationService, SqliteEvaluationRepository
 from ai_multi_agent_platform.execution import ExecutorRegistry
 from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
@@ -167,6 +169,8 @@ class SingleNodeDeployment:
     telemetry: Telemetry
     health_provider: AggregatedHealthProvider
     distributed_runtime: DistributedRuntime | None
+    orchestrators: OrchestratorRegistry
+    executors: ExecutorRegistry
     pre_authorization_lifecycle: LifecycleBackend
     lifecycle_binding: StartupLifecycleBinding
     authentication: LocalAuthenticationService
@@ -445,6 +449,8 @@ def _assemble_deployment(
         telemetry=observability.telemetry,
         health_provider=health.provider,
         distributed_runtime=execution.distributed_runtime,
+        orchestrators=execution.orchestrators,
+        executors=execution.executors,
         pre_authorization_lifecycle=execution.pre_authorization_lifecycle,
         lifecycle_binding=execution.lifecycle,
         authentication=security.authentication,
