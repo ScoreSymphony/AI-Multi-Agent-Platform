@@ -76,10 +76,11 @@ class ApplicationRuntimeRegistry:
                 details={"application_id": manifest.application_id, "version": manifest.version},
             )
         if len(candidates) > 1:
+            candidate_values: list[JsonValue] = [runtime_id for runtime_id in candidates]
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "application runtime selection is ambiguous",
-                details={"runtime_ids": list(candidates)},
+                details={"runtime_ids": candidate_values},
             )
         return candidates[0]
 
