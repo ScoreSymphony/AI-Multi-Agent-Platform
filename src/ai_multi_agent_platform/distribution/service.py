@@ -198,34 +198,16 @@ class DistributionService:
                     item.kind,
                 ),
             )
-        if item.route in {DistributionRoute.PLUGIN, DistributionRoute.PORTABLE_IMPORT} and self._router is None:
-            findings = (
-                *findings,
-                ValidationFinding(
-                    "distribution_router_unavailable",
-                    FindingSeverity.ERROR,
-                    "canonical owner-domain distribution router is not configured",
-                    FindingCategory.COMPATIBILITY,
-                    item.item_id,
-                ),
-            )
-        if item.route is DistributionRoute.MANUAL:
-            findings = (
-                *findings,
-                ValidationFinding(
-                    "manual_distribution",
-                    FindingSeverity.ERROR,
-                    "component requires a manual distribution route",
-                    FindingCategory.COMPATIBILITY,
-                    item.item_id,
-                ),
-            )
         return DistributionPreview(
             provider_id=provider.provider_id,
             item=item,
             route=item.route,
             findings=findings,
-            activation_allowed=not has_errors(findings),
+            activation_allowed=(
+                item.route is not DistributionRoute.MANUAL
+                and handler_available
+                and not has_errors(findings)
+            ),
             artifact_sha256=artifact_sha256,
             decision=decision,
         )
