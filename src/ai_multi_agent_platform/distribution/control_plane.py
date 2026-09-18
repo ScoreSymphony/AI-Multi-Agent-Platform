@@ -21,7 +21,7 @@ from .service import (
     DistributionUninstallPreview,
 )
 from .state import RegistryInstallation
-from .validation import ValidationContext
+from .validation import ValidationContext, ValidationFinding
 
 REGISTRY_COLLECTION = "registry-items"
 REGISTRY_PREVIEW_COMMAND = "registry.preview"
@@ -1141,19 +1141,14 @@ def _preview_resource(
     return resource
 
 
-def _finding_resource(finding: object) -> dict[str, JsonValue]:
-    typed = cast(object, finding)
-    details = getattr(typed, "details")
+def _finding_resource(finding: ValidationFinding) -> dict[str, JsonValue]:
     return {
-        "code": str(getattr(typed, "code")),
-        "severity": str(getattr(getattr(typed, "severity"), "value")),
-        "category": str(getattr(getattr(typed, "category"), "value")),
-        "subject": cast(JsonValue, getattr(typed, "subject")),
-        "message": str(getattr(typed, "message")),
-        "details": {
-            str(key): str(value)
-            for key, value in cast(tuple[tuple[str, str], ...], details)
-        },
+        "code": finding.code,
+        "severity": finding.severity.value,
+        "category": finding.category.value,
+        "subject": finding.subject,
+        "message": finding.message,
+        "details": {key: value for key, value in finding.details},
     }
 
 
