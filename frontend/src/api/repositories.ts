@@ -269,7 +269,7 @@ export class RepositoryCollectionClient {
         attach: options.attach ?? false,
         ...approvalPayload(options.approvalId),
       },
-      options.idempotencyKey,
+      options.idempotencyKey ?? crypto.randomUUID(),
     );
   }
 
