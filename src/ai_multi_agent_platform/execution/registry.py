@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+
 from .contracts import Executor
 
 
