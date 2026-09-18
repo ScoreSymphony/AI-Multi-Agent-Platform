@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.plugins import ExtensionType, PluginRegistry
+from ai_multi_agent_platform.plugins import PluginRegistry
+from ai_multi_agent_platform.plugins.models import ExtensionType
 
 from .items import RegistryItem
 from .models import RegistryItemType
