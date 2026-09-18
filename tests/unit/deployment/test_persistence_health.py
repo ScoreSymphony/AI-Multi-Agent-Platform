@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import sqlite3
 from collections import namedtuple
 from pathlib import Path
@@ -57,12 +58,7 @@ def test_persistence_health_fails_closed_when_data_root_disappears(tmp_path: Pat
     async def scenario() -> None:
         config = SingleNodeConfig(data_dir=tmp_path / "data", secure_cookie=False)
         _seed_required_stores(config)
-        for child in tuple(config.data_dir.rglob("*"))[::-1]:
-            if child.is_file():
-                child.unlink()
-            elif child.is_dir():
-                child.rmdir()
-        config.data_dir.rmdir()
+        shutil.rmtree(config.data_dir)
 
         provider = SingleNodePersistenceHealthProvider(config, minimum_free_bytes=0)
 
