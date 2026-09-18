@@ -121,6 +121,10 @@ describe("#17 shell accessibility semantics", () => {
     expect(knowledge).toContain("Checking Knowledge availability");
     expect(knowledge).not.toContain("Source-backed canonical retrieval");
 
+    const files = renderShell("/files");
+    expect(files).toContain("Checking Files &amp; artifacts availability");
+    expect(files).not.toContain("Canonical File metadata");
+
     const importExport = renderShell("/import-export");
     expect(importExport).toContain("Checking Import / Export availability");
     expect(importExport).not.toContain("Export canonical resource");
@@ -148,6 +152,7 @@ describe("#17 shell accessibility semantics", () => {
         "memory",
         "knowledge",
         "knowledge-results",
+        "files",
         ...PORTABILITY_RESOURCES,
       ],
     } as APImanifest;
@@ -160,6 +165,7 @@ describe("#17 shell accessibility semantics", () => {
     expect(manifestResourceState("ready", manifest, "plugins")).toBe("available");
     expect(manifestResourceState("ready", manifest, "plugin-candidates")).toBe("available");
     expect(manifestResourceState("ready", manifest, "memory")).toBe("available");
+    expect(manifestResourceState("ready", manifest, "files")).toBe("available");
     expect(manifestResourceState("ready", manifest, "agent-teams")).toBe("unavailable");
     expect(manifestResourceState("unavailable", null, "agents")).toBe("unavailable");
 
