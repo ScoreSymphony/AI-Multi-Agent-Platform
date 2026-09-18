@@ -1104,4 +1104,3 @@ def test_activation_rechecks_final_handoff_artifact_digest() -> None:
 
     assert provider.fetch_count == 3
     assert router.calls == []
-
