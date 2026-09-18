@@ -20,6 +20,7 @@ from ai_multi_agent_platform.automation import (
     TriggerDelivery,
     TriggerType,
 )
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.deployment.startup_recovery import (
     StartupRecoveryExtensionReport,
     reconcile_single_node_startup,
@@ -321,6 +322,72 @@ def test_auth_session_expiry_and_revocation_survive_sqlite_restart(tmp_path: Pat
     assert restored_expired.active(now=NOW) is False
     assert restored_revoked.revoked_at == revoked.revoked_at
     assert restored_revoked.active(now=NOW) is False
+
+
+
+def test_cleanup_failure_is_machine_readable_and_blocks_readiness(tmp_path: Path) -> None:
+    class FailingAutomation:
+        async def reconcile_startup_deliveries(self) -> Any:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "sensitive backend detail must not become startup authority",
+            )
+
+    class EmptyKernel:
+        async def recover_all(self) -> tuple[object, ...]:
+            return ()
+
+    extension = SingleNodeTransientStateRecoveryExtension(
+        automation=cast(Any, FailingAutomation()),
+        authentication_sessions={},
+        clock=lambda: NOW,
+    )
+    result = asyncio.run(
+        reconcile_single_node_startup(
+            data_dir=tmp_path,
+            kernel=cast(Any, EmptyKernel()),
+            extensions=(extension,),
+        )
+    )
+
+    payload = json.loads(result.report_path.read_text(encoding="utf-8"))
+    extension_payload = payload["extensions"][0]
+    assert result.ready_for_service is False
+    assert extension_payload["ready_for_service"] is False
+    assert extension_payload["failure_count"] == 1
+    assert extension_payload["failures"] == [
+        {
+            "state_class": "automation_delivery",
+            "disposition": "blocked_reconciliation_error",
+            "error_code": ErrorCode.BACKEND_ERROR.value,
+        }
+    ]
+    assert "sensitive backend detail" not in json.dumps(payload)
+    assert extension_payload["evidence"][0]["disposition"] == "blocked"
+    assert extension_payload["evidence"][0]["duration_ms"] >= 0
+
+
+def test_unexpected_cleanup_failure_also_fails_closed_without_exception_details() -> None:
+    class FailingAutomation:
+        async def reconcile_startup_deliveries(self) -> Any:
+            raise RuntimeError("do-not-leak-this-detail")
+
+    extension = SingleNodeTransientStateRecoveryExtension(
+        automation=cast(Any, FailingAutomation()),
+        authentication_sessions={},
+        clock=lambda: NOW,
+    )
+    report = asyncio.run(extension.reconcile_startup())
+
+    assert report.ready_for_service is False
+    assert report.failures == (
+        {
+            "state_class": "automation_delivery",
+            "disposition": "blocked_unexpected_reconciliation_error",
+            "error_code": "unexpected_reconciliation_error",
+        },
+    )
+    assert "do-not-leak-this-detail" not in repr(report)
 
 
 def test_startup_report_persists_extension_evidence(
