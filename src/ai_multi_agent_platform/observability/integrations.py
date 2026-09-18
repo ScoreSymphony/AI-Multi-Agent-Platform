@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, replace
 from hashlib import sha256
+from collections.abc import Callable
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts import HealthStatus, ProviderContract, ProviderDescriptor
@@ -94,9 +95,11 @@ class AggregatedHealthProvider(ProviderContract):
         dependencies: tuple[ProviderHealthDependency, ...],
         *,
         provider_id: str = "platform-observability-health",
+        draining: Callable[[], bool] | None = None,
     ) -> None:
         self._dependencies = dependencies
         self._provider_id = provider_id
+        self._draining = draining or (lambda: False)
         self._status = HealthStatus.UNKNOWN
         self._service_health = ServiceHealth(alive=True, readiness=ReadinessState.READY)
 
@@ -126,7 +129,10 @@ class AggregatedHealthProvider(ProviderContract):
                     detail=status.value,
                 )
             )
-        self._service_health = aggregate_health(tuple(dependencies))
+        self._service_health = aggregate_health(
+            tuple(dependencies),
+            draining=self._draining(),
+        )
         if not self._service_health.ready:
             self._status = HealthStatus.UNAVAILABLE
         elif self._service_health.readiness is ReadinessState.DEGRADED:
