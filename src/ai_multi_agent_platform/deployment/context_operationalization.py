@@ -100,6 +100,7 @@ from ai_multi_agent_platform.skills import (
 from .context_verification import CanonicalVerificationContextClassificationResolver
 from .egress_bindings import EgressDeploymentBindings
 from .external_effect_recovery import ExternalEffectStartupRecovery
+from .startup_recovery import StartupRecoveryExtension
 
 if TYPE_CHECKING:
     from ai_multi_agent_platform.deployment.single_node import (
@@ -236,6 +237,7 @@ class SingleNodeContextComposition:
     research: ResearchService
     reconciliation: ContextBindingReconciliationReport
     external_effect_recovery: ExternalEffectRecoveryCoordinator | None = None
+    startup_recovery_extensions: tuple[StartupRecoveryExtension, ...] = ()
 
 
 def install_single_node_context(
@@ -438,6 +440,7 @@ def install_single_node_context(
         )
 
     external_effect_recovery: ExternalEffectRecoveryCoordinator | None = None
+    startup_recovery_extensions: tuple[StartupRecoveryExtension, ...] = ()
     if egress is not None:
         external_effect_recovery = ExternalEffectRecoveryCoordinator(
             SQLiteExternalEffectRecoveryRepository(
@@ -456,8 +459,7 @@ def install_single_node_context(
             base.control_plane,
             external_effect_recovery,
         )
-        base.startup_recovery_extensions = (
-            *base.startup_recovery_extensions,
+        startup_recovery_extensions = (
             ExternalEffectStartupRecovery(external_effect_recovery),
         )
 
@@ -526,6 +528,7 @@ def install_single_node_context(
         research=research,
         reconciliation=reconciliation,
         external_effect_recovery=external_effect_recovery,
+        startup_recovery_extensions=startup_recovery_extensions,
     )
 
 
