@@ -1,4 +1,4 @@
-"""Optional registry and distribution contracts for issue #81."""
+"""Optional registry and Marketplace distribution contracts."""
 
 from .canonical_router import (
     CanonicalDistributionRouter,
@@ -24,16 +24,28 @@ from .discovery import (
     curate_discovered_candidate,
 )
 from .filesystem import FilesystemRegistryProvider
+from .handlers import MarketplaceKindHandler, MarketplaceKindHandlerRegistry
 from .items import InstalledRegistryItem, RegistryItem, RegistryQuery
+from .kinds import (
+    BUILTIN_MARKETPLACE_KINDS,
+    MarketplaceKindDescriptor,
+    MarketplaceKindRegistry,
+    builtin_marketplace_kind,
+    marketplace_kind_registry_with_builtins,
+)
 from .local import LocalRegistryProvider
 from .models import (
     ArtifactIntegrity,
     DistributionRoute,
     RegistryDependency,
+    RegistryItemKind,
     RegistryItemType,
+    RegistryManifestReference,
     RegistrySource,
     TrustStatus,
     VersionRange,
+    parse_registry_item_kind,
+    registry_item_kind_value,
 )
 from .plugin_adapter import PluginRegistryArtifactInstaller
 from .provider import RegistryItemNotFoundError, RegistryProvider, RegistryUnavailableError
@@ -76,6 +88,7 @@ from .validation import (
 
 __all__ = [
     "ArtifactIntegrity",
+    "BUILTIN_MARKETPLACE_KINDS",
     "CanonicalDistributionRouter",
     "CuratedCandidateReview",
     "DiscoveryCandidate",
@@ -89,6 +102,10 @@ __all__ = [
     "InstalledRegistryItem",
     "JsonRegistryInstallationStore",
     "LocalRegistryProvider",
+    "MarketplaceKindDescriptor",
+    "MarketplaceKindHandler",
+    "MarketplaceKindHandlerRegistry",
+    "MarketplaceKindRegistry",
     "PlatformRegistryValidationContextResolver",
     "PluginArtifactInstaller",
     "PluginRegistryArtifactInstaller",
@@ -106,8 +123,10 @@ __all__ = [
     "RegistryInstallationSnapshot",
     "RegistryInstallationStore",
     "RegistryItem",
+    "RegistryItemKind",
     "RegistryItemNotFoundError",
     "RegistryItemType",
+    "RegistryManifestReference",
     "RegistryPluginReconciliationError",
     "RegistryProvider",
     "RegistryQuery",
@@ -127,14 +146,18 @@ __all__ = [
     "ValidationContext",
     "ValidationFinding",
     "VersionRange",
+    "builtin_marketplace_kind",
     "curate_discovered_candidate",
     "derive_technical_metadata",
     "has_errors",
     "is_technical_component",
     "load_hmac_signature_keys",
+    "marketplace_kind_registry_with_builtins",
+    "parse_registry_item_kind",
     "reconcile_registry_plugins",
     "register_distribution_control_plane",
     "registry_item_from_document",
+    "registry_item_kind_value",
     "validate_item",
     "validate_registry_item_document",
 ]

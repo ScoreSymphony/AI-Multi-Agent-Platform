@@ -1,4 +1,4 @@
-"""Reference local/offline registry provider for issue #81."""
+"""Reference local/offline registry provider."""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ class LocalRegistryProvider:
             return False
         if query.technical_only and not set(item.categories).intersection(TECHNICAL_CATEGORIES):
             return False
-        if query.item_types and item.item_type not in query.item_types:
+        if query.item_kinds and item.kind not in query.item_kinds:
             return False
         if query.tags and not query.tags.issubset(item.tags):
             return False
@@ -96,6 +96,7 @@ class LocalRegistryProvider:
             haystack = " ".join(
                 (
                     item.item_id,
+                    item.kind,
                     item.name,
                     item.description,
                     item.publisher,
