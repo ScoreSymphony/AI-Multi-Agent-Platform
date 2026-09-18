@@ -372,7 +372,7 @@ async def test_hermes_marketplace_kind_uses_plugin_lifecycle_and_orchestrator_re
     base = reference_manifest()
     manifest = replace(
         base,
-        plugin_id=HERMES_ADAPTER_ID,
+        plugin_id="hermes.orchestrator-plugin",
         name="Hermes",
         description="Replaceable Hermes orchestrator adapter.",
         extensions=(
@@ -419,19 +419,19 @@ async def test_hermes_marketplace_kind_uses_plugin_lifecycle_and_orchestrator_re
     assert installed.state.value == "installed"
     assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
 
-    plugin_registry.configure(HERMES_ADAPTER_ID, {})
+    plugin_registry.configure(manifest.plugin_id, {})
     hermes = HermesOrchestrator(
         HermesAdapterConfig(enabled=True),
         secret_resolver=lambda _: None,
     )
     runtime = _HermesPluginRuntime(manifest, hermes)
-    enabled = await plugin_registry.enable(HERMES_ADAPTER_ID, runtime)
+    enabled = await plugin_registry.enable(manifest.plugin_id, runtime)
 
     assert enabled.state.value == "enabled"
     assert orchestrators.select(OrchestratorSelection(HERMES_ADAPTER_ID)) is hermes
     assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
 
-    await plugin_registry.disable(HERMES_ADAPTER_ID)
+    await plugin_registry.disable(manifest.plugin_id)
     assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
     assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
     assert runtime.stopped is True
@@ -459,7 +459,7 @@ async def test_hermes_full_marketplace_flow_preserves_replaceable_orchestrator_o
     base = reference_manifest()
     manifest = replace(
         base,
-        plugin_id=HERMES_ADAPTER_ID,
+        plugin_id="hermes.orchestrator-plugin",
         name="Hermes",
         description="Replaceable Hermes orchestrator adapter.",
         extensions=(
@@ -544,20 +544,20 @@ async def test_hermes_full_marketplace_flow_preserves_replaceable_orchestrator_o
         orchestrators.select(OrchestratorSelection(reference.descriptor.provider_id)) is reference
     )
 
-    plugin_registry.configure(HERMES_ADAPTER_ID, {})
+    plugin_registry.configure(manifest.plugin_id, {})
     hermes = HermesOrchestrator(
         HermesAdapterConfig(enabled=True),
         secret_resolver=lambda _: None,
     )
     runtime = _HermesPluginRuntime(manifest, hermes)
-    await plugin_registry.enable(HERMES_ADAPTER_ID, runtime)
+    await plugin_registry.enable(manifest.plugin_id, runtime)
 
     assert orchestrators.select(OrchestratorSelection(HERMES_ADAPTER_ID)) is hermes
     assert (
         orchestrators.select(OrchestratorSelection(reference.descriptor.provider_id)) is reference
     )
 
-    await plugin_registry.disable(HERMES_ADAPTER_ID)
+    await plugin_registry.disable(manifest.plugin_id)
     assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
     assert (
         orchestrators.select(OrchestratorSelection(reference.descriptor.provider_id)) is reference
@@ -566,7 +566,7 @@ async def test_hermes_full_marketplace_flow_preserves_replaceable_orchestrator_o
     await service.uninstall(item.item_id, authorized=True)
     assert service.installed(item.item_id) is None
     with pytest.raises(ContractError) as removed:
-        plugin_registry.get(HERMES_ADAPTER_ID)
+        plugin_registry.get(manifest.plugin_id)
     assert removed.value.code is ErrorCode.NOT_FOUND
 
 
