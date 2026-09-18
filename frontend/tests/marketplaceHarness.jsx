@@ -60,6 +60,22 @@ function item({
     provenance: "browser regression fixture",
     minimum_platform_version: null,
     maximum_platform_version: null,
+    install_order: [
+      ...found.dependencies
+        .filter((dependency) => dependency.status !== "satisfied" && !dependency.optional)
+        .map((dependency) => ({
+          item_id: dependency.item_id,
+          item_kind: dependency.kind ?? "unknown",
+          version: dependency.installed_version ?? dependency.minimum_version ?? "1.0.0",
+          source_registry: "local",
+        })),
+      {
+        item_id: found.item_id,
+        item_kind: found.item_type,
+        version: found.version,
+        source_registry: "local",
+      },
+    ],
     compatibility: {
       minimum_platform_version: null,
       maximum_platform_version: null,
@@ -262,6 +278,29 @@ function listProjection(entry) {
   };
 }
 
+function marketplaceKindResources() {
+  const byKind = new Map();
+  for (const entry of catalog) {
+    if (byKind.has(entry.item_type)) continue;
+    byKind.set(entry.item_type, {
+      id: entry.item_type,
+      type: "marketplace-kind",
+      kind: entry.item_type,
+      display_name: entry.item_type
+        .split("_")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" "),
+      default_route: entry.route,
+      supports_install: entry.route !== "manual",
+      supports_update:
+        entry.item_type !== "application" && entry.route !== "manual",
+      supports_uninstall:
+        entry.route === "kind_handler" || entry.route === "plugin",
+    });
+  }
+  return [...byKind.values()].sort((left, right) => left.kind.localeCompare(right.kind));
+}
+
 function pageFor(items, cursor) {
   const pageSize = 5;
   const projected = items.map(listProjection);
@@ -413,6 +452,19 @@ const fetchImpl = async (input, init = {}) => {
   const parsed = new URL(url, window.location.origin);
   const body = init.body ? JSON.parse(String(init.body)) : null;
   calls.push({ url, method: init.method ?? "GET", body });
+
+  if (parsed.pathname === "/api/v1/marketplace-kinds") {
+    const items = marketplaceKindResources();
+    return new Response(
+      JSON.stringify({
+        items,
+        next_cursor: null,
+        total: items.length,
+        limit: 200,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }
 
   if (parsed.pathname === "/api/v1/registry-items") {
     if (providerMode === "disabled") {
