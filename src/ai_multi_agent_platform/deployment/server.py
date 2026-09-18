@@ -447,12 +447,8 @@ async def _run_startup_recovery(
         ),
     }
     context = TelemetryContext()
-    severity = (
-        TelemetrySeverity.INFO if recovery.ready_for_service else TelemetrySeverity.WARNING
-    )
-    outcome = (
-        TelemetryOutcome.SUCCEEDED if recovery.ready_for_service else TelemetryOutcome.UNKNOWN
-    )
+    severity = TelemetrySeverity.INFO if recovery.ready_for_service else TelemetrySeverity.WARNING
+    outcome = TelemetryOutcome.SUCCEEDED if recovery.ready_for_service else TelemetryOutcome.UNKNOWN
     deployment.telemetry.log(
         severity=severity,
         component=FailureComponent.INFRASTRUCTURE_UNKNOWN,
