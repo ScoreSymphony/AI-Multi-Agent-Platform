@@ -21,6 +21,7 @@ from ai_multi_agent_platform.distribution import (
     JsonRegistryInstallationStore,
     LocalRegistryProvider,
     MarketplaceKindHandlerRegistry,
+    MultiRegistryProvider,
     RegistryCommandHandlers,
     RegistryDependency,
     RegistryItem,
@@ -575,6 +576,9 @@ def test_marketplace_preview_reflects_actual_route_availability() -> None:
     assert registry_preview["item"]["route_available"] is None  # type: ignore[index]
     assert marketplace_preview["activation_allowed"] is False
     assert marketplace_preview["item"]["route_available"] is False  # type: ignore[index]
+    assert "decision" not in registry_preview
+    assert marketplace_preview["decision"]["operation"] == "install"  # type: ignore[index]
+    assert marketplace_preview["decision"]["compatibility"]["compatible"] is True  # type: ignore[index]
 
 
 def test_handler_unavailable_fails_with_typed_marketplace_error(tmp_path: Path) -> None:
@@ -780,3 +784,148 @@ def test_marketplace_item_not_found_is_canonical_not_found() -> None:
         asyncio.run(service.get_resource(_request(), "missing.item"))
 
     assert error.value.code is ErrorCode.NOT_FOUND
+
+
+def test_marketplace_uninstall_enforces_persisted_reverse_dependency_decision(
+    tmp_path: Path,
+) -> None:
+    target = _application("example.target", "1.0.0")
+    dependent = _application(
+        "example.dependent",
+        "1.0.0",
+        dependencies=(RegistryDependency(target.item_id),),
+    )
+    artifacts = {
+        (target.item_id, target.version): b"target",
+        (dependent.item_id, dependent.version): b"dependent",
+    }
+    store = JsonRegistryInstallationStore(tmp_path / "reverse-dependencies.json")
+    store.record(target, provider_id="local")
+    store.record(dependent, provider_id="local")
+    handler = RecordingHandler()
+    commands = RegistryCommandHandlers(
+        DistributionService(
+            LocalRegistryProvider((target, dependent), artifacts),
+            installations=store,
+            kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+        ),
+        StaticValidationContext(_context()),
+    )
+
+    with pytest.raises(ContractError) as error:
+        asyncio.run(commands.marketplace_uninstall(_request(), target.item_id, {}))
+
+    assert error.value.code is ErrorCode.CONFLICT
+    assert error.value.details["marketplace_reason"] == "dependency_block"
+    assert store.get(target.item_id) is not None
+    assert handler.calls == []
+
+
+def test_marketplace_multi_source_discovery_detail_and_preview_are_source_qualified(
+    tmp_path: Path,
+) -> None:
+    source_a_item = _application("example.shared", "1.0.0")
+    source_b_item = replace(
+        source_a_item,
+        publisher="publisher-b",
+        source=RegistrySource(
+            "https://example.invalid/source-b",
+            "example.shared@1.0.0",
+            revision="source-b-v1",
+        ),
+    )
+    source_a = LocalRegistryProvider(
+        (source_a_item,),
+        {(source_a_item.item_id, source_a_item.version): b"source-a"},
+        provider_id="source-a",
+    )
+    source_b = LocalRegistryProvider(
+        (source_b_item,),
+        {(source_b_item.item_id, source_b_item.version): b"source-b"},
+        provider_id="source-b",
+    )
+    distribution = DistributionService(
+        MultiRegistryProvider((source_a, source_b)),
+        installations=JsonRegistryInstallationStore(tmp_path / "multi-source.json"),
+        kind_handlers=MarketplaceKindHandlerRegistry((RecordingHandler(),)),
+    )
+    service = RegistryResourceService(distribution, StaticValidationContext(_context()))
+    commands = RegistryCommandHandlers(distribution, StaticValidationContext(_context()))
+
+    source_b_results = asyncio.run(
+        service.list_resources(
+            _request(),
+            PageQuery(filters={"source": "source-b"}),
+        )
+    )
+    assert len(source_b_results) == 1
+    assert source_b_results[0]["source_registry"] == "source-b"
+    assert (
+        source_b_results[0]["qualified_id"]
+        == "source-b::example.shared@1.0.0"
+    )
+
+    detail = asyncio.run(
+        service.get_resource(
+            _request(),
+            "source-b::example.shared@1.0.0",
+        )
+    )
+    assert detail["publisher"] == "publisher-b"
+    assert detail["source_registry"] == "source-b"
+
+    with pytest.raises(ContractError) as ambiguous:
+        asyncio.run(service.get_resource(_request(), "example.shared@1.0.0"))
+    assert ambiguous.value.code is ErrorCode.CONFLICT
+    assert ambiguous.value.details["marketplace_reason"] == "source_ambiguous"
+
+    preview = asyncio.run(
+        commands.marketplace_preview(
+            _request(),
+            source_b_item.item_id,
+            {
+                "version": source_b_item.version,
+                "source_registry": "source-b",
+            },
+        )
+    )
+    assert preview["decision"]["provenance_diff"]["candidate_source_registry"] == "source-b"  # type: ignore[index]
+    assert preview["item"]["source_registry"] == "source-b"  # type: ignore[index]
+
+
+def test_marketplace_preview_serializes_structured_decision_findings(
+    tmp_path: Path,
+) -> None:
+    item = _application(
+        "example.decision",
+        "1.0.0",
+        dependencies=(RegistryDependency("example.missing"),),
+        requested_permissions=frozenset({"filesystem.write"}),
+    )
+    commands = RegistryCommandHandlers(
+        DistributionService(
+            LocalRegistryProvider(
+                (item,),
+                {(item.item_id, item.version): b"component"},
+            ),
+            installations=JsonRegistryInstallationStore(tmp_path / "decision.json"),
+            kind_handlers=MarketplaceKindHandlerRegistry((RecordingHandler(),)),
+        ),
+        StaticValidationContext(_context()),
+    )
+
+    preview = asyncio.run(
+        commands.marketplace_preview(
+            _request(),
+            item.item_id,
+            {"version": item.version},
+        )
+    )
+
+    decision = preview["decision"]
+    assert decision["operation"] == "install"  # type: ignore[index]
+    assert decision["dependency_blocked"] is True  # type: ignore[index]
+    assert decision["dependencies"][0]["status"] == "missing"  # type: ignore[index]
+    assert decision["permission_diff"]["added"] == ["filesystem.write"]  # type: ignore[index]
+    findings = preview["findings"]
+    assert {finding["category"] for finding in findings} >= {"dependency", "permission"}  # type: ignore[index]
