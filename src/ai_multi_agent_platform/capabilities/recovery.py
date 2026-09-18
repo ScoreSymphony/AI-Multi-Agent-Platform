@@ -95,6 +95,38 @@ class ExternalEffectReconciler(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class ExternalEffectRecoveryEvent:
+    """Content-free recovery transition suitable for #16 telemetry/timeline export."""
+
+    event_name: str
+    effect_id: str
+    invocation_id: str
+    task_id: str
+    run_id: str
+    capability_id: str
+    provider_id: str
+    status: ExternalEffectRecoveryStatus
+    disposition: ExternalEffectRecoveryDisposition
+    reason: str
+    occurred_at: datetime
+
+
+class ExternalEffectRecoveryEventObserver(Protocol):
+    async def record_external_effect_recovery(
+        self,
+        event: ExternalEffectRecoveryEvent,
+    ) -> None: ...
+
+
+class NullExternalEffectRecoveryEventObserver:
+    async def record_external_effect_recovery(
+        self,
+        event: ExternalEffectRecoveryEvent,
+    ) -> None:
+        del event
+
+
+@dataclass(frozen=True, slots=True)
 class ExternalEffectRecoveryRecord:
     effect_id: str
     invocation_id: str
@@ -343,11 +375,38 @@ class SQLiteExternalEffectRecoveryRepository:
 class ExternalEffectRecoveryCoordinator:
     """Classify ambiguous outcomes without becoming a second execution/retry engine."""
 
-    def __init__(self, repository: ExternalEffectRecoveryRepository) -> None:
+    def __init__(
+        self,
+        repository: ExternalEffectRecoveryRepository,
+        *,
+        event_observer: ExternalEffectRecoveryEventObserver | None = None,
+    ) -> None:
         self.repository = repository
+        self._event_observer = event_observer or NullExternalEffectRecoveryEventObserver()
         self._pending: dict[str, _PendingExternalAttempt] = {}
         self._reconcilers: dict[str, ExternalEffectReconciler] = {}
         self._lock = asyncio.Lock()
+
+    async def _emit(
+        self,
+        event_name: str,
+        record: ExternalEffectRecoveryRecord,
+    ) -> None:
+        await self._event_observer.record_external_effect_recovery(
+            ExternalEffectRecoveryEvent(
+                event_name=event_name,
+                effect_id=record.effect_id,
+                invocation_id=record.invocation_id,
+                task_id=record.task_id,
+                run_id=record.run_id,
+                capability_id=record.capability_id,
+                provider_id=record.provider_id,
+                status=record.status,
+                disposition=record.disposition,
+                reason=record.reason,
+                occurred_at=record.updated_at,
+            )
+        )
 
     def register_reconciler(
         self,
