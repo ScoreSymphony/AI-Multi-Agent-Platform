@@ -133,6 +133,9 @@ class AggregatedHealthProvider(ProviderContract):
         self._failure_counts: dict[str, int] = {}
         self._recovery_counts: dict[str, int] = {}
         self._probe_lock = asyncio.Lock()
+        self._operational_state: ReadinessState | None = None
+        self._operational_detail: str | None = None
+        self._operational_action: str | None = None
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -148,11 +151,41 @@ class AggregatedHealthProvider(ProviderContract):
     def service_health(self) -> ServiceHealth:
         return self._service_health
 
+    def set_operational_state(
+        self,
+        state: ReadinessState | None,
+        *,
+        detail: str | None = None,
+        operator_action: str | None = None,
+    ) -> None:
+        """Project platform-owned recovery/drain state without taking lifecycle ownership."""
+
+        if state not in {
+            None,
+            ReadinessState.RECONCILING,
+            ReadinessState.OPERATOR_INTERVENTION_REQUIRED,
+            ReadinessState.DRAINING,
+        }:
+            raise ValueError("operational state must be reconciling, operator-required, draining or None")
+        self._operational_state = state
+        self._operational_detail = detail
+        self._operational_action = operator_action
+
     async def health(self) -> HealthStatus:
         async with self._probe_lock:
             dependencies: list[DependencyHealth] = []
             for item in self._dependencies:
                 dependencies.append(await self._probe_dependency(item))
+            if self._operational_state is not None:
+                dependencies.append(
+                    DependencyHealth(
+                        name="platform-runtime",
+                        state=self._operational_state,
+                        required=True,
+                        detail=self._operational_detail,
+                        operator_action=self._operational_action,
+                    )
+                )
             self._service_health = aggregate_health(tuple(dependencies))
             if not self._service_health.ready:
                 self._status = HealthStatus.UNAVAILABLE
