@@ -369,10 +369,7 @@ class DistributionService:
         )
         route = self.route_for(item)
         owner_handler = self._kind_handlers.get(item.item_type)
-        handler_available = (
-            route is not DistributionRoute.KIND_HANDLER
-            or owner_handler is not None
-        )
+        handler_available = route is not DistributionRoute.KIND_HANDLER or owner_handler is not None
         findings = (
             *findings,
             *self._owner_candidate_findings(item, artifact),
