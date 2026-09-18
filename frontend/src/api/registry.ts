@@ -6,6 +6,16 @@ import type { JsonValue, ListQuery, Page } from "./types";
 export type KnownRegistryItemType =
   | "agent"
   | "agent_team"
+  | "orchestrator"
+  | "executor"
+  | "model_provider"
+  | "capability_provider"
+  | "memory_provider"
+  | "file_provider"
+  | "knowledge_provider"
+  | "observability_exporter"
+  | "automation_provider"
+  | "evaluator"
   | "tool"
   | "skill"
   | "plugin"
@@ -114,6 +124,7 @@ export interface RegistryKindDescriptor {
   supports_install: boolean;
   supports_update: boolean;
   supports_uninstall: boolean;
+  group?: string | null;
   owner_resource?: string | null;
   management_path?: string | null;
 }
