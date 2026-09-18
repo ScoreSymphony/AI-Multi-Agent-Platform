@@ -704,6 +704,14 @@ function MarketplaceDetail({
       {item.compatibility?.reasons?.length ? (
         <RequirementList title="Compatibility findings" values={item.compatibility.reasons} />
       ) : null}
+      <RequirementList title="Operating systems" values={item.compatibility?.operating_systems ?? []} />
+      <RequirementList title="Architectures" values={item.compatibility?.architectures ?? []} />
+      <RequirementList title="Required runtimes" values={item.compatibility?.required_runtimes ?? []} />
+      <RequirementList title="Missing runtimes" values={item.compatibility?.missing_runtimes ?? []} />
+      <RequirementList title="Missing capabilities" values={item.compatibility?.missing_capabilities ?? []} />
+      <RequirementList title="Missing plugins" values={item.compatibility?.missing_plugins ?? []} />
+      <RequirementList title="Missing connectors" values={item.compatibility?.missing_connectors ?? []} />
+      <RequirementList title="Missing models" values={item.compatibility?.missing_models ?? []} />
       <DependencyList dependencies={item.dependencies} />
       <RequirementList title="Requested permissions" values={item.requested_permissions} />
       <RequirementList title="Required capabilities" values={item.required_capabilities} />
@@ -1027,7 +1035,7 @@ function ProvenanceDiffView({
     changedPair("Package", diff.previous_package_reference, diff.candidate_package_reference),
     changedPair("Revision", diff.previous_revision, diff.candidate_revision),
     changedPair("Artifact SHA-256", diff.previous_artifact_sha256, diff.candidate_artifact_sha256),
-    changedPair("Signature", diff.previous_signature, diff.candidate_signature),
+    diff.signature_changed ? "Signature changed" : null,
     changedPair("Signature key", diff.previous_signature_key_id, diff.candidate_signature_key_id),
     changedPair("Trust", diff.previous_trust_status, diff.candidate_trust_status),
     changedPair("Review reference", diff.previous_review_reference, diff.candidate_review_reference),
@@ -1057,7 +1065,7 @@ function provenanceIntegrityChanges(
   if (!diff?.installed) return [];
   return [
     changedPair("Artifact digest", diff.previous_artifact_sha256, diff.candidate_artifact_sha256),
-    changedPair("Signature", diff.previous_signature, diff.candidate_signature),
+    diff.signature_changed ? "Signature changed" : null,
     changedPair("Signature key", diff.previous_signature_key_id, diff.candidate_signature_key_id),
   ].filter((value): value is string => value !== null);
 }
@@ -1109,7 +1117,9 @@ function DependencyList({ dependencies }: { dependencies: RegistryDependency[] }
       <ul>
         {dependencies.map((dependency, index) => (
           <li key={`${dependency.item_id}:${index}`}>
-            {dependency.kind ? `${humanizeKind(dependency.kind)} · ` : ""}
+            {dependency.item_kind ?? dependency.kind
+              ? `${humanizeKind(dependency.item_kind ?? dependency.kind ?? "")} · `
+              : ""}
             <CanonicalId value={dependency.item_id} /> — {dependency.optional ? "optional" : "required"};
             versions {dependency.minimum_version ?? "any"} – {dependency.maximum_version ?? "any"}
             {dependency.status ? <> · <StatusBadge value={dependency.status} /></> : null}
