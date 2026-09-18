@@ -23,6 +23,7 @@ from .control_plane import (
     register_application_control_plane,
 )
 from .definition import Application
+from .local_host import LocalApplicationHostProfile, detect_local_application_host_profile
 from .local_process_runtime import LocalProcessApplicationRuntime
 from .log_control_plane import (
     APPLICATION_LOG_COLLECTION,
@@ -161,6 +162,7 @@ __all__ = [
     "ApplicationVolumeKind",
     "ApplicationVolumeMount",
     "InMemoryApplicationRepository",
+    "LocalApplicationHostProfile",
     "LocalApplicationWorkspaceBinder",
     "LocalProcessApplicationRuntime",
     "SqliteApplicationAuditStore",
@@ -169,6 +171,7 @@ __all__ = [
     "application_control_plane_module",
     "application_log_control_plane_module",
     "application_manifest_from_document",
+    "detect_local_application_host_profile",
     "application_resource_handler_module",
     "register_application_audit_control_plane",
     "register_application_control_plane",
