@@ -41,79 +41,6 @@ from .marketplace_agent_handlers import (
 from .marketplace_handler_support import _json_object, _requirements
 
 
-_SECRET_SCHEMA_VALUE_KEYS = frozenset({"default", "const", "example", "examples", "enum"})
-
-
-def _sensitive_field_name(name: str) -> bool:
-    probe: JsonValue = {name: "__marketplace_secret_probe__"}
-    return redact_sensitive(probe) != probe
-
-
-def _contains_materialized_secret_schema_value(
-    value: JsonValue,
-    *,
-    sensitive_context: bool = False,
-) -> bool:
-    if isinstance(value, dict):
-        if sensitive_context:
-            for key in _SECRET_SCHEMA_VALUE_KEYS:
-                if key in value and value[key] not in (None, "", [], {}):
-                    return True
-
-        properties = value.get("properties")
-        if isinstance(properties, dict):
-            for property_name, property_schema in properties.items():
-                if not isinstance(property_name, str):
-                    continue
-                if _contains_materialized_secret_schema_value(
-                    property_schema,
-                    sensitive_context=sensitive_context or _sensitive_field_name(property_name),
-                ):
-                    return True
-
-        for key, nested in value.items():
-            if key == "properties":
-                continue
-            if _contains_materialized_secret_schema_value(
-                nested,
-                sensitive_context=sensitive_context,
-            ):
-                return True
-        return False
-
-    if isinstance(value, list):
-        return any(
-            _contains_materialized_secret_schema_value(
-                nested,
-                sensitive_context=sensitive_context,
-            )
-            for nested in value
-        )
-    return False
-
-
-def _reject_embedded_provider_credentials(manifest: PluginManifest) -> None:
-    for extension in manifest.extensions:
-        if extension.extension_type is not ExtensionType.MODEL_PROVIDER:
-            continue
-        metadata = cast(JsonValue, dict(extension.metadata))
-        if redact_sensitive(metadata) != metadata:
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                "Model Provider Marketplace packages must not embed plaintext credentials",
-            )
-
-    schema = cast(JsonValue, dict(manifest.configuration_schema))
-    if _contains_materialized_secret_schema_value(schema):
-        raise ContractError(
-            ErrorCode.INVALID_CONFIGURATION,
-            (
-                "Model Provider Marketplace configuration schema must describe secret fields "
-                "without embedding credential values"
-            ),
-        )
-
-
 class PluginMarketplaceKindHandler:
     """Expose existing Plugin owner operations without replacing the legacy install route."""
 
@@ -216,8 +143,6 @@ class PluginExtensionMarketplaceKindHandler:
                     f"{self._extension_type.value} extension"
                 ),
             )
-        if self._extension_type is ExtensionType.MODEL_PROVIDER:
-            _reject_embedded_provider_credentials(manifest)
         return manifest
 
     def validate_candidate(self, item: RegistryItem, artifact: bytes) -> None:
