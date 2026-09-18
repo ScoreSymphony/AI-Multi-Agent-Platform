@@ -55,7 +55,10 @@ class MarketplaceKindHandlerRegistry:
         normalized = registry_item_kind_value(kind)
         handler = self._handlers.get(normalized)
         if handler is None:
-            raise KeyError(f"marketplace handler for kind {normalized!r} is not registered")
+            raise ContractError(
+                ErrorCode.UNSUPPORTED_CAPABILITY,
+                f"no Marketplace handler registered for kind {normalized!r}",
+            )
         return handler
 
     def kinds(self) -> tuple[str, ...]:
