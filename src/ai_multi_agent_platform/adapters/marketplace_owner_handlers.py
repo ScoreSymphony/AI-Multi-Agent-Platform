@@ -34,7 +34,10 @@ from ai_multi_agent_platform.skills.codec import skill_revision_from_json
 from ai_multi_agent_platform.skills.models import SkillRevision
 from ai_multi_agent_platform.skills.service import SkillService
 
-from .marketplace_agent_handlers import AgentMarketplaceKindHandler, AgentTeamMarketplaceKindHandler
+from .marketplace_agent_handlers import (
+    AgentMarketplaceKindHandler as AgentMarketplaceKindHandler,
+    AgentTeamMarketplaceKindHandler as AgentTeamMarketplaceKindHandler,
+)
 from .marketplace_handler_support import _json_object, _requirements
 
 
