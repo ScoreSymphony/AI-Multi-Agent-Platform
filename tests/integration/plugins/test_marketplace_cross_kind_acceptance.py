@@ -416,5 +416,5 @@ async def test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance(tmp
         final_application_runtimes,
     )
     with pytest.raises(ContractError) as removed_application:
-        await final_handler.status(application)
+        await final_handler.status(replace(application, source_registry="acceptance"))
     assert removed_application.value.code is ErrorCode.NOT_FOUND
