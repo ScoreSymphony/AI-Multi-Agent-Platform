@@ -120,10 +120,7 @@ def _service(
 ) -> DistributionService:
     provider = LocalRegistryProvider(
         tuple(item for item, _artifact in items),
-        {
-            (item.item_id, item.version): artifact
-            for item, artifact in items
-        },
+        {(item.item_id, item.version): artifact for item, artifact in items},
         provider_id=provider_id,
     )
     return DistributionService(
@@ -401,14 +398,12 @@ def test_integrity_and_signature_mismatches_block_preview() -> None:
 
     assert integrity_preview.activation_allowed is False
     assert any(
-        finding.code == "checksum_mismatch"
-        and finding.category is FindingCategory.INTEGRITY
+        finding.code == "checksum_mismatch" and finding.category is FindingCategory.INTEGRITY
         for finding in integrity_preview.findings
     )
     assert signature_preview.activation_allowed is False
     assert any(
-        finding.code == "signature_failure"
-        and finding.category is FindingCategory.INTEGRITY
+        finding.code == "signature_failure" and finding.category is FindingCategory.INTEGRITY
         for finding in signature_preview.findings
     )
 
@@ -450,9 +445,7 @@ def test_source_change_is_explicit_and_requires_review(tmp_path: Path) -> None:
     assert provenance.repository_changed is True
     assert preview.decision.update_state.source_change is True
     assert preview.decision.approval.required is True
-    assert {"source_change", "repository_change"} <= set(
-        preview.decision.approval.reasons
-    )
+    assert {"source_change", "repository_change"} <= set(preview.decision.approval.reasons)
 
 
 def test_publisher_change_is_explicit_and_requires_review(tmp_path: Path) -> None:
@@ -612,11 +605,7 @@ def test_preview_findings_are_structured_and_explainable() -> None:
         _context(),
     )
 
-    finding = next(
-        finding
-        for finding in preview.findings
-        if finding.code == "missing_dependency"
-    )
+    finding = next(finding for finding in preview.findings if finding.code == "missing_dependency")
     assert finding.category is FindingCategory.DEPENDENCY
     assert finding.subject == "example.missing"
     assert ("required_by", item.item_id) in finding.details
@@ -887,13 +876,8 @@ def test_dependency_from_multiple_sources_requires_explicit_source_choice() -> N
     )
 
     dependency = next(
-        item
-        for item in preview.decision.dependencies
-        if item.item_id == "example.ambiguous-tool"
+        item for item in preview.decision.dependencies if item.item_id == "example.ambiguous-tool"
     )
     assert dependency.status is DependencyStatus.SOURCE_AMBIGUOUS
     assert preview.activation_allowed is False
-    assert any(
-        finding.code == "dependency_source_ambiguous"
-        for finding in preview.findings
-    )
+    assert any(finding.code == "dependency_source_ambiguous" for finding in preview.findings)
