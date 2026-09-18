@@ -41,7 +41,7 @@ function cardByHeading(page, name) {
 async function expectMarketplaceMutationError(page, mode, expectedMessage) {
   await page.goto(`${baseUrl}/tests/marketplaceHarness.html?mutation=${mode}`);
   await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Skills", exact: true }).click();
+  await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   const skillCard = cardByHeading(page, "Code Review Skill");
   await skillCard.getByRole("button", { name: "Inspect", exact: true }).click();
   await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
@@ -80,9 +80,9 @@ try {
     "Example Plugin",
     "GitHub Connector",
     "Code Server",
-    "Skills",
+    "AI & Agents",
     "Applications",
-    "Templates / Workflows",
+    "Content",
     "Marketplace source",
     "Provenance",
     "Maturity",
@@ -108,11 +108,11 @@ try {
   requireText(decodedInitialUrl, "direction=asc", "Marketplace server-side sorting");
 
   let before = await page.evaluate(() => window.__marketplaceCalls.length);
-  await page.getByRole("button", { name: "Skills", exact: true }).click();
+  await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   await page.waitForFunction(
     (count) =>
       window.__marketplaceCalls.slice(count).some((call) =>
-        decodeURIComponent(call.url).includes("filter[item_type]=skill"),
+        decodeURIComponent(call.url).includes("filter[item_type]=agent,agent_team,skill,orchestrator"),
       ),
     before,
   );
@@ -346,7 +346,7 @@ try {
   await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
 
   before = await page.evaluate(() => window.__marketplaceCalls.length);
-  await page.getByRole("button", { name: "Templates / Workflows", exact: true }).click();
+  await page.getByRole("button", { name: "Content", exact: true }).click();
   await page.waitForFunction(
     (count) =>
       window.__marketplaceCalls.slice(count).some((call) =>
@@ -516,7 +516,7 @@ try {
 
   await page.goto(`${baseUrl}/tests/marketplaceHarness.html?mutation=slow`);
   await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Skills", exact: true }).click();
+  await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   const slowSkillCard = cardByHeading(page, "Code Review Skill");
   await slowSkillCard.getByRole("button", { name: "Inspect", exact: true }).click();
   await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
