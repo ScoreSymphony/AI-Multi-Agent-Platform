@@ -121,6 +121,13 @@ uses the following existing authorities:
 | Template / Workflow / other portable assets | #79 portability workflow and resource-specific import owners | `CanonicalDistributionRouter` / `PORTABLE_IMPORT` | **first-class Marketplace: no; fail closed**; legacy `registry.activate` may still delegate import | **first-class Marketplace: no; fail closed** | **no generic Marketplace uninstall port; fail closed** | canonical resource owners retain their own state, but #79 does not yet provide a durable completed-import receipt/replay contract sufficient to repair Marketplace evidence after restart | existing resource-owner surfaces, not Marketplace handler state |
 | Registered future/custom kind | the subsystem supplied by the registrant | registered `MarketplaceKindHandler` / descriptor-selected route | only when descriptor + handler support it | only when descriptor + handler support it | only when descriptor + handler support it | canonical owner supplies durable recovery; handler mutation contract requires idempotent identical retries while Marketplace evidence reloads from its store | registered handler status (mandatory read operation) |
 
+Model Provider package validation is value-free at the Marketplace boundary. Sensitive
+credential keys in package metadata are rejected, and a configuration schema may describe fields
+such as API-key or credential-reference inputs only when it does not embed secret-bearing
+`default`, `const`, `examples` or `enum` values. Endpoint configuration and
+`SecretReference` binding happen after installation through the canonical owner/configuration
+surface; Marketplace projections never expose the package artifact as configured provider state.
+
 The semantic-kind audit intentionally does **not** turn every #20 extension enum into a top-level Marketplace category. `memory_provider`, `file_provider`, `knowledge_provider`, `observability_exporter`, `automation_provider` and `evaluator` are exposed as dedicated higher-level kinds because they represent reusable operator/user choices, but remain fail-closed until a deployment wires a stable canonical owner handler. Lower-level `event_provider`, `transport_provider`, `authorization_provider`, `node_provider`, `worker_provider`, `frontend_extension`, `configuration_extension` and routing-policy internals remain discoverable as generic Plugins unless a later owner contract makes a separate product-facing lifecycle meaningful. This avoids multiplying Marketplace lifecycle owners merely because the Plugin SDK has an extension enum.
 
 Marketplace Skill artifacts must carry canonical `SkillSource` metadata. Installation therefore
