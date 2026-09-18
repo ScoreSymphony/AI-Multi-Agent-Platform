@@ -340,61 +340,16 @@ class DistributionService:
             installation.current.version,
             source_registry=installation.current.source_registry,
         )
-        reverse_dependencies: list[DependencyResolution] = []
-        for dependent in self.installed_items():
-            if dependent.current.item_id == item_id:
-                continue
-            dependencies = dependent.current.dependencies
-            if dependencies is None:
-                try:
-                    dependent_item = self.get(
-                        dependent.current.item_id,
-                        dependent.current.version,
-                        source_registry=dependent.current.source_registry,
-                    )
-                except LookupError:
-                    reverse_dependencies.append(
-                        DependencyResolution(
-                            required_by=dependent.current.item_id,
-                            item_id=item_id,
-                            item_kind=installation.current.as_installed().kind,
-                            optional=False,
-                            minimum_version=None,
-                            maximum_version=None,
-                            status=DependencyStatus.UNKNOWN_INSTALLED_DEPENDENT,
-                            installed_version=installation.current.version,
-                            path=(dependent.current.item_id, item_id),
-                        )
-                    )
-                    continue
-                dependencies = dependent_item.dependencies
-            for dependency in dependencies:
-                if dependency.optional or dependency.item_id != item_id:
-                    continue
-                if not dependency.version_range.contains(installation.current.version):
-                    continue
-                reverse_dependencies.append(
-                    DependencyResolution(
-                        required_by=dependent.current.item_id,
-                        item_id=item_id,
-                        item_kind=dependency.kind_value,
-                        optional=False,
-                        minimum_version=dependency.version_range.minimum,
-                        maximum_version=dependency.version_range.maximum,
-                        status=DependencyStatus.REQUIRED_BY_INSTALLED,
-                        installed_version=installation.current.version,
-                        path=(dependent.current.item_id, item_id),
-                    )
-                )
-        resolved_dependencies = tuple(reverse_dependencies)
+        resolved_dependencies = self._reverse_dependencies_for_uninstall(
+            item_id,
+            installation,
+        )
         findings = dependency_findings(resolved_dependencies)
         owner_route = item.route in {
             DistributionRoute.KIND_HANDLER,
             DistributionRoute.PLUGIN,
         }
-        handler_available = (
-            owner_route and self._kind_handlers.get(item.item_type) is not None
-        )
+        handler_available = owner_route and self._kind_handlers.get(item.item_type) is not None
         operation_supported = owner_route and _kind_supports(item, "uninstall")
         if not owner_route:
             findings = (
@@ -444,6 +399,59 @@ class DistributionService:
             activation_allowed=not has_errors(findings),
             decision=decision,
         )
+
+    def _reverse_dependencies_for_uninstall(
+        self,
+        item_id: str,
+        installation: RegistryInstallation,
+    ) -> tuple[DependencyResolution, ...]:
+        reverse_dependencies: list[DependencyResolution] = []
+        for dependent in self.installed_items():
+            if dependent.current.item_id == item_id:
+                continue
+            dependencies = dependent.current.dependencies
+            if dependencies is None:
+                try:
+                    dependent_item = self.get(
+                        dependent.current.item_id,
+                        dependent.current.version,
+                        source_registry=dependent.current.source_registry,
+                    )
+                except LookupError:
+                    reverse_dependencies.append(
+                        DependencyResolution(
+                            required_by=dependent.current.item_id,
+                            item_id=item_id,
+                            item_kind=installation.current.as_installed().kind,
+                            optional=False,
+                            minimum_version=None,
+                            maximum_version=None,
+                            status=DependencyStatus.UNKNOWN_INSTALLED_DEPENDENT,
+                            installed_version=installation.current.version,
+                            path=(dependent.current.item_id, item_id),
+                        )
+                    )
+                    continue
+                dependencies = dependent_item.dependencies
+            for dependency in dependencies:
+                if dependency.optional or dependency.item_id != item_id:
+                    continue
+                if not dependency.version_range.contains(installation.current.version):
+                    continue
+                reverse_dependencies.append(
+                    DependencyResolution(
+                        required_by=dependent.current.item_id,
+                        item_id=item_id,
+                        item_kind=dependency.kind_value,
+                        optional=False,
+                        minimum_version=dependency.version_range.minimum,
+                        maximum_version=dependency.version_range.maximum,
+                        status=DependencyStatus.REQUIRED_BY_INSTALLED,
+                        installed_version=installation.current.version,
+                        path=(dependent.current.item_id, item_id),
+                    )
+                )
+        return tuple(reverse_dependencies)
 
     async def uninstall(
         self,
