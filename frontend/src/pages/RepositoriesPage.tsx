@@ -42,7 +42,8 @@ export function RepositoriesPage({ client }: { client: RepositoryCollectionClien
 
   const attachLocal = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const projectId = String(form.get("project_id") ?? "").trim();
     const name = String(form.get("name") ?? "").trim();
     const initialize = form.get("initialize") === "on";
@@ -54,7 +55,7 @@ export function RepositoriesPage({ client }: { client: RepositoryCollectionClien
     setActionError(null);
     try {
       await client.attachLocal(projectId, { name, initialize, defaultBranch, approvalId });
-      event.currentTarget.reset();
+      formElement.reset();
       await load();
     } catch (nextError) {
       setActionError(nextError);
