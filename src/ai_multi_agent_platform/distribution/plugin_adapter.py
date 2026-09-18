@@ -35,7 +35,7 @@ class PluginRegistryArtifactInstaller:
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                "registry plugin artifact must be a UTF-8 JSON #20 manifest",
+                "registry plugin artifact must be a UTF-8 JSON canonical plugin manifest",
             ) from exc
         validate_manifest_document(document)
         if not isinstance(document, dict):
