@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from dataclasses import replace
 from pathlib import Path
@@ -36,6 +37,49 @@ class _Router:
 
     async def import_portable(self, item: RegistryItem, artifact: bytes) -> object:
         return item.item_id, artifact
+
+
+class _RecordingRouter:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    async def install_plugin(self, item: RegistryItem, artifact: bytes) -> object:
+        del artifact
+        self.calls.append(("plugin", item.item_id))
+        return item.item_id
+
+    async def import_portable(self, item: RegistryItem, artifact: bytes) -> object:
+        del artifact
+        self.calls.append(("portable", item.item_id))
+        return item.item_id
+
+
+class _ChangingArtifactProvider:
+    def __init__(self, item: RegistryItem, artifact: bytes) -> None:
+        self._delegate = LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+            provider_id="local",
+        )
+        self._artifact = artifact
+        self.fetch_count = 0
+
+    @property
+    def provider_id(self) -> str:
+        return self._delegate.provider_id
+
+    def search(self, query: RegistryQuery) -> tuple[RegistryItem, ...]:
+        return self._delegate.search(query)
+
+    def get(self, item_id: str, version: str | None = None) -> RegistryItem:
+        return self._delegate.get(item_id, version)
+
+    def fetch_artifact(self, item_id: str, version: str) -> bytes:
+        del item_id, version
+        self.fetch_count += 1
+        if self.fetch_count <= 2:
+            return self._artifact
+        return b"changed-after-revalidation"
 
 
 class _RejectingSignatureVerifier:
@@ -1043,4 +1087,20 @@ def test_installed_dependency_evidence_wins_over_same_version_catalog_drift(
         dependency.item_id != "example.catalog-only-transitive"
         for dependency in preview.decision.dependencies
     )
+
+def test_activation_rechecks_final_handoff_artifact_digest() -> None:
+    item, artifact = _item("example.handoff-integrity")
+    provider = _ChangingArtifactProvider(item, artifact)
+    router = _RecordingRouter()
+    service = DistributionService(provider, router)
+    context = _context()
+
+    preview = service.preview(item.item_id, item.version, context)
+
+    assert preview.activation_allowed is True
+    with pytest.raises(RuntimeError, match="changed immediately before activation"):
+        asyncio.run(service.activate(preview, context, authorized=True))
+
+    assert provider.fetch_count == 3
+    assert router.calls == []
 
