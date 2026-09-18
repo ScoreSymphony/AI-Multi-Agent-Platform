@@ -11,6 +11,7 @@ from pathlib import Path
 _DANGEROUS_GIT_ENV_EXACT = frozenset(
     {
         "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_ALLOW_PROTOCOL",
         "GIT_ASKPASS",
         "GIT_CEILING_DIRECTORIES",
         "GIT_COMMON_DIR",
@@ -18,6 +19,7 @@ _DANGEROUS_GIT_ENV_EXACT = frozenset(
         "GIT_CONFIG_COUNT",
         "GIT_CONFIG_GLOBAL",
         "GIT_CONFIG_NOSYSTEM",
+        "GIT_CONFIG_PARAMETERS",
         "GIT_CONFIG_SYSTEM",
         "GIT_DIR",
         "GIT_DISCOVERY_ACROSS_FILESYSTEM",
@@ -26,6 +28,7 @@ _DANGEROUS_GIT_ENV_EXACT = frozenset(
         "GIT_EXTERNAL_DIFF",
         "GIT_INDEX_FILE",
         "GIT_OBJECT_DIRECTORY",
+        "GIT_PROTOCOL_FROM_USER",
         "GIT_PROXY_COMMAND",
         "GIT_SSH",
         "GIT_SSH_COMMAND",
