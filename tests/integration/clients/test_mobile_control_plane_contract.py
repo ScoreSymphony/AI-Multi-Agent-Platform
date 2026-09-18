@@ -109,6 +109,13 @@ def test_mobile_routes_project_real_single_node_control_plane_state(tmp_path: Pa
         assert search.status == 200
         assert isinstance(search.body["items"], list)
 
+        openapi = await _request(deployment, token, "GET", "/api/v1/openapi.json")
+        assert openapi.status == 200
+        assert (
+            "/api/v1/conversation-messages/{message_id}:resume-task"
+            in openapi.body["paths"]
+        )
+
         manifest = await _request(deployment, token, "GET", "/api/v1/")
         assert manifest.status == 200
         resources = set(manifest.body["resources"])
@@ -156,5 +163,7 @@ def test_mobile_routes_project_real_single_node_control_plane_state(tmp_path: Pa
             "notification.mark-read",
         ):
             assert command in source
+        assert "conversation-messages/" in source
+        assert ":resume-task" in source
 
     asyncio.run(scenario())
