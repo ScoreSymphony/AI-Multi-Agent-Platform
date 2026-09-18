@@ -577,6 +577,35 @@ class ExternalEffectRecoveryCoordinator:
         for record in self.repository.list():
             if record.terminal:
                 continue
+            if record.status is ExternalEffectRecoveryStatus.DISPATCHING:
+                disposition = self._uncertain_disposition(record)
+                record = self.repository.save(
+                    replace(
+                        record,
+                        status=(
+                            ExternalEffectRecoveryStatus.UNCERTAIN
+                            if disposition
+                            in {
+                                ExternalEffectRecoveryDisposition.SAFE_TO_RETRY,
+                                ExternalEffectRecoveryDisposition.RECONCILE_WITH_PROVIDER,
+                            }
+                            else ExternalEffectRecoveryStatus.BLOCKED
+                        ),
+                        disposition=disposition,
+                        reason="startup_detected_unacknowledged_dispatch",
+                        updated_at=_utc_now(),
+                    )
+                )
+            elif record.status is ExternalEffectRecoveryStatus.RECONCILING:
+                record = self.repository.save(
+                    replace(
+                        record,
+                        status=ExternalEffectRecoveryStatus.UNCERTAIN,
+                        disposition=ExternalEffectRecoveryDisposition.RECONCILE_WITH_PROVIDER,
+                        reason="startup_resuming_interrupted_read_only_reconciliation",
+                        updated_at=_utc_now(),
+                    )
+                )
             if record.disposition in {
                 ExternalEffectRecoveryDisposition.RECONCILE_WITH_PROVIDER,
                 ExternalEffectRecoveryDisposition.BLOCKED_DEPENDENCY,
@@ -652,6 +681,12 @@ class ExternalEffectRecoveryCoordinator:
 
     def get_record(self, effect_id: str) -> ExternalEffectRecoveryRecord:
         return self.repository.get(effect_id)
+
+    def find_record_by_invocation(
+        self,
+        invocation_id: str,
+    ) -> ExternalEffectRecoveryRecord | None:
+        return self.repository.find_by_invocation(invocation_id)
 
     async def _operator_transition(
         self,
