@@ -80,8 +80,7 @@ def test_shipped_single_node_composes_application_runtime_and_control_plane(tmp_
         == "applications.resource-associations"
     )
     assert (
-        deployment.control_plane.resource_owner("application-audit-events")
-        == "applications.audit"
+        deployment.control_plane.resource_owner("application-audit-events") == "applications.audit"
     )
     assert deployment.control_plane.command_owner("application.start") == "applications"
 
