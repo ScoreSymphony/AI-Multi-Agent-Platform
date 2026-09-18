@@ -17,6 +17,16 @@ export type ApplicationObservedState =
   | "removed";
 export type ApplicationHealth = "unknown" | "healthy" | "degraded" | "unhealthy";
 export type ApplicationOpenMode = "embedded" | "external";
+export type ApplicationConfigValueType = "string" | "integer" | "number" | "boolean";
+
+export interface CanonicalApplicationConfigurationField {
+  name: string;
+  value_type: ApplicationConfigValueType;
+  required: boolean;
+  default: JsonValue;
+  mutable: boolean;
+  environment_variable: string | null;
+}
 
 export interface CanonicalApplicationManifest {
   schema_version: string;
@@ -26,7 +36,7 @@ export interface CanonicalApplicationManifest {
   description: string;
   services: Array<Record<string, JsonValue>>;
   volumes: Array<Record<string, JsonValue>>;
-  configuration: Array<Record<string, JsonValue>>;
+  configuration: CanonicalApplicationConfigurationField[];
   secrets: Array<Record<string, JsonValue>>;
   resources: Record<string, JsonValue>;
   ui: Record<string, JsonValue> | null;
@@ -181,12 +191,23 @@ export class ApplicationsClient {
     return this.command("application.remove", instanceId);
   }
 
-  private command(command: string, instanceId: string): Promise<CanonicalApplicationInstance> {
+  configure(
+    instanceId: string,
+    configuration: Record<string, JsonValue>,
+  ): Promise<CanonicalApplicationInstance> {
+    return this.command("application.configure", instanceId, { configuration });
+  }
+
+  private command(
+    command: string,
+    instanceId: string,
+    payload: Record<string, JsonValue> = {},
+  ): Promise<CanonicalApplicationInstance> {
     return this.transport.request<CanonicalApplicationInstance>(
       `/commands/${encodeURIComponent(command)}`,
       {
         method: "POST",
-        body: { resource_ref: requireRef(instanceId) },
+        body: { resource_ref: requireRef(instanceId), ...payload },
         idempotencyKey: crypto.randomUUID(),
       },
     );
