@@ -127,6 +127,7 @@ Representative codes:
 | `sqlite_integrity_failed` | SQLite quick check failed | **no repair** | stop writes; recover through owner / backup policy |
 | `json_store_unavailable` | JSON store inaccessible | next probe may recover | restore access |
 | `json_store_invalid` | persisted JSON is malformed | **no repair** | recover through owning subsystem |
+| `file_temp_state_unowned` | temp File state has no canonical PENDING owner | none; remain degraded | inspect/remove manually; never promote it |
 
 The probe emits #16 structured transition telemetry for persistence
 `unavailable`, `degraded`, and `recovered` states. Telemetry is derived state and never becomes
