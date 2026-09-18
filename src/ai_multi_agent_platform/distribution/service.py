@@ -198,6 +198,17 @@ class DistributionService:
                     item.kind,
                 ),
             )
+        if item.route in {DistributionRoute.PLUGIN, DistributionRoute.PORTABLE_IMPORT} and self._router is None:
+            findings = (
+                *findings,
+                ValidationFinding(
+                    "distribution_router_unavailable",
+                    FindingSeverity.ERROR,
+                    "canonical owner-domain distribution router is not configured",
+                    FindingCategory.COMPATIBILITY,
+                    item.item_id,
+                ),
+            )
         if item.route is DistributionRoute.MANUAL:
             findings = (
                 *findings,
