@@ -40,7 +40,7 @@ from ai_multi_agent_platform.distribution import (
     TrustStatus,
     ValidationContext,
 )
-from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.plugins import (
     ExtensionType,
     PluginRegistry,
@@ -226,7 +226,7 @@ async def test_skill_handler_delegates_revisions_and_removal_to_skill_service(tm
     )
     owner = OwnerRef(type="user", id="marketplace-skill-owner")
     first_revision = SkillRevision(
-        skill_id="skill_marketplace_review",
+        skill_id=new_id("skill"),
         revision=1,
         profile=SkillProfile(
             name="Marketplace review",
@@ -326,7 +326,7 @@ async def test_application_handler_delegates_to_1173_and_rejects_fake_update(tmp
     handler = ApplicationMarketplaceKindHandler(lifecycle, repository, runtimes)
 
     first_manifest = ApplicationManifest(
-        application_id="application_marketplace_demo",
+        application_id=new_id("application"),
         name="Marketplace demo",
         version="1.0.0",
         description="Application owner delegation fixture",
