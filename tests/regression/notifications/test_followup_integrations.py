@@ -36,7 +36,7 @@ def _service(*, recipient_eligibility=None) -> NotificationService:
     )
 
 
-def test_verification_required_and_changes_requested_use_opaque_issue86_attention_contract() -> (
+def test_verification_required_and_changes_requested_use_opaque_verification_attention_contract() -> (
     None
 ):
     recipient = _recipient()
@@ -68,7 +68,7 @@ def test_verification_required_and_changes_requested_use_opaque_issue86_attentio
     assert changes.aggregation_key != required.aggregation_key
 
 
-def test_membership_attention_supports_canonical_organization_scope_without_owning_issue87() -> (
+def test_membership_attention_supports_canonical_organization_scope_without_owning_organization_lifecycle() -> (
     None
 ):
     organization = _recipient(RecipientType.ORGANIZATION)
@@ -175,7 +175,7 @@ def test_approval_required_projects_end_to_end_into_recipient_inbox() -> None:
     asyncio.run(scenario())
 
 
-def test_approval_resolved_projection_uses_canonical_issue15_status_without_payload() -> None:
+def test_approval_resolved_projection_uses_canonical_approval_status_without_payload() -> None:
     now = datetime(2026, 9, 4, tzinfo=UTC)
     recipient = _recipient()
     task_id = new_id("task")
