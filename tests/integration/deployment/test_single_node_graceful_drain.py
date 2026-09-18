@@ -514,12 +514,14 @@ def test_lifespan_teardown_timeout_cannot_hang_process_exit(
     monkeypatch: Any,
 ) -> None:
     async def scenario() -> None:
+        exporter = InMemoryExporter()
         deployment = build_single_node_deployment(
             SingleNodeConfig(
                 data_dir=tmp_path / "teardown-timeout",
                 secure_cookie=False,
                 shutdown_timeout_seconds=1,
-            )
+            ),
+            observability_exporter=exporter,
         )
         # Keep the integration test fast while exercising the exact production deadline path.
         deployment.drain.timeout_seconds = 0.05
@@ -562,5 +564,14 @@ def test_lifespan_teardown_timeout_cannot_hang_process_exit(
         assert any(item.get("type") == "lifespan.shutdown.complete" for item in sent)
         assert deployment.drain.snapshot().forced is True
         assert deployment.drain.snapshot().completed is True
+        assert deployment.drain.snapshot().force_reason == "resource_teardown_timeout"
+
+        timeline = {
+            entry.event_name: entry
+            for entry in exporter.timeline
+            if entry.event_name.startswith("platform.single_node.drain.")
+        }
+        assert timeline["platform.single_node.drain.timeout"].outcome.value == "timed_out"
+        assert timeline["platform.single_node.drain.completed"].outcome.value == "timed_out"
 
     asyncio.run(scenario())
