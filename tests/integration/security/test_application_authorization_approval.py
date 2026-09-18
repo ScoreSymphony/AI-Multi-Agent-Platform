@@ -4,8 +4,8 @@ import asyncio
 import sys
 
 from ai_multi_agent_platform.applications import (
-    ApplicationConfigValueType,
     ApplicationConfigurationField,
+    ApplicationConfigValueType,
     ApplicationLifecycleService,
     ApplicationManifest,
     ApplicationRuntimeRegistry,
