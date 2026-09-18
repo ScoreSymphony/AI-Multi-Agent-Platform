@@ -21,6 +21,7 @@ from ai_multi_agent_platform.automation import (
     TriggerType,
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.deployment.startup_recovery import (
     StartupRecoveryExtensionReport,
     reconcile_single_node_startup,
@@ -215,6 +216,108 @@ def test_orphaned_automation_delivery_blocks_readiness_without_mutation() -> Non
             AutomationStartupRecoveryDisposition.BLOCKED_ORPHANED_OWNER
         )
         assert await service.get_delivery(stale.id) == stale
+
+    asyncio.run(scenario())
+
+
+
+def test_single_node_restart_reconciles_crash_after_canonical_task_admission_without_duplicate(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        root = tmp_path / "single-node-crash-window"
+        config = SingleNodeConfig(data_dir=root, secure_cookie=False)
+        first = build_single_node_deployment(config)
+        account = first.bootstrap_admin("issue-1153-admin", "correct horse battery staple")
+        automation = await first.control_plane.automation_service.create_automation(
+            name="restart task admission",
+            description="simulate process loss after canonical Task creation",
+            identity=IdentityContext(
+                principal_ref=account.user_id,
+                owner_type="user",
+                owner_id=account.user_id,
+            ),
+            trigger=TriggerDefinition(type=TriggerType.MANUAL),
+            task_template=TaskTemplate(
+                title="Canonical restart task",
+                objective="Must not be duplicated when Automation delivery is replayed",
+            ),
+            now=NOW,
+        )
+        succeeded = await first.control_plane.automation_service.test_trigger(
+            automation.id,
+            occurrence_id="crash-after-task-admission",
+            fired_at=NOW,
+        )
+        assert succeeded.status is DeliveryStatus.SUCCEEDED
+        assert succeeded.generated_task_id is not None
+        canonical_task_id = succeeded.generated_task_id
+
+        # Simulate the exact crash window after canonical Task admission but before the
+        # Automation owner persisted SUCCEEDED. The durable Task/idempotency record already exists.
+        stale = replace(
+            succeeded,
+            status=DeliveryStatus.PROCESSING,
+            generated_task_id=None,
+            processing_duration_ms=None,
+            error_code=None,
+            error_message=None,
+            retryable=False,
+            next_retry_at=None,
+            retry_exhausted_at=None,
+        )
+        await first.control_plane.automation_service.repository.save_delivery(stale)
+
+        restarted = build_single_node_deployment(config)
+        before_streams = set(await restarted.kernel_repository.list_stream_ids())
+        assert canonical_task_id in before_streams
+
+        recovery = await reconcile_single_node_startup(
+            data_dir=root,
+            kernel=restarted.kernel,
+            coordinator=restarted.coordination,
+            distributed_runtime=restarted.distributed_runtime,
+            extensions=restarted.startup_recovery_extensions,
+            reviewer_reconciler=restarted.reviewer_recovery,
+        )
+        recovered = await restarted.control_plane.automation_service.get_delivery(stale.id)
+        after_streams = set(await restarted.kernel_repository.list_stream_ids())
+
+        assert recovery.ready_for_service is True
+        transient = next(
+            report
+            for report in recovery.extension_recoveries
+            if report.name == "single-node-transient-state"
+        )
+        automation_evidence = next(
+            item
+            for item in transient.evidence
+            if item.get("state_class") == "automation_delivery"
+        )
+        assert automation_evidence["disposition"] == "resumed"
+        assert recovered.status is DeliveryStatus.SUCCEEDED
+        assert recovered.attempt == succeeded.attempt
+        assert recovered.generated_task_id == canonical_task_id
+        assert after_streams == before_streams
+
+        repeated = await reconcile_single_node_startup(
+            data_dir=root,
+            kernel=restarted.kernel,
+            coordinator=restarted.coordination,
+            distributed_runtime=restarted.distributed_runtime,
+            extensions=restarted.startup_recovery_extensions,
+            reviewer_reconciler=restarted.reviewer_recovery,
+        )
+        repeated_transient = next(
+            report
+            for report in repeated.extension_recoveries
+            if report.name == "single-node-transient-state"
+        )
+        assert not any(
+            item.get("state_class") == "automation_delivery"
+            for item in repeated_transient.evidence
+        )
+        assert set(await restarted.kernel_repository.list_stream_ids()) == before_streams
 
     asyncio.run(scenario())
 
