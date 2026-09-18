@@ -218,6 +218,7 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
                     "Marketplace Agent artifact contains no canonical revisions",
                 )
             return created
+        # error-boundary: allow-broad-catch=cleanup rollback partial Marketplace Agent install
         except Exception:
             if existing is None and created is not None:
                 try:
@@ -453,6 +454,7 @@ class AgentTeamMarketplaceKindHandler(_AgentMarketplaceBase):
                     "Marketplace Agent Team artifact contains no canonical revisions",
                 )
             return created
+        # error-boundary: allow-broad-catch=cleanup rollback partial Marketplace Team install
         except Exception:
             if existing is None and created is not None:
                 try:
