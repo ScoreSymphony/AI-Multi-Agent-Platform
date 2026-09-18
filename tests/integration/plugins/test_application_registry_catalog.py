@@ -76,9 +76,9 @@ def test_application_registry_items_are_catalog_only_and_manual_by_default() -> 
     assert item.route is DistributionRoute.MANUAL
 
     provider = LocalRegistryProvider((item,))
-    assert provider.search(
-        RegistryQuery(item_types=frozenset({RegistryItemType.APPLICATION}))
-    ) == (item,)
+    assert provider.search(RegistryQuery(item_types=frozenset({RegistryItemType.APPLICATION}))) == (
+        item,
+    )
 
 
 def test_registry_v2_accepts_application_definitions_without_changing_v1() -> None:
@@ -95,9 +95,7 @@ def test_registry_v2_accepts_application_definitions_without_changing_v1() -> No
 
 def test_registry_control_plane_discovers_application_catalog_metadata() -> None:
     item = _application_item()
-    service = RegistryResourceService(
-        DistributionService(LocalRegistryProvider((item,)))
-    )
+    service = RegistryResourceService(DistributionService(LocalRegistryProvider((item,))))
     context = RequestContext(
         request_id="request-application-catalog",
         correlation_id="correlation-application-catalog",
