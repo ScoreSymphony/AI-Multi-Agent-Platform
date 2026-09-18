@@ -38,7 +38,13 @@ export function parseMobileDeepLink(value: string): MobileRoute | null {
   if (url.username || url.password || url.search || url.hash) return null;
 
   const kind = url.hostname as MobileRouteKind;
-  const id = decodeURIComponent(url.pathname.replace(/^\//, ""));
+  let id: string;
+  try {
+    const encodedId = url.pathname.startsWith("/") ? url.pathname.slice(1) : url.pathname;
+    id = decodeURIComponent(encodedId);
+  } catch {
+    return null;
+  }
   if (!ROUTE_KINDS.has(kind) || !CANONICAL_ID.test(id)) return null;
   if (id.includes("/") || id.includes("\\")) return null;
   return { kind, id };
