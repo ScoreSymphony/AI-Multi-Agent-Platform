@@ -31,10 +31,10 @@ def _utc_now() -> datetime:
 class SingleNodeTransientStateRecoveryExtension:
     """Reconcile restart-sensitive state without becoming a second lifecycle owner.
 
-    Worker/Run and Plan/Step recovery remain owned by the outer #707 startup path.
-    Workspace/filesystem cleanup remains with the #1155 persistence owner. This
-    extension handles Automation delivery ownership and proves that durable #36
-    browser-session revocation/expiry metadata survived the process restart.
+    Worker/Run and Plan/Step recovery remain owned by the canonical startup path.
+    Workspace/filesystem cleanup remains with the persistence owner. This extension
+    handles Automation delivery ownership and proves that durable authentication
+    session revocation/expiry metadata survived the process restart.
     """
 
     automation: AutomationStartupRecovery
