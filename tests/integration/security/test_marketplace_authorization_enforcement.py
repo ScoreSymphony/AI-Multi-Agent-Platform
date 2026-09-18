@@ -243,6 +243,7 @@ async def test_marketplace_install_denial_stops_before_owner_mutation(tmp_path) 
     assert installations.get(item.item_id) is None
     assert gate.audit_records[-1].outcome is AuthorizationOutcome.DENY
 
+
 async def test_marketplace_approval_digest_binds_resolved_permission_state(tmp_path) -> None:
     policy = (
         LocalPrincipalPolicy(
