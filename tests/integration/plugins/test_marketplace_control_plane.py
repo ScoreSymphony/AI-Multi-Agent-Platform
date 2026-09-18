@@ -508,6 +508,37 @@ def test_compatible_filter_uses_full_current_environment() -> None:
     assert blocked[0]["compatibility"]["missing_runtimes"] == ["docker"]  # type: ignore[index]
 
 
+def test_uninstalled_owner_item_exposes_requirements_without_runtime_reads() -> None:
+    class UninstalledHandler(RecordingHandler):
+        def describe(self, item: RegistryItem) -> dict[str, object]:
+            raise AssertionError(f"describe must not run before install: {item.item_id}")
+
+        async def status(self, item: RegistryItem) -> object:
+            raise AssertionError(f"status must not run before install: {item.item_id}")
+
+    item = _application("example.uninstalled-app", "1.0.0")
+    handler = UninstalledHandler()
+    service = RegistryResourceService(
+        DistributionService(
+            LocalRegistryProvider((item,)),
+            kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+        )
+    )
+
+    detail = asyncio.run(service.get_resource(_request(), item.item_id))
+
+    owner_extension = detail["owner_extension"]
+    assert isinstance(owner_extension, dict)
+    assert owner_extension["handler_available"] is True
+    assert owner_extension["requirements"] == {
+        "kind": "application",
+        "required_capabilities": [],
+    }
+    assert owner_extension["details"] is None
+    assert owner_extension["status"] is None
+    assert owner_extension["status_version"] is None
+
+
 def test_plugin_route_exposes_owner_extension_and_supports_marketplace_uninstall(
     tmp_path: Path,
 ) -> None:
