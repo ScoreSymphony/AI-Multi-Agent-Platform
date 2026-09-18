@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from hashlib import sha256
 from typing import Protocol
 
-from ai_multi_agent_platform.contracts import HealthStatus, ProviderContract, ProviderDescriptor
+from ai_multi_agent_platform.contracts import (\n    ContractError,\n    ErrorCode,\n    HealthStatus,\n    ProviderContract,\n    ProviderDescriptor,\n)
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.messaging import TraceContext, TransportEnvelope
 
@@ -80,14 +80,37 @@ class ProviderHealthDependency:
     provider: ProviderContract
     required: bool = True
     name: str | None = None
+    timeout_seconds: float = 2.0
+    max_retries: int = 1
+    backoff_seconds: float = 0.05
+    operator_action: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.timeout_seconds <= 0:
+            raise ValueError("health probe timeout_seconds must be positive")
+        if self.max_retries < 0 or self.max_retries > 5:
+            raise ValueError("health probe max_retries must be between 0 and 5")
+        if self.backoff_seconds < 0:
+            raise ValueError("health probe backoff_seconds must not be negative")
 
     @property
     def dependency_name(self) -> str:
         return self.name or self.provider.descriptor.provider_id
 
 
+_RETRYABLE_HEALTH_ERROR_CODES = frozenset(
+    {
+        ErrorCode.UNAVAILABLE,
+        ErrorCode.TIMEOUT,
+        ErrorCode.RATE_LIMITED,
+        ErrorCode.RESOURCE_EXHAUSTED,
+        ErrorCode.TRANSIENT_FAILURE,
+    }
+)
+
+
 class AggregatedHealthProvider(ProviderContract):
-    """Expose required-vs-optional dependency degradation through the existing API health seam."""
+    """Expose bounded required-vs-optional dependency health through the existing API seam."""
 
     def __init__(
         self,
@@ -99,6 +122,9 @@ class AggregatedHealthProvider(ProviderContract):
         self._provider_id = provider_id
         self._status = HealthStatus.UNKNOWN
         self._service_health = ServiceHealth(alive=True, readiness=ReadinessState.READY)
+        self._last_states: dict[str, ReadinessState] = {}
+        self._failure_counts: dict[str, int] = {}
+        self._recovery_counts: dict[str, int] = {}
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -115,18 +141,8 @@ class AggregatedHealthProvider(ProviderContract):
         return self._service_health
 
     async def health(self) -> HealthStatus:
-        dependencies: list[DependencyHealth] = []
-        for item in self._dependencies:
-            status = await item.provider.health()
-            dependencies.append(
-                DependencyHealth(
-                    name=item.dependency_name,
-                    state=_readiness_from_provider(status),
-                    required=item.required,
-                    detail=status.value,
-                )
-            )
-        self._service_health = aggregate_health(tuple(dependencies))
+        dependencies = tuple([await self._probe_dependency(item) for item in self._dependencies])
+        self._service_health = aggregate_health(dependencies)
         if not self._service_health.ready:
             self._status = HealthStatus.UNAVAILABLE
         elif self._service_health.readiness is ReadinessState.DEGRADED:
@@ -134,6 +150,88 @@ class AggregatedHealthProvider(ProviderContract):
         else:
             self._status = HealthStatus.HEALTHY
         return self._status
+
+    async def _probe_dependency(self, item: ProviderHealthDependency) -> DependencyHealth:
+        attempts = 0
+        state = ReadinessState.UNAVAILABLE
+        detail: str | None = None
+        error_code: str | None = None
+        retryable = False
+        maximum_attempts = item.max_retries + 1
+
+        while attempts < maximum_attempts:
+            attempts += 1
+            retryable = False
+            try:
+                status = await asyncio.wait_for(
+                    item.provider.health(),
+                    timeout=item.timeout_seconds,
+                )
+                state = _readiness_from_provider(status)
+                detail = status.value
+                error_code = (
+                    None
+                    if state is not ReadinessState.UNAVAILABLE
+                    else ErrorCode.UNAVAILABLE.value
+                )
+                retryable = state is ReadinessState.UNAVAILABLE
+            except asyncio.CancelledError:
+                raise
+            except TimeoutError:
+                state = ReadinessState.UNAVAILABLE
+                detail = "health probe timed out"
+                error_code = ErrorCode.TIMEOUT.value
+                retryable = True
+            except ContractError as exc:
+                state = ReadinessState.UNAVAILABLE
+                detail = exc.message
+                error_code = exc.code.value
+                retryable = exc.retryable or exc.code in _RETRYABLE_HEALTH_ERROR_CODES
+            # error-boundary: allow-broad-catch=boundary provider health probe normalization
+            except Exception:
+                state = ReadinessState.UNAVAILABLE
+                detail = "provider health probe failed"
+                error_code = ErrorCode.BACKEND_ERROR.value
+                retryable = False
+
+            if state is not ReadinessState.UNAVAILABLE:
+                break
+            if attempts >= maximum_attempts or not retryable:
+                break
+            if item.backoff_seconds > 0:
+                await asyncio.sleep(item.backoff_seconds * attempts)
+
+        name = item.dependency_name
+        previous = self._last_states.get(name)
+        previously_impaired = previous is not None and previous is not ReadinessState.READY
+        currently_impaired = state is not ReadinessState.READY
+        if currently_impaired and not previously_impaired:
+            self._failure_counts[name] = self._failure_counts.get(name, 0) + 1
+        elif not currently_impaired and previously_impaired:
+            self._recovery_counts[name] = self._recovery_counts.get(name, 0) + 1
+        self._last_states[name] = state
+
+        operator_action = item.operator_action
+        if currently_impaired and operator_action is None:
+            operator_action = (
+                "restore the required dependency and rerun platform doctor; "
+                "do not mutate canonical lifecycle state directly"
+                if item.required
+                else "restore or disable the optional dependency; unrelated canonical "
+                "operations may continue"
+            )
+
+        return DependencyHealth(
+            name=name,
+            state=state,
+            required=item.required,
+            detail=detail,
+            error_code=error_code,
+            attempts=attempts,
+            failure_count=self._failure_counts.get(name, 0),
+            recovery_count=self._recovery_counts.get(name, 0),
+            operator_action=operator_action,
+        )
 
 
 def _readiness_from_provider(status: HealthStatus) -> ReadinessState:

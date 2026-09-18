@@ -583,17 +583,52 @@ def _doctor_health(body: JsonValue) -> tuple[str, list[JsonValue]]:
 
     ready = body.get("ready")
     providers = body.get("providers")
-    if not isinstance(ready, bool) or not isinstance(providers, list):
+    readiness_state = body.get("readiness_state")
+    allowed_readiness = {
+        "ready",
+        "degraded",
+        "reconciling",
+        "unavailable",
+        "operator_intervention_required",
+        "draining",
+    }
+    if (
+        not isinstance(ready, bool)
+        or not isinstance(providers, list)
+        or (readiness_state is not None and readiness_state not in allowed_readiness)
+    ):
         return "blocking", [
             {
                 "name": "health_schema",
                 "status": "blocking",
-                "message": "health payload must contain boolean ready and provider list",
+                "message": (
+                    "health payload must contain boolean ready, provider list and a valid "
+                    "readiness_state when present"
+                ),
             }
         ]
 
     overall = "healthy" if ready else "blocking"
     checks: list[JsonValue] = []
+    if isinstance(readiness_state, str):
+        state_status = (
+            "healthy"
+            if readiness_state == "ready"
+            else "degraded"
+            if readiness_state == "degraded" and ready
+            else "blocking"
+        )
+        if state_status == "degraded" and overall == "healthy":
+            overall = "degraded"
+        checks.append(
+            {
+                "name": "readiness_state",
+                "status": state_status,
+                "readiness_state": readiness_state,
+                "guidance": _doctor_guidance(readiness_state, required=not ready),
+            }
+        )
+
     for provider in providers:
         if not isinstance(provider, dict):
             overall = "blocking"
@@ -628,8 +663,11 @@ def _doctor_health(body: JsonValue) -> tuple[str, list[JsonValue]]:
             continue
 
         if not available or status == "unavailable":
-            check_status = "blocking"
-            overall = "blocking"
+            check_status = "blocking" if not ready else "degraded"
+            if check_status == "blocking":
+                overall = "blocking"
+            elif overall == "healthy":
+                overall = "degraded"
         elif status in {"degraded", "unknown"}:
             check_status = "degraded"
             if overall == "healthy":
@@ -644,9 +682,123 @@ def _doctor_health(body: JsonValue) -> tuple[str, list[JsonValue]]:
                 "provider_type": provider_type,
                 "provider_status": status,
                 "available": available,
+                "error_code": provider.get("error_code"),
+                "guidance": (
+                    provider.get("operator_action")
+                    if isinstance(provider.get("operator_action"), str)
+                    else _doctor_guidance(
+                        "unavailable" if check_status == "blocking" else status,
+                        required=check_status == "blocking",
+                    )
+                ),
             }
         )
+
+        dependencies = provider.get("dependencies", [])
+        if dependencies is None:
+            dependencies = []
+        if not isinstance(dependencies, list):
+            overall = "blocking"
+            checks.append(
+                {
+                    "name": "dependency_health_schema",
+                    "status": "blocking",
+                    "provider_id": provider_id,
+                    "message": "provider dependencies must be a JSON list",
+                }
+            )
+            continue
+        for dependency in dependencies:
+            if not isinstance(dependency, dict):
+                overall = "blocking"
+                checks.append(
+                    {
+                        "name": "dependency_health_schema",
+                        "status": "blocking",
+                        "provider_id": provider_id,
+                        "message": "dependency health entry must be a JSON object",
+                    }
+                )
+                continue
+            dependency_name = dependency.get("name")
+            dependency_state = dependency.get("state")
+            required = dependency.get("required")
+            if (
+                not isinstance(dependency_name, str)
+                or dependency_state not in allowed_readiness
+                or not isinstance(required, bool)
+            ):
+                overall = "blocking"
+                checks.append(
+                    {
+                        "name": "dependency_health_schema",
+                        "status": "blocking",
+                        "provider_id": provider_id,
+                        "message": "dependency health entry does not match the canonical schema",
+                    }
+                )
+                continue
+
+            if dependency_state == "ready":
+                dependency_status = "healthy"
+            elif required and dependency_state in {
+                "reconciling",
+                "unavailable",
+                "operator_intervention_required",
+                "draining",
+            }:
+                dependency_status = "blocking"
+                overall = "blocking"
+            else:
+                dependency_status = "degraded"
+                if overall == "healthy":
+                    overall = "degraded"
+            action = dependency.get("operator_action")
+            checks.append(
+                {
+                    "name": "dependency_health",
+                    "status": dependency_status,
+                    "provider_id": provider_id,
+                    "dependency": dependency_name,
+                    "dependency_state": dependency_state,
+                    "required": required,
+                    "error_code": dependency.get("error_code"),
+                    "attempts": dependency.get("attempts"),
+                    "failure_count": dependency.get("failure_count"),
+                    "recovery_count": dependency.get("recovery_count"),
+                    "guidance": (
+                        action
+                        if isinstance(action, str)
+                        else _doctor_guidance(dependency_state, required=required)
+                    ),
+                }
+            )
     return overall, checks
+
+
+def _doctor_guidance(state: str, *, required: bool) -> str:
+    if state == "operator_intervention_required":
+        return (
+            "inspect canonical recovery diagnostics and resolve only the reported blocker "
+            "through the supported operator command"
+        )
+    if state == "reconciling":
+        return (
+            "allow canonical reconciliation to complete; inspect the startup recovery report "
+            "if the state does not clear"
+        )
+    if state == "draining":
+        return "allow the current drain/shutdown operation to complete before submitting new work"
+    if required or state == "unavailable":
+        return (
+            "restore the required dependency and rerun platform doctor; do not edit canonical "
+            "lifecycle state directly"
+        )
+    if state in {"degraded", "unknown"}:
+        return (
+            "restore or disable the optional dependency; unrelated canonical operations may continue"
+        )
+    return "no operator action required"
 
 
 def _project_command(

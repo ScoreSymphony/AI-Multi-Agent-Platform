@@ -133,8 +133,8 @@ This startup slice does **not** close #707. Remaining reliability work includes,
 - stale non-Worker session/materialization cleanup;
 - explicit uncertain-side-effect recovery states;
 - persistence/filesystem fault injection and recovery;
-- provider/dependency failure isolation and bounded retries;
-- health/readiness integration while reconciliation is in progress;
-- operator diagnostics beyond the startup report;
+- provider/dependency failure isolation and bounded retries — owned by follow-up #1156;
+- health/readiness integration while reconciliation is in progress — owned by follow-up #1156;
+- operator diagnostics beyond the startup report — owned by follow-up #1156;
 - repeated hard-kill/restart endurance testing;
 - reusable failure-injection fixtures and platform-conformance reliability evidence.
