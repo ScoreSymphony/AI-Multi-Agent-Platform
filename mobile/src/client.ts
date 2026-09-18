@@ -151,6 +151,15 @@ export class MobileControlPlaneClient {
     return this.approvalDecision("approval.deny", approval, comment);
   }
 
+  resumeWaitingTask(messageId: string, taskId: string): Promise<CanonicalTask> {
+    const canonicalMessageId = requireText(messageId, "Conversation message ID");
+    const canonicalTaskId = requireText(taskId, "Task ID");
+    return this.mutate(
+      `/conversation-messages/${encodeURIComponent(canonicalMessageId)}:resume-task`,
+      { task_id: canonicalTaskId },
+    );
+  }
+
   verificationReview(
     verificationId: string,
     action: "verification.accept" | "verification.reject" | "verification.request-changes",
