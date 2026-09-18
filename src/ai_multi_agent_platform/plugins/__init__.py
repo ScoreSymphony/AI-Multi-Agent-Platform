@@ -1,6 +1,6 @@
 """Versioned plugin SDK and lifecycle foundation."""
 
-from .binders import CapabilityRegistryBinder
+from .binders import CapabilityRegistryBinder, ConnectorRegistryBinder
 from .discovery import (
     DiscoveredPlugin,
     PluginCatalog,
@@ -39,6 +39,7 @@ __all__ = [
     "PLUGIN_MANIFEST_SCHEMA",
     "CapabilityRegistryBinder",
     "CompatibilityState",
+    "ConnectorRegistryBinder",
     "DiscoveredPlugin",
     "ExtensionBinder",
     "ExtensionRegistration",
