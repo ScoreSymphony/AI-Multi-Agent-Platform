@@ -23,6 +23,7 @@ from ai_multi_agent_platform.distribution import (
     MarketplaceKindHandlerRegistry,
     MultiRegistryProvider,
     RegistryCommandHandlers,
+    RegistryCompatibility,
     RegistryDependency,
     RegistryItem,
     RegistryItemType,
@@ -402,6 +403,53 @@ def test_version_sort_is_numeric_and_deterministic() -> None:
         ("example.other", "3.0.0"),
         ("example.sort", "2.0.0"),
     ]
+
+
+def test_compatible_filter_uses_full_current_environment() -> None:
+    compatible = replace(
+        _tool("example.runtime-ok", "Runtime OK"),
+        compatibility=RegistryCompatibility(
+            operating_systems=frozenset({"linux"}),
+            architectures=frozenset({"x86_64"}),
+            required_runtimes=frozenset({"python"}),
+        ),
+    )
+    incompatible = replace(
+        _tool("example.runtime-missing", "Runtime Missing"),
+        compatibility=RegistryCompatibility(
+            operating_systems=frozenset({"linux"}),
+            architectures=frozenset({"x86_64"}),
+            required_runtimes=frozenset({"docker"}),
+        ),
+    )
+    service = RegistryResourceService(
+        DistributionService(LocalRegistryProvider((compatible, incompatible))),
+        StaticValidationContext(
+            _context(
+                operating_system="linux",
+                architecture="x86_64",
+                available_runtimes=frozenset({"python"}),
+            )
+        ),
+    )
+
+    installable = asyncio.run(
+        service.list_resources(
+            _request(),
+            PageQuery(filters={"compatible": "true"}),
+        )
+    )
+    blocked = asyncio.run(
+        service.list_resources(
+            _request(),
+            PageQuery(filters={"compatible": "false"}),
+        )
+    )
+
+    assert [item["item_id"] for item in installable] == ["example.runtime-ok"]
+    assert [item["item_id"] for item in blocked] == ["example.runtime-missing"]
+    assert installable[0]["compatibility"]["compatible"] is True  # type: ignore[index]
+    assert blocked[0]["compatibility"]["missing_runtimes"] == ["docker"]  # type: ignore[index]
 
 
 def test_detail_exposes_manifest_update_state_compatibility_and_owner_extension(
