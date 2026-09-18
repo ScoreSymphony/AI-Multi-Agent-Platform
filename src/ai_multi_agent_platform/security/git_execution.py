@@ -78,6 +78,15 @@ _DANGEROUS_CONFIG_EXACT = frozenset(
         "tag.gpgsign",
     }
 )
+_DANGEROUS_CONFIG_PREFIX_SUFFIXES = (
+    ("filter.", (".clean", ".smudge", ".process")),
+    ("diff.", (".command", ".textconv")),
+    ("merge.", (".driver",)),
+    ("credential.", (".helper",)),
+    ("url.", (".insteadof", ".pushinsteadof")),
+    ("remote.", (".proxy", ".receivepack", ".uploadpack", ".vcs")),
+    ("submodule.", (".update",)),
+)
 _REMOTE_HELPER = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*::")
 _SCP_REMOTE = re.compile(r"^(?:[^/@:\\\\]+@)?[^/:\\\\]+:.+$")
 _WINDOWS_ABSOLUTE_PATH = re.compile(r"^[A-Za-z]:[\\\\/]")
@@ -154,43 +163,20 @@ def unsafe_local_git_config_keys(keys: Iterable[str]) -> tuple[str, ...]:
     unsafe: set[str] = set()
     for key in keys:
         normalized = key.strip().lower()
-        if not normalized:
-            continue
-        if normalized in _DANGEROUS_CONFIG_EXACT:
-            unsafe.add(normalized)
-            continue
-        if normalized == "include.path" or (
-            normalized.startswith("includeif.") and normalized.endswith(".path")
-        ):
-            unsafe.add(normalized)
-            continue
-        if normalized.startswith("filter.") and normalized.endswith(
-            (".clean", ".smudge", ".process")
-        ):
-            unsafe.add(normalized)
-            continue
-        if normalized.startswith("diff.") and normalized.endswith((".command", ".textconv")):
-            unsafe.add(normalized)
-            continue
-        if normalized.startswith("merge.") and normalized.endswith(".driver"):
-            unsafe.add(normalized)
-            continue
-        if normalized.startswith("credential.") and normalized.endswith(".helper"):
-            unsafe.add(normalized)
-            continue
-        if normalized.startswith("url.") and normalized.endswith(
-            (".insteadof", ".pushinsteadof")
-        ):
-            unsafe.add(normalized)
-            continue
-        if normalized.startswith("remote.") and normalized.endswith(
-            (".proxy", ".receivepack", ".uploadpack", ".vcs")
-        ):
-            unsafe.add(normalized)
-            continue
-        if normalized.startswith("submodule.") and normalized.endswith(".update"):
+        if normalized and _is_unsafe_local_git_config_key(normalized):
             unsafe.add(normalized)
     return tuple(sorted(unsafe))
+
+
+def _is_unsafe_local_git_config_key(key: str) -> bool:
+    if key in _DANGEROUS_CONFIG_EXACT or key == "include.path":
+        return True
+    if key.startswith("includeif.") and key.endswith(".path"):
+        return True
+    return any(
+        key.startswith(prefix) and key.endswith(suffixes)
+        for prefix, suffixes in _DANGEROUS_CONFIG_PREFIX_SUFFIXES
+    )
 
 
 def validate_git_remote_url(url: str) -> str:
