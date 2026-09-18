@@ -92,7 +92,7 @@ def _start_and_stop_once(
         )
         try:
             _wait_until_ready(port, process, log_path)
-            process.send_signal(signal.SIGINT)
+            process.send_signal(signal.SIGTERM)
             process.wait(timeout=10)
             if process.returncode != 0:
                 raise RuntimeError(
@@ -123,6 +123,7 @@ def main() -> int:
                 "AI_MAP_PORT": str(port),
                 "AI_MAP_SECURE_COOKIE": "false",
                 "AI_MAP_LOG_LEVEL": "warning",
+                "AI_MAP_SHUTDOWN_TIMEOUT_SECONDS": "5",
             }
         )
 
