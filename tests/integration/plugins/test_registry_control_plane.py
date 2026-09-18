@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 
-from ai_multi_agent_platform.control_plane.models import PageQuery
+from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 from ai_multi_agent_platform.distribution import (
     MARKETPLACE_KIND_COLLECTION,
     REGISTRY_ACTIVATE_COMMAND,
@@ -11,7 +11,10 @@ from ai_multi_agent_platform.distribution import (
     REGISTRY_PREVIEW_COMMAND,
     ArtifactIntegrity,
     DistributionService,
+    InstalledRegistryItem,
+    JsonRegistryInstallationStore,
     LocalRegistryProvider,
+    PlatformRegistryValidationContextResolver,
     RegistryItem,
     RegistryItemType,
     RegistrySource,
@@ -78,6 +81,82 @@ def _item() -> tuple[RegistryItem, bytes]:
         trust_status=TrustStatus.REVIEWED,
     )
     return item, artifact
+
+
+def test_platform_validation_resolver_merges_local_and_marketplace_installations(
+    tmp_path,
+) -> None:
+    marketplace_item, _artifact = _item()
+    installations = JsonRegistryInstallationStore(tmp_path / "registry-installations.json")
+    installations.record(marketplace_item, provider_id="local")
+    local_item = InstalledRegistryItem(
+        "example.local-owner-item",
+        "2.0.0",
+        item_type=RegistryItemType.TOOL,
+    )
+    owner_copy = InstalledRegistryItem(
+        marketplace_item.item_id,
+        "9.0.0",
+        item_type=RegistryItemType.TEMPLATE,
+    )
+    resolver = PlatformRegistryValidationContextResolver(
+        platform_version="0.0.1",
+        installations=installations,
+        installed_items=lambda: (local_item, owner_copy),
+        operating_system="linux",
+        architecture="x86_64",
+    )
+
+    resolved = asyncio.run(
+        resolver.resolve(
+            RequestContext(
+                request_id="registry-context",
+                correlation_id="registry-context",
+            )
+        )
+    )
+
+    by_id = {item.item_id: item for item in resolved.installed_items}
+    assert by_id[local_item.item_id].source_registry is None
+    assert by_id[local_item.item_id].version == "2.0.0"
+    assert by_id[marketplace_item.item_id].source_registry is None
+    assert by_id[marketplace_item.item_id].version == owner_copy.version
+
+
+def test_platform_validation_resolver_enriches_same_version_owner_state_with_marketplace_origin(
+    tmp_path,
+) -> None:
+    marketplace_item, _artifact = _item()
+    installations = JsonRegistryInstallationStore(tmp_path / "registry-installations.json")
+    installations.record(marketplace_item, provider_id="local")
+    owner_copy = InstalledRegistryItem(
+        marketplace_item.item_id,
+        marketplace_item.version,
+        item_type=RegistryItemType.TEMPLATE,
+    )
+    resolver = PlatformRegistryValidationContextResolver(
+        platform_version="0.0.1",
+        installations=installations,
+        installed_items=lambda: (owner_copy,),
+        operating_system="linux",
+        architecture="x86_64",
+    )
+
+    resolved = asyncio.run(
+        resolver.resolve(
+            RequestContext(
+                request_id="registry-context-same-version",
+                correlation_id="registry-context-same-version",
+            )
+        )
+    )
+
+    installed = next(
+        item for item in resolved.installed_items if item.item_id == owner_copy.item_id
+    )
+    assert installed.version == owner_copy.version
+    assert installed.source_registry == "local"
+    assert installed.provenance == marketplace_item.provenance
 
 
 def test_disabled_registry_registers_no_northbound_surface() -> None:

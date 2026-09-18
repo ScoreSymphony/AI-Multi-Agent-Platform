@@ -21,7 +21,7 @@ from .models import (
     parse_registry_item_kind,
 )
 
-REGISTRY_ITEM_SCHEMA_VERSION = "5"
+REGISTRY_ITEM_SCHEMA_VERSION = "6"
 REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
@@ -194,9 +194,17 @@ REGISTRY_ITEM_SCHEMA_V4["properties"]["compatibility"] = {
 }
 
 REGISTRY_ITEM_SCHEMA_V5: dict[str, Any] = deepcopy(REGISTRY_ITEM_SCHEMA_V4)
-REGISTRY_ITEM_SCHEMA_V5["properties"]["schema_version"] = {"const": REGISTRY_ITEM_SCHEMA_VERSION}
+REGISTRY_ITEM_SCHEMA_V5["properties"]["schema_version"] = {"const": "5"}
 REGISTRY_ITEM_SCHEMA_V5["properties"]["maturity"] = {
     "enum": [maturity.value for maturity in RegistryMaturity]
+}
+
+REGISTRY_ITEM_SCHEMA_V6: dict[str, Any] = deepcopy(REGISTRY_ITEM_SCHEMA_V5)
+REGISTRY_ITEM_SCHEMA_V6["properties"]["schema_version"] = {"const": REGISTRY_ITEM_SCHEMA_VERSION}
+REGISTRY_ITEM_SCHEMA_V6["properties"]["homepage"] = {"type": ["string", "null"], "minLength": 1}
+REGISTRY_ITEM_SCHEMA_V6["properties"]["documentation"] = {
+    "type": ["string", "null"],
+    "minLength": 1,
 }
 
 _REGISTRY_ITEM_SCHEMAS = {
@@ -204,7 +212,8 @@ _REGISTRY_ITEM_SCHEMAS = {
     "2": REGISTRY_ITEM_SCHEMA_V2,
     "3": REGISTRY_ITEM_SCHEMA_V3,
     "4": REGISTRY_ITEM_SCHEMA_V4,
-    REGISTRY_ITEM_SCHEMA_VERSION: REGISTRY_ITEM_SCHEMA_V5,
+    "5": REGISTRY_ITEM_SCHEMA_V5,
+    REGISTRY_ITEM_SCHEMA_VERSION: REGISTRY_ITEM_SCHEMA_V6,
 }
 
 
@@ -273,6 +282,8 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
             signature_key_id=integrity.get("signature_key_id"),
         ),
         trust_status=TrustStatus(document["trust_status"]),
+        homepage=document.get("homepage"),
+        documentation=document.get("documentation"),
         review_reference=document.get("review_reference"),
         released_at=document.get("released_at"),
         changelog=document.get("changelog"),
