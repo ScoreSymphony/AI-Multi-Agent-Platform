@@ -74,13 +74,41 @@ class VersionRange:
 
 
 @dataclass(frozen=True, slots=True)
+class RegistryCompatibility:
+    """Portable environment constraints that do not duplicate runtime scheduling."""
+
+    operating_systems: frozenset[str] = frozenset()
+    architectures: frozenset[str] = frozenset()
+    required_runtimes: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        for values, field_name in (
+            (self.operating_systems, "operating_systems"),
+            (self.architectures, "architectures"),
+            (self.required_runtimes, "required_runtimes"),
+        ):
+            for value in values:
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"{field_name} must contain only non-blank strings")
+
+
+@dataclass(frozen=True, slots=True)
 class RegistryDependency:
     item_id: str
     version_range: VersionRange = field(default_factory=VersionRange)
     optional: bool = False
+    item_kind: RegistryItemKind | None = None
 
     def __post_init__(self) -> None:
         _require_id(self.item_id, "dependency item_id")
+        if self.item_kind is not None:
+            object.__setattr__(self, "item_kind", parse_registry_item_kind(self.item_kind))
+
+    @property
+    def kind_value(self) -> str | None:
+        if self.item_kind is None:
+            return None
+        return registry_item_kind_value(self.item_kind)
 
 
 @dataclass(frozen=True, slots=True)

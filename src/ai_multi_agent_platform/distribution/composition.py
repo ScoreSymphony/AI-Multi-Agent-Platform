@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import platform as host_platform
 from collections.abc import Callable, Iterable
 
 from ai_multi_agent_platform.control_plane.models import RequestContext
@@ -25,6 +26,9 @@ class PlatformRegistryValidationContextResolver:
         plugins: Inventory = lambda: (),
         connectors: Inventory = lambda: (),
         models: Inventory = lambda: (),
+        runtimes: Inventory = lambda: (),
+        operating_system: str | None = None,
+        architecture: str | None = None,
         grantable_permissions: PermissionInventory = lambda _context: (),
     ) -> None:
         self._platform_version = platform_version
@@ -33,6 +37,9 @@ class PlatformRegistryValidationContextResolver:
         self._plugins = plugins
         self._connectors = connectors
         self._models = models
+        self._runtimes = runtimes
+        self._operating_system = operating_system or host_platform.system().casefold()
+        self._architecture = architecture or host_platform.machine().casefold()
         self._grantable_permissions = grantable_permissions
 
     async def resolve(self, context: RequestContext) -> ValidationContext:
@@ -49,4 +56,7 @@ class PlatformRegistryValidationContextResolver:
             installed_connectors=frozenset(self._connectors()),
             available_models=frozenset(self._models()),
             grantable_permissions=frozenset(self._grantable_permissions(context)),
+            operating_system=self._operating_system,
+            architecture=self._architecture,
+            available_runtimes=frozenset(self._runtimes()),
         )

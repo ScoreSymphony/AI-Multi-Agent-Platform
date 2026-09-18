@@ -57,11 +57,12 @@ def _registry_metadata(
     provenance: str,
     artifact: bytes,
     required_connectors: list[str] | None = None,
+    required_runtimes: list[str] | None = None,
     tags: list[str] | None = None,
     categories: list[str] | None = None,
 ) -> dict[str, object]:
     return {
-        "schema_version": "1",
+        "schema_version": "4" if required_runtimes is not None else "1",
         "item_id": item_id,
         "item_type": item_type,
         "name": name,
@@ -95,6 +96,17 @@ def _registry_metadata(
         "changelog": "Hardening fixture",
         "deprecated": False,
         "yanked": False,
+        **(
+            {
+                "compatibility": {
+                    "operating_systems": [],
+                    "architectures": [],
+                    "required_runtimes": required_runtimes,
+                }
+            }
+            if required_runtimes is not None
+            else {}
+        ),
     }
 
 
@@ -171,7 +183,7 @@ def test_registry_installation_store_migrates_v1_state_without_losing_evidence(
 
     store.unpin("example.legacy")
     persisted = json.loads(path.read_text(encoding="utf-8"))
-    assert persisted["version"] == "3"
+    assert persisted["version"] == "4"
 
 
 def test_successful_activation_persists_exact_artifact_digest(tmp_path: Path) -> None:
@@ -289,6 +301,47 @@ def test_registry_plugin_restart_reconciliation_rejects_changed_artifact(tmp_pat
         )
 
 
+def test_registry_plugin_restart_reconciliation_rejects_publisher_drift(
+    tmp_path: Path,
+) -> None:
+    manifest = reference_manifest()
+    artifact = json.dumps(_manifest_document(manifest), sort_keys=True).encode("utf-8")
+    metadata = _registry_metadata(
+        item_id=manifest.plugin_id,
+        item_type="plugin",
+        name=manifest.name,
+        description=manifest.description,
+        version=manifest.plugin_version,
+        publisher=manifest.author,
+        repository=manifest.provenance.source_repository or "https://example.invalid/plugin",
+        package_reference=f"{manifest.plugin_id}@{manifest.plugin_version}",
+        license_name=manifest.provenance.license,
+        provenance="registry-release",
+        artifact=artifact,
+    )
+    catalog, _artifact_path = _write_catalog(tmp_path, metadata, artifact)
+    item = registry_item_from_document(metadata)
+    data_dir = tmp_path / "data"
+    JsonRegistryInstallationStore(data_dir / "db" / "registry-installations.json").record(
+        item,
+        provider_id="local-test",
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+
+    changed_metadata = dict(metadata)
+    changed_metadata["publisher"] = "different-publisher"
+    _write_catalog(tmp_path, changed_metadata, artifact)
+
+    with pytest.raises(RegistryPluginReconciliationError, match="publisher"):
+        build_default_single_node_deployment(
+            SingleNodeConfig(
+                data_dir=data_dir,
+                secure_cookie=False,
+                registry_catalog=catalog,
+            )
+        )
+
+
 def test_production_registry_validation_uses_live_connector_inventory(tmp_path: Path) -> None:
     connector = ReferenceConnectorProvider()
     artifact = b"{}"
@@ -331,6 +384,44 @@ def test_production_registry_validation_uses_live_connector_inventory(tmp_path: 
     )
     assert "missing_connector" not in _finding_codes(after)
     assert after["activation_allowed"] is True
+
+
+def test_production_registry_validation_uses_live_application_runtime_inventory(
+    tmp_path: Path,
+) -> None:
+    artifact = b"{}"
+    metadata = _registry_metadata(
+        item_id="example.runtime-dependent",
+        item_type="template",
+        name="Runtime dependent template",
+        description="Requires the configured local application runtime",
+        version="1.0.0",
+        publisher="example",
+        repository="https://example.invalid/runtime-template",
+        package_reference="example.runtime-dependent@1.0.0",
+        license_name="MIT",
+        provenance="registry-release",
+        artifact=artifact,
+        required_runtimes=["local.process"],
+    )
+    catalog, _ = _write_catalog(tmp_path, metadata, artifact)
+    deployment = build_default_single_node_deployment(
+        SingleNodeConfig(
+            data_dir=tmp_path / "data",
+            secure_cookie=False,
+            registry_catalog=catalog,
+        )
+    )
+    handler = deployment.control_plane._command_handlers[REGISTRY_PREVIEW_COMMAND]
+    context = RequestContext("request-runtime", "correlation-runtime")
+
+    preview = cast(
+        dict[str, JsonValue],
+        asyncio.run(handler(context, "example.runtime-dependent", {"version": "1.0.0"})),
+    )
+
+    assert "missing_runtime" not in _finding_codes(preview)
+    assert preview["activation_allowed"] is True
 
 
 def test_pinned_registry_item_still_exposes_newer_update_but_blocks_apply(
