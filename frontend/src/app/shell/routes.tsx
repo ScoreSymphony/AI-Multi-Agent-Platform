@@ -29,7 +29,7 @@ import { PluginCandidateDetailPage, PluginDetailPage, PluginsPage } from "../../
 import { ProjectDetailPage, WorkspaceDetailPage } from "../../pages/ProjectPages";
 import { ProjectsPage } from "../../pages/ProjectListPage";
 import { RepositoriesPage, RepositoryDetailPage } from "../../pages/RepositoriesPage";
-import { ReferencesPage } from "../../pages/ReferencePages";
+import { FileDetailPage, ReferencesPage } from "../../pages/ReferencePages";
 import { RunsPage } from "../../pages/RunListPage";
 import { SearchPage } from "../../pages/SearchPage";
 import { SettingsPage } from "../../pages/SettingsPage";
@@ -76,6 +76,7 @@ export function renderShellRoute({
     goalClient,
     computeClient,
     evaluationClient,
+    filesClient,
     governanceClient,
     integrationsClient,
     learningClient,
@@ -106,6 +107,7 @@ export function renderShellRoute({
   const connectionMatch = matchPath("/integrations/connections/:connectionId", path);
   const memoryMatch = matchPath("/memory/:memoryId", path);
   const knowledgeMatch = matchPath("/knowledge/:sourceId", path);
+  const fileMatch = matchPath("/files/:fileId", path);
   const providerMatch = matchPath("/models/providers/:providerId", path);
   const modelMatch = matchPath("/models/:modelId", path);
   const evaluationSuiteMatch = matchPath("/evaluations/suites/:suiteRef", path);
@@ -161,7 +163,8 @@ export function renderShellRoute({
   if (path === "/agent-teams") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams"><AgentTeamsPage client={client} /></ManifestResourcePage>;
   if (agentTeamMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams"><AgentTeamDetailPage client={client} teamId={agentTeamMatch.teamId} /></ManifestResourcePage>;
   if (path === "/organizations") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Organizations" resource="organizations"><OrganizationsPage client={organizationClient} /></ManifestResourcePage>;
-  if (path === "/files") return <ReferencesPage client={client} />;
+  if (path === "/files") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Files & artifacts" resource="files"><ReferencesPage client={client} files={filesClient} /></ManifestResourcePage>;
+  if (fileMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="File" resource="files"><FileDetailPage client={filesClient} fileId={fileMatch.fileId} /></ManifestResourcePage>;
   if (referenceMatch) return <VerificationBoundReferenceDetailPage client={client} verificationClient={verificationClient} collection={referenceMatch.collection} resourceId={referenceMatch.resourceId} />;
   if (path === "/memory") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory"><MemoryPage client={memoryKnowledgeClient} /></ManifestResourcePage>;
   if (memoryMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory"><MemoryDetailPage client={memoryKnowledgeClient} memoryId={memoryMatch.memoryId} /></ManifestResourcePage>;
