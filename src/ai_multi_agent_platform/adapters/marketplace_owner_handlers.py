@@ -367,11 +367,11 @@ class AgentMarketplaceKindHandler(_AgentMarketplaceBase):
             "agent_id": current.agent_id,
             "revision": current.revision,
             "name": current.profile.name,
-            "required_capabilities": tuple(
-                constraint.capability_id for constraint in current.profile.capabilities.required
-            ),
+            "required_capabilities": current.profile.capabilities.required_ids,
             "optional_capabilities": tuple(
-                constraint.capability_id for constraint in current.profile.capabilities.optional
+                constraint.capability_id
+                for constraint in current.profile.capabilities.constraints
+                if not constraint.required
             ),
             "memory_scopes": tuple(
                 scope.value for scope in sorted(current.profile.data_access.memory_scopes, key=lambda value: value.value)
