@@ -166,51 +166,34 @@ def build_default_single_node_deployment(
     return deployment
 
 
-def _configure_registry(
-    config: SingleNodeConfig,
+def _registry_plugin_runtime(deployment: SingleNodeDeployment) -> PluginRegistry:
+    plugin_registry = deployment.control_plane.plugin_registry
+    if plugin_registry is not None:
+        return plugin_registry
+
+    plugin_registry = PluginRegistry(
+        platform_version=__version__,
+        supported_interfaces={
+            ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"}),
+            ExtensionType.CONNECTOR_PROVIDER: frozenset({"1.0"}),
+        },
+        binders={
+            ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(deployment.capabilities),
+            ExtensionType.CONNECTOR_PROVIDER: ConnectorRegistryBinder(deployment.connectors),
+        },
+    )
+    deployment.control_plane.attach_plugin_runtime(plugin_registry)
+    return plugin_registry
+
+
+def _marketplace_kind_handlers(
     deployment: SingleNodeDeployment,
     applications: ApplicationRuntimeComposition,
-) -> tuple[DistributionService | None, RegistryCommandHandlers | None]:
-    """Attach #81 only when an operator explicitly configures a local Registry catalog."""
-
-    if config.registry_catalog is None:
-        return None, None
-
-    provider = FilesystemRegistryProvider(config.registry_catalog)
-    installations = JsonRegistryInstallationStore(
-        deployment.config.database_dir / "registry-installations.json"
-    )
-    plugin_registry = deployment.control_plane.plugin_registry
-    if plugin_registry is None:
-        plugin_registry = PluginRegistry(
-            platform_version=__version__,
-            supported_interfaces={
-                ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"}),
-                ExtensionType.CONNECTOR_PROVIDER: frozenset({"1.0"}),
-            },
-            binders={
-                ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(deployment.capabilities),
-                ExtensionType.CONNECTOR_PROVIDER: ConnectorRegistryBinder(deployment.connectors),
-            },
-        )
-        deployment.control_plane.attach_plugin_runtime(plugin_registry)
-
-    signature_verifier = None
-    if config.registry_signature_keys is not None:
-        signature_verifier = HmacSha256SignatureVerifier(
-            load_hmac_signature_keys(config.registry_signature_keys)
-        )
-    asyncio.run(
-        reconcile_registry_plugins(
-            provider,
-            installations,
-            plugin_registry,
-            signature_verifier=signature_verifier,
-        )
-    )
-
-    plugin_installer = PluginRegistryArtifactInstaller(plugin_registry)
-    kind_handlers = MarketplaceKindHandlerRegistry(
+    *,
+    plugin_registry: PluginRegistry,
+    plugin_installer: PluginRegistryArtifactInstaller,
+) -> MarketplaceKindHandlerRegistry:
+    return MarketplaceKindHandlerRegistry(
         (
             PluginExtensionMarketplaceKindHandler(
                 kind=RegistryItemType.TOOL,
@@ -232,23 +215,14 @@ def _configure_registry(
             ),
         )
     )
-    portability = deployment.control_plane.portability_workflow
-    if portability is None:
-        raise RuntimeError(
-            "single-node Registry composition requires the canonical portability workflow"
-        )
-    router = CanonicalDistributionRouter(
-        plugin_installer=plugin_installer,
-        portability=portability,
-    )
-    distribution = DistributionService(
-        provider,
-        router,
-        installations=installations,
-        signature_verifier=signature_verifier,
-        kind_handlers=kind_handlers,
-    )
-    validation = PlatformRegistryValidationContextResolver(
+
+
+def _registry_validation_resolver(
+    deployment: SingleNodeDeployment,
+    installations: JsonRegistryInstallationStore,
+    plugin_registry: PluginRegistry,
+) -> PlatformRegistryValidationContextResolver:
+    return PlatformRegistryValidationContextResolver(
         platform_version=__version__,
         installations=installations,
         capabilities=lambda: (
@@ -270,6 +244,59 @@ def _configure_registry(
             )
         ),
     )
+
+
+def _configure_registry(
+    config: SingleNodeConfig,
+    deployment: SingleNodeDeployment,
+    applications: ApplicationRuntimeComposition,
+) -> tuple[DistributionService | None, RegistryCommandHandlers | None]:
+    """Attach the optional Registry only when an operator configures a local catalog."""
+
+    if config.registry_catalog is None:
+        return None, None
+
+    provider = FilesystemRegistryProvider(config.registry_catalog)
+    installations = JsonRegistryInstallationStore(
+        deployment.config.database_dir / "registry-installations.json"
+    )
+    plugin_registry = _registry_plugin_runtime(deployment)
+    signature_verifier = (
+        HmacSha256SignatureVerifier(load_hmac_signature_keys(config.registry_signature_keys))
+        if config.registry_signature_keys is not None
+        else None
+    )
+    asyncio.run(
+        reconcile_registry_plugins(
+            provider,
+            installations,
+            plugin_registry,
+            signature_verifier=signature_verifier,
+        )
+    )
+
+    plugin_installer = PluginRegistryArtifactInstaller(plugin_registry)
+    portability = deployment.control_plane.portability_workflow
+    if portability is None:
+        raise RuntimeError(
+            "single-node Registry composition requires the canonical portability workflow"
+        )
+    distribution = DistributionService(
+        provider,
+        CanonicalDistributionRouter(
+            plugin_installer=plugin_installer,
+            portability=portability,
+        ),
+        installations=installations,
+        signature_verifier=signature_verifier,
+        kind_handlers=_marketplace_kind_handlers(
+            deployment,
+            applications,
+            plugin_registry=plugin_registry,
+            plugin_installer=plugin_installer,
+        ),
+    )
+    validation = _registry_validation_resolver(deployment, installations, plugin_registry)
     register_distribution_control_plane(
         deployment.control_plane,
         distribution,
