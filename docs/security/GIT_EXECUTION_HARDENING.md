@@ -201,7 +201,7 @@ than being promoted directly into production.
 ## Malicious fixture corpus
 
 The permanent regression corpus is
-`tests/security/test_gitspawn_regression.py`.
+`tests/regression/security/test_gitspawn_regression.py`.
 
 | Fixture ID | Primitive | Representative command/path | Expected result | Mitigation |
 | --- | --- | --- | --- | --- |
