@@ -9,6 +9,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from ai_multi_agent_platform.security.git_execution import (
+    controlled_git_environment,
+    resolve_git_executable,
+    validate_git_remote_url,
+)
+
 from .discovery import (
     UPDATE_OBSERVATION_SCHEMA_VERSION,
     CompatibilityInventory,
@@ -52,8 +58,20 @@ def git_head_revision(source_url: str) -> str:
     """Resolve a repository HEAD without cloning or mutating a working tree."""
 
     try:
+        safe_source_url = validate_git_remote_url(source_url)
+    except ValueError as exc:
+        raise UpdateDiscoveryError(f"git discovery rejected {source_url}: {exc}") from exc
+    try:
         completed = subprocess.run(
-            ["git", "ls-remote", "--exit-code", source_url, "HEAD"],
+            [
+                resolve_git_executable("git"),
+                "ls-remote",
+                "--exit-code",
+                safe_source_url,
+                "HEAD",
+            ],
+            env=controlled_git_environment(),
+            stdin=subprocess.DEVNULL,
             check=False,
             capture_output=True,
             text=True,
