@@ -14,13 +14,14 @@ from .models import (
     RegistryCompatibility,
     RegistryDependency,
     RegistryManifestReference,
+    RegistryMaturity,
     RegistrySource,
     TrustStatus,
     VersionRange,
     parse_registry_item_kind,
 )
 
-REGISTRY_ITEM_SCHEMA_VERSION = "4"
+REGISTRY_ITEM_SCHEMA_VERSION = "5"
 REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
@@ -165,7 +166,7 @@ REGISTRY_ITEM_SCHEMA_V3["properties"]["manifest"] = {
 }
 
 REGISTRY_ITEM_SCHEMA_V4: dict[str, Any] = deepcopy(REGISTRY_ITEM_SCHEMA_V3)
-REGISTRY_ITEM_SCHEMA_V4["properties"]["schema_version"] = {"const": REGISTRY_ITEM_SCHEMA_VERSION}
+REGISTRY_ITEM_SCHEMA_V4["properties"]["schema_version"] = {"const": "4"}
 REGISTRY_ITEM_SCHEMA_V4["properties"]["dependencies"]["items"]["properties"]["item_kind"] = {
     "type": ["string", "null"],
     "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
@@ -192,11 +193,18 @@ REGISTRY_ITEM_SCHEMA_V4["properties"]["compatibility"] = {
     "additionalProperties": False,
 }
 
+REGISTRY_ITEM_SCHEMA_V5: dict[str, Any] = deepcopy(REGISTRY_ITEM_SCHEMA_V4)
+REGISTRY_ITEM_SCHEMA_V5["properties"]["schema_version"] = {"const": REGISTRY_ITEM_SCHEMA_VERSION}
+REGISTRY_ITEM_SCHEMA_V5["properties"]["maturity"] = {
+    "enum": [maturity.value for maturity in RegistryMaturity]
+}
+
 _REGISTRY_ITEM_SCHEMAS = {
     "1": REGISTRY_ITEM_SCHEMA_V1,
     "2": REGISTRY_ITEM_SCHEMA_V2,
     "3": REGISTRY_ITEM_SCHEMA_V3,
-    REGISTRY_ITEM_SCHEMA_VERSION: REGISTRY_ITEM_SCHEMA_V4,
+    "4": REGISTRY_ITEM_SCHEMA_V4,
+    REGISTRY_ITEM_SCHEMA_VERSION: REGISTRY_ITEM_SCHEMA_V5,
 }
 
 
@@ -256,6 +264,9 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
         required_models=tuple(document.get("required_models", [])),
         tags=frozenset(document.get("tags", [])),
         categories=frozenset(document.get("categories", [])),
+        maturity=(
+            RegistryMaturity(document["maturity"]) if document.get("maturity") is not None else None
+        ),
         integrity=ArtifactIntegrity(
             sha256=integrity.get("sha256"),
             signature=integrity.get("signature"),
