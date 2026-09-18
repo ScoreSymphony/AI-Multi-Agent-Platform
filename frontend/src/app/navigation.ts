@@ -23,7 +23,7 @@ export const navigation: NavigationItem[] = [
   { label: "Agents", path: "/agents", group: "Agents", apiResource: "agents" },
   { label: "Agent Teams", path: "/agent-teams", group: "Agents", apiResource: "agent-teams" },
   { label: "Verification", path: "/verification", group: "Agents", apiResource: "verifications" },
-  { label: "Files & Artifacts", path: "/files", group: "Data", apiResource: "artifacts" },
+  { label: "Files & Artifacts", path: "/files", group: "Data", apiResource: "files" },
   { label: "Memory", path: "/memory", group: "Data", apiResource: "memory" },
   { label: "Knowledge", path: "/knowledge", group: "Data", apiResource: "knowledge" },
   { label: "Search", path: "/search", group: "Data", apiResource: "search" },
