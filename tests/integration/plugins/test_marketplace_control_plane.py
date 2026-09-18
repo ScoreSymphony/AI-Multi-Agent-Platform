@@ -1267,6 +1267,51 @@ def test_marketplace_preview_serializes_structured_decision_findings(
     assert {finding["category"] for finding in findings} >= {"dependency", "permission"}  # type: ignore[index]
 
 
+def test_marketplace_preview_projects_only_explicit_candidate_owner_details(
+    tmp_path: Path,
+) -> None:
+    class CandidateDetailHandler(RecordingHandler):
+        def validate_candidate(self, item: RegistryItem, artifact: bytes) -> None:
+            assert item.kind == "application"
+            assert artifact == b"candidate-detail"
+
+        def describe_candidate(
+            self,
+            item: RegistryItem,
+            artifact: bytes,
+        ) -> dict[str, object]:
+            self.validate_candidate(item, artifact)
+            return {"candidate_kind": item.kind, "phase": "pre-install"}
+
+    item = _application("example.candidate-detail", "1.0.0")
+    commands = RegistryCommandHandlers(
+        DistributionService(
+            LocalRegistryProvider(
+                (item,),
+                {(item.item_id, item.version): b"candidate-detail"},
+            ),
+            installations=JsonRegistryInstallationStore(tmp_path / "candidate-detail.json"),
+            kind_handlers=MarketplaceKindHandlerRegistry((CandidateDetailHandler(),)),
+        ),
+        StaticValidationContext(_context()),
+    )
+
+    preview = asyncio.run(
+        commands.marketplace_preview(
+            _request(),
+            item.item_id,
+            {"version": item.version},
+        )
+    )
+
+    owner_extension = preview["item"]["owner_extension"]  # type: ignore[index]
+    assert owner_extension["details"] == {  # type: ignore[index]
+        "candidate_kind": "application",
+        "phase": "pre-install",
+    }
+    assert owner_extension["status"] is None  # type: ignore[index]
+
+
 def test_future_kind_registry_controls_operations_and_same_version_source_switch(
     tmp_path: Path,
 ) -> None:
