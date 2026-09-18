@@ -59,7 +59,7 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "tests/unit/notifications/test_notification_service.py::"
         "test_approval_required_projection_uses_exact_approval_reference_without_payload",
         "tests/regression/notifications/test_followup_integrations.py::"
-        "test_verification_required_and_changes_requested_use_opaque_issue86_attention_contract",
+        "test_verification_required_and_changes_requested_use_opaque_verification_attention_contract",
         "tests/unit/notifications/test_event_projection.py::"
         "test_event_provider_projects_task_event_and_replay_aggregates_safely",
     ),
