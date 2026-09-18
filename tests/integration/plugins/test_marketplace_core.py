@@ -83,11 +83,38 @@ def test_builtin_marketplace_kinds_include_new_first_class_families() -> None:
 
     assert {"tool", "skill", "plugin", "connector", "application", "template"} <= kinds
     assert registry.require("application").default_route is DistributionRoute.KIND_HANDLER
-    assert registry.require(RegistryItemType.TOOL).default_route is DistributionRoute.KIND_HANDLER
     assert (
-        registry.require(RegistryItemType.CONNECTOR).default_route is DistributionRoute.KIND_HANDLER
+        registry.require(RegistryItemType.TOOL).default_route is DistributionRoute.PORTABLE_IMPORT
+    )
+    assert (
+        registry.require(RegistryItemType.CONNECTOR).default_route
+        is DistributionRoute.PORTABLE_IMPORT
     )
     assert registry.require(RegistryItemType.APPLICATION).supports_update is False
+
+
+def test_manifest_backed_tool_and_connector_use_owner_handlers_without_regressing_legacy_routes() -> None:
+    tool = _item(
+        RegistryItemType.TOOL,
+        manifest=RegistryManifestReference(kind="tool", reference="tools/example.json"),
+    )
+    connector = _item(
+        RegistryItemType.CONNECTOR,
+        manifest=RegistryManifestReference(
+            kind="connector",
+            reference="connectors/example.json",
+        ),
+    )
+    legacy_tool = _item(RegistryItemType.TOOL, item_id="example.legacy-tool")
+    legacy_connector = _item(
+        RegistryItemType.CONNECTOR,
+        item_id="example.legacy-connector",
+    )
+
+    assert tool.route is DistributionRoute.KIND_HANDLER
+    assert connector.route is DistributionRoute.KIND_HANDLER
+    assert legacy_tool.route is DistributionRoute.PORTABLE_IMPORT
+    assert legacy_connector.route is DistributionRoute.PORTABLE_IMPORT
 
 
 def test_new_marketplace_kind_can_be_registered_without_enum_change() -> None:
