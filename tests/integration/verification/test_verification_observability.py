@@ -177,7 +177,7 @@ def test_sqlite_restart_preserves_audit_without_replaying_duplicate_events(tmp_p
     assert restored.audit_history() == after
 
 
-def test_verification_timeline_reader_maps_audit_to_issue_16_semantics() -> None:
+def test_verification_timeline_reader_maps_audit_to_observability_semantics() -> None:
     service = VerificationService()
     policy = service.register_policy(_human_policy())
     task_id = new_id("task")
