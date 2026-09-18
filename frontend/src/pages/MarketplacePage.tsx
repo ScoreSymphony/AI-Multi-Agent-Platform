@@ -74,6 +74,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   const [category, setCategory] = useState("");
   const [license, setLicense] = useState("");
   const [publisher, setPublisher] = useState("");
+  const [sourceRegistry, setSourceRegistry] = useState("");
   const [requiredCapability, setRequiredCapability] = useState("");
   const [platformVersion, setPlatformVersion] = useState("");
   const [installedFilter, setInstalledFilter] = useState<"" | "true" | "false">("");
@@ -99,6 +100,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     if (category.trim()) filters.category = category.trim();
     if (license.trim()) filters.license = license.trim();
     if (publisher.trim()) filters.publisher = publisher.trim();
+    if (sourceRegistry.trim()) filters.source = sourceRegistry.trim();
     if (requiredCapability.trim()) filters.required_capability = requiredCapability.trim();
     if (platformVersion.trim()) filters.platform_version = platformVersion.trim();
     if (installedFilter) filters.installed = installedFilter;
@@ -123,6 +125,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     platformVersion,
     publisher,
     queryText,
+    sourceRegistry,
     requiredCapability,
     sort,
     tag,
@@ -312,6 +315,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     setCategory("");
     setLicense("");
     setPublisher("");
+    setSourceRegistry("");
     setRequiredCapability("");
     setPlatformVersion("");
     setInstalledFilter("");
@@ -340,7 +344,13 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
 
   const filtersActive =
     Boolean(queryText.trim() || kindFilter || trustStatus || maturity || tag.trim() || category.trim()) ||
-    Boolean(license.trim() || publisher.trim() || requiredCapability.trim() || platformVersion.trim()) ||
+    Boolean(
+      license.trim() ||
+      publisher.trim() ||
+      sourceRegistry.trim() ||
+      requiredCapability.trim() ||
+      platformVersion.trim()
+    ) ||
     Boolean(installedFilter || compatibilityFilter || technicalOnly || updatesOnly);
 
   const providerDisabled = error ? providerLooksDisabled(error) : false;
@@ -481,6 +491,14 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
             />
           </label>
           <label>
+            Marketplace source
+            <input
+              value={sourceRegistry}
+              placeholder="official or private"
+              onChange={(event) => setSourceRegistry(event.target.value)}
+            />
+          </label>
+          <label>
             Required capability
             <input
               value={requiredCapability}
@@ -502,6 +520,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
               <option value="name">Name</option>
               <option value="version">Version</option>
               <option value="publisher">Publisher</option>
+              <option value="source_registry">Marketplace source</option>
               <option value="released_at">Release date</option>
               <option value="item_type">Kind</option>
               <option value="maturity">Maturity</option>
