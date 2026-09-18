@@ -21,6 +21,7 @@ from ai_multi_agent_platform.contracts import (
     ModelStreamEvent,
     ModelStreamEventKind,
     OperationContext,
+    OperationControl,
     ProviderDescriptor,
 )
 from ai_multi_agent_platform.models import (
@@ -330,3 +331,100 @@ def test_native_stream_timeout_is_mapped_to_canonical_error() -> None:
     assert captured.value.code is ErrorCode.TIMEOUT
     assert captured.value.retryable is True
     assert captured.value.provider_id == "local-stream-provider"
+
+
+class HangingModelProvider(ModelProvider):
+    def __init__(self) -> None:
+        self.generate_cancelled = 0
+        self.stream_cancelled = 0
+
+    @property
+    def descriptor(self) -> ProviderDescriptor:
+        return ProviderDescriptor(
+            provider_id="hanging-model-provider",
+            provider_type="test-model",
+            health=HealthStatus.HEALTHY,
+            available=True,
+        )
+
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            self.generate_cancelled += 1
+            raise
+        return ModelResponse(
+            request_id=request.request_id,
+            text="unreachable",
+            model_ref="provider-private-model",
+        )
+
+    def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]:
+        async def iterate() -> AsyncIterator[ModelStreamEvent]:
+            try:
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                self.stream_cancelled += 1
+                raise
+            yield ModelStreamEvent(
+                request_id=request.request_id,
+                kind=ModelStreamEventKind.TEXT_DELTA,
+                model_ref="provider-private-model",
+                text_delta="unreachable",
+            )
+
+        return iterate()
+
+
+def hanging_runtime() -> tuple[HangingModelProvider, ModelRuntime]:
+    provider = HangingModelProvider()
+    config = ModelConfiguration(
+        config_id="model-hanging",
+        display_name="Hanging model",
+        provider_id=provider.descriptor.provider_id,
+        location=ModelLocation.LOCAL,
+        health=HealthStatus.HEALTHY,
+        capabilities=ModelCapabilities(streaming=True, modalities=("text",)),
+    )
+    _, runtime = runtime_with_provider(provider, config=config)
+    return provider, runtime
+
+
+def hanging_request(request_id: str) -> ModelRequest:
+    return ModelRequest(
+        request_id=request_id,
+        messages=("Bound this provider call",),
+        context=OperationContext(
+            correlation_id=f"corr-{request_id}",
+            control=OperationControl(timeout_seconds=0.01),
+        ),
+        requirements={"model_config_id": "model-hanging"},
+    )
+
+
+def test_model_runtime_bounds_hanging_generate_with_canonical_timeout() -> None:
+    provider, runtime = hanging_runtime()
+
+    with pytest.raises(ContractError) as captured:
+        asyncio.run(runtime.generate(hanging_request("req-hanging-generate")))
+
+    assert captured.value.code is ErrorCode.TIMEOUT
+    assert captured.value.retryable is True
+    assert captured.value.provider_id == provider.descriptor.provider_id
+    assert captured.value.details["model_config_id"] == "model-hanging"
+    assert provider.generate_cancelled == 1
+
+
+def test_model_runtime_bounds_hanging_stream_with_canonical_timeout() -> None:
+    provider, runtime = hanging_runtime()
+
+    with pytest.raises(ContractError) as captured:
+        asyncio.run(
+            collect_events(runtime.stream(hanging_request("req-hanging-stream")))
+        )
+
+    assert captured.value.code is ErrorCode.TIMEOUT
+    assert captured.value.retryable is True
+    assert captured.value.provider_id == provider.descriptor.provider_id
+    assert captured.value.details["model_config_id"] == "model-hanging"
+    assert provider.stream_cancelled == 1

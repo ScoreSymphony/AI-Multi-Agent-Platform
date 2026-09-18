@@ -39,6 +39,11 @@ retries/backoff.
 The health layer never retries canonical Task/Run mutations. Runtime retry ownership remains with
 the existing lifecycle/coordinator mechanisms and their persisted idempotency/reconciliation rules.
 
+Model invocation now enforces `OperationControl.timeout_seconds` at the provider-neutral
+`ModelRuntime` boundary for both generate and streaming calls. A hanging provider is cancelled by
+the timeout boundary and exposed as canonical retryable `timeout`; external caller cancellation
+continues to map through the existing canonical `cancelled` path.
+
 ## Readiness states
 
 The backend-neutral states are:
