@@ -492,6 +492,29 @@ def test_gitspawn_external_remote_helper_is_rejected_before_fetch(tmp_path: Path
     asyncio.run(scenario())
 
 
+@pytest.mark.skipif(os.name == "nt", reason="remote-helper fixture uses POSIX command syntax")
+def test_gitspawn_direct_push_remote_helper_is_rejected_before_spawn(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        provider, repository, operation, root = await _initialized_provider(tmp_path)
+        (root / "payload.txt").write_text("safe\n", encoding="utf-8")
+        await provider.commit(
+            repository,
+            "baseline",
+            operation,
+            author_name="GitSpawn Test",
+            author_email="gitspawn@example.invalid",
+        )
+        marker = tmp_path / "direct-push-helper-executed"
+
+        with pytest.raises(ContractError) as error:
+            await provider.push(repository, operation, remote=f"ext::touch {marker}")
+
+        assert error.value.code is ErrorCode.INVALID_CONFIGURATION
+        assert not marker.exists()
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.skipif(os.name == "nt", reason="Git hook executability semantics differ on Windows")
 def test_gitspawn_local_push_remote_cannot_execute_target_hook(tmp_path: Path) -> None:
     async def scenario() -> None:
