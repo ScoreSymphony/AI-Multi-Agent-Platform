@@ -47,6 +47,7 @@ class FailureComponent(StrEnum):
     CONTROL_PLANE_HA = "control_plane_ha"
     CONNECTOR_BROWSER = "connector_browser"
     PLUGIN_ADAPTER = "plugin_adapter"
+    APPLICATION_ADAPTER = "application_adapter"
     INFRASTRUCTURE_UNKNOWN = "infrastructure_unknown"
 
 

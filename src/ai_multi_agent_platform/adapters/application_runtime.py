@@ -12,11 +12,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ai_multi_agent_platform.applications import (
+    ApplicationAuditLog,
     ApplicationLifecycleService,
     ApplicationRuntimeRegistry,
     LocalApplicationWorkspaceBinder,
     LocalProcessApplicationRuntime,
+    SqliteApplicationAuditStore,
     SqliteApplicationRepository,
+    register_application_audit_control_plane,
     register_application_control_plane,
     register_application_log_control_plane,
     register_application_resource_handlers,
@@ -35,6 +38,8 @@ class ApplicationRuntimeComposition:
     repository: SqliteApplicationRepository
     runtimes: ApplicationRuntimeRegistry
     lifecycle: ApplicationLifecycleService
+    audit: ApplicationAuditLog
+    audit_store: SqliteApplicationAuditStore
 
     async def reconcile_startup(self) -> StartupRecoveryExtensionReport:
         """Reconcile durable desired state without leaking backend diagnostics."""
@@ -69,7 +74,10 @@ def compose_application_runtime(
 
     effective_workspaces = workspace_provider or deployment.workspaces
     effective_local_path = workspace_local_path or deployment.workspaces.local_path
-    repository = SqliteApplicationRepository(config.database_dir / "applications.sqlite3")
+    database_path = config.database_dir / "applications.sqlite3"
+    repository = SqliteApplicationRepository(database_path)
+    audit_store = SqliteApplicationAuditStore(database_path)
+    audit = ApplicationAuditLog(audit_store, telemetry=deployment.telemetry)
     workspace_binder = LocalApplicationWorkspaceBinder(
         effective_workspaces,
         effective_local_path,
@@ -94,10 +102,17 @@ def compose_application_runtime(
         deployment.control_plane,
         repository,
     )
+    register_application_audit_control_plane(
+        deployment.control_plane,
+        audit,
+        audit_store,
+    )
     composition = ApplicationRuntimeComposition(
         repository=repository,
         runtimes=runtimes,
         lifecycle=lifecycle,
+        audit=audit,
+        audit_store=audit_store,
     )
     deployment.startup_recovery_extensions = (
         *deployment.startup_recovery_extensions,

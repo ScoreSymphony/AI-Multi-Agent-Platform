@@ -71,12 +71,16 @@ def test_shipped_single_node_composes_application_runtime_and_control_plane(tmp_
     assert "application-instances" in deployment.control_plane.registered_collections
     assert "application-logs" in deployment.control_plane.registered_collections
     assert "application-resource-handlers" in deployment.control_plane.registered_collections
+    assert "application-audit-events" in deployment.control_plane.registered_collections
     assert "application.install" in deployment.control_plane.registered_commands
     assert deployment.control_plane.resource_owner("applications") == "applications"
     assert deployment.control_plane.resource_owner("application-logs") == "applications.logs"
     assert (
         deployment.control_plane.resource_owner("application-resource-handlers")
         == "applications.resource-associations"
+    )
+    assert (
+        deployment.control_plane.resource_owner("application-audit-events") == "applications.audit"
     )
     assert deployment.control_plane.command_owner("application.start") == "applications"
 

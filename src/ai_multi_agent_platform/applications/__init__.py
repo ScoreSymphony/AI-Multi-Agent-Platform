@@ -1,5 +1,16 @@
 """Canonical managed Application definitions, lifecycle and runtime contracts."""
 
+from .audit import (
+    APPLICATION_AUDIT_COLLECTION,
+    APPLICATION_AUDIT_MODULE,
+    APPLICATION_AUDIT_TYPE,
+    AUDITED_APPLICATION_COMMANDS,
+    ApplicationAuditLog,
+    ApplicationAuditResourceService,
+    SqliteApplicationAuditStore,
+    application_audit_control_plane_module,
+    register_application_audit_control_plane,
+)
 from .control_plane import (
     APPLICATION_COLLECTION,
     APPLICATION_COLLECTIONS,
@@ -86,6 +97,9 @@ from .sqlite_repository import SqliteApplicationRepository
 from .workspace_execution import LocalApplicationWorkspaceBinder
 
 __all__ = [
+    "APPLICATION_AUDIT_COLLECTION",
+    "APPLICATION_AUDIT_MODULE",
+    "APPLICATION_AUDIT_TYPE",
     "APPLICATION_COLLECTION",
     "APPLICATION_COLLECTIONS",
     "APPLICATION_COMMANDS",
@@ -97,7 +111,10 @@ __all__ = [
     "APPLICATION_MODULE",
     "APPLICATION_RESOURCE_HANDLER_COLLECTION",
     "APPLICATION_RESOURCE_HANDLER_MODULE",
+    "AUDITED_APPLICATION_COMMANDS",
     "Application",
+    "ApplicationAuditLog",
+    "ApplicationAuditResourceService",
     "ApplicationConfigValueType",
     "ApplicationConfigurationField",
     "ApplicationDesiredState",
@@ -146,11 +163,14 @@ __all__ = [
     "InMemoryApplicationRepository",
     "LocalApplicationWorkspaceBinder",
     "LocalProcessApplicationRuntime",
+    "SqliteApplicationAuditStore",
     "SqliteApplicationRepository",
+    "application_audit_control_plane_module",
     "application_control_plane_module",
     "application_log_control_plane_module",
     "application_manifest_from_document",
     "application_resource_handler_module",
+    "register_application_audit_control_plane",
     "register_application_control_plane",
     "register_application_log_control_plane",
     "register_application_resource_handlers",
