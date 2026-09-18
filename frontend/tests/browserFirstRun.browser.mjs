@@ -281,6 +281,7 @@ try {
   await page.getByLabel("Provider-native model name", { exact: true }).fill("browser-model-native");
   await page.getByLabel("Display name", { exact: true }).fill("Browser local model");
   await page.getByLabel("Base URL", { exact: true }).fill(`http://${host}:${modelPort}/v1`);
+  await page.getByLabel("Context window", { exact: true }).fill("32768");
   await (await waitForButton(page, "Validate and save model")).click();
 
   await page.getByRole("heading", { name: "Create project", exact: true }).waitFor();
