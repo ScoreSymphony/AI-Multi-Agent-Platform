@@ -66,7 +66,10 @@ future serving modes from treating reconciliation or an operator-required state 
 
 - `failure_count` increments when a dependency enters an impaired state;
 - `recovery_count` increments when it returns to `ready`;
-- `attempts` reports the bounded attempts used by the current probe.
+- `attempts` / `retry_count` report the bounded work used by the current probe;
+- `last_retry_error_code` records the canonical reason for the most recent retry;
+- `probe_duration_seconds` records current probe cost;
+- `degraded_duration_seconds` records the active or just-recovered degradation duration.
 
 These counters are diagnostics, not canonical lifecycle state. A dependency returning never creates
 or retries canonical work by itself, so repeated health flap/recovery cycles cannot duplicate
@@ -79,7 +82,8 @@ Task/Run effects or widen routing/authorization policy.
 - required blockers as `blocking`;
 - optional degradation as `degraded`;
 - backend-neutral dependency name/state/error code;
-- probe attempts plus failure/recovery counts;
+- probe attempts/retries, canonical retry reason, probe duration and degradation duration;
+- failure/recovery transition counts;
 - non-destructive guidance.
 
 The guidance never recommends direct database/event-store edits. Operator-required recovery remains
