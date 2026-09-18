@@ -288,7 +288,7 @@ class RegistryResourceService:
             details = (
                 self.distribution.describe(status_item)
                 if status_item is not None
-                else self.distribution.describe_candidate(item)
+                else self._candidate_details(item)
             )
             status = (
                 await self.distribution.status(status_item) if status_item is not None else None
@@ -310,6 +310,20 @@ class RegistryResourceService:
             "status": json_value(status) if status is not None else None,
             "status_version": status_item.version if status_item is not None else None,
         }
+
+    def _candidate_details(
+        self,
+        item: RegistryItem,
+    ) -> Mapping[str, object] | None:
+        try:
+            return self.distribution.describe_candidate(item)
+        except ContractError as exc:
+            if exc.code not in {
+                ErrorCode.INVALID_CONFIGURATION,
+                ErrorCode.CONFLICT,
+            }:
+                raise
+            return None
 
     def _installed_status_item(
         self,
