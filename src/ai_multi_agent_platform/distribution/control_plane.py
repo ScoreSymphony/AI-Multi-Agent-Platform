@@ -50,6 +50,7 @@ MARKETPLACE_INSTALL_COMMAND = "marketplace.install"
 MARKETPLACE_UPDATE_COMMAND = "marketplace.update"
 MARKETPLACE_UNINSTALL_COMMAND = "marketplace.uninstall"
 
+
 class RegistryValidationContextResolver(Protocol):
     """Resolve validation inputs from authoritative server-side platform state."""
 
@@ -78,8 +79,8 @@ class RegistryResourceService:
     ) -> tuple[dict[str, JsonValue], ...]:
         _validate_marketplace_sort(query.sort)
         plan = _registry_query(query)
-        compatibility_context, compatibility_version = (
-            await self._list_compatibility_context(context, plan)
+        compatibility_context, compatibility_version = await self._list_compatibility_context(
+            context, plan
         )
         items = self._search_items(plan.query)
         resources = [
@@ -116,9 +117,7 @@ class RegistryResourceService:
             else None
         )
         platform_compatible = (
-            compatibility.platform_compatible
-            if compatibility is not None
-            else None
+            compatibility.platform_compatible if compatibility is not None else None
         )
         return _item_resource(
             item,
@@ -203,9 +202,7 @@ class RegistryResourceService:
             installation,
             update_available=has_update,
             platform_compatible=(
-                compatibility.platform_compatible
-                if compatibility is not None
-                else is_compatible
+                compatibility.platform_compatible if compatibility is not None else is_compatible
             ),
             compatibility_decision=compatibility,
             route_available=self.distribution.route_available(item),
