@@ -601,9 +601,7 @@ def test_marketplace_future_kind_matches_core_control_plane_and_cli(
     cli_preview = previewed["data"]
     assert cli_preview == api_preview.body
     assert cli_preview["decision"]["operation"] == core_preview.decision.operation.value
-    assert cli_preview["item"]["owner_extension"]["requirements"] == {
-        "runtime": "notebook-host"
-    }
+    assert cli_preview["item"]["owner_extension"]["requirements"] == {"runtime": "notebook-host"}
     assert cli_preview["item"]["owner_extension"]["details"] is None
     assert cli_preview["item"]["integrity"]["sha256"] == core_item.integrity.sha256
     assert cli_preview["item"]["trust"] == core_item.trust_status.value
@@ -642,4 +640,3 @@ def test_marketplace_future_kind_matches_core_control_plane_and_cli(
     assert status_item["installed"] is True
     assert status_item["owner_extension"]["status"]["owner_state"] == "installed"
     assert status_item["owner_extension"]["details"]["owner"] == "notebook"
-
