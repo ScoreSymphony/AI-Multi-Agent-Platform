@@ -5,7 +5,11 @@ from __future__ import annotations
 from ai_multi_agent_platform.capabilities.provider import CapabilityToolProvider
 from ai_multi_agent_platform.capabilities.registry import CapabilityRegistry
 from ai_multi_agent_platform.connectors import ConnectorProvider, ConnectorService
+from ai_multi_agent_platform.contracts import ModelProvider, Orchestrator
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.execution import Executor, ExecutorRegistry
+from ai_multi_agent_platform.models import ModelRegistry
+from ai_multi_agent_platform.orchestration import OrchestratorRegistry
 
 from .models import ExtensionType
 from .runtime import ExtensionRegistration
@@ -34,6 +38,90 @@ class CapabilityRegistryBinder:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "capability_provider extension must implement CapabilityToolProvider",
+            )
+        self._registry.unregister_provider(registration.instance.descriptor.provider_id)
+
+
+
+class OrchestratorRegistryBinder:
+    """Bind Orchestrator extensions to the canonical provider-neutral registry."""
+
+    def __init__(self, registry: OrchestratorRegistry) -> None:
+        self._registry = registry
+
+    async def register(self, registration: ExtensionRegistration) -> None:
+        if registration.spec.extension_type is not ExtensionType.ORCHESTRATOR:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION, "orchestrator binder received wrong extension type"
+            )
+        if not isinstance(registration.instance, Orchestrator):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "orchestrator extension must implement the canonical Orchestrator contract",
+            )
+        orchestrator = registration.instance
+        self._registry.register(orchestrator.descriptor.provider_id, orchestrator)
+
+    async def unregister(self, registration: ExtensionRegistration) -> None:
+        if not isinstance(registration.instance, Orchestrator):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "orchestrator extension must implement the canonical Orchestrator contract",
+            )
+        self._registry.unregister(registration.instance.descriptor.provider_id)
+
+
+class ExecutorRegistryBinder:
+    """Bind Executor extensions to the canonical execution registry."""
+
+    def __init__(self, registry: ExecutorRegistry) -> None:
+        self._registry = registry
+
+    async def register(self, registration: ExtensionRegistration) -> None:
+        if registration.spec.extension_type is not ExtensionType.EXECUTOR:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION, "executor binder received wrong extension type"
+            )
+        if not isinstance(registration.instance, Executor):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "executor extension must implement the canonical Executor contract",
+            )
+        executor = registration.instance
+        self._registry.register(executor.descriptor.executor_id, executor)
+
+    async def unregister(self, registration: ExtensionRegistration) -> None:
+        if not isinstance(registration.instance, Executor):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "executor extension must implement the canonical Executor contract",
+            )
+        self._registry.unregister(registration.instance.descriptor.executor_id)
+
+
+class ModelProviderRegistryBinder:
+    """Bind provider implementations without creating configured model instances."""
+
+    def __init__(self, registry: ModelRegistry) -> None:
+        self._registry = registry
+
+    async def register(self, registration: ExtensionRegistration) -> None:
+        if registration.spec.extension_type is not ExtensionType.MODEL_PROVIDER:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION, "model-provider binder received wrong extension type"
+            )
+        if not isinstance(registration.instance, ModelProvider):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "model_provider extension must implement the canonical ModelProvider contract",
+            )
+        self._registry.register_provider(registration.instance)
+
+    async def unregister(self, registration: ExtensionRegistration) -> None:
+        if not isinstance(registration.instance, ModelProvider):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "model_provider extension must implement the canonical ModelProvider contract",
             )
         self._registry.unregister_provider(registration.instance.descriptor.provider_id)
 
