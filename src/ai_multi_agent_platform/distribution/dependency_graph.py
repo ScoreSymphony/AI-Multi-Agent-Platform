@@ -130,21 +130,16 @@ def _resolve_dependency(
         )
 
     record = installed.get(dependency.item_id)
-    candidate, catalog_status = _select_dependency_candidate(
-        dependency,
-        catalog,
-        preferred_source=record.source_registry if record is not None else None,
-        preferred_version=record.version if record is not None else None,
-    )
     if record is not None:
         return _installed_visit(
             parent,
             dependency,
             record=record,
-            candidate=candidate,
+            candidate=_installed_catalog_candidate(dependency, catalog, record),
             path=dependency_path,
         )
 
+    candidate, catalog_status = _select_dependency_candidate(dependency, catalog)
     status = catalog_status
     if dependency.optional and status is DependencyStatus.MISSING:
         status = DependencyStatus.OPTIONAL_MISSING
@@ -197,12 +192,27 @@ def _installed_dependency_status(
     return DependencyStatus.SATISFIED
 
 
+def _installed_catalog_candidate(
+    dependency: RegistryDependency,
+    catalog: tuple[RegistryItem, ...],
+    record: InstalledRegistryItem,
+) -> RegistryItem | None:
+    return next(
+        (
+            candidate
+            for candidate in catalog
+            if candidate.item_id == dependency.item_id
+            and candidate.version == record.version
+            and candidate.source_registry == record.source_registry
+            and (dependency.kind_value is None or candidate.kind == dependency.kind_value)
+        ),
+        None,
+    )
+
+
 def _select_dependency_candidate(
     dependency: RegistryDependency,
     catalog: tuple[RegistryItem, ...],
-    *,
-    preferred_source: str | None,
-    preferred_version: str | None,
 ) -> tuple[RegistryItem | None, DependencyStatus]:
     by_id = tuple(candidate for candidate in catalog if candidate.item_id == dependency.item_id)
     if not by_id:
@@ -220,13 +230,6 @@ def _select_dependency_candidate(
     if not compatible:
         return None, DependencyStatus.VERSION_CONFLICT
 
-    preferred = _preferred_candidate(
-        compatible,
-        source_registry=preferred_source,
-        version=preferred_version,
-    )
-    if preferred is not None:
-        return preferred, DependencyStatus.AVAILABLE
     return _latest_unambiguous_candidate(compatible)
 
 
@@ -237,29 +240,6 @@ def _matching_kind_candidates(
     if dependency.kind_value is None:
         return candidates
     return tuple(candidate for candidate in candidates if candidate.kind == dependency.kind_value)
-
-
-def _preferred_candidate(
-    candidates: tuple[RegistryItem, ...],
-    *,
-    source_registry: str | None,
-    version: str | None,
-) -> RegistryItem | None:
-    if source_registry is None:
-        return None
-    same_source = tuple(
-        candidate for candidate in candidates if candidate.source_registry == source_registry
-    )
-    if version is not None:
-        exact = next(
-            (candidate for candidate in same_source if candidate.version == version),
-            None,
-        )
-        if exact is not None:
-            return exact
-    if not same_source:
-        return None
-    return max(same_source, key=lambda candidate: version_key(candidate.version))
 
 
 def _latest_unambiguous_candidate(
