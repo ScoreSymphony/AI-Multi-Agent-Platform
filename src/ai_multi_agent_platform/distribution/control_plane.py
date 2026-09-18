@@ -9,8 +9,10 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import (
     CommandAuthorizer,
+    CommandHandler,
     ControlPlane,
     ControlPlaneModule,
+    ResourceService,
 )
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, json_value
 from ai_multi_agent_platform.control_plane.module_registry import install_control_plane_modules
@@ -861,7 +863,7 @@ def register_distribution_control_plane(
     if not distribution.enabled:
         return
 
-    resources = {
+    resources: dict[str, ResourceService] = {
         REGISTRY_COLLECTION: RegistryResourceService(
             distribution,
             validation_context_resolver,
@@ -869,7 +871,7 @@ def register_distribution_control_plane(
         MARKETPLACE_KIND_COLLECTION: MarketplaceKindResourceService(distribution),
     }
     handlers: RegistryCommandHandlers | None = None
-    commands: dict[str, object] = {}
+    commands: dict[str, CommandHandler] = {}
     if validation_context_resolver is not None:
         handlers = RegistryCommandHandlers(distribution, validation_context_resolver)
         commands = _distribution_commands(distribution, handlers)
@@ -891,7 +893,7 @@ def register_distribution_control_plane(
                 ControlPlaneModule(
                     name=MARKETPLACE_MODULE,
                     resource_services=resources,
-                    command_handlers=commands,  # type: ignore[arg-type]
+                    command_handlers=commands,
                     command_authorizers=authorizers,
                 ),
             ),
@@ -907,8 +909,8 @@ def register_distribution_control_plane(
 def _distribution_commands(
     distribution: DistributionService,
     handlers: RegistryCommandHandlers,
-) -> dict[str, object]:
-    commands: dict[str, object] = {
+) -> dict[str, CommandHandler]:
+    commands: dict[str, CommandHandler] = {
         REGISTRY_PREVIEW_COMMAND: handlers.preview,
         MARKETPLACE_PREVIEW_COMMAND: handlers.marketplace_preview,
     }
