@@ -566,7 +566,7 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
         # that suppresses cancellation must not regain authority over process exit.
         await asyncio.sleep(0)
 
-        def observe_completion(task: asyncio.Task[None]) -> None:
+        def observe_completion(task: asyncio.Future[None]) -> None:
             if task.cancelled():
                 return
             try:
