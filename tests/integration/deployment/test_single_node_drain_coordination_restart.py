@@ -66,9 +66,7 @@ def test_progressing_plan_step_keeps_exact_identity_across_forced_drain_restart(
 ) -> None:
     async def scenario() -> None:
         root = tmp_path / "progressing-step"
-        first = build_single_node_deployment(
-            SingleNodeConfig(data_dir=root, secure_cookie=False)
-        )
+        first = build_single_node_deployment(SingleNodeConfig(data_dir=root, secure_cookie=False))
         admin = first.bootstrap_admin("drain-plan", "correct horse battery staple")
         plan, step = await _planned_single_step(
             first,
@@ -118,9 +116,7 @@ def test_retry_backoff_deadline_survives_drain_restart_without_early_retry(
 ) -> None:
     async def scenario() -> None:
         root = tmp_path / "retry-backoff"
-        first = build_single_node_deployment(
-            SingleNodeConfig(data_dir=root, secure_cookie=False)
-        )
+        first = build_single_node_deployment(SingleNodeConfig(data_dir=root, secure_cookie=False))
         admin = first.bootstrap_admin("drain-retry", "correct horse battery staple")
         plan, step = await _planned_single_step(
             first,
