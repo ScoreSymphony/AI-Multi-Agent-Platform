@@ -373,26 +373,10 @@ class DistributionService:
             route is not DistributionRoute.KIND_HANDLER
             or owner_handler is not None
         )
-        if owner_handler is not None:
-            validate_candidate = getattr(owner_handler, "validate_candidate", None)
-            if validate_candidate is not None:
-                candidate_validator = cast(
-                    Callable[[RegistryItem, bytes], None],
-                    validate_candidate,
-                )
-                try:
-                    candidate_validator(item, artifact)
-                except ContractError as exc:
-                    findings = (
-                        *findings,
-                        ValidationFinding(
-                            "owner_candidate_invalid",
-                            FindingSeverity.ERROR,
-                            exc.message,
-                            FindingCategory.COMPATIBILITY,
-                            item.kind,
-                        ),
-                    )
+        findings = (
+            *findings,
+            *self._owner_candidate_findings(item, artifact),
+        )
         operation = self._activation_operation(item)
         operation_supported = (
             route is not DistributionRoute.KIND_HANDLER
@@ -439,6 +423,35 @@ class DistributionService:
             artifact_sha256=artifact_sha256,
             decision=decision,
         )
+
+    def _owner_candidate_findings(
+        self,
+        item: RegistryItem,
+        artifact: bytes,
+    ) -> tuple[ValidationFinding, ...]:
+        owner_handler = self._kind_handlers.get(item.item_type)
+        if owner_handler is None:
+            return ()
+        validate_candidate = getattr(owner_handler, "validate_candidate", None)
+        if validate_candidate is None:
+            return ()
+        candidate_validator = cast(
+            Callable[[RegistryItem, bytes], None],
+            validate_candidate,
+        )
+        try:
+            candidate_validator(item, artifact)
+        except ContractError as exc:
+            return (
+                ValidationFinding(
+                    "owner_candidate_invalid",
+                    FindingSeverity.ERROR,
+                    exc.message,
+                    FindingCategory.COMPATIBILITY,
+                    item.kind,
+                ),
+            )
+        return ()
 
     def preview_uninstall(
         self,
