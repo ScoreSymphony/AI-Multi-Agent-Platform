@@ -18,6 +18,11 @@ from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.security import redact_text
 from ai_multi_agent_platform.workspaces import MaterializationOutcome
 
+from .local_host import (
+    LocalApplicationHostProfile,
+    detect_local_application_host_profile,
+    local_host_resource_rejections,
+)
 from .models import (
     ApplicationDesiredState,
     ApplicationEndpointProtocol,
@@ -71,6 +76,8 @@ class LocalProcessApplicationRuntime:
         secret_purpose: str = "application_runtime",
         secret_lifetime_seconds: int = _DEFAULT_SECRET_LIFETIME_SECONDS,
         workspace_binder: LocalApplicationWorkspaceBinder | None = None,
+        host_profile: LocalApplicationHostProfile | None = None,
+        resource_probe_path: os.PathLike[str] | str | None = None,
     ) -> None:
         if stop_timeout_seconds <= 0:
             raise ValueError("stop_timeout_seconds must be > 0")
@@ -99,6 +106,9 @@ class LocalProcessApplicationRuntime:
         self._secret_purpose = secret_purpose
         self._secret_lifetime_seconds = secret_lifetime_seconds
         self._workspace_binder = workspace_binder
+        self._host_profile = host_profile or detect_local_application_host_profile(
+            disk_path=resource_probe_path
+        )
         self._processes: dict[str, dict[str, _ManagedProcess]] = {}
         self._logs: dict[str, deque[ApplicationLogEntry]] = {}
         self._environments: dict[str, dict[str, str]] = {}
@@ -402,6 +412,7 @@ class LocalProcessApplicationRuntime:
         return await self.stop(manifest, instance)
 
     def _validate_request(self, request: ApplicationInstallRequest) -> None:
+        self._validate_host_requirements(request)
         unsupported = [
             service.service_id
             for service in request.manifest.services
@@ -442,6 +453,18 @@ class LocalProcessApplicationRuntime:
                     "local process runtime requires a Workspace binder for volume bindings"
                 )
             self._workspace_binder.validate_request(request)
+
+    def _validate_host_requirements(self, request: ApplicationInstallRequest) -> None:
+        rejected = local_host_resource_rejections(
+            request.manifest.resources,
+            host=self._host_profile,
+            runtime_capabilities=self.descriptor.capabilities,
+        )
+        if rejected:
+            raise ApplicationPreparationError(
+                "local process host does not satisfy application resource requirements: "
+                + ", ".join(rejected)
+            )
 
     async def _materialize_workspace(
         self,

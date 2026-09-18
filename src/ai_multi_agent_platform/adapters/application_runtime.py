@@ -85,6 +85,7 @@ def compose_application_runtime(
     local_process = LocalProcessApplicationRuntime(
         secret_provider=secret_provider,
         workspace_binder=workspace_binder,
+        resource_probe_path=config.data_dir,
     )
     runtimes = ApplicationRuntimeRegistry((local_process,))
     lifecycle = ApplicationLifecycleService(repository, runtimes)
