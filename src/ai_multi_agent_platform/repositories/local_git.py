@@ -486,10 +486,23 @@ class LocalGitRepositoryProvider(RepositoryProvider):
         del context
         if not remote.strip():
             raise ValueError("remote must not be blank")
-        args = ["push", remote]
+        configured_remotes = set(self._lines("remote"))
+        if remote not in configured_remotes:
+            try:
+                validate_git_remote_url(remote)
+            except ValueError as exc:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "Git push target uses unsupported executable-indirection",
+                    retryable=False,
+                    provider_id=self.provider_id,
+                ) from exc
+        args = ["push", "--", remote]
         if refspec is not None:
             if not refspec.strip():
                 raise ValueError("refspec must not be blank when provided")
+            if refspec.startswith("-"):
+                raise ValueError("refspec must not start with '-'")
             args.append(refspec)
         self._run(*args)
         head = self._head_revision()
