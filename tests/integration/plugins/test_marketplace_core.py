@@ -19,6 +19,7 @@ from ai_multi_agent_platform.distribution import (
     RegistryItem,
     RegistryItemType,
     RegistryManifestReference,
+    RegistryMaturity,
     RegistryQuery,
     RegistrySource,
     RegistrySourceConflictError,
@@ -176,6 +177,34 @@ def test_schema_v3_preserves_unknown_kind_and_manifest_reference() -> None:
     assert item.manifest is not None
     assert item.manifest.kind_value == "notebook_extension"
     assert item.manifest.reference == "manifests/notebook-extension.json"
+
+
+def test_schema_v5_adds_maturity_without_breaking_v3_compatibility() -> None:
+    current = _document(
+        item_type="notebook_extension",
+        manifest={
+            "kind": "notebook_extension",
+            "reference": "manifests/notebook-extension.json",
+            "schema_version": "1",
+        },
+    )
+    current["schema_version"] = "5"
+    current["maturity"] = "beta"
+
+    item = registry_item_from_document(current)
+    legacy = registry_item_from_document(
+        _document(
+            item_type="notebook_extension",
+            manifest={
+                "kind": "notebook_extension",
+                "reference": "manifests/notebook-extension.json",
+                "schema_version": "1",
+            },
+        )
+    )
+
+    assert item.maturity is RegistryMaturity.BETA
+    assert legacy.maturity is None
 
 
 def test_schema_v3_parses_known_application_kind_back_to_enum() -> None:
