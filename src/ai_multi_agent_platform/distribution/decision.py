@@ -5,6 +5,7 @@ from __future__ import annotations
 from .decision_state import (
     build_approval_requirement,
     build_change_findings,
+    build_dependency_diff,
     build_permission_diff,
     build_provenance_diff,
     build_update_state,
@@ -13,6 +14,7 @@ from .decision_state import (
 from .decision_types import (
     ApprovalRequirement,
     CompatibilityDecision,
+    DependencyDiff,
     DependencyResolution,
     DistributionOperation,
     MarketplaceDecision,
@@ -49,6 +51,7 @@ def build_marketplace_decision(
     )
     install_order = deterministic_install_order(item, dependencies)
     compatibility = evaluate_compatibility(item, context)
+    dependency_diff = build_dependency_diff(item, installation)
     permission_diff = build_permission_diff(item, installation)
     provenance_diff = build_provenance_diff(
         item,
@@ -59,7 +62,7 @@ def build_marketplace_decision(
     findings = merge_findings(
         _without_direct_dependency_findings(validation_findings),
         dependency_findings(dependencies),
-        build_change_findings(permission_diff, provenance_diff, approval),
+        build_change_findings(dependency_diff, permission_diff, provenance_diff, approval),
         _same_release_identity_findings(
             item,
             artifact_sha256=artifact_sha256,
@@ -85,6 +88,7 @@ def build_marketplace_decision(
             dependencies=dependencies,
             install_order=install_order,
             compatibility=compatibility,
+            dependency_diff=dependency_diff,
             permission_diff=permission_diff,
             provenance_diff=provenance_diff,
             approval=approval,
@@ -220,12 +224,14 @@ def uninstall_decision(
         removed=tuple(sorted(current.requested_permissions)),
         unchanged=(),
     )
+    dependency_diff = _uninstall_dependency_diff(installation)
     provenance_diff = _uninstall_provenance_diff(installation)
     return MarketplaceDecision(
         operation=DistributionOperation.UNINSTALL,
         dependencies=dependencies,
         install_order=(),
         compatibility=CompatibilityDecision(True, True, True),
+        dependency_diff=dependency_diff,
         permission_diff=permission_diff,
         provenance_diff=provenance_diff,
         approval=ApprovalRequirement(False),
@@ -233,6 +239,34 @@ def uninstall_decision(
             installation,
             permission_diff=permission_diff,
         ),
+    )
+
+
+def _uninstall_dependency_diff(
+    installation: RegistryInstallation,
+) -> DependencyDiff:
+    previous_raw = installation.current.dependencies
+    if previous_raw is None:
+        return DependencyDiff(
+            installed=True,
+            previous_known=False,
+            previous=(),
+            requested=(),
+            added=(),
+            removed=(),
+            changes=(),
+            unchanged=(),
+        )
+    previous = tuple(previous_raw)
+    return DependencyDiff(
+        installed=True,
+        previous_known=True,
+        previous=previous,
+        requested=(),
+        added=(),
+        removed=previous,
+        changes=(),
+        unchanged=(),
     )
 
 
