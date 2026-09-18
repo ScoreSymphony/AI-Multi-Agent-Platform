@@ -47,7 +47,13 @@ from ai_multi_agent_platform.plugins import (
     reference_manifest,
 )
 from ai_multi_agent_platform.skills.codec import skill_revision_to_json
-from ai_multi_agent_platform.skills.models import SkillContent, SkillProfile, SkillRevision
+from ai_multi_agent_platform.skills.models import (
+    SkillContent,
+    SkillProfile,
+    SkillRevision,
+    SkillSource,
+    SkillTrustStatus,
+)
 from ai_multi_agent_platform.skills.repository import InMemorySkillRepository
 from ai_multi_agent_platform.skills.service import SkillService
 
@@ -232,6 +238,13 @@ async def test_skill_handler_delegates_revisions_and_removal_to_skill_service(tm
             name="Marketplace review",
             purpose_categories=("review",),
             content=SkillContent(content="review v1"),
+            source=SkillSource(
+                source_url="https://example.invalid/upstream-skill",
+                source_revision="source-rev-1",
+                license="MIT",
+            ),
+            trust_status=SkillTrustStatus.DISCOVERED,
+            enabled=False,
         ),
         owner_ref=owner,
     )
