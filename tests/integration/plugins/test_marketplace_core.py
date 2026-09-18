@@ -82,9 +82,12 @@ def test_builtin_marketplace_kinds_include_new_first_class_families() -> None:
 
     assert {"tool", "skill", "plugin", "connector", "application", "template"} <= kinds
     assert registry.require("application").default_route is DistributionRoute.KIND_HANDLER
+    assert registry.require(RegistryItemType.TOOL).default_route is DistributionRoute.KIND_HANDLER
     assert (
-        registry.require(RegistryItemType.TOOL).default_route is DistributionRoute.PORTABLE_IMPORT
+        registry.require(RegistryItemType.CONNECTOR).default_route
+        is DistributionRoute.KIND_HANDLER
     )
+    assert registry.require(RegistryItemType.APPLICATION).supports_update is False
 
 
 def test_new_marketplace_kind_can_be_registered_without_enum_change() -> None:
@@ -213,7 +216,7 @@ class RecordingApplicationHandler:
         self.calls.append(("uninstall", item.item_id))
         return None
 
-    def status(self, item: RegistryItem) -> object:
+    async def status(self, item: RegistryItem) -> object:
         return {"item_id": item.item_id}
 
     def describe(self, item: RegistryItem) -> dict[str, object]:
