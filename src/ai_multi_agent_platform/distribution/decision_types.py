@@ -23,6 +23,7 @@ class DependencyStatus(StrEnum):
     KIND_UNKNOWN = "kind_unknown"
     KIND_CONFLICT = "kind_conflict"
     SOURCE_AMBIGUOUS = "source_ambiguous"
+    ENVIRONMENT_INCOMPATIBLE = "environment_incompatible"
     SELF_DEPENDENCY = "self_dependency"
     CYCLE = "cycle"
     REQUIRED_BY_INSTALLED = "required_by_installed"
@@ -42,6 +43,7 @@ class DependencyResolution:
     candidate_version: str | None = None
     candidate_kind: str | None = None
     candidate_source_registry: str | None = None
+    candidate_compatibility: CompatibilityDecision | None = None
     path: tuple[str, ...] = ()
 
     @property

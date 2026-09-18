@@ -45,6 +45,7 @@ def build_marketplace_decision(
         item,
         catalog=catalog,
         installed_items=context.installed_items,
+        context=context,
     )
     install_order = deterministic_install_order(item, dependencies)
     compatibility = evaluate_compatibility(item, context)
