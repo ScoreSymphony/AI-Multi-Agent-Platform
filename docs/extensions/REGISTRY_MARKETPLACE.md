@@ -92,10 +92,12 @@ metadata to make a Skill first-party or trusted. A release update delegates to
 `SkillService.update_skill()`; the Skill owner may reject it when the artifact attempts to rewrite
 immutable source provenance, in which case Marketplace does not synthesize a replacement lifecycle.
 
-Tool and Connector Marketplace artifacts are therefore canonical #20 plugin manifests that declare,
-respectively, at least one `capability_provider` or `connector_provider` extension.  Marketplace
-installation never enables such a plugin and never constructs a provider runtime.  Enable/disable,
-configuration, permission grants and runtime binding remain the existing Plugin lifecycle.
+Manifest-backed v3 Tool and Connector Marketplace artifacts use canonical Plugin manifests that
+declare, respectively, at least one `capability_provider` or `connector_provider` extension.
+Existing manifestless Tool/Connector catalog entries retain their portable-import route for backward
+compatibility. Marketplace installation never enables a plugin and never constructs a provider
+runtime. Enable/disable, configuration, permission grants and runtime binding remain the existing
+Plugin lifecycle.
 
 Application runtime selection also remains inside #1173.  `ApplicationRuntimeRegistry` selects only
 when exactly one registered runtime can satisfy the manifest; an unavailable or ambiguous runtime
