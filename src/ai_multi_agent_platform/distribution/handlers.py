@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Protocol
 
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+
 from .items import RegistryItem
 from .models import RegistryItemKind, registry_item_kind_value
 
@@ -27,7 +29,7 @@ class MarketplaceKindHandler(Protocol):
 
     async def uninstall(self, item: RegistryItem) -> object: ...
 
-    def status(self, item: RegistryItem) -> object: ...
+    async def status(self, item: RegistryItem) -> object: ...
 
     def describe(self, item: RegistryItem) -> Mapping[str, object]: ...
 
