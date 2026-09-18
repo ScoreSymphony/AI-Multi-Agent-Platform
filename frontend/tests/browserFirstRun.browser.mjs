@@ -428,7 +428,14 @@ try {
   if (!(await producedResultLink.evaluate((element) => document.activeElement === element))) {
     throw new Error("Produced Result navigation did not accept keyboard focus");
   }
+  await producedResultLink.press("Enter");
+  await page.getByRole("heading", { name: "Result reference", exact: true }).waitFor();
+  if (!page.url().includes("/results/")) {
+    throw new Error(`Produced Result keyboard navigation opened an unexpected route: ${page.url()}`);
+  }
 
+  await page.goto(`${frontendUrl}/onboarding`);
+  await page.getByRole("heading", { name: "Guided onboarding", exact: true }).waitFor();
   await page.getByRole("heading", { name: "Optional General Assistant setup", exact: true }).waitFor();
   await (await waitForButton(page, "Bootstrap standard Agents")).click();
   await (await waitForButton(page, "Create editable General Assistant")).click();
