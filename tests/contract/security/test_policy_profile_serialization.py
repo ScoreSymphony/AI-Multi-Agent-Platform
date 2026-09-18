@@ -1,5 +1,3 @@
-"""Migrated under #722; original coverage tracked issue #310."""
-
 
 # ruff: noqa: F401
 
