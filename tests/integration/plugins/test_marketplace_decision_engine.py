@@ -24,9 +24,9 @@ from ai_multi_agent_platform.distribution import (
     RegistrySource,
     RegistrySourceConflictError,
     TrustStatus,
-    registry_item_from_document,
     ValidationContext,
     VersionRange,
+    registry_item_from_document,
 )
 
 
