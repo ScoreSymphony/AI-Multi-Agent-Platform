@@ -8,6 +8,8 @@ import pytest
 
 from ai_multi_agent_platform.adapters.marketplace_owner_handlers import (
     AgentMarketplaceKindHandler,
+    ApplicationMarketplaceKindHandler,
+    PluginMarketplaceKindHandler,
     SkillMarketplaceKindHandler,
 )
 from ai_multi_agent_platform.agents import (
@@ -18,20 +20,46 @@ from ai_multi_agent_platform.agents import (
     JsonAgentRepository,
 )
 from ai_multi_agent_platform.agents.service import AgentService
+from ai_multi_agent_platform.applications import (
+    ApplicationDesiredState,
+    ApplicationHealthStatus,
+    ApplicationInstallRequest,
+    ApplicationInstance,
+    ApplicationLifecycleService,
+    ApplicationManifest,
+    ApplicationObservedState,
+    ApplicationRuntimeDescriptor,
+    ApplicationRuntimeRegistry,
+    ApplicationService,
+    ApplicationServiceRuntime,
+    SqliteApplicationRepository,
+)
+from ai_multi_agent_platform.applications.serialization import application_manifest_to_document
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.control_plane.plugin_api import _manifest_document
 from ai_multi_agent_platform.distribution import (
     DistributionService,
     JsonRegistryInstallationStore,
     LocalRegistryProvider,
     MarketplaceKindHandlerRegistry,
+    PluginRegistryArtifactInstaller,
     RegistryItem,
     RegistryItemType,
+    RegistryManifestReference,
+    RegistryQuery,
     RegistrySource,
     TrustStatus,
     ValidationContext,
+    reconcile_registry_plugins,
 )
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.portability import AgentPortableCodec, snapshot_agent
+from ai_multi_agent_platform.plugins import (
+    ExtensionType,
+    PluginManifest,
+    PluginRegistry,
+    reference_manifest,
+)
 from ai_multi_agent_platform.skills import JsonSkillRepository
 from ai_multi_agent_platform.skills.codec import skill_revision_to_json
 from ai_multi_agent_platform.skills.models import (
@@ -54,6 +82,28 @@ class _FailOnceInstallationStore(JsonRegistryInstallationStore):
             self.fail_next_save = False
             raise OSError("forced marketplace persistence failure")
         super()._save()
+
+
+class _MutableProvider:
+    provider_id = "drifting"
+
+    def __init__(self, item: RegistryItem, artifact: bytes) -> None:
+        self.item = item
+        self.artifact = artifact
+
+    def search(self, query: RegistryQuery) -> tuple[RegistryItem, ...]:
+        del query
+        return (self.item,)
+
+    def get(self, item_id: str, version: str | None = None) -> RegistryItem:
+        if item_id != self.item.item_id or (version is not None and version != self.item.version):
+            raise LookupError(item_id)
+        return self.item
+
+    def fetch_artifact(self, item_id: str, version: str) -> bytes:
+        if item_id != self.item.item_id or version != self.item.version:
+            raise LookupError(item_id)
+        return bytes(self.artifact)
 
 
 class _MutableSkillOwner:
@@ -197,6 +247,30 @@ async def test_owner_failures_never_advance_marketplace_installation_evidence(
         await service.uninstall(first.item_id, authorized=True)
     assert store.get(first.item_id).current.version == first.version  # type: ignore[union-attr]
     assert owner.version == first.version
+
+
+@pytest.mark.asyncio
+async def test_stale_install_preview_is_revalidated_before_owner_mutation(tmp_path: Path) -> None:
+    first = _item("1.0.0")
+    provider = _MutableProvider(first, b"skill-v1")
+    store = JsonRegistryInstallationStore(tmp_path / "stale-install.json")
+    owner = _MutableSkillOwner()
+    service = DistributionService(
+        provider,
+        installations=store,
+        kind_handlers=MarketplaceKindHandlerRegistry((owner,)),
+    )
+    context = ValidationContext("0.0.1")
+    preview = service.preview(first.item_id, first.version, context)
+
+    provider.item = replace(first, description="metadata drift after preview")
+
+    with pytest.raises(RuntimeError, match="registry metadata changed after preview"):
+        await service.activate(preview, context, authorized=True)
+
+    assert owner.calls == []
+    assert owner.version is None
+    assert store.get(first.item_id) is None
 
 
 @pytest.mark.asyncio
@@ -412,6 +486,382 @@ async def test_real_skill_owner_recovers_evidence_after_restart_for_install_upda
     )
     await final_service.uninstall(first.item_id, authorized=True)
     assert final_store.get(first.item_id) is None
+
+
+class _ApplicationRuntime:
+    descriptor = ApplicationRuntimeDescriptor(
+        runtime_id="atomicity.process",
+        supported_service_runtimes=frozenset({ApplicationServiceRuntime.PROCESS}),
+    )
+
+    async def prepare(self, request: ApplicationInstallRequest) -> ApplicationInstance:
+        return ApplicationInstance(
+            application_id=request.manifest.application_id,
+            application_version=request.manifest.version,
+            runtime_id=self.descriptor.runtime_id,
+            desired_state=ApplicationDesiredState.STOPPED,
+            observed_state=ApplicationObservedState.STOPPED,
+            health=ApplicationHealthStatus.UNKNOWN,
+            configuration=request.resolved_configuration(),
+            secret_bindings=request.secret_bindings,
+            volume_bindings=request.volume_bindings,
+        )
+
+    async def status(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> ApplicationInstance:
+        del manifest
+        return instance
+
+    async def remove(
+        self,
+        manifest: ApplicationManifest,
+        instance: ApplicationInstance,
+    ) -> ApplicationInstance:
+        del manifest
+        return replace(
+            instance,
+            desired_state=ApplicationDesiredState.REMOVED,
+            observed_state=ApplicationObservedState.REMOVED,
+        )
+
+
+def _real_application_fixture() -> tuple[RegistryItem, bytes]:
+    item = RegistryItem(
+        item_id="atomicity.application",
+        item_type=RegistryItemType.APPLICATION,
+        name="Atomicity application",
+        description="Real canonical Application owner recovery fixture",
+        version="1.0.0",
+        publisher="tests",
+        source=RegistrySource(
+            "https://example.invalid/atomicity-application",
+            "atomicity.application@1.0.0",
+            revision="source-1",
+        ),
+        license="MIT",
+        provenance="atomicity-application",
+        trust_status=TrustStatus.REVIEWED,
+        manifest=RegistryManifestReference(
+            kind=RegistryItemType.APPLICATION,
+            reference="manifests/atomicity.application.json",
+            schema_version="1",
+        ),
+    )
+    manifest = ApplicationManifest(
+        application_id=new_id("application"),
+        name="Atomicity Application",
+        version=item.version,
+        description="Canonical Application recovery fixture",
+        services=(
+            ApplicationService(
+                service_id="app",
+                runtime=ApplicationServiceRuntime.PROCESS,
+                process=("python", "-m", "atomicity_application"),
+            ),
+        ),
+    )
+    artifact = json.dumps(
+        application_manifest_to_document(manifest),
+        sort_keys=True,
+    ).encode()
+    return item, artifact
+
+
+@pytest.mark.asyncio
+async def test_real_application_owner_recovers_evidence_after_restart_for_install_and_uninstall(
+    tmp_path: Path,
+) -> None:
+    item, artifact = _real_application_fixture()
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+        provider_id="atomicity-application",
+    )
+    installation_path = tmp_path / "application-installations.json"
+    application_path = tmp_path / "applications.sqlite3"
+    context = ValidationContext("0.0.1")
+
+    store = _FailOnceInstallationStore(installation_path)
+    repository = SqliteApplicationRepository(application_path)
+    runtimes = ApplicationRuntimeRegistry((_ApplicationRuntime(),))
+    handler = ApplicationMarketplaceKindHandler(
+        ApplicationLifecycleService(repository, runtimes),
+        repository,
+        runtimes,
+    )
+    service = DistributionService(
+        provider,
+        installations=store,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+
+    store.fail_next_save = True
+    with pytest.raises(OSError, match="forced marketplace persistence failure"):
+        await service.activate(
+            service.preview(item.item_id, item.version, context),
+            context,
+            authorized=True,
+        )
+
+    assert store.get(item.item_id) is None
+    assert len(SqliteApplicationRepository(application_path).list_applications()) == 1
+
+    restarted_repository = SqliteApplicationRepository(application_path)
+    restarted_runtimes = ApplicationRuntimeRegistry((_ApplicationRuntime(),))
+    restarted_handler = ApplicationMarketplaceKindHandler(
+        ApplicationLifecycleService(restarted_repository, restarted_runtimes),
+        restarted_repository,
+        restarted_runtimes,
+    )
+    restarted_store = _FailOnceInstallationStore(installation_path)
+    restarted = DistributionService(
+        provider,
+        installations=restarted_store,
+        kind_handlers=MarketplaceKindHandlerRegistry((restarted_handler,)),
+    )
+
+    first_retry = await restarted.activate(
+        restarted.preview(item.item_id, item.version, context),
+        context,
+        authorized=True,
+    )
+    assert first_retry.application_version == item.version
+    installation = restarted_store.get(item.item_id)
+    assert installation is not None
+    assert installation.current.version == item.version
+    assert installation.current.source_registry == "atomicity-application"
+    assert len(restarted_repository.list_applications()) == 1
+    assert len(restarted_repository.list_instances(application_id=first_retry.application_id)) == 1
+
+    uninstall_preview = restarted.preview_uninstall(item.item_id)
+    restarted_store.fail_next_save = True
+    with pytest.raises(OSError, match="forced marketplace persistence failure"):
+        await restarted.uninstall(uninstall_preview, authorized=True)
+
+    installation_after_failure = restarted_store.get(item.item_id)
+    assert installation_after_failure is not None
+    assert installation_after_failure.current.version == item.version
+
+    after_remove_repository = SqliteApplicationRepository(application_path)
+    after_remove_runtimes = ApplicationRuntimeRegistry((_ApplicationRuntime(),))
+    after_remove_handler = ApplicationMarketplaceKindHandler(
+        ApplicationLifecycleService(after_remove_repository, after_remove_runtimes),
+        after_remove_repository,
+        after_remove_runtimes,
+    )
+    resolved_item = replace(item, source_registry="atomicity-application")
+    with pytest.raises(ContractError) as removed:
+        await after_remove_handler.status(resolved_item)
+    assert removed.value.code is ErrorCode.NOT_FOUND
+
+    final_store = _FailOnceInstallationStore(installation_path)
+    final_repository = SqliteApplicationRepository(application_path)
+    final_runtimes = ApplicationRuntimeRegistry((_ApplicationRuntime(),))
+    final_service = DistributionService(
+        provider,
+        installations=final_store,
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (
+                ApplicationMarketplaceKindHandler(
+                    ApplicationLifecycleService(final_repository, final_runtimes),
+                    final_repository,
+                    final_runtimes,
+                ),
+            )
+        ),
+    )
+    await final_service.uninstall(item.item_id, authorized=True)
+    assert final_store.get(item.item_id) is None
+
+
+class _PluginRouter:
+    def __init__(self, installer: PluginRegistryArtifactInstaller) -> None:
+        self._installer = installer
+
+    async def install_plugin(self, item: RegistryItem, artifact: bytes) -> object:
+        return await self._installer.install_verified_plugin(item, artifact)
+
+    async def import_portable(self, item: RegistryItem, artifact: bytes) -> object:
+        del item, artifact
+        raise AssertionError("plugin recovery fixture must not use portable import")
+
+
+def _plugin_item(manifest: PluginManifest) -> RegistryItem:
+    return RegistryItem(
+        item_id=manifest.plugin_id,
+        item_type=RegistryItemType.PLUGIN,
+        name=manifest.name,
+        description=manifest.description,
+        version=manifest.plugin_version,
+        publisher=manifest.author,
+        source=RegistrySource(
+            "https://example.invalid/atomicity-plugin",
+            f"{manifest.plugin_id}@{manifest.plugin_version}",
+            revision=f"rev-{manifest.plugin_version}",
+        ),
+        license=manifest.provenance.license,
+        provenance="atomicity-plugin",
+        trust_status=TrustStatus.REVIEWED,
+    )
+
+
+def _plugin_artifact(manifest: PluginManifest) -> bytes:
+    return json.dumps(_manifest_document(manifest), sort_keys=True).encode()
+
+
+def _plugin_runtime() -> tuple[
+    PluginRegistry,
+    PluginRegistryArtifactInstaller,
+    PluginMarketplaceKindHandler,
+    _PluginRouter,
+]:
+    registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+    )
+    installer = PluginRegistryArtifactInstaller(registry)
+    return (
+        registry,
+        installer,
+        PluginMarketplaceKindHandler(installer, registry),
+        _PluginRouter(installer),
+    )
+
+
+@pytest.mark.asyncio
+async def test_real_plugin_owner_recovers_install_update_uninstall_evidence_splits(
+    tmp_path: Path,
+) -> None:
+    first_manifest = reference_manifest()
+    second_manifest = replace(first_manifest, plugin_version="1.1.0")
+    first = _plugin_item(first_manifest)
+    second = _plugin_item(second_manifest)
+    provider = LocalRegistryProvider(
+        (first, second),
+        {
+            (first.item_id, first.version): _plugin_artifact(first_manifest),
+            (second.item_id, second.version): _plugin_artifact(second_manifest),
+        },
+        provider_id="atomicity-plugin",
+    )
+    installation_path = tmp_path / "plugin-installations.json"
+    context = ValidationContext("0.0.1")
+
+    store = _FailOnceInstallationStore(installation_path)
+    registry, _, handler, router = _plugin_runtime()
+    service = DistributionService(
+        provider,
+        router,
+        installations=store,
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+
+    store.fail_next_save = True
+    with pytest.raises(OSError, match="forced marketplace persistence failure"):
+        await service.activate(
+            service.preview(first.item_id, first.version, context),
+            context,
+            authorized=True,
+        )
+    assert store.get(first.item_id) is None
+    assert registry.get(first.item_id).plugin_version == first.version
+
+    install_retry_store = _FailOnceInstallationStore(installation_path)
+    install_retry_registry, _, install_retry_handler, install_retry_router = _plugin_runtime()
+    assert (
+        await reconcile_registry_plugins(
+            provider,
+            install_retry_store,
+            install_retry_registry,
+        )
+        == ()
+    )
+    with pytest.raises(ContractError) as missing_after_install_restart:
+        install_retry_registry.get(first.item_id)
+    assert missing_after_install_restart.value.code is ErrorCode.NOT_FOUND
+
+    install_retry = DistributionService(
+        provider,
+        install_retry_router,
+        installations=install_retry_store,
+        kind_handlers=MarketplaceKindHandlerRegistry((install_retry_handler,)),
+    )
+    await install_retry.activate(
+        install_retry.preview(first.item_id, first.version, context),
+        context,
+        authorized=True,
+    )
+    assert install_retry_store.get(first.item_id) is not None
+    assert install_retry_registry.get(first.item_id).plugin_version == first.version
+
+    update_preview = install_retry.preview(second.item_id, second.version, context)
+    install_retry_store.fail_next_save = True
+    with pytest.raises(OSError, match="forced marketplace persistence failure"):
+        await install_retry.activate(update_preview, context, authorized=True)
+    installed_before_restart = install_retry_store.get(first.item_id)
+    assert installed_before_restart is not None
+    assert installed_before_restart.current.version == first.version
+    assert install_retry_registry.get(first.item_id).plugin_version == second.version
+
+    update_retry_store = _FailOnceInstallationStore(installation_path)
+    update_retry_registry, _, update_retry_handler, update_retry_router = _plugin_runtime()
+    assert await reconcile_registry_plugins(
+        provider,
+        update_retry_store,
+        update_retry_registry,
+    ) == (first.item_id,)
+    assert update_retry_registry.get(first.item_id).plugin_version == first.version
+
+    update_retry = DistributionService(
+        provider,
+        update_retry_router,
+        installations=update_retry_store,
+        kind_handlers=MarketplaceKindHandlerRegistry((update_retry_handler,)),
+    )
+    await update_retry.activate(
+        update_retry.preview(second.item_id, second.version, context),
+        context,
+        authorized=True,
+    )
+    updated_evidence = update_retry_store.get(first.item_id)
+    assert updated_evidence is not None
+    assert updated_evidence.current.version == second.version
+    assert update_retry_registry.get(first.item_id).plugin_version == second.version
+
+    uninstall_preview = update_retry.preview_uninstall(first.item_id)
+    update_retry_store.fail_next_save = True
+    with pytest.raises(OSError, match="forced marketplace persistence failure"):
+        await update_retry.uninstall(uninstall_preview, authorized=True)
+    evidence_after_remove_failure = update_retry_store.get(first.item_id)
+    assert evidence_after_remove_failure is not None
+    assert evidence_after_remove_failure.current.version == second.version
+    with pytest.raises(ContractError) as removed_before_restart:
+        update_retry_registry.get(first.item_id)
+    assert removed_before_restart.value.code is ErrorCode.NOT_FOUND
+
+    uninstall_retry_store = _FailOnceInstallationStore(installation_path)
+    uninstall_retry_registry, _, uninstall_retry_handler, uninstall_retry_router = _plugin_runtime()
+    assert await reconcile_registry_plugins(
+        provider,
+        uninstall_retry_store,
+        uninstall_retry_registry,
+    ) == (first.item_id,)
+    assert uninstall_retry_registry.get(first.item_id).plugin_version == second.version
+
+    uninstall_retry = DistributionService(
+        provider,
+        uninstall_retry_router,
+        installations=uninstall_retry_store,
+        kind_handlers=MarketplaceKindHandlerRegistry((uninstall_retry_handler,)),
+    )
+    await uninstall_retry.uninstall(first.item_id, authorized=True)
+    assert uninstall_retry_store.get(first.item_id) is None
+    with pytest.raises(ContractError) as removed_after_retry:
+        uninstall_retry_registry.get(first.item_id)
+    assert removed_after_retry.value.code is ErrorCode.NOT_FOUND
 
 
 def _agent_profile(name: str) -> AgentProfile:
