@@ -63,6 +63,7 @@ function descriptor(
 
 export function MarketplacePage({ client }: { client: RegistryClient }) {
   const [page, setPage] = useState<Page<RegistryItem> | null>(null);
+  const [kindDescriptors, setKindDescriptors] = useState<RegistryKindDescriptor[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [queryText, setQueryText] = useState("");
@@ -133,8 +134,12 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   const load = useCallback(
     async (pageCursor?: string) => {
       try {
-        const next = await client.list({ ...listQuery, cursor: pageCursor });
+        const [next, registeredKinds] = await Promise.all([
+          client.list({ ...listQuery, cursor: pageCursor }),
+          client.listKinds({ limit: 200, sort: "kind", direction: "asc" }),
+        ]);
         setPage(next);
+        setKindDescriptors(registeredKinds.items);
         setError(null);
       } catch (nextError) {
         setError(nextError);
@@ -150,8 +155,11 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   }, [load]);
 
   const effectiveKindDescriptors = useMemo(
-    () => mergeKindDescriptors([], [...(page?.items ?? []), ...(selected ? [selected] : [])]),
-    [page, selected],
+    () => mergeKindDescriptors(
+      kindDescriptors,
+      [...(page?.items ?? []), ...(selected ? [selected] : [])],
+    ),
+    [kindDescriptors, page, selected],
   );
 
   const dynamicKinds = useMemo(() => {
