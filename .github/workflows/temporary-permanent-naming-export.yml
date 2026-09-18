@@ -1,0 +1,27 @@
+name: Temporary permanent-naming checkout export
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  export-checkout:
+    if: github.event.pull_request.number == 1207
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Package current checkout
+        shell: bash
+        run: |
+          tar --exclude=.git -czf /tmp/permanent-naming-checkout.tar.gz .
+      - name: Upload current checkout
+        uses: actions/upload-artifact@v7
+        with:
+          name: permanent-naming-checkout-${{ github.event.pull_request.head.sha }}
+          path: /tmp/permanent-naming-checkout.tar.gz
+          if-no-files-found: error
+          retention-days: 1
