@@ -118,12 +118,14 @@ async def test_tool_handler_uses_plugin_owner_for_full_package_lifecycle(tmp_pat
         item_id=first_manifest.plugin_id,
         version=first_manifest.plugin_version,
         license_name=first_manifest.provenance.license,
+        manifest=True,
     )
     second = _item(
         RegistryItemType.TOOL,
         item_id=second_manifest.plugin_id,
         version=second_manifest.plugin_version,
         license_name=second_manifest.provenance.license,
+        manifest=True,
     )
     provider = LocalRegistryProvider(
         (first, second),
@@ -190,6 +192,7 @@ async def test_connector_handler_requires_connector_provider_extension() -> None
         item_id=connector_manifest.plugin_id,
         version=connector_manifest.plugin_version,
         license_name=connector_manifest.provenance.license,
+        manifest=True,
     )
 
     snapshot = await handler.install(item, _plugin_artifact(connector_manifest))
@@ -208,6 +211,7 @@ async def test_connector_handler_requires_connector_provider_extension() -> None
         item_id=wrong.plugin_id,
         version=wrong.plugin_version,
         license_name=wrong.provenance.license,
+        manifest=True,
     )
     with pytest.raises(ContractError) as unsupported:
         await handler.install(wrong_item, _plugin_artifact(wrong))
