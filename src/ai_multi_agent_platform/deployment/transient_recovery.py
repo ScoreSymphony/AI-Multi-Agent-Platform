@@ -11,7 +11,7 @@ from ai_multi_agent_platform.automation import (
     AutomationStartupRecoveryReport,
 )
 from ai_multi_agent_platform.contracts import ContractError
-from ai_multi_agent_platform.security import BrowserSession
+from ai_multi_agent_platform.security.authentication_models import BrowserSession
 
 from .startup_recovery import StartupRecoveryExtensionReport
 
