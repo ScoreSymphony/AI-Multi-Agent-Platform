@@ -191,9 +191,7 @@ class PluginExtensionMarketplaceKindHandler:
             "extensions": tuple(extension.extension_id for extension in matching_extensions),
             "capabilities": tuple(manifest.capabilities),
             "extension_metadata": {
-                extension.extension_id: redact_sensitive(
-                    cast(JsonValue, dict(extension.metadata))
-                )
+                extension.extension_id: redact_sensitive(cast(JsonValue, dict(extension.metadata)))
                 for extension in matching_extensions
             },
         }
