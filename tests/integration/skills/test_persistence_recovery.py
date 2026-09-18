@@ -1,7 +1,4 @@
-"""Skill persistence and restart recovery coverage.
-
-Migrated from the historical Issue #588 root-level suite as part of #722.
-"""
+"""Skill persistence and restart recovery coverage."""
 
 from __future__ import annotations
 
