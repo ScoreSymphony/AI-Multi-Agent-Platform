@@ -36,6 +36,8 @@ from ai_multi_agent_platform.skills.service import SkillService
 
 from .marketplace_agent_handlers import (
     AgentMarketplaceKindHandler as AgentMarketplaceKindHandler,
+)
+from .marketplace_agent_handlers import (
     AgentTeamMarketplaceKindHandler as AgentTeamMarketplaceKindHandler,
 )
 from .marketplace_handler_support import _json_object, _requirements
