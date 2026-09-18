@@ -53,13 +53,13 @@ from ai_multi_agent_platform.distribution import (
     reconcile_registry_plugins,
 )
 from ai_multi_agent_platform.domain import OwnerRef, new_id
-from ai_multi_agent_platform.portability import AgentPortableCodec, snapshot_agent
 from ai_multi_agent_platform.plugins import (
     ExtensionType,
     PluginManifest,
     PluginRegistry,
     reference_manifest,
 )
+from ai_multi_agent_platform.portability import AgentPortableCodec, snapshot_agent
 from ai_multi_agent_platform.skills import JsonSkillRepository
 from ai_multi_agent_platform.skills.codec import skill_revision_to_json
 from ai_multi_agent_platform.skills.models import (
