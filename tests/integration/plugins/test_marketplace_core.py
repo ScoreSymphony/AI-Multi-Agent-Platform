@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.distribution import (
     DistributionRoute,
     DistributionService,
@@ -256,3 +257,28 @@ def test_kind_handler_route_is_not_installable_without_owner_handler() -> None:
 
     assert preview.route is DistributionRoute.KIND_HANDLER
     assert preview.activation_allowed is False
+
+
+def test_portable_template_route_remains_unchanged() -> None:
+    registry = marketplace_kind_registry_with_builtins()
+    assert (
+        registry.require(RegistryItemType.TEMPLATE).default_route
+        is DistributionRoute.PORTABLE_IMPORT
+    )
+    assert (
+        registry.require(RegistryItemType.WORKFLOW).default_route
+        is DistributionRoute.PORTABLE_IMPORT
+    )
+
+
+def test_missing_kind_handler_fails_with_typed_owner_capability_error() -> None:
+    item = _item(RegistryItemType.SKILL)
+    provider = LocalRegistryProvider((item,), {(item.item_id, item.version): b"skill"})
+    service = DistributionService(provider)
+    context = ValidationContext("0.0.1")
+    preview = service.preview(item.item_id, item.version, context)
+
+    with pytest.raises(ContractError) as missing:
+        asyncio.run(service.activate(preview, context, authorized=True))
+
+    assert missing.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
