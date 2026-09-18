@@ -17,6 +17,11 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+
+from ai_multi_agent_platform.security.git_execution import (
+    controlled_git_environment,
+    resolve_git_executable,
+)
 from time import monotonic
 
 from ai_multi_agent_platform.conformance.evidence import parse_runtime_evidence
@@ -719,8 +724,10 @@ def _component_versions(values: Mapping[str, str] | None) -> tuple[ComponentVers
 def _git_commit(root: Path) -> str | None:
     try:
         process = subprocess.run(
-            ("git", "rev-parse", "HEAD"),
+            (resolve_git_executable("git"), "rev-parse", "HEAD"),
             cwd=root,
+            env=controlled_git_environment(),
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             check=False,
