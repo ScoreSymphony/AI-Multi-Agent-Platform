@@ -93,9 +93,12 @@ class EgressCapabilityInvoker(BaseCapabilityInvoker):
         provider_invocation: ToolInvocation,
         canonical_invocation: DomainToolInvocation | None,
     ) -> None:
-        del registration, provider_invocation
+        del provider_invocation
         recovery = self._external_effect_recovery
-        if recovery is None:
+        if recovery is None or registration.capability.side_effects not in {
+            SideEffectClassification.EXTERNAL,
+            SideEffectClassification.DESTRUCTIVE,
+        }:
             return
         await recovery.begin_dispatch(
             request.invocation_id,
