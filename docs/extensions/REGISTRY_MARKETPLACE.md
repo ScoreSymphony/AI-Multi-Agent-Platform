@@ -124,7 +124,7 @@ uses the following existing authorities:
 Model Provider package validation is value-free at the Marketplace boundary. Sensitive
 credential keys in package metadata are rejected, and a configuration schema may describe fields
 such as API-key or credential-reference inputs only when it does not embed secret-bearing
-`default`, `const`, `examples` or `enum` values. Endpoint configuration and
+`default`, `const`, `example`, `examples` or `enum` values. Endpoint configuration and
 `SecretReference` binding happen after installation through the canonical owner/configuration
 surface; Marketplace projections never expose the package artifact as configured provider state.
 
