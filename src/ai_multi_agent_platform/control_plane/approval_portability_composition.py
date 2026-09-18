@@ -179,8 +179,14 @@ class ControlPlane(_ApprovalControlPlane):
         pagination = PageQuery(
             limit=query.limit,
             cursor=query.cursor,
-            sort=query.sort,
-            direction=query.direction,
+            sort=(
+                "__service_order__"
+                if bool(getattr(service, "handles_sorting", False))
+                else query.sort
+            ),
+            direction="asc"
+            if bool(getattr(service, "handles_sorting", False))
+            else query.direction,
             fields=query.fields,
         )
         return paginate(resources, pagination)

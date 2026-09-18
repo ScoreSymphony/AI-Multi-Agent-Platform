@@ -114,6 +114,7 @@ def test_registry_control_plane_discovers_application_catalog_metadata() -> None
     assert resource["item_type"] == "application"
     assert resource["version"] == "1.2.0"
     assert resource["source"] == {
+        "registry": "local",
         "repository": "https://example.invalid/application",
         "package_reference": "application-manifest@1.2.0",
         "revision": "release-1.2.0",

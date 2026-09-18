@@ -250,6 +250,18 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         }
         return terminal_actions.get(terminal_verb, AuthorizationAction.MODIFY), ResourceType.GENERIC
 
+    if action.startswith("marketplace."):
+        marketplace_verb = action.removeprefix("marketplace.")
+        marketplace_actions = {
+            "preview": AuthorizationAction.READ,
+            "install": AuthorizationAction.CREATE,
+            "update": AuthorizationAction.MODIFY,
+            "uninstall": AuthorizationAction.DELETE,
+        }
+        return marketplace_actions.get(
+            marketplace_verb, AuthorizationAction.MODIFY
+        ), ResourceType.GENERIC
+
     if action.startswith("application."):
         application_verb = action.removeprefix("application.")
         application_actions = {

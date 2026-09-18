@@ -1,6 +1,6 @@
 """Canonical top-level command-line composition.
 
-Registry, governed Learning and Task trace commands are API-first and use only the
+Registry/Marketplace, governed Learning and Task trace commands are API-first and use only the
 canonical Control Plane. Every other area delegates to the stable repository CLI.
 """
 
@@ -21,6 +21,7 @@ from .client import (
 )
 from .credentials import AuthenticatedTransport, CredentialStore
 from .learning import add_learning_parser, execute_learning
+from .marketplace import add_marketplace_parser, execute_marketplace
 from .profiles import CLIProfile, ProfileError, ProfileStore, default_config_path
 from .registry import add_registry_parser, execute_registry
 from .render import Renderer
@@ -57,7 +58,7 @@ def run_cli(
             )
         )
         return 2
-    if requested_area not in {"registry", "learning", "trace"}:
+    if requested_area not in {"registry", "marketplace", "learning", "trace"}:
         return repository_run_cli(
             arguments,
             transport=transport,
@@ -100,6 +101,8 @@ def run_cli(
         )
         if args.area == "registry":
             response = execute_registry(args, client, _require_confirmation)
+        elif args.area == "marketplace":
+            response = execute_marketplace(args, client, _require_confirmation)
         elif args.area == "learning":
             response = execute_learning(args, client, _require_confirmation)
         elif args.area == "trace":
@@ -135,6 +138,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     areas = parser.add_subparsers(dest="area", required=True)
     add_registry_parser(areas)
+    add_marketplace_parser(areas)
     add_learning_parser(areas)
     add_trace_parser(areas)
     return parser
