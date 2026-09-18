@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+from ai_multi_agent_platform.contracts import ExecutionSnapshot, ExecutionStatus
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.deployment.startup_recovery import reconcile_single_node_startup
 from ai_multi_agent_platform.domain import RunStatus
@@ -140,14 +141,14 @@ def test_cancellation_started_before_drain_settles_without_duplicate_run(
 
         entered_cancel = asyncio.Event()
         release_cancel = asyncio.Event()
-        original_finish_cancel = first.kernel._finish_cancel
 
-        async def blocked_finish_cancel(*args: Any, **kwargs: Any) -> Any:
+        async def blocked_cancel(run_id: str, context: Any) -> ExecutionSnapshot:
+            del context
             entered_cancel.set()
             await release_cancel.wait()
-            return await original_finish_cancel(*args, **kwargs)
+            return ExecutionSnapshot(run_id=run_id, status=ExecutionStatus.CANCELLED)
 
-        monkeypatch.setattr(first.kernel, "_finish_cancel", blocked_finish_cancel)
+        monkeypatch.setattr(first.lifecycle_binding, "cancel", blocked_cancel)
 
         async def cancel() -> Any:
             return await first.kernel.cancel_run(
