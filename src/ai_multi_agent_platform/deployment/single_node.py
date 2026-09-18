@@ -343,16 +343,14 @@ def build_single_node_deployment_from_foundation(
     storage = foundation.storage
     observability = foundation.observability
     security = foundation.security
-    runtime, platform_services, repository_foundation, execution = (
-        _build_runtime_execution_stage(
-            config,
-            foundation,
-            onboarding_model_adapters=onboarding_model_adapters,
-            distributed_runtime=distributed_runtime,
-            enable_distributed_execution=enable_distributed_execution,
-            repository_discovery_resolver=repository_discovery_resolver,
-            model_runtime_factory=model_runtime_factory,
-        )
+    runtime, platform_services, repository_foundation, execution = _build_runtime_execution_stage(
+        config,
+        foundation,
+        onboarding_model_adapters=onboarding_model_adapters,
+        distributed_runtime=distributed_runtime,
+        enable_distributed_execution=enable_distributed_execution,
+        repository_discovery_resolver=repository_discovery_resolver,
+        model_runtime_factory=model_runtime_factory,
     )
     verification = build_verification(config)
     kernel = build_kernel(
