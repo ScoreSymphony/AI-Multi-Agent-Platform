@@ -83,8 +83,7 @@ def _raw_git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 def _python_marker_command(marker: Path) -> str:
     program = (
-        "from pathlib import Path; "
-        f"Path({str(marker)!r}).write_text('executed', encoding='utf-8')"
+        f"from pathlib import Path; Path({str(marker)!r}).write_text('executed', encoding='utf-8')"
     )
     return f"{shlex.quote(sys.executable)} -c {shlex.quote(program)}"
 
@@ -348,13 +347,17 @@ def test_gitspawn_commit_identity_environment_cannot_override_explicit_author(
             author_email="gitspawn@example.invalid",
         )
 
-        identity = _raw_git(
-            root,
-            "show",
-            "-s",
-            "--format=%an%x00%ae%x00%cn%x00%ce",
-            "HEAD",
-        ).stdout.strip().split("\x00")
+        identity = (
+            _raw_git(
+                root,
+                "show",
+                "-s",
+                "--format=%an%x00%ae%x00%cn%x00%ce",
+                "HEAD",
+            )
+            .stdout.strip()
+            .split("\x00")
+        )
         assert identity == [
             "GitSpawn Test",
             "gitspawn@example.invalid",
