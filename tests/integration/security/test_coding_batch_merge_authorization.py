@@ -1,5 +1,3 @@
-"""Migrated under #722; original coverage tracked issue #872."""
-
 from __future__ import annotations
 
 import pytest
