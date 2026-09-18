@@ -673,7 +673,7 @@ async def test_hermes_marketplace_install_activates_through_canonical_control_pl
         {"manifest_digest": _manifest_digest(manifest)},
     )
     assert enabled["state"] == "enabled"
-    assert set(enabled["granted_permissions"]) == {"network_access", "secret_consumption"}
+    assert enabled["granted_permissions"] == ["network_access", "secret_consumption"]
     selected = orchestrators.select(OrchestratorSelection(HERMES_ADAPTER_ID))
     assert isinstance(selected, HermesOrchestrator)
     assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
