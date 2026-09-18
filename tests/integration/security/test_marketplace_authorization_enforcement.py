@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.control_plane.extensions import ControlPlane
+from ai_multi_agent_platform.control_plane import ControlPlane
 from ai_multi_agent_platform.control_plane.models import ActorContext, RequestContext
 from ai_multi_agent_platform.distribution import (
     DistributionService,
