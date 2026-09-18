@@ -14,7 +14,13 @@ from ai_multi_agent_platform.agents import AgentCapabilityTurn, AgentRepository,
 from ai_multi_agent_platform.capabilities import (
     CapabilityInvocation,
     CapabilitySpec,
+    ExternalEffectReconciler,
+    ExternalEffectRecoveryCoordinator,
+    SQLiteExternalEffectRecoveryRepository,
     bind_canonical_capability_invocation,
+)
+from ai_multi_agent_platform.capabilities.recovery_control_plane import (
+    register_external_effect_recovery_control_plane,
 )
 from ai_multi_agent_platform.context.bindings import (
     ContextRunBindingRepository,
@@ -92,6 +98,7 @@ from ai_multi_agent_platform.skills import (
 
 from .context_verification import CanonicalVerificationContextClassificationResolver
 from .egress_bindings import EgressDeploymentBindings
+from .external_effect_recovery import ExternalEffectStartupRecovery
 
 if TYPE_CHECKING:
     from ai_multi_agent_platform.deployment.single_node import (
@@ -227,6 +234,7 @@ class SingleNodeContextComposition:
     research_repository: SqliteResearchRepository
     research: ResearchService
     reconciliation: ContextBindingReconciliationReport
+    external_effect_recovery: ExternalEffectRecoveryCoordinator | None = None
 
 
 def install_single_node_context(
@@ -428,6 +436,29 @@ def install_single_node_context(
             run_bindings=run_bindings,
         )
 
+    external_effect_recovery: ExternalEffectRecoveryCoordinator | None = None
+    if egress is not None:
+        external_effect_recovery = ExternalEffectRecoveryCoordinator(
+            SQLiteExternalEffectRecoveryRepository(
+                database_dir / "external-effect-recovery.sqlite3"
+            )
+        )
+        for descriptor in base.capabilities.inventory_providers():
+            provider = base.capabilities.runtime_provider(descriptor.provider_id)
+            if isinstance(provider, ExternalEffectReconciler):
+                external_effect_recovery.register_reconciler(
+                    descriptor.provider_id,
+                    provider,
+                )
+        register_external_effect_recovery_control_plane(
+            base.control_plane,
+            external_effect_recovery,
+        )
+        base.startup_recovery_extensions = (
+            *base.startup_recovery_extensions,
+            ExternalEffectStartupRecovery(external_effect_recovery),
+        )
+
     trace_hierarchy = TraceHierarchy(base.telemetry)
     capability_turn = (
         None
@@ -440,6 +471,7 @@ def install_single_node_context(
                 canonical_binding_hook=bind_canonical_capability_invocation,
                 classification_resolver=capability_classification,
                 observer=ObservabilityInvocationObserver(base.telemetry),
+                external_effect_recovery=external_effect_recovery,
             ),
         )
     )
@@ -491,6 +523,7 @@ def install_single_node_context(
         research_repository=research_repository,
         research=research,
         reconciliation=reconciliation,
+        external_effect_recovery=external_effect_recovery,
     )
 
 
