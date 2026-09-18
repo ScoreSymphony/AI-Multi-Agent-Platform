@@ -54,7 +54,7 @@ Compatibility, permission, provenance and update state are separate typed projec
 
 `preview()` never activates content. Async `activate()` requires explicit authorization, re-fetches the exact metadata/artifact, re-runs server-side validation to prevent preview/apply drift, and only then delegates to the owner domain through `DistributionRouter`. Installation state is recorded only after the owner handoff succeeds. The durable installation snapshot records a SHA-256 digest of the exact bytes that were successfully handed to the owner, even when the Registry metadata did not require its own checksum.
 
-`CanonicalDistributionRouter` is the reference owner handoff. Portable Registry assets must be UTF-8 JSON portable packages. The router sends them through the canonical #79 `validate_package_document()` -> `preview_import()` -> `execute_import()` workflow; it never writes Templates, Agents, Teams, Workflows or other imported resources itself.
+`CanonicalDistributionRouter` remains the reference handoff for generic portable Registry assets. Those artifacts are UTF-8 JSON portable packages and flow through #79 `validate_package_document()` -> `preview_import()` -> `execute_import()`; the router never becomes their resource owner. First-class Marketplace `agent` and `agent_team` items deliberately use kind handlers instead: their artifact is the canonical Agent/Team portable snapshot payload, decoded by the existing #79 Agent codecs and then materialized through `AgentService`. This gives Marketplace status/update/uninstall an explicit canonical owner seam without creating a second Agent model. Multi-resource Agent-pack import remains the generic #79 package concern; #1221 does not invent a Marketplace-private bundle format.
 
 Plugin artifacts are intentionally different. `PluginRegistryArtifactInstaller` validates the Registry artifact as a canonical #20 manifest, requires Registry ID/version/license agreement, and delegates installation or an explicit newer-version update to `PluginRegistry`. Updates require a stopped runtime, repeat #20 compatibility/configuration/state-version validation, clear old permission grants, and never silently re-enable code. A state-version change remains fail-closed until the declared owner-domain state migration has actually completed.
 
@@ -75,10 +75,11 @@ The canonical owner may then be one step ahead of Marketplace evidence; this is 
 recoverable state, not a second source of truth. Registered owner handlers must therefore make an
 already-applied identical mutation idempotent. Retrying the same source-qualified lifecycle request
 (after a process restart if necessary) observes the canonical owner state and completes only the
-missing Marketplace evidence write. Built-in Skill, Plugin-backed Tool/Connector, Plugin and
-Application handlers implement this retry contract; Application version update remains unsupported.
-The acceptance suite exercises install, update and uninstall evidence-write failures across fresh
-`SkillService`, `JsonSkillRepository`, installation-store and `DistributionService` instances.
+missing Marketplace evidence write. Built-in Agent, Agent Team, Skill, Plugin-backed
+Tool/Connector, Plugin and Application handlers implement this retry contract; Application version
+update remains unsupported. The acceptance suite exercises durable evidence-write recovery with
+fresh owner repositories, installation stores and `DistributionService` instances, including
+`JsonAgentRepository` and `JsonSkillRepository`.
 
 Pins are explicit durable application policy. `registry.pin` can pin only the currently installed version; `registry.unpin` removes that constraint. A pin does **not** hide newer releases: discovery and `update_available` still report a newer candidate, while preview returns `version_pinned` and blocks application until the pin is removed. Updates are never applied automatically. License/provenance changes and pins are validated before activation.
 
