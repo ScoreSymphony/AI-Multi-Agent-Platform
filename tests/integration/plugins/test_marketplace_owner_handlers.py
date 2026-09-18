@@ -211,6 +211,16 @@ async def test_agent_handler_installs_canonical_revisions_without_runtime_instan
     assert target_repository.list_agent_runs() == ()
     assert handler.describe(item)["owner_domain"] == "agents"
 
+    retried_install = await handler.install(
+        item,
+        _portable_agent_artifact(source_repository, second.agent_id),
+    )
+    assert retried_install.revision == 2
+    assert target_repository.list_agent_revisions(second.agent_id) == (
+        target.get_agent_revision(second.agent_id, 1),
+        target.get_agent_revision(second.agent_id, 2),
+    )
+
     third = source.update_agent(second.agent_id, _agent_profile("Research Agent v3"))
     updated_item = replace(
         item,
@@ -224,6 +234,14 @@ async def test_agent_handler_installs_canonical_revisions_without_runtime_instan
     assert updated.revision == 3
     assert updated.profile.name == "Research Agent v3"
 
+    retried_update = await handler.update(
+        updated_item,
+        _portable_agent_artifact(source_repository, third.agent_id),
+    )
+    assert retried_update.revision == 3
+    assert len(target_repository.list_agent_revisions(second.agent_id)) == 3
+
+    await handler.uninstall(updated_item)
     await handler.uninstall(updated_item)
     with pytest.raises(ContractError) as missing:
         target.get_agent_revision(second.agent_id)
@@ -278,6 +296,14 @@ async def test_agent_team_handler_uses_canonical_team_owner_and_member_validatio
     assert handler.describe(team_item)["member_count"] == 1
     assert target_repository.list_agent_runs() == ()
 
+    retried_team = await handler.install(
+        team_item,
+        _portable_team_artifact(source_repository, team.team_id),
+    )
+    assert retried_team.revision == 1
+    assert len(target_repository.list_team_revisions(team.team_id)) == 1
+
+    await handler.uninstall(team_item)
     await handler.uninstall(team_item)
     with pytest.raises(ContractError) as missing:
         target.get_team_revision(team.team_id)
