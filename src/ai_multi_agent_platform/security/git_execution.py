@@ -68,6 +68,18 @@ _WINDOWS_ABSOLUTE_PATH = re.compile(r"^[A-Za-z]:[\\\\/]")
 _ALLOWED_URL_SCHEMES = frozenset({"git", "http", "https", "ssh"})
 
 
+def _absolute_search_path(value: str | None) -> str:
+    entries = []
+    for raw_entry in (value or os.defpath).split(os.pathsep):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        candidate = Path(entry).expanduser()
+        if candidate.is_absolute():
+            entries.append(str(candidate))
+    return os.pathsep.join(entries) or os.defpath
+
+
 def controlled_git_environment(
     inherited: Mapping[str, str] | None = None,
     *,
@@ -89,6 +101,7 @@ def controlled_git_environment(
         ):
             environment.pop(key, None)
 
+    environment["PATH"] = _absolute_search_path(environment.get("PATH"))
     environment.update(
         {
             "GIT_CONFIG_NOSYSTEM": "1",
@@ -109,10 +122,12 @@ def resolve_git_executable(binary: str) -> str:
     """Resolve a Git executable once outside the child environment when possible."""
 
     candidate = Path(binary).expanduser()
-    if candidate.is_absolute() or candidate.parent != Path("."):
+    if candidate.is_absolute():
         return str(candidate)
-    resolved = shutil.which(binary)
-    return resolved or binary
+    if candidate.parent != Path("."):
+        return str(candidate.resolve())
+    resolved = shutil.which(binary, path=_absolute_search_path(os.environ.get("PATH")))
+    return str(Path(resolved).resolve()) if resolved is not None else binary
 
 
 def unsafe_local_git_config_keys(keys: Iterable[str]) -> tuple[str, ...]:
