@@ -71,7 +71,7 @@ def test_team_update_is_canonical_and_preserves_identity() -> None:
     asyncio.run(scenario())
 
 
-def test_live_membership_guard_revokes_stale_team_scope_before_issue_15_policy() -> None:
+def test_live_membership_guard_revokes_stale_team_scope_before_authorization_policy() -> None:
     async def scenario() -> None:
         now = datetime(2026, 9, 3, 12, tzinfo=UTC)
         repository = InMemoryOrganizationRepository()
