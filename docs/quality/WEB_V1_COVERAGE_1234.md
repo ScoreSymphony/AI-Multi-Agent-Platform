@@ -113,6 +113,23 @@ Adding generic buttons for these boundaries would weaken, not improve, V1 archit
    dependency pins had advanced beyond the documented values. `docs/FRONTEND.md` is reconciled in
    the same change.
 
+## Remaining #1234 work outside this branch
+
+This branch is intentionally a mergeable **coverage slice**, not the final #1234 closure branch.
+Two additional closed V1 owners were identified during the audit but are deliberately not started
+halfway here:
+
+- **#589 Research Evidence** explicitly requires a Web inspection surface for Research Items,
+  Sources, Claims, Evidence, freshness/staleness, verification status, provenance and downstream
+  Task/Plan/Decision references. The Control Plane owner exists, but no maintained Web route is
+  currently present.
+- **#598 Decision Records** explicitly requires Web list/search/filter, detail, linked evidence,
+  downstream references, supersession history and revisit status. A read client exists, but the
+  maintained Web route/page is still absent.
+
+These should be implemented on dedicated follow-up branches and then composed with this branch in
+the later collection branch, rather than leaving partial route/client work in this slice.
+
 ## Remaining dependency-owned evidence
 
 #1234 must not claim final closure from component tests alone:
@@ -126,9 +143,9 @@ Adding generic buttons for these boundaries would weaken, not improve, V1 archit
 - **#747** remains the final whole-product acceptance audit after #1234 and the other implementation
   work are complete.
 
-The implementation branch is therefore allowed to become merge-ready before #1164/#1221 close,
-but #1234 itself should remain open until those hard dependencies are consumed and the exact final
-integrated Web state is rechecked.
+The implementation branch is therefore allowed to become merge-ready before #1164/#1221 close.
+#1234 itself should remain open until #589/#598 Web follow-ups are integrated, #1164/#1221 are
+consumed and the exact final integrated Web state is rechecked.
 
 ## Validation contract
 
