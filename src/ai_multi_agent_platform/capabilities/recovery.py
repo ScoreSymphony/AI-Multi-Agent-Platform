@@ -508,7 +508,8 @@ class ExternalEffectRecoveryCoordinator:
                 disposition=disposition,
                 reason=f"reconciliation_failed:{exc.code.value}",
             )
-        except Exception as exc:  # error-boundary: provider reconciliation outer boundary
+        # error-boundary: allow-broad-catch=translation provider reconciliation outer boundary
+        except Exception as exc:
             await self._record_reconciliation_failure(
                 effect_id,
                 disposition=ExternalEffectRecoveryDisposition.UNCERTAIN_MANUAL_REVIEW,
