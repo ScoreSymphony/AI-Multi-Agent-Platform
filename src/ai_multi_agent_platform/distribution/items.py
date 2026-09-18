@@ -50,6 +50,8 @@ class RegistryItem:
     maturity: RegistryMaturity | None = None
     integrity: ArtifactIntegrity = field(default_factory=ArtifactIntegrity)
     trust_status: TrustStatus = TrustStatus.UNTRUSTED
+    homepage: str | None = None
+    documentation: str | None = None
     review_reference: str | None = None
     released_at: str | None = None
     changelog: str | None = None
@@ -96,6 +98,8 @@ class RegistryItem:
         if self.source_registry is not None:
             _require_text(self.source_registry, "source_registry")
         for optional_value, optional_field_name in (
+            (self.homepage, "homepage"),
+            (self.documentation, "documentation"),
             (self.review_reference, "review_reference"),
             (self.released_at, "released_at"),
             (self.changelog, "changelog"),
