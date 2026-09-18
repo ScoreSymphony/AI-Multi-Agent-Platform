@@ -162,7 +162,7 @@ def _issue_context_requires_rewrite(line: str) -> bool:
 
     if ISSUE_REFERENCE.search(line) is None or _provenance_line(line):
         return False
-    normalized = line.strip().strip("\\\"'").strip()
+    normalized = line.strip().strip('"\'').strip()
     normalized = re.sub(r"^#+\\s+", "", normalized).strip()
     return (
         ISSUE_LED_CONTEXT.match(normalized) is not None
