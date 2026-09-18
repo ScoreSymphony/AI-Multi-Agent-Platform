@@ -367,7 +367,16 @@ def main(
                 # Enter drain before Uvicorn closes listeners/waits for connection tasks. This
                 # disables northbound mutation admission as soon as operator shutdown begins.
                 await deployment.drain.begin(reason="server_shutdown")
-                await super().shutdown(sockets=sockets)
+                try:
+                    await super().shutdown(sockets=sockets)
+                except asyncio.CancelledError:
+                    raise
+                # error-boundary: allow-broad-catch=boundary server teardown must be observable
+                except Exception as exc:
+                    deployment.drain.mark_teardown_failure(type(exc).__name__)
+                    await deployment.drain.mark_forced("server_teardown_failure")
+                    await deployment.drain.mark_completed()
+                    raise
                 if self.force_exit:
                     await deployment.drain.mark_forced("operator_force_signal")
                     await deployment.drain.mark_completed()
