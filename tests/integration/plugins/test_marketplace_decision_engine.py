@@ -784,3 +784,116 @@ def test_schema_v4_round_trips_cross_kind_and_environment_constraints() -> None:
     assert item.compatibility.operating_systems == frozenset({"linux"})
     assert item.compatibility.architectures == frozenset({"x86_64"})
     assert item.compatibility.required_runtimes == frozenset({"python"})
+
+
+def test_current_yanked_release_is_reported_in_update_state(
+    tmp_path: Path,
+) -> None:
+    current, current_artifact = _item(
+        "example.current-yanked",
+        yanked=True,
+    )
+    candidate, candidate_artifact = _item(
+        current.item_id,
+        version="1.1.0",
+    )
+    store = JsonRegistryInstallationStore(tmp_path / "installations.json")
+    store.record(
+        replace(current, yanked=False),
+        provider_id="local",
+    )
+    service = _service(
+        ((current, current_artifact), (candidate, candidate_artifact)),
+        store=store,
+    )
+
+    preview = service.preview(candidate.item_id, candidate.version, _context())
+
+    assert preview.decision.update_state.current_yanked is True
+    assert preview.decision.update_state.candidate_yanked is False
+    assert preview.decision.update_state.latest_compatible_version == candidate.version
+
+
+def test_trust_downgrade_is_visible_and_requires_review(
+    tmp_path: Path,
+) -> None:
+    old, old_artifact = _item(
+        "example.trust-downgrade",
+        trust_status=TrustStatus.TRUSTED,
+    )
+    candidate, candidate_artifact = _item(
+        old.item_id,
+        version="1.1.0",
+        trust_status=TrustStatus.UNTRUSTED,
+    )
+    store = JsonRegistryInstallationStore(tmp_path / "installations.json")
+    store.record(old, provider_id="local")
+    service = _service(
+        ((old, old_artifact), (candidate, candidate_artifact)),
+        store=store,
+    )
+
+    preview = service.preview(candidate.item_id, candidate.version, _context())
+
+    assert preview.decision.provenance_diff.trust_downgraded is True
+    assert preview.decision.update_state.trust_integrity_issue is True
+    assert "trust_downgrade" in preview.decision.approval.reasons
+    assert any(finding.code == "trust_downgrade" for finding in preview.findings)
+
+
+def test_dependency_from_multiple_sources_requires_explicit_source_choice() -> None:
+    root, root_artifact = _item(
+        "example.ambiguous-root",
+        dependencies=(
+            RegistryDependency(
+                "example.ambiguous-tool",
+                item_kind=RegistryItemType.TOOL,
+            ),
+        ),
+    )
+    tool_a, tool_a_artifact = _item(
+        "example.ambiguous-tool",
+        RegistryItemType.TOOL,
+    )
+    tool_b, tool_b_artifact = _item(
+        "example.ambiguous-tool",
+        RegistryItemType.TOOL,
+    )
+    root_provider = LocalRegistryProvider(
+        (root,),
+        {(root.item_id, root.version): root_artifact},
+        provider_id="root-source",
+    )
+    source_a = LocalRegistryProvider(
+        (tool_a,),
+        {(tool_a.item_id, tool_a.version): tool_a_artifact},
+        provider_id="source-a",
+    )
+    source_b = LocalRegistryProvider(
+        (tool_b,),
+        {(tool_b.item_id, tool_b.version): tool_b_artifact},
+        provider_id="source-b",
+    )
+    service = DistributionService(
+        MultiRegistryProvider((root_provider, source_a, source_b)),
+        _Router(),
+    )
+
+    preview = service.preview(
+        root.item_id,
+        root.version,
+        _context(),
+        source_registry="root-source",
+    )
+
+    dependency = next(
+        item
+        for item in preview.decision.dependencies
+        if item.item_id == "example.ambiguous-tool"
+    )
+    assert dependency.status is DependencyStatus.SOURCE_AMBIGUOUS
+    assert preview.activation_allowed is False
+    assert any(
+        finding.code == "dependency_source_ambiguous"
+        for finding in preview.findings
+    )
