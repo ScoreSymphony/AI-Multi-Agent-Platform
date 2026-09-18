@@ -9,6 +9,7 @@ import {
   manifestResourceState,
   manifestResourcesState,
 } from "./Shell";
+import { navigation } from "./navigation";
 import { RouterProvider } from "./router";
 
 afterEach(() => {
@@ -42,6 +43,16 @@ describe("#17 shell accessibility semantics", () => {
     expect((html.match(/aria-current="page"/g) ?? []).length).toBe(1);
     expect(html).toContain('href="/chat"');
     expect(html).toContain('id="main" tabindex="-1"');
+  });
+
+  it("maps every discoverable primary navigation item to a maintained route", () => {
+    for (const item of navigation) {
+      const html = renderShell(item.path);
+      expect(html, `navigation route fell through to unavailable: ${item.path}`).not.toContain(
+        "Canonical subsystem unavailable",
+      );
+      expect(html).not.toContain("Unknown route");
+    }
   });
 
   it("announces Control Plane and Task live status changes politely", () => {
