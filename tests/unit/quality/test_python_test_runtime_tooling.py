@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.ci.run_pytest_lane import build_report, budget_violations  # noqa: E402
+from scripts.ci.run_pytest_lane import budget_violations, build_report  # noqa: E402
 from scripts.ci.verify_pytest_runtime_aggregate import (  # noqa: E402
     aggregate_violations,
     build_aggregate,
