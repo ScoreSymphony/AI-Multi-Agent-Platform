@@ -1004,6 +1004,7 @@ def test_persisted_installed_dependency_detects_cycle_after_catalog_drift(
     )
     assert any(finding.code == "dependency_cycle" for finding in preview.findings)
 
+
 def test_installed_dependency_evidence_wins_over_same_version_catalog_drift(
     tmp_path: Path,
 ) -> None:
