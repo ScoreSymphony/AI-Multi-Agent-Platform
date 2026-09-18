@@ -17,6 +17,7 @@ import { NotificationClient } from "../../api/notifications";
 import { OnboardingClient } from "../../api/onboarding";
 import { OrganizationClient } from "../../api/organizations";
 import { PluginsClient } from "../../api/plugins";
+import { PortabilityClient } from "../../api/portability";
 import { RegistryClient } from "../../api/registry";
 import { RepositoryCollectionClient } from "../../api/repositories";
 import { SetupClient } from "../../api/setup";
@@ -45,6 +46,7 @@ export function useShellClients(baseUrl: string) {
   const notificationClient = useMemo(() => new NotificationClient({ transport }), [transport]);
   const organizationClient = useMemo(() => new OrganizationClient({ transport }), [transport]);
   const pluginsClient = useMemo(() => new PluginsClient({ transport }), [transport]);
+  const portabilityClient = useMemo(() => new PortabilityClient({ transport }), [transport]);
   const registryClient = useMemo(() => new RegistryClient({ transport }), [transport]);
   const templateClient = useMemo(() => new TemplateClient({ transport }), [transport]);
   const verificationClient = useMemo(() => new VerificationClient({ transport }), [transport]);
@@ -70,6 +72,7 @@ export function useShellClients(baseUrl: string) {
     notificationClient,
     organizationClient,
     pluginsClient,
+    portabilityClient,
     registryClient,
     templateClient,
     verificationClient,
