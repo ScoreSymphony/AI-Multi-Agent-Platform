@@ -301,6 +301,7 @@ def test_schema_v6_adds_canonical_links_without_breaking_v5() -> None:
     assert legacy_item.homepage is None
     assert legacy_item.documentation is None
 
+
 def test_schema_v5_rejects_v6_canonical_link_fields() -> None:
     legacy = _document(
         item_type="notebook_extension",
@@ -316,6 +317,7 @@ def test_schema_v5_rejects_v6_canonical_link_fields() -> None:
 
     with pytest.raises(ValidationError):
         registry_item_from_document(legacy)
+
 
 def test_registry_item_rejects_blank_canonical_links() -> None:
     with pytest.raises(ValueError, match="homepage"):
@@ -334,6 +336,7 @@ def test_registry_item_rejects_blank_canonical_links() -> None:
             provenance="source-release",
             homepage=" ",
         )
+
 
 def test_schema_v3_parses_known_application_kind_back_to_enum() -> None:
     item = registry_item_from_document(
