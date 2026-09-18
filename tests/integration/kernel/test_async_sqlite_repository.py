@@ -262,7 +262,8 @@ def test_sqlite_kernel_offload_concurrency_is_bounded(tmp_path: Path) -> None:
 
 def test_sqlite_kernel_failed_mutation_rolls_back(tmp_path: Path) -> None:
     async def scenario() -> None:
-        repository = SqliteKernelRepository(tmp_path / "kernel.sqlite3")
+        database = tmp_path / "kernel.sqlite3"
+        repository = SqliteKernelRepository(database)
         first_stream = new_id("task")
         second_stream = new_id("task")
         duplicate_id = new_id("event")
