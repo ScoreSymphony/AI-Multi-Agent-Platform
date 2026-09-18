@@ -248,7 +248,10 @@ class RegistryResourceService:
         item: RegistryItem,
         installation: RegistryInstallation | None,
     ) -> dict[str, JsonValue] | None:
-        if item.route is not DistributionRoute.KIND_HANDLER:
+        if item.route not in {
+            DistributionRoute.KIND_HANDLER,
+            DistributionRoute.PLUGIN,
+        }:
             return None
         try:
             requirements = self.distribution.inspect_requirements(item)
@@ -540,7 +543,10 @@ class RegistryCommandHandlers:
         self,
         preview: DistributionUninstallPreview,
     ) -> None:
-        if preview.item.route is not DistributionRoute.KIND_HANDLER:
+        if preview.item.route not in {
+            DistributionRoute.KIND_HANDLER,
+            DistributionRoute.PLUGIN,
+        }:
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
                 "marketplace uninstall is not available for this component route",
