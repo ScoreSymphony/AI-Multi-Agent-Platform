@@ -130,20 +130,38 @@ def test_runtime_aggregate_uses_slowest_lane_and_enforces_budget() -> None:
             "budget_violations": [],
         },
     }
+    validation_reports = {
+        "quality": {"wall_seconds": 70.0},
+        "unit": {"wall_seconds": 83.0},
+        "contract-architecture-release": {"wall_seconds": 43.0},
+        "integration": {"wall_seconds": 148.0},
+        "system-regression": {"wall_seconds": 121.0},
+    }
 
-    summary = build_aggregate(reports)
+    summary = build_aggregate(reports, validation_reports)
 
-    assert summary["critical_lane"] == "integration"
+    assert summary["pytest_critical_lane"] == "integration"
     assert summary["pytest_critical_path_seconds"] == 122.0
     assert summary["pytest_total_compute_seconds"] == 273.0
+    assert summary["validation_critical_lane"] == "integration"
+    assert summary["validation_critical_path_seconds"] == 148.0
     assert aggregate_violations(
         summary,
-        {"pytest_critical_path_seconds": 330},
+        {
+            "pytest_critical_path_seconds": 330,
+            "validation_critical_path_seconds": 350,
+        },
     ) == []
     assert aggregate_violations(
         summary,
-        {"pytest_critical_path_seconds": 100},
-    ) == ["pytest critical path 122.000s exceeds 100.000s"]
+        {
+            "pytest_critical_path_seconds": 100,
+            "validation_critical_path_seconds": 140,
+        },
+    ) == [
+        "pytest critical path 122.000s exceeds 100.000s",
+        "validation critical path 148.000s exceeds 140.000s",
+    ]
 
 
 def test_runtime_aggregate_rejects_failed_or_over_budget_lane() -> None:
@@ -165,10 +183,20 @@ def test_runtime_aggregate_rejects_failed_or_over_budget_lane() -> None:
             "budget_violations": [],
         },
     }
+    validation_reports = {
+        "quality": {"wall_seconds": 70.0},
+        "unit": {"wall_seconds": 83.0},
+        "contract-architecture-release": {"wall_seconds": 43.0},
+        "integration": {"wall_seconds": 148.0},
+        "system-regression": {"wall_seconds": 121.0},
+    }
 
-    summary = build_aggregate(reports)
+    summary = build_aggregate(reports, validation_reports)
 
     assert aggregate_violations(
         summary,
-        {"pytest_critical_path_seconds": 330},
+        {
+            "pytest_critical_path_seconds": 330,
+            "validation_critical_path_seconds": 350,
+        },
     ) == ["failed or over-budget lanes: integration"]
