@@ -860,6 +860,16 @@ def test_handler_unavailable_fails_with_typed_marketplace_error(tmp_path: Path) 
     )
     assert preview["activation_allowed"] is False
 
+    detail = asyncio.run(
+        RegistryResourceService(distribution, resolver).get_resource(_request(), skill.item_id)
+    )
+    owner_extension = detail["owner_extension"]
+    assert isinstance(owner_extension, dict)
+    assert owner_extension["handler_available"] is False
+    assert owner_extension["requirements"] is None
+    assert owner_extension["details"] is None
+    assert owner_extension["status"] is None
+
     with pytest.raises(ContractError) as error:
         asyncio.run(
             commands.marketplace_install(
