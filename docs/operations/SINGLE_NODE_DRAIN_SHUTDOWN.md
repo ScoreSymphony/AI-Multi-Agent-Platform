@@ -25,9 +25,9 @@ For a normal service-manager stop or \x60Ctrl+C\x60:
 3. new terminal WebSocket sessions are rejected with close code \x601013\x60;
 4. read-only inspection remains available while the process is still serving;
 5. already-admitted mutations may settle only before the shared drain deadline;
-6. Uvicorn connection/task settlement and ASGI lifespan teardown use the same configured bound;
-7. if the deadline expires, remaining process-local teardown is cancelled and the process exits;
-8. the next startup reconciles canonical durable state through #707 before becoming ready.
+7. Uvicorn connection/task settlement and ASGI lifespan teardown use the same configured bound;
+8. if the deadline expires, remaining process-local teardown is cancelled and the process exits;
+9. the next startup reconciles canonical durable state through #707 before becoming ready.
 
 The default bound is 30 seconds. Configure it explicitly with:
 
