@@ -203,6 +203,7 @@ export interface MarketplaceDependencyResolution {
   candidate_kind: string | null;
   candidate_source_registry: string | null;
   path: string[];
+  blocking: boolean;
 }
 
 export interface MarketplaceCompatibilityDecision {
