@@ -9,7 +9,7 @@ from ai_multi_agent_platform.plugins import PluginRegistry
 from ai_multi_agent_platform.plugins.models import ExtensionType
 
 from .items import RegistryItem
-from .models import RegistryItemType
+from .models import DistributionRoute, RegistryItemType
 from .plugin_adapter import PluginRegistryArtifactInstaller
 from .provider import RegistryProvider
 from .signatures import RegistrySignatureVerifier
@@ -108,8 +108,15 @@ def _validate_persisted_kind(
     snapshot: RegistryInstallationSnapshot,
     item: RegistryItem,
 ) -> bool:
-    if not _is_plugin_backed_kind(item.item_type):
-        if snapshot.item_type is not None and _is_plugin_backed_kind(snapshot.item_type):
+    if not _item_is_plugin_backed(item):
+        if snapshot.item_type is RegistryItemType.PLUGIN:
+            raise RegistryPluginReconciliationError(
+                f"persisted Registry component {snapshot.item_id!r} changed item type"
+            )
+        if (
+            snapshot.item_type in _PLUGIN_BACKED_KINDS
+            and snapshot.item_type is not item.item_type
+        ):
             raise RegistryPluginReconciliationError(
                 f"persisted Registry component {snapshot.item_id!r} changed item type"
             )
@@ -119,6 +126,13 @@ def _validate_persisted_kind(
             f"persisted Registry component {snapshot.item_id!r} changed item type"
         )
     return True
+
+
+def _item_is_plugin_backed(item: RegistryItem) -> bool:
+    return item.item_type is RegistryItemType.PLUGIN or (
+        item.item_type in _PLUGIN_BACKED_KINDS
+        and item.route is DistributionRoute.KIND_HANDLER
+    )
 
 
 def _is_plugin_backed_kind(item_type: object) -> bool:
