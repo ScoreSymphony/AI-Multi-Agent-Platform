@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   ApplicationsClient,
   type CanonicalApplication,
@@ -311,7 +311,7 @@ export function ApplicationConfigurationForm({
     );
   }
 
-  const submit = (event: import("react").FormEvent<HTMLFormElement>) => {
+  const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const configuration: Record<string, JsonValue> = {};
