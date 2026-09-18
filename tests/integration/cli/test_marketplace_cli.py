@@ -373,6 +373,7 @@ def test_marketplace_json_error_preserves_canonical_machine_contract(tmp_path: P
     assert payload["category"] == "conflict"
     assert payload["details"]["marketplace_reason"] == "dependency_block"
 
+
 def test_marketplace_future_kind_matches_core_control_plane_and_cli(
     tmp_path: Path,
 ) -> None:
