@@ -5,18 +5,23 @@ from __future__ import annotations
 import hashlib
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.plugins import PluginRegistry
+from ai_multi_agent_platform.plugins import PluginManifest, PluginRegistry
 
 from .items import RegistryItem
-from .models import RegistryItemType
+from .models import DistributionRoute, RegistryItemType
 from .plugin_adapter import PluginRegistryArtifactInstaller
 from .provider import RegistryProvider, SourcedRegistryProvider
 from .signatures import RegistrySignatureVerifier
 from .state import RegistryInstallationSnapshot, RegistryInstallationStore
 
+_PLUGIN_BACKED_KINDS: dict[str, str] = {
+    RegistryItemType.TOOL: "capability_provider",
+    RegistryItemType.CONNECTOR: "connector_provider",
+}
+
 
 class RegistryPluginReconciliationError(RuntimeError):
-    """Persisted Registry plugin state cannot be reconciled with its canonical #20 owner."""
+    """Persisted Registry package state cannot be reconciled with its canonical plugin owner."""
 
 
 async def reconcile_registry_plugins(
@@ -26,83 +31,178 @@ async def reconcile_registry_plugins(
     *,
     signature_verifier: RegistrySignatureVerifier | None = None,
 ) -> tuple[str, ...]:
-    """Restore previously installed Registry plugins into the canonical #20 registry.
+    """Restore Registry installations whose package lifecycle is owned by the plugin domain.
 
-    Reconciliation is not a new installation decision. It restores only a previously persisted
-    Registry installation, never enables a runtime, never restores permission grants, and fails
-    closed if the current catalog cannot reproduce the exact persisted plugin artifact/source.
-    Non-plugin Registry installations remain owned by their already-persistent import domains.
+    Reconciliation restores only previously persisted plugin-backed installations. It never
+    enables runtimes or restores permission grants. Skills, Applications and portable imports keep
+    their own durable owner state.
     """
 
     installer = PluginRegistryArtifactInstaller(plugin_registry)
     restored: list[str] = []
     for installation in installations.list():
-        snapshot = installation.current
-        if snapshot.item_type is not None and snapshot.item_type is not RegistryItemType.PLUGIN:
-            continue
-
-        try:
-            item = _get_snapshot_item(provider, snapshot)
-        except LookupError as exc:
-            if snapshot.item_type is RegistryItemType.PLUGIN:
-                raise RegistryPluginReconciliationError(
-                    f"persisted Registry plugin {snapshot.item_id!r} "
-                    f"version {snapshot.version!r} is missing from the configured catalog"
-                ) from exc
-            # Legacy v1 state did not persist item_type. If the item is no longer available there
-            # is no safe basis for guessing that it was executable plugin code.
-            continue
-
-        if item.item_type is not RegistryItemType.PLUGIN:
-            if snapshot.item_type is RegistryItemType.PLUGIN:
-                raise RegistryPluginReconciliationError(
-                    f"persisted Registry plugin {snapshot.item_id!r} changed item type"
-                )
-            continue
-
-        _validate_snapshot(item.source_registry or provider.provider_id, snapshot, item)
-        artifact = _fetch_snapshot_artifact(provider, snapshot)
-        digest = hashlib.sha256(artifact).hexdigest()
-        trusted_digest = snapshot.artifact_sha256 or item.integrity.sha256
-        if trusted_digest is None:
-            raise RegistryPluginReconciliationError(
-                f"persisted Registry plugin {item.item_id!r} has no durable artifact digest"
-            )
-        if digest != trusted_digest:
-            raise RegistryPluginReconciliationError(
-                f"persisted Registry plugin {item.item_id!r} artifact digest changed"
-            )
-        if item.integrity.sha256 is not None and digest != item.integrity.sha256:
-            raise RegistryPluginReconciliationError(
-                f"persisted Registry plugin {item.item_id!r} fails catalog checksum validation"
-            )
-        if item.integrity.signature is not None:
-            verified = (
-                signature_verifier.verify(item, artifact)
-                if signature_verifier is not None
-                else None
-            )
-            if verified is not True:
-                raise RegistryPluginReconciliationError(
-                    f"persisted Registry plugin {item.item_id!r} signature cannot be verified"
-                )
-
-        try:
-            current = plugin_registry.get(item.item_id)
-        except ContractError as exc:
-            if exc.code is not ErrorCode.NOT_FOUND:
-                raise
-        else:
-            if current.plugin_version != item.version:
-                raise RegistryPluginReconciliationError(
-                    f"canonical plugin owner already contains {item.item_id!r} "
-                    f"at version {current.plugin_version!r}, expected {item.version!r}"
-                )
-
-        await installer.install_verified_plugin(item, artifact)
-        restored.append(item.item_id)
-
+        item_id = await _restore_plugin_backed_installation(
+            provider,
+            installation.current,
+            plugin_registry,
+            installer,
+            signature_verifier=signature_verifier,
+        )
+        if item_id is not None:
+            restored.append(item_id)
     return tuple(restored)
+
+
+async def _restore_plugin_backed_installation(
+    provider: RegistryProvider,
+    snapshot: RegistryInstallationSnapshot,
+    plugin_registry: PluginRegistry,
+    installer: PluginRegistryArtifactInstaller,
+    *,
+    signature_verifier: RegistrySignatureVerifier | None,
+) -> str | None:
+    if not _snapshot_may_be_plugin_backed(snapshot):
+        return None
+
+    item = _resolve_persisted_item(provider, snapshot)
+    if item is None or not _validate_persisted_kind(snapshot, item):
+        return None
+
+    _validate_snapshot(item.source_registry or provider.provider_id, snapshot, item)
+    artifact = _fetch_snapshot_artifact(provider, snapshot)
+    _validate_artifact(snapshot, item, artifact, signature_verifier)
+    manifest = _validated_reconciliation_manifest(item, artifact, installer)
+    _validate_existing_owner_state(plugin_registry, item, manifest)
+
+    await installer.install_verified_plugin(item, artifact)
+    return item.item_id
+
+
+def _snapshot_may_be_plugin_backed(snapshot: RegistryInstallationSnapshot) -> bool:
+    return (
+        snapshot.item_type is None
+        or snapshot.item_type is RegistryItemType.PLUGIN
+        or snapshot.item_type in _PLUGIN_BACKED_KINDS
+    )
+
+
+def _resolve_persisted_item(
+    provider: RegistryProvider,
+    snapshot: RegistryInstallationSnapshot,
+) -> RegistryItem | None:
+    try:
+        return _get_snapshot_item(provider, snapshot)
+    except LookupError as exc:
+        if snapshot.item_type is not None and _is_plugin_backed_kind(snapshot.item_type):
+            raise RegistryPluginReconciliationError(
+                f"persisted Registry component {snapshot.item_id!r} "
+                f"version {snapshot.version!r} is missing from the configured catalog"
+            ) from exc
+        # Legacy state without item_type cannot safely be assumed to contain executable code.
+        return None
+
+
+def _validate_persisted_kind(
+    snapshot: RegistryInstallationSnapshot,
+    item: RegistryItem,
+) -> bool:
+    if not _item_is_plugin_backed(item):
+        if snapshot.item_type is RegistryItemType.PLUGIN:
+            raise RegistryPluginReconciliationError(
+                f"persisted Registry component {snapshot.item_id!r} changed item type"
+            )
+        if snapshot.item_type in _PLUGIN_BACKED_KINDS and snapshot.item_type is not item.item_type:
+            raise RegistryPluginReconciliationError(
+                f"persisted Registry component {snapshot.item_id!r} changed item type"
+            )
+        return False
+    if snapshot.item_type is not None and snapshot.item_type is not item.item_type:
+        raise RegistryPluginReconciliationError(
+            f"persisted Registry component {snapshot.item_id!r} changed item type"
+        )
+    return True
+
+
+def _item_is_plugin_backed(item: RegistryItem) -> bool:
+    return item.item_type is RegistryItemType.PLUGIN or (
+        item.item_type in _PLUGIN_BACKED_KINDS and item.route is DistributionRoute.KIND_HANDLER
+    )
+
+
+def _is_plugin_backed_kind(item_type: object) -> bool:
+    return item_type is RegistryItemType.PLUGIN or item_type in _PLUGIN_BACKED_KINDS
+
+
+def _validate_artifact(
+    snapshot: RegistryInstallationSnapshot,
+    item: RegistryItem,
+    artifact: bytes,
+    signature_verifier: RegistrySignatureVerifier | None,
+) -> None:
+    digest = hashlib.sha256(artifact).hexdigest()
+    trusted_digest = snapshot.artifact_sha256 or item.integrity.sha256
+    if trusted_digest is None:
+        raise RegistryPluginReconciliationError(
+            f"persisted Registry component {item.item_id!r} has no durable artifact digest"
+        )
+    if digest != trusted_digest:
+        raise RegistryPluginReconciliationError(
+            f"persisted Registry component {item.item_id!r} artifact digest changed"
+        )
+    if item.integrity.sha256 is not None and digest != item.integrity.sha256:
+        raise RegistryPluginReconciliationError(
+            f"persisted Registry component {item.item_id!r} fails catalog checksum validation"
+        )
+    if item.integrity.signature is not None:
+        verified = (
+            signature_verifier.verify(item, artifact) if signature_verifier is not None else None
+        )
+        if verified is not True:
+            raise RegistryPluginReconciliationError(
+                f"persisted Registry component {item.item_id!r} signature cannot be verified"
+            )
+
+
+def _validated_reconciliation_manifest(
+    item: RegistryItem,
+    artifact: bytes,
+    installer: PluginRegistryArtifactInstaller,
+) -> PluginManifest:
+    manifest = installer.validated_manifest(item, artifact)
+    expected_extension = _PLUGIN_BACKED_KINDS.get(item.item_type)
+    if expected_extension is None:
+        return manifest
+    if not any(
+        extension.extension_type.value == expected_extension for extension in manifest.extensions
+    ):
+        raise RegistryPluginReconciliationError(
+            f"persisted Registry {item.kind} {item.item_id!r} no longer declares "
+            f"{expected_extension}"
+        )
+    return manifest
+
+
+def _validate_existing_owner_state(
+    plugin_registry: PluginRegistry,
+    item: RegistryItem,
+    manifest: PluginManifest,
+) -> None:
+    try:
+        current = plugin_registry.get(item.item_id)
+    except ContractError as exc:
+        if exc.code is ErrorCode.NOT_FOUND:
+            return
+        raise
+    if current.plugin_version != item.version:
+        raise RegistryPluginReconciliationError(
+            f"canonical plugin owner already contains {item.item_id!r} "
+            f"at version {current.plugin_version!r}, expected {item.version!r}"
+        )
+    if plugin_registry.manifest(item.item_id) != manifest:
+        raise RegistryPluginReconciliationError(
+            f"canonical plugin owner already contains {item.item_id!r} "
+            "at the expected version with a different manifest"
+        )
 
 
 def _get_snapshot_item(
@@ -168,5 +268,5 @@ def _validate_snapshot(
             mismatches.append("review reference")
     if mismatches:
         raise RegistryPluginReconciliationError(
-            f"persisted Registry plugin {snapshot.item_id!r} changed " + ", ".join(mismatches)
+            f"persisted Registry component {snapshot.item_id!r} changed " + ", ".join(mismatches)
         )
