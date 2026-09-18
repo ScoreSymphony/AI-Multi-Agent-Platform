@@ -418,6 +418,12 @@ try {
   if (chatCompletionCount < 5) {
     throw new Error(`Official browser first run did not execute the real local model path: ${chatCompletionCount} completion calls`);
   }
+  const tasksAfterSuccess = await taskInventory(page);
+  if (tasksAfterSuccess.length !== tasksBeforeFailure.length + 1) {
+    throw new Error(
+      `Official browser first run created an unexpected number of canonical Tasks: before=${JSON.stringify(tasksBeforeFailure)} after=${JSON.stringify(tasksAfterSuccess)}`,
+    );
+  }
   await producedResultLink.focus();
   if (!(await producedResultLink.evaluate((element) => document.activeElement === element))) {
     throw new Error("Produced Result navigation did not accept keyboard focus");
