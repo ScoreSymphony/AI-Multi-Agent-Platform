@@ -71,8 +71,10 @@ from ai_multi_agent_platform.distribution import (
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.plugins import (
     ConnectorRegistryBinder,
+    ExecutorRegistryBinder,
     ExtensionRegistration,
     ExtensionType,
+    ModelProviderRegistryBinder,
     OrchestratorRegistryBinder,
     PluginContext,
     PluginHealth,
@@ -87,6 +89,8 @@ from ai_multi_agent_platform.portability import (
     snapshot_agent,
     snapshot_agent_team,
 )
+from ai_multi_agent_platform.execution import ExecutorRegistry, ReferenceExecutor
+from ai_multi_agent_platform.models import ModelRegistry
 from ai_multi_agent_platform.orchestration import (
     OrchestratorRegistry,
     OrchestratorSelection,
@@ -102,6 +106,7 @@ from ai_multi_agent_platform.skills.models import (
 )
 from ai_multi_agent_platform.skills.repository import InMemorySkillRepository
 from ai_multi_agent_platform.skills.service import SkillService
+from ai_multi_agent_platform.testing import FakeModelProvider
 
 pytestmark = pytest.mark.asyncio
 
@@ -357,6 +362,132 @@ async def test_hermes_marketplace_kind_uses_plugin_lifecycle_and_orchestrator_re
     assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
     assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
     assert runtime.stopped is True
+
+
+class _SingleExtensionRuntime:
+    def __init__(self, manifest, instance: object) -> None:
+        self.manifest = manifest
+        self.instance = instance
+
+    async def initialize(self, context: PluginContext) -> tuple[ExtensionRegistration, ...]:
+        assert context.configuration == {}
+        return (ExtensionRegistration(spec=self.manifest.extensions[0], instance=self.instance),)
+
+    async def health(self) -> PluginHealthReport:
+        return PluginHealthReport(PluginHealth.HEALTHY)
+
+    async def shutdown(self) -> None:
+        return None
+
+
+async def test_model_provider_marketplace_install_does_not_create_configured_model() -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.model-provider-plugin",
+        name="Reference model provider",
+        description="Model provider implementation package.",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="model-provider.reference",
+                extension_type=ExtensionType.MODEL_PROVIDER,
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={"type": "object", "additionalProperties": False},
+    )
+    models = ModelRegistry()
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.MODEL_PROVIDER: frozenset({"1.0"})},
+        binders={ExtensionType.MODEL_PROVIDER: ModelProviderRegistryBinder(models)},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.MODEL_PROVIDER,
+        extension_type=ExtensionType.MODEL_PROVIDER,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.MODEL_PROVIDER,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+
+    await handler.install(item, _plugin_artifact(manifest))
+    assert models.list_providers() == ()
+    assert models.list_models() == ()
+
+    plugin_registry.configure(item.item_id, {})
+    provider = FakeModelProvider()
+    await plugin_registry.enable(
+        item.item_id,
+        _SingleExtensionRuntime(manifest, provider),
+    )
+
+    assert models.get_provider(provider.descriptor.provider_id) is provider
+    assert models.list_models() == ()
+
+    await plugin_registry.disable(item.item_id)
+    assert models.list_providers() == ()
+    assert models.list_models() == ()
+
+
+async def test_executor_marketplace_install_activates_only_through_plugin_owner(tmp_path) -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.executor-plugin",
+        name="Reference executor package",
+        description="Executor implementation package.",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="executor.reference",
+                extension_type=ExtensionType.EXECUTOR,
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={"type": "object", "additionalProperties": False},
+    )
+    executors = ExecutorRegistry()
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.EXECUTOR: frozenset({"1.0"})},
+        binders={ExtensionType.EXECUTOR: ExecutorRegistryBinder(executors)},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.EXECUTOR,
+        extension_type=ExtensionType.EXECUTOR,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.EXECUTOR,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+
+    await handler.install(item, _plugin_artifact(manifest))
+    assert executors.executor_ids == ()
+
+    plugin_registry.configure(item.item_id, {})
+    executor = ReferenceExecutor(tmp_path)
+    await plugin_registry.enable(
+        item.item_id,
+        _SingleExtensionRuntime(manifest, executor),
+    )
+    assert executor.descriptor.executor_id in executors.executor_ids
+
+    await plugin_registry.disable(item.item_id)
+    assert executors.executor_ids == ()
 
 
 async def test_plugin_activation_keeps_legacy_route_and_owner_handler_adds_status_remove(
