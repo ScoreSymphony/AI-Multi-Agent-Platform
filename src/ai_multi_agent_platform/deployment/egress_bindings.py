@@ -15,6 +15,7 @@ from ai_multi_agent_platform.capabilities import (
     CapabilityClassificationResolver,
     CapabilityRegistry,
     EgressCapabilityInvoker,
+    ExternalEffectRecoveryCoordinator,
     GovernanceBindingHook,
     InvocationObserver,
     PolicyHook,
@@ -64,6 +65,7 @@ class EgressDeploymentBindings:
         governance_binding_hook: GovernanceBindingHook | None = None,
         approval_hook: ApprovalHook | None = None,
         observer: InvocationObserver | None = None,
+        external_effect_recovery: ExternalEffectRecoveryCoordinator | None = None,
         classification_resolver: CapabilityClassificationResolver | None = None,
     ) -> EgressCapabilityInvoker:
         return EgressCapabilityInvoker(
@@ -73,6 +75,7 @@ class EgressDeploymentBindings:
             governance_binding_hook=governance_binding_hook,
             approval_hook=approval_hook,
             observer=observer,
+            external_effect_recovery=external_effect_recovery,
             egress_gate=self.runtime.gate,
             classification_resolver=classification_resolver,
         )
