@@ -657,6 +657,9 @@ def test_marketplace_future_kind_matches_core_control_plane_and_cli(
         "marketplace",
         "status",
         item.item_id,
+        item.version,
+        "--source",
+        "acceptance",
     )
     assert code == 0
     assert error == ""
