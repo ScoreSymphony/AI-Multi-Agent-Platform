@@ -7,8 +7,11 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 
 from .decision import (
+    DependencyResolution,
+    DependencyStatus,
     MarketplaceDecision,
     build_marketplace_decision,
+    dependency_findings,
     uninstall_decision,
 )
 from .handlers import MarketplaceKindHandlerRegistry
@@ -220,12 +223,62 @@ class DistributionService:
         if installation is None:
             raise LookupError(f"registry item {item_id!r} is not installed")
         provider = self._require_provider()
-        decision = uninstall_decision(installation)
+        reverse_dependencies: list[DependencyResolution] = []
+        for dependent in self.installed_items():
+            if dependent.current.item_id == item_id:
+                continue
+            try:
+                dependent_item = self.get(
+                    dependent.current.item_id,
+                    dependent.current.version,
+                    source_registry=dependent.current.source_registry,
+                )
+            except LookupError:
+                reverse_dependencies.append(
+                    DependencyResolution(
+                        required_by=dependent.current.item_id,
+                        item_id=item_id,
+                        item_kind=installation.current.item_type.value
+                        if installation.current.item_type is not None
+                        else None,
+                        optional=False,
+                        minimum_version=None,
+                        maximum_version=None,
+                        status=DependencyStatus.UNKNOWN_INSTALLED_DEPENDENT,
+                        installed_version=installation.current.version,
+                        path=(dependent.current.item_id, item_id),
+                    )
+                )
+                continue
+            for dependency in dependent_item.dependencies:
+                if dependency.optional or dependency.item_id != item_id:
+                    continue
+                if not dependency.version_range.contains(installation.current.version):
+                    continue
+                reverse_dependencies.append(
+                    DependencyResolution(
+                        required_by=dependent.current.item_id,
+                        item_id=item_id,
+                        item_kind=dependency.kind_value,
+                        optional=False,
+                        minimum_version=dependency.version_range.minimum,
+                        maximum_version=dependency.version_range.maximum,
+                        status=DependencyStatus.REQUIRED_BY_INSTALLED,
+                        installed_version=installation.current.version,
+                        path=(dependent.current.item_id, item_id),
+                    )
+                )
+        resolved_dependencies = tuple(reverse_dependencies)
+        findings = dependency_findings(resolved_dependencies)
+        decision = uninstall_decision(
+            installation,
+            dependencies=resolved_dependencies,
+        )
         return DistributionUninstallPreview(
             provider_id=provider.provider_id,
             installation=installation,
-            findings=(),
-            activation_allowed=True,
+            findings=findings,
+            activation_allowed=not has_errors(findings),
             decision=decision,
         )
 
