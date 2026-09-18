@@ -1270,6 +1270,9 @@ def test_future_kind_registry_controls_operations_and_same_version_source_switch
             "supports_install": True,
             "supports_update": True,
             "supports_uninstall": True,
+            "group": "other",
+            "owner_resource": None,
+            "management_path": None,
         },
     )
     assert detail["installed"] is True
