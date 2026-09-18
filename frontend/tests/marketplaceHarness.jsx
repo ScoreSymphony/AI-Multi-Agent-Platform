@@ -60,22 +60,6 @@ function item({
     provenance: "browser regression fixture",
     minimum_platform_version: null,
     maximum_platform_version: null,
-    install_order: [
-      ...found.dependencies
-        .filter((dependency) => dependency.status !== "satisfied" && !dependency.optional)
-        .map((dependency) => ({
-          item_id: dependency.item_id,
-          item_kind: dependency.kind ?? "unknown",
-          version: dependency.installed_version ?? dependency.minimum_version ?? "1.0.0",
-          source_registry: "local",
-        })),
-      {
-        item_id: found.item_id,
-        item_kind: found.item_type,
-        version: found.version,
-        source_registry: "local",
-      },
-    ],
     compatibility: {
       minimum_platform_version: null,
       maximum_platform_version: null,
@@ -370,6 +354,22 @@ function marketplaceDecision(found, blocked) {
       path: [found.item_id, dependency.item_id],
       blocking: dependency.status !== "satisfied" && !dependency.optional,
     })),
+    install_order: [
+      ...found.dependencies
+        .filter((dependency) => dependency.status !== "satisfied" && !dependency.optional)
+        .map((dependency) => ({
+          item_id: dependency.item_id,
+          item_kind: dependency.kind ?? "unknown",
+          version: dependency.installed_version ?? dependency.minimum_version ?? "1.0.0",
+          source_registry: "local",
+        })),
+      {
+        item_id: found.item_id,
+        item_kind: found.item_type,
+        version: found.version,
+        source_registry: "local",
+      },
+    ],
     compatibility: {
       compatible: !blocked,
       platform_compatible: !blocked,
