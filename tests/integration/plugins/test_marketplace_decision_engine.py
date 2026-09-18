@@ -1078,6 +1078,38 @@ def test_integrity_and_signature_mismatches_block_preview() -> None:
     )
 
 
+def test_license_and_provenance_changes_are_typed(tmp_path: Path) -> None:
+    old, old_artifact = _item("example.provenance-metadata", version="1.0.0")
+    candidate_base, candidate_artifact = _item(
+        old.item_id,
+        version="1.1.0",
+    )
+    candidate = replace(
+        candidate_base,
+        license="Apache-2.0",
+        provenance="reviewed-community-release",
+    )
+    store = JsonRegistryInstallationStore(tmp_path / "provenance-metadata.json")
+    store.record(old, provider_id="local")
+    service = _service(
+        ((old, old_artifact), (candidate, candidate_artifact)),
+        store=store,
+    )
+
+    preview = service.preview(candidate.item_id, candidate.version, _context())
+
+    diff = preview.decision.provenance_diff
+    assert diff.previous_license == old.license
+    assert diff.candidate_license == candidate.license
+    assert diff.license_changed is True
+    assert diff.previous_provenance == old.provenance
+    assert diff.candidate_provenance == candidate.provenance
+    assert diff.provenance_changed is True
+    assert diff.changed is True
+    codes = {finding.code for finding in preview.findings}
+    assert {"license_changed", "provenance_changed"} <= codes
+
+
 def test_source_change_is_explicit_and_requires_review(tmp_path: Path) -> None:
     old, old_artifact = _item("example.source-change", version="1.0.0")
     candidate, candidate_artifact = _item(

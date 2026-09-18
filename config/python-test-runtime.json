@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "baseline": {
+    "captured_at": "2026-09-18",
+    "environment": "GitHub Actions ubuntu-latest / Python 3.12",
+    "sample_runs": [
+      {
+        "pull_request": 1242,
+        "run_id": 35382243470,
+        "head_sha": "5c5fd0917b1f21639dd45f0fe339f09a2e322cf8",
+        "unit_wall_seconds": 14,
+        "non_unit_wall_seconds": 209,
+        "pytest_aggregate_wall_seconds": 223,
+        "required_test_job_wall_seconds": 288
+      },
+      {
+        "pull_request": 1239,
+        "run_id": 35380594929,
+        "head_sha": "adb73bbecbe651c1265121553a65bd66cf74f3f2",
+        "unit_wall_seconds": 16,
+        "non_unit_wall_seconds": 226,
+        "pytest_aggregate_wall_seconds": 242,
+        "required_test_job_wall_seconds": 316
+      },
+      {
+        "pull_request": 1232,
+        "run_id": 35378746395,
+        "head_sha": "0a7200e564e411d382fbf1e665b4b3e837cf3d6f",
+        "unit_wall_seconds": 14,
+        "non_unit_wall_seconds": 383,
+        "pytest_aggregate_wall_seconds": 397,
+        "required_test_job_wall_seconds": 466
+      },
+      {
+        "pull_request": 1229,
+        "run_id": 35377694798,
+        "head_sha": "b54c1eb4522b0624179232ead8f355cf8dde7491",
+        "unit_wall_seconds": 17,
+        "non_unit_wall_seconds": 228,
+        "pytest_aggregate_wall_seconds": 245,
+        "required_test_job_wall_seconds": 314
+      },
+      {
+        "pull_request": 1228,
+        "run_id": 35376636994,
+        "head_sha": "470141038d8920fbdf00d4cdb66f2c0ecf0c2ec1",
+        "unit_wall_seconds": 11,
+        "non_unit_wall_seconds": 167,
+        "pytest_aggregate_wall_seconds": 178,
+        "required_test_job_wall_seconds": 226
+      },
+      {
+        "pull_request": 1227,
+        "run_id": 35381455059,
+        "head_sha": "91d18bba8fc6751c674a9c9a7619fb401812ae59",
+        "unit_wall_seconds": 16,
+        "non_unit_wall_seconds": 222,
+        "pytest_aggregate_wall_seconds": 238,
+        "required_test_job_wall_seconds": 308
+      }
+    ],
+    "summary": {
+      "unit_wall_seconds_median": 15,
+      "unit_wall_seconds_range": [
+        11,
+        17
+      ],
+      "non_unit_wall_seconds_median": 224,
+      "non_unit_wall_seconds_range": [
+        167,
+        383
+      ],
+      "pytest_aggregate_wall_seconds_median": 240,
+      "pytest_aggregate_wall_seconds_range": [
+        178,
+        397
+      ],
+      "required_test_job_wall_seconds_median": 311,
+      "required_test_job_wall_seconds_range": [
+        226,
+        466
+      ]
+    },
+    "notes": [
+      "Step durations are measured from completed successful GitHub Actions runs immediately preceding the sharding change.",
+      "The wide non-unit range demonstrates runner/load variance, so initial wall budgets guard major regressions rather than normal hosted-runner jitter.",
+      "Per-test and per-module thresholds are initial major-regression guards and are tightened only from retained timing artifacts."
+    ],
+    "post_sharding_evidence": {
+      "integration": [
+        {
+          "run_id": 35384156371,
+          "wall_seconds": 120.435,
+          "slowest_test_seconds": 6.874
+        },
+        {
+          "run_id": 35384102471,
+          "wall_seconds": 122.02,
+          "slowest_test_seconds": 8.29
+        },
+        {
+          "run_id": 35384227788,
+          "wall_seconds": 277.123,
+          "slowest_test_seconds": 9.68,
+          "slowest_module_seconds": 17.397,
+          "test_result": "2505 passed, 58 skipped",
+          "note": "Healthy but runner-slow execution; the historical 240s budget caused the job failure after all tests passed."
+        }
+      ],
+      "system-regression": [
+        {
+          "run_id": 35384227788,
+          "wall_seconds": 95.651,
+          "slowest_test_seconds": 7.593
+        }
+      ],
+      "contract-architecture-release": [
+        {
+          "run_id": 35384227788,
+          "wall_seconds": 23.081,
+          "slowest_test_seconds": 2.853,
+          "slowest_module_seconds": 3.3,
+          "test_result": "664 passed"
+        }
+      ]
+    }
+  },
+  "lane_budgets": {
+    "unit": {
+      "wall_seconds": 30,
+      "slow_test_seconds": 10,
+      "slow_module_seconds": 20
+    },
+    "contract-architecture-release": {
+      "wall_seconds": 120,
+      "slow_test_seconds": 10,
+      "slow_module_seconds": 15
+    },
+    "integration": {
+      "wall_seconds": 330,
+      "slow_test_seconds": 15,
+      "slow_module_seconds": 20
+    },
+    "system-regression": {
+      "wall_seconds": 240,
+      "slow_test_seconds": 15,
+      "slow_module_seconds": 20
+    },
+    "full-local": {
+      "wall_seconds": 480,
+      "slow_test_seconds": 30,
+      "slow_module_seconds": 60
+    }
+  },
+  "aggregate_budgets": {
+    "frontend-independent-python-ci": {
+      "matrix_job_timeout_seconds": 360,
+      "pytest_critical_path_seconds": 330,
+      "rationale": "The integration lane has healthy pytest runs at 120.435s, 122.020s and 277.123s; its full matrix-job wall times include 140s, 148s and 315s observations. A 330-second pytest guard and 350-second frontend-independent Python validation guard leave measured runner-variance headroom while still detecting major regressions. The six-minute matrix timeout is an outer fail-safe, not the normal target.",
+      "validation_critical_path_seconds": 350
+    },
+    "full-local-python-suite": {
+      "wall_seconds": 480,
+      "rationale": "The serial reference-suite baseline ranged from 178 to 397 seconds across six successful pre-sharding GitHub-hosted runs; 480 seconds is approximately 21% above the observed worst case and is a major-regression guard rather than a hardware-portable performance promise."
+    }
+  }
+}

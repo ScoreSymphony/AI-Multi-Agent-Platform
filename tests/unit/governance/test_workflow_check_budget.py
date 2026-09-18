@@ -23,7 +23,12 @@ def _job_ids(name: str) -> set[str]:
 
 
 def test_core_ci_and_optional_compatibility_are_split() -> None:
-    assert _job_ids("ci.yml") == {"test", "single-node-install-smoke", "frontend"}
+    assert _job_ids("ci.yml") == {
+        "python-validation",
+        "test",
+        "single-node-install-smoke",
+        "frontend",
+    }
     assert _job_ids("compatibility.yml") == {
         "litellm-compat",
         "bifrost-pinned-compat",
@@ -63,7 +68,7 @@ def test_codeql_and_repository_quality_recheck_main() -> None:
     assert "main" in repository_quality_triggers
 
 
-def test_routine_main_push_budget_is_nine_checks() -> None:
+def test_routine_main_push_budget_is_ten_checks() -> None:
     routine_push_workflows = (
         "ci.yml",
         "benchmark-smoke.yml",
@@ -75,7 +80,7 @@ def test_routine_main_push_budget_is_nine_checks() -> None:
         assert "main" in triggers
 
     routine_checks = sum(len(_job_ids(workflow)) for workflow in routine_push_workflows)
-    assert routine_checks == 9
+    assert routine_checks == 10
     assert routine_checks <= 10
 
 
