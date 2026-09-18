@@ -72,9 +72,7 @@ def resolve_scope(
     workspace_bindings = tuple(projection.workspace_bindings)
 
     if workspace_id is not None:
-        matching = tuple(
-            binding for binding in workspace_bindings if binding[1] == workspace_id
-        )
+        matching = tuple(binding for binding in workspace_bindings if binding[1] == workspace_id)
         if len(matching) != 1:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
