@@ -6,6 +6,11 @@ import os
 import subprocess
 from pathlib import Path
 
+from ai_multi_agent_platform.security.git_execution import (
+    controlled_git_environment,
+    resolve_git_executable,
+)
+
 BUILD_COMMIT_ENV = "AI_MULTI_AGENT_PLATFORM_BUILD_COMMIT"
 
 
@@ -34,8 +39,10 @@ def discover_build_commit(explicit: str | None = None) -> str | None:
         return None
     try:
         completed = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+            [resolve_git_executable("git"), "rev-parse", "HEAD"],
             cwd=checkout,
+            env=controlled_git_environment(),
+            stdin=subprocess.DEVNULL,
             check=True,
             capture_output=True,
             text=True,
