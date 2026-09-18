@@ -526,9 +526,14 @@ def test_lifespan_teardown_timeout_cannot_hang_process_exit(
         # Keep the integration test fast while exercising the exact production deadline path.
         deployment.drain.timeout_seconds = 0.05
         never = asyncio.Event()
+        first_cancellation_seen = asyncio.Event()
 
         async def stuck_notification_shutdown() -> None:
-            await never.wait()
+            try:
+                await never.wait()
+            except asyncio.CancelledError:
+                first_cancellation_seen.set()
+                await never.wait()
 
         monkeypatch.setattr(
             deployment.control_plane,
@@ -565,6 +570,7 @@ def test_lifespan_teardown_timeout_cannot_hang_process_exit(
         assert deployment.drain.snapshot().forced is True
         assert deployment.drain.snapshot().completed is True
         assert deployment.drain.snapshot().force_reason == "resource_teardown_timeout"
+        assert first_cancellation_seen.is_set() is True
 
         timeline = {
             entry.event_name: entry
