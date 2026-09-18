@@ -10,13 +10,14 @@ from typing import Protocol
 from .items import InstalledRegistryItem, RegistryItem
 from .models import (
     RegistryItemKind,
+    TrustStatus,
     parse_registry_item_kind,
     registry_item_kind_value,
     version_key,
 )
 
-_STATE_VERSION = "3"
-_SUPPORTED_STATE_VERSIONS = frozenset({"1", "2", _STATE_VERSION})
+_STATE_VERSION = "4"
+_SUPPORTED_STATE_VERSIONS = frozenset({"1", "2", "3", _STATE_VERSION})
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +32,14 @@ class RegistryInstallationSnapshot:
     provenance: str
     item_type: RegistryItemKind | None = None
     artifact_sha256: str | None = None
+    publisher: str | None = None
+    requested_permissions: tuple[str, ...] = ()
+    signature: str | None = None
+    signature_key_id: str | None = None
+    trust_status: TrustStatus | None = None
+    review_reference: str | None = None
+    deprecated: bool = False
+    yanked: bool = False
 
     def __post_init__(self) -> None:
         InstalledRegistryItem(
@@ -39,15 +48,27 @@ class RegistryInstallationSnapshot:
             source_registry=self.source_registry,
             license=self.license,
             provenance=self.provenance,
+            item_type=self.item_type,
         )
         if self.item_type is not None:
             object.__setattr__(self, "item_type", parse_registry_item_kind(self.item_type))
+        if self.trust_status is not None and not isinstance(self.trust_status, TrustStatus):
+            object.__setattr__(self, "trust_status", TrustStatus(self.trust_status))
         if not self.source_repository.strip():
             raise ValueError("source_repository must be non-blank")
         if not self.package_reference.strip():
             raise ValueError("package_reference must be non-blank")
         if self.revision is not None and not self.revision.strip():
             raise ValueError("revision must be non-blank when provided")
+        if self.publisher is not None and not self.publisher.strip():
+            raise ValueError("publisher must be non-blank when provided")
+        if self.review_reference is not None and not self.review_reference.strip():
+            raise ValueError("review_reference must be non-blank when provided")
+        for permission in self.requested_permissions:
+            if not permission.strip():
+                raise ValueError("requested_permissions must contain non-blank values")
+        if self.signature_key_id is not None and self.signature is None:
+            raise ValueError("signature_key_id requires signature metadata")
         if self.artifact_sha256 is not None:
             if len(self.artifact_sha256) != 64:
                 raise ValueError("artifact_sha256 must be a SHA-256 hex digest")
@@ -64,6 +85,7 @@ class RegistryInstallationSnapshot:
             pinned_version=pinned_version,
             license=self.license,
             provenance=self.provenance,
+            item_type=self.item_type,
         )
 
 
@@ -123,7 +145,7 @@ class JsonRegistryInstallationStore:
         current = RegistryInstallationSnapshot(
             item_id=item.item_id,
             version=item.version,
-            source_registry=provider_id,
+            source_registry=item.source_registry or provider_id,
             source_repository=item.source.repository,
             package_reference=item.source.package_reference,
             revision=item.source.revision,
@@ -131,6 +153,14 @@ class JsonRegistryInstallationStore:
             provenance=item.provenance,
             item_type=item.item_type,
             artifact_sha256=artifact_sha256 or item.integrity.sha256,
+            publisher=item.publisher,
+            requested_permissions=tuple(sorted(item.requested_permissions)),
+            signature=item.integrity.signature,
+            signature_key_id=item.integrity.signature_key_id,
+            trust_status=item.trust_status,
+            review_reference=item.review_reference,
+            deprecated=item.deprecated,
+            yanked=item.yanked,
         )
         previous = self._records.get(item.item_id)
         history = previous.history if previous is not None else ()
@@ -216,6 +246,14 @@ def _snapshot_to_json(snapshot: RegistryInstallationSnapshot) -> dict[str, objec
             registry_item_kind_value(snapshot.item_type) if snapshot.item_type is not None else None
         ),
         "artifact_sha256": snapshot.artifact_sha256,
+        "publisher": snapshot.publisher,
+        "requested_permissions": list(snapshot.requested_permissions),
+        "signature": snapshot.signature,
+        "signature_key_id": snapshot.signature_key_id,
+        "trust_status": snapshot.trust_status.value if snapshot.trust_status is not None else None,
+        "review_reference": snapshot.review_reference,
+        "deprecated": snapshot.deprecated,
+        "yanked": snapshot.yanked,
     }
 
 
@@ -233,6 +271,14 @@ def _snapshot_from_json(value: object) -> RegistryInstallationSnapshot:
         provenance=_string(value, "provenance"),
         item_type=_optional_item_type(value, "item_type"),
         artifact_sha256=_optional_string(value, "artifact_sha256"),
+        publisher=_optional_string(value, "publisher"),
+        requested_permissions=_string_tuple(value, "requested_permissions"),
+        signature=_optional_string(value, "signature"),
+        signature_key_id=_optional_string(value, "signature_key_id"),
+        trust_status=_optional_trust_status(value, "trust_status"),
+        review_reference=_optional_string(value, "review_reference"),
+        deprecated=_optional_bool(value, "deprecated", default=False),
+        yanked=_optional_bool(value, "yanked", default=False),
     )
 
 
@@ -271,6 +317,42 @@ def _optional_string(value: dict[object, object], key: str) -> str | None:
     if not isinstance(result, str) or not result.strip():
         raise ValueError(f"registry installation field {key!r} must be null or non-blank string")
     return result
+
+
+def _string_tuple(value: dict[object, object], key: str) -> tuple[str, ...]:
+    result = value.get(key, [])
+    if not isinstance(result, list):
+        raise ValueError(f"registry installation field {key!r} must be an array")
+    parsed: list[str] = []
+    for entry in result:
+        if not isinstance(entry, str) or not entry.strip():
+            raise ValueError(
+                f"registry installation field {key!r} must contain non-blank strings"
+            )
+        parsed.append(entry)
+    return tuple(parsed)
+
+
+def _optional_bool(value: dict[object, object], key: str, *, default: bool) -> bool:
+    result = value.get(key, default)
+    if not isinstance(result, bool):
+        raise ValueError(f"registry installation field {key!r} must be a boolean")
+    return result
+
+
+def _optional_trust_status(
+    value: dict[object, object],
+    key: str,
+) -> TrustStatus | None:
+    result = value.get(key)
+    if result is None:
+        return None
+    if not isinstance(result, str):
+        raise ValueError(f"registry installation field {key!r} must be null or a string")
+    try:
+        return TrustStatus(result)
+    except ValueError as exc:
+        raise ValueError(f"registry installation field {key!r} has invalid trust status") from exc
 
 
 def _optional_item_type(
