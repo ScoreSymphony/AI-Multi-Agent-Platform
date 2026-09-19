@@ -22,7 +22,7 @@ Issue #1236 treats the public Web, CLI and HTTP API surfaces as projections of o
 | Plan / Step progress | plan-coordination / workflow projections | task workflow commands | workflow progress client/UI | The maintained #1164 browser first-run emits the real Plan/Steps and #1236 re-resolves every emitted Plan/Step ID through public `/api/v1` resources |
 | Run status / cancellation | `/runs`, task-run cancellation action | run commands | ControlPlaneClient run methods | Shared Run fixture plus browser first-run checks that every Step Run ID/status agrees with `/api/v1/runs/{id}`; lifecycle mutation remains server-owned |
 | Result / Artifact inspection | canonical result/artifact resources | result/reference inspection | canonical reference/detail clients | Browser first-run Result/Artifact IDs resolve through public API and rendered deep links use those exact canonical IDs |
-| Agents / Agent Teams | agent/team resources and commands | canonical resource/extension commands | typed agent/team clients | Browser first-run researcher/developer/reviewer Agent IDs resolve through `/api/v1/agents/{id}`; #1221 cross-kind Marketplace semantics are integrated separately and are not redefined here |
+| Agents / Agent Teams | agent/team resources and commands | canonical resource/extension commands | typed agent/team clients | Browser first-run researcher/developer/reviewer Agent IDs resolve through `/api/v1/agents/{id}`; the existing standard-catalog bootstrap step also proves installed/preserved Agent Team identities through `/api/v1/agent-teams`; #1221 Marketplace semantics remain separate |
 | Models / providers | model/provider resources | model/model-provider commands | typed model clients/pages | Same Control Plane resources; provider-private IDs must not leak |
 | Tools / Capabilities | capability resources/invocation policy | canonical capability/reference paths | typed capability client/pages | Existing capability conformance; no client-owned invocation authority |
 | Approvals | approval resources/actions | canonical approval commands | ApprovalClient | Existing approval policy tests; permissions remain server-owned |
@@ -60,7 +60,8 @@ The #1164 browser architecture is reused directly rather than duplicated. `front
 4. the browser-returned Task, Plan, Step, Run, Result, Artifact, Verification and specialized Agent identities are re-resolved through public Control Plane resources and checked against the browser projection's lifecycle/linkage state;
 5. rendered Task, Run, Result and Artifact deep links contain the exact canonical IDs returned by the server;
 6. an unavailable local model fails closed in the maintained UI, produces an actionable safe error and does not create a shadow/partial Task;
-7. a separate Task created and cancelled through the public API is then opened/reloaded in the maintained Web detail route; the page observes the server's newer `cancelled` state and revision rather than retaining a Web-owned snapshot.
+7. the existing standard Agent catalog bootstrap step returns Agent Team keys that are matched to canonical `/api/v1/agent-teams` resources and re-resolved by ID;
+8. a separate Task created and cancelled through the public API is then opened/reloaded in the maintained Web detail route; the page observes the server's newer `cancelled` state and revision rather than retaining a Web-owned snapshot.
 
 Authorization/approval policy itself remains server-owned. `J-web` retains canonical unauthenticated/denied/approval-required presentation coverage while the security-owned integration tests exercise the actual authorization/approval boundary; the first-run browser flow does not duplicate that policy implementation.
 
