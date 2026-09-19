@@ -497,8 +497,10 @@ try {
   const taskPath = `/tasks/${encodeURIComponent(createdTask.id)}`;
   await page.goto(`${frontendUrl}${taskPath}`);
   await page.locator(`main[data-route="${taskPath}"]`).waitFor();
+  await page.locator(`code[title="${createdTask.id}"]`).first().waitFor();
   await page.reload();
   await page.locator(`main[data-route="${taskPath}"]`).waitFor();
+  await page.locator(`code[title="${createdTask.id}"]`).first().waitFor();
 
   const searchPath = "/search?q=Browser&types=task";
   await page.goto(`${frontendUrl}${searchPath}`);
@@ -575,6 +577,7 @@ try {
   await page.unroute(taskDetailApi, missingTaskDetail);
   await page.reload();
   await page.locator(`main[data-route="${taskPath}"]`).waitFor();
+  await page.locator(`code[title="${createdTask.id}"]`).first().waitFor();
 
   // Force both transport attempts for manifest discovery to fail once. The maintained shell must
   // expose a retryable Control Plane outage and recover in-place when the next manifest read works.
