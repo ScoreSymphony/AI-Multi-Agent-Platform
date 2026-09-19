@@ -93,8 +93,6 @@ export function ModelsPage({ client }: { client: ControlPlaneClient }) {
     );
   }
 
-  if (!models && !providers && !modelError && !providerError) return <LoadingState />;
-
   const enabledOnPage = models?.items.filter((model) => model.enabled).length ?? "—";
   const healthyProvidersOnPage =
     providers?.items.filter(
