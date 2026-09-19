@@ -68,8 +68,7 @@ def hermes_plugin_manifest() -> PluginManifest:
                 extension_type=ExtensionType.ORCHESTRATOR,
                 interface_version="1.0",
                 entrypoint=(
-                    "ai_multi_agent_platform.adapters.hermes_plugin:"
-                    "HermesOrchestratorPlugin"
+                    "ai_multi_agent_platform.adapters.hermes_plugin:HermesOrchestratorPlugin"
                 ),
                 metadata={
                     "agent_support": True,
