@@ -9,7 +9,7 @@ from typing import Any, Literal, cast
 from urllib.parse import parse_qsl
 from uuid import uuid4
 
-from ai_multi_agent_platform.contracts.errors import ContractError
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .models import (
