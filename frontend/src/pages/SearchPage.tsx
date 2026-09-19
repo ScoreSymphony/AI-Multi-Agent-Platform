@@ -8,7 +8,7 @@ import type {
   SearchSort,
 } from "../api/types";
 import { useCursorPagination } from "../app/pagination";
-import { AppLink } from "../app/router";
+import { AppLink, useRouter } from "../app/router";
 import { PaginationControls } from "../components/Pagination";
 import {
   CanonicalId,
@@ -27,7 +27,8 @@ const DEFAULT_SEARCH: SearchRequest = {
 };
 
 export function SearchPage({ client }: { client: ControlPlaneClient }) {
-  const [request, setRequest] = useState<SearchRequest>(DEFAULT_SEARCH);
+  const { search, navigate } = useRouter();
+  const request = useMemo(() => searchRequestFromQuery(search), [search]);
   const [page, setPage] = useState<SearchPageResult | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
@@ -52,13 +53,14 @@ export function SearchPage({ client }: { client: ControlPlaneClient }) {
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const nextRequest = searchRequestFromForm(new FormData(event.currentTarget));
     pagination.reset();
-    setRequest(searchRequestFromForm(new FormData(event.currentTarget)));
+    navigate(`/search${searchRequestToQuery(nextRequest)}`);
   };
 
   const reset = () => {
     pagination.reset();
-    setRequest({ ...DEFAULT_SEARCH });
+    navigate("/search");
   };
 
   const modeUnavailable =
@@ -76,54 +78,54 @@ export function SearchPage({ client }: { client: ControlPlaneClient }) {
       </header>
 
       <Card title="Search filters">
-        <form className="form-grid" onSubmit={submit} onReset={reset}>
+        <form className="form-grid" key={queryKey} onSubmit={submit} onReset={reset}>
           <label>
             Query
-            <input name="q" placeholder="title, objective, ID or keyword" />
+            <input name="q" placeholder="title, objective, ID or keyword" defaultValue={request.q ?? ""} />
           </label>
           <label>
             Exact canonical ID
-            <input name="id" placeholder="task_… / project_… / run_…" />
+            <input name="id" placeholder="task_… / project_… / run_…" defaultValue={request.id ?? ""} />
           </label>
           <label>
             Resource types
-            <input name="types" placeholder="project,workspace,task,run" />
+            <input name="types" placeholder="project,workspace,task,run" defaultValue={request.types?.join(",") ?? ""} />
           </label>
           <label>
             Project ID
-            <input name="project_id" placeholder="project_…" />
+            <input name="project_id" placeholder="project_…" defaultValue={request.project_id ?? ""} />
           </label>
           <label>
             Workspace ID
-            <input name="workspace_id" placeholder="workspace_…" />
+            <input name="workspace_id" placeholder="workspace_…" defaultValue={request.workspace_id ?? ""} />
           </label>
           <label>
             Status
-            <input name="statuses" placeholder="running,succeeded" />
+            <input name="statuses" placeholder="running,succeeded" defaultValue={request.statuses?.join(",") ?? ""} />
           </label>
           <label>
             Tags
-            <input name="tags" placeholder="search,priority" />
+            <input name="tags" placeholder="search,priority" defaultValue={request.tags?.join(",") ?? ""} />
           </label>
           <label>
             Source
-            <input name="sources" placeholder="canonical" />
+            <input name="sources" placeholder="canonical" defaultValue={request.sources?.join(",") ?? ""} />
           </label>
           <label>
             Provider
-            <input name="providers" placeholder="control-plane" />
+            <input name="providers" placeholder="control-plane" defaultValue={request.providers?.join(",") ?? ""} />
           </label>
           <label>
             Updated after
-            <input name="updated_after" placeholder="2026-09-03T12:00:00+02:00" />
+            <input name="updated_after" placeholder="2026-09-03T12:00:00+02:00" defaultValue={request.updated_after ?? ""} />
           </label>
           <label>
             Updated before
-            <input name="updated_before" placeholder="2026-09-03T18:00:00+02:00" />
+            <input name="updated_before" placeholder="2026-09-03T18:00:00+02:00" defaultValue={request.updated_before ?? ""} />
           </label>
           <label>
             Mode
-            <select name="mode" defaultValue="">
+            <select name="mode" defaultValue={request.mode ?? ""}>
               <option value="">Auto</option>
               <option value="exact">exact</option>
               <option value="keyword">keyword</option>
@@ -134,7 +136,7 @@ export function SearchPage({ client }: { client: ControlPlaneClient }) {
           </label>
           <label>
             Sort
-            <select name="sort" defaultValue="updated_at">
+            <select name="sort" defaultValue={request.sort ?? DEFAULT_SEARCH.sort}>
               <option value="relevance">relevance</option>
               <option value="id">id</option>
               <option value="updated_at">updated_at</option>
@@ -142,14 +144,14 @@ export function SearchPage({ client }: { client: ControlPlaneClient }) {
           </label>
           <label>
             Direction
-            <select name="direction" defaultValue="desc">
+            <select name="direction" defaultValue={request.direction ?? DEFAULT_SEARCH.direction}>
               <option value="desc">desc</option>
               <option value="asc">asc</option>
             </select>
           </label>
           <label>
             Limit
-            <input name="limit" type="number" min={1} max={200} defaultValue={25} />
+            <input name="limit" type="number" min={1} max={200} defaultValue={request.limit ?? DEFAULT_SEARCH.limit} />
           </label>
           <div className="actions">
             <button className="primary" type="submit">Search</button>
@@ -306,6 +308,96 @@ function csv(form: FormData, name: string): string[] | undefined {
   if (!value) return undefined;
   const values = value.split(",").map((part) => part.trim()).filter(Boolean);
   return values.length ? Array.from(new Set(values)) : undefined;
+}
+
+export function searchRequestFromQuery(search: string): SearchRequest {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const limitValue = Number(params.get("limit") ?? DEFAULT_SEARCH.limit);
+  const mode = params.get("mode");
+  const sort = params.get("sort");
+  const direction = params.get("direction");
+  return {
+    q: queryValue(params, "q"),
+    id: queryValue(params, "id"),
+    types: queryCsv(params, "types"),
+    project_id: queryValue(params, "project_id"),
+    workspace_id: queryValue(params, "workspace_id"),
+    statuses: queryCsv(params, "statuses"),
+    tags: queryCsv(params, "tags"),
+    sources: queryCsv(params, "sources"),
+    providers: queryCsv(params, "providers"),
+    updated_after: queryValue(params, "updated_after"),
+    updated_before: queryValue(params, "updated_before"),
+    mode: isSearchMode(mode) ? mode : undefined,
+    limit: Number.isInteger(limitValue) && limitValue >= 1 && limitValue <= 200
+      ? limitValue
+      : DEFAULT_SEARCH.limit,
+    sort: isSearchSort(sort) ? sort : DEFAULT_SEARCH.sort,
+    direction: direction === "asc" || direction === "desc"
+      ? direction
+      : DEFAULT_SEARCH.direction,
+  };
+}
+
+export function searchRequestToQuery(request: SearchRequest): string {
+  const params = new URLSearchParams();
+  setQueryValue(params, "q", request.q);
+  setQueryValue(params, "id", request.id);
+  setQueryList(params, "types", request.types);
+  setQueryValue(params, "project_id", request.project_id);
+  setQueryValue(params, "workspace_id", request.workspace_id);
+  setQueryList(params, "statuses", request.statuses);
+  setQueryList(params, "tags", request.tags);
+  setQueryList(params, "sources", request.sources);
+  setQueryList(params, "providers", request.providers);
+  setQueryValue(params, "updated_after", request.updated_after);
+  setQueryValue(params, "updated_before", request.updated_before);
+  setQueryValue(params, "mode", request.mode);
+  if (request.limit !== undefined && request.limit !== DEFAULT_SEARCH.limit) {
+    params.set("limit", String(request.limit));
+  }
+  if (request.sort && request.sort !== DEFAULT_SEARCH.sort) params.set("sort", request.sort);
+  if (request.direction && request.direction !== DEFAULT_SEARCH.direction) {
+    params.set("direction", request.direction);
+  }
+  const encoded = params.toString();
+  return encoded ? `?${encoded}` : "";
+}
+
+function queryValue(params: URLSearchParams, name: string): string | undefined {
+  const value = params.get(name)?.trim();
+  return value || undefined;
+}
+
+function queryCsv(params: URLSearchParams, name: string): string[] | undefined {
+  const value = queryValue(params, name);
+  if (!value) return undefined;
+  const values = value.split(",").map((part) => part.trim()).filter(Boolean);
+  return values.length ? Array.from(new Set(values)) : undefined;
+}
+
+function setQueryValue(
+  params: URLSearchParams,
+  name: string,
+  value: string | undefined,
+): void {
+  if (value) params.set(name, value);
+}
+
+function setQueryList(
+  params: URLSearchParams,
+  name: string,
+  values: string[] | undefined,
+): void {
+  if (values?.length) params.set(name, values.join(","));
+}
+
+function isSearchMode(value: string | null): value is SearchMode {
+  return value !== null && ["exact", "keyword", "metadata", "semantic", "hybrid"].includes(value);
+}
+
+function isSearchSort(value: string | null): value is SearchSort {
+  return value !== null && ["relevance", "id", "updated_at"].includes(value);
 }
 
 function formatDate(value: string): string {
