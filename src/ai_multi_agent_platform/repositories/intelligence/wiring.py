@@ -46,7 +46,7 @@ _DEFAULT_MAX_TREE_BYTES = 64 * 1024 * 1024
 
 @runtime_checkable
 class LocalMaterializationPathProvider(Protocol):
-    """Refined local #37 seam used only at the single-node composition boundary."""
+    """Refined local Workspace seam used only at the single-node composition boundary."""
 
     def local_path(self, materialization_id: str) -> Path: ...
 
@@ -91,7 +91,7 @@ class AuthorizedRepositorySnapshotLoader:
 class AuthorizedRunWorkspaceSnapshotLoader:
     """Resolve the exact repository-shaped Workspace source visible to one canonical Run.
 
-    The immutable ``RunWorkspaceBinding`` proves Workspace/Snapshot identity. #15 authorizes
+    The immutable ``RunWorkspaceBinding`` proves Workspace/Snapshot identity. Canonical authorization gates
     the Workspace read before any bytes are touched. If the local execution coordinator owns an
     active materialization, its current bytes are read through a narrowly refined local path seam;
     no dirty bytes are persisted merely to answer a read-only intelligence request. If a Run is
@@ -191,7 +191,7 @@ class AuthorizedRunWorkspaceSnapshotLoader:
         if isinstance(requested_source_revision, str) and requested_source_revision.strip():
             compatible_revisions.add(requested_source_revision)
         if revision not in compatible_revisions:
-            # The caller deliberately asked for another revision. Let the ordinary #82 path
+            # The caller deliberately asked for another revision. Let the ordinary repository path
             # resolve that exact repository state instead of substituting the Run Workspace.
             return None
 
