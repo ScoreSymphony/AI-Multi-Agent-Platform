@@ -10,6 +10,7 @@ from ai_multi_agent_platform.agents import register_standard_agent_control_plane
 from ai_multi_agent_platform.agents.routing_profile_control_plane import (
     register_routing_profile_aware_agent_control_plane,
 )
+from ai_multi_agent_platform.contracts import HealthStatus, ProviderContract, ProviderDescriptor
 from ai_multi_agent_platform.control_plane import (
     ControlPlaneASGI,
     evaluation_command_handlers,
@@ -21,6 +22,7 @@ from ai_multi_agent_platform.coordination import (
     coordination_command_handlers,
     coordination_resource_services,
 )
+from ai_multi_agent_platform.kernel import SqliteKernelRepository
 from ai_multi_agent_platform.models import ModelRoutingProfileRef
 from ai_multi_agent_platform.observability import (
     AggregatedHealthProvider,
@@ -58,6 +60,28 @@ from .repositories import RepositoryFoundationBundle, RepositoryRuntimeBundle
 from .services import PlatformServicesBundle, RuntimeServicesBundle
 
 
+class _KernelPersistenceHealthProvider(ProviderContract):
+    """Expose canonical kernel persistence readiness through the provider-neutral health seam."""
+
+    def __init__(self, repository: SqliteKernelRepository) -> None:
+        self._repository = repository
+        self._descriptor = ProviderDescriptor(
+            provider_id="kernel-persistence",
+            provider_type="persistence",
+            supported_operations=("readiness",),
+            health=HealthStatus.HEALTHY,
+            available=True,
+        )
+
+    @property
+    def descriptor(self) -> ProviderDescriptor:
+        return self._descriptor
+
+    async def health(self) -> HealthStatus:
+        await self._repository.readiness_probe()
+        return HealthStatus.HEALTHY
+
+
 @dataclass(frozen=True, slots=True)
 class HealthBundle:
     """Health/readiness authority over the supported single-node providers."""
@@ -83,12 +107,18 @@ class HttpBundle:
 def build_health(
     storage: StorageBundle,
     execution: ExecutionBundle,
+    observability: ObservabilityBundle | None = None,
 ) -> HealthBundle:
     """Build required single-node health dependencies explicitly."""
 
     return HealthBundle(
         provider=AggregatedHealthProvider(
             (
+                ProviderHealthDependency(
+                    _KernelPersistenceHealthProvider(storage.kernel_repository),
+                    required=True,
+                    name="kernel-persistence",
+                ),
                 ProviderHealthDependency(
                     execution.orchestrator,
                     required=True,
@@ -100,7 +130,8 @@ def build_health(
                     name="lifecycle",
                 ),
                 ProviderHealthDependency(storage.files, required=True, name="files"),
-            )
+            ),
+            telemetry=None if observability is None else observability.telemetry,
         )
     )
 

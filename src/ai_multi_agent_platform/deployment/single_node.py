@@ -345,7 +345,7 @@ def build_single_node_deployment_from_foundation(
         kernel,
         accounting_service=accounting_service,
     )
-    health = build_health(storage, execution)
+    health = build_health(storage, execution, observability)
     control_plane = build_control_plane(
         config,
         storage,

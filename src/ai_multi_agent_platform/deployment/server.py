@@ -19,6 +19,7 @@ from ai_multi_agent_platform.backup import (
 from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.kernel import RecoveryReport
+from ai_multi_agent_platform.observability import ReadinessState
 from ai_multi_agent_platform.upgrade.service import MaintenanceStateStore, UpgradeError
 from ai_multi_agent_platform.upgrade.versioning import (
     BASELINE_ADOPTION_PLATFORM_RELEASE,
@@ -389,14 +390,47 @@ async def _run_restore_recovery(
 async def _run_startup_recovery(
     deployment: SingleNodeDeployment,
 ) -> SingleNodeStartupRecoveryResult:
-    return await reconcile_single_node_startup(
-        data_dir=deployment.config.data_dir,
-        kernel=deployment.kernel,
-        coordinator=deployment.coordination,
-        distributed_runtime=deployment.distributed_runtime,
-        extensions=deployment.startup_recovery_extensions,
-        reviewer_reconciler=deployment.reviewer_recovery,
+    deployment.health_provider.set_operational_state(
+        ReadinessState.RECONCILING,
+        detail="ordinary single-node startup reconciliation is in progress",
+        operator_action=(
+            "allow canonical startup reconciliation to complete; inspect the startup recovery "
+            "report if the state does not clear"
+        ),
     )
+    try:
+        recovery = await reconcile_single_node_startup(
+            data_dir=deployment.config.data_dir,
+            kernel=deployment.kernel,
+            coordinator=deployment.coordination,
+            distributed_runtime=deployment.distributed_runtime,
+            extensions=deployment.startup_recovery_extensions,
+            reviewer_reconciler=deployment.reviewer_recovery,
+        )
+    except asyncio.CancelledError:
+        raise
+    # error-boundary: allow-broad-catch=boundary preserve startup recovery failure diagnostics
+    except Exception:
+        deployment.health_provider.set_operational_state(
+            ReadinessState.OPERATOR_INTERVENTION_REQUIRED,
+            detail="ordinary startup reconciliation failed before readiness could be established",
+            operator_action=(
+                "inspect canonical startup recovery diagnostics and resolve the reported blocker"
+            ),
+        )
+        raise
+
+    if recovery.ready_for_service:
+        deployment.health_provider.set_operational_state(None)
+    else:
+        deployment.health_provider.set_operational_state(
+            ReadinessState.OPERATOR_INTERVENTION_REQUIRED,
+            detail="ordinary startup reconciliation requires explicit operator resolution",
+            operator_action=(
+                "inspect the startup recovery report and use only the supported recovery commands"
+            ),
+        )
+    return recovery
 
 
 def _print_restore_recovery(recovery: PostRestoreRecoveryResult | None) -> None:
