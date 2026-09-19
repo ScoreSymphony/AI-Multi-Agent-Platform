@@ -111,7 +111,10 @@ export function normalizeAppLinkHref(
 ): string | undefined {
   if (!href) return href;
   try {
-    const base = new URL(baseHref);
+    let base = new URL(baseHref);
+    if (base.protocol !== "http:" && base.protocol !== "https:") {
+      base = new URL("https://router.invalid/");
+    }
     const resolved = new URL(href, base);
     if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
       return undefined;
