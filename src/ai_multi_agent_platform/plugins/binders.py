@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from ai_multi_agent_platform.agents.runtime import (
-    AgentOrchestratorMapper,
-    AgentOrchestratorMapperRegistry,
-)
+from typing import Protocol, cast
+
 from ai_multi_agent_platform.capabilities.provider import CapabilityToolProvider
 from ai_multi_agent_platform.capabilities.registry import CapabilityRegistry
 from ai_multi_agent_platform.connectors import ConnectorProvider, ConnectorService
@@ -17,6 +15,27 @@ from ai_multi_agent_platform.orchestration import OrchestratorRegistry
 
 from .models import ExtensionType
 from .runtime import ExtensionRegistration
+
+
+class _AgentOrchestratorMapper(Protocol):
+    @property
+    def adapter_id(self) -> str: ...
+
+    async def map_agent(self, spec: object) -> object: ...
+
+
+class _AgentOrchestratorMapperRegistry(Protocol):
+    def register(self, mapper: _AgentOrchestratorMapper) -> None: ...
+
+    def unregister(self, adapter_id: str) -> object: ...
+
+
+def _as_agent_orchestrator_mapper(value: object) -> _AgentOrchestratorMapper | None:
+    adapter_id = getattr(value, "adapter_id", None)
+    map_agent = getattr(value, "map_agent", None)
+    if not isinstance(adapter_id, str) or not callable(map_agent):
+        return None
+    return cast(_AgentOrchestratorMapper, value)
 
 
 class CapabilityRegistryBinder:
@@ -53,10 +72,14 @@ class OrchestratorRegistryBinder:
         self,
         registry: OrchestratorRegistry,
         *,
-        agent_mappers: AgentOrchestratorMapperRegistry | None = None,
+        agent_mappers: object | None = None,
     ) -> None:
         self._registry = registry
-        self._agent_mappers = agent_mappers
+        self._agent_mappers = (
+            cast(_AgentOrchestratorMapperRegistry, agent_mappers)
+            if agent_mappers is not None
+            else None
+        )
 
     async def register(self, registration: ExtensionRegistration) -> None:
         if registration.spec.extension_type is not ExtensionType.ORCHESTRATOR:
@@ -71,16 +94,17 @@ class OrchestratorRegistryBinder:
         orchestrator = registration.instance
         provider_id = orchestrator.descriptor.provider_id
         self._registry.register(provider_id, orchestrator)
-        if self._agent_mappers is None or not isinstance(orchestrator, AgentOrchestratorMapper):
+        mapper = _as_agent_orchestrator_mapper(orchestrator)
+        if self._agent_mappers is None or mapper is None:
             return
-        if orchestrator.adapter_id != provider_id:
+        if mapper.adapter_id != provider_id:
             self._registry.unregister(provider_id)
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "Agent orchestrator mapper adapter_id must match provider_id",
             )
         try:
-            self._agent_mappers.register(orchestrator)
+            self._agent_mappers.register(mapper)
         except ContractError as exc:
             try:
                 self._registry.unregister(provider_id)
@@ -100,15 +124,16 @@ class OrchestratorRegistryBinder:
         orchestrator = registration.instance
         provider_id = orchestrator.descriptor.provider_id
         removed_mapper = False
-        if self._agent_mappers is not None and isinstance(orchestrator, AgentOrchestratorMapper):
-            self._agent_mappers.unregister(orchestrator.adapter_id)
+        mapper = _as_agent_orchestrator_mapper(orchestrator)
+        if self._agent_mappers is not None and mapper is not None:
+            self._agent_mappers.unregister(mapper.adapter_id)
             removed_mapper = True
         try:
             self._registry.unregister(provider_id)
         except ContractError as exc:
             if removed_mapper and self._agent_mappers is not None:
                 try:
-                    self._agent_mappers.register(orchestrator)
+                    self._agent_mappers.register(mapper)
                 except ContractError as rollback_error:
                     exc.add_note(
                         "Agent mapper rollback failed after orchestrator unregister error"
