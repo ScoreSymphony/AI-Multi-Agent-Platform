@@ -69,7 +69,6 @@ def _bind_official_first_run(deployment: TaskBudgetSingleNodeDeployment) -> None
         onboarding=deployment.onboarding,
         kernel=deployment.kernel,
         planning=deployment.planning,
-        scopes=deployment.scopes,
         agents=deployment.agents,
         authorization=deployment.authorization,
         coordination=deployment.coordination_repository,
