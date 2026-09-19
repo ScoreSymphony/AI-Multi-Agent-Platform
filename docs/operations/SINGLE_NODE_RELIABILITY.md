@@ -91,8 +91,11 @@ Broader #707 work extends this policy through focused follow-ups. #1155 owns the
 persistence/filesystem slice documented in
 `docs/operations/PERSISTENCE_FAILURE_RECOVERY.md`: required persistence participates in
 readiness, crash-interrupted File/Workspace state is recovered only with ownership evidence, and
-unknown/corrupt canonical state remains fail-closed. Uncertain external side effects remain
-separate and must not be collapsed into a generic `retry everything` rule.
+unknown/corrupt canonical state remains fail-closed. The uncertain external-side-effect gap is
+handled by #1154; see [External side-effect recovery](EXTERNAL_EFFECT_RECOVERY.md) for the durable
+dispatch journal, provider reconciliation contract, manual-review path and operator diagnostics.
+These recovery owners remain explicit rather than being collapsed into a generic `retry everything`
+rule.
 
 ## Idempotency and fail-closed behavior
 
@@ -136,9 +139,9 @@ This startup slice does **not** close #707. Remaining reliability work includes,
 
 - graceful drain/shutdown hardening;
 - stale non-Worker session cleanup outside the #1155 File/Workspace storage slice;
-- explicit uncertain-side-effect recovery states;
+- external-side-effect recovery is tracked separately by #1154 and documented in `EXTERNAL_EFFECT_RECOVERY.md`;
 - provider/dependency failure isolation beyond persistence and bounded lifecycle retries;
 - health/readiness integration while reconciliation is in progress;
 - operator diagnostics beyond startup/persistence diagnostics;
 - repeated hard-kill/restart endurance testing;
-- broader platform-conformance reliability evidence consuming the reusable #1155 fixtures.
+- broader platform-conformance reliability evidence consuming the reusable #1155 persistence fixtures and the #1154 external-effect failure injector.

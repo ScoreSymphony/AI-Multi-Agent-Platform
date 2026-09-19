@@ -77,6 +77,33 @@ class CompensationIdempotency(StrEnum):
     UNKNOWN = "unknown"
 
 
+class ExternalEffectIdempotency(StrEnum):
+    """Declared duplicate-safety of the original external action."""
+
+    GUARANTEED = "guaranteed"
+    PROVIDER_DEPENDENT = "provider_dependent"
+    NONE = "none"
+    UNKNOWN = "unknown"
+
+
+class ExternalEffectReconciliationSupport(StrEnum):
+    """Whether a provider can safely observe an ambiguous action after dispatch."""
+
+    SUPPORTED = "supported"
+    UNSUPPORTED = "unsupported"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalEffectRecoveryPolicy:
+    """Recovery contract for the original side effect, independent from compensation."""
+
+    idempotency: ExternalEffectIdempotency = ExternalEffectIdempotency.UNKNOWN
+    reconciliation: ExternalEffectReconciliationSupport = (
+        ExternalEffectReconciliationSupport.UNKNOWN
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class CompensationDescriptor:
     """Backend-neutral declaration of one explicitly supported compensating capability.
@@ -202,6 +229,9 @@ class CapabilitySpec:
     credential_requirement: CredentialRequirement = CredentialRequirement.NONE
     reversibility: ReversibilityClassification = ReversibilityClassification.UNKNOWN
     compensation: CompensationDescriptor | None = None
+    external_effect_recovery: ExternalEffectRecoveryPolicy = field(
+        default_factory=ExternalEffectRecoveryPolicy
+    )
 
     def __post_init__(self) -> None:
         if not self.capability_id.strip():

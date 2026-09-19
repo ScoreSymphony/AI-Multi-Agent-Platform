@@ -235,7 +235,7 @@ def _extend_base_deployment(
         handoffs=extensions.handoffs,
         automatic_reviewer=automatic_review.workflow,
         reviewer_recovery=automatic_review.recovery,
-        startup_recovery_extensions=(),
+        startup_recovery_extensions=extensions.context.startup_recovery_extensions,
     )
     deployment.startup_recovery_extensions = (
         *deployment.startup_recovery_extensions,

@@ -17,6 +17,23 @@ from .invocation import (
 from .native import ECHO_CAPABILITY_ID, NativeEchoProvider
 from .observer import EventRepositoryInvocationObserver
 from .provider import CapabilityToolProvider
+from .recovery import (
+    ExternalEffectInvocationObserver,
+    ExternalEffectObservation,
+    ExternalEffectObservationStatus,
+    ExternalEffectReconciler,
+    ExternalEffectReconciliationRequest,
+    ExternalEffectRecoveryCoordinator,
+    ExternalEffectRecoveryDisposition,
+    ExternalEffectRecoveryEvent,
+    ExternalEffectRecoveryEventObserver,
+    ExternalEffectRecoveryRecord,
+    ExternalEffectRecoveryRepository,
+    ExternalEffectRecoveryStatus,
+    InMemoryExternalEffectRecoveryRepository,
+    external_effect_recovery_resource,
+)
+from .recovery_persistence import SQLiteExternalEffectRecoveryRepository
 from .registry import CapabilityDiscoveryPolicyHook, CapabilityRegistry
 from .types import (
     ISOLATED_WORKSPACE_WRITE_FEATURE,
@@ -29,6 +46,9 @@ from .types import (
     CompensationDescriptor,
     CompensationIdempotency,
     CredentialRequirement,
+    ExternalEffectIdempotency,
+    ExternalEffectReconciliationSupport,
+    ExternalEffectRecoveryPolicy,
     InvocationRecord,
     InvocationStatus,
     InvocationTrace,
@@ -60,6 +80,21 @@ __all__ = [
     "CredentialRequirement",
     "ECHO_CAPABILITY_ID",
     "EgressCapabilityInvoker",
+    "ExternalEffectIdempotency",
+    "ExternalEffectInvocationObserver",
+    "ExternalEffectObservation",
+    "ExternalEffectObservationStatus",
+    "ExternalEffectReconciler",
+    "ExternalEffectReconciliationRequest",
+    "ExternalEffectReconciliationSupport",
+    "ExternalEffectRecoveryCoordinator",
+    "ExternalEffectRecoveryDisposition",
+    "ExternalEffectRecoveryEvent",
+    "ExternalEffectRecoveryEventObserver",
+    "ExternalEffectRecoveryPolicy",
+    "ExternalEffectRecoveryRecord",
+    "ExternalEffectRecoveryRepository",
+    "ExternalEffectRecoveryStatus",
     "EventRepositoryInvocationObserver",
     "GovernanceBindingHook",
     "ISOLATED_WORKSPACE_WRITE_FEATURE",
@@ -67,6 +102,7 @@ __all__ = [
     "InvocationRecord",
     "InvocationStatus",
     "InvocationTrace",
+    "InMemoryExternalEffectRecoveryRepository",
     "NativeEchoProvider",
     "NullInvocationObserver",
     "PolicyDecision",
@@ -74,7 +110,9 @@ __all__ = [
     "ReversibilityClassification",
     "SafetyClassification",
     "SideEffectClassification",
+    "SQLiteExternalEffectRecoveryRepository",
     "bind_canonical_capability_invocation",
     "canonical_tool_id",
     "canonical_tool_invocation_id",
+    "external_effect_recovery_resource",
 ]

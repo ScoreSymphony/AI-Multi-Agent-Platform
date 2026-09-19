@@ -18,6 +18,7 @@ from .conformance import (
     assert_tool_provider_contract,
     assert_worker_provider_contract,
 )
+from .external_effects import ExternalEffectFault, FailureInjectingExternalEffectProvider
 from .fakes import (
     FakeAuthorizationProvider,
     FakeCapabilityProvider,
@@ -39,6 +40,8 @@ from .scoped_memory import FakeScopedMemoryProvider
 from .scoped_memory_hardening import assert_scoped_memory_provider_contract
 
 __all__ = [
+    "ExternalEffectFault",
+    "FailureInjectingExternalEffectProvider",
     "FakeAuthorizationProvider",
     "FakeCapabilityProvider",
     "FakeEventProvider",
