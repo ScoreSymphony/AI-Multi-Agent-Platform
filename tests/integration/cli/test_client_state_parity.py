@@ -319,17 +319,50 @@ def test_cli_mutation_uses_idempotency_key_and_does_not_retry_retryable_error(
     assert observed_error["retryable"] is True
 
 
-def test_cli_preserves_not_found_and_conflict_error_categories(tmp_path: Path) -> None:
+def test_cli_preserves_shared_canonical_core_error_semantics(tmp_path: Path) -> None:
     task = _fixture("canonical-task.json")
     cases = _fixture("canonical-error-cases.json")
     task_id = task["id"]
     assert isinstance(task_id, str)
 
     scenarios = (
-        ("not_found", ("task", "show", task_id), f"/api/v1/tasks/{task_id}", False),
-        ("conflict", ("--yes", "task", "queue", task_id), f"/api/v1/tasks/{task_id}:queue", True),
+        ("validation", ("task", "show", task_id), f"/api/v1/tasks/{task_id}", "GET"),
+        (
+            "invalid_cursor",
+            ("task", "list", "--cursor", "not-a-valid-cursor"),
+            "/api/v1/tasks",
+            "GET",
+        ),
+        ("unauthenticated", ("task", "show", task_id), f"/api/v1/tasks/{task_id}", "GET"),
+        ("forbidden", ("task", "show", task_id), f"/api/v1/tasks/{task_id}", "GET"),
+        (
+            "approval_required",
+            ("--yes", "task", "queue", task_id),
+            f"/api/v1/tasks/{task_id}:queue",
+            "POST",
+        ),
+        ("not_found", ("task", "show", task_id), f"/api/v1/tasks/{task_id}", "GET"),
+        (
+            "conflict",
+            ("--yes", "task", "queue", task_id),
+            f"/api/v1/tasks/{task_id}:queue",
+            "POST",
+        ),
+        ("unavailable", ("task", "show", task_id), f"/api/v1/tasks/{task_id}", "GET"),
+        (
+            "retryable_backend_failure",
+            ("task", "show", task_id),
+            f"/api/v1/tasks/{task_id}",
+            "GET",
+        ),
+        (
+            "non_retryable_backend_failure",
+            ("task", "show", task_id),
+            f"/api/v1/tasks/{task_id}",
+            "GET",
+        ),
     )
-    for case_name, command, path, is_mutation in scenarios:
+    for case_name, command, path, expected_method in scenarios:
         raw_case = cases[case_name]
         assert isinstance(raw_case, dict)
         status = raw_case["status"]
@@ -341,7 +374,14 @@ def test_cli_preserves_not_found_and_conflict_error_categories(tmp_path: Path) -
         stdout = StringIO()
         stderr = StringIO()
         code = run_cli(
-            ("--config", str(_config(tmp_path)), "--json", *command),
+            (
+                "--config",
+                str(_config(tmp_path)),
+                "--json",
+                "--retries",
+                "0",
+                *command,
+            ),
             transport=transport,
             stdout=stdout,
             stderr=stderr,
@@ -354,8 +394,9 @@ def test_cli_preserves_not_found_and_conflict_error_categories(tmp_path: Path) -
         assert observed["code"] == error_body["code"]
         assert observed["category"] == error_body["category"]
         assert observed["retryable"] == error_body["retryable"]
-        expected_method = "POST" if is_mutation else "GET"
+        assert observed.get("details") == error_body.get("details")
         assert transport.calls == [(expected_method, f"http://control-plane.invalid{path}")]
+
 
 
 class _MarketplaceParityTransport:
