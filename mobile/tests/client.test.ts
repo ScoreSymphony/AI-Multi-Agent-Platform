@@ -34,6 +34,7 @@ describe("MobileControlPlaneClient", () => {
       "https://platform.example/api/v1/tasks?limit=50&sort=updated_at&direction=desc",
     );
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer mobile-token");
+    expect(new Headers(init.headers).get("X-Correlation-ID")).toBeTruthy();
   });
 
   it("reuses last successful read as visibly stale data after a network failure", async () => {
@@ -119,6 +120,27 @@ describe("MobileControlPlaneClient", () => {
       ),
     ).rejects.toBeInstanceOf(OfflineMutationError);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("maps canonical error code and message without treating policy failures as offline", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ code: "forbidden", message: "approval policy denied the operation" }),
+        { status: 403 },
+      ),
+    );
+    const client = new MobileControlPlaneClient({
+      baseUrl: "https://platform.example",
+      credentialSource,
+      fetchImpl,
+    });
+
+    await expect(client.listTasks()).rejects.toMatchObject({
+      status: 403,
+      code: "forbidden",
+      message: "approval policy denied the operation",
+    });
+    expect(client.isOffline()).toBe(false);
   });
 
   it("does not disguise invalid server JSON as an offline stale read", async () => {
